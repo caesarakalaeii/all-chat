@@ -1,0 +1,191 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: allchat-postgres
+    environment:
+      POSTGRES_USER: allchat
+      POSTGRES_PASSWORD: allchat_dev_password
+      POSTGRES_DB: allchat
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U allchat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - allchat-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: allchat-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - allchat-network
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: deployments/docker/Dockerfile.auth-service
+    container_name: allchat-auth-service
+    environment:
+      - SERVICE_NAME=auth-service
+      - ENVIRONMENT=development
+      - PORT=8081
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=allchat
+      - DATABASE_PASSWORD=allchat_dev_password
+      - DATABASE_NAME=allchat
+      - DATABASE_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID}
+      - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET}
+      - TWITCH_REDIRECT_URL=http://localhost:8080/api/v1/auth/callback
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat-network
+
+  overlay-manager:
+    build:
+      context: ..
+      dockerfile: deployments/docker/Dockerfile.overlay-manager
+    container_name: allchat-overlay-manager
+    environment:
+      - SERVICE_NAME=overlay-manager
+      - ENVIRONMENT=development
+      - PORT=8082
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=allchat
+      - DATABASE_PASSWORD=allchat_dev_password
+      - DATABASE_NAME=allchat
+      - DATABASE_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat-network
+
+  emote-service:
+    build:
+      context: ..
+      dockerfile: deployments/docker/Dockerfile.emote-service
+    container_name: allchat-emote-service
+    environment:
+      - SERVICE_NAME=emote-service
+      - ENVIRONMENT=development
+      - PORT=8083
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=allchat
+      - DATABASE_PASSWORD=allchat_dev_password
+      - DATABASE_NAME=allchat
+      - DATABASE_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat-network
+
+  chat-listener:
+    build:
+      context: ..
+      dockerfile: deployments/docker/Dockerfile.chat-listener
+    container_name: allchat-chat-listener
+    environment:
+      - SERVICE_NAME=chat-listener
+      - ENVIRONMENT=development
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=allchat
+      - DATABASE_PASSWORD=allchat_dev_password
+      - DATABASE_NAME=allchat
+      - DATABASE_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - EMOTE_SERVICE_URL=http://emote-service:8083
+      - TWITCH_BOT_USERNAME=${TWITCH_BOT_USERNAME:-allchat_bot}
+      - TWITCH_BOT_OAUTH=${TWITCH_BOT_OAUTH}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      emote-service:
+        condition: service_started
+    networks:
+      - allchat-network
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: deployments/docker/Dockerfile.api-gateway
+    container_name: allchat-api-gateway
+    environment:
+      - SERVICE_NAME=api-gateway
+      - ENVIRONMENT=development
+      - PORT=8080
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - OVERLAY_MANAGER_URL=http://overlay-manager:8082
+      - EMOTE_SERVICE_URL=http://emote-service:8083
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      overlay-manager:
+        condition: service_started
+    networks:
+      - allchat-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  allchat-network:
+    driver: bridge
