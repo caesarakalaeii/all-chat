@@ -4,9 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-All-Chat is a cloud-native microservices platform for displaying Twitch chat messages on streaming overlays with support for 7TV, BTTV, and FFZ emotes. The project follows **Hexagonal Architecture** (Ports & Adapters) for maintainability and testability.
+All-Chat is a cloud-native microservices platform for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok) on streaming overlays with support for 7TV, BTTV, and FFZ emotes. The project follows **Hexagonal Architecture** (Ports & Adapters) for maintainability and testability.
 
-**Current Status**: ~60% complete. Auth Service, Overlay Manager, and Emote Service are fully implemented. Chat Listener and API Gateway are pending.
+**Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from Twitch + YouTube + Kick simultaneously, or be configured with a single source - providing full flexibility for streamers who multistream or want unified chat displays.
+
+**Platform Priority**: Initial focus is Twitch and YouTube, with Kick and TikTok support planned for future releases.
+
+**Current Status**: ~60% complete. Auth Service, Overlay Manager, and Emote Service are fully implemented. Multi-source Chat Listener and API Gateway are pending.
 
 ## Build & Test Commands
 
@@ -79,6 +83,48 @@ internal/<service-name>/
 - **Database**: Each service has its own PostgreSQL schema/tables (future: separate DBs)
 - **Caching**: Redis for emotes and session data
 
+### Unified Message Format
+
+All chat messages from different platforms are normalized to a common format before publishing to Redis:
+
+```json
+{
+  "id": "uuid",
+  "overlay_id": "uuid",
+  "platform": "twitch|youtube|kick|tiktok",
+  "channel_id": "platform-specific-id",
+  "channel_name": "display-name",
+  "user": {
+    "id": "platform-user-id",
+    "username": "username",
+    "display_name": "Display Name",
+    "avatar_url": "https://...",
+    "badges": ["subscriber", "moderator"],
+    "color": "#FF0000"
+  },
+  "message": {
+    "text": "Hello world!",
+    "emotes": [
+      {
+        "code": "Kappa",
+        "provider": "twitch",
+        "url": "https://...",
+        "positions": [[0, 5]]
+      }
+    ]
+  },
+  "timestamp": "2025-11-10T12:34:56Z",
+  "metadata": {
+    "is_subscriber": true,
+    "is_moderator": false,
+    "bits": 0,
+    "super_chat_amount": 0
+  }
+}
+```
+
+This unified format allows the frontend to display messages from all platforms consistently.
+
 ## Tech Stack Details
 
 ### Core Dependencies
@@ -131,10 +177,15 @@ internal/<service-name>/
 - `GET/POST /overlays` - List/Create overlays
 - `GET/PUT/DELETE /overlays/:id` - Get/Update/Delete overlay
 - `GET/PUT /overlays/:id/config` - Get/Update configuration
+- `GET /overlays/:id/sources` - List chat sources for overlay
+- `POST /overlays/:id/sources` - Add chat source to overlay
+- `DELETE /overlays/:id/sources/:source_id` - Remove chat source from overlay
+- `PUT /overlays/:id/sources/:source_id` - Update chat source configuration
 
 **Database Tables**:
-- `overlays` - Overlay metadata
-- `overlay_configs` - Configuration (JSONB display_settings, filter_settings)
+- `overlays` - Overlay metadata (one-to-many with users)
+- `overlay_chat_sources` - Chat sources for each overlay (many-to-many relationship)
+- `overlay_configs` - Display and filter configuration (one-to-one with overlays)
 
 ### Emote Service (Port 8083) ✅
 **Purpose**: Fetch & cache emotes from 7TV, BTTV, FFZ
@@ -153,17 +204,33 @@ internal/<service-name>/
 **Caching**: Uses Redis with TTL (e.g., `emotes:7tv:{channel}`)
 
 ### Chat Listener (TODO) ⏳
-**Purpose**: Connect to Twitch IRC, enrich messages, publish to Redis
+**Purpose**: Connect to multiple live streaming platforms, normalize messages, enrich with emotes, publish to Redis
+
+**Architecture**:
+- **Plugin-based design**: Each streaming platform (Twitch, YouTube, Kick, TikTok) is a separate adapter
+- **Unified message format**: All messages normalized to common structure regardless of source
+- **Dynamic source management**: Connect/disconnect from sources based on active overlay configurations
 
 **Expected Flow**:
-1. Connect to Twitch IRC with bot credentials
-2. Join channels based on active overlays
-3. Parse incoming messages
-4. Enrich with emotes from Emote Service
-5. Publish to Redis channel `overlay:{overlay_id}`
+1. Poll database for active overlay chat sources
+2. Connect to each platform's API/IRC (Twitch IRC, YouTube Live Chat API, Kick WebSocket, TikTok API)
+3. Join channels/streams based on active overlays
+4. Parse incoming messages and normalize to unified format
+5. Enrich with emotes from Emote Service (platform-specific emotes)
+6. Publish to Redis channels (`overlay:{overlay_id}`) - messages from all sources for that overlay
+7. Handle reconnections and rate limits per platform
+
+**Supported Sources**:
+- **Twitch** (Phase 1): IRC connection (gempir/go-twitch-irc) ✅ Priority
+- **YouTube** (Phase 1): Live Chat API (requires OAuth) ✅ Priority
+- **Kick** (Phase 2): WebSocket/API connection
+- **TikTok** (Phase 2): Live Chat API
 
 **Environment**:
-- `TWITCH_BOT_USERNAME`, `TWITCH_BOT_OAUTH` (required)
+- `TWITCH_BOT_USERNAME`, `TWITCH_BOT_OAUTH` (required for Twitch)
+- `YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` (required for YouTube)
+- `KICK_API_TOKEN` (required for Kick - future)
+- `TIKTOK_API_KEY` (required for TikTok - future)
 
 ### API Gateway (Port 8080) (TODO) ⏳
 **Purpose**: Entry point, WebSocket management, HTTP routing
@@ -218,12 +285,31 @@ REDIS_PORT=6379
 - `is_active` flag for soft enable/disable
 - Indexed on `user_id` and `is_active`
 
+**Overlay Chat Sources Table** (`overlay_chat_sources`):
+- Many-to-one with overlays (cascade delete)
+- Supports multiple sources per overlay
+- Fields: `platform` (twitch, youtube, discord, kick, irc), `channel_id`, `auth_required`
+- Each source can have platform-specific configuration in JSONB field
+- Indexed on `overlay_id` and `platform`
+
 **Overlay Configs Table** (`overlay_configs`):
 - One-to-one with overlays (cascade delete)
 - JSONB fields: `display_settings`, `filter_settings`
 - Emote flags: `enable_7tv`, `enable_bttv`, `enable_ffz`
+- NO LONGER stores single `twitch_channel` - replaced by `overlay_chat_sources` table
 
-**Migration**: `migrations/001_initial_schema.sql`
+**Supported Platforms Table** (`supported_platforms`):
+- Registry of available streaming platforms
+- Fields: `platform`, `display_name`, `is_enabled`, `requires_oauth`, `config_schema`
+- Initial platforms: Twitch (enabled), YouTube (enabled), Kick (disabled), TikTok (disabled)
+
+**Migrations**:
+- `migrations/001_initial_schema.sql` - Initial schema (single Twitch channel per overlay)
+- `migrations/002_add_multi_source_support.sql` - Multi-source support (BREAKING CHANGE)
+  - Adds `overlay_chat_sources` table
+  - Removes `twitch_channel` from `overlay_configs`
+  - Renames `active_channels` to `active_platform_channels` with platform support
+  - Adds `supported_platforms` registry table
 
 ## Common Development Patterns
 
@@ -305,9 +391,12 @@ Each service has:
 - CORS currently allows `*` in dev (configure for production)
 
 ### Implementation TODOs
-- [ ] Complete Chat Listener service
-- [ ] Complete API Gateway service
-- [ ] Build Svelte 5 frontend
+- [ ] Apply multi-source migration (`002_add_multi_source_support.sql`)
+- [ ] Update Overlay Manager to support chat sources CRUD endpoints
+- [ ] Complete Chat Listener service (Phase 1: Twitch + YouTube)
+- [ ] Complete API Gateway service with WebSocket multi-source support
+- [ ] Build Svelte 5 frontend with multi-source configuration UI
+- [ ] Add Chat Listener adapters for Kick and TikTok (Phase 2)
 - [ ] Add Prometheus metrics endpoint
 - [ ] Implement distributed tracing (OpenTelemetry)
 - [ ] Add comprehensive unit/integration tests

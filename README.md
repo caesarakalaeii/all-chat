@@ -1,6 +1,8 @@
 # All-Chat - Cloud-Native Streaming Overlay Service
 
-A scalable, microservices-based platform for displaying Twitch chat messages on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
+A scalable, microservices-based platform for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
+
+**Multi-Source Chat Aggregation**: Create overlays that combine messages from multiple streaming platforms simultaneously. Perfect for streamers who multistream or want unified chat displays across platforms.
 
 ## 🏗️ Architecture
 
@@ -10,7 +12,7 @@ This project follows cloud-native principles with a microservices architecture:
 - **Auth Service**: Handles Twitch OAuth and JWT token management
 - **Overlay Manager**: CRUD operations for overlays and configurations
 - **Emote Service**: Fetches and caches emotes from 7TV, BTTV, FFZ
-- **Chat Listener**: Connects to Twitch IRC and publishes messages to Redis
+- **Chat Listener**: Connects to multiple live streaming platforms (Twitch, YouTube, Kick, TikTok) and publishes normalized messages to Redis
 
 ### Tech Stack
 
@@ -322,7 +324,7 @@ For issues and questions:
 - [ ] Chat listener with Twitch IRC
 - [ ] WebSocket overlay service
 - [ ] Svelte 5 frontend
-- [ ] YouTube chat support
+- [ ] Multi-source chat support (YouTube, Kick, TikTok)
 - [ ] Custom emote animations
 - [ ] Advanced filtering options
 - [ ] Analytics dashboard
