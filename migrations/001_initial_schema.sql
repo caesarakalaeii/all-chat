@@ -87,6 +87,7 @@ CREATE INDEX idx_active_channels_listener ON active_channels(listener_instance);
 
 -- Emote cache (optional, can also use Redis)
 CREATE TABLE emote_cache (
+    id SERIAL PRIMARY KEY,
     emote_code VARCHAR(100) NOT NULL,
     channel VARCHAR(100), -- NULL for global emotes
     provider VARCHAR(20) NOT NULL, -- 'twitch', '7tv', 'bttv', 'ffz'
@@ -95,7 +96,7 @@ CREATE TABLE emote_cache (
     expires_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW(),
 
-    PRIMARY KEY (emote_code, COALESCE(channel, ''), provider)
+    UNIQUE (emote_code, channel, provider)
 );
 
 CREATE INDEX idx_emote_cache_channel ON emote_cache(channel);

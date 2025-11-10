@@ -23,7 +23,7 @@ func (r *PostgresChannelRepository) GetActiveChannels(ctx context.Context) ([]do
 	query := `
 		SELECT
 			o.id,
-			o.twitch_channel,
+			oc.twitch_channel,
 			oc.enable_7tv,
 			oc.enable_bttv,
 			oc.enable_ffz,
