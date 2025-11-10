@@ -1,13 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { auth } from './lib/api';
+  import { parseRoute, onRouteChange, type Route } from './lib/router';
   import Dashboard from './components/Dashboard.svelte';
   import Landing from './components/Landing.svelte';
+  import OverlayViewerPage from './components/OverlayViewerPage.svelte';
 
   let user = $state<any>(null);
   let loading = $state(true);
+  let currentRoute = $state<Route>(parseRoute());
 
   onMount(async () => {
+    // Set up route change listener
+    const cleanup = onRouteChange(() => {
+      currentRoute = parseRoute();
+    });
+
     // Check if we have tokens in URL (OAuth callback)
     const params = new URLSearchParams(window.location.search);
     const accessToken = params.get('access_token');
@@ -19,15 +27,19 @@
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
-    // Try to get current user
-    try {
-      const response = await auth.getMe();
-      user = response.data.user;
-    } catch (error) {
-      console.log('Not authenticated');
-    } finally {
-      loading = false;
+    // Try to get current user (except for overlay viewer route which doesn't require auth)
+    if (currentRoute.path !== '/overlay/:id') {
+      try {
+        const response = await auth.getMe();
+        user = response.data.user;
+      } catch (error) {
+        console.log('Not authenticated');
+      }
     }
+
+    loading = false;
+
+    return cleanup;
   });
 
   function handleLogout() {
@@ -39,6 +51,8 @@
 <main>
   {#if loading}
     <div class="loading">Loading...</div>
+  {:else if currentRoute.path === '/overlay/:id' && currentRoute.params?.id}
+    <OverlayViewerPage overlayId={currentRoute.params.id} />
   {:else if user}
     <Dashboard {user} onLogout={handleLogout} />
   {:else}

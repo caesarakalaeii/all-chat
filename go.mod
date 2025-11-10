@@ -1,6 +1,6 @@
 module github.com/caesar/all-chat
 
-go 1.25.3
+go 1.23.0
 
 require (
 	github.com/gempir/go-twitch-irc/v4 v4.2.0
@@ -12,7 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/redis/go-redis/v9 v9.16.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/oauth2 v0.33.0
+	golang.org/x/oauth2 v0.24.0
 )
 
 require (
