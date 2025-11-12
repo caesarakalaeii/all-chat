@@ -10,12 +10,29 @@
 
 # Output of the go coverage tool
 *.out
+coverage.out
+coverage.html
 
 # Go workspace file
 go.work
 
 # Dependency directories
 vendor/
+
+# Build artifacts and binaries
+auth-service
+overlay-manager
+emote-service
+api-gateway
+message-processor
+twitch-listener
+youtube-listener
+source-controller
+
+# LSP and build cache directories
+@shared/
+@*/
+shared/pkg
 
 # Environment variables
 .env

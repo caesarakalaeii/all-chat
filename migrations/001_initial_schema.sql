@@ -1,117 +1,119 @@
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- All-Chat Initial Database Schema
+-- Migration: 001
+-- Description: Create users, overlays, overlay_configs, and overlay_chat_sources tables
 
--- Users table
-CREATE TABLE users (
+-- Users table (Twitch OAuth)
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     twitch_id VARCHAR(50) UNIQUE NOT NULL,
-    username VARCHAR(100) NOT NULL,
-    display_name VARCHAR(100),
-    avatar_url TEXT,
-    access_token_encrypted TEXT, -- Encrypted token
-    refresh_token_encrypted TEXT, -- Encrypted token
-    token_expires_at TIMESTAMP,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
+    profile_image_url TEXT,
+    email VARCHAR(255),
+    access_token TEXT NOT NULL,           -- Encrypted OAuth token
+    refresh_token TEXT NOT NULL,          -- Encrypted refresh token
+    token_expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    last_login_at TIMESTAMP
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX idx_users_twitch_id ON users(twitch_id);
 CREATE INDEX idx_users_username ON users(username);
 
 -- Overlays table
-CREATE TABLE overlays (
+CREATE TABLE IF NOT EXISTS overlays (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(100) NOT NULL,
     description TEXT,
-    is_active BOOLEAN DEFAULT true,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX idx_overlays_user_id ON overlays(user_id);
-CREATE INDEX idx_overlays_active ON overlays(is_active) WHERE is_active = true;
+CREATE INDEX idx_overlays_is_active ON overlays(is_active);
+CREATE INDEX idx_overlays_user_id_is_active ON overlays(user_id, is_active);
 
 -- Overlay configurations
-CREATE TABLE overlay_configs (
+CREATE TABLE IF NOT EXISTS overlay_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    overlay_id UUID NOT NULL REFERENCES overlays(id) ON DELETE CASCADE,
-
-    -- Chat source configuration
-    twitch_channel VARCHAR(100) NOT NULL,
-
-    -- Emote settings
-    enable_7tv BOOLEAN DEFAULT true,
-    enable_bttv BOOLEAN DEFAULT true,
-    enable_ffz BOOLEAN DEFAULT false,
-
-    -- Display settings (JSON for flexibility)
-    display_settings JSONB DEFAULT '{
-        "max_messages": 50,
-        "message_duration": 10,
-        "font_size": 16,
-        "animation": "slide",
-        "theme": "dark"
-    }'::jsonb,
-
-    -- Filtering settings
-    filter_settings JSONB DEFAULT '{
-        "blocked_users": [],
-        "blocked_words": [],
-        "subscriber_only": false,
-        "moderator_only": false,
-        "min_chat_delay": 0
-    }'::jsonb,
-
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-
-    UNIQUE(overlay_id)
-);
-
-CREATE INDEX idx_overlay_configs_overlay_id ON overlay_configs(overlay_id);
-CREATE INDEX idx_overlay_configs_channel ON overlay_configs(twitch_channel);
-
--- Active channels being monitored (for chat listener coordination)
-CREATE TABLE active_channels (
-    channel_name VARCHAR(100) PRIMARY KEY,
-    overlay_count INTEGER DEFAULT 0,
-    last_message_at TIMESTAMP,
-    listener_instance VARCHAR(100), -- Instance ID for distributed coordination
+    overlay_id UUID NOT NULL UNIQUE REFERENCES overlays(id) ON DELETE CASCADE,
+    display_settings JSONB DEFAULT '{}'::jsonb,  -- Font, colors, animations
+    filter_settings JSONB DEFAULT '{}'::jsonb,   -- Banned words, user filters
+    enable_7tv BOOLEAN DEFAULT TRUE,
+    enable_bttv BOOLEAN DEFAULT TRUE,
+    enable_ffz BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_active_channels_listener ON active_channels(listener_instance);
+CREATE INDEX idx_overlay_configs_overlay_id ON overlay_configs(overlay_id);
 
--- Emote cache (optional, can also use Redis)
-CREATE TABLE emote_cache (
-    id SERIAL PRIMARY KEY,
-    emote_code VARCHAR(100) NOT NULL,
-    channel VARCHAR(100), -- NULL for global emotes
-    provider VARCHAR(20) NOT NULL, -- 'twitch', '7tv', 'bttv', 'ffz'
-    emote_url TEXT NOT NULL,
-    emote_data JSONB, -- Additional metadata (sizes, animated, etc)
-    expires_at TIMESTAMP,
+-- Supported platforms registry
+CREATE TABLE IF NOT EXISTS supported_platforms (
+    platform VARCHAR(50) PRIMARY KEY,           -- 'twitch', 'youtube', 'kick', 'tiktok'
+    display_name VARCHAR(100) NOT NULL,         -- 'Twitch', 'YouTube', 'Kick', 'TikTok'
+    is_enabled BOOLEAN DEFAULT FALSE,           -- Feature flag
+    requires_oauth BOOLEAN DEFAULT FALSE,
+    config_schema JSONB DEFAULT '{}'::jsonb,    -- JSON Schema for platform-specific config
     created_at TIMESTAMP DEFAULT NOW(),
-
-    UNIQUE (emote_code, channel, provider)
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_emote_cache_channel ON emote_cache(channel);
-CREATE INDEX idx_emote_cache_expires ON emote_cache(expires_at);
-CREATE INDEX idx_emote_cache_provider ON emote_cache(provider);
+-- Insert initial platforms
+INSERT INTO supported_platforms (platform, display_name, is_enabled, requires_oauth) VALUES
+    ('twitch', 'Twitch', TRUE, FALSE),
+    ('youtube', 'YouTube', TRUE, TRUE),
+    ('kick', 'Kick', FALSE, FALSE),
+    ('tiktok', 'TikTok', FALSE, TRUE)
+ON CONFLICT (platform) DO NOTHING;
 
--- Update timestamp triggers
+-- Overlay chat sources (multi-source support)
+CREATE TABLE IF NOT EXISTS overlay_chat_sources (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    overlay_id UUID NOT NULL REFERENCES overlays(id) ON DELETE CASCADE,
+    platform VARCHAR(50) NOT NULL REFERENCES supported_platforms(platform),
+    channel_id VARCHAR(100) NOT NULL,           -- Platform-specific channel ID
+    channel_name VARCHAR(100) NOT NULL,         -- Display name
+    auth_required BOOLEAN DEFAULT FALSE,
+    config JSONB DEFAULT '{}'::jsonb,           -- Platform-specific settings
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(overlay_id, platform, channel_id)    -- Prevent duplicate sources
+);
+
+CREATE INDEX idx_overlay_chat_sources_overlay_id ON overlay_chat_sources(overlay_id);
+CREATE INDEX idx_overlay_chat_sources_platform ON overlay_chat_sources(platform);
+CREATE INDEX idx_overlay_chat_sources_is_active ON overlay_chat_sources(is_active);
+CREATE INDEX idx_overlay_chat_sources_overlay_platform ON overlay_chat_sources(overlay_id, platform, is_active);
+
+-- Trigger to automatically create overlay_config when overlay is created
+CREATE OR REPLACE FUNCTION create_overlay_config()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO overlay_configs (overlay_id)
+    VALUES (NEW.id);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_create_overlay_config
+    AFTER INSERT ON overlays
+    FOR EACH ROW
+    EXECUTE FUNCTION create_overlay_config();
+
+-- Updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
+-- Apply updated_at trigger to all tables
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -121,18 +123,8 @@ CREATE TRIGGER update_overlays_updated_at BEFORE UPDATE ON overlays
 CREATE TRIGGER update_overlay_configs_updated_at BEFORE UPDATE ON overlay_configs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_active_channels_updated_at BEFORE UPDATE ON active_channels
+CREATE TRIGGER update_overlay_chat_sources_updated_at BEFORE UPDATE ON overlay_chat_sources
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Optional: Overlay analytics table for future use
-CREATE TABLE overlay_analytics (
-    id BIGSERIAL PRIMARY KEY,
-    overlay_id UUID NOT NULL REFERENCES overlays(id) ON DELETE CASCADE,
-    event_type VARCHAR(50) NOT NULL, -- 'view', 'message_displayed', 'connection_established'
-    event_data JSONB,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_analytics_overlay_id ON overlay_analytics(overlay_id);
-CREATE INDEX idx_analytics_created_at ON overlay_analytics(created_at DESC);
-CREATE INDEX idx_analytics_event_type ON overlay_analytics(event_type);
+CREATE TRIGGER update_supported_platforms_updated_at BEFORE UPDATE ON supported_platforms
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
