@@ -1,104 +1,98 @@
-.PHONY: help build run test clean docker-up docker-down docker-logs
+.PHONY: help build test clean docker-up docker-down migrate deps
 
-help: ## Show this help message
-	@echo 'Usage: make [target]'
-	@echo ''
-	@echo 'Available targets:'
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+# Default target
+help:
+	@echo "All-Chat Makefile Commands"
+	@echo ""
+	@echo "Development:"
+	@echo "  make deps          - Download Go dependencies"
+	@echo "  make build         - Build all services"
+	@echo "  make test          - Run all tests"
+	@echo "  make test-coverage - Run tests with coverage"
+	@echo ""
+	@echo "Docker Compose:"
+	@echo "  make docker-up     - Start all services with Docker Compose"
+	@echo "  make docker-down   - Stop all services"
+	@echo "  make docker-logs   - View logs"
+	@echo "  make docker-restart - Restart all services"
+	@echo ""
+	@echo "Database:"
+	@echo "  make migrate       - Run database migrations"
+	@echo "  make migrate-down  - Rollback migrations"
+	@echo ""
+	@echo "Individual Services:"
+	@echo "  make build-auth    - Build auth-service"
+	@echo "  make test-auth     - Test auth-service"
+	@echo "  make run-auth      - Run auth-service locally"
 
-build: ## Build all services
+# Download dependencies
+deps:
+	@echo "Downloading dependencies..."
+	cd shared && go mod download
+	cd services/auth-service && go mod download
+
+# Build all services
+build:
 	@echo "Building all services..."
-	@mkdir -p bin
-	@go build -o bin/api-gateway ./cmd/api-gateway
-	@go build -o bin/auth-service ./cmd/auth-service
-	@go build -o bin/overlay-manager ./cmd/overlay-manager
-	@go build -o bin/emote-service ./cmd/emote-service
-	@go build -o bin/chat-listener ./cmd/chat-listener
-	@echo "✓ All services built successfully"
+	@$(MAKE) build-auth
 
-build-api-gateway: ## Build API Gateway
-	@mkdir -p bin
-	@go build -o bin/api-gateway ./cmd/api-gateway
+build-auth:
+	@echo "Building auth-service..."
+	cd services/auth-service && go build -o ../../bin/auth-service ./cmd
 
-build-auth: ## Build Auth Service
-	@mkdir -p bin
-	@go build -o bin/auth-service ./cmd/auth-service
+# Run tests
+test:
+	@echo "Running all tests..."
+	go test -v ./...
 
-build-overlay: ## Build Overlay Manager
-	@mkdir -p bin
-	@go build -o bin/overlay-manager ./cmd/overlay-manager
+test-coverage:
+	@echo "Running tests with coverage..."
+	go test -v -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
 
-build-emote: ## Build Emote Service
-	@mkdir -p bin
-	@go build -o bin/emote-service ./cmd/emote-service
+test-auth:
+	@echo "Testing auth-service..."
+	cd services/auth-service && go test -v ./...
 
-build-chat: ## Build Chat Listener
-	@mkdir -p bin
-	@go build -o bin/chat-listener ./cmd/chat-listener
+# Clean build artifacts
+clean:
+	@echo "Cleaning build artifacts..."
+	rm -rf bin/
+	rm -f coverage.out coverage.html
 
-test: ## Run tests
-	@go test -v ./...
+# Docker Compose commands
+docker-up:
+	@echo "Starting services with Docker Compose..."
+	cd deployments && docker-compose up -d
+	@echo "Services started. Check logs with: make docker-logs"
 
-test-coverage: ## Run tests with coverage
-	@go test -coverprofile=coverage.out ./...
-	@go tool cover -html=coverage.out
+docker-down:
+	@echo "Stopping services..."
+	cd deployments && docker-compose down
 
-clean: ## Clean build artifacts
-	@rm -rf bin/
-	@rm -f coverage.out
-	@echo "✓ Cleaned build artifacts"
+docker-logs:
+	@echo "Tailing logs..."
+	cd deployments && docker-compose logs -f
 
-docker-up: ## Start all services with Docker Compose
-	@cd deployments && docker-compose up -d
-	@echo "✓ All services started"
+docker-restart:
+	@echo "Restarting services..."
+	cd deployments && docker-compose restart
 
-docker-down: ## Stop all services
-	@cd deployments && docker-compose down
-	@echo "✓ All services stopped"
+docker-build:
+	@echo "Building Docker images..."
+	cd deployments && docker-compose build
 
-docker-logs: ## Show logs from all services
-	@cd deployments && docker-compose logs -f
+# Database migrations
+migrate:
+	@echo "Running database migrations..."
+	PGPASSWORD=allchat_dev_password psql -h localhost -U allchat -d allchat -f migrations/001_initial_schema.sql
 
-docker-build: ## Build Docker images
-	@cd deployments && docker-compose build
+migrate-down:
+	@echo "Rolling back migrations..."
+	@echo "Manual rollback required - DROP tables in reverse order"
 
-docker-restart: docker-down docker-up ## Restart all services
-
-deps: ## Download Go dependencies
-	@go mod download
-	@go mod tidy
-
-lint: ## Run linter
-	@golangci-lint run ./...
-
-fmt: ## Format code
-	@go fmt ./...
-
-run-auth: ## Run auth service locally
-	@go run ./cmd/auth-service/main.go
-
-run-overlay: ## Run overlay manager locally
-	@go run ./cmd/overlay-manager/main.go
-
-run-emote: ## Run emote service locally
-	@go run ./cmd/emote-service/main.go
-
-run-chat: ## Run chat listener locally
-	@go run ./cmd/chat-listener/main.go
-
-run-gateway: ## Run API gateway locally
-	@go run ./cmd/api-gateway/main.go
-
-migrate-up: ## Run database migrations
-	@psql postgresql://allchat:allchat_dev_password@localhost:5432/allchat < migrations/001_initial_schema.sql
-
-web-install: ## Install frontend dependencies
-	@cd web && npm install
-
-web-dev: ## Start frontend dev server
-	@cd web && npm run dev
-
-web-build: ## Build frontend for production
-	@cd web && npm run build
-
-.DEFAULT_GOAL := help
+# Run services locally (requires PostgreSQL and Redis running)
+run-auth:
+	@echo "Running auth-service locally..."
+	cd services/auth-service && go run ./cmd
