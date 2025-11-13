@@ -1,22 +1,20 @@
 # Build stage
 FROM golang:1.25-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache git
+WORKDIR /app
 
-WORKDIR /build
+# Copy shared module
+COPY shared/ ./shared/
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Copy service files
+COPY services/overlay-manager/ ./services/overlay-manager/
 
 # Download dependencies
+WORKDIR /app/services/overlay-manager
 RUN go mod download
 
-# Copy source code
-COPY . .
-
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o overlay-manager ./cmd/main.go
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/overlay-manager ./cmd
 
 # Runtime stage
 FROM alpine:3.19
@@ -31,7 +29,7 @@ RUN addgroup -g 1000 appuser && \
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /build/overlay-manager .
+COPY --from=builder /app/overlay-manager .
 
 # Change ownership
 RUN chown -R appuser:appuser /app
