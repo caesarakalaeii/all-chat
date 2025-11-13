@@ -1,0 +1,94 @@
+package channels
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/caesar/all-chat/services/twitch-listener/models"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// RepositoryInterface defines the interface for channel repository
+type RepositoryInterface interface {
+	GetActiveChannels(ctx context.Context) ([]models.ChannelSource, error)
+	GetUniqueChannels(ctx context.Context) ([]string, error)
+}
+
+// Repository handles database queries for channel management
+type Repository struct {
+	db *pgxpool.Pool
+}
+
+// NewRepository creates a new channel repository
+func NewRepository(db *pgxpool.Pool) *Repository {
+	return &Repository{db: db}
+}
+
+// GetActiveChannels returns all active Twitch channels that should be monitored
+// based on active overlays with Twitch sources
+func (r *Repository) GetActiveChannels(ctx context.Context) ([]models.ChannelSource, error) {
+	query := `
+		SELECT DISTINCT
+			o.id as overlay_id,
+			ocs.channel_id
+		FROM overlays o
+		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
+		WHERE o.is_active = true
+		  AND ocs.platform = 'twitch'
+		ORDER BY ocs.channel_id
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active channels: %w", err)
+	}
+	defer rows.Close()
+
+	var channels []models.ChannelSource
+	for rows.Next() {
+		var ch models.ChannelSource
+		if err := rows.Scan(&ch.OverlayID, &ch.ChannelID); err != nil {
+			return nil, fmt.Errorf("failed to scan channel row: %w", err)
+		}
+		channels = append(channels, ch)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating channel rows: %w", err)
+	}
+
+	return channels, nil
+}
+
+// GetUniqueChannels returns a deduplicated list of channel IDs
+func (r *Repository) GetUniqueChannels(ctx context.Context) ([]string, error) {
+	query := `
+		SELECT DISTINCT ocs.channel_id
+		FROM overlays o
+		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
+		WHERE o.is_active = true
+		  AND ocs.platform = 'twitch'
+		ORDER BY ocs.channel_id
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unique channels: %w", err)
+	}
+	defer rows.Close()
+
+	var channels []string
+	for rows.Next() {
+		var channelID string
+		if err := rows.Scan(&channelID); err != nil {
+			return nil, fmt.Errorf("failed to scan channel ID: %w", err)
+		}
+		channels = append(channels, channelID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating channel rows: %w", err)
+	}
+
+	return channels, nil
+}

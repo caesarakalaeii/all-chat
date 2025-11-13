@@ -1,0 +1,213 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/caesar/all-chat/services/api-gateway/handlers"
+	"github.com/caesar/all-chat/services/api-gateway/middleware"
+	"github.com/caesar/all-chat/services/api-gateway/models"
+	"github.com/caesar/all-chat/services/api-gateway/subscription"
+	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
+	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/logger"
+	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
+)
+
+func main() {
+	// Initialize logger
+	logLevel := getEnvOrDefault("LOG_LEVEL", "info")
+	log := logger.NewLogger("api-gateway", logLevel)
+	defer log.Sync()
+
+	log.Info("Starting API Gateway",
+		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
+	)
+
+	ctx := context.Background()
+
+	// Connect to PostgreSQL (for WebSocket overlay verification)
+	dbHost := getEnvOrDefault("DATABASE_HOST", "localhost")
+	dbPort := getEnvOrDefault("DATABASE_PORT", "5432")
+	dbUser := getEnvOrDefault("DATABASE_USER", "allchat")
+	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "allchat_dev_password")
+	dbName := getEnvOrDefault("DATABASE_NAME", "allchat")
+
+	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+		dbUser, dbPassword, dbHost, dbPort, dbName)
+
+	db, err := database.NewPostgresPool(connString)
+	if err != nil {
+		log.Fatal("Failed to connect to database", zap.Error(err))
+	}
+	defer db.Close()
+
+	log.Info("Connected to PostgreSQL")
+
+	// Connect to Redis (for WebSocket Pub/Sub)
+	redisHost := getEnvOrDefault("REDIS_HOST", "localhost")
+	redisPort := getEnvOrDefault("REDIS_PORT", "6379")
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+	})
+	defer redisClient.Close()
+
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Fatal("Failed to connect to Redis", zap.Error(err))
+	}
+
+	log.Info("Connected to Redis")
+
+	// Load service registry from environment
+	registry, err := models.NewServiceRegistry()
+	if err != nil {
+		log.Fatal("Failed to initialize service registry", zap.Error(err))
+	}
+
+	log.Info("Service registry initialized",
+		zap.Int("services", len(registry.Services)),
+	)
+
+	// Create WebSocket components
+	wsManager := wsconn.NewManager(log)
+
+	// Create Redis Pub/Sub subscriber with message handler
+	messageHandler := func(overlayID string, message []byte) {
+		// Broadcast message to all connections in this overlay
+		count := wsManager.BroadcastToOverlay(overlayID, message)
+		log.Debug("Broadcast message to overlay",
+			zap.String("overlay_id", overlayID),
+			zap.Int("connections", count),
+		)
+	}
+
+	subscriber := subscription.NewSubscriber(redisClient, log, messageHandler)
+	defer subscriber.Stop()
+
+	// Create repository for overlay verification
+	subRepo := subscription.NewRepository(db)
+
+	// Get JWT secret from environment
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Warn("JWT_SECRET not set, auth middleware will fail")
+	}
+
+	// Create handlers
+	proxyHandler := handlers.NewProxyHandler(registry)
+	healthHandler := handlers.NewHealthHandler(registry)
+	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, jwtSecret, log)
+
+	// Set Gin mode
+	if logLevel == "debug" {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// Create router
+	router := gin.New()
+
+	// Apply global middleware
+	router.Use(gin.Recovery()) // Panic recovery
+	router.Use(middleware.Logging(log))
+	router.Use(middleware.CORS())
+
+	// Health check endpoint (no auth required)
+	router.GET("/health", healthHandler.CheckHealth)
+
+	// WebSocket endpoint for overlays
+	router.GET("/ws/overlay/:overlay_id", wsHandler.HandleOverlayConnection)
+
+	// API routes - Group by authentication requirements
+
+	// Public routes (no auth required)
+	publicAPI := router.Group("/api/v1")
+	{
+		// Auth service routes
+		publicAPI.POST("/auth/login", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/login", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/callback", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/refresh", proxyHandler.ForwardRequest)
+
+		// Emote service routes (public)
+		publicAPI.GET("/emotes/*path", proxyHandler.ForwardRequest)
+	}
+
+	// Protected routes (JWT auth required)
+	protectedAPI := router.Group("/api/v1")
+	protectedAPI.Use(middleware.JWTAuth(jwtSecret))
+	{
+		// Auth service - protected routes
+		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)
+
+		// Overlay manager routes (all protected)
+		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/overlays/:id", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/overlays/:id", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/overlays/:id", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/overlays/:id/config", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/overlays/:id/config", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/overlays/:id/sources", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/sources", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/overlays/:id/sources/:source_id", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/overlays/:id/sources/:source_id", proxyHandler.ForwardRequest)
+	}
+
+	// Get port from environment
+	port := getEnvOrDefault("PORT", "8080")
+
+	// Create HTTP server
+	srv := &http.Server{
+		Addr:         ":" + port,
+		Handler:      router,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in goroutine
+	go func() {
+		log.Info("API Gateway listening",
+			zap.String("port", port),
+		)
+
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Failed to start server", zap.Error(err))
+		}
+	}()
+
+	// Wait for interrupt signal for graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Info("Shutting down server...")
+
+	// Give outstanding requests 25 seconds to complete
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Error("Server forced to shutdown", zap.Error(err))
+	}
+
+	log.Info("Server exited")
+}
+
+// getEnvOrDefault gets an environment variable or returns a default value
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
