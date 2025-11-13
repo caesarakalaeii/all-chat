@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Last Updated:** 2025-11-11
-**Related Docs**: [Architecture Overview](./ARCHITECTURE_OVERVIEW.md), [Component Architecture](./COMPONENT_ARCHITECTURE.md)
+**Related Docs**: [Approved Architecture](./APPROVED_ARCHITECTURE.md), [Approved Architecture](./APPROVED_ARCHITECTURE.md)
 
 ---
 

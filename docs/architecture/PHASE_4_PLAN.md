@@ -13,7 +13,7 @@ Phase 4 adds YouTube Live Chat support, enabling multi-platform chat aggregation
 
 **Key Deliverables**:
 1. **YouTube Listener** - Poll YouTube Live Chat API, parse messages
-2. **Source Controller** - Orchestrate multiple platform listeners, leader election
+2. **Source Manager** - Orchestrate multiple platform listeners, leader election
 3. **Message Processor Enhancement** - Handle YouTube message format
 4. **Multi-platform Testing** - Twitch + YouTube in single overlay
 
@@ -23,7 +23,7 @@ Phase 4 adds YouTube Live Chat support, enabling multi-platform chat aggregation
 
 ```
 ┌─────────────────────────────────────────────────┐
-│           Source Controller (Port 8088)         │
+│           Source Manager (Port 8088)         │
 │  - Leader election per live stream              │
 │  - Active source registry                       │
 │  - Listener coordination                        │
@@ -62,11 +62,11 @@ Phase 4 adds YouTube Live Chat support, enabling multi-platform chat aggregation
 
 ### Multi-Platform Message Flow
 
-1. **Database** → Source Controller:
+1. **Database** → Source Manager:
    - Poll for active overlay sources (platform=youtube)
    - Detect new/removed YouTube streams
 
-2. **Source Controller** → YouTube Listener:
+2. **Source Manager** → YouTube Listener:
    - Leader election (one poller per stream)
    - Assign live stream IDs to poll
    - Health monitoring
@@ -334,7 +334,7 @@ services/youtube-listener/
 
 ---
 
-## Service 2: Source Controller
+## Service 2: Source Manager
 
 ### Purpose
 Orchestrate multiple platform listeners (Twitch, YouTube, future platforms), perform leader election for YouTube streams, maintain active source registry, and coordinate listener health.
@@ -343,7 +343,7 @@ Orchestrate multiple platform listeners (Twitch, YouTube, future platforms), per
 
 ```
 ┌─────────────────────────────────┐
-│   Source Controller             │
+│   Source Manager             │
 │   ┌─────────────────────────┐   │
 │   │ Active Source Registry  │   │
 │   │ - All active sources    │   │
@@ -367,14 +367,14 @@ Orchestrate multiple platform listeners (Twitch, YouTube, future platforms), per
 └─────────────────────────────────┘
 ```
 
-### Why Source Controller?
+### Why Source Manager?
 
 **Problem**: YouTube API polling requires exactly one poller per live stream to avoid:
 1. Duplicate messages (multiple pollers)
 2. Quota waste (redundant API calls)
 3. Rate limit violations
 
-**Solution**: Source Controller provides:
+**Solution**: Source Manager provides:
 1. **Leader Election**: Ensure one YouTube Listener instance polls each stream
 2. **Active Registry**: Track which listeners are polling which streams
 3. **Health Monitoring**: Detect failed listeners and reassign work
@@ -396,8 +396,8 @@ GET leader:youtube:stream:{stream_id} == {instance_id}
 ```
 
 **Leadership Lifecycle**:
-1. YouTube Listener queries Source Controller for assigned streams
-2. Source Controller tries to acquire lock for stream
+1. YouTube Listener queries Source Manager for assigned streams
+2. Source Manager tries to acquire lock for stream
 3. If acquired → Listener becomes leader, starts polling
 4. Leader sends heartbeat every 5 seconds
 5. If heartbeat stops → lock expires, another listener can take over
@@ -440,7 +440,7 @@ GET  /status                      # Current leadership state
 ### File Structure
 
 ```
-services/source-controller/
+services/source-manager/
 ├── cmd/
 │   └── main.go                      # Entry point
 ├── handlers/
@@ -663,7 +663,7 @@ docker-compose up -d
 # - twitch-listener:8085
 # - youtube-listener:8086       # NEW
 # - message-processor:8087
-# - source-controller:8088       # NEW
+# - source-manager:8088       # NEW
 ```
 
 ### E2E Test Scenarios
@@ -725,7 +725,7 @@ docker-compose up -d
 
 1. Start 3 YouTube Listener instances
 2. Create overlay with YouTube source
-3. Check Source Controller status: `GET http://localhost:8088/status`
+3. Check Source Manager status: `GET http://localhost:8088/status`
 4. **Verify**:
    - Only one instance is leader for stream
    - Leader sends heartbeats
@@ -803,17 +803,17 @@ youtube-listener:
   depends_on:
     - redis
     - postgres
-    - source-controller
+    - source-manager
   networks:
     - allchat
   restart: unless-stopped
 
-# services/source-controller
-source-controller:
+# services/source-manager
+source-manager:
   build:
     context: ../
-    dockerfile: services/source-controller/Dockerfile
-  container_name: allchat-source-controller
+    dockerfile: services/source-manager/Dockerfile
+  container_name: allchat-source-manager
   environment:
     - PORT=8088
     - LOG_LEVEL=info
@@ -853,27 +853,27 @@ YOUTUBE_REDIRECT_URL=http://localhost:8080/api/v1/auth/youtube/callback
 build-youtube-listener:
 	cd services/youtube-listener && go build -o youtube-listener ./cmd
 
-.PHONY: build-source-controller
-build-source-controller:
-	cd services/source-controller && go build -o source-controller ./cmd
+.PHONY: build-source-manager
+build-source-manager:
+	cd services/source-manager && go build -o source-manager ./cmd
 
 # Test Phase 4 services
 .PHONY: test-youtube-listener
 test-youtube-listener:
 	cd services/youtube-listener && go test -v -cover ./...
 
-.PHONY: test-source-controller
-test-source-controller:
-	cd services/source-controller && go test -v -cover ./...
+.PHONY: test-source-manager
+test-source-manager:
+	cd services/source-manager && go test -v -cover ./...
 
 # Run Phase 4 services locally
 .PHONY: run-youtube-listener
 run-youtube-listener:
 	cd services/youtube-listener && go run ./cmd
 
-.PHONY: run-source-controller
-run-source-controller:
-	cd services/source-controller && go run ./cmd
+.PHONY: run-source-manager
+run-source-manager:
+	cd services/source-manager && go run ./cmd
 ```
 
 ---
@@ -970,8 +970,8 @@ COMMIT;
 | **Week 1** | Mon-Wed | YouTube Listener: OAuth + API Client | ⏳ |
 | | Thu-Fri | YouTube Listener: Stream Management + Polling | ⏳ |
 | **Week 2** | Mon-Tue | YouTube Listener: Publishing + Testing | ⏳ |
-| | Wed-Thu | Source Controller: Registry + Leader Election | ⏳ |
-| | Fri | Source Controller: Coordinator | ⏳ |
+| | Wed-Thu | Source Manager: Registry + Leader Election | ⏳ |
+| | Fri | Source Manager: Coordinator | ⏳ |
 | **Week 3** | Mon-Tue | Message Processor: YouTube Normalizer | ⏳ |
 | | Wed-Thu | Integration testing (multi-platform) | ⏳ |
 | | Fri | Documentation, cleanup | ⏳ |
@@ -995,7 +995,7 @@ COMMIT;
 Phase 4 is complete when:
 
 - [ ] YouTube Listener deployed and tested
-- [ ] Source Controller deployed and tested
+- [ ] Source Manager deployed and tested
 - [ ] Message Processor handles YouTube messages
 - [ ] OAuth flow works for YouTube
 - [ ] Leader election prevents duplicate polling

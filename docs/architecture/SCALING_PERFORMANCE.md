@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Last Updated:** 2025-11-11
-**Related Docs**: [Architecture Overview](./ARCHITECTURE_OVERVIEW.md), [Deployment](./DEPLOYMENT_KUBERNETES.md)
+**Related Docs**: [Approved Architecture](./APPROVED_ARCHITECTURE.md), [Deployment](./DEPLOYMENT_KUBERNETES.md)
 
 ---
 
@@ -218,7 +218,7 @@ func (e *EmoteService) WarmCache(popularChannels []string) {
 
 ---
 
-### Source Controller
+### Source Manager
 
 **Scaling**: **Leader Election** (only 1 active instance)
 
@@ -232,24 +232,24 @@ replicas: 2  # 1 leader + 1 standby
 **Leader Election Flow**:
 ```mermaid
 sequenceDiagram
-    participant SC1 as Source Controller 1
-    participant SC2 as Source Controller 2
+    participant SC1 as Source Manager 1
+    participant SC2 as Source Manager 2
     participant Redis
 
-    SC1->>Redis: SET leader:source-controller {instance-1} NX EX 30
+    SC1->>Redis: SET leader:source-manager {instance-1} NX EX 30
     Redis-->>SC1: OK (acquired leadership)
-    SC2->>Redis: SET leader:source-controller {instance-2} NX EX 30
+    SC2->>Redis: SET leader:source-manager {instance-2} NX EX 30
     Redis-->>SC2: nil (leader exists)
 
     loop Every 10 seconds
-        SC1->>Redis: EXPIRE leader:source-controller 30
+        SC1->>Redis: EXPIRE leader:source-manager 30
         Note over SC2: Standby mode
     end
 
     Note over SC1: CRASH!
     Note over Redis: Key expires after 30s
 
-    SC2->>Redis: SET leader:source-controller {instance-2} NX EX 30
+    SC2->>Redis: SET leader:source-manager {instance-2} NX EX 30
     Redis-->>SC2: OK (acquired leadership)
     SC2->>SC2: Start control loop
 ```
@@ -542,7 +542,7 @@ streams, _ := redis.XReadGroup(ctx, &redis.XReadGroupArgs{
 | Auth Service | 2 | 100m | 128Mi | $10/mo |
 | Overlay Manager | 2 | 100m | 128Mi | $10/mo |
 | Emote Service | 2 | 100m | 128Mi | $10/mo |
-| Source Controller | 2 | 100m | 128Mi | $10/mo |
+| Source Manager | 2 | 100m | 128Mi | $10/mo |
 | Twitch Listener | 2 | 200m | 256Mi | $20/mo |
 | YouTube Listener | 2 | 200m | 256Mi | $20/mo |
 | Message Processor | 3 | 600m | 768Mi | $60/mo |
@@ -558,7 +558,7 @@ streams, _ := redis.XReadGroup(ctx, &redis.XReadGroupArgs{
 | Auth Service | 3 | 150m | 192Mi | $15/mo |
 | Overlay Manager | 3 | 150m | 192Mi | $15/mo |
 | Emote Service | 3 | 150m | 192Mi | $15/mo |
-| Source Controller | 2 | 100m | 128Mi | $10/mo |
+| Source Manager | 2 | 100m | 128Mi | $10/mo |
 | Twitch Listener | 5 | 500m | 640Mi | $50/mo |
 | YouTube Listener | 5 | 500m | 640Mi | $50/mo |
 | Message Processor | 7 | 1400m | 1792Mi | $140/mo |

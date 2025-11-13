@@ -1,0 +1,88 @@
+/**
+ * OAuth Callback Page
+ *
+ * Handles the OAuth callback from Twitch.
+ * The backend redirects here with a JWT token in the URL query parameter.
+ *
+ * Flow:
+ * 1. Extract token from URL (?token=xxx)
+ * 2. Store token in localStorage
+ * 3. Fetch user info from API
+ * 4. Redirect to dashboard
+ *
+ * This is a Client Component because it:
+ * - Uses useEffect for side effects
+ * - Accesses URL parameters
+ * - Uses localStorage
+ * - Handles redirects
+ */
+
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { authApi } from '@/lib/api/auth';
+
+export default function AuthCallbackPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { setToken, setUser } = useAuthStore();
+
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const handleCallback = async () => {
+      // Get token from URL parameter
+      const token = searchParams.get('token');
+
+      if (!token) {
+        setError('No authentication token received');
+        setLoading(false);
+        return;
+      }
+
+      // Store token
+      setToken(token);
+
+      try {
+        // Fetch user info
+        const user = await authApi.getMe();
+        setUser(user);
+
+        // Redirect to dashboard
+        router.push('/dashboard');
+      } catch (err) {
+        console.error('Authentication failed:', err);
+        setError('Authentication failed. Please try again.');
+        setLoading(false);
+      }
+    };
+
+    handleCallback();
+  }, [searchParams, setToken, setUser, router]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-900">
+      {loading ? (
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-twitch mx-auto mb-4"></div>
+          <p className="text-white text-lg">Authenticating...</p>
+          <p className="text-gray-400 text-sm mt-2">Please wait</p>
+        </div>
+      ) : error ? (
+        <div className="text-center">
+          <div className="text-6xl mb-4">⚠️</div>
+          <p className="text-red-500 text-lg mb-4">{error}</p>
+          <a
+            href="/"
+            className="inline-block bg-twitch hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+          >
+            Return to Home
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
+}

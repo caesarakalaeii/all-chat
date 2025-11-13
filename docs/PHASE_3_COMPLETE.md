@@ -532,7 +532,7 @@ Multiple users can watch the same overlay:
 
 - YouTube Live Chat API polling
 - Multi-platform message normalization
-- Source Controller for coordination
+- Source Manager for coordination
 
 ### Phase 6 (Production Hardening)
 
