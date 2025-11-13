@@ -106,14 +106,14 @@ func main() {
 	router.GET("/health/live", healthHandler.CheckLive)
 	router.GET("/health/ready", healthHandler.CheckReady)
 
-	// Auth routes
-	router.GET("/auth/login", authHandler.HandleLogin)
-	router.POST("/auth/login", authHandler.HandleLogin)
-	router.GET("/auth/callback", authHandler.HandleCallback)
-	router.POST("/auth/refresh", authHandler.HandleRefresh)
+	// Auth routes (no /auth prefix - API Gateway strips /api/v1/auth and forwards rest)
+	router.GET("/login", authHandler.HandleLogin)
+	router.POST("/login", authHandler.HandleLogin)
+	router.GET("/callback", authHandler.HandleCallback)
+	router.POST("/refresh", authHandler.HandleRefresh)
 
 	// Protected routes (require JWT)
-	protected := router.Group("/auth")
+	protected := router.Group("/")
 	protected.Use(middleware.JWTAuth(jwtSecret))
 	{
 		protected.GET("/me", authHandler.HandleGetMe)
