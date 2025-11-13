@@ -228,12 +228,12 @@ services:
       - allchat
     restart: unless-stopped
 
-  # Source Controller (Phase 4)
-  source-controller:
+  # Source Manager (Phase 4)
+  source-manager:
     build:
       context: ../
-      dockerfile: services/source-controller/Dockerfile
-    container_name: allchat-source-controller
+      dockerfile: services/source-manager/Dockerfile
+    container_name: allchat-source-manager
     environment:
       PORT: "8088"
       LOG_LEVEL: "info"
@@ -283,7 +283,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      source-controller:
+      source-manager:
         condition: service_started
     networks:
       - allchat

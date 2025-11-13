@@ -27,7 +27,7 @@ services=(
   "twitch-listener"
   "youtube-listener"
   "message-processor"
-  "source-controller"
+  "source-manager"
 )
 
 # Build and push each service

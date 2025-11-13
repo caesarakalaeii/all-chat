@@ -80,8 +80,8 @@
      - Health checks and status
    - Documentation: See `services/youtube-listener/README.md`
 
-8. **Source Controller** (Phase 4 - NEW)
-   - Location: `services/source-controller/`
+8. **Source Manager** (Phase 4 - NEW)
+   - Location: `services/source-manager/`
    - Port: 8088
    - Status: ✅ Implementation complete (testing pending)
    - Features:
@@ -119,7 +119,7 @@ all-chat/
 │   ├── twitch-listener/       ✅ Complete (Phase 3)
 │   ├── message-processor/     ✅ Complete (Phase 3, Enhanced Phase 4)
 │   ├── youtube-listener/      ✅ Complete (Phase 4) NEW
-│   └── source-controller/     ✅ Complete (Phase 4) NEW
+│   └── source-manager/     ✅ Complete (Phase 4) NEW
 ├── shared/
 │   ├── auth/                  ✅ JWT utilities
 │   ├── database/              ✅ PostgreSQL helpers
@@ -212,7 +212,7 @@ curl http://localhost:8087/health/live  # Message Processor
 
 # Phase 4 services
 curl http://localhost:8086/health/live  # YouTube Listener
-curl http://localhost:8088/health/live  # Source Controller
+curl http://localhost:8088/health/live  # Source Manager
 
 # 6. Check Redis Streams
 redis-cli
@@ -239,7 +239,7 @@ websocat "ws://localhost:8080/ws/overlay/{overlay-id}?token={jwt}"
 | Twitch Listener | 22 | ~95% | ✅ |
 | Message Processor | 8 | 100% (normalizer) | ✅ |
 | YouTube Listener | 0 | 0% | ⏳ TODO |
-| Source Controller | 0 | 0% | ⏳ TODO |
+| Source Manager | 0 | 0% | ⏳ TODO |
 | **TOTAL** | **205+** | **~88%** | ✅ |
 
 ```bash
@@ -544,7 +544,7 @@ All should return success before proceeding.
 
 ### Phase 4: YouTube Integration ⏳ IN PROGRESS (90% Complete)
 - [x] YouTube Listener (14 Go files)
-- [x] Source Controller (8 Go files)
+- [x] Source Manager (8 Go files)
 - [x] Message Processor YouTube support
 - [x] Database migration (003_youtube_support.sql)
 - [x] Docker Compose updates
@@ -698,7 +698,7 @@ psql -h localhost -U allchat -d allchat -c "SELECT COUNT(*) FROM overlays WHERE 
 ### Next Steps (Phase 4)
 
 1. **YouTube Listener** - Poll YouTube Live Chat API
-2. **Source Controller** - Coordinate multiple platform listeners
+2. **Source Manager** - Coordinate multiple platform listeners
 3. **Multi-platform testing** - Twitch + YouTube in one overlay
 
 ### Recommended Order
@@ -706,7 +706,7 @@ psql -h localhost -U allchat -d allchat -c "SELECT COUNT(*) FROM overlays WHERE 
 1. Read `docs/architecture/IMPLEMENTATION_ROADMAP.md` (Phase 4 section)
 2. Create `docs/architecture/PHASE_4_PLAN.md`
 3. Implement YouTube Listener service
-4. Implement Source Controller service
+4. Implement Source Manager service
 5. Update Message Processor to handle YouTube messages
 6. Integration testing with Twitch + YouTube
 
@@ -762,10 +762,10 @@ go mod tidy
 go build -o youtube-listener ./cmd
 go test ./... -v
 
-# Source Controller
-cd ../source-controller
+# Source Manager
+cd ../source-manager
 go mod tidy
-go build -o source-controller ./cmd
+go build -o source-manager ./cmd
 go test ./... -v
 ```
 
@@ -779,11 +779,11 @@ export DATABASE_HOST=localhost
 export REDIS_HOST=localhost
 ./youtube-listener
 
-# Terminal 2: Start Source Controller
-cd services/source-controller
+# Terminal 2: Start Source Manager
+cd services/source-manager
 export DATABASE_HOST=localhost
 export REDIS_HOST=localhost
-./source-controller
+./source-manager
 
 # Terminal 3: Check status
 curl http://localhost:8086/status | jq
@@ -828,7 +828,7 @@ websocat "ws://localhost:8080/ws/overlay/$OVERLAY_ID?token=$TOKEN"
 - ✅ YouTube messages have `"platform": "youtube"`
 - ✅ Both platforms' emotes are enriched
 - ✅ Messages are interleaved by timestamp
-- ✅ Only one YouTube poller per stream (check Source Controller status)
+- ✅ Only one YouTube poller per stream (check Source Manager status)
 
 ---
 
@@ -837,10 +837,10 @@ websocat "ws://localhost:8080/ws/overlay/$OVERLAY_ID?token=$TOKEN"
 - [ ] Database migration applied successfully
 - [ ] YouTube OAuth credentials configured
 - [ ] YouTube Listener builds without errors
-- [ ] Source Controller builds without errors
+- [ ] Source Manager builds without errors
 - [ ] Message Processor handles YouTube messages
 - [ ] Unit tests written for YouTube Listener (target: 85%+ coverage)
-- [ ] Unit tests written for Source Controller (target: 80%+ coverage)
+- [ ] Unit tests written for Source Manager (target: 80%+ coverage)
 - [ ] Integration test: Twitch-only overlay works
 - [ ] Integration test: YouTube-only overlay works
 - [ ] Integration test: Multi-platform overlay (Twitch + YouTube) works
@@ -861,7 +861,7 @@ websocat "ws://localhost:8080/ws/overlay/$OVERLAY_ID?token=$TOKEN"
 **Tasks:**
 1. Write comprehensive unit tests for Phase 4 services
    - YouTube Listener: OAuth, API client, parser, poller
-   - Source Controller: Registry, leader election
+   - Source Manager: Registry, leader election
    - Message Processor: YouTube normalizer
 2. Write integration tests
    - Multi-platform message flow
@@ -883,7 +883,7 @@ websocat "ws://localhost:8080/ws/overlay/$OVERLAY_ID?token=$TOKEN"
 **Goal**: Build user interface for overlay management
 
 **Tasks:**
-1. Initialize Next.js/Svelte 5 project
+1. Initialize Next.js + React project
 2. Authentication pages (Twitch + YouTube OAuth)
 3. Dashboard (list overlays)
 4. Overlay management UI
@@ -964,15 +964,17 @@ websocat "ws://localhost:8080/ws/overlay/$OVERLAY_ID?token=$TOKEN"
 
 ## 💡 Recommended Next Action
 
-**Start with: Phase 4 Completion Testing**
+**Start with: Comprehensive Testing**
 
-1. Apply database migration
-2. Set up YouTube OAuth credentials
-3. Build YouTube Listener and Source Controller
-4. Test multi-platform overlay (Twitch + YouTube)
-5. Verify everything works end-to-end
+See `docs/TESTING_COMPREHENSIVE.md` for the complete testing guide (2-4 hours).
 
-**Then proceed to**: Writing comprehensive tests for Phase 4 services to ensure stability and reliability.
+**Quick Start:**
+1. Fill in `deployments/.env` with your credentials
+2. Run: `cd deployments && docker-compose up -d`
+3. Apply migrations
+4. Follow testing guide step-by-step
+
+**Then proceed to**: Production deployment to Caesar cluster using Ansible.
 
 ---
 
