@@ -42,6 +42,24 @@ func GenerateJWT(userID, twitchID, username, email, secret string) (string, erro
 	return token.SignedString([]byte(secret))
 }
 
+// GenerateToken generates a JWT token with custom expiry duration
+// This is a simpler version for services that don't need all user details
+func GenerateToken(userID, username, secret string, expiry time.Duration) (string, error) {
+	claims := Claims{
+		UserID:   userID,
+		Username: username,
+		Roles:    []string{"user"},
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
+			Issuer:    "all-chat",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
+}
+
 // ValidateJWT validates a JWT token and returns the claims
 func ValidateJWT(tokenString, secret string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {

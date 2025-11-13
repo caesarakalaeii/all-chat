@@ -19,12 +19,12 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { authApi } from '@/lib/api/auth';
 
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setToken, setUser } = useAuthStore();
@@ -84,5 +84,19 @@ export default function AuthCallbackPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-900">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-twitch"></div>
+        </div>
+      }
+    >
+      <AuthCallbackContent />
+    </Suspense>
   );
 }

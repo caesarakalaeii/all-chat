@@ -1,0 +1,279 @@
+# Quick Start: Deploy All-Chat to Kubernetes
+
+**TL;DR**: Three commands to deploy everything!
+
+```bash
+# 1. Generate vault from your .env file
+./generate-vault-from-env.sh
+
+# 2. Deploy to Kubernetes
+./deploy.sh
+
+# 3. Check status
+kubectl get pods -n allchat
+```
+
+---
+
+## Prerequisites
+
+✅ You already have:
+- Ansible installed
+- k3d installed
+- kubectl installed
+- Docker running
+- Vault password at `~/.ssh/ansible_vault_pass`
+- Credentials in `.env` file
+
+---
+
+## Step-by-Step
+
+### 1. Make Sure Your .env Has the Right Values
+
+Your `.env` file should have:
+
+```bash
+# Twitch (required)
+TWITCH_CLIENT_ID=your_actual_client_id
+TWITCH_CLIENT_SECRET=your_actual_secret
+TWITCH_BOT_USERNAME=your_bot_name
+TWITCH_BOT_OAUTH=oauth:your_token
+
+# YouTube (optional but recommended)
+YOUTUBE_CLIENT_ID=your_youtube_client_id
+YOUTUBE_CLIENT_SECRET=your_youtube_secret
+
+# JWT Secret (required)
+JWT_SECRET=your_strong_random_secret
+
+# Database password
+DATABASE_PASSWORD=allchat_dev_password
+```
+
+### 2. Generate Encrypted Vault
+
+```bash
+cd deployments/ansible
+./generate-vault-from-env.sh
+```
+
+This will:
+- Read your `.env` file
+- Create `secrets.vault.yml` with all values
+- Encrypt it using password from `~/.ssh/ansible_vault_pass`
+- No manual editing required!
+
+### 3. Deploy Everything
+
+```bash
+./deploy.sh
+```
+
+This will:
+- Create k3d cluster "allchat"
+- Deploy PostgreSQL and Redis
+- Deploy all 8 microservices
+- Set up networking
+
+**Deployment takes about 5-10 minutes.**
+
+### 4. Verify Deployment
+
+```bash
+# Check all pods are running
+kubectl get pods -n allchat
+
+# Check services
+kubectl get services -n allchat
+
+# View logs
+kubectl logs -n allchat -l app=api-gateway --tail=50
+```
+
+### 5. Access Services
+
+#### Option A: Port Forward Script
+
+```bash
+./port-forward.sh
+```
+
+#### Option B: Manual Port Forward
+
+```bash
+# In separate terminals
+kubectl port-forward -n allchat svc/api-gateway 8080:8080
+kubectl port-forward -n allchat svc/postgres 5432:5432
+```
+
+#### Access
+
+- **API Gateway**: http://localhost:8080
+- **Health Check**: http://localhost:8080/health
+
+---
+
+## Common Tasks
+
+### Update Secrets
+
+If you change `.env`:
+
+```bash
+# Regenerate vault
+./generate-vault-from-env.sh
+
+# Redeploy
+./deploy.sh
+```
+
+### Check Pod Logs
+
+```bash
+# Specific service
+kubectl logs -n allchat -l app=api-gateway -f
+
+# All services
+kubectl logs -n allchat --all-containers=true -f
+```
+
+### Restart a Service
+
+```bash
+kubectl rollout restart deployment/api-gateway -n allchat
+```
+
+### Delete Everything
+
+```bash
+k3d cluster delete allchat
+```
+
+### Start Fresh
+
+```bash
+# Delete cluster
+k3d cluster delete allchat
+
+# Deploy again
+./deploy.sh
+```
+
+---
+
+## Troubleshooting
+
+### "Vault password file not found"
+
+Make sure `~/.ssh/ansible_vault_pass` exists:
+
+```bash
+ls -la ~/.ssh/ansible_vault_pass
+```
+
+### "Pods not starting"
+
+Check pod status:
+
+```bash
+kubectl describe pod -n allchat <pod-name>
+kubectl logs -n allchat <pod-name>
+```
+
+### "Port already in use"
+
+Kill processes using the ports:
+
+```bash
+sudo lsof -i :8080
+sudo kill <PID>
+```
+
+Or change ports in `secrets.vault.yml.template` before generating.
+
+### "Image pull errors"
+
+The playbook should build and push images automatically. If you see errors:
+
+```bash
+# Check local registry
+kubectl get pods -n kube-system | grep registry
+
+# Manually build and push (if needed)
+docker build -t localhost:5000/allchat-api-gateway:latest services/api-gateway
+docker push localhost:5000/allchat-api-gateway:latest
+```
+
+---
+
+## What's Running?
+
+After successful deployment:
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| API Gateway | 8080 | Main entry point, WebSocket |
+| Auth Service | 8081 | Twitch OAuth, JWT tokens |
+| Overlay Manager | 8082 | Overlay CRUD |
+| Emote Service | 8083 | 7TV/BTTV/FFZ emotes |
+| Twitch Listener | 8085 | Twitch IRC |
+| YouTube Listener | 8086 | YouTube Live Chat |
+| Message Processor | 8087 | Message normalization |
+| Source Manager | 8088 | Active source registry |
+| PostgreSQL | 5432 | Database |
+| Redis | 6379 | Cache & Pub/Sub |
+
+---
+
+## Next Steps
+
+1. **Deploy Frontend** (if not already done):
+   ```bash
+   cd ../../frontend
+   npm install
+   npm run dev
+   # Access at http://localhost:3000
+   ```
+
+2. **Test WebSocket Connection**:
+   ```bash
+   # Create an overlay via API/Frontend
+   # Then connect to: ws://localhost:8080/ws/overlay/<overlay-id>
+   ```
+
+3. **Monitor Services**:
+   ```bash
+   # Install k9s for better monitoring
+   k9s -n allchat
+   ```
+
+4. **Set Up Ingress** (for production):
+   - Configure domain
+   - Set up TLS certificates
+   - Update ingress manifests
+
+---
+
+## Files Created
+
+After running scripts:
+
+```
+deployments/ansible/
+├── secrets.vault.yml        # Your encrypted secrets (git-ignored)
+├── secrets.vault.yml.backup.* # Backups when regenerating
+└── port-forward.sh          # Generated by playbook
+```
+
+---
+
+## Full Documentation
+
+- [Complete README](README.md) - Detailed deployment guide
+- [Vault Guide](README_VAULT.md) - All about Ansible Vault
+- [Project Docs](../../GETTING_STARTED.md) - Architecture overview
+
+---
+
+**That's it! You're running All-Chat on Kubernetes! 🎉**

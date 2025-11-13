@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twitch-listener
+  namespace: allchat
+  labels:
+    app: twitch-listener
+    component: listener
+    platform: twitch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: twitch-listener
+  template:
+    metadata:
+      labels:
+        app: twitch-listener
+        component: listener
+        platform: twitch
+    spec:
+      containers:
+      - name: twitch-listener
+        image: localhost:5000/allchat-twitch-listener:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8085
+          name: http
+        env:
+        - name: PORT
+          value: "8085"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: LOG_LEVEL
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_PORT
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_NAME
+        - name: DATABASE_USER
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: DATABASE_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_PORT
+        - name: TWITCH_BOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: TWITCH_BOT_USERNAME
+        - name: TWITCH_BOT_OAUTH
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: TWITCH_BOT_OAUTH
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8085
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8085
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: twitch-listener
+  namespace: allchat
+  labels:
+    app: twitch-listener
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8085
+    targetPort: 8085
+    protocol: TCP
+    name: http
+  selector:
+    app: twitch-listener

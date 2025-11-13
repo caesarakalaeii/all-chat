@@ -75,3 +75,9 @@ tmp/
 temp/
 
 .resources
+
+# Ansible Vault - Keep secrets encrypted and never commit plaintext!
+deployments/ansible/secrets.vault.yml
+deployments/ansible/.vault_pass
+*.vault.yml
+!*.vault.yml.template
