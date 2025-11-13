@@ -20,17 +20,8 @@ go.work
 vendor/
 
 # Build artifacts and binaries
-auth-service
-overlay-manager
-emote-service
-api-gateway
-message-processor
-twitch-listener
-youtube-listener
-source-controller
-
 # LSP and build cache directories
-@shared/
+
 @*/
 shared/pkg
 

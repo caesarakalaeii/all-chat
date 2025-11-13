@@ -1,0 +1,223 @@
+package normalizer
+
+import (
+	"testing"
+	"time"
+
+	"github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestTwitchNormalizer_Normalize(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	tests := []struct {
+		name      string
+		raw       *models.RawChatMessage
+		overlayID string
+		check     func(*testing.T, *models.UnifiedChatMessage)
+		wantErr   bool
+	}{
+		{
+			name: "basic message",
+			raw: &models.RawChatMessage{
+				MessageID: "msg-123",
+				Platform:  "twitch",
+				ChannelID: "xqc",
+				UserID:    "12345",
+				Username:  "viewer123",
+				Text:      "Hello World",
+				Timestamp: time.Now().UTC(),
+				Tags: map[string]string{
+					"display-name": "Viewer123",
+					"color":        "#FF0000",
+					"badges":       "subscriber/12",
+					"subscriber":   "1",
+				},
+			},
+			overlayID: "overlay-1",
+			check: func(t *testing.T, msg *models.UnifiedChatMessage) {
+				assert.Equal(t, "msg-123", msg.ID)
+				assert.Equal(t, "overlay-1", msg.OverlayID)
+				assert.Equal(t, "twitch", msg.Platform)
+				assert.Equal(t, "xqc", msg.ChannelID)
+				assert.Equal(t, "xqc", msg.ChannelName)
+				assert.Equal(t, "12345", msg.User.ID)
+				assert.Equal(t, "viewer123", msg.User.Username)
+				assert.Equal(t, "Viewer123", msg.User.DisplayName)
+				assert.Equal(t, "#FF0000", msg.User.Color)
+				assert.Contains(t, msg.User.Badges, "subscriber")
+				assert.Equal(t, "Hello World", msg.Message.Text)
+				assert.True(t, msg.Metadata["is_subscriber"].(bool))
+			},
+		},
+		{
+			name: "message with emotes",
+			raw: &models.RawChatMessage{
+				MessageID: "msg-456",
+				Platform:  "twitch",
+				ChannelID: "summit1g",
+				UserID:    "999",
+				Username:  "emoteuser",
+				Text:      "Kappa test Kappa",
+				Timestamp: time.Now().UTC(),
+				Tags: map[string]string{
+					"display-name": "EmoteUser",
+					"emotes":       "25:0-4,11-15",
+				},
+			},
+			overlayID: "overlay-2",
+			check: func(t *testing.T, msg *models.UnifiedChatMessage) {
+				assert.Equal(t, "Kappa test Kappa", msg.Message.Text)
+				assert.Len(t, msg.Message.Emotes, 1)
+
+				emote := msg.Message.Emotes[0]
+				assert.Equal(t, "Kappa", emote.Code)
+				assert.Equal(t, "twitch", emote.Provider)
+				assert.Contains(t, emote.URL, "25")
+				assert.Len(t, emote.Positions, 2)
+				assert.Equal(t, []int{0, 4}, emote.Positions[0])
+				assert.Equal(t, []int{11, 15}, emote.Positions[1])
+			},
+		},
+		{
+			name: "message with multiple emote types",
+			raw: &models.RawChatMessage{
+				MessageID: "msg-789",
+				Platform:  "twitch",
+				ChannelID: "test",
+				UserID:    "111",
+				Username:  "user",
+				Text:      "Kappa test PogChamp nice",
+				Timestamp: time.Now().UTC(),
+				Tags: map[string]string{
+					"emotes": "25:0-4/88:11-18", // PogChamp is 8 chars, positions 11-18
+				},
+			},
+			overlayID: "overlay-3",
+			check: func(t *testing.T, msg *models.UnifiedChatMessage) {
+				assert.Len(t, msg.Message.Emotes, 2)
+				assert.Equal(t, "Kappa", msg.Message.Emotes[0].Code)
+				assert.Equal(t, "PogChamp", msg.Message.Emotes[1].Code)
+			},
+		},
+		{
+			name: "message with badges",
+			raw: &models.RawChatMessage{
+				MessageID: "msg-999",
+				Platform:  "twitch",
+				ChannelID: "test",
+				UserID:    "222",
+				Username:  "mod",
+				Text:      "test",
+				Timestamp: time.Now().UTC(),
+				Tags: map[string]string{
+					"badges": "moderator/1,subscriber/24,turbo/1",
+					"mod":    "1",
+				},
+			},
+			overlayID: "overlay-4",
+			check: func(t *testing.T, msg *models.UnifiedChatMessage) {
+				assert.Contains(t, msg.User.Badges, "moderator")
+				assert.Contains(t, msg.User.Badges, "subscriber")
+				assert.Contains(t, msg.User.Badges, "turbo")
+				assert.True(t, msg.Metadata["is_moderator"].(bool))
+			},
+		},
+		{
+			name: "unsupported platform",
+			raw: &models.RawChatMessage{
+				MessageID: "msg-error",
+				Platform:  "youtube",
+				ChannelID: "test",
+				UserID:    "123",
+				Username:  "user",
+				Text:      "test",
+				Timestamp: time.Now().UTC(),
+				Tags:      map[string]string{},
+			},
+			overlayID: "overlay-5",
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := normalizer.Normalize(tt.raw, tt.overlayID)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				if tt.check != nil {
+					tt.check(t, result)
+				}
+			}
+		})
+	}
+}
+
+func TestTwitchNormalizer_ExtractUserInfo(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	raw := &models.RawChatMessage{
+		UserID:   "12345",
+		Username: "testuser",
+		Tags: map[string]string{
+			"display-name": "TestUser",
+			"color":        "#00FF00",
+			"badges":       "broadcaster/1,moderator/1",
+		},
+	}
+
+	userInfo := normalizer.extractUserInfo(raw)
+
+	assert.Equal(t, "12345", userInfo.ID)
+	assert.Equal(t, "testuser", userInfo.Username)
+	assert.Equal(t, "TestUser", userInfo.DisplayName)
+	assert.Equal(t, "#00FF00", userInfo.Color)
+	assert.Contains(t, userInfo.Badges, "broadcaster")
+	assert.Contains(t, userInfo.Badges, "moderator")
+}
+
+func TestTwitchNormalizer_ExtractUserInfo_NoDisplayName(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	raw := &models.RawChatMessage{
+		UserID:   "999",
+		Username: "user",
+		Tags:     map[string]string{},
+	}
+
+	userInfo := normalizer.extractUserInfo(raw)
+
+	// Should fallback to username
+	assert.Equal(t, "user", userInfo.DisplayName)
+}
+
+func TestTwitchNormalizer_ExtractMetadata(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	raw := &models.RawChatMessage{
+		Tags: map[string]string{
+			"subscriber": "1",
+			"mod":        "0",
+			"turbo":      "1",
+			"id":         "twitch-msg-id",
+			"room-id":    "71092938",
+		},
+	}
+
+	metadata := normalizer.extractMetadata(raw)
+
+	assert.True(t, metadata["is_subscriber"].(bool))
+	assert.False(t, metadata["is_moderator"].(bool))
+	assert.True(t, metadata["is_turbo"].(bool))
+	assert.Equal(t, "twitch-msg-id", metadata["twitch_message_id"])
+	assert.Equal(t, "71092938", metadata["twitch_room_id"])
+	assert.Equal(t, 0, metadata["bits"])
+	assert.Equal(t, 0, metadata["super_chat_amount"])
+}
