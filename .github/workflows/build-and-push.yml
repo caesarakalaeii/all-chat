@@ -1,0 +1,176 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - '.github/workflows/build-and-push.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/**'
+      - 'shared/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: caesarakalaeii/allchat
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      auth-service: ${{ steps.changes.outputs.auth-service }}
+      overlay-manager: ${{ steps.changes.outputs.overlay-manager }}
+      emote-service: ${{ steps.changes.outputs.emote-service }}
+      api-gateway: ${{ steps.changes.outputs.api-gateway }}
+      twitch-listener: ${{ steps.changes.outputs.twitch-listener }}
+      youtube-listener: ${{ steps.changes.outputs.youtube-listener }}
+      message-processor: ${{ steps.changes.outputs.message-processor }}
+      source-controller: ${{ steps.changes.outputs.source-controller }}
+      shared: ${{ steps.changes.outputs.shared }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            auth-service:
+              - 'services/auth-service/**'
+              - 'shared/**'
+            overlay-manager:
+              - 'services/overlay-manager/**'
+              - 'shared/**'
+            emote-service:
+              - 'services/emote-service/**'
+              - 'shared/**'
+            api-gateway:
+              - 'services/api-gateway/**'
+              - 'shared/**'
+            twitch-listener:
+              - 'services/twitch-listener/**'
+              - 'shared/**'
+            youtube-listener:
+              - 'services/youtube-listener/**'
+              - 'shared/**'
+            message-processor:
+              - 'services/message-processor/**'
+              - 'shared/**'
+            source-controller:
+              - 'services/source-controller/**'
+              - 'shared/**'
+            shared:
+              - 'shared/**'
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        service:
+          - name: auth-service
+            changed: ${{ needs.detect-changes.outputs.auth-service }}
+          - name: overlay-manager
+            changed: ${{ needs.detect-changes.outputs.overlay-manager }}
+          - name: emote-service
+            changed: ${{ needs.detect-changes.outputs.emote-service }}
+          - name: api-gateway
+            changed: ${{ needs.detect-changes.outputs.api-gateway }}
+          - name: twitch-listener
+            changed: ${{ needs.detect-changes.outputs.twitch-listener }}
+          - name: youtube-listener
+            changed: ${{ needs.detect-changes.outputs.youtube-listener }}
+          - name: message-processor
+            changed: ${{ needs.detect-changes.outputs.message-processor }}
+          - name: source-controller
+            changed: ${{ needs.detect-changes.outputs.source-controller }}
+
+    steps:
+      - name: Checkout repository
+        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/${{ matrix.service.name }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Output image details
+        if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
+        run: |
+          echo "Service: ${{ matrix.service.name }}"
+          echo "Tags: ${{ steps.meta.outputs.tags }}"
+          echo "Image pushed to: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}"
+
+  test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - overlay-manager
+          - emote-service
+          - api-gateway
+          - twitch-listener
+          - youtube-listener
+          - message-processor
+          - source-controller
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Run tests for ${{ matrix.service }}
+        run: |
+          cd services/${{ matrix.service }}
+          go mod download
+          go test -v -short ./...

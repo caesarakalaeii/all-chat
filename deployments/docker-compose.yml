@@ -131,6 +131,164 @@ services:
       - allchat
     restart: unless-stopped
 
+  # API Gateway (Phase 2 + Phase 3 WebSocket)
+  api-gateway:
+    build:
+      context: ../
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: allchat-gateway
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: "info"
+      AUTH_SERVICE_URL: http://auth-service:8081
+      OVERLAY_SERVICE_URL: http://overlay-manager:8082
+      EMOTE_SERVICE_URL: http://emote-service:8083
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: allchat_dev_password
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      overlay-manager:
+        condition: service_started
+      emote-service:
+        condition: service_started
+    networks:
+      - allchat
+    restart: unless-stopped
+
+  # Twitch Listener (Phase 3)
+  twitch-listener:
+    build:
+      context: ../
+      dockerfile: services/twitch-listener/Dockerfile
+    container_name: allchat-twitch-listener
+    environment:
+      PORT: "8085"
+      LOG_LEVEL: "info"
+      TWITCH_BOT_USERNAME: ${TWITCH_BOT_USERNAME}
+      TWITCH_BOT_OAUTH: ${TWITCH_BOT_OAUTH}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: allchat_dev_password
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    ports:
+      - "8085:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
+  # Message Processor (Phase 3)
+  message-processor:
+    build:
+      context: ../
+      dockerfile: services/message-processor/Dockerfile
+    container_name: allchat-message-processor
+    environment:
+      PORT: "8087"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: allchat_dev_password
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      EMOTE_SERVICE_URL: http://emote-service:8083
+    ports:
+      - "8087:8087"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      emote-service:
+        condition: service_started
+    networks:
+      - allchat
+    restart: unless-stopped
+
+  # Source Controller (Phase 4)
+  source-controller:
+    build:
+      context: ../
+      dockerfile: services/source-controller/Dockerfile
+    container_name: allchat-source-controller
+    environment:
+      PORT: "8088"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: allchat_dev_password
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    ports:
+      - "8088:8088"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
+  # YouTube Listener (Phase 4)
+  youtube-listener:
+    build:
+      context: ../
+      dockerfile: services/youtube-listener/Dockerfile
+    container_name: allchat-youtube-listener
+    environment:
+      PORT: "8086"
+      LOG_LEVEL: "info"
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET}
+      YOUTUBE_REDIRECT_URL: ${YOUTUBE_REDIRECT_URL:-http://localhost:8080/api/v1/auth/youtube/callback}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: allchat_dev_password
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      POLLING_INTERVAL_MS: "2000"
+      QUOTA_LIMIT_DAILY: "10000"
+    ports:
+      - "8086:8086"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      source-controller:
+        condition: service_started
+    networks:
+      - allchat
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     driver: local
