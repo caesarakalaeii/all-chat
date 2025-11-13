@@ -25,7 +25,7 @@ All-Chat is a cloud-native microservices platform for aggregating and displaying
 
 **Platform Priority**: Initial focus is Twitch and YouTube, with Kick and TikTok support planned for future releases.
 
-**Current Status**: ~90% Phase 4 complete. All 8 core services implemented (Auth, Overlay Manager, Emote Service, API Gateway, Twitch Listener, YouTube Listener, Message Processor, Source Manager). Twitch integration fully tested and working. YouTube integration pending testing.
+**Current Status**: ~90% Phase 4 complete. All 5 core services implemented (API Gateway, Twitch Listener, YouTube Listener, Message Processor, Source Manager). Twitch integration fully tested and working. YouTube integration pending testing.
 
 ## Build & Test Commands
 
@@ -33,22 +33,10 @@ All-Chat is a cloud-native microservices platform for aggregating and displaying
 # Build all services
 make build
 
-# Build individual services
-make build-auth         # Auth Service
-make build-overlay      # Overlay Manager
-make build-emote        # Emote Service
-make build-chat         # Chat Listener (TODO)
-make build-api-gateway  # API Gateway (TODO)
-
 # Run tests
 make test              # All tests
 make test-coverage     # With coverage report
-go test -v ./services/auth-service/...  # Single service tests
-
-# Run individual services locally (requires PostgreSQL & Redis running)
-make run-auth
-make run-overlay
-make run-emote
+go test -v ./services/api-gateway/...  # Single service tests
 
 # Code quality
 make fmt               # Format code
@@ -169,122 +157,126 @@ This unified format allows the frontend to display messages from all platforms c
 
 ## Service Details
 
-### Auth Service (Port 8081) ✅
-**Purpose**: Twitch OAuth & JWT management
-
-**Key Files**:
-- `services/auth-service/cmd/main.go` - Entry point
-- `services/auth-service/oauth/` - OAuth flow implementation
-- `services/auth-service/handlers/` - HTTP endpoints
-
-**Endpoints**:
-- `GET /auth/login` - Start OAuth flow
-- `GET /auth/callback` - OAuth callback
-- `POST /auth/refresh` - Refresh tokens
-- `GET /auth/me` - Get current user
-- `POST /auth/logout` - Logout
-
-**Environment**:
-- `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` (required)
-- `TWITCH_REDIRECT_URL` (default: `http://localhost:8080/api/v1/auth/callback`)
-- `JWT_SECRET` (required for production)
-
-### Overlay Manager (Port 8082) ✅
-**Purpose**: CRUD operations for overlays and configurations
-
-**Key Files**:
-- `services/overlay-manager/cmd/main.go` - Entry point
-- `services/overlay-manager/handlers/` - HTTP handlers
-- `services/overlay-manager/repository/` - Database persistence layer
-
-**Endpoints**:
-- `GET/POST /overlays` - List/Create overlays
-- `GET/PUT/DELETE /overlays/:id` - Get/Update/Delete overlay
-- `GET/PUT /overlays/:id/config` - Get/Update configuration
-- `GET /overlays/:id/sources` - List chat sources for overlay
-- `POST /overlays/:id/sources` - Add chat source to overlay
-- `DELETE /overlays/:id/sources/:source_id` - Remove chat source from overlay
-- `PUT /overlays/:id/sources/:source_id` - Update chat source configuration
-
-**Database Tables**:
-- `overlays` - Overlay metadata (one-to-many with users)
-- `overlay_chat_sources` - Chat sources for each overlay (many-to-many relationship)
-- `overlay_configs` - Display and filter configuration (one-to-one with overlays)
-
-### Emote Service (Port 8083) ✅
-**Purpose**: Fetch & cache emotes from 7TV, BTTV, FFZ
-
-**Key Files**:
-- `services/emote-service/cmd/main.go` - Entry point
-- `services/emote-service/handlers/` - HTTP handlers
-- `services/emote-service/cache/` - Redis caching layer
-- `services/emote-service/clients/` - External API clients (7TV, BTTV, FFZ)
-
-**Endpoints**:
-- `GET /emotes/channel/:channel` - Get all emotes for channel
-- `GET /emotes/7tv/:channel` - 7TV emotes only
-- `GET /emotes/bttv/:channel` - BTTV emotes only
-- `GET /emotes/ffz/:channel` - FFZ emotes only
-
-**Caching**: Uses Redis with TTL (e.g., `emotes:7tv:{channel}`)
-
-### Chat Listener (TODO) ⏳
-**Purpose**: Connect to multiple live streaming platforms, normalize messages, enrich with emotes, publish to Redis
-
-**Architecture**:
-- **Plugin-based design**: Each streaming platform (Twitch, YouTube, Kick, TikTok) is a separate adapter
-- **Unified message format**: All messages normalized to common structure regardless of source
-- **Dynamic source management**: Connect/disconnect from sources based on active overlay configurations
-
-**Expected Flow**:
-1. Poll database for active overlay chat sources
-2. Connect to each platform's API/IRC (Twitch IRC, YouTube Live Chat API, Kick WebSocket, TikTok API)
-3. Join channels/streams based on active overlays
-4. Parse incoming messages and normalize to unified format
-5. Enrich with emotes from Emote Service (platform-specific emotes)
-6. Publish to Redis channels (`overlay:{overlay_id}`) - messages from all sources for that overlay
-7. Handle reconnections and rate limits per platform
-
-**Supported Sources**:
-- **Twitch** (Phase 1): IRC connection (gempir/go-twitch-irc) ✅ Priority
-- **YouTube** (Phase 1): Live Chat API (requires OAuth) ✅ Priority
-- **Kick** (Phase 2): WebSocket/API connection
-- **TikTok** (Phase 2): Live Chat API
-
-**Environment**:
-- `TWITCH_BOT_USERNAME`, `TWITCH_BOT_OAUTH` (required for Twitch)
-- `YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` (required for YouTube)
-- `KICK_API_TOKEN` (required for Kick - future)
-- `TIKTOK_API_KEY` (required for TikTok - future)
-
-### API Gateway (Port 8080) (TODO) ⏳
+### API Gateway (Port 8080) ✅
 **Purpose**: Entry point, WebSocket management, HTTP routing
 
-**Expected Features**:
-- HTTP reverse proxy to backend services
-- WebSocket server for overlay connections
-- Subscribe to Redis pub/sub channels
-- Broadcast messages to WebSocket clients
-- Serve static frontend files
+**Key Files**:
+- `services/api-gateway/cmd/main.go` - Entry point
+- `services/api-gateway/handlers/` - HTTP handlers
+- `services/api-gateway/websocket/` - WebSocket server implementation
 
-**WebSocket**: `ws://localhost:8080/ws/overlay/:id?token=JWT`
+**Features**:
+- HTTP reverse proxy to backend services
+- WebSocket server for overlay connections (`ws://localhost:8080/ws/overlay/:id`)
+- Subscribe to Redis pub/sub channels (`overlay:{overlay_id}`)
+- Broadcast messages to WebSocket clients
+- Connection pooling per overlay
+- CORS and request logging
+- Health aggregation
+
+**Documentation**: See `services/api-gateway/README.md`
+
+### Twitch Listener (Port 8085) ✅
+**Purpose**: Connect to Twitch IRC, listen to chat, publish raw messages to Redis Streams
+
+**Key Files**:
+- `services/twitch-listener/cmd/main.go` - Entry point
+- `services/twitch-listener/irc/client.go` - Twitch IRC client implementation
+- `services/twitch-listener/channels/manager.go` - Dynamic channel join/leave management
+- `services/twitch-listener/publisher/redis.go` - Publishes to Redis Stream `chat:raw`
+
+**Features**:
+- Twitch IRC connection (gempir/go-twitch-irc)
+- Dynamic channel JOIN/PART
+- Rate limiting (20 JOIN/10s per Twitch limits)
+- Publishes to Redis Streams (`chat:raw`)
+- Automatic reconnection
+- Health checks and status
+
+**Environment**:
+- `TWITCH_BOT_USERNAME`, `TWITCH_BOT_OAUTH` (required)
+
+**Documentation**: See `services/twitch-listener/README.md`
+
+### YouTube Listener (Port 8086) ✅
+**Purpose**: Poll YouTube Live Chat API, publish raw messages to Redis Streams
+
+**Key Files**:
+- `services/youtube-listener/cmd/main.go` - Entry point with leader election
+- `services/youtube-listener/youtube/client.go` - YouTube API client wrapper
+- `services/youtube-listener/streams/poller.go` - Live chat polling logic (2-5s interval)
+- `services/youtube-listener/channels/manager.go` - Active stream tracking
+- `services/youtube-listener/publisher/redis.go` - Publishes to Redis Stream `chat:raw`
+
+**Features**:
+- YouTube Live Chat API polling
+- OAuth 2.0 per-user authentication
+- Adaptive polling intervals (2-5 seconds)
+- Quota tracking (10,000 units/day default)
+- Leader election (prevents duplicate polling)
+- Publishes to Redis Streams (`chat:raw`)
+- Health checks and status
+
+**Environment**:
+- `YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` (required)
+
+**Documentation**: See `services/youtube-listener/README.md`
+
+### Message Processor (Port 8087) ✅
+**Purpose**: Consume messages from Redis Streams, normalize, enrich with emotes, publish to overlay-specific Pub/Sub
+
+**Key Files**:
+- `services/message-processor/cmd/main.go` - Consumer group initialization
+- `services/message-processor/consumer/streams.go` - Redis Streams XREADGROUP consumer
+- `services/message-processor/normalizer/twitch_normalizer.go` - Twitch message parsing
+- `services/message-processor/normalizer/youtube_normalizer.go` - YouTube message parsing
+- `services/message-processor/enricher/emote_enricher.go` - Emote enrichment
+- `services/message-processor/publisher/pubsub.go` - Publishes to `overlay:{overlay_id}`
+- `services/message-processor/router/router.go` - Routes messages based on platform
+
+**Features**:
+- Redis Streams consumer (consumer group `message-processors`)
+- Message normalization (Twitch + YouTube → Unified format)
+- Emote enrichment (7TV, BTTV, FFZ via external APIs)
+- Platform detection and routing
+- Overlay-specific publishing via Redis Pub/Sub
+- Health checks and status
+
+**Documentation**: See `services/message-processor/README.md`
+
+### Source Manager (Port 8088) ✅
+**Purpose**: Active source registry and Redis-based leader election for YouTube polling
+
+**Key Files**:
+- `services/source-manager/cmd/main.go` - Entry point
+- `services/source-manager/registry/` - Active source tracking
+- `services/source-manager/election/` - Leader election implementation
+- `services/source-manager/handlers/` - HTTP API for leadership
+
+**Features**:
+- Active source registry (syncs from database)
+- Redis-based leader election (prevents duplicate YouTube polling)
+- Leadership API (claim, renew, release)
+- Health checks and status
+- Coordination between YouTube Listener instances
+
+**Environment**:
+- `REDIS_HOST`, `REDIS_PORT` (required)
+- `DATABASE_*` variables for source registry sync
 
 ## Environment Variables
 
 See `.env.example` for template. Key variables:
 
 ```bash
-# Twitch OAuth (required)
-TWITCH_CLIENT_ID=
-TWITCH_CLIENT_SECRET=
-TWITCH_REDIRECT_URL=http://localhost:8080/api/v1/auth/callback
-
-# Twitch IRC Bot (required for Chat Listener)
+# Twitch IRC Bot (required for Twitch Listener)
 TWITCH_BOT_USERNAME=
 TWITCH_BOT_OAUTH=oauth:...
 
-# JWT (required)
-JWT_SECRET=
+# YouTube API (required for YouTube Listener)
+YOUTUBE_API_KEY=
+YOUTUBE_CLIENT_ID=
+YOUTUBE_CLIENT_SECRET=
 
 # Database (defaults for local dev)
 DATABASE_HOST=localhost
@@ -300,41 +292,24 @@ REDIS_PORT=6379
 
 ## Database Schema
 
-**Users Table** (`users`):
-- Stores Twitch user info
-- OAuth tokens encrypted at rest (basic encryption, TODO: AES-GCM)
-- Indexed on `twitch_id` and `username`
+The application uses PostgreSQL for persistent data storage. Key tables used by the services:
 
-**Overlays Table** (`overlays`):
-- One-to-many with users (cascade delete)
-- `is_active` flag for soft enable/disable
-- Indexed on `user_id` and `is_active`
+**Active Sources** (`active_sources` or similar):
+- Tracks which chat sources are currently active
+- Used by Source Manager for registry and leader election
+- Used by Listeners to know which channels/streams to connect to
+- Fields typically include: `overlay_id`, `platform`, `channel_id`, `is_active`
 
-**Overlay Chat Sources Table** (`overlay_chat_sources`):
-- Many-to-one with overlays (cascade delete)
-- Supports multiple sources per overlay
-- Fields: `platform` (twitch, youtube, discord, kick, irc), `channel_id`, `auth_required`
-- Each source can have platform-specific configuration in JSONB field
-- Indexed on `overlay_id` and `platform`
-
-**Overlay Configs Table** (`overlay_configs`):
-- One-to-one with overlays (cascade delete)
-- JSONB fields: `display_settings`, `filter_settings`
-- Emote flags: `enable_7tv`, `enable_bttv`, `enable_ffz`
-- NO LONGER stores single `twitch_channel` - replaced by `overlay_chat_sources` table
-
-**Supported Platforms Table** (`supported_platforms`):
-- Registry of available streaming platforms
-- Fields: `platform`, `display_name`, `is_enabled`, `requires_oauth`, `config_schema`
-- Initial platforms: Twitch (enabled), YouTube (enabled), Kick (disabled), TikTok (disabled)
+**Configuration Storage**:
+- Overlay configurations and chat source mappings
+- Referenced by services to determine what to listen to
+- Platform-specific settings (polling intervals, auth tokens, etc.)
 
 **Migrations**:
-- `migrations/001_initial_schema.sql` - Initial schema (single Twitch channel per overlay)
-- `migrations/002_add_multi_source_support.sql` - Multi-source support (BREAKING CHANGE)
-  - Adds `overlay_chat_sources` table
-  - Removes `twitch_channel` from `overlay_configs`
-  - Renames `active_channels` to `active_platform_channels` with platform support
-  - Adds `supported_platforms` registry table
+See `migrations/` directory for database schema evolution. The schema supports:
+- Multiple streaming platforms (Twitch, YouTube, Kick, TikTok)
+- Multi-source overlays (one overlay can aggregate multiple chat sources)
+- Platform-specific configuration (JSONB fields for flexibility)
 
 ## Common Development Patterns
 
@@ -392,9 +367,10 @@ make docker-logs  # Watch logs
 
 Services accessible at:
 - API Gateway: `http://localhost:8080`
-- Auth: `http://localhost:8081`
-- Overlay: `http://localhost:8082`
-- Emote: `http://localhost:8083`
+- Twitch Listener: `http://localhost:8085`
+- YouTube Listener: `http://localhost:8086`
+- Message Processor: `http://localhost:8087`
+- Source Manager: `http://localhost:8088`
 
 ### Kubernetes
 ```bash
@@ -417,16 +393,14 @@ Each service has:
 - CORS currently allows `*` in dev (configure for production)
 
 ### Implementation TODOs
-- [ ] Apply multi-source migration (`002_add_multi_source_support.sql`)
-- [ ] Update Overlay Manager to support chat sources CRUD endpoints
-- [ ] Complete Chat Listener service (Phase 1: Twitch + YouTube)
-- [ ] Complete API Gateway service with WebSocket multi-source support
-- [ ] Build React + Next.js frontend with multi-source configuration UI
-- [ ] Add Chat Listener adapters for Kick and TikTok (Phase 2)
-- [ ] Add Prometheus metrics endpoint
+- [ ] Complete integration testing for YouTube Listener
+- [ ] Add Listener adapters for Kick and TikTok (Phase 2)
+- [ ] Build React + Next.js frontend for overlay display and configuration
+- [ ] Add Prometheus metrics endpoint to all services
 - [ ] Implement distributed tracing (OpenTelemetry)
 - [ ] Add comprehensive unit/integration tests
-- [ ] Set up CI/CD pipeline (GitHub Actions recommended)
+- [ ] Implement authentication/authorization for production use
+- [ ] Add overlay management API (CRUD operations)
 
 ### Scalability TODOs
 - [ ] Separate databases per service
@@ -450,15 +424,22 @@ Each service has:
 - Run migrations: `make migrate-up`
 - Check `migrations/001_initial_schema.sql` for schema
 
-**OAuth Errors**:
-- Verify Twitch app redirect URL matches `.env` (`TWITCH_REDIRECT_URL`)
-- Ensure Client ID and Secret are correct
-- Check Twitch app is not rate-limited
+**Twitch Listener Errors**:
+- Verify Twitch bot OAuth token is valid (get from https://twitchapps.com/tmi/)
+- Check bot username matches token
+- Ensure channels exist and are spelled correctly
+
+**YouTube Listener Errors**:
+- Verify YouTube API credentials are valid
+- Check API quota hasn't been exceeded (10,000 units/day default)
+- Ensure video IDs are live streams with chat enabled
 
 ## Resources
 
-- **Twitch Developer Console**: https://dev.twitch.tv/console/apps
 - **Twitch IRC OAuth**: https://twitchapps.com/tmi/
+- **Twitch Developer Console**: https://dev.twitch.tv/console/apps
+- **YouTube Live Chat API**: https://developers.google.com/youtube/v3/live/docs
+- **YouTube API Console**: https://console.developers.google.com/
 - **7TV API**: https://7tv.io/docs
 - **BTTV API**: https://betterttv.com/developers
 - **FFZ API**: https://www.frankerfacez.com/developers
