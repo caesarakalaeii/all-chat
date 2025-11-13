@@ -32,7 +32,7 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		BaseURL:     authURL,
 		HealthPath:  "/health/live",
 		PathPrefix:  "/api/v1/auth",
-		StripPrefix: true,
+		StripPrefix: true, // Strip /api/v1/auth, forward remaining path
 	}
 
 	// Overlay Manager
@@ -42,7 +42,7 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		BaseURL:     overlayURL,
 		HealthPath:  "/health/live",
 		PathPrefix:  "/api/v1/overlays",
-		StripPrefix: true,
+		StripPrefix: true, // Strip /api/v1/overlays, forward remaining path
 	}
 
 	// Emote Service
@@ -52,7 +52,7 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		BaseURL:     emoteURL,
 		HealthPath:  "/health/live",
 		PathPrefix:  "/api/v1/emotes",
-		StripPrefix: true,
+		StripPrefix: true, // Strip /api/v1/emotes, forward remaining path
 	}
 
 	// Validate all service URLs are set
