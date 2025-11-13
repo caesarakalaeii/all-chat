@@ -32,7 +32,7 @@ jobs:
       twitch-listener: ${{ steps.changes.outputs.twitch-listener }}
       youtube-listener: ${{ steps.changes.outputs.youtube-listener }}
       message-processor: ${{ steps.changes.outputs.message-processor }}
-      source-controller: ${{ steps.changes.outputs.source-controller }}
+      source-manager: ${{ steps.changes.outputs.source-manager }}
       shared: ${{ steps.changes.outputs.shared }}
     steps:
       - uses: actions/checkout@v4
@@ -64,8 +64,8 @@ jobs:
             message-processor:
               - 'services/message-processor/**'
               - 'shared/**'
-            source-controller:
-              - 'services/source-controller/**'
+            source-manager:
+              - 'services/source-manager/**'
               - 'shared/**'
             shared:
               - 'shared/**'
@@ -95,8 +95,8 @@ jobs:
             changed: ${{ needs.detect-changes.outputs.youtube-listener }}
           - name: message-processor
             changed: ${{ needs.detect-changes.outputs.message-processor }}
-          - name: source-controller
-            changed: ${{ needs.detect-changes.outputs.source-controller }}
+          - name: source-manager
+            changed: ${{ needs.detect-changes.outputs.source-manager }}
 
     steps:
       - name: Checkout repository
@@ -159,7 +159,7 @@ jobs:
           - twitch-listener
           - youtube-listener
           - message-processor
-          - source-controller
+          - source-manager
 
     steps:
       - uses: actions/checkout@v4

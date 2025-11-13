@@ -23,7 +23,7 @@ resources:
 
   # Phase 4 - YouTube Integration
   - youtube-listener/deployment.yaml
-  - source-controller/deployment.yaml
+  - source-manager/deployment.yaml
 
 commonLabels:
   project: allchat
@@ -51,6 +51,6 @@ images:
   - name: allchat-message-processor
     newName: localhost:5000/allchat-message-processor
     newTag: latest
-  - name: allchat-source-controller
-    newName: localhost:5000/allchat-source-controller
+  - name: allchat-source-manager
+    newName: localhost:5000/allchat-source-manager
     newTag: latest

@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: source-controller
+  name: source-manager
   namespace: allchat
   labels:
-    app: source-controller
+    app: source-manager
     component: controller
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: source-controller
+      app: source-manager
   template:
     metadata:
       labels:
-        app: source-controller
+        app: source-manager
         component: controller
     spec:
       containers:
-      - name: source-controller
-        image: localhost:5000/allchat-source-controller:latest
+      - name: source-manager
+        image: localhost:5000/allchat-source-manager:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8088
@@ -92,10 +92,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: source-controller
+  name: source-manager
   namespace: allchat
   labels:
-    app: source-controller
+    app: source-manager
 spec:
   type: ClusterIP
   ports:
@@ -104,18 +104,18 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: source-controller
+    app: source-manager
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: source-controller-hpa
+  name: source-manager-hpa
   namespace: allchat
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: source-controller
+    name: source-manager
   minReplicas: 1
   maxReplicas: 3
   metrics:
