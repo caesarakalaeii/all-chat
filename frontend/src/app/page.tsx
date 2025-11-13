@@ -30,9 +30,20 @@ export default function LandingPage() {
     }
   }, [user, token, router]);
 
-  const handleLogin = () => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-    window.location.href = `${apiUrl}/api/v1/auth/login`;
+  const handleLogin = async () => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+      const response = await fetch(`${apiUrl}/api/v1/auth/login`);
+      const data = await response.json();
+
+      if (data.auth_url) {
+        window.location.href = data.auth_url;
+      } else {
+        console.error('No auth_url in response:', data);
+      }
+    } catch (error) {
+      console.error('Failed to initiate login:', error);
+    }
   };
 
   return (

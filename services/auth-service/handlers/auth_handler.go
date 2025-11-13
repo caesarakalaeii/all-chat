@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -150,12 +151,25 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.TokenResponse{
-		AccessToken:  jwtToken,
-		RefreshToken: token.RefreshToken,
-		ExpiresIn:    int64(h.jwtExpiry.Seconds()),
-		TokenType:    "Bearer",
-	})
+	// Redirect to frontend with token in URL fragment (more secure than query param)
+	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
+	redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer",
+		frontendURL,
+		jwtToken,
+		token.RefreshToken,
+		int64(h.jwtExpiry.Seconds()),
+	)
+
+	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// getEnvOrDefault gets an environment variable or returns a default value
+func getEnvOrDefault(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // HandleRefresh refreshes an expired JWT using Twitch refresh token

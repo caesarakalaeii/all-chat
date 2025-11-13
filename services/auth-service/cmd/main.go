@@ -100,7 +100,7 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.Logging(log))
-	router.Use(middleware.CORS())
+	// CORS is handled by API Gateway, not by individual services
 
 	// Health check endpoints
 	router.GET("/health/live", healthHandler.CheckLive)

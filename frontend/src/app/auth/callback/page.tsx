@@ -34,8 +34,11 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Get token from URL parameter
-      const token = searchParams.get('token');
+      // Get token from URL fragment (#access_token=xxx)
+      const hash = window.location.hash.substring(1); // Remove #
+      const params = new URLSearchParams(hash);
+      const token = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
 
       if (!token) {
         setError('No authentication token received');
@@ -45,6 +48,9 @@ function AuthCallbackContent() {
 
       // Store token
       setToken(token);
+      if (refreshToken && typeof window !== 'undefined') {
+        localStorage.setItem('refresh_token', refreshToken);
+      }
 
       try {
         // Fetch user info

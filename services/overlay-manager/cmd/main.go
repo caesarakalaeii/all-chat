@@ -13,7 +13,6 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
-	"github.com/caesar/all-chat/shared/middleware"
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -91,7 +90,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(middleware.CORS())
+	// CORS is handled by API Gateway, not by individual services
 	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
 		SkipPaths: []string{"/health/live", "/health/ready"},
 	}))
