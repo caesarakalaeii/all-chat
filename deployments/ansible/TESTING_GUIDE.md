@@ -102,7 +102,7 @@ ok: [localhost] => {
 # - twitch-listener
 # - youtube-listener (NEW)
 # - message-processor
-# - source-controller (NEW)
+# - source-manager (NEW)
 ```
 
 **Expected output:**
@@ -111,9 +111,9 @@ Building: youtube-listener
 ...
 ✅ youtube-listener complete
 
-Building: source-controller
+Building: source-manager
 ...
-✅ source-controller complete
+✅ source-manager complete
 
 All images built and pushed successfully!
 ```
@@ -141,7 +141,7 @@ kubectl get pods -n allchat
 - twitch-listener-xxxxx-yyy (1/1 Running)
 - youtube-listener-xxxxx-yyy (1/1 Running)
 - message-processor-xxxxx-yyy (1/1 Running)
-- source-controller-xxxxx-yyy (1/1 Running)
+- source-manager-xxxxx-yyy (1/1 Running)
 
 ### Step 5: Verify Deployment
 
@@ -191,29 +191,29 @@ curl http://localhost:8086/status | jq
 # }
 ```
 
-### Scenario 2: Source Controller Leader Election
+### Scenario 2: Source Manager Leader Election
 
 ```bash
-# Port forward Source Controller
-kubectl port-forward -n allchat svc/source-controller 8088:8088 &
+# Port forward Source Manager
+kubectl port-forward -n allchat svc/source-manager 8088:8088 &
 
 # Check status
 curl http://localhost:8088/status | jq
 
 # Scale to 3 replicas
-kubectl scale deployment source-controller -n allchat --replicas=3
+kubectl scale deployment source-manager -n allchat --replicas=3
 
 # Wait for pods
-kubectl wait --for=condition=Ready pod -l app=source-controller -n allchat --timeout=120s
+kubectl wait --for=condition=Ready pod -l app=source-manager -n allchat --timeout=120s
 
 # Check instance IDs
-kubectl get pods -n allchat -l app=source-controller -o wide
+kubectl get pods -n allchat -l app=source-manager -o wide
 
 # Check leadership status (all instances should have unique IDs)
 curl http://localhost:8088/status | jq '.instance_id'
 
 # Scale back
-kubectl scale deployment source-controller -n allchat --replicas=1
+kubectl scale deployment source-manager -n allchat --replicas=1
 ```
 
 ### Scenario 3: PostgreSQL Data Persistence
@@ -281,7 +281,7 @@ wget -qO- http://postgres:5432
 wget -qO- http://redis:6379
 # Expected: Redis connection attempt
 
-wget -qO- http://source-controller:8088/health/live
+wget -qO- http://source-manager:8088/health/live
 # Expected: {"status":"alive"}
 
 exit
@@ -311,8 +311,8 @@ kubectl logs -n allchat -l app=message-processor | grep -i normalizer
 # Scale YouTube Listener to handle more streams
 kubectl scale deployment youtube-listener -n allchat --replicas=3
 
-# Scale Source Controller for redundancy
-kubectl scale deployment source-controller -n allchat --replicas=2
+# Scale Source Manager for redundancy
+kubectl scale deployment source-manager -n allchat --replicas=2
 
 # Scale Message Processor for higher throughput
 kubectl scale deployment message-processor -n allchat --replicas=5

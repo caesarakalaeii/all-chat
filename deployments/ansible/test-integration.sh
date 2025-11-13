@@ -37,7 +37,7 @@ echo "========================================="
 services=(
   "8080:API Gateway"
   "8086:YouTube Listener"
-  "8088:Source Controller"
+  "8088:Source Manager"
 )
 
 for svc in "${services[@]}"; do
@@ -69,7 +69,7 @@ echo -e "Active streams: $STREAM_COUNT"
 echo -e "Quota used today: $QUOTA_USED"
 echo ""
 
-echo "Source Controller status:"
+echo "Source Manager status:"
 SOURCE_STATUS=$(curl -s "http://localhost:8088/status")
 echo "$SOURCE_STATUS" | jq '.'
 echo ""
@@ -151,24 +151,24 @@ echo "========================================="
 echo "Test 6: Leader Election"
 echo "========================================="
 
-echo "Scaling Source Controller to 3 replicas..."
-kubectl scale deployment source-controller -n "$NAMESPACE" --replicas=3
+echo "Scaling Source Manager to 3 replicas..."
+kubectl scale deployment source-manager -n "$NAMESPACE" --replicas=3
 
 echo "Waiting for pods to be ready..."
-kubectl wait --for=condition=Ready pod -l app=source-controller -n "$NAMESPACE" --timeout=120s || true
+kubectl wait --for=condition=Ready pod -l app=source-manager -n "$NAMESPACE" --timeout=120s || true
 
 echo ""
 echo "Checking leadership distribution..."
 LEADERSHIP=$(curl -s "http://localhost:8088/leadership")
 echo "$LEADERSHIP" | jq '.'
 
-INSTANCE_COUNT=$(kubectl get pods -n "$NAMESPACE" -l app=source-controller --no-headers | wc -l)
+INSTANCE_COUNT=$(kubectl get pods -n "$NAMESPACE" -l app=source-manager --no-headers | wc -l)
 echo ""
-echo -e "Source Controller instances: $INSTANCE_COUNT"
+echo -e "Source Manager instances: $INSTANCE_COUNT"
 
 # Scale back to 1
 echo "Scaling back to 1 replica..."
-kubectl scale deployment source-controller -n "$NAMESPACE" --replicas=1
+kubectl scale deployment source-manager -n "$NAMESPACE" --replicas=1
 echo ""
 
 # Summary
@@ -191,5 +191,5 @@ else
   echo ""
   echo "Check logs for errors:"
   echo "  kubectl logs -n $NAMESPACE -l app=youtube-listener --tail=100"
-  echo "  kubectl logs -n $NAMESPACE -l app=source-controller --tail=100"
+  echo "  kubectl logs -n $NAMESPACE -l app=source-manager --tail=100"
 fi

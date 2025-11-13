@@ -2,15 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Navigation Guide for LLM Agents
+
+**IMPORTANT**: Before starting any task, read [GETTING_STARTED.md](./GETTING_STARTED.md) for:
+- Quick reference to important files
+- Repository structure overview
+- Service-specific navigation guides
+- Common tasks and where to find relevant code
+- Development workflow best practices
+
+The GETTING_STARTED.md file is your map for navigating this repository efficiently. Use it to quickly locate:
+- Which files to read for specific tasks
+- Where services are located and what they do
+- Documentation for architecture, deployment, and testing
+- Known issues and technical debt
+
 ## Project Overview
 
-All-Chat is a cloud-native microservices platform for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok) on streaming overlays with support for 7TV, BTTV, and FFZ emotes. The project follows **Hexagonal Architecture** (Ports & Adapters) for maintainability and testability.
+All-Chat is a cloud-native microservices platform for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok) on streaming overlays with support for 7TV, BTTV, and FFZ emotes. The project follows **Standard Go Layout** with clear service boundaries for maintainability and testability.
 
 **Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from Twitch + YouTube + Kick simultaneously, or be configured with a single source - providing full flexibility for streamers who multistream or want unified chat displays.
 
 **Platform Priority**: Initial focus is Twitch and YouTube, with Kick and TikTok support planned for future releases.
 
-**Current Status**: ~60% complete. Auth Service, Overlay Manager, and Emote Service are fully implemented. Multi-source Chat Listener and API Gateway are pending.
+**Current Status**: ~90% Phase 4 complete. All 8 core services implemented (Auth, Overlay Manager, Emote Service, API Gateway, Twitch Listener, YouTube Listener, Message Processor, Source Manager). Twitch integration fully tested and working. YouTube integration pending testing.
 
 ## Build & Test Commands
 
@@ -28,7 +43,7 @@ make build-api-gateway  # API Gateway (TODO)
 # Run tests
 make test              # All tests
 make test-coverage     # With coverage report
-go test -v ./internal/auth-service/...  # Single service tests
+go test -v ./services/auth-service/...  # Single service tests
 
 # Run individual services locally (requires PostgreSQL & Redis running)
 make run-auth
@@ -52,36 +67,38 @@ make migrate-up        # Run migrations (requires PostgreSQL running)
 
 ## Architecture Principles
 
-### Hexagonal Architecture Structure
+### Standard Go Service Layout
 
-All services follow this pattern:
+All services follow the standard Go project layout:
 ```
-internal/<service-name>/
-├── adapters/           # External implementations
-│   ├── api/           # HTTP handlers (Gin)
-│   └── repository/    # Database implementations (pgx)
-└── core/              # Business logic (no external dependencies)
-    ├── domain/        # Entities and value objects
-    ├── ports/         # Interfaces (Service & Repository)
-    └── services/      # Business logic implementations
+services/<service-name>/
+├── cmd/               # Application entry points
+│   └── main.go       # Service initialization
+├── handlers/          # HTTP handlers (Gin)
+├── models/           # Data models and domain entities
+├── repository/       # Database layer (optional)
+├── <domain-packages>/ # Domain-specific packages (e.g., oauth/, streams/, channels/)
+├── go.mod            # Module dependencies
+└── Dockerfile        # Container image
 ```
 
-**Key Rules**:
-- Core domain never imports adapters
-- All external dependencies injected via ports (interfaces)
-- Domain models are in `core/domain/`
-- Business logic is in `core/services/`
-- HTTP handlers are in `adapters/api/`
-- Database code is in `adapters/repository/`
+**Key Principles**:
+- Clear separation of concerns via packages
+- Dependency injection for testability
+- Domain logic in dedicated packages (e.g., `oauth/`, `streams/`, `channels/`)
+- HTTP handlers separate from business logic
+- Database code in `repository/` packages when needed
+- Each service is independently deployable
 
 ### Service Communication
 
 - **Synchronous**: HTTP/REST between services (via API Gateway)
-- **Asynchronous**: Redis Pub/Sub for real-time messages
-  - Chat Listener publishes to `overlay:{overlay_id}`
-  - API Gateway WebSocket subscribes to channels
-- **Database**: Each service has its own PostgreSQL schema/tables (future: separate DBs)
-- **Caching**: Redis for emotes and session data
+- **Asynchronous**: Redis Streams + Pub/Sub for real-time messages
+  - Listeners publish raw messages to Redis Stream `chat:raw`
+  - Message Processor consumes from stream, enriches, and publishes to `overlay:{overlay_id}` via Pub/Sub
+  - API Gateway WebSocket subscribes to overlay-specific channels
+- **Database**: Shared PostgreSQL database (separate schemas per service)
+- **Caching**: Redis for emotes, session data, and leader election
 
 ### Unified Message Format
 
@@ -127,7 +144,7 @@ This unified format allows the frontend to display messages from all platforms c
 
 ## Tech Stack Details
 
-### Core Dependencies
+### Backend Dependencies
 - **Go 1.23+** (required)
 - **Gin** (`gin-gonic/gin`) - HTTP framework
 - **PostgreSQL 16** with `pgx/v5` - Database
@@ -136,12 +153,19 @@ This unified format allows the frontend to display messages from all platforms c
 - **JWT** (`golang-jwt/jwt/v5`) - Auth tokens
 - **Zap** (`uber-go/zap`) - Structured logging
 
-### Shared Packages (`pkg/`)
-- `pkg/auth/` - JWT utilities (Generate, Validate, Claims)
-- `pkg/database/` - PostgreSQL connection pooling
-- `pkg/redis/` - Redis client wrapper
-- `pkg/logger/` - Zap logger initialization
-- `pkg/middleware/` - HTTP middleware (CORS, Auth)
+### Frontend Stack
+- **React 18+** - UI library
+- **Next.js 14+** (App Router) - SSR framework
+- **TypeScript** - Type safety
+- **Tailwind CSS** - Styling
+- **WebSocket API** - Real-time message streaming
+
+### Shared Packages (`shared/`)
+- `shared/auth/` - JWT utilities (Generate, Validate, Claims)
+- `shared/database/` - PostgreSQL connection pooling
+- `shared/redis/` - Redis client wrapper
+- `shared/logger/` - Zap logger initialization
+- `shared/middleware/` - HTTP middleware (CORS, Auth)
 
 ## Service Details
 
@@ -149,9 +173,9 @@ This unified format allows the frontend to display messages from all platforms c
 **Purpose**: Twitch OAuth & JWT management
 
 **Key Files**:
-- `cmd/auth-service/main.go` - Entry point
-- `internal/auth-service/core/services/auth_service.go` - OAuth flow
-- `internal/auth-service/adapters/api/handlers.go` - Endpoints
+- `services/auth-service/cmd/main.go` - Entry point
+- `services/auth-service/oauth/` - OAuth flow implementation
+- `services/auth-service/handlers/` - HTTP endpoints
 
 **Endpoints**:
 - `GET /auth/login` - Start OAuth flow
@@ -169,9 +193,9 @@ This unified format allows the frontend to display messages from all platforms c
 **Purpose**: CRUD operations for overlays and configurations
 
 **Key Files**:
-- `cmd/overlay-manager/main.go` - Entry point
-- `internal/overlay-manager/core/services/overlay_service.go` - Business logic
-- `internal/overlay-manager/adapters/repository/postgres_overlay_repository.go` - Persistence
+- `services/overlay-manager/cmd/main.go` - Entry point
+- `services/overlay-manager/handlers/` - HTTP handlers
+- `services/overlay-manager/repository/` - Database persistence layer
 
 **Endpoints**:
 - `GET/POST /overlays` - List/Create overlays
@@ -191,9 +215,10 @@ This unified format allows the frontend to display messages from all platforms c
 **Purpose**: Fetch & cache emotes from 7TV, BTTV, FFZ
 
 **Key Files**:
-- `cmd/emote-service/main.go` - Entry point
-- `internal/emote-service/core/services/emote_service.go` - Caching logic
-- `internal/emote-service/adapters/clients/emote_clients.go` - External API clients
+- `services/emote-service/cmd/main.go` - Entry point
+- `services/emote-service/handlers/` - HTTP handlers
+- `services/emote-service/cache/` - Redis caching layer
+- `services/emote-service/clients/` - External API clients (7TV, BTTV, FFZ)
 
 **Endpoints**:
 - `GET /emotes/channel/:channel` - Get all emotes for channel
@@ -315,19 +340,20 @@ REDIS_PORT=6379
 
 ### Adding a New Endpoint
 
-1. Define method in `core/ports/service.go` interface
-2. Implement in `core/services/<service>_service.go`
-3. Add handler in `adapters/api/handlers.go`
-4. Register route in handler's `RegisterRoutes` method
+1. Implement business logic in appropriate domain package (e.g., `oauth/`, `streams/`)
+2. Add HTTP handler function in `handlers/<feature>.go`
+3. Register route in `cmd/main.go` or handler initialization
+4. Add tests in `handlers/<feature>_test.go`
 
 ### Adding a New Service
 
-1. Create directory structure following hexagonal architecture
-2. Copy `cmd/<existing-service>/main.go` as template
+1. Create directory structure following standard Go layout in `services/<service-name>/`
+2. Copy `services/<existing-service>/cmd/main.go` as template
 3. Follow patterns: logger initialization, DB/Redis connection, health checks
-4. Add Dockerfile in `deployments/docker/<service>.Dockerfile`
-5. Add deployment manifests in `deployments/k8s/<service>/`
-6. Add Make targets to `Makefile`
+4. Organize domain logic in dedicated packages (e.g., `oauth/`, `streams/`, `channels/`)
+5. Add Dockerfile at `services/<service-name>/Dockerfile`
+6. Add deployment manifests in `deployments/k8s/base/<service-name>/`
+7. Add Make targets to `Makefile`
 
 ### Error Handling
 
@@ -395,7 +421,7 @@ Each service has:
 - [ ] Update Overlay Manager to support chat sources CRUD endpoints
 - [ ] Complete Chat Listener service (Phase 1: Twitch + YouTube)
 - [ ] Complete API Gateway service with WebSocket multi-source support
-- [ ] Build Svelte 5 frontend with multi-source configuration UI
+- [ ] Build React + Next.js frontend with multi-source configuration UI
 - [ ] Add Chat Listener adapters for Kick and TikTok (Phase 2)
 - [ ] Add Prometheus metrics endpoint
 - [ ] Implement distributed tracing (OpenTelemetry)
@@ -436,4 +462,18 @@ Each service has:
 - **7TV API**: https://7tv.io/docs
 - **BTTV API**: https://betterttv.com/developers
 - **FFZ API**: https://www.frankerfacez.com/developers
-- **SVELTE Docs**: @.resources/svelte/docs
+- **React Docs**: https://react.dev
+- **Next.js Docs**: https://nextjs.org/docs
+
+## Additional Navigation Help
+
+For comprehensive navigation guidance, file locations, and task-specific instructions, see:
+- **[GETTING_STARTED.md](./GETTING_STARTED.md)** - Complete LLM agent navigation guide
+
+This guide includes:
+- Quick links to all important files
+- Service-specific navigation (what each service does and where to find code)
+- Common tasks and where to look
+- Architecture documentation map
+- Development workflows and commands
+- Known issues and technical debt references

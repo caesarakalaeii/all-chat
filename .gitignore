@@ -33,7 +33,7 @@ services/*/api-gateway
 services/*/twitch-listener
 services/*/youtube-listener
 services/*/message-processor
-services/*/source-controller
+services/*/main
 
 # Environment variables
 .env

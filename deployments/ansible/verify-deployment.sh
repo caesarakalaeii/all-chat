@@ -125,7 +125,7 @@ echo ""
 # Check Phase 4 services
 echo "Checking Phase 4 services..."
 check_pod "youtube-listener" "YouTube Listener"
-check_pod "source-controller" "Source Controller"
+check_pod "source-manager" "Source Manager"
 echo ""
 
 # Check services
@@ -134,7 +134,7 @@ check_service "postgres" "PostgreSQL"
 check_service "redis" "Redis"
 check_service "api-gateway" "API Gateway"
 check_service "youtube-listener" "YouTube Listener"
-check_service "source-controller" "Source Controller"
+check_service "source-manager" "Source Manager"
 echo ""
 
 # Check deployments are ready

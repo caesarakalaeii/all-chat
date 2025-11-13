@@ -76,7 +76,7 @@ kubectl get deployments -n allchat
 
 # View logs
 kubectl logs -n allchat -l app=youtube-listener --tail=50
-kubectl logs -n allchat -l app=source-controller --tail=50
+kubectl logs -n allchat -l app=source-manager --tail=50
 ```
 
 ### 5. Port Forward for Local Access
@@ -97,7 +97,7 @@ kubectl port-forward -n allchat svc/redis 6379:6379 &
 # Health checks
 curl http://localhost:8080/health
 curl http://localhost:8086/health/live  # YouTube Listener
-curl http://localhost:8088/health/live  # Source Controller
+curl http://localhost:8088/health/live  # Source Manager
 
 # Status endpoints
 curl http://localhost:8086/status | jq
@@ -125,8 +125,8 @@ kubectl get all -n allchat
 # Scale YouTube Listener
 kubectl scale deployment youtube-listener -n allchat --replicas=3
 
-# Scale Source Controller
-kubectl scale deployment source-controller -n allchat --replicas=2
+# Scale Source Manager
+kubectl scale deployment source-manager -n allchat --replicas=2
 
 # View HPAs
 kubectl get hpa -n allchat
@@ -178,20 +178,20 @@ curl http://localhost:8086/status | jq
 # Expected: status="running", quota tracking visible
 ```
 
-### Test 2: Source Controller Leader Election
+### Test 2: Source Manager Leader Election
 
 ```bash
 # Port forward
-kubectl port-forward -n allchat svc/source-controller 8088:8088 &
+kubectl port-forward -n allchat svc/source-manager 8088:8088 &
 
 # Check status
 curl http://localhost:8088/status | jq
 
 # Scale to 3 replicas
-kubectl scale deployment source-controller -n allchat --replicas=3
+kubectl scale deployment source-manager -n allchat --replicas=3
 
 # Wait for pods to start
-kubectl wait --for=condition=Ready pod -l app=source-controller -n allchat --timeout=120s
+kubectl wait --for=condition=Ready pod -l app=source-manager -n allchat --timeout=120s
 
 # Check leadership (should see multiple instances, one leader per stream)
 curl http://localhost:8088/leadership | jq

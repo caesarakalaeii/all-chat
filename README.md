@@ -19,7 +19,7 @@ This project follows cloud-native principles with a microservices architecture:
 - **Backend**: Go 1.23+ with Gin framework
 - **Database**: PostgreSQL 16
 - **Cache/Messaging**: Redis 7
-- **Frontend**: Svelte 5 with Runes
+- **Frontend**: React 18+ with Next.js 14 (App Router, SSR)
 - **Deployment**: Docker + Kubernetes
 - **Real-time**: WebSockets + Redis Pub/Sub
 
@@ -102,32 +102,27 @@ make run-gateway
 
 ```
 all-chat/
-├── cmd/                    # Application entry points
+├── services/              # Microservices
 │   ├── api-gateway/
 │   ├── auth-service/
 │   ├── chat-listener/
 │   ├── emote-service/
-│   └── overlay-manager/
-├── internal/               # Private application code
-│   ├── api-gateway/
-│   ├── auth-service/
-│   ├── chat-listener/
-│   ├── emote-service/
-│   └── overlay-manager/
-│       ├── adapters/      # External implementations
-│       │   ├── api/       # HTTP handlers
-│       │   └── repository/# Database
-│       └── core/          # Business logic
-│           ├── domain/    # Entities
-│           ├── ports/     # Interfaces
-│           └── services/  # Use cases
-├── pkg/                   # Shared libraries
+│   ├── message-processor/
+│   ├── overlay-manager/
+│   ├── source-manager/
+│   ├── twitch-listener/
+│   └── youtube-listener/
+│       ├── cmd/           # Entry point
+│       ├── handlers/      # HTTP handlers
+│       ├── models/        # Data models
+│       └── <packages>/    # Domain packages
+├── shared/                # Shared libraries
 │   ├── auth/             # JWT utilities
 │   ├── database/         # Database helpers
 │   ├── redis/            # Redis client
 │   ├── logger/           # Structured logging
 │   └── middleware/       # HTTP middleware
-├── web/                  # Frontend (Svelte 5)
+├── frontend/             # Frontend (React + Next.js)
 ├── deployments/          # Deployment configs
 │   ├── docker/          # Dockerfiles
 │   ├── k8s/             # Kubernetes manifests
@@ -203,7 +198,7 @@ WS     /ws/overlay/:id?token=JWT    # Overlay WebSocket connection
 
 ## 🎨 Frontend
 
-The Svelte 5 frontend includes:
+The React + Next.js frontend includes:
 
 - **Landing Page**: Marketing and login
 - **Dashboard**: Manage overlays
@@ -211,9 +206,9 @@ The Svelte 5 frontend includes:
 - **Overlay Viewer**: Embedded in OBS
 
 ```bash
-cd web
+cd frontend
 npm install
-npm run dev     # Development server
+npm run dev     # Development server (Next.js)
 npm run build   # Production build
 ```
 
@@ -278,7 +273,7 @@ make test
 make test-coverage
 
 # Run specific package tests
-go test -v ./internal/auth-service/...
+go test -v ./services/auth-service/...
 ```
 
 ## 📈 Monitoring
@@ -322,8 +317,8 @@ For issues and questions:
 - [x] Overlay CRUD operations
 - [ ] Emote service implementation
 - [ ] Chat listener with Twitch IRC
-- [ ] WebSocket overlay service
-- [ ] Svelte 5 frontend
+- [x] WebSocket overlay service
+- [ ] React + Next.js frontend
 - [ ] Multi-source chat support (YouTube, Kick, TikTok)
 - [ ] Custom emote animations
 - [ ] Advanced filtering options
