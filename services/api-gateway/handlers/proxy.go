@@ -43,8 +43,19 @@ func (p *ProxyHandler) ForwardRequest(c *gin.Context) {
 		return
 	}
 
+	// Build the backend path - strip prefix if configured
+	backendPath := path
+	if service.StripPrefix && len(path) >= len(service.PathPrefix) {
+		// Strip the matched prefix from the path
+		backendPath = path[len(service.PathPrefix):]
+		// Ensure backendPath starts with /
+		if backendPath == "" || backendPath[0] != '/' {
+			backendPath = "/" + backendPath
+		}
+	}
+
 	// Build the backend URL
-	backendURL := service.BaseURL + path
+	backendURL := service.BaseURL + backendPath
 	if c.Request.URL.RawQuery != "" {
 		backendURL += "?" + c.Request.URL.RawQuery
 	}
