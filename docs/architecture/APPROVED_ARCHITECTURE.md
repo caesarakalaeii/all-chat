@@ -86,7 +86,7 @@ graph TB
 
     subgraph "Processing"
         MP[Message Processor<br/>:8087<br/>Normalize + Enrich]
-        CTRL[Source Controller<br/>:8088<br/>Leader Election + Orchestration]
+        CTRL[Source Manager<br/>:8088<br/>Leader Election + Orchestration]
     end
 
     subgraph "Infrastructure"
@@ -222,7 +222,7 @@ graph TB
 
 **Add**:
 8. YouTube Listener (API polling + OAuth)
-9. Source Controller (orchestration + leader election)
+9. Source Manager (orchestration + leader election)
 
 **Frontend**:
 - Multi-source selection
@@ -292,7 +292,7 @@ all-chat/
 │   ├── message-processor/           # Phase 3
 │   ├── twitch-listener/             # Phase 3
 │   ├── youtube-listener/            # Phase 4
-│   └── source-controller/           # Phase 4
+│   └── source-manager/           # Phase 4
 │
 ├── shared/                          # Shared packages
 │   ├── database/                    # PostgreSQL utilities

@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Last Updated:** 2025-11-11
-**Related Docs**: [Architecture Overview](./ARCHITECTURE_OVERVIEW.md), [Scaling & Performance](./SCALING_PERFORMANCE.md)
+**Related Docs**: [Approved Architecture](./APPROVED_ARCHITECTURE.md), [Scaling & Performance](./SCALING_PERFORMANCE.md)
 
 ---
 

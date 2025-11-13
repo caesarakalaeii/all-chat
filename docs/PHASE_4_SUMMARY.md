@@ -34,8 +34,8 @@ Phase 4 successfully implements YouTube Live Chat API integration, enabling All-
 - Respects YouTube API rate limits and quota
 - Graceful handling of token expiration and API errors
 
-### 2. Source Controller Service
-**Location**: `services/source-controller/`
+### 2. Source Manager Service
+**Location**: `services/source-manager/`
 **Port**: 8088
 **Files**: 8 Go files
 
@@ -70,7 +70,7 @@ Phase 4 successfully implements YouTube Live Chat API integration, enabling All-
 - `supported_platforms` - Platform registry (Twitch, YouTube, Kick, TikTok)
 
 ### 5. Infrastructure
-- Updated `docker-compose.yml` with YouTube Listener and Source Controller
+- Updated `docker-compose.yml` with YouTube Listener and Source Manager
 - Updated `.env.example` with YouTube OAuth variables
 - Updated `CHECKPOINT.md` with comprehensive next steps
 
@@ -88,7 +88,7 @@ Phase 4 successfully implements YouTube Live Chat API integration, enabling All-
                 │
                 ▼
 ┌──────────────────────────────────────┐
-│      Source Controller (8088)        │
+│      Source Manager (8088)        │
 │  - Source Registry                   │
 │  - Leader Election (Redis)           │
 └───────────────┬──────────────────────┘
@@ -160,20 +160,20 @@ Phase 4 successfully implements YouTube Live Chat API integration, enabling All-
 
 ### Extensibility
 - ✅ Normalizer interface makes adding new platforms easy
-- ✅ Source Controller can manage any polling-based platform
+- ✅ Source Manager can manage any polling-based platform
 - ✅ Message Processor auto-routes based on platform field
 
 ---
 
 ## 📈 Statistics
 
-- **New Services**: 2 (YouTube Listener, Source Controller)
+- **New Services**: 2 (YouTube Listener, Source Manager)
 - **Enhanced Services**: 1 (Message Processor)
 - **New Go Files**: 25
 - **Lines of Code Added**: ~2,500+
 - **New Database Tables**: 3
 - **New Docker Services**: 2
-- **API Endpoints Added**: 5 (Source Controller)
+- **API Endpoints Added**: 5 (Source Manager)
 
 ---
 
@@ -192,7 +192,7 @@ Phase 4 successfully implements YouTube Live Chat API integration, enabling All-
 
 3. **Build and Test Services**
    - Build YouTube Listener
-   - Build Source Controller
+   - Build Source Manager
    - Test locally
 
 4. **Integration Testing**
@@ -204,7 +204,7 @@ Phase 4 successfully implements YouTube Live Chat API integration, enabling All-
 ### Short-Term (1 week)
 5. **Write Tests**
    - Unit tests for YouTube Listener (target: 85% coverage)
-   - Unit tests for Source Controller (target: 80% coverage)
+   - Unit tests for Source Manager (target: 80% coverage)
    - Integration tests for multi-platform scenarios
 
 ---
@@ -214,7 +214,7 @@ Phase 4 successfully implements YouTube Live Chat API integration, enabling All-
 Phase 4 will be considered 100% complete when:
 
 - [x] YouTube Listener implemented
-- [x] Source Controller implemented
+- [x] Source Manager implemented
 - [x] Message Processor supports YouTube
 - [x] Database migration created
 - [x] Docker Compose updated
@@ -260,8 +260,8 @@ Phase 4 will be considered 100% complete when:
 - Can request increase to 1,000,000 units/day for production
 
 ### Leader Election Algorithm
-1. YouTube Listener queries Source Controller for streams
-2. Source Controller tries to acquire Redis lock: `SET leader:youtube:{stream_id} {instance_id} NX EX 10`
+1. YouTube Listener queries Source Manager for streams
+2. Source Manager tries to acquire Redis lock: `SET leader:youtube:{stream_id} {instance_id} NX EX 10`
 3. If acquired → instance becomes leader, starts polling
 4. Leader sends heartbeat every 5 seconds: `EXPIRE leader:youtube:{stream_id} 10`
 5. If lock expires → another instance can take over

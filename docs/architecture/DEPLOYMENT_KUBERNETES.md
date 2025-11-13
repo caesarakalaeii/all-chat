@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Last Updated:** 2025-11-11
-**Related Docs**: [Architecture Overview](./ARCHITECTURE_OVERVIEW.md), [Scaling & Performance](./SCALING_PERFORMANCE.md)
+**Related Docs**: [Approved Architecture](./APPROVED_ARCHITECTURE.md), [Scaling & Performance](./SCALING_PERFORMANCE.md)
 
 ---
 
@@ -76,7 +76,7 @@ graph TB
         end
 
         subgraph "Control Plane"
-            SC_SVC[source-controller-service<br/>ClusterIP]
+            SC_SVC[source-manager-service<br/>ClusterIP]
         end
 
         subgraph "Data Layer"
@@ -438,29 +438,29 @@ spec:
 
 ---
 
-### Source Controller (Leader Election)
+### Source Manager (Leader Election)
 
-**File**: `deployments/k8s/source-controller/deployment.yaml`
+**File**: `deployments/k8s/source-manager/deployment.yaml`
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: source-controller
+  name: source-manager
   namespace: all-chat
 spec:
   replicas: 2  # Only one will be leader
   selector:
     matchLabels:
-      app: source-controller
+      app: source-manager
   template:
     metadata:
       labels:
-        app: source-controller
+        app: source-manager
     spec:
       containers:
-        - name: source-controller
-          image: allchat/source-controller:latest
+        - name: source-manager
+          image: allchat/source-manager:latest
           ports:
             - containerPort: 8084
           env:
@@ -481,7 +481,7 @@ spec:
                   name: all-chat-config
                   key: redis_host
             - name: LEADER_ELECTION_KEY
-              value: "leader:source-controller"
+              value: "leader:source-manager"
             - name: LEADER_TTL
               value: "30"  # seconds
             - name: POLL_INTERVAL
@@ -509,7 +509,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: source-controller
+  name: source-manager
   namespace: all-chat
 spec:
   type: ClusterIP
@@ -517,7 +517,7 @@ spec:
     - port: 8084
       targetPort: 8084
   selector:
-    app: source-controller
+    app: source-manager
 ```
 
 ---
@@ -697,7 +697,7 @@ spec:
 | `auth-service` | ClusterIP | 8081 | Internal service-to-service communication |
 | `overlay-service` | ClusterIP | 8082 | Internal service-to-service communication |
 | `emote-service` | ClusterIP | 8083 | Internal service-to-service communication |
-| `source-controller` | ClusterIP | 8084 | Health checks only |
+| `source-manager` | ClusterIP | 8084 | Health checks only |
 | `twitch-listener` | Headless (ClusterIP: None) | 8085 | Individual pod targeting |
 | `youtube-listener` | Headless | 8086 | Individual pod targeting |
 | `message-processor` | Headless | 8087 | Consumer group members |
@@ -1393,7 +1393,7 @@ kubectl apply -f deployments/k8s/redis/
 kubectl apply -f deployments/k8s/auth-service/
 kubectl apply -f deployments/k8s/overlay-manager/
 kubectl apply -f deployments/k8s/emote-service/
-kubectl apply -f deployments/k8s/source-controller/
+kubectl apply -f deployments/k8s/source-manager/
 kubectl apply -f deployments/k8s/twitch-listener/
 kubectl apply -f deployments/k8s/youtube-listener/
 kubectl apply -f deployments/k8s/message-processor/

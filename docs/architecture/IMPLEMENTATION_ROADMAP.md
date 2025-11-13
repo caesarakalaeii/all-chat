@@ -2,7 +2,7 @@
 
 **Version:** 2.0
 **Last Updated:** 2025-11-12
-**Related Docs**: [Architecture Overview](./ARCHITECTURE_OVERVIEW.md), All Architecture Docs
+**Related Docs**: [Approved Architecture](./APPROVED_ARCHITECTURE.md), All Architecture Docs
 
 **Platform Priority**: Twitch (P0) > YouTube (P1) > TikTok (P2) > Kick (P3)
 
@@ -48,7 +48,7 @@ gantt
     Twitch E2E Testing              :p3-4, 2025-12-20, 3d
     section Phase 4: YouTube (P1)
     YouTube Listener                :p4-1, 2025-12-23, 10d
-    Source Controller               :p4-2, 2026-01-02, 7d
+    Source Manager               :p4-2, 2026-01-02, 7d
     Multi-platform Testing          :p4-3, 2026-01-09, 3d
     section Phase 5: Frontend
     Next.js Setup                   :p5-1, 2026-01-12, 3d
@@ -107,7 +107,7 @@ gantt
 | Component | Status | Priority | Estimated Effort |
 |-----------|--------|----------|------------------|
 | **YouTube Listener** | ❌ Not Started | P1 | 10 days |
-| **Source Controller** | ❌ Not Started | P1 | 7 days |
+| **Source Manager** | ❌ Not Started | P1 | 7 days |
 
 ### Deferred to Phase 7
 
@@ -489,7 +489,7 @@ graph LR
 - [ ] Implement WebSocket connection manager
 - [ ] Parse Kick message format
 - [ ] Normalize to unified message format
-- [ ] Integrate with control plane (Source Controller)
+- [ ] Integrate with control plane (Source Manager)
 - [ ] Write unit and integration tests
 
 **Success Criteria**:

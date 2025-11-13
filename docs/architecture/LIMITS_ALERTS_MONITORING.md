@@ -32,7 +32,7 @@
 | **Message Processor** | 200m | 1000m | 256Mi | 1Gi | High CPU (emote parsing), multiple goroutines |
 | **Twitch Listener** | 100m | 500m | 128Mi | 512Mi | IRC connections, message parsing |
 | **YouTube Listener** | 100m | 500m | 128Mi | 512Mi | API polling, OAuth management |
-| **Source Controller** | 50m | 200m | 64Mi | 256Mi | Leader election, low CPU |
+| **Source Manager** | 50m | 200m | 64Mi | 256Mi | Leader election, low CPU |
 
 ### Infrastructure Limits
 

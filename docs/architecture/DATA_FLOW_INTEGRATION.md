@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Last Updated:** 2025-11-11
-**Related Docs**: [Architecture Overview](./ARCHITECTURE_OVERVIEW.md), [Component Architecture](./COMPONENT_ARCHITECTURE.md)
+**Related Docs**: [Approved Architecture](./APPROVED_ARCHITECTURE.md), [Approved Architecture](./APPROVED_ARCHITECTURE.md)
 
 ---
 
@@ -202,10 +202,10 @@ func (p *MessageProcessor) consumeRawMessages(ctx context.Context) {
 }
 ```
 
-#### Producer: Source Controller
+#### Producer: Source Manager
 
 ```go
-// Source Controller detects new active source
+// Source Manager detects new active source
 func (c *SourceController) handleNewSource(source *domain.ChatSource) {
     command := map[string]interface{}{
         "command_id": uuid.New().String(),
