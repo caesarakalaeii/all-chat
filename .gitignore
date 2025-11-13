@@ -25,6 +25,16 @@ vendor/
 @*/
 shared/pkg
 
+# Service binaries
+services/*/auth-service
+services/*/overlay-manager
+services/*/emote-service
+services/*/api-gateway
+services/*/twitch-listener
+services/*/youtube-listener
+services/*/message-processor
+services/*/source-controller
+
 # Environment variables
 .env
 .env.local
