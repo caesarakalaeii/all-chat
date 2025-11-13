@@ -286,7 +286,7 @@ docker run -d \
 ## Production Considerations
 
 1. **Quota**: Request increase to 1,000,000 units/day
-2. **Leader Election**: Use Source Controller to prevent duplicate polling
+2. **Leader Election**: Use Source Manager to prevent duplicate polling
 3. **Token Management**: Monitor token refresh success rate
 4. **Scaling**: One instance can handle ~50 concurrent streams
 5. **Monitoring**: Export Prometheus metrics for quota and polling rates
@@ -295,7 +295,7 @@ docker run -d \
 
 - **Twitch Listener**: Same Redis Stream (`chat:raw`)
 - **Message Processor**: Consumes from `chat:raw`, normalizes YouTube messages
-- **Source Controller**: Manages leader election for YouTube streams
+- **Source Manager**: Manages leader election for YouTube streams
 
 ## License
 

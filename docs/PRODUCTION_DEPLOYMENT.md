@@ -198,8 +198,8 @@ curl http://localhost:8080/health
 kubectl port-forward -n allchat svc/youtube-listener 8086:8086 &
 curl http://localhost:8086/status | jq
 
-# Test Source Controller
-kubectl port-forward -n allchat svc/source-controller 8088:8088 &
+# Test Source Manager
+kubectl port-forward -n allchat svc/source-manager 8088:8088 &
 curl http://localhost:8088/status | jq
 ```
 
@@ -235,7 +235,7 @@ ghcr.io/caesarakalaeii/allchat-api-gateway:main
 ghcr.io/caesarakalaeii/allchat-twitch-listener:main
 ghcr.io/caesarakalaeii/allchat-youtube-listener:main
 ghcr.io/caesarakalaeii/allchat-message-processor:main
-ghcr.io/caesarakalaeii/allchat-source-controller:main
+ghcr.io/caesarakalaeii/allchat-source-manager:main
 ```
 
 ### Keel Auto-Update
@@ -322,7 +322,7 @@ spec:
 | Twitch Listener | 2 | 10 | CPU-based |
 | YouTube Listener | 2 | 10 | CPU-based |
 | Message Processor | 3 | 20 | CPU + Memory |
-| Source Controller | 2 | 5 | CPU-based |
+| Source Manager | 2 | 5 | CPU-based |
 
 ### Database Scaling
 
@@ -397,7 +397,7 @@ Currently: 1 replica with 10Gi storage
 - `redis-deployment.yaml` - Redis deployment with PVC
 - `auth-service-deployment.yaml` - With Keel annotations
 - `youtube-listener-deployment.yaml` - With Keel annotations
-- `source-controller-deployment.yaml` - With Keel annotations
+- `source-manager-deployment.yaml` - With Keel annotations
 - `api-gateway-deployment.yaml` - With Keel annotations
 - `message-processor-deployment.yaml` - With Keel annotations
 - `README.md` - Deployment documentation
@@ -512,7 +512,7 @@ kubectl port-forward -n allchat svc/api-gateway 8080:8080
 
 # Port forward specific services
 kubectl port-forward -n allchat svc/youtube-listener 8086:8086
-kubectl port-forward -n allchat svc/source-controller 8088:8088
+kubectl port-forward -n allchat svc/source-manager 8088:8088
 
 # Access database
 kubectl port-forward -n allchat allchat-cluster-1 5432:5432

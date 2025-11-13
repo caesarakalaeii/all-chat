@@ -34,8 +34,8 @@
 - ✅ Graceful error handling
 - ✅ Health endpoints for Kubernetes
 
-### **2. Source Controller Service** ✅
-**Location**: `services/source-controller/`
+### **2. Source Manager Service** ✅
+**Location**: `services/source-manager/`
 **Files Created**: 8 Go files + 1 test file
 **Lines of Code**: ~800
 
@@ -107,7 +107,7 @@
 - `verify-deployment.sh` - Verification script
 - `test-integration.sh` - Integration tests
 - `TESTING_GUIDE.md` - Comprehensive guide
-- Kubernetes manifests for YouTube Listener and Source Controller
+- Kubernetes manifests for YouTube Listener and Source Manager
 - Kustomization.yaml for base overlay
 
 ---
@@ -197,7 +197,7 @@
 ### Leader Election Flow
 
 ```
-Source Controller
+Source Manager
        │
        ├─> Query active YouTube sources from DB
        │
@@ -241,7 +241,7 @@ Source Controller
 - Dockerfile
 - README.md
 
-**Source Controller** (10 files):
+**Source Manager** (10 files):
 - cmd/main.go
 - registry/registry.go
 - registry/repository.go
@@ -274,7 +274,7 @@ Source Controller
 - deployments/ansible/TESTING_GUIDE.md
 - deployments/k8s/base/kustomization.yaml
 - deployments/k8s/base/youtube-listener/deployment.yaml
-- deployments/k8s/base/source-controller/deployment.yaml
+- deployments/k8s/base/source-manager/deployment.yaml
 - deployments/k8s/base/postgres/configmap.yaml
 - deployments/k8s/base/redis/deployment.yaml
 - deployments/k8s/base/postgres/deployment.yaml
@@ -301,7 +301,7 @@ docker-compose up -d
 
 # Check logs
 docker-compose logs -f youtube-listener
-docker-compose logs -f source-controller
+docker-compose logs -f source-manager
 ```
 
 ### Kubernetes (k3d)
@@ -350,7 +350,7 @@ kubectl apply -f ../k8s/base/ -n allchat --recursive
 When Phase 4 is 100% complete:
 
 - [x] YouTube Listener implemented
-- [x] Source Controller implemented
+- [x] Source Manager implemented
 - [x] Message Processor enhanced
 - [x] Database migration created
 - [x] Docker Compose updated

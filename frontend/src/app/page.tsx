@@ -1,0 +1,117 @@
+/**
+ * Landing Page
+ *
+ * The home page of All-Chat.
+ * Displays product information and "Login with Twitch" button.
+ *
+ * Features:
+ * - Hero section with gradient background
+ * - Twitch OAuth login button
+ * - Feature highlights
+ * - Platform icons
+ *
+ * This is a Client Component because it uses browser APIs and state.
+ */
+
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/lib/stores/auth-store';
+
+export default function LandingPage() {
+  const router = useRouter();
+  const { user, token } = useAuthStore();
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (user && token) {
+      router.push('/dashboard');
+    }
+  }, [user, token, router]);
+
+  const handleLogin = () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+    window.location.href = `${apiUrl}/api/v1/auth/login`;
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
+      <div className="container mx-auto px-4 py-20">
+        <div className="text-center">
+          {/* Hero Section */}
+          <h1 className="text-6xl font-bold text-white mb-6 drop-shadow-lg">All-Chat</h1>
+          <p className="text-xl text-gray-300 mb-12 max-w-2xl mx-auto">
+            Aggregate chat from Twitch, YouTube, and more in one beautiful overlay for your stream
+          </p>
+
+          {/* Login Button */}
+          <div className="max-w-md mx-auto space-y-4">
+            <button
+              onClick={handleLogin}
+              className="w-full bg-twitch hover:bg-purple-700 text-white font-semibold py-4 px-6 rounded-lg text-lg transition-colors flex items-center justify-center gap-2"
+            >
+              {/* Twitch Logo SVG */}
+              <svg
+                className="w-6 h-6"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
+              </svg>
+              Login with Twitch
+            </button>
+
+            {/* Platform Indicators */}
+            <div className="flex items-center justify-center gap-6 text-gray-400 text-sm">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
+                </svg>
+                Twitch
+              </div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                </svg>
+                YouTube
+              </div>
+              <div className="text-xs text-gray-500">+ More platforms</div>
+            </div>
+          </div>
+
+          {/* Feature Grid */}
+          <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            <div className="text-center p-6 bg-white/5 rounded-lg backdrop-blur-sm">
+              <div className="text-4xl mb-4">🌐</div>
+              <h3 className="text-xl font-semibold text-white mb-2">Multi-Platform</h3>
+              <p className="text-gray-400">
+                Combine chat from Twitch and YouTube in one unified overlay
+              </p>
+            </div>
+
+            <div className="text-center p-6 bg-white/5 rounded-lg backdrop-blur-sm">
+              <div className="text-4xl mb-4">⚡</div>
+              <h3 className="text-xl font-semibold text-white mb-2">Real-Time</h3>
+              <p className="text-gray-400">Low latency chat delivery under 500ms for Twitch</p>
+            </div>
+
+            <div className="text-center p-6 bg-white/5 rounded-lg backdrop-blur-sm">
+              <div className="text-4xl mb-4">🎨</div>
+              <h3 className="text-xl font-semibold text-white mb-2">Customizable</h3>
+              <p className="text-gray-400">
+                Full control over appearance, emotes (7TV, BTTV, FFZ), and filtering
+              </p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-20 text-gray-500 text-sm">
+            <p>Open Source • Built with Go + React • Multi-Platform Chat Aggregation</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

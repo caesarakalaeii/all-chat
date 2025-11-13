@@ -868,4 +868,4 @@ Phase 3 is complete when:
 
 ---
 
-**Next Phase**: [Phase 4: YouTube Integration](./PHASE_4_PLAN.md) (YouTube Listener + Source Controller)
+**Next Phase**: [Phase 4: YouTube Integration](./PHASE_4_PLAN.md) (YouTube Listener + Source Manager)

@@ -1,0 +1,92 @@
+/**
+ * Overlays API
+ *
+ * Functions for managing overlays and chat sources.
+ * Communicates with the Overlay Manager service via API Gateway.
+ */
+
+import { apiClient } from './client';
+import type {
+  Overlay,
+  OverlayConfig,
+  ChatSource,
+  CreateOverlayRequest,
+  UpdateOverlayRequest,
+  AddSourceRequest
+} from '../types/overlay';
+
+export const overlaysApi = {
+  /**
+   * Get all overlays for the authenticated user
+   */
+  async list(): Promise<Overlay[]> {
+    const response = await apiClient.get<{ overlays: Overlay[] }>('/api/v1/overlays');
+    return response.overlays;
+  },
+
+  /**
+   * Get a specific overlay by ID
+   */
+  async get(id: string): Promise<Overlay> {
+    return apiClient.get<Overlay>(`/api/v1/overlays/${id}`);
+  },
+
+  /**
+   * Create a new overlay
+   */
+  async create(data: CreateOverlayRequest): Promise<Overlay> {
+    return apiClient.post<Overlay>('/api/v1/overlays', data);
+  },
+
+  /**
+   * Update an existing overlay
+   */
+  async update(id: string, data: UpdateOverlayRequest): Promise<Overlay> {
+    return apiClient.put<Overlay>(`/api/v1/overlays/${id}`, data);
+  },
+
+  /**
+   * Delete an overlay
+   */
+  async delete(id: string): Promise<void> {
+    await apiClient.delete(`/api/v1/overlays/${id}`);
+  },
+
+  /**
+   * Get overlay configuration (display settings, filters, emotes)
+   */
+  async getConfig(id: string): Promise<OverlayConfig> {
+    return apiClient.get<OverlayConfig>(`/api/v1/overlays/${id}/config`);
+  },
+
+  /**
+   * Update overlay configuration
+   */
+  async updateConfig(id: string, config: Partial<OverlayConfig>): Promise<OverlayConfig> {
+    return apiClient.put<OverlayConfig>(`/api/v1/overlays/${id}/config`, config);
+  },
+
+  /**
+   * Get all chat sources for an overlay
+   */
+  async getSources(id: string): Promise<ChatSource[]> {
+    const response = await apiClient.get<{ sources: ChatSource[] }>(
+      `/api/v1/overlays/${id}/sources`
+    );
+    return response.sources;
+  },
+
+  /**
+   * Add a chat source to an overlay
+   */
+  async addSource(id: string, data: AddSourceRequest): Promise<ChatSource> {
+    return apiClient.post<ChatSource>(`/api/v1/overlays/${id}/sources`, data);
+  },
+
+  /**
+   * Remove a chat source from an overlay
+   */
+  async removeSource(overlayId: string, sourceId: string): Promise<void> {
+    await apiClient.delete(`/api/v1/overlays/${overlayId}/sources/${sourceId}`);
+  }
+};
