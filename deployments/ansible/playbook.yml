@@ -1,0 +1,231 @@
+---
+- name: Set up k3d cluster for All-Chat
+  hosts: localhost
+  connection: local
+  gather_facts: yes
+
+  vars:
+    cluster_name: allchat
+    k3d_version: v5.6.0
+    kubectl_version: v1.28.0
+    registry_port: 5000
+    api_port: 6443
+    http_port: 8080
+    https_port: 8443
+    postgres_password: allchat_dev_password
+    jwt_secret: dev-secret-change-in-production
+
+  tasks:
+    - name: Check if k3d is installed
+      command: k3d version
+      register: k3d_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Install k3d
+      block:
+        - name: Download k3d
+          get_url:
+            url: "https://github.com/k3d-io/k3d/releases/download/{{ k3d_version }}/k3d-linux-amd64"
+            dest: /tmp/k3d
+            mode: '0755'
+
+        - name: Install k3d to /usr/local/bin
+          become: yes
+          copy:
+            src: /tmp/k3d
+            dest: /usr/local/bin/k3d
+            mode: '0755'
+            remote_src: yes
+      when: k3d_check.failed
+
+    - name: Check if kubectl is installed
+      command: kubectl version --client
+      register: kubectl_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Install kubectl
+      block:
+        - name: Download kubectl
+          get_url:
+            url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+            dest: /tmp/kubectl
+            mode: '0755'
+
+        - name: Install kubectl to /usr/local/bin
+          become: yes
+          copy:
+            src: /tmp/kubectl
+            dest: /usr/local/bin/kubectl
+            mode: '0755'
+            remote_src: yes
+      when: kubectl_check.failed
+
+    - name: Check if cluster exists
+      command: k3d cluster list
+      register: cluster_list
+      changed_when: false
+
+    - name: Delete existing cluster if present
+      command: k3d cluster delete {{ cluster_name }}
+      when: "cluster_name in cluster_list.stdout"
+      ignore_errors: yes
+
+    - name: Create k3d cluster
+      command: >
+        k3d cluster create {{ cluster_name }}
+        --api-port {{ api_port }}
+        --port "{{ http_port }}:80@loadbalancer"
+        --port "{{ https_port }}:443@loadbalancer"
+        --registry-create {{ cluster_name }}-registry:0.0.0.0:{{ registry_port }}
+        --agents 2
+        --k3s-arg "--disable=traefik@server:0"
+      register: cluster_create
+      changed_when: "'Cluster' in cluster_create.stdout"
+
+    - name: Wait for cluster to be ready
+      command: kubectl wait --for=condition=Ready nodes --all --timeout=120s
+      retries: 3
+      delay: 10
+      register: cluster_ready
+      until: cluster_ready.rc == 0
+
+    - name: Create allchat namespace
+      command: kubectl create namespace allchat
+      ignore_errors: yes
+
+    - name: Create ConfigMap for environment variables
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: allchat-config
+            namespace: allchat
+          data:
+            DATABASE_HOST: postgres
+            DATABASE_PORT: "5432"
+            DATABASE_NAME: allchat
+            DATABASE_USER: allchat
+            REDIS_HOST: redis
+            REDIS_PORT: "6379"
+            LOG_LEVEL: info
+            EMOTE_SERVICE_URL: http://emote-service:8083
+            AUTH_SERVICE_URL: http://auth-service:8081
+            OVERLAY_SERVICE_URL: http://overlay-manager:8082
+            CORS_ORIGIN: http://localhost:3000
+            POLLING_INTERVAL_MS: "2000"
+            QUOTA_LIMIT_DAILY: "10000"
+
+    - name: Create Secret for sensitive data
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: allchat-secrets
+            namespace: allchat
+          type: Opaque
+          stringData:
+            DATABASE_PASSWORD: "{{ postgres_password }}"
+            JWT_SECRET: "{{ jwt_secret }}"
+            TWITCH_CLIENT_ID: "your-twitch-client-id"
+            TWITCH_CLIENT_SECRET: "your-twitch-client-secret"
+            TWITCH_BOT_USERNAME: "your-bot-username"
+            TWITCH_BOT_OAUTH: "oauth:your-oauth-token"
+            YOUTUBE_CLIENT_ID: "your-youtube-client-id"
+            YOUTUBE_CLIENT_SECRET: "your-youtube-client-secret"
+
+    - name: Apply PostgreSQL manifests
+      command: kubectl apply -f ../k8s/base/postgres/ -n allchat
+      args:
+        chdir: "{{ playbook_dir }}"
+
+    - name: Apply Redis manifests
+      command: kubectl apply -f ../k8s/base/redis/ -n allchat
+      args:
+        chdir: "{{ playbook_dir }}"
+
+    - name: Wait for PostgreSQL to be ready
+      command: kubectl wait --for=condition=Ready pod -l app=postgres -n allchat --timeout=300s
+
+    - name: Wait for Redis to be ready
+      command: kubectl wait --for=condition=Ready pod -l app=redis -n allchat --timeout=300s
+
+    - name: Apply application manifests
+      command: kubectl apply -f ../k8s/base/ -n allchat --recursive
+      args:
+        chdir: "{{ playbook_dir }}"
+      ignore_errors: yes
+
+    - name: Wait for all deployments to be ready
+      command: kubectl wait --for=condition=Available deployment --all -n allchat --timeout=600s
+      register: deployments_ready
+      until: deployments_ready.rc == 0
+      retries: 5
+      delay: 30
+      ignore_errors: yes
+
+    - name: Get cluster info
+      command: kubectl cluster-info
+      register: cluster_info
+
+    - name: Display cluster info
+      debug:
+        msg: "{{ cluster_info.stdout_lines }}"
+
+    - name: Get all pods
+      command: kubectl get pods -n allchat -o wide
+      register: pods_info
+
+    - name: Display pods
+      debug:
+        msg: "{{ pods_info.stdout_lines }}"
+
+    - name: Get all services
+      command: kubectl get services -n allchat
+      register: services_info
+
+    - name: Display services
+      debug:
+        msg: "{{ services_info.stdout_lines }}"
+
+    - name: Create port-forward script
+      copy:
+        content: |
+          #!/bin/bash
+          echo "Starting port forwards..."
+          kubectl port-forward -n allchat svc/api-gateway 8080:8080 &
+          kubectl port-forward -n allchat svc/postgres 5432:5432 &
+          kubectl port-forward -n allchat svc/redis 6379:6379 &
+          echo "Port forwards active. Press Ctrl+C to stop."
+          wait
+        dest: "{{ playbook_dir }}/port-forward.sh"
+        mode: '0755'
+
+    - name: Display next steps
+      debug:
+        msg:
+          - "=================================="
+          - "k3d cluster '{{ cluster_name }}' is ready!"
+          - "=================================="
+          - ""
+          - "Cluster access:"
+          - "  kubectl get nodes"
+          - "  kubectl get pods -n allchat"
+          - "  kubectl get services -n allchat"
+          - ""
+          - "Port forwarding (run in separate terminal):"
+          - "  {{ playbook_dir }}/port-forward.sh"
+          - ""
+          - "Or manually:"
+          - "  kubectl port-forward -n allchat svc/api-gateway 8080:8080"
+          - "  kubectl port-forward -n allchat svc/postgres 5432:5432"
+          - ""
+          - "Registry: localhost:{{ registry_port }}"
+          - ""
+          - "To delete cluster:"
+          - "  k3d cluster delete {{ cluster_name }}"

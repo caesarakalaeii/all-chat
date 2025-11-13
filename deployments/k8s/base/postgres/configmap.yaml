@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-migrations
+  namespace: allchat
+data:
+  001_initial_schema.sql: |
+    # Content will be loaded from migrations/001_initial_schema.sql
+    # In production, use an init container or migration job
+  003_youtube_support.sql: |
+    # Content will be loaded from migrations/003_youtube_support.sql
+    # In production, use an init container or migration job

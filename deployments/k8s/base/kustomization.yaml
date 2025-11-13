@@ -1,0 +1,56 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: allchat
+
+resources:
+  # Infrastructure
+  - postgres/deployment.yaml
+  - postgres/configmap.yaml
+  - redis/deployment.yaml
+
+  # Phase 1 - Foundation
+  - auth-service/deployment.yaml
+  - overlay-manager/deployment.yaml
+
+  # Phase 2 - Infrastructure Services
+  - emote-service/deployment.yaml
+  - api-gateway/deployment.yaml
+
+  # Phase 3 - Twitch Real-Time
+  - twitch-listener/deployment.yaml
+  - message-processor/deployment.yaml
+
+  # Phase 4 - YouTube Integration
+  - youtube-listener/deployment.yaml
+  - source-controller/deployment.yaml
+
+commonLabels:
+  project: allchat
+  managed-by: kustomize
+
+images:
+  - name: allchat-auth-service
+    newName: localhost:5000/allchat-auth-service
+    newTag: latest
+  - name: allchat-overlay-manager
+    newName: localhost:5000/allchat-overlay-manager
+    newTag: latest
+  - name: allchat-emote-service
+    newName: localhost:5000/allchat-emote-service
+    newTag: latest
+  - name: allchat-api-gateway
+    newName: localhost:5000/allchat-api-gateway
+    newTag: latest
+  - name: allchat-twitch-listener
+    newName: localhost:5000/allchat-twitch-listener
+    newTag: latest
+  - name: allchat-youtube-listener
+    newName: localhost:5000/allchat-youtube-listener
+    newTag: latest
+  - name: allchat-message-processor
+    newName: localhost:5000/allchat-message-processor
+    newTag: latest
+  - name: allchat-source-controller
+    newName: localhost:5000/allchat-source-controller
+    newTag: latest
