@@ -197,11 +197,11 @@ func (h *OverlayHandler) HandleDeleteOverlay(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// RegisterRoutes registers overlay routes
+// RegisterRoutes registers overlay routes (no /overlays prefix - API Gateway strips /api/v1/overlays)
 func (h *OverlayHandler) RegisterRoutes(router *gin.Engine) {
-	router.POST("/overlays", h.HandleCreateOverlay)
-	router.GET("/overlays", h.HandleListOverlays)
-	router.GET("/overlays/:id", h.HandleGetOverlay)
-	router.PUT("/overlays/:id", h.HandleUpdateOverlay)
-	router.DELETE("/overlays/:id", h.HandleDeleteOverlay)
+	router.POST("/", h.HandleCreateOverlay)
+	router.GET("/", h.HandleListOverlays)
+	router.GET("/:id", h.HandleGetOverlay)
+	router.PUT("/:id", h.HandleUpdateOverlay)
+	router.DELETE("/:id", h.HandleDeleteOverlay)
 }
