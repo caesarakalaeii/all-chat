@@ -30,27 +30,27 @@ commonLabels:
   managed-by: kustomize
 
 images:
-  - name: allchat-auth-service
+  - name: allchat-auth-service:latest
     newName: ghcr.io/caesarakalaeii/allchat-auth-service
     newTag: main
-  - name: allchat-overlay-manager
+  - name: allchat-overlay-manager:latest
     newName: ghcr.io/caesarakalaeii/allchat-overlay-manager
     newTag: main
-  - name: allchat-emote-service
+  - name: allchat-emote-service:latest
     newName: ghcr.io/caesarakalaeii/allchat-emote-service
     newTag: main
-  - name: allchat-api-gateway
+  - name: allchat-api-gateway:latest
     newName: ghcr.io/caesarakalaeii/allchat-api-gateway
     newTag: main
-  - name: allchat-twitch-listener
+  - name: allchat-twitch-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-twitch-listener
     newTag: main
-  - name: allchat-youtube-listener
+  - name: allchat-youtube-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-youtube-listener
     newTag: main
-  - name: allchat-message-processor
+  - name: allchat-message-processor:latest
     newName: ghcr.io/caesarakalaeii/allchat-message-processor
     newTag: main
-  - name: allchat-source-manager
+  - name: allchat-source-manager:latest
     newName: ghcr.io/caesarakalaeii/allchat-source-manager
     newTag: main
