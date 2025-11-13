@@ -39,3 +39,4 @@ ENV LOG_LEVEL=info
 
 # Run the application
 CMD ["./api-gateway"]
+# Force rebuild
