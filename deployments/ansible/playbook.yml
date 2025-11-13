@@ -4,16 +4,31 @@
   connection: local
   gather_facts: yes
 
+  # Load secrets from encrypted vault file
+  # Run with: ansible-playbook -i inventory.yml playbook.yml --ask-vault-pass
+  vars_files:
+    - secrets.vault.yml
+
+  # Default vars (can be overridden in vault)
   vars:
-    cluster_name: allchat
-    k3d_version: v5.6.0
-    kubectl_version: v1.28.0
-    registry_port: 5000
-    api_port: 6443
-    http_port: 8080
-    https_port: 8443
-    postgres_password: allchat_dev_password
-    jwt_secret: dev-secret-change-in-production
+    # These will be loaded from secrets.vault.yml if present
+    cluster_name: "{{ cluster_name | default('allchat') }}"
+    k3d_version: "{{ k3d_version | default('v5.6.0') }}"
+    kubectl_version: "{{ kubectl_version | default('v1.28.0') }}"
+    registry_port: "{{ registry_port | default(5000) }}"
+    api_port: "{{ api_port | default(6443) }}"
+    http_port: "{{ http_port | default(8080) }}"
+    https_port: "{{ https_port | default(8443) }}"
+    log_level: "{{ log_level | default('info') }}"
+    cors_origin: "{{ cors_origin | default('http://localhost:3000') }}"
+    polling_interval_ms: "{{ polling_interval_ms | default('2000') }}"
+    quota_limit_daily: "{{ quota_limit_daily | default('10000') }}"
+    database_host: "{{ database_host | default('postgres') }}"
+    database_port: "{{ database_port | default('5432') }}"
+    database_name: "{{ database_name | default('allchat') }}"
+    database_user: "{{ database_user | default('allchat') }}"
+    redis_host: "{{ redis_host | default('redis') }}"
+    redis_port: "{{ redis_port | default('6379') }}"
 
   tasks:
     - name: Check if k3d is installed
@@ -105,19 +120,19 @@
             name: allchat-config
             namespace: allchat
           data:
-            DATABASE_HOST: postgres
-            DATABASE_PORT: "5432"
-            DATABASE_NAME: allchat
-            DATABASE_USER: allchat
-            REDIS_HOST: redis
-            REDIS_PORT: "6379"
-            LOG_LEVEL: info
+            DATABASE_HOST: "{{ database_host }}"
+            DATABASE_PORT: "{{ database_port }}"
+            DATABASE_NAME: "{{ database_name }}"
+            DATABASE_USER: "{{ database_user }}"
+            REDIS_HOST: "{{ redis_host }}"
+            REDIS_PORT: "{{ redis_port }}"
+            LOG_LEVEL: "{{ log_level }}"
             EMOTE_SERVICE_URL: http://emote-service:8083
             AUTH_SERVICE_URL: http://auth-service:8081
             OVERLAY_SERVICE_URL: http://overlay-manager:8082
-            CORS_ORIGIN: http://localhost:3000
-            POLLING_INTERVAL_MS: "2000"
-            QUOTA_LIMIT_DAILY: "10000"
+            CORS_ORIGIN: "{{ cors_origin }}"
+            POLLING_INTERVAL_MS: "{{ polling_interval_ms }}"
+            QUOTA_LIMIT_DAILY: "{{ quota_limit_daily }}"
 
     - name: Create Secret for sensitive data
       kubernetes.core.k8s:
@@ -132,12 +147,12 @@
           stringData:
             DATABASE_PASSWORD: "{{ postgres_password }}"
             JWT_SECRET: "{{ jwt_secret }}"
-            TWITCH_CLIENT_ID: "your-twitch-client-id"
-            TWITCH_CLIENT_SECRET: "your-twitch-client-secret"
-            TWITCH_BOT_USERNAME: "your-bot-username"
-            TWITCH_BOT_OAUTH: "oauth:your-oauth-token"
-            YOUTUBE_CLIENT_ID: "your-youtube-client-id"
-            YOUTUBE_CLIENT_SECRET: "your-youtube-client-secret"
+            TWITCH_CLIENT_ID: "{{ twitch_client_id }}"
+            TWITCH_CLIENT_SECRET: "{{ twitch_client_secret }}"
+            TWITCH_BOT_USERNAME: "{{ twitch_bot_username }}"
+            TWITCH_BOT_OAUTH: "{{ twitch_bot_oauth }}"
+            YOUTUBE_CLIENT_ID: "{{ youtube_client_id }}"
+            YOUTUBE_CLIENT_SECRET: "{{ youtube_client_secret }}"
 
     - name: Apply PostgreSQL manifests
       command: kubectl apply -f ../k8s/base/postgres/ -n allchat

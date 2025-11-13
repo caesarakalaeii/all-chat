@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emote-service
+  namespace: allchat
+  labels:
+    app: emote-service
+    component: emote
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: emote-service
+  template:
+    metadata:
+      labels:
+        app: emote-service
+        component: emote
+    spec:
+      containers:
+      - name: emote-service
+        image: localhost:5000/allchat-emote-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8083
+          name: http
+        env:
+        - name: PORT
+          value: "8083"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: LOG_LEVEL
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_PORT
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8083
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8083
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emote-service
+  namespace: allchat
+  labels:
+    app: emote-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8083
+    targetPort: 8083
+    protocol: TCP
+    name: http
+  selector:
+    app: emote-service

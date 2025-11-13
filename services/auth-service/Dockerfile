@@ -1,10 +1,7 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
-
-# Copy go workspace files
-COPY go.work go.work.sum ./
 
 # Copy shared module
 COPY shared/ ./shared/
@@ -12,9 +9,9 @@ COPY shared/ ./shared/
 # Copy service files
 COPY services/auth-service/ ./services/auth-service/
 
-# Download dependencies
+# Download dependencies (use go.mod directly, not go.work)
 WORKDIR /app/services/auth-service
-RUN go mod download
+RUN go work vendor || go mod download
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/auth-service ./cmd

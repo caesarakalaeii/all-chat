@@ -83,7 +83,7 @@ services:
   # Overlay Manager (Phase 1)
   overlay-manager:
     build:
-      context: ../services/overlay-manager
+      context: ../
       dockerfile: services/overlay-manager/Dockerfile
     container_name: allchat-overlay
     environment:
@@ -284,6 +284,25 @@ services:
       redis:
         condition: service_healthy
       source-manager:
+        condition: service_started
+    networks:
+      - allchat
+    restart: unless-stopped
+
+  # Frontend (Phase 5)
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: allchat-frontend
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://api-gateway:8080
+      NEXT_PUBLIC_WS_URL: ws://api-gateway:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      api-gateway:
         condition: service_started
     networks:
       - allchat
