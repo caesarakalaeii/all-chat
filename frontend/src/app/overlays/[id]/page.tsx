@@ -67,9 +67,39 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     if (!newSourceChannel.trim()) return;
 
     try {
+      let channelId = newSourceChannel.trim();
+
+      // If YouTube, resolve URL/handle to channel ID first
+      if (newSourcePlatform === 'youtube') {
+        try {
+          const response = await fetch('/api/v1/overlays/youtube/resolve', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ input: newSourceChannel }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            alert(error.error || 'Failed to resolve YouTube channel');
+            return;
+          }
+
+          const resolved = await response.json();
+          channelId = resolved.channel_id;
+          console.log(`Resolved YouTube input to channel: ${resolved.title} (${channelId})`);
+        } catch (error) {
+          console.error('Failed to resolve YouTube channel:', error);
+          alert('Failed to resolve YouTube channel. Please enter a valid YouTube URL, handle (@username), or channel ID.');
+          return;
+        }
+      }
+
       await overlaysApi.addSource(params.id, {
         platform: newSourcePlatform as any,
-        channel_id: newSourceChannel
+        channel_id: channelId
       });
       const updatedSources = await overlaysApi.getSources(params.id);
       setSources(updatedSources);
