@@ -122,7 +122,8 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	wsConn := wsconn.NewConnection(conn, overlayID, claims.UserID, h.logger)
 
 	// Subscribe to overlay's Redis Pub/Sub channel
-	if err := h.subscriber.Subscribe(ctx, overlayID); err != nil {
+	// Use background context - subscription must outlive the HTTP request
+	if err := h.subscriber.Subscribe(context.Background(), overlayID); err != nil {
 		h.logger.Error("Failed to subscribe to overlay channel",
 			zap.String("overlay_id", overlayID),
 			zap.Error(err),
@@ -133,7 +134,8 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	}
 
 	// Add connection to manager
-	h.wsManager.AddConnection(ctx, wsConn)
+	// Use background context here too since connection lives beyond HTTP request
+	h.wsManager.AddConnection(context.Background(), wsConn)
 
 	// Send connected message
 	connectedMsg := models.NewConnected(overlayID)
