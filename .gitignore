@@ -81,3 +81,11 @@ deployments/ansible/secrets.vault.yml
 deployments/ansible/.vault_pass
 *.vault.yml
 !*.vault.yml.template
+
+# Test scripts
+test_twitch_chat.py
+
+# Debug and checkpoint files
+DEBUG_CHECKPOINT.md
+CHECKPOINT.md
+.playwright-mcp/
