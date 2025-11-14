@@ -41,14 +41,20 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
 
     const loadData = async () => {
       try {
-        const [overlayData, sourcesData] = await Promise.all([
-          overlaysApi.get(params.id),
-          overlaysApi.getSources(params.id)
-        ]);
+        const overlayData = await overlaysApi.get(params.id);
         setOverlay(overlayData);
-        setSources(sourcesData);
+
+        // Try to fetch sources, but handle 404 gracefully (endpoint may not be implemented yet)
+        try {
+          const sourcesData = await overlaysApi.getSources(params.id);
+          setSources(sourcesData);
+        } catch (sourcesError) {
+          console.warn('Sources endpoint not available yet, starting with empty sources');
+          setSources([]);
+        }
       } catch (error) {
         console.error('Failed to load overlay:', error);
+        setOverlay(null);
       } finally {
         setLoading(false);
       }
@@ -230,14 +236,14 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
           )}
 
           {/* Sources List */}
-          {sources.length === 0 ? (
+          {!sources || sources.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <p className="mb-2">No chat sources added yet</p>
               <p className="text-sm">Add Twitch or YouTube sources to start aggregating chat</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {sources.map((source) => (
+              {sources?.map((source) => (
                 <div
                   key={source.id}
                   className={`flex items-center justify-between p-4 bg-gray-750 rounded-lg border ${getPlatformColor(
