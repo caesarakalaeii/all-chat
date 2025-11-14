@@ -78,7 +78,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   }, [messages]);
 
   const copyOverlayUrl = () => {
-    const url = `${window.location.origin}/overlay/${params.id}`;
+    const url = `${window.location.origin}/overlays/${params.id}/preview`;
     navigator.clipboard.writeText(url);
     alert('Overlay URL copied to clipboard!\n\nAdd this as a Browser Source in OBS.');
   };
