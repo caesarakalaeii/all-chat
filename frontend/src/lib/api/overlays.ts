@@ -70,10 +70,10 @@ export const overlaysApi = {
    * Get all chat sources for an overlay
    */
   async getSources(id: string): Promise<ChatSource[]> {
-    const response = await apiClient.get<{ sources: ChatSource[] }>(
+    const response = await apiClient.get<ChatSource[]>(
       `/api/v1/overlays/${id}/sources`
     );
-    return response.sources;
+    return response;
   },
 
   /**
