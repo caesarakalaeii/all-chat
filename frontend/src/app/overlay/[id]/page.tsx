@@ -153,13 +153,13 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
                   </span>
 
                   {/* Badges */}
-                  {message.user?.badge_urls && message.user.badge_urls.length > 0 && (
+                  {message.user?.badges && message.user.badges.length > 0 && (
                     <div className="flex gap-1">
-                      {message.user.badge_urls.map((badgeUrl, idx) => (
+                      {message.user.badges.map((badge, idx) => (
                         <img
                           key={idx}
-                          src={badgeUrl}
-                          alt="badge"
+                          src={badge.icon_url}
+                          alt={badge.name}
                           className="w-4 h-4"
                         />
                       ))}
