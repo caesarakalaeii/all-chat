@@ -1,9 +1,28 @@
 # All-Chat Development Checkpoint
 
-**Date**: November 13, 2025 (Latest Update: Evening Session - COMPLETED)
-**Current Phase**: 8-Service Architecture COMPLETE ✅
-**Last Completed**: All 8 services implemented, tested, and integrated
-**Status**: Production-ready architecture
+**Date**: November 14, 2025 (Latest Update: Production Deployment & Auth Flow Fixed)
+**Current Phase**: Production Deployment with Auth Working ✅
+**Last Completed**: OAuth flow fixed, JWT authentication working, overlays CRUD functional
+**Status**: Core functionality working, source management in progress
+
+---
+
+## 🔴 Known Issues (November 14, 2025 - Active Session)
+
+### Critical Issues to Fix:
+1. **No way to delete an overlay** - Dashboard UI has no delete button
+2. **Adding sources to overlays doesn't work** - POST to `/sources` endpoint returns 404 (being fixed)
+3. **Overlay preview URL returns 404** - `/overlays/:id/preview` page not routing correctly
+
+### Recently Fixed:
+- ✅ OAuth callback URL corrected (`/api/v1/auth/callback`)
+- ✅ JWT authentication middleware added to overlay-manager
+- ✅ Empty overlays array handling in dashboard
+- ✅ Frontend API client response format fixed
+
+### In Progress:
+- 🔧 Implementing overlay chat sources management endpoints
+- 🔧 Source repository and handlers being added to overlay-manager
 
 ---
 
