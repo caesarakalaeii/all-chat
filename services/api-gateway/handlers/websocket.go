@@ -140,29 +140,32 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	connectedJSON, _ := connectedMsg.ToJSON()
 	wsConn.Send(connectedJSON)
 
-	// Start connection pumps
-	wsConn.Start(ctx)
-
 	h.logger.Info("WebSocket connection established",
 		zap.String("overlay_id", overlayID),
 		zap.String("user_id", claims.UserID),
 		zap.String("username", claims.Username),
 	)
 
-	// Wait for connection to close
-	// The connection will handle itself until it closes
-	// When closed, we need to clean up
+	// Start connection pumps (runs in goroutines)
+	// This will handle read/write until the connection closes
+	// Cleanup is handled by the connection's close callback
+	wsConn.Start(ctx)
 
-	// Note: We need to defer cleanup to run when the connection closes
-	// This is handled by the connection's readPump/writePump goroutines
-	defer func() {
+	// Set up cleanup callback when connection closes
+	go func() {
+		// Wait for connection to close
+		for !wsConn.IsClosed() {
+			time.Sleep(100 * time.Millisecond)
+		}
+		// Clean up when closed
 		h.wsManager.RemoveConnection(wsConn)
-		h.subscriber.Unsubscribe(ctx, overlayID)
+		h.subscriber.Unsubscribe(context.Background(), overlayID)
+		h.logger.Info("WebSocket connection closed",
+			zap.String("overlay_id", overlayID),
+			zap.String("user_id", claims.UserID),
+		)
 	}()
 
-	// Block until connection closes
-	// The Start() method runs pumps in goroutines, so we need to wait
-	for !wsConn.IsClosed() {
-		time.Sleep(100 * time.Millisecond)
-	}
+	// Return immediately - don't block the HTTP handler
+	// The WebSocket connection will continue in the background
 }
