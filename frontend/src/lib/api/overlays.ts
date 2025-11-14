@@ -20,8 +20,8 @@ export const overlaysApi = {
    * Get all overlays for the authenticated user
    */
   async list(): Promise<Overlay[]> {
-    const response = await apiClient.get<{ overlays: Overlay[] }>('/api/v1/overlays');
-    return response.overlays;
+    const response = await apiClient.get<Overlay[]>('/api/v1/overlays');
+    return response;
   },
 
   /**
