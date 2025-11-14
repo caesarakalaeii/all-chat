@@ -174,7 +174,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		h.subscriber.Unsubscribe(context.Background(), overlayID)
 		h.logger.Info("WebSocket connection closed",
 			zap.String("overlay_id", overlayID),
-			zap.String("user_id", claims.UserID),
+			zap.String("user_id", userID),
 		)
 	}()
 
