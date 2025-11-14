@@ -84,6 +84,7 @@ func main() {
 	twitchClientID := getEnvOrDefault("TWITCH_CLIENT_ID", "")
 	twitchClientSecret := getEnvOrDefault("TWITCH_CLIENT_SECRET", "")
 	avatarEnricher := enricher.NewAvatarEnricher(redisClient, twitchClientID, twitchClientSecret, log)
+	badgeEnricher := enricher.NewBadgeEnricher(redisClient, twitchClientID, twitchClientSecret, log)
 
 	overlayRepo := router.NewRepository(db)
 	overlayRouter := router.NewRouter(overlayRepo, log)
@@ -132,6 +133,15 @@ func main() {
 			// Enrich with avatars (Twitch only, cached in Redis)
 			if err := avatarEnricher.Enrich(ctx, unified); err != nil {
 				log.Warn("Failed to enrich avatar",
+					zap.String("message_id", rawMsg.MessageID),
+					zap.Error(err),
+				)
+				// Continue even if enrichment fails
+			}
+
+			// Enrich with badge icons (Twitch only, cached in Redis)
+			if err := badgeEnricher.Enrich(ctx, unified); err != nil {
+				log.Warn("Failed to enrich badges",
 					zap.String("message_id", rawMsg.MessageID),
 					zap.Error(err),
 				)
