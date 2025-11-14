@@ -47,12 +47,20 @@ type ChatMessageData struct {
 
 // UserInfo contains user information
 type UserInfo struct {
-	ID          string   `json:"id"`
-	Username    string   `json:"username"`
-	DisplayName string   `json:"display_name"`
-	AvatarURL   string   `json:"avatar_url,omitempty"`
-	Badges      []string `json:"badges"`
-	Color       string   `json:"color,omitempty"`
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	DisplayName string  `json:"display_name"`
+	AvatarURL   string  `json:"avatar_url,omitempty"`
+	BadgeURLs   []string `json:"badge_urls,omitempty"` // Legacy field for compatibility
+	Badges      []Badge `json:"badges"`
+	Color       string  `json:"color,omitempty"`
+}
+
+// Badge represents a user badge
+type Badge struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	IconURL string `json:"icon_url"`
 }
 
 // MessageContent contains the message text and emotes
