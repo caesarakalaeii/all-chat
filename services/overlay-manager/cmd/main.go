@@ -72,14 +72,20 @@ func main() {
 
 	log.Info("Connected to Redis successfully")
 
-	// Initialize repository with the connection string
+	// Initialize repositories with the connection string
 	overlayRepo, err := repository.NewOverlayRepository(connString)
 	if err != nil {
 		log.Fatal("Failed to create overlay repository", zap.Error(err))
 	}
 
+	sourceRepo, err := repository.NewSourceRepository(connString)
+	if err != nil {
+		log.Fatal("Failed to create source repository", zap.Error(err))
+	}
+
 	// Initialize handlers
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
+	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 
 	// Setup Gin router
@@ -104,6 +110,7 @@ func main() {
 	protected.Use(middleware.JWTAuth(config.JWTSecret))
 	{
 		overlayHandler.RegisterRoutes(protected)
+		sourcesHandler.RegisterRoutes(protected)
 	}
 
 	// Create HTTP server
