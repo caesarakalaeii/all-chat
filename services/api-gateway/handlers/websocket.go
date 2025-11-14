@@ -146,10 +146,13 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		zap.String("username", claims.Username),
 	)
 
+	// Create background context for WebSocket connection
+	// Don't use the HTTP request context - it gets cancelled when handler returns!
+	wsCtx := context.Background()
+
 	// Start connection pumps (runs in goroutines)
 	// This will handle read/write until the connection closes
-	// Cleanup is handled by the connection's close callback
-	wsConn.Start(ctx)
+	wsConn.Start(wsCtx)
 
 	// Set up cleanup callback when connection closes
 	go func() {
