@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: allchat-config
+  namespace: allchat
+data:
+  # Service URLs
+  AUTH_SERVICE_URL: http://auth-service:8081
+  OVERLAY_SERVICE_URL: http://overlay-manager:8082
+  EMOTE_SERVICE_URL: http://emote-service:8083
+
+  # Database Configuration
+  DATABASE_HOST: allchat-cluster-rw.allchat.svc.cluster.local
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: allchat
+  DATABASE_USER: allchat_user
+
+  # Redis Configuration
+  REDIS_HOST: redis.allchat.svc.cluster.local
+  REDIS_PORT: "6379"
+
+  # OAuth Redirect URLs (Production)
+  TWITCH_REDIRECT_URL: https://allchat.caes.ar/api/v1/auth/callback
+  YOUTUBE_REDIRECT_URL: https://allchat.caes.ar/api/v1/auth/youtube/callback
+
+  # Frontend URL
+  FRONTEND_URL: https://allchat.caes.ar
+
+  # CORS Configuration
+  CORS_ORIGIN: https://allchat.caes.ar
+
+  # JWT Configuration
+  JWT_EXPIRY_HOURS: "24"
+
+  # YouTube API Configuration
+  POLLING_INTERVAL_MS: "2000"
+  QUOTA_LIMIT_DAILY: "10000"
+
+  # Logging
+  LOG_LEVEL: info

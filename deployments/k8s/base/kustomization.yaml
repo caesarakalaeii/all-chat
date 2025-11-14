@@ -4,6 +4,9 @@ kind: Kustomization
 namespace: allchat
 
 resources:
+  # Shared Configuration
+  - configmap.yaml
+
   # Infrastructure
   - postgres/deployment.yaml
   - postgres/configmap.yaml
