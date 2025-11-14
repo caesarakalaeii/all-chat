@@ -110,7 +110,7 @@ export default function DashboardPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-twitch mx-auto mb-4"></div>
             Loading overlays...
           </div>
-        ) : overlays.length === 0 ? (
+        ) : !overlays || overlays.length === 0 ? (
           <div className="text-center py-20">
             <div className="text-6xl mb-6">📺</div>
             <p className="text-gray-400 text-lg mb-6">No overlays yet</p>
@@ -124,7 +124,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {overlays.map((overlay) => (
+            {overlays?.map((overlay) => (
               <div
                 key={overlay.id}
                 onClick={() => router.push(`/overlays/${overlay.id}`)}

@@ -33,9 +33,10 @@ export const useOverlayStore = create<OverlayStore>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const overlays = await overlaysApi.list();
-      set({ overlays, loading: false });
+      set({ overlays: overlays || [], loading: false });
     } catch (error) {
       set({
+        overlays: [], // Reset to empty array on error
         error: error instanceof Error ? error.message : 'Failed to fetch overlays',
         loading: false
       });
