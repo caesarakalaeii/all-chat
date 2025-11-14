@@ -47,20 +47,19 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const envelope = JSON.parse(event.data);
 
-        // Handle envelope format
-        let message = data;
-        if (data.type === 'chat_message' && data.payload) {
-          message = data.payload;
+        console.log('[OBS Overlay] Received message:', envelope);
+
+        // Only process chat messages, ignore connected/ping/pong/error
+        if (envelope.type === 'chat_message' && envelope.data) {
+          const message = envelope.data;
+
+          setMessages((prev) => {
+            const newMessages = [...prev, message];
+            return newMessages.slice(-maxMessages);
+          });
         }
-
-        console.log('[OBS Overlay] Received message:', message);
-
-        setMessages((prev) => {
-          const newMessages = [...prev, message];
-          return newMessages.slice(-maxMessages);
-        });
       } catch (error) {
         console.error('[OBS Overlay] Failed to parse message:', error);
       }
