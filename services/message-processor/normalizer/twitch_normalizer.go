@@ -81,15 +81,11 @@ func (n *TwitchNormalizer) extractUserInfo(raw *models.RawChatMessage) models.Us
 		displayName = raw.Username
 	}
 
-	// Generate Twitch avatar URL from user ID
-	// Twitch profile images follow this pattern
-	avatarURL := fmt.Sprintf("https://static-cdn.jtvnw.net/jtv_user_pictures/%s-profile_image-70x70.png", raw.Username)
-
 	return models.UserInfo{
 		ID:          raw.UserID,
 		Username:    raw.Username,
 		DisplayName: displayName,
-		AvatarURL:   avatarURL,
+		AvatarURL:   "", // Will be enriched by avatar enricher
 		Badges:      badges,
 		Color:       tags["color"],
 	}
