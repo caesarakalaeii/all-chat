@@ -9,20 +9,31 @@
 
 ## 🔴 Known Issues (November 14, 2025 - Active Session)
 
-### Critical Issues to Fix:
-1. **No way to delete an overlay** - Dashboard UI has no delete button
-2. **Adding sources to overlays doesn't work** - POST to `/sources` endpoint returns 404 (being fixed)
-3. **Overlay preview URL returns 404** - `/overlays/:id/preview` page not routing correctly
+### Critical Issue Remaining:
+1. **WebSocket constantly reconnecting (error 1006)** - API Gateway WebSocket closes immediately after connecting
+   - Frontend connects successfully but connection drops immediately
+   - Pattern: Connect → Closed 1006 → Reconnect loop
+   - Prevents messages from being delivered to overlay preview
+   - **Status**: Investigating - likely API Gateway WebSocket handler issue
 
-### Recently Fixed:
+### Message Flow Status (Verified Working):
+- ✅ Twitch Listener: Connected to IRC and joined caesarlp channel
+- ✅ Message Reception: Messages received from Twitch chat
+- ✅ Redis Stream: Messages published to `chat:raw` stream (6 messages)
+- ✅ Message Processor: Consuming from stream (entries_read: 7, pending: 0, lag: 0)
+- ✅ Overlay Routing: Database query correctly finds overlay for twitch/caesarlp
+- ✅ Pub/Sub Channel: `overlay:23ca3940-c4c0-4ddf-85df-6b7cfe19f629` exists
+- ❌ WebSocket Delivery: API Gateway WebSocket not staying connected
+
+### Recently Fixed (All Working):
 - ✅ OAuth callback URL corrected (`/api/v1/auth/callback`)
 - ✅ JWT authentication middleware added to overlay-manager
 - ✅ Empty overlays array handling in dashboard
 - ✅ Frontend API client response format fixed
-
-### In Progress:
-- 🔧 Implementing overlay chat sources management endpoints
-- 🔧 Source repository and handlers being added to overlay-manager
+- ✅ Delete overlay functionality - UI button and DELETE endpoint working
+- ✅ Add sources to overlays - Endpoints implemented, route conflict resolved
+- ✅ Overlay preview URL - Corrected to `/overlays/:id/preview`
+- ✅ Sources display - API response format fixed, sources show in UI
 
 ---
 
