@@ -51,15 +51,26 @@ func (n *TwitchNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 func (n *TwitchNormalizer) extractUserInfo(raw *models.RawChatMessage) models.UserInfo {
 	tags := raw.Tags
 
-	// Extract badges
-	badges := make([]string, 0)
+	// Extract badges with URLs
+	badges := make([]models.Badge, 0)
 	if badgesStr, ok := tags["badges"]; ok && badgesStr != "" {
 		// Format: "subscriber/12,moderator/1"
 		badgePairs := strings.Split(badgesStr, ",")
 		for _, pair := range badgePairs {
 			parts := strings.Split(pair, "/")
-			if len(parts) > 0 {
-				badges = append(badges, parts[0])
+			if len(parts) >= 2 {
+				name := parts[0]
+				version := parts[1]
+
+				// Generate Twitch badge URL
+				// Format: https://static-cdn.jtvnw.net/badges/v1/{name}/{version}/1
+				iconURL := fmt.Sprintf("https://static-cdn.jtvnw.net/badges/v1/%s/%s/1", name, version)
+
+				badges = append(badges, models.Badge{
+					Name:    name,
+					Version: version,
+					IconURL: iconURL,
+				})
 			}
 		}
 	}
@@ -70,11 +81,15 @@ func (n *TwitchNormalizer) extractUserInfo(raw *models.RawChatMessage) models.Us
 		displayName = raw.Username
 	}
 
+	// Generate Twitch avatar URL from user ID
+	// Twitch profile images follow this pattern
+	avatarURL := fmt.Sprintf("https://static-cdn.jtvnw.net/jtv_user_pictures/%s-profile_image-70x70.png", raw.Username)
+
 	return models.UserInfo{
 		ID:          raw.UserID,
 		Username:    raw.Username,
 		DisplayName: displayName,
-		AvatarURL:   "", // Twitch doesn't provide this in IRC
+		AvatarURL:   avatarURL,
 		Badges:      badges,
 		Color:       tags["color"],
 	}

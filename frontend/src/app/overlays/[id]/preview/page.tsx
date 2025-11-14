@@ -167,17 +167,15 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                         className="flex gap-3 p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/80 transition-colors"
                       >
                         {/* Avatar */}
-                        {message.user.avatar_url ? (
-                          <img
-                            src={message.user.avatar_url}
-                            alt={message.user.display_name}
-                            className="w-10 h-10 rounded-full flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gray-700 flex-shrink-0 flex items-center justify-center text-white font-bold">
-                            {message.user.display_name[0].toUpperCase()}
-                          </div>
-                        )}
+                        <img
+                          src={message.user.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.user.display_name)}&background=6b7280&color=fff&size=40`}
+                          alt={message.user.display_name}
+                          className="w-10 h-10 rounded-full flex-shrink-0"
+                          onError={(e) => {
+                            // Fallback to generated avatar if image fails to load
+                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(message.user.display_name)}&background=6b7280&color=fff&size=40`;
+                          }}
+                        />
 
                         {/* Message Content */}
                         <div className="flex-1 min-w-0">
@@ -196,13 +194,18 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                             >
                               {message.user.display_name}
                             </span>
-                            {message.user.badges?.map((badge) => (
-                              <span
-                                key={badge}
-                                className="px-1.5 py-0.5 bg-gray-700 text-gray-300 text-xs rounded"
-                              >
-                                {badge}
-                              </span>
+                            {message.user.badges?.map((badge, index) => (
+                              <img
+                                key={`${badge.name}-${index}`}
+                                src={badge.icon_url}
+                                alt={badge.name}
+                                title={`${badge.name} (${badge.version})`}
+                                className="w-4 h-4 inline-block"
+                                onError={(e) => {
+                                  // Fallback to text badge if icon fails to load
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
                             ))}
                           </div>
 

@@ -32,12 +32,19 @@ type UnifiedChatMessage struct {
 
 // UserInfo contains information about the message author
 type UserInfo struct {
-	ID          string   `json:"id"`
-	Username    string   `json:"username"`
-	DisplayName string   `json:"display_name"`
-	AvatarURL   string   `json:"avatar_url,omitempty"`
-	Badges      []string `json:"badges"`
-	Color       string   `json:"color,omitempty"`
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	DisplayName string  `json:"display_name"`
+	AvatarURL   string  `json:"avatar_url,omitempty"`
+	Badges      []Badge `json:"badges"`
+	Color       string  `json:"color,omitempty"`
+}
+
+// Badge represents a user badge (subscriber, moderator, etc.)
+type Badge struct {
+	Name    string `json:"name"`     // e.g., "subscriber", "moderator"
+	Version string `json:"version"`  // e.g., "12", "1"
+	IconURL string `json:"icon_url"` // URL to badge image
 }
 
 // MessageInfo contains the message content and emotes
