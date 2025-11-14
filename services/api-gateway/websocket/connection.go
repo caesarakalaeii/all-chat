@@ -160,18 +160,19 @@ func (c *Connection) writePump(ctx context.Context) {
 			}
 
 		case <-ticker.C:
-			// Send ping
+			// Send WebSocket protocol-level ping
 			c.conn.SetWriteDeadline(time.Now().Add(WriteWait))
-			ping := models.NewPing()
-			pingJSON, _ := ping.ToJSON()
-
-			if err := c.conn.WriteMessage(websocket.TextMessage, pingJSON); err != nil {
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				c.logger.Warn("Failed to send ping",
 					zap.String("overlay_id", c.overlayID),
 					zap.Error(err),
 				)
 				return
 			}
+
+			c.logger.Debug("Sent ping",
+				zap.String("overlay_id", c.overlayID),
+			)
 		}
 	}
 }
