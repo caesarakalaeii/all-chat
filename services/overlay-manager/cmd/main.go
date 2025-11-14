@@ -13,6 +13,7 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/middleware"
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -95,9 +96,15 @@ func main() {
 		SkipPaths: []string{"/health/live", "/health/ready"},
 	}))
 
-	// Register routes
-	overlayHandler.RegisterRoutes(router)
+	// Register health routes (no auth required)
 	healthHandler.RegisterRoutes(router)
+
+	// Protected routes (require JWT)
+	protected := router.Group("/")
+	protected.Use(middleware.JWTAuth(config.JWTSecret))
+	{
+		overlayHandler.RegisterRoutes(protected)
+	}
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -149,6 +156,7 @@ type Config struct {
 	DatabaseName     string
 	RedisHost        string
 	RedisPort        string
+	JWTSecret        string
 }
 
 // loadConfig loads configuration from environment variables
@@ -163,6 +171,7 @@ func loadConfig() *Config {
 		DatabaseName:     getEnv("DATABASE_NAME", "allchat"),
 		RedisHost:        getEnv("REDIS_HOST", "localhost"),
 		RedisPort:        getEnv("REDIS_PORT", "6379"),
+		JWTSecret:        getEnv("JWT_SECRET", "default-secret-change-in-production"),
 	}
 }
 
