@@ -22,8 +22,14 @@ export interface UserInfo {
   username: string;
   display_name: string;
   avatar_url?: string;
-  badges: string[];
+  badges: Badge[];
   color?: string;
+}
+
+export interface Badge {
+  name: string;
+  version: string;
+  icon_url: string;
 }
 
 export interface MessageInfo {

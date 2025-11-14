@@ -61,27 +61,43 @@ func (n *YouTubeNormalizer) extractUserInfo(raw *models.RawChatMessage) models.U
 }
 
 // extractBadges extracts YouTube badges from tags
-func (n *YouTubeNormalizer) extractBadges(tags map[string]string) []string {
-	badges := make([]string, 0)
+func (n *YouTubeNormalizer) extractBadges(tags map[string]string) []models.Badge {
+	badges := make([]models.Badge, 0)
 
 	// Owner (channel owner/broadcaster)
 	if tags["is_owner"] == "true" {
-		badges = append(badges, "owner")
+		badges = append(badges, models.Badge{
+			Name:    "owner",
+			Version: "1",
+			IconURL: "https://www.youtube.com/s/desktop/d743f786/img/favicon_96x96.png", // YouTube icon as placeholder
+		})
 	}
 
 	// Sponsor (channel member)
 	if tags["is_sponsor"] == "true" {
-		badges = append(badges, "member")
+		badges = append(badges, models.Badge{
+			Name:    "member",
+			Version: "1",
+			IconURL: "https://www.youtube.com/s/desktop/d743f786/img/favicon_96x96.png",
+		})
 	}
 
 	// Moderator
 	if tags["is_moderator"] == "true" {
-		badges = append(badges, "moderator")
+		badges = append(badges, models.Badge{
+			Name:    "moderator",
+			Version: "1",
+			IconURL: "https://www.youtube.com/s/desktop/d743f786/img/favicon_96x96.png",
+		})
 	}
 
 	// Verified
 	if tags["is_verified"] == "true" {
-		badges = append(badges, "verified")
+		badges = append(badges, models.Badge{
+			Name:    "verified",
+			Version: "1",
+			IconURL: "https://www.youtube.com/s/desktop/d743f786/img/favicon_96x96.png",
+		})
 	}
 
 	return badges
