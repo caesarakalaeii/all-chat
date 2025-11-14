@@ -6,6 +6,7 @@ on:
       - '**'  # Build on ANY branch
     paths:
       - 'services/**'
+      - 'frontend/**'
       - 'shared/**'
       - '.github/workflows/build-and-push.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
       - main
     paths:
       - 'services/**'
+      - 'frontend/**'
       - 'shared/**'
   workflow_dispatch:
 
@@ -32,6 +34,7 @@ jobs:
       youtube-listener: ${{ steps.changes.outputs.youtube-listener }}
       message-processor: ${{ steps.changes.outputs.message-processor }}
       source-manager: ${{ steps.changes.outputs.source-manager }}
+      frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
     steps:
       - uses: actions/checkout@v4
@@ -66,6 +69,8 @@ jobs:
             source-manager:
               - 'services/source-manager/**'
               - 'shared/**'
+            frontend:
+              - 'frontend/**'
             shared:
               - 'shared/**'
 
@@ -83,20 +88,31 @@ jobs:
         service:
           - name: auth-service
             changed: ${{ needs.detect-changes.outputs.auth-service }}
+            path: services/auth-service
           - name: overlay-manager
             changed: ${{ needs.detect-changes.outputs.overlay-manager }}
+            path: services/overlay-manager
           - name: emote-service
             changed: ${{ needs.detect-changes.outputs.emote-service }}
+            path: services/emote-service
           - name: api-gateway
             changed: ${{ needs.detect-changes.outputs.api-gateway }}
+            path: services/api-gateway
           - name: twitch-listener
             changed: ${{ needs.detect-changes.outputs.twitch-listener }}
+            path: services/twitch-listener
           - name: youtube-listener
             changed: ${{ needs.detect-changes.outputs.youtube-listener }}
+            path: services/youtube-listener
           - name: message-processor
             changed: ${{ needs.detect-changes.outputs.message-processor }}
+            path: services/message-processor
           - name: source-manager
             changed: ${{ needs.detect-changes.outputs.source-manager }}
+            path: services/source-manager
+          - name: frontend
+            changed: ${{ needs.detect-changes.outputs.frontend }}
+            path: frontend
 
     steps:
       - name: Checkout repository
@@ -133,7 +149,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./services/${{ matrix.service.name }}/Dockerfile
+          file: ./${{ matrix.service.path }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
