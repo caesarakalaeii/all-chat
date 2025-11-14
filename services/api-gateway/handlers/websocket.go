@@ -58,38 +58,45 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		return
 	}
 
-	// Get JWT token from query parameter
+	// Get JWT token from query parameter (optional for OBS)
 	token := c.Query("token")
-	if token == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "token is required"})
-		return
-	}
+	var userID string
+	var username string
 
-	// Validate JWT
-	claims, err := auth.ValidateJWT(token, h.jwtSecret)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
-		return
-	}
-
-	// Verify user owns the overlay
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	owns, err := h.repo.VerifyOverlayOwnership(ctx, overlayID, claims.UserID)
-	if err != nil {
-		h.logger.Error("Failed to verify overlay ownership",
-			zap.String("overlay_id", overlayID),
-			zap.String("user_id", claims.UserID),
-			zap.Error(err),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify ownership"})
-		return
-	}
+	// If token provided, validate and check ownership
+	if token != "" {
+		claims, err := auth.ValidateJWT(token, h.jwtSecret)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			return
+		}
 
-	if !owns {
-		c.JSON(http.StatusForbidden, gin.H{"error": "you do not own this overlay"})
-		return
+		userID = claims.UserID
+		username = claims.Username
+
+		// Verify user owns the overlay
+		owns, err := h.repo.VerifyOverlayOwnership(ctx, overlayID, claims.UserID)
+		if err != nil {
+			h.logger.Error("Failed to verify overlay ownership",
+				zap.String("overlay_id", overlayID),
+				zap.String("user_id", claims.UserID),
+				zap.Error(err),
+			)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify ownership"})
+			return
+		}
+
+		if !owns {
+			c.JSON(http.StatusForbidden, gin.H{"error": "you do not own this overlay"})
+			return
+		}
+	} else {
+		// No token provided (OBS mode) - use anonymous connection
+		userID = "obs"
+		username = "OBS"
 	}
 
 	// Check if overlay is active
@@ -119,7 +126,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	}
 
 	// Create WebSocket connection wrapper
-	wsConn := wsconn.NewConnection(conn, overlayID, claims.UserID, h.logger)
+	wsConn := wsconn.NewConnection(conn, overlayID, userID, h.logger)
 
 	// Subscribe to overlay's Redis Pub/Sub channel
 	// Use background context - subscription must outlive the HTTP request
@@ -144,8 +151,8 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	h.logger.Info("WebSocket connection established",
 		zap.String("overlay_id", overlayID),
-		zap.String("user_id", claims.UserID),
-		zap.String("username", claims.Username),
+		zap.String("user_id", userID),
+		zap.String("username", username),
 	)
 
 	// Create background context for WebSocket connection
