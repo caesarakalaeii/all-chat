@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -80,8 +81,25 @@ func main() {
 
 	// Create Redis Pub/Sub subscriber with message handler
 	messageHandler := func(overlayID string, message []byte) {
-		// Broadcast message to all connections in this overlay
-		count := wsManager.BroadcastToOverlay(overlayID, message)
+		// Wrap the unified message in a WebSocket message envelope
+		wsMsg := models.WSMessage{
+			Type:      models.WSMessageTypeChatMessage,
+			Data:      json.RawMessage(message), // Use RawMessage to avoid re-parsing
+			Timestamp: time.Now().UTC(),
+		}
+
+		// Convert to JSON
+		wsJSON, err := wsMsg.ToJSON()
+		if err != nil {
+			log.Error("Failed to wrap message in WebSocket envelope",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+			return
+		}
+
+		// Broadcast wrapped message to all connections in this overlay
+		count := wsManager.BroadcastToOverlay(overlayID, wsJSON)
 		log.Debug("Broadcast message to overlay",
 			zap.String("overlay_id", overlayID),
 			zap.Int("connections", count),
