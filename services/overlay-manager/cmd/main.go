@@ -11,6 +11,7 @@ import (
 
 	"github.com/caesar/all-chat/services/overlay-manager/handlers"
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
+	"github.com/caesar/all-chat/services/overlay-manager/youtube"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
@@ -88,6 +89,11 @@ func main() {
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 
+	// YouTube helper
+	youtubeAPIKey := getEnv("YOUTUBE_API_KEY", "")
+	youtubeResolver := youtube.NewResolver(youtubeAPIKey)
+	youtubeHandler := handlers.NewYouTubeHandler(youtubeResolver, log)
+
 	// Setup Gin router
 	if config.GinMode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -120,6 +126,9 @@ func main() {
 		protected.GET("/:id/sources", sourcesHandler.HandleListSources)
 		protected.POST("/:id/sources", sourcesHandler.HandleAddSource)
 		protected.DELETE("/:id/sources/:source_id", sourcesHandler.HandleDeleteSource)
+
+		// YouTube helper routes
+		protected.POST("/youtube/resolve", youtubeHandler.ResolveChannel)
 	}
 
 	// Create HTTP server
