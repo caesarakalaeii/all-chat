@@ -231,33 +231,109 @@ Based on the symptoms, the most likely remaining issues are:
 
 ---
 
-## 🎯 Recommended Next Session Actions
+## ✅ LATEST SESSION PROGRESS (2025-11-14 16:05)
 
-1. **Enable DEBUG logging:**
+### What We Fixed This Session
+1. ✅ **Database Configuration** - Created user, overlay, and chat source
+2. ✅ **Twitch Listener** - Successfully joined #caesarlp channel
+3. ✅ **Message Flow** - Confirmed 10 messages published to Redis Pub/Sub
+4. ✅ **Frontend Auth** - Successfully logged in via Twitch OAuth
+5. ✅ **WebSocket Connection** - Browser shows "Connected" status
+
+### Current Status
+```
+Twitch IRC (#caesarlp) → ✅ WORKING
+Twitch Listener → ✅ RECEIVING & PUBLISHING
+Redis Stream (chat:raw) → ✅ WORKING
+Message Processor → ✅ CONSUMING & ENRICHING
+Redis Pub/Sub (overlay:*) → ✅ MESSAGES PUBLISHED (10 messages confirmed)
+API Gateway → ❌ NOT SUBSCRIBING TO REDIS (No subscription logs)
+WebSocket → ⚠️ CONNECTED (browser) but NO SERVER LOGS
+Frontend → ❓ Connected but receiving 0 messages
+```
+
+### 🐛 ROOT CAUSE IDENTIFIED
+
+**Issue:** Nginx reverse proxy is NOT forwarding WebSocket connections to the API Gateway backend.
+
+**Evidence:**
+- Browser console: `✅ [WebSocket] Connected to wss://allchat.caes.ar/ws/overlay/...`
+- Browser shows: `✅ ● Connected` (green)
+- API Gateway logs: `❌ NO HTTP requests from browser`
+- API Gateway logs: `❌ NO "WebSocket connection established" message`
+- API Gateway logs: `❌ NO subscription logs`
+- Redis MONITOR: `✅ 10 messages published successfully`
+- Frontend code comment (websocket.ts:5): `"WebSocket connections are proxied through Nginx at /ws/* paths"`
+- Kubernetes: `❌ No Nginx deployment found in cluster`
+- Kubernetes: `❌ No frontend deployment found in cluster`
+
+**Root Cause CONFIRMED:**
+There is an **external Nginx reverse proxy** (outside the Kubernetes cluster) that:
+1. ✅ Serves the frontend (Next.js) at `allchat.caes.ar`
+2. ✅ Accepts WebSocket connections from browsers
+3. ❌ **NOT configured to proxy `/ws/*` paths to the API Gateway LoadBalancer**
+4. ❌ WebSocket connections terminate at Nginx without reaching the backend
+
+The WebSocket appears "Connected" in the browser because Nginx accepts the WebSocket upgrade, but it never forwards the connection to the API Gateway at `172.21.0.2:8080` or `10.43.19.127:8080`.
+
+### ✅ SOLUTION: Configure Nginx Proxy Manager
+
+**Problem:** Nginx Proxy Manager (NPM) in the `caesar` namespace is NOT configured to proxy WebSocket connections to the API Gateway.
+
+**Current Setup:**
+- NPM: `nginx-proxy-manager` pod in `caesar` namespace
+- NPM Service: `npm-service` LoadBalancer on ports 80, 443, 81
+- NPM UI: `https://allchat.caes.ar:81` (or IP:81)
+- API Gateway: `api-gateway.allchat.svc.cluster.local:8080`
+- SSL Certificate: ✅ Already configured for `allchat.caes.ar`
+
+**Required NPM Configuration:**
+
+1. **Access NPM Admin UI:**
    ```bash
-   kubectl -n allchat set env deployment/api-gateway LOG_LEVEL=debug
+   # Get NPM LoadBalancer IP
+   kubectl get svc -n caesar npm-service
+   # Access: http://<EXTERNAL-IP>:81
+   # Default credentials: admin@example.com / changeme
    ```
 
-2. **Send test message and check logs in real-time:**
-   ```bash
-   # Terminal 1
-   kubectl -n allchat logs deployment/api-gateway --follow | grep -v health
+2. **Add/Update Proxy Host for allchat.caes.ar:**
+   - Domain: `allchat.caes.ar`
+   - Scheme: `http`
+   - Forward Hostname/IP: `api-gateway.allchat.svc.cluster.local`
+   - Forward Port: `8080`
+   - **✅ Enable WebSocket Support** (CRITICAL!)
+   - SSL: Force SSL, Use existing certificate
 
-   # Terminal 2
-   python3 test_twitch_chat.py
+3. **Add Custom Location for WebSocket path:**
+   - Location: `/ws/`
+   - Scheme: `http`
+   - Forward Hostname/IP: `api-gateway.allchat.svc.cluster.local`
+   - Forward Port: `8080`
+   - **✅ Enable WebSocket Support** (CRITICAL!)
+
+4. **Advanced Configuration (if needed):**
+   ```nginx
+   location /ws/ {
+       proxy_pass http://api-gateway.allchat.svc.cluster.local:8080;
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade $http_upgrade;
+       proxy_set_header Connection "upgrade";
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+   }
    ```
 
-3. **Check WebSocket raw messages in browser console:**
-   - Open browser dev tools
-   - Go to Network → WS tab
-   - Filter for overlay WebSocket
-   - Send test message
-   - Check if messages appear in WebSocket frames
+5. **Test After Configuration:**
+   ```bash
+   # From browser or wscat
+   wscat -c "wss://allchat.caes.ar/ws/overlay/23ca3940-c4c0-4ddf-85df-6b7cfe19f629?token=YOUR_TOKEN"
 
-4. **If messages are in WebSocket but not displaying:**
-   - Issue is in frontend React code
-   - Check `frontend/` for WebSocket message handler
-   - Look for message parsing/rendering logic
+   # Should see in API Gateway logs:
+   kubectl logs -n allchat deployment/api-gateway --follow | grep "WebSocket"
+   ```
 
 ---
 

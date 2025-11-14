@@ -2,9 +2,11 @@ package channels
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -37,13 +39,20 @@ type Manager struct {
 	syncTicker  *time.Ticker
 	stopChan    chan struct{}
 	wg          sync.WaitGroup
+	dbConn      DBConnInterface // For PostgreSQL LISTEN
+}
+
+// DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
+type DBConnInterface interface {
+	GetPool() interface{}
 }
 
 // NewManager creates a new channel manager
-func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, logger *zap.Logger) *Manager {
+func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn DBConnInterface, logger *zap.Logger) *Manager {
 	return &Manager{
 		repo:        repo,
 		joinParter:  joinParter,
+		dbConn:      dbConn,
 		logger:      logger,
 		rateLimiter: rate.NewLimiter(rate.Every(JoinRatePer/JoinRateLimit), JoinRateLimit),
 		activeChans: make(map[string]bool),
@@ -52,19 +61,24 @@ func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, logger
 	}
 }
 
-// Start begins the periodic sync process
+// Start begins the periodic sync process and PostgreSQL LISTEN
 func (m *Manager) Start(ctx context.Context) error {
 	// Initial sync
 	if err := m.SyncChannels(ctx); err != nil {
 		return err
 	}
 
-	// Start periodic sync
+	// Start periodic sync (fallback)
 	m.wg.Add(1)
 	go m.syncLoop(ctx)
 
+	// Start PostgreSQL LISTEN for instant notifications
+	m.wg.Add(1)
+	go m.listenForChanges(ctx)
+
 	m.logger.Info("Channel manager started",
 		zap.Duration("sync_interval", SyncInterval),
+		zap.String("notification_channel", "chat_source_changes"),
 	)
 
 	return nil
@@ -93,6 +107,86 @@ func (m *Manager) syncLoop(ctx context.Context) {
 			return
 		case <-ctx.Done():
 			return
+		}
+	}
+}
+
+// listenForChanges listens for PostgreSQL NOTIFY events for instant source updates
+func (m *Manager) listenForChanges(ctx context.Context) {
+	defer m.wg.Done()
+
+	for {
+		select {
+		case <-m.stopChan:
+			return
+		case <-ctx.Done():
+			return
+		default:
+			// Get connection from pool for LISTEN
+			pool := m.dbConn.GetPool()
+			if pool == nil {
+				m.logger.Error("Failed to get database pool for LISTEN")
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			// Acquire connection and LISTEN
+			if err := m.listenAndWait(ctx, pool); err != nil {
+				m.logger.Warn("PostgreSQL LISTEN error, will retry",
+					zap.Error(err),
+					zap.Duration("retry_in", 5*time.Second),
+				)
+				time.Sleep(5 * time.Second)
+			}
+		}
+	}
+}
+
+// listenAndWait establishes LISTEN connection and waits for notifications
+func (m *Manager) listenAndWait(ctx context.Context, poolInterface interface{}) error {
+	pool, ok := poolInterface.(*pgxpool.Pool)
+	if !ok {
+		return fmt.Errorf("invalid pool type")
+	}
+
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to acquire connection: %w", err)
+	}
+	defer conn.Release()
+
+	// Start listening for notifications
+	_, err = conn.Exec(ctx, "LISTEN chat_source_changes")
+	if err != nil {
+		return fmt.Errorf("failed to LISTEN: %w", err)
+	}
+
+	m.logger.Info("PostgreSQL LISTEN active",
+		zap.String("channel", "chat_source_changes"),
+	)
+
+	// Wait for notifications
+	for {
+		select {
+		case <-m.stopChan:
+			return nil
+		case <-ctx.Done():
+			return nil
+		default:
+			// Wait for notification with timeout
+			notification, err := conn.Conn().WaitForNotification(ctx)
+			if err != nil {
+				return fmt.Errorf("notification wait failed: %w", err)
+			}
+
+			m.logger.Info("Source change notification received",
+				zap.String("payload", notification.Payload),
+			)
+
+			// Trigger immediate sync
+			if err := m.SyncChannels(ctx); err != nil {
+				m.logger.Error("Failed to sync after notification", zap.Error(err))
+			}
 		}
 	}
 }

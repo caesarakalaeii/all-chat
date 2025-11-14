@@ -18,6 +18,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -99,7 +100,8 @@ func main() {
 
 	// Initialize stream manager
 	streamRepo := streams.NewRepository(db, log)
-	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, log)
+	dbConnWrapper := &dbConnWrapper{pool: db}
+	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, log)
 
 	// Start stream manager
 	if err := streamManager.Start(ctx); err != nil {
@@ -172,4 +174,13 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// dbConnWrapper wraps pgxpool.Pool to implement DBConnInterface
+type dbConnWrapper struct {
+	pool *pgxpool.Pool
+}
+
+func (w *dbConnWrapper) GetPool() interface{} {
+	return w.pool
 }
