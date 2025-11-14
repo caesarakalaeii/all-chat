@@ -32,8 +32,8 @@ export default function LandingPage() {
 
   const handleLogin = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const response = await fetch(`${apiUrl}/api/v1/auth/login`);
+      // Use relative URL - Nginx will proxy to API Gateway
+      const response = await fetch('/api/v1/auth/login');
       const data = await response.json();
 
       if (data.auth_url) {
