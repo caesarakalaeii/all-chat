@@ -17,20 +17,23 @@ const nextConfig = {
     ]
   },
 
-  // API rewrites for development
+  // API rewrites for local development only
+  // In production, Nginx handles /api/* and /ws/* proxying
   async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:8080/api/:path*'
-      }
-    ];
-  },
-
-  // Environment variables available to browser
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
-    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080'
+    // Only apply rewrites in development mode
+    if (process.env.NODE_ENV === 'development') {
+      return [
+        {
+          source: '/api/:path*',
+          destination: 'http://localhost:8080/api/:path*'
+        },
+        {
+          source: '/ws/:path*',
+          destination: 'http://localhost:8080/ws/:path*'
+        }
+      ];
+    }
+    return [];
   }
 };
 

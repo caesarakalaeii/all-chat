@@ -4,12 +4,27 @@
  * Base HTTP client for communicating with the All-Chat API Gateway.
  * Handles authentication, error handling, and request formatting.
  *
+ * All API requests are proxied through Nginx at /api/* paths.
+ * This provides same-origin requests (no CORS), SSL termination,
+ * and better security by keeping backend services internal.
+ *
  * Usage:
  *   const data = await apiClient.get<ResponseType>('/api/v1/endpoint');
  *   const result = await apiClient.post('/api/v1/endpoint', { data });
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+// In production: /api/* is proxied to API Gateway by Nginx
+// In development: use NEXT_PUBLIC_API_URL or localhost
+function getApiUrl(): string {
+  if (typeof window !== 'undefined') {
+    // Browser: use same origin (Nginx will proxy /api/* to backend)
+    return window.location.origin;
+  }
+  // SSR: use env var or localhost for development
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+}
+
+const API_URL = getApiUrl();
 
 export class ApiError extends Error {
   constructor(
