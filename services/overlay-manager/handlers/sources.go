@@ -30,7 +30,7 @@ func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepositor
 	}
 }
 
-// HandleListSources handles GET /overlays/:overlay_id/sources
+// HandleListSources handles GET /:id/sources
 func (h *SourcesHandler) HandleListSources(c *gin.Context) {
 	// Get user ID from context
 	userID, exists := c.Get("user_id")
@@ -39,7 +39,7 @@ func (h *SourcesHandler) HandleListSources(c *gin.Context) {
 		return
 	}
 
-	overlayID := c.Param("overlay_id")
+	overlayID := c.Param("id")
 
 	// Verify user owns this overlay
 	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
@@ -63,7 +63,7 @@ func (h *SourcesHandler) HandleListSources(c *gin.Context) {
 	c.JSON(http.StatusOK, sources)
 }
 
-// HandleAddSource handles POST /overlays/:overlay_id/sources
+// HandleAddSource handles POST /:id/sources
 func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	// Get user ID from context
 	userID, exists := c.Get("user_id")
@@ -72,7 +72,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		return
 	}
 
-	overlayID := c.Param("overlay_id")
+	overlayID := c.Param("id")
 
 	// Verify user owns this overlay
 	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
@@ -123,7 +123,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	c.JSON(http.StatusCreated, source)
 }
 
-// HandleDeleteSource handles DELETE /overlays/:overlay_id/sources/:id
+// HandleDeleteSource handles DELETE /:id/sources/:source_id
 func (h *SourcesHandler) HandleDeleteSource(c *gin.Context) {
 	// Get user ID from context
 	userID, exists := c.Get("user_id")
@@ -132,8 +132,8 @@ func (h *SourcesHandler) HandleDeleteSource(c *gin.Context) {
 		return
 	}
 
-	overlayID := c.Param("overlay_id")
-	sourceID := c.Param("id")
+	overlayID := c.Param("id")
+	sourceID := c.Param("source_id")
 
 	// Verify user owns this overlay
 	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
@@ -159,8 +159,9 @@ func (h *SourcesHandler) HandleDeleteSource(c *gin.Context) {
 }
 
 // RegisterRoutes registers source routes
+// Note: Must be registered on the overlay detail routes (/:id/sources)
 func (h *SourcesHandler) RegisterRoutes(router gin.IRouter) {
-	router.GET("/:overlay_id/sources", h.HandleListSources)
-	router.POST("/:overlay_id/sources", h.HandleAddSource)
-	router.DELETE("/:overlay_id/sources/:id", h.HandleDeleteSource)
+	router.GET("/sources", h.HandleListSources)
+	router.POST("/sources", h.HandleAddSource)
+	router.DELETE("/sources/:source_id", h.HandleDeleteSource)
 }

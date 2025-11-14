@@ -109,8 +109,17 @@ func main() {
 	protected := router.Group("/")
 	protected.Use(middleware.JWTAuth(config.JWTSecret))
 	{
-		overlayHandler.RegisterRoutes(protected)
-		sourcesHandler.RegisterRoutes(protected)
+		// Overlay CRUD routes (no :id prefix)
+		protected.POST("/", overlayHandler.HandleCreateOverlay)
+		protected.GET("/", overlayHandler.HandleListOverlays)
+		protected.GET("/:id", overlayHandler.HandleGetOverlay)
+		protected.PUT("/:id", overlayHandler.HandleUpdateOverlay)
+		protected.DELETE("/:id", overlayHandler.HandleDeleteOverlay)
+
+		// Source management routes (nested under /:id)
+		protected.GET("/:id/sources", sourcesHandler.HandleListSources)
+		protected.POST("/:id/sources", sourcesHandler.HandleAddSource)
+		protected.DELETE("/:id/sources/:source_id", sourcesHandler.HandleDeleteSource)
 	}
 
 	// Create HTTP server
