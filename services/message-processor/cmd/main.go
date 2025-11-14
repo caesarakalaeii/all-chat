@@ -80,6 +80,11 @@ func main() {
 	emoteClient := enricher.NewHTTPEmoteClient(emoteServiceURL, log)
 	emoteEnricher := enricher.NewEnricher(emoteClient, log)
 
+	// Avatar enricher for Twitch users
+	twitchClientID := getEnvOrDefault("TWITCH_CLIENT_ID", "")
+	twitchClientSecret := getEnvOrDefault("TWITCH_CLIENT_SECRET", "")
+	avatarEnricher := enricher.NewAvatarEnricher(redisClient, twitchClientID, twitchClientSecret, log)
+
 	overlayRepo := router.NewRepository(db)
 	overlayRouter := router.NewRouter(overlayRepo, log)
 
@@ -122,6 +127,15 @@ func main() {
 					zap.Error(err),
 				)
 				continue
+			}
+
+			// Enrich with avatars (Twitch only, cached in Redis)
+			if err := avatarEnricher.Enrich(ctx, unified); err != nil {
+				log.Warn("Failed to enrich avatar",
+					zap.String("message_id", rawMsg.MessageID),
+					zap.Error(err),
+				)
+				// Continue even if enrichment fails
 			}
 
 			// Enrich with emotes
