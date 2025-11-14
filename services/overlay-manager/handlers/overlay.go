@@ -91,6 +91,11 @@ func (h *OverlayHandler) HandleListOverlays(c *gin.Context) {
 		return
 	}
 
+	// Ensure we always return an array, even if empty (not null)
+	if overlays == nil {
+		overlays = []*models.Overlay{}
+	}
+
 	c.JSON(http.StatusOK, overlays)
 }
 
