@@ -2,10 +2,13 @@
  * WebSocket Client
  *
  * Manages WebSocket connection to the API Gateway for real-time chat messages.
+ * WebSocket connections are proxied through Nginx at /ws/* paths.
+ *
  * Features:
  * - Automatic reconnection with exponential backoff
  * - Ping/Pong keep-alive handling
  * - Type-safe message handling
+ * - Same-origin WebSocket (proxied via Nginx)
  *
  * Usage:
  *   const client = new WebSocketClient();
@@ -16,7 +19,20 @@
 
 import type { ChatMessage, WebSocketMessage } from '../types/message';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080';
+// Automatically detect WebSocket URL based on page protocol
+// In production: wss://domain.com proxied to backend via Nginx
+// In development: ws://localhost:8080
+function getWebSocketUrl(): string {
+  if (typeof window !== 'undefined') {
+    // Browser: use same origin with ws/wss protocol
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}`;
+  }
+  // SSR: use env var or localhost
+  return process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080';
+}
+
+const WS_URL = getWebSocketUrl();
 
 export class WebSocketClient {
   private ws: WebSocket | null = null;
