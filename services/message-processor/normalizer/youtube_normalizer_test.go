@@ -54,6 +54,24 @@ func TestYouTubeNormalizer_Normalize_BasicMessage(t *testing.T) {
 	assert.Empty(t, unified.Message.Emotes) // No native YouTube emotes
 }
 
+func TestYouTubeNormalizer_Normalize_InvalidChannelID(t *testing.T) {
+	normalizer := NewYouTubeNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "msg-123",
+		Platform:  "youtube",
+		ChannelID: "../evil",
+		UserID:    "UCyyyyyy",
+		Username:  "TestUser",
+		Text:      "Hello world!",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+	}
+
+	_, err := normalizer.Normalize(raw, "overlay-456")
+	assert.Error(t, err)
+}
+
 func TestYouTubeNormalizer_Normalize_WrongPlatform(t *testing.T) {
 	normalizer := NewYouTubeNormalizer()
 
@@ -98,7 +116,7 @@ func TestYouTubeNormalizer_ExtractBadges_Owner(t *testing.T) {
 	unified, err := normalizer.Normalize(raw, "overlay-456")
 
 	assert.NoError(t, err)
-	assert.Contains(t, unified.User.Badges, "owner")
+	assertBadgePresent(t, unified.User.Badges, "owner")
 	assert.True(t, unified.Metadata["is_owner"].(bool))
 }
 
@@ -125,7 +143,7 @@ func TestYouTubeNormalizer_ExtractBadges_Member(t *testing.T) {
 	unified, err := normalizer.Normalize(raw, "overlay-456")
 
 	assert.NoError(t, err)
-	assert.Contains(t, unified.User.Badges, "member")
+	assertBadgePresent(t, unified.User.Badges, "member")
 	assert.True(t, unified.Metadata["is_sponsor"].(bool))
 }
 
@@ -152,7 +170,7 @@ func TestYouTubeNormalizer_ExtractBadges_Moderator(t *testing.T) {
 	unified, err := normalizer.Normalize(raw, "overlay-456")
 
 	assert.NoError(t, err)
-	assert.Contains(t, unified.User.Badges, "moderator")
+	assertBadgePresent(t, unified.User.Badges, "moderator")
 	assert.True(t, unified.Metadata["is_moderator"].(bool))
 }
 
@@ -179,7 +197,7 @@ func TestYouTubeNormalizer_ExtractBadges_Verified(t *testing.T) {
 	unified, err := normalizer.Normalize(raw, "overlay-456")
 
 	assert.NoError(t, err)
-	assert.Contains(t, unified.User.Badges, "verified")
+	assertBadgePresent(t, unified.User.Badges, "verified")
 	assert.True(t, unified.Metadata["is_verified"].(bool))
 }
 
@@ -206,9 +224,9 @@ func TestYouTubeNormalizer_ExtractBadges_MultipleBadges(t *testing.T) {
 	unified, err := normalizer.Normalize(raw, "overlay-456")
 
 	assert.NoError(t, err)
-	assert.Contains(t, unified.User.Badges, "member")
-	assert.Contains(t, unified.User.Badges, "moderator")
-	assert.Contains(t, unified.User.Badges, "verified")
+	assertBadgePresent(t, unified.User.Badges, "member")
+	assertBadgePresent(t, unified.User.Badges, "moderator")
+	assertBadgePresent(t, unified.User.Badges, "verified")
 	assert.Len(t, unified.User.Badges, 3)
 }
 

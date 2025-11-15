@@ -22,6 +22,10 @@ func (n *TwitchNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 		return nil, fmt.Errorf("unsupported platform: %s", raw.Platform)
 	}
 
+	if err := validateChannelID(raw.ChannelID); err != nil {
+		return nil, fmt.Errorf("invalid channel ID: %w", err)
+	}
+
 	// Extract user info from tags
 	userInfo := n.extractUserInfo(raw)
 

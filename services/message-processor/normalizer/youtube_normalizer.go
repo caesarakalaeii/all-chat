@@ -21,6 +21,10 @@ func (n *YouTubeNormalizer) Normalize(raw *models.RawChatMessage, overlayID stri
 		return nil, fmt.Errorf("unsupported platform: %s", raw.Platform)
 	}
 
+	if err := validateChannelID(raw.ChannelID); err != nil {
+		return nil, fmt.Errorf("invalid channel ID: %w", err)
+	}
+
 	// Extract user info from tags
 	userInfo := n.extractUserInfo(raw)
 

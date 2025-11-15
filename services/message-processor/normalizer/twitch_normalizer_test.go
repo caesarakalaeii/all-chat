@@ -20,6 +20,21 @@ func TestTwitchNormalizer_Normalize(t *testing.T) {
 		wantErr   bool
 	}{
 		{
+			name: "invalid channel id",
+			raw: &models.RawChatMessage{
+				MessageID: "msg-invalid",
+				Platform:  "twitch",
+				ChannelID: "../bad",
+				UserID:    "12345",
+				Username:  "viewer123",
+				Text:      "Hello World",
+				Timestamp: time.Now().UTC(),
+				Tags:      map[string]string{},
+			},
+			overlayID: "overlay-1",
+			wantErr:   true,
+		},
+		{
 			name: "basic message",
 			raw: &models.RawChatMessage{
 				MessageID: "msg-123",
@@ -47,7 +62,7 @@ func TestTwitchNormalizer_Normalize(t *testing.T) {
 				assert.Equal(t, "viewer123", msg.User.Username)
 				assert.Equal(t, "Viewer123", msg.User.DisplayName)
 				assert.Equal(t, "#FF0000", msg.User.Color)
-				assert.Contains(t, msg.User.Badges, "subscriber")
+				assertBadgePresent(t, msg.User.Badges, "subscriber")
 				assert.Equal(t, "Hello World", msg.Message.Text)
 				assert.True(t, msg.Metadata["is_subscriber"].(bool))
 			},
@@ -119,9 +134,9 @@ func TestTwitchNormalizer_Normalize(t *testing.T) {
 			},
 			overlayID: "overlay-4",
 			check: func(t *testing.T, msg *models.UnifiedChatMessage) {
-				assert.Contains(t, msg.User.Badges, "moderator")
-				assert.Contains(t, msg.User.Badges, "subscriber")
-				assert.Contains(t, msg.User.Badges, "turbo")
+				assertBadgePresent(t, msg.User.Badges, "moderator")
+				assertBadgePresent(t, msg.User.Badges, "subscriber")
+				assertBadgePresent(t, msg.User.Badges, "turbo")
 				assert.True(t, msg.Metadata["is_moderator"].(bool))
 			},
 		},
@@ -179,8 +194,18 @@ func TestTwitchNormalizer_ExtractUserInfo(t *testing.T) {
 	assert.Equal(t, "testuser", userInfo.Username)
 	assert.Equal(t, "TestUser", userInfo.DisplayName)
 	assert.Equal(t, "#00FF00", userInfo.Color)
-	assert.Contains(t, userInfo.Badges, "broadcaster")
-	assert.Contains(t, userInfo.Badges, "moderator")
+	assertBadgePresent(t, userInfo.Badges, "broadcaster")
+	assertBadgePresent(t, userInfo.Badges, "moderator")
+}
+
+func assertBadgePresent(t *testing.T, badges []models.Badge, name string) {
+	t.Helper()
+	for _, badge := range badges {
+		if badge.Name == name {
+			return
+		}
+	}
+	t.Fatalf("expected badge %q to be present", name)
 }
 
 func TestTwitchNormalizer_ExtractUserInfo_NoDisplayName(t *testing.T) {
