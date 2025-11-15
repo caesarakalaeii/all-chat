@@ -244,6 +244,7 @@ services:
       DATABASE_PASSWORD: allchat_dev_password
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET:-dev-service-secret}
     ports:
       - "8088:8088"
     depends_on:
