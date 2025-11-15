@@ -20,17 +20,19 @@ import (
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
-	oauthClient *oauth.TwitchOAuth
-	userRepo    *repository.UserRepository
-	redis       *redis.Client
-	jwtSecret   string
-	jwtExpiry   time.Duration
-	logger      *zap.Logger
+	twitchOAuth  *oauth.TwitchOAuth
+	youtubeOAuth *oauth.YouTubeOAuth
+	userRepo     *repository.UserRepository
+	redis        *redis.Client
+	jwtSecret    string
+	jwtExpiry    time.Duration
+	logger       *zap.Logger
 }
 
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler(
-	oauthClient *oauth.TwitchOAuth,
+	twitchOAuth *oauth.TwitchOAuth,
+	youtubeOAuth *oauth.YouTubeOAuth,
 	userRepo *repository.UserRepository,
 	redisClient *redis.Client,
 	jwtSecret string,
@@ -38,12 +40,13 @@ func NewAuthHandler(
 	logger *zap.Logger,
 ) *AuthHandler {
 	return &AuthHandler{
-		oauthClient: oauthClient,
-		userRepo:    userRepo,
-		redis:       redisClient,
-		jwtSecret:   jwtSecret,
-		jwtExpiry:   time.Duration(jwtExpiryHours) * time.Hour,
-		logger:      logger,
+		twitchOAuth:  twitchOAuth,
+		youtubeOAuth: youtubeOAuth,
+		userRepo:     userRepo,
+		redis:        redisClient,
+		jwtSecret:    jwtSecret,
+		jwtExpiry:    time.Duration(jwtExpiryHours) * time.Hour,
+		logger:       logger,
 	}
 }
 
@@ -65,7 +68,29 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 		return
 	}
 
-	authURL := h.oauthClient.GetAuthURL(state)
+	authURL := h.twitchOAuth.GetAuthURL(state)
+	c.JSON(http.StatusOK, gin.H{"auth_url": authURL})
+}
+
+// HandleYouTubeLogin initiates the YouTube OAuth flow
+func (h *AuthHandler) HandleYouTubeLogin(c *gin.Context) {
+	// Generate random state for CSRF protection
+	state, err := generateRandomString(32)
+	if err != nil {
+		h.logger.Error("Failed to generate state", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	// Store state in Redis with 10 minute expiry
+	err = h.redis.Set(c.Request.Context(), "oauth_state:youtube:"+state, "1", 10*time.Minute).Err()
+	if err != nil {
+		h.logger.Error("Failed to store state", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	authURL := h.youtubeOAuth.GetAuthURL(state)
 	c.JSON(http.StatusOK, gin.H{"auth_url": authURL})
 }
 
@@ -91,7 +116,7 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 	h.redis.Del(c.Request.Context(), "oauth_state:"+state)
 
 	// Exchange code for token
-	token, err := h.oauthClient.ExchangeCode(c.Request.Context(), code)
+	token, err := h.twitchOAuth.ExchangeCode(c.Request.Context(), code)
 	if err != nil {
 		h.logger.Error("Failed to exchange code", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange code"})
@@ -99,7 +124,7 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 	}
 
 	// Get user info from Twitch
-	twitchUser, err := h.oauthClient.GetUserInfo(c.Request.Context(), token.AccessToken)
+	twitchUser, err := h.twitchOAuth.GetUserInfo(c.Request.Context(), token.AccessToken)
 	if err != nil {
 		h.logger.Error("Failed to get user info", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
@@ -110,8 +135,10 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 	user, err := h.userRepo.GetByTwitchID(c.Request.Context(), twitchUser.ID)
 	if err != nil {
 		// Create new user
+		twitchID := twitchUser.ID
 		user = &models.User{
-			TwitchID:        twitchUser.ID,
+			TwitchID:        &twitchID,
+			AuthProvider:    "twitch",
 			Username:        twitchUser.Login,
 			DisplayName:     twitchUser.DisplayName,
 			Email:           twitchUser.Email,
@@ -163,6 +190,112 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 	c.Redirect(http.StatusFound, redirectURL)
 }
 
+// HandleYouTubeCallback handles the YouTube OAuth callback
+func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
+	code := c.Query("code")
+	state := c.Query("state")
+
+	if code == "" || state == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing code or state"})
+		return
+	}
+
+	// Verify state
+	exists, err := h.redis.Get(c.Request.Context(), "oauth_state:youtube:"+state).Result()
+	if err != nil || exists == "" {
+		h.logger.Warn("Invalid or expired state", zap.String("state", state))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired state"})
+		return
+	}
+
+	// Delete used state
+	h.redis.Del(c.Request.Context(), "oauth_state:youtube:"+state)
+
+	// Exchange code for token
+	token, err := h.youtubeOAuth.ExchangeCode(c.Request.Context(), code)
+	if err != nil {
+		h.logger.Error("Failed to exchange code", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange code"})
+		return
+	}
+
+	// Get user info from Google
+	youtubeUser, err := h.youtubeOAuth.GetUserInfo(c.Request.Context(), token.AccessToken)
+	if err != nil {
+		h.logger.Error("Failed to get user info", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
+		return
+	}
+
+	// Check if user exists by Google ID
+	user, err := h.userRepo.GetByGoogleID(c.Request.Context(), youtubeUser.ID)
+	if err != nil {
+		// Create new YouTube user
+		googleID := youtubeUser.ID
+		user = &models.User{
+			GoogleID:        &googleID,
+			AuthProvider:    "youtube",
+			Username:        youtubeUser.Email, // Use email as username for YouTube users
+			DisplayName:     youtubeUser.Name,
+			Email:           youtubeUser.Email,
+			ProfileImageURL: youtubeUser.Picture,
+			AccessToken:     token.AccessToken,
+			RefreshToken:    token.RefreshToken,
+			TokenExpiresAt:  token.Expiry,
+		}
+
+		if err := h.userRepo.Create(c.Request.Context(), user); err != nil {
+			h.logger.Error("Failed to create YouTube user", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+			return
+		}
+
+		h.logger.Info("Created new YouTube user",
+			zap.String("user_id", user.ID),
+			zap.String("email", user.Email),
+		)
+	} else {
+		// Update existing user
+		user.DisplayName = youtubeUser.Name
+		user.Email = youtubeUser.Email
+		user.ProfileImageURL = youtubeUser.Picture
+		user.AccessToken = token.AccessToken
+		user.RefreshToken = token.RefreshToken
+		user.TokenExpiresAt = token.Expiry
+
+		if err := h.userRepo.Update(c.Request.Context(), user); err != nil {
+			h.logger.Error("Failed to update YouTube user", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
+			return
+		}
+	}
+
+	// Store YouTube OAuth tokens for YouTube Listener
+	if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, token); err != nil {
+		h.logger.Error("Failed to store YouTube tokens", zap.Error(err))
+		// Don't fail the login, just log the error
+	}
+
+	// Generate JWT
+	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
+	if err != nil {
+		h.logger.Error("Failed to generate JWT", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	// Redirect to frontend with token in URL fragment
+	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
+	redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer",
+		frontendURL,
+		jwtToken,
+		token.RefreshToken,
+		int64(h.jwtExpiry.Seconds()),
+	)
+
+	c.Redirect(http.StatusFound, redirectURL)
+}
+
 // getEnvOrDefault gets an environment variable or returns a default value
 func getEnvOrDefault(key, defaultValue string) string {
 	value := os.Getenv(key)
@@ -184,7 +317,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	}
 
 	// Refresh OAuth token
-	token, err := h.oauthClient.RefreshToken(c.Request.Context(), req.RefreshToken)
+	token, err := h.twitchOAuth.RefreshToken(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		h.logger.Error("Failed to refresh token", zap.Error(err))
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to refresh token"})
@@ -192,7 +325,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	}
 
 	// Get user info to find user ID
-	twitchUser, err := h.oauthClient.GetUserInfo(c.Request.Context(), token.AccessToken)
+	twitchUser, err := h.twitchOAuth.GetUserInfo(c.Request.Context(), token.AccessToken)
 	if err != nil {
 		h.logger.Error("Failed to get user info", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})

@@ -37,11 +37,20 @@ func main() {
 	twitchClientID := os.Getenv("TWITCH_CLIENT_ID")
 	twitchClientSecret := os.Getenv("TWITCH_CLIENT_SECRET")
 	twitchRedirectURL := getEnvOrDefault("TWITCH_REDIRECT_URL", "http://localhost:8080/api/v1/auth/callback")
+
+	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
+	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
+	youtubeRedirectURL := getEnvOrDefault("YOUTUBE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/youtube/callback")
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)
 
 	if twitchClientID == "" || twitchClientSecret == "" {
 		log.Fatal("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set")
+	}
+
+	if youtubeClientID == "" || youtubeClientSecret == "" {
+		log.Warn("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET not set, YouTube OAuth will not be available")
 	}
 
 	if jwtSecret == "" {
@@ -82,11 +91,27 @@ func main() {
 	log.Info("Connected to Redis")
 
 	// Initialize components
-	oauthClient := oauth.NewTwitchOAuth(twitchClientID, twitchClientSecret, twitchRedirectURL)
+	twitchOAuth := oauth.NewTwitchOAuth(twitchClientID, twitchClientSecret, twitchRedirectURL)
+
+	var youtubeOAuth *oauth.YouTubeOAuth
+	if youtubeClientID != "" && youtubeClientSecret != "" {
+		youtubeOAuth = oauth.NewYouTubeOAuth(youtubeClientID, youtubeClientSecret, youtubeRedirectURL)
+	}
+
 	userRepo := repository.NewUserRepository(db)
 
+	// Create platform provider registry
+	providers := make(map[oauth.Platform]oauth.OAuthProvider)
+	providers[oauth.PlatformTwitch] = twitchOAuth
+	if youtubeOAuth != nil {
+		providers[oauth.PlatformYouTube] = youtubeOAuth
+	}
+
+	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
+
 	// Create handlers
-	authHandler := handlers.NewAuthHandler(oauthClient, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
+	platformAuthHandler := handlers.NewPlatformAuthHandler(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, log)
+	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 
 	// Set Gin mode
@@ -107,17 +132,27 @@ func main() {
 	router.GET("/health/ready", healthHandler.CheckReady)
 
 	// Auth routes (no /auth prefix - API Gateway strips /api/v1/auth and forwards rest)
-	router.GET("/login", authHandler.HandleLogin)
-	router.POST("/login", authHandler.HandleLogin)
-	router.GET("/callback", authHandler.HandleCallback)
-	router.POST("/refresh", authHandler.HandleRefresh)
+	// Twitch OAuth (legacy routes)
+	router.GET("/login", legacyAuthHandler.HandleLogin)
+	router.POST("/login", legacyAuthHandler.HandleLogin)
+	router.GET("/callback", legacyAuthHandler.HandleCallback)
+
+	// Platform-based OAuth routes (generalized for all platforms)
+	router.GET("/twitch/login", platformAuthHandler.HandleLogin(oauth.PlatformTwitch))
+	router.GET("/twitch/callback", platformAuthHandler.HandleCallback(oauth.PlatformTwitch))
+
+	router.GET("/youtube/login", platformAuthHandler.HandleLogin(oauth.PlatformYouTube))
+	router.GET("/youtube/callback", platformAuthHandler.HandleCallback(oauth.PlatformYouTube))
+
+	// Token refresh
+	router.POST("/refresh", legacyAuthHandler.HandleRefresh)
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
 	protected.Use(middleware.JWTAuth(jwtSecret))
 	{
-		protected.GET("/me", authHandler.HandleGetMe)
-		protected.POST("/logout", authHandler.HandleLogout)
+		protected.GET("/me", legacyAuthHandler.HandleGetMe)
+		protected.POST("/logout", legacyAuthHandler.HandleLogout)
 	}
 
 	// Get port from environment
