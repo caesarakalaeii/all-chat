@@ -121,6 +121,7 @@ func (t *TikTokOAuth) GetUserInfoTikTok(ctx context.Context, accessToken string)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := t.client.Do(req)
 	if err != nil {
