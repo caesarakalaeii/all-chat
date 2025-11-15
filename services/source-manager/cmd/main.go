@@ -14,6 +14,7 @@ import (
 	"github.com/caesar/all-chat/services/source-manager/registry"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -89,13 +90,17 @@ func main() {
 	router.GET("/health/ready", healthHandler.ReadinessProbe)
 	router.GET("/status", healthHandler.Status)
 
+	serviceAuthSecret := getEnvOrDefault("SERVICE_JWT_SECRET", "dev-service-secret")
+	protected := router.Group("/")
+	protected.Use(middleware.ServiceJWTAuth(serviceAuthSecret))
+
 	// Source handlers
 	sourceHandler := handlers.NewSourceHandler(sourceRegistry, leaderManager)
-	router.GET("/sources", sourceHandler.GetSources)
-	router.POST("/leadership/claim", sourceHandler.ClaimLeadership)
-	router.POST("/leadership/renew", sourceHandler.RenewLeadership)
-	router.POST("/leadership/release", sourceHandler.ReleaseLeadership)
-	router.GET("/leadership", sourceHandler.GetLeadershipStatus)
+	protected.GET("/sources", sourceHandler.GetSources)
+	protected.POST("/leadership/claim", sourceHandler.ClaimLeadership)
+	protected.POST("/leadership/renew", sourceHandler.RenewLeadership)
+	protected.POST("/leadership/release", sourceHandler.ReleaseLeadership)
+	protected.GET("/leadership", sourceHandler.GetLeadershipStatus)
 
 	// Get port
 	port := getEnvOrDefault("PORT", "8088")
