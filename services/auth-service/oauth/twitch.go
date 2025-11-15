@@ -49,8 +49,13 @@ func (t *TwitchOAuth) ExchangeCode(ctx context.Context, code string) (*oauth2.To
 	return token, nil
 }
 
-// GetUserInfo fetches user information from Twitch API
-func (t *TwitchOAuth) GetUserInfo(ctx context.Context, accessToken string) (*models.TwitchUserInfo, error) {
+// GetPlatform returns the platform identifier
+func (t *TwitchOAuth) GetPlatform() Platform {
+	return PlatformTwitch
+}
+
+// GetUserInfo fetches user information from Twitch API (returns platform-specific type)
+func (t *TwitchOAuth) GetUserInfoTwitch(ctx context.Context, accessToken string) (*models.TwitchUserInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.twitch.tv/helix/users", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -83,6 +88,22 @@ func (t *TwitchOAuth) GetUserInfo(ctx context.Context, accessToken string) (*mod
 	}
 
 	return &result.Data[0], nil
+}
+
+// GetUserInfo fetches user information (generic interface implementation)
+func (t *TwitchOAuth) GetUserInfo(ctx context.Context, accessToken string) (PlatformUserInfo, error) {
+	twitchInfo, err := t.GetUserInfoTwitch(ctx, accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TwitchUserInfoWrapper{
+		ID:              twitchInfo.ID,
+		Login:           twitchInfo.Login,
+		DisplayName:     twitchInfo.DisplayName,
+		Email:           twitchInfo.Email,
+		ProfileImageURL: twitchInfo.ProfileImageURL,
+	}, nil
 }
 
 // RefreshToken refreshes an OAuth token
