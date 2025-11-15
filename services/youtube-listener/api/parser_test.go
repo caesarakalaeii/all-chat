@@ -2,7 +2,6 @@ package api
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/api/youtube/v3"

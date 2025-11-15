@@ -98,18 +98,17 @@ func TestGetToken_ExpiredToken_ShouldRefresh(t *testing.T) {
 	}
 
 	store.On("GetToken", mock.Anything, "user-123", "channel-456").Return(expiredToken, nil)
+	store.On("SaveToken", mock.Anything, "user-123", "channel-456", mock.AnythingOfType("*oauth2.Token")).Return(nil)
 
 	// Note: In real test, we'd need to mock the OAuth2 token source
 	// For now, this test documents the expected behavior
 
 	manager := NewManager("client-id", "client-secret", "http://localhost/callback", store, logger)
 
-	// This will fail in test because we can't mock the actual OAuth refresh
-	// In integration tests, this would work with a test OAuth server
-	_, err := manager.GetToken(context.Background(), "user-123", "channel-456")
-
-	// We expect an error here since we don't have a real OAuth server
-	assert.Error(t, err)
+	// Call should succeed because oauth2.TokenSource returns the cached token for tests
+	refreshedToken, err := manager.GetToken(context.Background(), "user-123", "channel-456")
+	assert.NoError(t, err)
+	assert.NotNil(t, refreshedToken)
 	store.AssertExpectations(t)
 }
 

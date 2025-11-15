@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -20,36 +21,59 @@ type TokenStore interface {
 // PostgresTokenStore implements TokenStore using PostgreSQL
 type PostgresTokenStore struct {
 	db     *pgxpool.Pool
+	enc    *encryption.AESEncryptor
 	logger *zap.Logger
 }
 
 // NewPostgresTokenStore creates a new PostgreSQL token store
-func NewPostgresTokenStore(db *pgxpool.Pool, logger *zap.Logger) *PostgresTokenStore {
+func NewPostgresTokenStore(db *pgxpool.Pool, enc *encryption.AESEncryptor, logger *zap.Logger) *PostgresTokenStore {
 	return &PostgresTokenStore{
 		db:     db,
+		enc:    enc,
 		logger: logger,
 	}
 }
 
 // SaveToken saves an OAuth token to the database
 func (s *PostgresTokenStore) SaveToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error {
-	query := `
-		INSERT INTO youtube_oauth_tokens (user_id, channel_id, access_token, refresh_token, token_type, expiry, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NOW())
-		ON CONFLICT (user_id, channel_id)
-		DO UPDATE SET
-			access_token = EXCLUDED.access_token,
-			refresh_token = EXCLUDED.refresh_token,
-			token_type = EXCLUDED.token_type,
-			expiry = EXCLUDED.expiry,
-			updated_at = NOW()
-	`
+	encAccess, err := s.enc.EncryptString(token.AccessToken)
+	if err != nil {
+		s.logger.Error("Failed to encrypt access token",
+			zap.String("user_id", userID),
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		return fmt.Errorf("encrypt access token: %w", err)
+	}
 
-	_, err := s.db.Exec(ctx, query,
+	encRefresh, err := s.enc.EncryptString(token.RefreshToken)
+	if err != nil {
+		s.logger.Error("Failed to encrypt refresh token",
+			zap.String("user_id", userID),
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		return fmt.Errorf("encrypt refresh token: %w", err)
+	}
+
+	query := `
+INSERT INTO youtube_oauth_tokens (user_id, channel_id, access_token, refresh_token, token_type, expiry, encryption_version, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, 1, NOW())
+ON CONFLICT (user_id, channel_id)
+DO UPDATE SET
+access_token = EXCLUDED.access_token,
+refresh_token = EXCLUDED.refresh_token,
+token_type = EXCLUDED.token_type,
+expiry = EXCLUDED.expiry,
+encryption_version = EXCLUDED.encryption_version,
+updated_at = NOW()
+`
+
+	_, err = s.db.Exec(ctx, query,
 		userID,
 		channelID,
-		token.AccessToken,
-		token.RefreshToken,
+		encAccess,
+		encRefresh,
 		token.TokenType,
 		token.Expiry,
 	)
@@ -74,19 +98,22 @@ func (s *PostgresTokenStore) SaveToken(ctx context.Context, userID, channelID st
 // GetToken retrieves an OAuth token from the database
 func (s *PostgresTokenStore) GetToken(ctx context.Context, userID, channelID string) (*oauth2.Token, error) {
 	query := `
-		SELECT access_token, refresh_token, token_type, expiry
-		FROM youtube_oauth_tokens
-		WHERE user_id = $1 AND channel_id = $2
-	`
+SELECT access_token, refresh_token, token_type, expiry, encryption_version
+FROM youtube_oauth_tokens
+WHERE user_id = $1 AND channel_id = $2
+`
 
 	var token oauth2.Token
 	var expiry time.Time
+	var encryptionVersion int16
+	var storedAccess, storedRefresh string
 
 	err := s.db.QueryRow(ctx, query, userID, channelID).Scan(
-		&token.AccessToken,
-		&token.RefreshToken,
+		&storedAccess,
+		&storedRefresh,
 		&token.TokenType,
 		&expiry,
+		&encryptionVersion,
 	)
 
 	if err != nil {
@@ -96,6 +123,38 @@ func (s *PostgresTokenStore) GetToken(ctx context.Context, userID, channelID str
 			zap.Error(err),
 		)
 		return nil, fmt.Errorf("failed to get token: %w", err)
+	}
+
+	if encryptionVersion >= 1 {
+		decryptedAccess, decryptErr := s.enc.DecryptString(storedAccess)
+		if decryptErr != nil {
+			s.logger.Error("Failed to decrypt access token",
+				zap.String("user_id", userID),
+				zap.String("channel_id", channelID),
+				zap.Error(decryptErr),
+			)
+			return nil, fmt.Errorf("decrypt access token: %w", decryptErr)
+		}
+
+		decryptedRefresh, decryptErr := s.enc.DecryptString(storedRefresh)
+		if decryptErr != nil {
+			s.logger.Error("Failed to decrypt refresh token",
+				zap.String("user_id", userID),
+				zap.String("channel_id", channelID),
+				zap.Error(decryptErr),
+			)
+			return nil, fmt.Errorf("decrypt refresh token: %w", decryptErr)
+		}
+
+		token.AccessToken = decryptedAccess
+		token.RefreshToken = decryptedRefresh
+	} else {
+		s.logger.Warn("Found legacy plaintext tokens; returning without decryption",
+			zap.String("user_id", userID),
+			zap.String("channel_id", channelID),
+		)
+		token.AccessToken = storedAccess
+		token.RefreshToken = storedRefresh
 	}
 
 	token.Expiry = expiry

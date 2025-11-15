@@ -270,63 +270,27 @@ sequenceDiagram
 
 ### Token Storage (Encrypted)
 
-```go
-// Encrypt token before storing
-func EncryptToken(plaintext, key string) (string, error) {
-    block, err := aes.NewCipher([]byte(key))
-    if err != nil {
-        return "", err
-    }
+YouTube OAuth tokens are encrypted before they hit PostgreSQL via `shared/encryption.AESEncryptor`, the same helper that backs the Auth Service. The helper uses AES‑256 GCM with a random nonce per record and base64 encodes the payload that is ultimately stored in `youtube_oauth_tokens.access_token` and `.refresh_token`.
 
-    gcm, err := cipher.NewGCM(block)
-    if err != nil {
-        return "", err
-    }
+**Key management workflow:**
 
-    nonce := make([]byte, gcm.NonceSize())
-    if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-        return "", err
-    }
+1. **Generate a key** (32 random bytes, base64 encoded for convenience):
+   ```bash
+   openssl rand -base64 32
+   ```
+2. **Store it in your secret manager** – for Kubernetes we keep it inside `all-chat/youtube-token-encryption` and mount it as the `YOUTUBE_TOKEN_ENCRYPTION_KEY` environment variable.
+3. **Configure the service** – the YouTube Listener refuses to boot without `YOUTUBE_TOKEN_ENCRYPTION_KEY`, parses the base64 string, and builds the encryptor at start-up.
+4. **Deploy the migration** – `migrations/006_youtube_token_encryption.sql` adds an `encryption_version` flag so we can track which rows are already re‑encrypted.
+5. **Backfill legacy rows** – run the purpose-built job from this repo once the secret is in place:
+   ```bash
+   cd services/youtube-listener
+   YOUTUBE_TOKEN_ENCRYPTION_KEY=$(cat /path/to/key) \
+   go run ./cmd/token_backfill
+   ```
+   The command reads every `encryption_version = 0` row, encrypts the plaintext tokens with the configured key, and writes them back with `encryption_version = 1`.
+6. **Rotation** – generate a new key, deploy it alongside the service, reset `encryption_version` to `0` for the rows you plan to rotate (or all rows), and rerun the backfill command so the ciphertext is recreated with the new secret.
 
-    ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
-    return base64.StdEncoding.EncodeToString(ciphertext), nil
-}
-
-// Decrypt token when needed
-func DecryptToken(ciphertext, key string) (string, error) {
-    data, err := base64.StdEncoding.DecodeString(ciphertext)
-    if err != nil {
-        return "", err
-    }
-
-    block, err := aes.NewCipher([]byte(key))
-    if err != nil {
-        return "", err
-    }
-
-    gcm, err := cipher.NewGCM(block)
-    if err != nil {
-        return "", err
-    }
-
-    nonceSize := gcm.NonceSize()
-    nonce, ciphertext := data[:nonceSize], data[nonceSize:]
-
-    plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-    if err != nil {
-        return "", err
-    }
-
-    return string(plaintext), nil
-}
-```
-
-**IMPORTANT**: Use a strong encryption key (32 bytes) stored in Kubernetes Secrets:
-```bash
-kubectl create secret generic encryption-key \
-  --from-literal=key=$(openssl rand -base64 32) \
-  -n all-chat
-```
+> ✅ **Reminder:** Never check the raw key into git. Only mount the base64 string through your secret store, then export `YOUTUBE_TOKEN_ENCRYPTION_KEY` for local runs using direnv or your shell profile.
 
 ---
 
