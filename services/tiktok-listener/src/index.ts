@@ -238,7 +238,7 @@ class TikTokListenerService {
         this.handleChatMessage(username, overlayId, data);
       });
 
-      connection.on(WebcastEvent.CONNECTED, (state) => {
+      connection.on('connected', (state: any) => {
         logger.info('TikTok stream connected', {
           username,
           room_id: state.roomId,
@@ -250,7 +250,7 @@ class TikTokListenerService {
         }
       });
 
-      connection.on(WebcastEvent.DISCONNECTED, () => {
+      connection.on('disconnected', () => {
         logger.warn('TikTok stream disconnected', { username });
         const stream = this.activeStreams.get(username);
         if (stream) {
@@ -258,7 +258,7 @@ class TikTokListenerService {
         }
       });
 
-      connection.on('error', (err) => {
+      connection.on('error', (err: any) => {
         logger.error('TikTok stream error', { username, error: err });
       });
 
