@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -97,8 +98,8 @@ func (h *PlatformAuthHandler) HandleCallback(platform oauth.Platform) gin.Handle
 
 		// Verify state
 		stateKey := fmt.Sprintf("oauth_state:%s:%s", platform, state)
-		exists, err := h.redis.Get(c.Request.Context(), stateKey).Result()
-		if err != nil || exists == "" {
+		_, err := h.redis.Get(c.Request.Context(), stateKey).Result()
+		if err != nil {
 			h.logger.Warn("Invalid or expired state",
 				zap.String("platform", string(platform)),
 				zap.String("state", state),
