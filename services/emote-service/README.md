@@ -16,6 +16,7 @@ The Emote Service fetches and caches third-party emotes from multiple providers 
 - ✅ **Health Checks**: Kubernetes-ready liveness/readiness probes
 - ✅ **Structured Logging**: JSON logs with request/response details
 - ✅ **Graceful Shutdown**: 25-second timeout for in-flight requests
+- ✅ **Input Validation & Throttling**: Channel identifiers are sanitized and requests are rate limited
 
 ## API Endpoints
 
@@ -116,6 +117,26 @@ curl http://localhost:8083/emotes/ffz/lirik
 | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
 | `REDIS_HOST` | `localhost` | Redis host |
 | `REDIS_PORT` | `6379` | Redis port |
+| `RATE_LIMIT_REQUESTS` | `60` | Requests allowed per window for a single IP/API key |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Window size used by the limiter |
+| `EMOTE_SERVICE_API_KEY` | _empty_ | Optional shared secret; when set, clients must send it via the `X-API-Key` header |
+
+### Rate Limiting & Authentication
+
+- **Limiter defaults**: 60 requests per 60 seconds per identifier.
+  - If the `X-API-Key` header is provided, the limiter buckets requests by that token.
+  - Otherwise, the caller's IP address is used.
+- **HTTP 429**: Clients receive `Retry-After` metadata when throttled.
+- **API keys**: When `EMOTE_SERVICE_API_KEY` is set, every request must include `X-API-Key: <value>`.
+  - Keys are validated before the handlers run, and unauthorized requests receive `401` responses.
+
+Example request with auth:
+
+```bash
+curl \
+  -H "X-API-Key: $EMOTE_SERVICE_API_KEY" \
+  http://localhost:8083/emotes/channel/xqc
+```
 
 ### Cache Configuration
 
