@@ -155,6 +155,12 @@ func main() {
 		publicAPI.GET("/auth/callback", proxyHandler.ForwardRequest)
 		publicAPI.POST("/auth/refresh", proxyHandler.ForwardRequest)
 
+		// Platform-specific OAuth routes
+		publicAPI.GET("/auth/twitch/login", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/twitch/callback", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/youtube/login", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/youtube/callback", proxyHandler.ForwardRequest)
+
 		// Emote service routes (public)
 		publicAPI.GET("/emotes/*path", proxyHandler.ForwardRequest)
 	}

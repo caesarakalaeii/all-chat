@@ -57,11 +57,13 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 		t.Fatalf("Failed to create connection pool: %v", err)
 	}
 
-	// Create users table
+	// Create users table (matches migration 005)
 	schema := `
 		CREATE TABLE IF NOT EXISTS users (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			twitch_id VARCHAR(50) UNIQUE NOT NULL,
+			twitch_id VARCHAR(50) UNIQUE,
+			google_id VARCHAR(100) UNIQUE,
+			auth_provider VARCHAR(20) NOT NULL DEFAULT 'twitch',
 			username VARCHAR(50) UNIQUE NOT NULL,
 			display_name VARCHAR(100) NOT NULL,
 			profile_image_url TEXT,
@@ -70,10 +72,15 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			refresh_token TEXT NOT NULL,
 			token_expires_at TIMESTAMP NOT NULL,
 			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
+			updated_at TIMESTAMP DEFAULT NOW(),
+			CONSTRAINT check_auth_ids CHECK (
+				(auth_provider = 'twitch' AND twitch_id IS NOT NULL) OR
+				(auth_provider = 'youtube' AND google_id IS NOT NULL)
+			)
 		);
 
 		CREATE INDEX idx_users_twitch_id ON users(twitch_id);
+		CREATE INDEX idx_users_google_id ON users(google_id);
 		CREATE INDEX idx_users_username ON users(username);
 	`
 
@@ -98,6 +105,9 @@ func TestUserRepository_Create(t *testing.T) {
 	repo := NewUserRepository(pool)
 	ctx := context.Background()
 
+	twitchID1 := "123456"
+	twitchID2 := "789012"
+
 	tests := []struct {
 		name    string
 		user    *models.User
@@ -106,7 +116,8 @@ func TestUserRepository_Create(t *testing.T) {
 		{
 			name: "successful create",
 			user: &models.User{
-				TwitchID:        "123456",
+				TwitchID:        &twitchID1,
+				AuthProvider:    "twitch",
 				Username:        "testuser",
 				DisplayName:     "TestUser",
 				ProfileImageURL: "https://example.com/avatar.png",
@@ -120,7 +131,8 @@ func TestUserRepository_Create(t *testing.T) {
 		{
 			name: "duplicate twitch_id",
 			user: &models.User{
-				TwitchID:        "123456", // Same as above
+				TwitchID:        &twitchID1, // Same as above
+				AuthProvider:    "twitch",
 				Username:        "anotheruser",
 				DisplayName:     "AnotherUser",
 				AccessToken:     "encrypted_access_token",
@@ -132,7 +144,8 @@ func TestUserRepository_Create(t *testing.T) {
 		{
 			name: "duplicate username",
 			user: &models.User{
-				TwitchID:        "789012",
+				TwitchID:        &twitchID2,
+				AuthProvider:    "twitch",
 				Username:        "testuser", // Same as first test
 				DisplayName:     "DifferentUser",
 				AccessToken:     "encrypted_access_token",
@@ -177,7 +190,8 @@ func TestUserRepository_GetByID(t *testing.T) {
 
 	// Create a test user
 	testUser := &models.User{
-		TwitchID:        "123456",
+		TwitchID:        &twitchID,
+		AuthProvider:    "twitch",
 		Username:        "testuser",
 		DisplayName:     "TestUser",
 		ProfileImageURL: "https://example.com/avatar.png",
@@ -254,7 +268,7 @@ func TestUserRepository_GetByTwitchID(t *testing.T) {
 
 	// Create a test user
 	testUser := &models.User{
-		TwitchID:        "123456",
+		TwitchID:        &[]string{"123456"}[0],
 		Username:        "testuser",
 		DisplayName:     "TestUser",
 		ProfileImageURL: "https://example.com/avatar.png",
@@ -319,7 +333,7 @@ func TestUserRepository_Update(t *testing.T) {
 
 	// Create a test user
 	testUser := &models.User{
-		TwitchID:        "123456",
+		TwitchID:        &[]string{"123456"}[0],
 		Username:        "testuser",
 		DisplayName:     "TestUser",
 		ProfileImageURL: "https://example.com/avatar.png",
@@ -403,7 +417,7 @@ func TestUserRepository_Delete(t *testing.T) {
 			name: "successful delete",
 			setup: func() string {
 				user := &models.User{
-					TwitchID:        "123456",
+					TwitchID:        &[]string{"123456"}[0],
 					Username:        "deleteuser",
 					DisplayName:     "DeleteUser",
 					AccessToken:     "encrypted_access_token",
@@ -456,7 +470,7 @@ func TestUserRepository_UpdateTokens(t *testing.T) {
 
 	// Create a test user
 	testUser := &models.User{
-		TwitchID:        "123456",
+		TwitchID:        &[]string{"123456"}[0],
 		Username:        "testuser",
 		DisplayName:     "TestUser",
 		AccessToken:     "old_encrypted_access_token",
