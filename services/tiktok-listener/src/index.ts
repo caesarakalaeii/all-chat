@@ -238,8 +238,8 @@ class TikTokListenerService {
         this.handleChatMessage(username, overlayId, data);
       });
 
-      // Use type assertion for v2 API events not in ClientEventMap
-      (connection as any).on('connected', (state: any) => {
+      // Use EventEmitter's generic on() method for lifecycle events
+      connection.on<'connected'>('connected' as 'connected', (state: { roomId?: string }) => {
         logger.info('TikTok stream connected', {
           username,
           room_id: state.roomId,
@@ -251,7 +251,7 @@ class TikTokListenerService {
         }
       });
 
-      (connection as any).on('disconnected', () => {
+      connection.on<'disconnected'>('disconnected' as 'disconnected', () => {
         logger.warn('TikTok stream disconnected', { username });
         const stream = this.activeStreams.get(username);
         if (stream) {
@@ -259,7 +259,7 @@ class TikTokListenerService {
         }
       });
 
-      (connection as any).on('error', (err: any) => {
+      connection.on<'error'>('error' as 'error', (err: Error) => {
         logger.error('TikTok stream error', { username, error: err });
       });
 
