@@ -182,6 +182,7 @@ func main() {
 
 		// YouTube resolver routes (protected)
 		protectedAPI.POST("/youtube/resolve", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/youtube/resolve", proxyHandler.ForwardRequest)
 	}
 
 	// Get port from environment
