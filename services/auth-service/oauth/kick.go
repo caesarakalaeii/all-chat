@@ -172,14 +172,19 @@ func (k *KickOAuth) GetUserInfoKick(ctx context.Context, accessToken string) (*m
 	}
 	defer resp.Body.Close()
 
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", readErr)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("kick API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var userInfo models.KickUserInfo
-	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := json.Unmarshal(body, &userInfo); err != nil {
+		// Log the actual response body for debugging
+		return nil, fmt.Errorf("failed to decode response (status %d, body preview: %.200s...): %w", resp.StatusCode, string(body), err)
 	}
 
 	return &userInfo, nil
