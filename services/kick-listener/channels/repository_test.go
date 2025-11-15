@@ -1,0 +1,173 @@
+package channels
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"go.uber.org/zap"
+)
+
+func TestRepository_GetActiveChannelsHandlesStringChatroomIDs(t *testing.T) {
+	rows := newFakeRows([][]any{
+		{"overlay-1", "channel-one", "123", true},
+		{"overlay-2", "channel-two", "invalid", true},
+	})
+
+	mockDB := &mockQueryExecutor{rows: rows}
+	repo := &Repository{db: mockDB, logger: zap.NewNop()}
+
+	channels, err := repo.GetActiveChannels(context.Background())
+	if err != nil {
+		t.Fatalf("GetActiveChannels returned error: %v", err)
+	}
+
+	if len(channels) != 2 {
+		t.Fatalf("expected 2 channels, got %d", len(channels))
+	}
+
+	if channels[0].ChatroomID != 123 {
+		t.Fatalf("expected first chatroom ID to be 123, got %d", channels[0].ChatroomID)
+	}
+
+	if channels[1].ChatroomID != 0 {
+		t.Fatalf("expected invalid chatroom ID to fall back to 0, got %d", channels[1].ChatroomID)
+	}
+
+	if !rows.closed {
+		t.Fatalf("expected rows to be closed after iteration")
+	}
+
+	if mockDB.lastQuery == "" {
+		t.Fatalf("expected query to be executed")
+	}
+}
+
+type mockQueryExecutor struct {
+	rows      pgx.Rows
+	lastQuery string
+}
+
+func (m *mockQueryExecutor) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	m.lastQuery = sql
+	return m.rows, nil
+}
+
+func (m *mockQueryExecutor) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, fmt.Errorf("not implemented")
+}
+
+type fakeRows struct {
+	data   [][]any
+	index  int
+	closed bool
+	err    error
+}
+
+func newFakeRows(data [][]any) *fakeRows {
+	return &fakeRows{data: data}
+}
+
+func (r *fakeRows) Close() {
+	r.closed = true
+}
+
+func (r *fakeRows) Err() error {
+	return r.err
+}
+
+func (r *fakeRows) CommandTag() pgconn.CommandTag {
+	return pgconn.CommandTag{}
+}
+
+func (r *fakeRows) FieldDescriptions() []pgconn.FieldDescription {
+	return nil
+}
+
+func (r *fakeRows) Next() bool {
+	if r.index >= len(r.data) {
+		r.Close()
+		return false
+	}
+	r.index++
+	return true
+}
+
+func (r *fakeRows) Scan(dest ...any) error {
+	if r.index == 0 || r.index > len(r.data) {
+		return fmt.Errorf("no current row")
+	}
+
+	row := r.data[r.index-1]
+	if len(dest) != len(row) {
+		return fmt.Errorf("scan mismatch: dest=%d row=%d", len(dest), len(row))
+	}
+
+	for i := range dest {
+		if err := assignScanValue(dest[i], row[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *fakeRows) Values() ([]any, error) {
+	if r.index == 0 || r.index > len(r.data) {
+		return nil, fmt.Errorf("no current row")
+	}
+	row := r.data[r.index-1]
+	values := make([]any, len(row))
+	copy(values, row)
+	return values, nil
+}
+
+func (r *fakeRows) RawValues() [][]byte {
+	return nil
+}
+
+func (r *fakeRows) Conn() *pgx.Conn {
+	return nil
+}
+
+func assignScanValue(dest any, value any) error {
+	switch d := dest.(type) {
+	case *string:
+		if value == nil {
+			*d = ""
+			return nil
+		}
+		str, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("expected string, got %T", value)
+		}
+		*d = str
+		return nil
+	case *bool:
+		if value == nil {
+			*d = false
+			return nil
+		}
+		b, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("expected bool, got %T", value)
+		}
+		*d = b
+		return nil
+	case *sql.NullString:
+		if value == nil {
+			*d = sql.NullString{}
+			return nil
+		}
+		str, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("expected string, got %T", value)
+		}
+		*d = sql.NullString{String: str, Valid: true}
+		return nil
+	default:
+		return fmt.Errorf("unsupported destination type %T", dest)
+	}
+}
