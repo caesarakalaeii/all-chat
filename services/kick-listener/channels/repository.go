@@ -2,8 +2,12 @@ package channels
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"strconv"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -17,8 +21,13 @@ type ActiveChannel struct {
 }
 
 // Repository handles database operations for channels
+type queryExecutor interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 type Repository struct {
-	db     *pgxpool.Pool
+	db     queryExecutor
 	logger *zap.Logger
 }
 
@@ -52,7 +61,7 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, e
 	var channels []*ActiveChannel
 	for rows.Next() {
 		var ch ActiveChannel
-		var chatroomID *int
+		var chatroomID sql.NullString
 
 		err := rows.Scan(
 			&ch.OverlayID,
@@ -65,9 +74,19 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, e
 			continue
 		}
 
-		// If chatroom_id is set, use it
-		if chatroomID != nil {
-			ch.ChatroomID = *chatroomID
+		// If chatroom_id is set, parse the value
+		if chatroomID.Valid && chatroomID.String != "" {
+			parsedID, err := strconv.Atoi(chatroomID.String)
+			if err != nil {
+				r.logger.Warn("Invalid chatroom_id metadata",
+					zap.String("overlay_id", ch.OverlayID),
+					zap.String("channel_slug", ch.ChannelSlug),
+					zap.String("raw_chatroom_id", chatroomID.String),
+					zap.Error(err),
+				)
+			} else {
+				ch.ChatroomID = parsedID
+			}
 		}
 
 		channels = append(channels, &ch)
