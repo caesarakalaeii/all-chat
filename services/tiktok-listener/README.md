@@ -4,6 +4,8 @@
 
 Real-time TikTok LIVE chat monitoring service for All-Chat. Connects to TikTok live streams and publishes chat messages to Redis Streams for processing.
 
+> **Note**: This service is currently in beta development and uses an unofficial library.
+
 ## ⚠️ Important Notice
 
 This service uses the **unofficial** [TikTok-Live-Connector](https://github.com/zerodytrash/TikTok-Live-Connector) library, which is based on reverse engineering TikTok's internal WebSocket service.
