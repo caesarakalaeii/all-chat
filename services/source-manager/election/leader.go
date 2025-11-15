@@ -3,6 +3,7 @@ package election
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/source-manager/models"
@@ -243,10 +244,9 @@ func (m *Manager) leaderKey(platform, streamID string) string {
 // parseLeaderKey parses a leader key into platform and stream ID
 func (m *Manager) parseLeaderKey(key string) (platform, streamID string, err error) {
 	// Key format: leader:{platform}:{stream_id}
-	var prefix string
-	n, err := fmt.Sscanf(key, "%s:%s:%s", &prefix, &platform, &streamID)
-	if err != nil || n != 3 || prefix != LeaderKeyPrefix {
+	parts := strings.Split(key, ":")
+	if len(parts) != 3 || parts[0] != LeaderKeyPrefix {
 		return "", "", fmt.Errorf("invalid leader key format: %s", key)
 	}
-	return platform, streamID, nil
+	return parts[1], parts[2], nil
 }
