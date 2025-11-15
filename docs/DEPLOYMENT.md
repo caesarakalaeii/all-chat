@@ -1,6 +1,6 @@
 # All-Chat Deployment Guide
 
-This guide covers deploying your own instance of All-Chat. If you just want to use the service, visit **[allchat.caes.ar](https://allchat.caes.ar)** instead.
+This guide covers deploying your own instance of All-Chat. If you just want to use the service, visit **[allch.at](https://allch.at)** instead.
 
 ## Table of Contents
 

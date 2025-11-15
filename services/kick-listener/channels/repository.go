@@ -1,0 +1,117 @@
+package channels
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+)
+
+// ActiveChannel represents an active Kick channel to monitor
+type ActiveChannel struct {
+	OverlayID   string
+	ChannelSlug string
+	ChatroomID  int
+	IsActive    bool
+}
+
+// Repository handles database operations for channels
+type Repository struct {
+	db     *pgxpool.Pool
+	logger *zap.Logger
+}
+
+// NewRepository creates a new channel repository
+func NewRepository(db *pgxpool.Pool, logger *zap.Logger) *Repository {
+	return &Repository{
+		db:     db,
+		logger: logger,
+	}
+}
+
+// GetActiveChannels retrieves all active Kick channels from the database
+func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, error) {
+	query := `
+		SELECT
+			ocs.overlay_id,
+			ocs.channel_identifier as channel_slug,
+			ocs.metadata->>'chatroom_id' as chatroom_id,
+			ocs.is_active
+		FROM overlay_chat_sources ocs
+		WHERE ocs.platform = 'kick'
+		  AND ocs.is_active = true
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active channels: %w", err)
+	}
+	defer rows.Close()
+
+	var channels []*ActiveChannel
+	for rows.Next() {
+		var ch ActiveChannel
+		var chatroomID *int
+
+		err := rows.Scan(
+			&ch.OverlayID,
+			&ch.ChannelSlug,
+			&chatroomID,
+			&ch.IsActive,
+		)
+		if err != nil {
+			r.logger.Error("Failed to scan channel row", zap.Error(err))
+			continue
+		}
+
+		// If chatroom_id is set, use it
+		if chatroomID != nil {
+			ch.ChatroomID = *chatroomID
+		}
+
+		channels = append(channels, &ch)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating channel rows: %w", err)
+	}
+
+	r.logger.Info("Retrieved active Kick channels",
+		zap.Int("count", len(channels)),
+	)
+
+	return channels, nil
+}
+
+// UpdateChatroomID updates the chatroom ID for a channel in the database
+func (r *Repository) UpdateChatroomID(ctx context.Context, overlayID, channelSlug string, chatroomID int) error {
+	query := `
+		UPDATE overlay_chat_sources
+		SET metadata = jsonb_set(
+			COALESCE(metadata, '{}'::jsonb),
+			'{chatroom_id}',
+			to_jsonb($3::int)
+		)
+		WHERE overlay_id = $1
+		  AND channel_identifier = $2
+		  AND platform = 'kick'
+	`
+
+	result, err := r.db.Exec(ctx, query, overlayID, channelSlug, chatroomID)
+	if err != nil {
+		return fmt.Errorf("failed to update chatroom ID: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("no rows updated for overlay_id=%s, channel=%s", overlayID, channelSlug)
+	}
+
+	r.logger.Info("Updated chatroom ID",
+		zap.String("overlay_id", overlayID),
+		zap.String("channel_slug", channelSlug),
+		zap.Int("chatroom_id", chatroomID),
+	)
+
+	return nil
+}

@@ -27,6 +27,7 @@ help:
 	@echo "  make build-gateway       - Build api-gateway"
 	@echo "  make build-twitch        - Build twitch-listener"
 	@echo "  make build-youtube       - Build youtube-listener"
+	@echo "  make build-tiktok        - Build tiktok-listener (Node.js)"
 	@echo "  make build-processor     - Build message-processor"
 	@echo "  make build-source-manager - Build source-manager"
 
@@ -40,6 +41,7 @@ deps:
 	cd services/api-gateway && go mod download
 	cd services/twitch-listener && go mod download
 	cd services/youtube-listener && go mod download
+	cd services/tiktok-listener && npm install
 	cd services/message-processor && go mod download
 	cd services/source-manager && go mod download
 
@@ -52,6 +54,7 @@ build:
 	@$(MAKE) build-gateway
 	@$(MAKE) build-twitch
 	@$(MAKE) build-youtube
+	@$(MAKE) build-tiktok
 	@$(MAKE) build-processor
 	@$(MAKE) build-source-manager
 
@@ -78,6 +81,10 @@ build-twitch:
 build-youtube:
 	@echo "Building youtube-listener..."
 	cd services/youtube-listener && go build -o ../../bin/youtube-listener ./cmd
+
+build-tiktok:
+	@echo "Building tiktok-listener..."
+	cd services/tiktok-listener && npm install && npm run build
 
 build-processor:
 	@echo "Building message-processor..."
