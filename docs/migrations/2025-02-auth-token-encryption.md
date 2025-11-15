@@ -13,66 +13,33 @@ The auth service now encrypts OAuth access and refresh tokens at rest. The chang
 3. **Re-encrypt historical tokens** – run the helper script below once per environment. It reads plaintext tokens, encrypts them with the shared `crypto` package, and writes the ciphertext back.
 4. **Deploy the new auth-service image** – once every row has ciphertext, redeploy. The service will decrypt tokens transparently on reads and encrypt on writes.
 
-## Re-encryption Helper
-Create a temporary Go program (or job) that links against the shared crypto package:
+## Backfill Tool
+The repository now includes a purpose-built helper at `services/auth-service/cmd/token-encryption-backfill`. The command scans both the `users` and `youtube_oauth_tokens` tables, encrypts any plaintext `access_token` / `refresh_token` values with the shared AES-GCM helper, and writes the ciphertext back in place.
 
-```go
-package main
+Usage:
 
-import (
-        "context"
-        "log"
-        "os"
+```bash
+# Dry-run to confirm how many rows would change
+DATABASE_URL=postgres://... TOKEN_ENCRYPTION_KEY=... \
+  go run ./services/auth-service/cmd/token-encryption-backfill --dry-run
 
-        "github.com/caesar/all-chat/shared/crypto"
-        "github.com/jackc/pgx/v5/pgxpool"
-)
-
-func main() {
-        ctx := context.Background()
-        pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
-        if err != nil {
-                log.Fatal(err)
-        }
-        defer pool.Close()
-
-        cipher, err := crypto.NewAESGCMCipher(os.Getenv("TOKEN_ENCRYPTION_KEY"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        rows, err := pool.Query(ctx, "SELECT id, access_token, refresh_token FROM users")
-        if err != nil {
-                log.Fatal(err)
-        }
-        defer rows.Close()
-
-        for rows.Next() {
-                var id, access, refresh string
-                if err := rows.Scan(&id, &access, &refresh); err != nil {
-                        log.Fatal(err)
-                }
-
-                encAccess, err := cipher.Encrypt(access)
-                if err != nil {
-                        log.Fatal(err)
-                }
-                encRefresh, err := cipher.Encrypt(refresh)
-                if err != nil {
-                        log.Fatal(err)
-                }
-
-                if _, err := pool.Exec(ctx, "UPDATE users SET access_token=$2, refresh_token=$3 WHERE id=$1", id, encAccess, encRefresh); err != nil {
-                        log.Fatal(err)
-                }
-        }
-
-        if rows.Err() != nil {
-                log.Fatal(rows.Err())
-        }
-
-        // Repeat the same loop for youtube_oauth_tokens
-}
+# Perform the actual update
+DATABASE_URL=postgres://... TOKEN_ENCRYPTION_KEY=... \
+  go run ./services/auth-service/cmd/token-encryption-backfill
 ```
 
-The loop can be extended to update `youtube_oauth_tokens` using the same cipher. After the job runs successfully, redeploy the auth-service and confirm that logins and token refresh operations succeed.
+Flags:
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--dry-run` | `false` | Log every row that would be updated without writing to the database. |
+| `--skip-users` | `false` | Ignore the `users` table (useful for partial rollouts or reruns). |
+| `--skip-youtube` | `false` | Ignore the `youtube_oauth_tokens` table. |
+
+The tool is idempotent: it attempts to decrypt each token before re-encrypting it. If the value already decrypts with the provided key it is left untouched, so the command can be rerun safely during staged rollouts. When the command exits successfully, redeploy the auth-service and confirm that logins and token refresh operations succeed. A detailed staging test checklist is available in `docs/migrations/2025-02-auth-token-encryption-staging-test-plan.md`.
+
+## Rollback Plan
+1. **Detect the issue** – if logins start failing or you detect corrupted tokens after the upgrade, immediately stop accepting new writes by scaling the auth-service deployment to zero replicas (or disabling ingress) to prevent additional encrypted tokens from being created.
+2. **Restore the plaintext backup** – revert the `users` and `youtube_oauth_tokens` tables from the snapshot that was captured during the migration prerequisites. This restores the original plaintext tokens so the previous build can keep working.
+3. **Redeploy the prior build** – roll back to the last known-good auth-service release that did not require encrypted tokens. Remove `TOKEN_ENCRYPTION_KEY` from the deployment (or point it to the legacy dummy value) so the downgraded service does not attempt to decrypt data.
+4. **Validate** – confirm that logins and token refresh flows succeed again. Once stability is restored you can re-run the staging test plan, address the root cause, and attempt the migration again.
