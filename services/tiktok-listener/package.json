@@ -19,7 +19,7 @@
   "author": "All-Chat",
   "license": "MIT",
   "dependencies": {
-    "tiktok-live-connector": "^1.2.7",
+    "tiktok-live-connector": "^2.1.0",
     "redis": "^4.6.12",
     "pg": "^8.11.3",
     "winston": "^3.11.0",
