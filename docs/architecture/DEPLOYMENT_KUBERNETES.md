@@ -271,6 +271,11 @@ spec:
               value: "http://overlay-service:8082"
             - name: EMOTE_SERVICE_URL
               value: "http://emote-service:8083"
+            - name: WEBSOCKET_ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: all-chat-config
+                  key: websocket_allowed_origins
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
@@ -807,7 +812,14 @@ data:
 
   # Logging
   log_level: "info"
+
+  # WebSocket Overlay Security
+  websocket_allowed_origins: "https://app.allchat.io,https://studio.allchat.io"
 ```
+
+> **API Gateway runtime knobs**
+> - `JWT_SECRET` (stored in `all-chat-secrets.jwt_secret`) is now mandatory. The gateway refuses to start if it is missing or empty, ensuring all proxied routes and WebSocket auth reuse the same verified signing key.
+> - `WEBSOCKET_ALLOWED_ORIGINS` (stored in `all-chat-config.websocket_allowed_origins`) defines the comma-separated allowlist for WebSocket upgrades. Use `*` or leave it blank only in trusted dev environments; production clusters should enumerate the exact frontend domains.
 
 ### Secret: `all-chat-secrets`
 
