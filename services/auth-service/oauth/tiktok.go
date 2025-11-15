@@ -41,11 +41,11 @@ func NewTikTokOAuth(clientKey, clientSecret, redirectURL string) *TikTokOAuth {
 }
 
 // GetAuthURL generates the OAuth authorization URL
-// TikTok scopes: user.info.basic, video.list, etc.
+// TikTok scopes: user.info.basic is the only scope needed for user authentication
 func (t *TikTokOAuth) GetAuthURL(state string) string {
 	params := url.Values{}
 	params.Set("client_key", t.clientKey)
-	params.Set("scope", "user.info.basic,video.list")
+	params.Set("scope", "user.info.basic")
 	params.Set("response_type", "code")
 	params.Set("redirect_uri", t.redirectURL)
 	params.Set("state", state)
