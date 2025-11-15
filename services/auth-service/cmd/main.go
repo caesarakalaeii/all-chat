@@ -13,6 +13,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/handlers"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
+	"github.com/caesar/all-chat/shared/crypto"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
@@ -52,6 +53,7 @@ func main() {
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)
+	tokenEncryptionKey := os.Getenv("TOKEN_ENCRYPTION_KEY")
 
 	if twitchClientID == "" || twitchClientSecret == "" {
 		log.Fatal("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set")
@@ -70,8 +72,16 @@ func main() {
 	}
 
 	if jwtSecret == "" {
-		log.Warn("JWT_SECRET not set, using default (NOT FOR PRODUCTION)")
-		jwtSecret = "default-secret-change-in-production"
+		log.Fatal("JWT_SECRET must be set")
+	}
+
+	if tokenEncryptionKey == "" {
+		log.Fatal("TOKEN_ENCRYPTION_KEY must be set and must be 16, 24, or 32 bytes")
+	}
+
+	tokenCipher, err := crypto.NewAESGCMCipher(tokenEncryptionKey)
+	if err != nil {
+		log.Fatal("failed to initialize token cipher", zap.Error(err))
 	}
 
 	// Connect to PostgreSQL
@@ -124,7 +134,7 @@ func main() {
 		kickOAuth = oauth.NewKickOAuth(kickClientID, kickClientSecret, kickRedirectURL)
 	}
 
-	userRepo := repository.NewUserRepository(db)
+	userRepo := repository.NewUserRepository(db, tokenCipher)
 
 	// Create platform provider registry
 	providers := make(map[oauth.Platform]oauth.OAuthProvider)

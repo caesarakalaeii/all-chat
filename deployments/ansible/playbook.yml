@@ -147,6 +147,7 @@
           stringData:
             DATABASE_PASSWORD: "{{ postgres_password }}"
             JWT_SECRET: "{{ jwt_secret }}"
+            TOKEN_ENCRYPTION_KEY: "{{ token_encryption_key }}"
             TWITCH_CLIENT_ID: "{{ twitch_client_id }}"
             TWITCH_CLIENT_SECRET: "{{ twitch_client_secret }}"
             TWITCH_BOT_USERNAME: "{{ twitch_bot_username }}"

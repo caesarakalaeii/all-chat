@@ -92,6 +92,11 @@ spec:
             secretKeyRef:
               name: allchat-secrets
               key: JWT_SECRET
+        - name: TOKEN_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: TOKEN_ENCRYPTION_KEY
         - name: JWT_EXPIRY_HOURS
           value: "24"
         resources:
