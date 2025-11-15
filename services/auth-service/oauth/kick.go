@@ -163,6 +163,8 @@ func (k *KickOAuth) GetUserInfoKick(ctx context.Context, accessToken string) (*m
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "AllChat/1.0")
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := k.client.Do(req)
 	if err != nil {
