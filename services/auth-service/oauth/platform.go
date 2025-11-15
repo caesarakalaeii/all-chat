@@ -74,3 +74,35 @@ func (y *YouTubeUserInfoWrapper) GetDisplayName() string     { return y.Name }
 func (y *YouTubeUserInfoWrapper) GetEmail() string           { return y.Email }
 func (y *YouTubeUserInfoWrapper) GetProfileImageURL() string { return y.Picture }
 func (y *YouTubeUserInfoWrapper) GetPlatform() Platform      { return PlatformYouTube }
+
+// TikTokUserInfoWrapper wraps TikTokUserInfo to implement PlatformUserInfo
+type TikTokUserInfoWrapper struct {
+	OpenID      string
+	UnionID     string
+	DisplayName string
+	AvatarURL   string
+}
+
+func (t *TikTokUserInfoWrapper) GetID() string              { return t.OpenID }
+func (t *TikTokUserInfoWrapper) GetUsername() string        { return t.DisplayName }
+func (t *TikTokUserInfoWrapper) GetDisplayName() string     { return t.DisplayName }
+func (t *TikTokUserInfoWrapper) GetEmail() string           { return "" } // TikTok doesn't provide email
+func (t *TikTokUserInfoWrapper) GetProfileImageURL() string { return t.AvatarURL }
+func (t *TikTokUserInfoWrapper) GetPlatform() Platform      { return PlatformTikTok }
+
+// KickUserInfoWrapper wraps KickUserInfo to implement PlatformUserInfo
+type KickUserInfoWrapper struct {
+	ID         string
+	Username   string
+	Slug       string
+	Bio        string
+	ProfilePic string
+	Email      string
+}
+
+func (k *KickUserInfoWrapper) GetID() string              { return k.ID }
+func (k *KickUserInfoWrapper) GetUsername() string        { return k.Username }
+func (k *KickUserInfoWrapper) GetDisplayName() string     { return k.Username }
+func (k *KickUserInfoWrapper) GetEmail() string           { return k.Email }
+func (k *KickUserInfoWrapper) GetProfileImageURL() string { return k.ProfilePic }
+func (k *KickUserInfoWrapper) GetPlatform() Platform      { return PlatformKick }

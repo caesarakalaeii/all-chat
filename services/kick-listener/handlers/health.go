@@ -1,0 +1,86 @@
+package handlers
+
+import (
+	"net/http"
+
+	"github.com/caesar/all-chat/services/kick-listener/channels"
+	"github.com/caesar/all-chat/services/kick-listener/publisher"
+	"github.com/caesar/all-chat/services/kick-listener/websocket"
+	"github.com/gin-gonic/gin"
+)
+
+// HealthHandler handles health check endpoints
+type HealthHandler struct {
+	wsClient      *websocket.Client
+	publisher     *publisher.StreamPublisher
+	channelMgr    *channels.Manager
+}
+
+// NewHealthHandler creates a new health handler
+func NewHealthHandler(
+	wsClient *websocket.Client,
+	publisher *publisher.StreamPublisher,
+	channelMgr *channels.Manager,
+) *HealthHandler {
+	return &HealthHandler{
+		wsClient:   wsClient,
+		publisher:  publisher,
+		channelMgr: channelMgr,
+	}
+}
+
+// LivenessProbe checks if the service is alive
+func (h *HealthHandler) LivenessProbe(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+		"service": "kick-listener",
+	})
+}
+
+// ReadinessProbe checks if the service is ready to handle requests
+func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
+	// Check WebSocket connection
+	if !h.wsClient.IsConnected() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "not ready",
+			"reason": "websocket not connected",
+		})
+		return
+	}
+
+	// Check Redis connection
+	if !h.publisher.IsHealthy(c.Request.Context()) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "not ready",
+			"reason": "redis not healthy",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ready",
+	})
+}
+
+// Status returns detailed service status
+func (h *HealthHandler) Status(c *gin.Context) {
+	subscriptions := h.channelMgr.GetSubscriptions()
+
+	channels := make([]map[string]interface{}, 0)
+	for slug, ch := range subscriptions {
+		channels = append(channels, map[string]interface{}{
+			"channel_slug": slug,
+			"chatroom_id":  ch.ChatroomID,
+			"overlay_id":   ch.OverlayID,
+			"is_active":    ch.IsActive,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":              "running",
+		"websocket_connected": h.wsClient.IsConnected(),
+		"redis_healthy":       h.publisher.IsHealthy(c.Request.Context()),
+		"subscribed_channels": len(subscriptions),
+		"channels":            channels,
+	})
+}

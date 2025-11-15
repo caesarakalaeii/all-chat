@@ -42,6 +42,14 @@ func main() {
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
 	youtubeRedirectURL := getEnvOrDefault("YOUTUBE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/youtube/callback")
 
+	tiktokClientKey := os.Getenv("TIKTOK_CLIENT_KEY")
+	tiktokClientSecret := os.Getenv("TIKTOK_CLIENT_SECRET")
+	tiktokRedirectURL := getEnvOrDefault("TIKTOK_REDIRECT_URL", "http://localhost:8080/api/v1/auth/tiktok/callback")
+
+	kickClientID := os.Getenv("KICK_CLIENT_ID")
+	kickClientSecret := os.Getenv("KICK_CLIENT_SECRET")
+	kickRedirectURL := getEnvOrDefault("KICK_REDIRECT_URL", "http://localhost:8080/api/v1/auth/kick/callback")
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)
 
@@ -51,6 +59,14 @@ func main() {
 
 	if youtubeClientID == "" || youtubeClientSecret == "" {
 		log.Warn("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET not set, YouTube OAuth will not be available")
+	}
+
+	if tiktokClientKey == "" || tiktokClientSecret == "" {
+		log.Warn("TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET not set, TikTok OAuth will not be available")
+	}
+
+	if kickClientID == "" || kickClientSecret == "" {
+		log.Warn("KICK_CLIENT_ID and KICK_CLIENT_SECRET not set, Kick OAuth will not be available")
 	}
 
 	if jwtSecret == "" {
@@ -98,6 +114,16 @@ func main() {
 		youtubeOAuth = oauth.NewYouTubeOAuth(youtubeClientID, youtubeClientSecret, youtubeRedirectURL)
 	}
 
+	var tiktokOAuth *oauth.TikTokOAuth
+	if tiktokClientKey != "" && tiktokClientSecret != "" {
+		tiktokOAuth = oauth.NewTikTokOAuth(tiktokClientKey, tiktokClientSecret, tiktokRedirectURL)
+	}
+
+	var kickOAuth *oauth.KickOAuth
+	if kickClientID != "" && kickClientSecret != "" {
+		kickOAuth = oauth.NewKickOAuth(kickClientID, kickClientSecret, kickRedirectURL)
+	}
+
 	userRepo := repository.NewUserRepository(db)
 
 	// Create platform provider registry
@@ -105,6 +131,12 @@ func main() {
 	providers[oauth.PlatformTwitch] = twitchOAuth
 	if youtubeOAuth != nil {
 		providers[oauth.PlatformYouTube] = youtubeOAuth
+	}
+	if tiktokOAuth != nil {
+		providers[oauth.PlatformTikTok] = tiktokOAuth
+	}
+	if kickOAuth != nil {
+		providers[oauth.PlatformKick] = kickOAuth
 	}
 
 	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
@@ -143,6 +175,12 @@ func main() {
 
 	router.GET("/youtube/login", platformAuthHandler.HandleLogin(oauth.PlatformYouTube))
 	router.GET("/youtube/callback", platformAuthHandler.HandleCallback(oauth.PlatformYouTube))
+
+	router.GET("/tiktok/login", platformAuthHandler.HandleLogin(oauth.PlatformTikTok))
+	router.GET("/tiktok/callback", platformAuthHandler.HandleCallback(oauth.PlatformTikTok))
+
+	router.GET("/kick/login", platformAuthHandler.HandleLogin(oauth.PlatformKick))
+	router.GET("/kick/callback", platformAuthHandler.HandleCallback(oauth.PlatformKick))
 
 	// Token refresh
 	router.POST("/refresh", legacyAuthHandler.HandleRefresh)

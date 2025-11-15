@@ -8,7 +8,7 @@ Perfect for streamers who multistream or want unified chat displays across platf
 
 ## ✨ Try It Now
 
-**Live Instance**: [allchat.caes.ar](https://allchat.caes.ar)
+**Live Instance**: [allch.at](https://allch.at)
 
 Create your multi-platform chat overlay in minutes - no installation required!
 
@@ -27,7 +27,7 @@ All-Chat lets you create beautiful chat overlays for OBS that combine messages f
 
 ### 1. Create an Overlay
 
-Visit **[allchat.caes.ar](https://allchat.caes.ar)** and:
+Visit **[allch.at](https://allch.at)** and:
 1. Sign in with Twitch
 2. Create a new overlay
 3. Add your chat sources (Twitch channels, YouTube streams, etc.)
@@ -36,7 +36,7 @@ Visit **[allchat.caes.ar](https://allchat.caes.ar)** and:
 ### 2. Add to OBS
 
 1. In OBS, add a **Browser Source**
-2. Set the URL to: `https://allchat.caes.ar/overlay/YOUR_OVERLAY_ID`
+2. Set the URL to: `https://allch.at/overlay/YOUR_OVERLAY_ID`
 3. Set width/height (e.g., 1920x1080)
 4. Check "Shutdown source when not visible" for best performance
 5. Click OK!
@@ -293,8 +293,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **🐛 Bug Reports**: [GitHub Issues](https://github.com/caesar/all-chat/issues)
 - **💬 Questions**: [GitHub Discussions](https://github.com/caesar/all-chat/discussions)
-- **📧 Email**: support@allchat.caes.ar
-- **🌐 Website**: [allchat.caes.ar](https://allchat.caes.ar)
+- **📧 Email**: support@allch.at
+- **🌐 Website**: [allch.at](https://allch.at)
 
 ## ⭐ Star History
 

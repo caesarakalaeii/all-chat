@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tiktok-listener
+  namespace: allchat
+  labels:
+    app: tiktok-listener
+    component: listener
+    platform: tiktok
+    version: beta
+spec:
+  replicas: 1  # Single instance recommended (unofficial library)
+  selector:
+    matchLabels:
+      app: tiktok-listener
+  template:
+    metadata:
+      labels:
+        app: tiktok-listener
+        component: listener
+        platform: tiktok
+        version: beta
+    spec:
+      containers:
+      - name: tiktok-listener
+        image: allchat/tiktok-listener:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8089
+          name: http
+          protocol: TCP
+        env:
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: LOG_LEVEL
+        - name: APP_VERSION
+          value: "0.1.0-beta"
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_PORT
+        - name: DATABASE_USER
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_USER
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_NAME
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: database-password
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_PORT
+        - name: PORT
+          value: "8089"
+        - name: POLL_INTERVAL_MS
+          value: "30000"  # Poll for active streams every 30 seconds
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8089
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8089
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+      restartPolicy: Always

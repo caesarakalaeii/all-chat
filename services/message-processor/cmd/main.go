@@ -69,11 +69,15 @@ func main() {
 	// Initialize components
 	twitchNormalizer := normalizer.NewTwitchNormalizer()
 	youtubeNormalizer := normalizer.NewYouTubeNormalizer()
+	tiktokNormalizer := normalizer.NewTikTokNormalizer()
+	kickNormalizer := normalizer.NewKickNormalizer()
 
 	// Map of platform-specific normalizers
 	normalizers := map[string]normalizer.Normalizer{
 		"twitch":  twitchNormalizer,
 		"youtube": youtubeNormalizer,
+		"tiktok":  tiktokNormalizer,
+		"kick":    kickNormalizer,
 	}
 
 	emoteServiceURL := getEnvOrDefault("EMOTE_SERVICE_URL", "http://localhost:8083")
