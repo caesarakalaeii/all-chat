@@ -22,6 +22,10 @@ func (n *TikTokNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 		return nil, fmt.Errorf("unsupported platform: %s", raw.Platform)
 	}
 
+	if err := validateChannelID(raw.ChannelID); err != nil {
+		return nil, fmt.Errorf("invalid channel ID: %w", err)
+	}
+
 	// Extract user info from tags
 	userInfo := n.extractUserInfo(raw)
 
@@ -112,8 +116,8 @@ func (n *TikTokNormalizer) extractMetadata(raw *models.RawChatMessage) map[strin
 
 	metadata := make(map[string]interface{})
 	metadata["is_subscriber"] = tags["is_subscriber"] == "true"
-	metadata["is_moderator"] = false // TikTok doesn't have moderator concept in unofficial lib
-	metadata["bits"] = 0             // TikTok doesn't use bits
+	metadata["is_moderator"] = false  // TikTok doesn't have moderator concept in unofficial lib
+	metadata["bits"] = 0              // TikTok doesn't use bits
 	metadata["super_chat_amount"] = 0 // SuperChatAmount would be for TikTok gifts
 	metadata["raw_tags"] = tags
 

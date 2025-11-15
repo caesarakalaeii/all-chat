@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -50,9 +51,13 @@ func NewHTTPEmoteClient(baseURL string, logger *zap.Logger) *HTTPEmoteClient {
 
 // GetEmotesForChannel fetches all emotes for a channel from the Emote Service
 func (c *HTTPEmoteClient) GetEmotesForChannel(ctx context.Context, channel string) ([]EmoteServiceEmote, error) {
-	url := fmt.Sprintf("%s/emotes/channel/%s", c.baseURL, channel)
+	escapedChannel := url.PathEscape(channel)
+	endpoint, err := url.JoinPath(c.baseURL, "emotes", "channel", escapedChannel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build emote service url: %w", err)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

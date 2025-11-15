@@ -21,6 +21,10 @@ func (n *KickNormalizer) Normalize(raw *models.RawChatMessage, overlayID string)
 		return nil, fmt.Errorf("unsupported platform: %s", raw.Platform)
 	}
 
+	if err := validateChannelID(raw.ChannelID); err != nil {
+		return nil, fmt.Errorf("invalid channel ID: %w", err)
+	}
+
 	// For Kick, the raw.Text might contain JSON data
 	// Try to parse it as a Kick message structure
 	// The Kick listener should have stored the message in the Text field as JSON
