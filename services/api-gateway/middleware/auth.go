@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"os"
 	"strings"
 
 	"github.com/caesar/all-chat/shared/auth"
@@ -9,12 +8,8 @@ import (
 )
 
 // JWTAuth returns a middleware that validates JWT tokens
-func JWTAuth(jwtSecret string) gin.HandlerFunc {
-	// If no secret is provided, try to get it from environment
-	if jwtSecret == "" {
-		jwtSecret = os.Getenv("JWT_SECRET")
-	}
 
+func JWTAuth(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
 		authHeader := c.GetHeader("Authorization")
