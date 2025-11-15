@@ -115,7 +115,7 @@ curl http://localhost:8083/emotes/ffz/lirik
 |----------|---------|-------------|
 | `PORT` | `8083` | HTTP server port |
 | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
-| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_HOST` | `localhost` | Redis host (used for caching **and** the distributed rate limiter) |
 | `REDIS_PORT` | `6379` | Redis port |
 | `RATE_LIMIT_REQUESTS` | `60` | Requests allowed per window for a single IP/API key |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | Window size used by the limiter |
@@ -126,6 +126,7 @@ curl http://localhost:8083/emotes/ffz/lirik
 - **Limiter defaults**: 60 requests per 60 seconds per identifier.
   - If the `X-API-Key` header is provided, the limiter buckets requests by that token.
   - Otherwise, the caller's IP address is used.
+- **Redis-backed limiter**: The throttling state lives in Redis so multiple pods share the same counters and can scale horizontally without double-counting requests.
 - **HTTP 429**: Clients receive `Retry-After` metadata when throttled.
 - **API keys**: When `EMOTE_SERVICE_API_KEY` is set, every request must include `X-API-Key: <value>`.
   - Keys are validated before the handlers run, and unauthorized requests receive `401` responses.

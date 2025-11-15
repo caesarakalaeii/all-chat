@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 	"time"
 
@@ -75,7 +74,7 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(ginLogger(log))
-	router.Use(rateLimitMiddleware(newRateLimiter(rateLimitRequests, rateLimitWindow), log))
+	router.Use(rateLimitMiddleware(newRedisRateLimiter(redisClient, rateLimitRequests, rateLimitWindow), log))
 	if apiKey != "" {
 		router.Use(apiKeyMiddleware(apiKey, log))
 	}
@@ -186,7 +185,12 @@ func rateLimitMiddleware(rl *rateLimiter, log *zap.Logger) gin.HandlerFunc {
 		}
 
 		key := rateLimitKey(c)
-		allowed, retryAfter := rl.allow(key)
+		allowed, retryAfter, err := rl.allow(c.Request.Context(), key)
+		if err != nil {
+			log.Error("Rate limiter error, allowing request", zap.Error(err))
+			c.Next()
+			return
+		}
 		if !allowed {
 			retrySeconds := int(math.Ceil(retryAfter.Seconds()))
 			if retrySeconds < 1 {
@@ -210,54 +214,45 @@ func rateLimitKey(c *gin.Context) string {
 }
 
 type rateLimiter struct {
-	limit   int
-	window  time.Duration
-	mu      sync.Mutex
-	clients map[string]*rateLimitState
+	limit  int
+	window time.Duration
+	client sharedRedis.Client
 }
 
-type rateLimitState struct {
-	count int
-	reset time.Time
-}
-
-func newRateLimiter(limit int, window time.Duration) *rateLimiter {
+func newRedisRateLimiter(client sharedRedis.Client, limit int, window time.Duration) *rateLimiter {
 	return &rateLimiter{
-		limit:   limit,
-		window:  window,
-		clients: make(map[string]*rateLimitState),
+		limit:  limit,
+		window: window,
+		client: client,
 	}
 }
 
-func (rl *rateLimiter) allow(key string) (bool, time.Duration) {
-	if rl == nil || rl.limit <= 0 || rl.window <= 0 {
-		return true, 0
+func (rl *rateLimiter) allow(ctx context.Context, key string) (bool, time.Duration, error) {
+	if rl == nil || rl.limit <= 0 || rl.window <= 0 || rl.client == nil {
+		return true, 0, nil
 	}
 
-	now := time.Now()
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
+	redisKey := "rate:" + key
+	count, err := rl.client.Incr(ctx, redisKey).Result()
+	if err != nil {
+		return true, 0, err
+	}
 
-	state, ok := rl.clients[key]
-	if !ok {
-		state = &rateLimitState{
-			count: 1,
-			reset: now.Add(rl.window),
+	if count == 1 {
+		if err := rl.client.Expire(ctx, redisKey, rl.window).Err(); err != nil {
+			return true, 0, err
 		}
-		rl.clients[key] = state
-		return true, 0
+		return true, 0, nil
 	}
 
-	if now.After(state.reset) {
-		state.count = 1
-		state.reset = now.Add(rl.window)
-		return true, 0
+	if count <= int64(rl.limit) {
+		return true, 0, nil
 	}
 
-	if state.count < rl.limit {
-		state.count++
-		return true, 0
+	ttl, err := rl.client.TTL(ctx, redisKey).Result()
+	if err != nil || ttl < 0 {
+		ttl = rl.window
 	}
 
-	return false, time.Until(state.reset)
+	return false, ttl, nil
 }
