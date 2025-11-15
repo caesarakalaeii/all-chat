@@ -44,6 +44,7 @@ REQUIRED_VARS=(
     "TWITCH_BOT_USERNAME"
     "TWITCH_BOT_OAUTH"
     "JWT_SECRET"
+    "TOKEN_ENCRYPTION_KEY"
 )
 
 MISSING_VARS=()
@@ -118,6 +119,7 @@ postgres_password: "${DATABASE_PASSWORD:-allchat_dev_password}"
 # =============================================================================
 jwt_secret: "${JWT_SECRET:-dev-secret-change-in-production}"
 jwt_expiry_hours: "24"
+token_encryption_key: "${TOKEN_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}"
 
 # =============================================================================
 # TWITCH INTEGRATION
