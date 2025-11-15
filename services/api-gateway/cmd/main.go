@@ -141,6 +141,10 @@ func main() {
 	// Health check endpoint (no auth required)
 	router.GET("/health", healthHandler.CheckHealth)
 
+	// Static legal pages (no auth required)
+	router.StaticFile("/legal/terms", "./static/legal/terms.html")
+	router.StaticFile("/legal/privacy", "./static/legal/privacy.html")
+
 	// WebSocket endpoint for overlays
 	router.GET("/ws/overlay/:overlay_id", wsHandler.HandleOverlayConnection)
 
