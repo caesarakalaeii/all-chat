@@ -21,6 +21,7 @@ import { Pool } from 'pg';
 import winston from 'winston';
 import { randomUUID } from 'crypto';
 import http from 'http';
+import { EventEmitter } from 'events';
 
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
@@ -238,8 +239,10 @@ class TikTokListenerService {
         this.handleChatMessage(username, overlayId, data);
       });
 
-      // Use EventEmitter's generic on() method for lifecycle events
-      connection.on<'connected'>('connected' as 'connected', (state: { roomId?: string }) => {
+      // Cast to EventEmitter for lifecycle events not in ClientEventMap
+      const emitter = connection as unknown as EventEmitter;
+
+      emitter.on('connected', (state: { roomId?: string }) => {
         logger.info('TikTok stream connected', {
           username,
           room_id: state.roomId,
@@ -251,7 +254,7 @@ class TikTokListenerService {
         }
       });
 
-      connection.on<'disconnected'>('disconnected' as 'disconnected', () => {
+      emitter.on('disconnected', () => {
         logger.warn('TikTok stream disconnected', { username });
         const stream = this.activeStreams.get(username);
         if (stream) {
@@ -259,7 +262,7 @@ class TikTokListenerService {
         }
       });
 
-      connection.on<'error'>('error' as 'error', (err: Error) => {
+      emitter.on('error', (err: Error) => {
         logger.error('TikTok stream error', { username, error: err });
       });
 
