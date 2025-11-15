@@ -1,0 +1,329 @@
+/**
+ * Windows 98 Chat Overlay Theme
+ *
+ * HOW TO USE IN OBS:
+ * 1. Add your overlay as a Browser Source in OBS
+ * 2. In the Browser Source properties, scroll down to "Custom CSS"
+ * 3. Copy and paste this entire CSS file into that field
+ * 4. Adjust the toggles below to show/hide elements
+ * 5. Click OK to apply
+ *
+ * CUSTOMIZATION OPTIONS:
+ * Toggle elements by commenting/uncommenting the CSS rules below.
+ * To hide an element, add the rules from the "OPTIONAL: HIDE ELEMENTS" section.
+ */
+
+/* ============================================
+   WINDOWS 98 CORE STYLES
+   ============================================ */
+
+/* Remove default background and reset container */
+body {
+  background: transparent !important;
+  font-family: "MS Sans Serif", "Microsoft Sans Serif", sans-serif !important;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Main container - looks like a Win98 window */
+.min-h-screen {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Message container - Win98 window style */
+.space-y-3 > div {
+  background: #c0c0c0 !important;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff !important;
+  box-shadow:
+    inset 1px 1px 0 0 #dfdfdf,
+    inset -1px -1px 0 0 #404040,
+    1px 1px 0 0 #000000 !important;
+  border-radius: 0 !important;
+  backdrop-filter: none !important;
+  padding: 8px !important;
+  margin-bottom: 8px !important;
+  animation: win98-slide-in 0.2s ease-out !important;
+}
+
+/* Win98 window slide-in animation */
+@keyframes win98-slide-in {
+  from {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Message content wrapper */
+.flex.items-start.gap-3 {
+  gap: 8px !important;
+}
+
+/* ============================================
+   AVATAR STYLES (Win98 Profile Picture Look)
+   ============================================ */
+
+/* Avatar container - inset Win98 style */
+.flex-shrink-0 img,
+.flex-shrink-0 > div {
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080 !important;
+  box-shadow:
+    inset -1px -1px 0 0 #dfdfdf,
+    inset 1px 1px 0 0 #000000 !important;
+  border-radius: 0 !important;
+  width: 32px !important;
+  height: 32px !important;
+  background: #c0c0c0 !important;
+  image-rendering: pixelated;
+}
+
+/* Avatar fallback (initials) */
+.flex-shrink-0 > div {
+  font-size: 10px !important;
+  font-weight: bold !important;
+  color: #000000 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================
+   USERNAME & PLATFORM BADGE
+   ============================================ */
+
+/* Platform badge - Win98 status bar style */
+.text-xs.font-semibold.uppercase {
+  background: #000080 !important;
+  color: #ffffff !important;
+  padding: 1px 4px !important;
+  border: 1px solid;
+  border-color: #808080 #ffffff #ffffff #808080 !important;
+  font-size: 9px !important;
+  letter-spacing: 0.5px !important;
+  font-weight: bold !important;
+  text-transform: uppercase !important;
+  margin-right: 4px !important;
+}
+
+/* Platform-specific colors for badge background */
+.text-purple-400 {
+  background: #800080 !important; /* Twitch purple */
+  color: #ffffff !important;
+}
+
+.text-red-400 {
+  background: #c00000 !important; /* YouTube red */
+  color: #ffffff !important;
+}
+
+.text-green-400 {
+  background: #008000 !important; /* Kick green */
+  color: #ffffff !important;
+}
+
+.text-gray-400 {
+  background: #808080 !important; /* Default gray */
+  color: #ffffff !important;
+}
+
+/* Username styling */
+.font-semibold.text-sm {
+  font-size: 11px !important;
+  font-weight: bold !important;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5) !important;
+  filter: none !important;
+}
+
+/* ============================================
+   BADGES (Subscriber, Moderator, etc.)
+   ============================================ */
+
+/* Badge container */
+.flex.gap-1 {
+  gap: 2px !important;
+}
+
+/* Individual badges - Win98 icon style */
+.flex.gap-1 img {
+  width: 14px !important;
+  height: 14px !important;
+  border: 1px solid;
+  border-color: #ffffff #404040 #404040 #ffffff !important;
+  padding: 1px;
+  background: #c0c0c0;
+  image-rendering: pixelated;
+  box-shadow: 1px 1px 0 0 #000000;
+}
+
+/* ============================================
+   MESSAGE TEXT
+   ============================================ */
+
+/* Message text container */
+.text-white.break-words {
+  color: #000000 !important;
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+  font-family: "MS Sans Serif", "Microsoft Sans Serif", sans-serif !important;
+  background: #ffffff !important;
+  border: 1px solid;
+  border-color: #808080 #ffffff #ffffff #808080 !important;
+  padding: 4px 6px !important;
+  margin-top: 4px !important;
+  box-shadow: inset -1px -1px 0 0 #dfdfdf !important;
+  word-wrap: break-word !important;
+}
+
+/* ============================================
+   TIMESTAMP
+   ============================================ */
+
+/* Timestamp styling - Win98 status bar look */
+.text-xs.text-gray-500 {
+  color: #000000 !important;
+  font-size: 9px !important;
+  background: #c0c0c0 !important;
+  border: 1px solid;
+  border-color: #808080 #ffffff #ffffff #808080 !important;
+  padding: 1px 4px !important;
+  margin-top: 4px !important;
+  display: inline-block !important;
+  font-family: "MS Sans Serif", "Microsoft Sans Serif", sans-serif !important;
+}
+
+/* ============================================
+   OPTIONAL: HIDE ELEMENTS
+   Uncomment the sections below to hide specific elements
+   ============================================ */
+
+/* --- HIDE AVATARS ---
+   Uncomment this section to hide user avatars */
+/*
+.flex-shrink-0 {
+  display: none !important;
+}
+*/
+
+/* --- HIDE PLATFORM BADGES ---
+   Uncomment this section to hide the platform labels (TWITCH, YOUTUBE, etc.) */
+/*
+.text-xs.font-semibold.uppercase {
+  display: none !important;
+}
+*/
+
+/* --- HIDE USER BADGES ---
+   Uncomment this section to hide subscriber/moderator badges */
+/*
+.flex.gap-1 {
+  display: none !important;
+}
+*/
+
+/* --- HIDE TIMESTAMP ---
+   Uncomment this section to hide message timestamps */
+/*
+.text-xs.text-gray-500 {
+  display: none !important;
+}
+*/
+
+/* --- HIDE AVATARS AND SHIFT CONTENT LEFT ---
+   Use this instead of the simple hide if you want content to shift left */
+/*
+.flex-shrink-0 {
+  display: none !important;
+}
+.flex.items-start.gap-3 {
+  gap: 0 !important;
+}
+*/
+
+/* ============================================
+   ADDITIONAL CUSTOMIZATION OPTIONS
+   ============================================ */
+
+/* Adjust overall message size - change values to your preference */
+/*
+.space-y-3 > div {
+  transform: scale(1.2);
+  transform-origin: left top;
+  margin-bottom: 16px !important;
+}
+*/
+
+/* Change window background color (default is Win98 gray) */
+/*
+.space-y-3 > div {
+  background: #008080 !important; /* Teal like old Windows backgrounds */
+}
+*/
+
+/* Make messages semi-transparent */
+/*
+.space-y-3 > div {
+  opacity: 0.95;
+}
+*/
+
+/* Disable animations for performance */
+/*
+.space-y-3 > div {
+  animation: none !important;
+}
+*/
+
+/* ============================================
+   ADVANCED: TITLE BAR OPTION
+   Uncomment to add a Win98-style title bar to each message
+   ============================================ */
+/*
+.flex.items-start.gap-3::before {
+  content: "Chat Message";
+  display: block;
+  background: linear-gradient(to right, #000080, #1084d0) !important;
+  color: #ffffff !important;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-weight: bold;
+  margin: -8px -8px 4px -8px;
+  border-bottom: 1px solid #000000;
+  font-family: "MS Sans Serif", "Microsoft Sans Serif", sans-serif;
+}
+*/
+
+/* ============================================
+   WIN98 SCROLLBAR (Optional - may not work in all OBS versions)
+   ============================================ */
+/*
+::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: #c0c0c0;
+  border: 1px solid #808080;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #404040 #404040 #ffffff;
+}
+
+::-webkit-scrollbar-button {
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #404040 #404040 #ffffff;
+  height: 16px;
+  width: 16px;
+}
+*/
