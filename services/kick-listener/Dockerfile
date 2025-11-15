@@ -1,0 +1,55 @@
+# Build stage
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates
+
+# Copy go.mod and go.sum for all services
+COPY go.work go.work.sum* ./
+COPY shared/go.mod shared/go.sum ./shared/
+COPY services/kick-listener/go.mod services/kick-listener/go.sum* ./services/kick-listener/
+
+# Download dependencies
+WORKDIR /app/services/kick-listener
+RUN go mod download
+
+# Copy source code
+WORKDIR /app
+COPY shared/ ./shared/
+COPY services/kick-listener/ ./services/kick-listener/
+
+# Build the service
+WORKDIR /app/services/kick-listener
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s" \
+    -o /app/kick-listener \
+    ./cmd/
+
+# Runtime stage
+FROM alpine:latest
+
+# Install CA certificates for HTTPS
+RUN apk --no-cache add ca-certificates tzdata
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/kick-listener .
+
+# Create non-root user
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+# Expose health check port
+EXPOSE 8089
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8089/health/live || exit 1
+
+CMD ["./kick-listener"]

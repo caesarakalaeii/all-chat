@@ -30,7 +30,7 @@ export default function LandingPage() {
     }
   }, [user, token, router]);
 
-  const handleLogin = async (platform: 'twitch' | 'youtube') => {
+  const handleLogin = async (platform: 'twitch' | 'youtube' | 'tiktok') => {
     try {
       // Use relative URL - Nginx will proxy to API Gateway
       const endpoint = platform === 'twitch' ? '/api/v1/auth/login' : `/api/v1/auth/${platform}/login`;
@@ -54,7 +54,7 @@ export default function LandingPage() {
           {/* Hero Section */}
           <h1 className="text-6xl font-bold text-white mb-6 drop-shadow-lg">All-Chat</h1>
           <p className="text-xl text-gray-300 mb-12 max-w-2xl mx-auto">
-            Aggregate chat from Twitch, YouTube, and more in one beautiful overlay for your stream
+            Aggregate chat from Twitch, YouTube, TikTok and more in one beautiful overlay for your stream
           </p>
 
           {/* Login Buttons */}
@@ -91,8 +91,27 @@ export default function LandingPage() {
               Login with YouTube
             </button>
 
+            <button
+              onClick={() => handleLogin('tiktok')}
+              className="w-full bg-black hover:bg-gray-900 text-white font-semibold py-4 px-6 rounded-lg text-lg transition-colors flex items-center justify-center gap-2 relative"
+            >
+              {/* TikTok Logo SVG */}
+              <svg
+                className="w-6 h-6"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
+              </svg>
+              Login with TikTok
+              <span className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full">
+                BETA
+              </span>
+            </button>
+
             {/* Platform Indicators */}
-            <div className="flex items-center justify-center gap-6 text-gray-400 text-sm">
+            <div className="flex items-center justify-center gap-4 text-gray-400 text-sm flex-wrap">
               <div className="flex items-center gap-2">
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
@@ -105,7 +124,14 @@ export default function LandingPage() {
                 </svg>
                 YouTube
               </div>
-              <div className="text-xs text-gray-500">+ More platforms</div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
+                </svg>
+                TikTok
+                <span className="text-xs bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">Beta</span>
+              </div>
+              <div className="text-xs text-gray-500">+ More coming</div>
             </div>
           </div>
 
@@ -115,7 +141,7 @@ export default function LandingPage() {
               <div className="text-4xl mb-4">🌐</div>
               <h3 className="text-xl font-semibold text-white mb-2">Multi-Platform</h3>
               <p className="text-gray-400">
-                Combine chat from Twitch and YouTube in one unified overlay
+                Combine chat from Twitch, YouTube, and TikTok in one unified overlay
               </p>
             </div>
 

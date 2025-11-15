@@ -65,6 +65,32 @@ func (h *PlatformAuthHandler) HandleLogin(platform oauth.Platform) gin.HandlerFu
 			return
 		}
 
+		// Handle PKCE for Kick
+		var authURL string
+		if platform == oauth.PlatformKick {
+			kickProvider, ok := provider.(*oauth.KickOAuth)
+			if !ok {
+				h.logger.Error("Kick provider type assertion failed")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
+
+			// Generate auth URL with PKCE
+			var codeVerifier string
+			authURL, codeVerifier = kickProvider.GetAuthURLWithPKCE(state)
+
+			// Store code verifier in Redis for later use during token exchange
+			verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, state)
+			err = h.redis.Set(c.Request.Context(), verifierKey, codeVerifier, 10*time.Minute).Err()
+			if err != nil {
+				h.logger.Error("Failed to store code verifier", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
+		} else {
+			authURL = provider.GetAuthURL(state)
+		}
+
 		// Store state in Redis with platform prefix
 		stateKey := fmt.Sprintf("oauth_state:%s:%s", platform, state)
 		err = h.redis.Set(c.Request.Context(), stateKey, "1", 10*time.Minute).Err()
@@ -74,7 +100,6 @@ func (h *PlatformAuthHandler) HandleLogin(platform oauth.Platform) gin.HandlerFu
 			return
 		}
 
-		authURL := provider.GetAuthURL(state)
 		c.JSON(http.StatusOK, gin.H{"auth_url": authURL})
 	}
 }
@@ -111,15 +136,52 @@ func (h *PlatformAuthHandler) HandleCallback(platform oauth.Platform) gin.Handle
 		// Delete used state
 		h.redis.Del(c.Request.Context(), stateKey)
 
-		// Exchange code for token
-		token, err := provider.ExchangeCode(c.Request.Context(), code)
-		if err != nil {
-			h.logger.Error("Failed to exchange code",
-				zap.String("platform", string(platform)),
-				zap.Error(err),
-			)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange code"})
-			return
+		// Exchange code for token (handle PKCE for Kick)
+		var token *oauth2.Token
+		if platform == oauth.PlatformKick {
+			kickProvider, ok := provider.(*oauth.KickOAuth)
+			if !ok {
+				h.logger.Error("Kick provider type assertion failed")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
+
+			// Retrieve code verifier from Redis
+			verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, state)
+			codeVerifier, err := h.redis.Get(c.Request.Context(), verifierKey).Result()
+			if err != nil {
+				h.logger.Error("Failed to retrieve code verifier",
+					zap.String("platform", string(platform)),
+					zap.Error(err),
+				)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve PKCE verifier"})
+				return
+			}
+
+			// Delete used verifier
+			h.redis.Del(c.Request.Context(), verifierKey)
+
+			// Exchange code with PKCE verifier
+			token, err = kickProvider.ExchangeCodeWithPKCE(c.Request.Context(), code, codeVerifier)
+			if err != nil {
+				h.logger.Error("Failed to exchange code with PKCE",
+					zap.String("platform", string(platform)),
+					zap.Error(err),
+				)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange code"})
+				return
+			}
+		} else {
+			var err error
+			token, err = provider.ExchangeCode(c.Request.Context(), code)
+			if err != nil {
+				h.logger.Error("Failed to exchange code",
+					zap.String("platform", string(platform)),
+					zap.Error(err),
+				)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange code"})
+				return
+			}
 		}
 
 		// Get user info
@@ -186,6 +248,10 @@ func (h *PlatformAuthHandler) getOrCreateUser(
 		user, err = h.userRepo.GetByTwitchID(ctx, platformUser.GetID())
 	case oauth.PlatformYouTube:
 		user, err = h.userRepo.GetByGoogleID(ctx, platformUser.GetID())
+	case oauth.PlatformKick:
+		user, err = h.userRepo.GetByKickID(ctx, platformUser.GetID())
+	case oauth.PlatformTikTok:
+		user, err = h.userRepo.GetByTikTokID(ctx, platformUser.GetID())
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -210,6 +276,10 @@ func (h *PlatformAuthHandler) getOrCreateUser(
 			user.TwitchID = &platformID
 		case oauth.PlatformYouTube:
 			user.GoogleID = &platformID
+		case oauth.PlatformKick:
+			user.KickID = &platformID
+		case oauth.PlatformTikTok:
+			user.TikTokOpenID = &platformID
 		}
 
 		if err := h.userRepo.Create(ctx, user); err != nil {

@@ -32,6 +32,7 @@ jobs:
       api-gateway: ${{ steps.changes.outputs.api-gateway }}
       twitch-listener: ${{ steps.changes.outputs.twitch-listener }}
       youtube-listener: ${{ steps.changes.outputs.youtube-listener }}
+      tiktok-listener: ${{ steps.changes.outputs.tiktok-listener }}
       message-processor: ${{ steps.changes.outputs.message-processor }}
       source-manager: ${{ steps.changes.outputs.source-manager }}
       frontend: ${{ steps.changes.outputs.frontend }}
@@ -63,6 +64,8 @@ jobs:
             youtube-listener:
               - 'services/youtube-listener/**'
               - 'shared/**'
+            tiktok-listener:
+              - 'services/tiktok-listener/**'
             message-processor:
               - 'services/message-processor/**'
               - 'shared/**'
@@ -104,6 +107,9 @@ jobs:
           - name: youtube-listener
             changed: ${{ needs.detect-changes.outputs.youtube-listener }}
             path: services/youtube-listener
+          - name: tiktok-listener
+            changed: ${{ needs.detect-changes.outputs.tiktok-listener }}
+            path: services/tiktok-listener
           - name: message-processor
             changed: ${{ needs.detect-changes.outputs.message-processor }}
             path: services/message-processor
