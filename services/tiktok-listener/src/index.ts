@@ -17,7 +17,7 @@
 
 import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
-import { Pool } from 'pg';
+import { Pool, Client, Notification } from 'pg';
 import winston from 'winston';
 import { randomUUID } from 'crypto';
 import http from 'http';
@@ -77,6 +77,7 @@ interface ActiveStream {
 class TikTokListenerService {
   private redis: RedisClientType;
   private db: Pool;
+  private listenClient?: Client; // Dedicated client for PostgreSQL LISTEN
   private activeStreams: Map<string, ActiveStream> = new Map();
   private isShuttingDown = false;
   private pollTimer?: NodeJS.Timeout;
@@ -176,6 +177,60 @@ class TikTokListenerService {
     this.pollTimer = setInterval(() => {
       this.pollActiveStreams();
     }, POLL_INTERVAL_MS);
+
+    // Start PostgreSQL LISTEN for instant notifications
+    this.startDatabaseListener();
+  }
+
+  private async startDatabaseListener(): Promise<void> {
+    try {
+      // Create dedicated client for LISTEN (Pool doesn't support notifications)
+      this.listenClient = new Client({
+        host: DATABASE_HOST,
+        port: DATABASE_PORT,
+        user: DATABASE_USER,
+        password: DATABASE_PASSWORD,
+        database: DATABASE_NAME
+      });
+
+      await this.listenClient.connect();
+
+      // Listen for chat source changes
+      await this.listenClient.query('LISTEN chat_source_changes');
+
+      logger.info('PostgreSQL LISTEN active for instant source updates', {
+        channel: 'chat_source_changes'
+      });
+
+      // Set up notification handler with proper typing
+      this.listenClient.on('notification', (msg: Notification) => {
+        if (msg.channel === 'chat_source_changes') {
+          logger.info('Source change notification received', {
+            payload: msg.payload
+          });
+
+          // Trigger immediate sync
+          this.pollActiveStreams().catch(err => {
+            logger.error('Failed to sync after notification', { error: err });
+          });
+        }
+      });
+
+      // Handle connection errors
+      this.listenClient.on('error', (err: Error) => {
+        logger.error('PostgreSQL LISTEN connection error', { error: err.message });
+      });
+
+      // Handle unexpected disconnection
+      this.listenClient.on('end', () => {
+        logger.warn('PostgreSQL LISTEN connection ended, will rely on polling');
+        this.listenClient = undefined;
+      });
+
+    } catch (error) {
+      logger.error('Failed to start PostgreSQL LISTEN', { error });
+      logger.info('Will rely on periodic polling only');
+    }
   }
 
   private async pollActiveStreams(): Promise<void> {
@@ -360,6 +415,12 @@ class TikTokListenerService {
     // Close Redis connection
     await this.redis.quit();
     logger.info('Redis connection closed');
+
+    // Close LISTEN client
+    if (this.listenClient) {
+      await this.listenClient.end();
+      logger.info('PostgreSQL LISTEN connection closed');
+    }
 
     // Close database pool
     await this.db.end();
