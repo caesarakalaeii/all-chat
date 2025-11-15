@@ -179,6 +179,9 @@ func main() {
 		protectedAPI.POST("/overlays/:id/sources", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/overlays/:id/sources/:source_id", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/overlays/:id/sources/:source_id", proxyHandler.ForwardRequest)
+
+		// YouTube resolver routes (protected)
+		protectedAPI.POST("/youtube/resolve", proxyHandler.ForwardRequest)
 	}
 
 	// Get port from environment
