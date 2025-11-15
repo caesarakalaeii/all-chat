@@ -83,13 +83,13 @@ export default function CookieBanner() {
                   <div className="flex items-start gap-2">
                     <span className="text-red-600 dark:text-red-400 mt-0.5">✗</span>
                     <div>
-                      <strong>No tracking cookies</strong> - We don't track your browsing behavior
+                      <strong>No tracking cookies</strong> - We don&apos;t track your browsing behavior
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-red-600 dark:text-red-400 mt-0.5">✗</span>
                     <div>
-                      <strong>No advertising cookies</strong> - We don't serve ads or share data with advertisers
+                      <strong>No advertising cookies</strong> - We don&apos;t serve ads or share data with advertisers
                     </div>
                   </div>
                 </div>
