@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/api-gateway/models"
@@ -14,23 +16,16 @@ import (
 	"go.uber.org/zap"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// Allow all origins in development
-		// TODO: Configure allowed origins for production
-		return true
-	},
-}
-
 // WebSocketHandler handles WebSocket connections for overlays
 type WebSocketHandler struct {
-	wsManager  *wsconn.Manager
-	subscriber *subscription.Subscriber
-	repo       *subscription.Repository
-	jwtSecret  string
-	logger     *zap.Logger
+	wsManager       *wsconn.Manager
+	subscriber      *subscription.Subscriber
+	repo            *subscription.Repository
+	jwtSecret       string
+	logger          *zap.Logger
+	upgrader        websocket.Upgrader
+	allowAllOrigins bool
+	allowedOrigins  map[string]struct{}
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
@@ -41,13 +36,32 @@ func NewWebSocketHandler(
 	jwtSecret string,
 	logger *zap.Logger,
 ) *WebSocketHandler {
-	return &WebSocketHandler{
-		wsManager:  wsManager,
-		subscriber: subscriber,
-		repo:       repo,
-		jwtSecret:  jwtSecret,
-		logger:     logger,
+	allowedOrigins, allowAll := loadAllowedOrigins()
+	h := &WebSocketHandler{
+		wsManager:       wsManager,
+		subscriber:      subscriber,
+		repo:            repo,
+		jwtSecret:       jwtSecret,
+		logger:          logger,
+		allowedOrigins:  allowedOrigins,
+		allowAllOrigins: allowAll,
 	}
+
+	h.upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     h.checkOrigin,
+	}
+
+	if h.allowAllOrigins {
+		logger.Info("WebSocket origin allowlist disabled; allowing all origins")
+	} else {
+		logger.Info("Configured WebSocket origin allowlist",
+			zap.Int("count", len(h.allowedOrigins)),
+		)
+	}
+
+	return h
 }
 
 // HandleOverlayConnection handles WebSocket connection requests for overlays
@@ -116,7 +130,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	}
 
 	// Upgrade HTTP connection to WebSocket
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		h.logger.Error("Failed to upgrade WebSocket",
 			zap.String("overlay_id", overlayID),
@@ -180,4 +194,51 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	// Return immediately - don't block the HTTP handler
 	// The WebSocket connection will continue in the background
+}
+
+func loadAllowedOrigins() (map[string]struct{}, bool) {
+	value := strings.TrimSpace(os.Getenv("WEBSOCKET_ALLOWED_ORIGINS"))
+	if value == "" {
+		return nil, true
+	}
+
+	allowed := make(map[string]struct{})
+	allowAll := false
+	for _, origin := range strings.Split(value, ",") {
+		origin = strings.TrimSpace(origin)
+		if origin == "" {
+			continue
+		}
+		if origin == "*" {
+			allowAll = true
+			continue
+		}
+		allowed[origin] = struct{}{}
+	}
+
+	if allowAll {
+		return nil, true
+	}
+
+	return allowed, false
+}
+
+func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
+	if h.allowAllOrigins {
+		return true
+	}
+
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+
+	if _, ok := h.allowedOrigins[origin]; ok {
+		return true
+	}
+
+	h.logger.Warn("Blocked WebSocket connection from disallowed origin",
+		zap.String("origin", origin),
+	)
+	return false
 }
