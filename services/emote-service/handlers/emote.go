@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"regexp"
 
 	"github.com/caesar/all-chat/services/emote-service/cache"
 	"github.com/caesar/all-chat/services/emote-service/models"
@@ -30,6 +31,8 @@ type EmoteHandler struct {
 	logger  *zap.Logger
 }
 
+var channelPattern = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
+
 // NewEmoteHandler creates a new emote handler
 func NewEmoteHandler(clients map[string]EmoteClient, cache EmoteCache, logger *zap.Logger) *EmoteHandler {
 	return &EmoteHandler{
@@ -45,6 +48,10 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 	channel := c.Param("channel")
 	if channel == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "channel parameter is required"})
+		return
+	}
+	if !isValidChannel(channel) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel identifier"})
 		return
 	}
 
@@ -87,6 +94,10 @@ func (h *EmoteHandler) GetProviderEmotes(c *gin.Context) {
 
 	if channel == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "channel parameter is required"})
+		return
+	}
+	if !isValidChannel(channel) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel identifier"})
 		return
 	}
 
@@ -167,4 +178,8 @@ func (h *EmoteHandler) fetchWithCache(ctx context.Context, client EmoteClient, p
 func (h *EmoteHandler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/emotes/channel/:channel", h.GetChannelEmotes)
 	router.GET("/emotes/:provider/:channel", h.GetProviderEmotes)
+}
+
+func isValidChannel(channel string) bool {
+	return channelPattern.MatchString(channel)
 }
