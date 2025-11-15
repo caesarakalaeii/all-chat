@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -113,9 +114,9 @@ func main() {
 	subRepo := subscription.NewRepository(db)
 
 	// Get JWT secret from environment
-	jwtSecret := os.Getenv("JWT_SECRET")
+	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 	if jwtSecret == "" {
-		log.Warn("JWT_SECRET not set, auth middleware will fail")
+		log.Fatal("JWT_SECRET environment variable is required")
 	}
 
 	// Create handlers
