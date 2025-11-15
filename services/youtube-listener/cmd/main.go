@@ -16,6 +16,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"github.com/caesar/all-chat/services/youtube-listener/streams"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,6 +43,18 @@ func main() {
 
 	if youtubeClientID == "" || youtubeClientSecret == "" {
 		log.Fatal("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET are required")
+	}
+
+	// Load encryption key for OAuth tokens
+	youtubeEncryptionKey := os.Getenv("YOUTUBE_TOKEN_ENCRYPTION_KEY")
+	parsedKey, err := encryption.ParseKey(youtubeEncryptionKey)
+	if err != nil {
+		log.Fatal("Invalid YOUTUBE_TOKEN_ENCRYPTION_KEY", zap.Error(err))
+	}
+
+	tokenEncryptor, err := encryption.NewAESEncryptor(parsedKey)
+	if err != nil {
+		log.Fatal("Failed to initialize token encryptor", zap.Error(err))
 	}
 
 	// Connect to PostgreSQL
@@ -77,7 +90,7 @@ func main() {
 	log.Info("Connected to Redis")
 
 	// Initialize components
-	tokenStore := oauth.NewPostgresTokenStore(db, log)
+	tokenStore := oauth.NewPostgresTokenStore(db, tokenEncryptor, log)
 	oauthManager := oauth.NewManager(youtubeClientID, youtubeClientSecret, youtubeRedirectURL, tokenStore, log)
 
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
