@@ -6,19 +6,22 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/shared/crypto"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 )
 
 // UserRepository handles user data persistence
 type UserRepository struct {
-	db *pgxpool.Pool
+	db     *pgxpool.Pool
+	cipher crypto.StringCipher
 }
 
 // NewUserRepository creates a new user repository
-func NewUserRepository(db *pgxpool.Pool) *UserRepository {
-	return &UserRepository{db: db}
+func NewUserRepository(db *pgxpool.Pool, cipher crypto.StringCipher) *UserRepository {
+	return &UserRepository{db: db, cipher: cipher}
 }
 
 // Create inserts a new user
@@ -27,16 +30,26 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
 	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()
 
-	query := `
-		INSERT INTO users (
-			id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
-			access_token, refresh_token, token_expires_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-	`
+	accessToken, err := r.encryptToken(user.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
 
-	_, err := r.db.Exec(ctx, query,
+	refreshToken, err := r.encryptToken(user.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt refresh token: %w", err)
+	}
+
+	query := `
+INSERT INTO users (
+id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+access_token, refresh_token, token_expires_at, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+`
+
+	_, err = r.db.Exec(ctx, query,
 		user.ID, user.TwitchID, user.GoogleID, user.TikTokOpenID, user.KickID, user.AuthProvider, user.Username, user.DisplayName, user.Email,
-		user.ProfileImageURL, user.AccessToken, user.RefreshToken,
+		user.ProfileImageURL, accessToken, refreshToken,
 		user.TokenExpiresAt, user.CreatedAt, user.UpdatedAt,
 	)
 
@@ -49,21 +62,14 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
 
 // GetByTwitchID retrieves a user by Twitch ID
 func (r *UserRepository) GetByTwitchID(ctx context.Context, twitchID string) (*models.User, error) {
-	user := &models.User{}
-
 	query := `
-		SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
-			   access_token, refresh_token, token_expires_at, created_at, updated_at
-		FROM users
-		WHERE twitch_id = $1
-	`
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+           access_token, refresh_token, token_expires_at, created_at, updated_at
+FROM users
+WHERE twitch_id = $1
+`
 
-	err := r.db.QueryRow(ctx, query, twitchID).Scan(
-		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName, &user.Email,
-		&user.ProfileImageURL, &user.AccessToken, &user.RefreshToken,
-		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
-	)
-
+	user, err := r.scanUser(r.db.QueryRow(ctx, query, twitchID))
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -73,21 +79,14 @@ func (r *UserRepository) GetByTwitchID(ctx context.Context, twitchID string) (*m
 
 // GetByGoogleID retrieves a user by Google ID
 func (r *UserRepository) GetByGoogleID(ctx context.Context, googleID string) (*models.User, error) {
-	user := &models.User{}
-
 	query := `
-		SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
-			   access_token, refresh_token, token_expires_at, created_at, updated_at
-		FROM users
-		WHERE google_id = $1
-	`
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+           access_token, refresh_token, token_expires_at, created_at, updated_at
+FROM users
+WHERE google_id = $1
+`
 
-	err := r.db.QueryRow(ctx, query, googleID).Scan(
-		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName, &user.Email,
-		&user.ProfileImageURL, &user.AccessToken, &user.RefreshToken,
-		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
-	)
-
+	user, err := r.scanUser(r.db.QueryRow(ctx, query, googleID))
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -97,21 +96,14 @@ func (r *UserRepository) GetByGoogleID(ctx context.Context, googleID string) (*m
 
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
-	user := &models.User{}
-
 	query := `
-		SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
-			   access_token, refresh_token, token_expires_at, created_at, updated_at
-		FROM users
-		WHERE id = $1
-	`
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+           access_token, refresh_token, token_expires_at, created_at, updated_at
+FROM users
+WHERE id = $1
+`
 
-	err := r.db.QueryRow(ctx, query, id).Scan(
-		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName, &user.Email,
-		&user.ProfileImageURL, &user.AccessToken, &user.RefreshToken,
-		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
-	)
-
+	user, err := r.scanUser(r.db.QueryRow(ctx, query, id))
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -122,17 +114,25 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, 
 // Update updates an existing user
 func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 	user.UpdatedAt = time.Now()
+	accessToken, err := r.encryptToken(user.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+	refreshToken, err := r.encryptToken(user.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt refresh token: %w", err)
+	}
 
 	query := `
-		UPDATE users
-		SET username = $2, display_name = $3, email = $4, profile_image_url = $5,
-			access_token = $6, refresh_token = $7, token_expires_at = $8, updated_at = $9
-		WHERE id = $1
-	`
+UPDATE users
+SET username = $2, display_name = $3, email = $4, profile_image_url = $5,
+access_token = $6, refresh_token = $7, token_expires_at = $8, updated_at = $9
+WHERE id = $1
+`
 
 	result, err := r.db.Exec(ctx, query,
 		user.ID, user.Username, user.DisplayName, user.Email, user.ProfileImageURL,
-		user.AccessToken, user.RefreshToken, user.TokenExpiresAt, user.UpdatedAt,
+		accessToken, refreshToken, user.TokenExpiresAt, user.UpdatedAt,
 	)
 
 	if err != nil {
@@ -148,13 +148,21 @@ func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 
 // UpdateTokens updates only the OAuth tokens for a user
 func (r *UserRepository) UpdateTokens(ctx context.Context, userID, accessToken, refreshToken string, expiresAt time.Time) error {
+	encAccessToken, err := r.encryptToken(accessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+	encRefreshToken, err := r.encryptToken(refreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt refresh token: %w", err)
+	}
 	query := `
-		UPDATE users
-		SET access_token = $2, refresh_token = $3, token_expires_at = $4, updated_at = $5
-		WHERE id = $1
-	`
+UPDATE users
+SET access_token = $2, refresh_token = $3, token_expires_at = $4, updated_at = $5
+WHERE id = $1
+`
 
-	result, err := r.db.Exec(ctx, query, userID, accessToken, refreshToken, expiresAt, time.Now())
+	result, err := r.db.Exec(ctx, query, userID, encAccessToken, encRefreshToken, expiresAt, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to update tokens: %w", err)
 	}
@@ -168,21 +176,14 @@ func (r *UserRepository) UpdateTokens(ctx context.Context, userID, accessToken, 
 
 // GetByKickID retrieves a user by Kick ID
 func (r *UserRepository) GetByKickID(ctx context.Context, kickID string) (*models.User, error) {
-	user := &models.User{}
-
 	query := `
-		SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
-			   access_token, refresh_token, token_expires_at, created_at, updated_at
-		FROM users
-		WHERE kick_id = $1
-	`
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+           access_token, refresh_token, token_expires_at, created_at, updated_at
+FROM users
+WHERE kick_id = $1
+`
 
-	err := r.db.QueryRow(ctx, query, kickID).Scan(
-		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName, &user.Email,
-		&user.ProfileImageURL, &user.AccessToken, &user.RefreshToken,
-		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
-	)
-
+	user, err := r.scanUser(r.db.QueryRow(ctx, query, kickID))
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -192,21 +193,14 @@ func (r *UserRepository) GetByKickID(ctx context.Context, kickID string) (*model
 
 // GetByTikTokID retrieves a user by TikTok Open ID
 func (r *UserRepository) GetByTikTokID(ctx context.Context, tiktokOpenID string) (*models.User, error) {
-	user := &models.User{}
-
 	query := `
-		SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
-			   access_token, refresh_token, token_expires_at, created_at, updated_at
-		FROM users
-		WHERE tiktok_open_id = $1
-	`
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+           access_token, refresh_token, token_expires_at, created_at, updated_at
+FROM users
+WHERE tiktok_open_id = $1
+`
 
-	err := r.db.QueryRow(ctx, query, tiktokOpenID).Scan(
-		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName, &user.Email,
-		&user.ProfileImageURL, &user.AccessToken, &user.RefreshToken,
-		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
-	)
-
+	user, err := r.scanUser(r.db.QueryRow(ctx, query, tiktokOpenID))
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -239,8 +233,17 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID string, t
 		tokenType = "Bearer"
 	}
 
-	_, err := r.db.Exec(ctx, query,
-		userID, channelID, token.AccessToken, token.RefreshToken, tokenType,
+	accessToken, err := r.encryptToken(token.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+	refreshToken, err := r.encryptToken(token.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt refresh token: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query,
+		userID, channelID, accessToken, refreshToken, tokenType,
 		token.Expiry, now, now,
 	)
 
@@ -249,4 +252,44 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID string, t
 	}
 
 	return nil
+}
+
+func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
+	user := &models.User{}
+	var encryptedAccessToken, encryptedRefreshToken string
+
+	err := row.Scan(
+		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName, &user.Email,
+		&user.ProfileImageURL, &encryptedAccessToken, &encryptedRefreshToken,
+		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	user.AccessToken, err = r.decryptToken(encryptedAccessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt access token: %w", err)
+	}
+
+	user.RefreshToken, err = r.decryptToken(encryptedRefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt refresh token: %w", err)
+	}
+
+	return user, nil
+}
+
+func (r *UserRepository) encryptToken(token string) (string, error) {
+	if r.cipher == nil || token == "" {
+		return token, nil
+	}
+	return r.cipher.Encrypt(token)
+}
+
+func (r *UserRepository) decryptToken(token string) (string, error) {
+	if r.cipher == nil || token == "" {
+		return token, nil
+	}
+	return r.cipher.Decrypt(token)
 }

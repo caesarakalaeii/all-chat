@@ -6,10 +6,13 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/shared/crypto"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+const testEncryptionKey = "0123456789abcdef0123456789abcdef"
 
 // setupTestDB creates a PostgreSQL testcontainer and returns a connection pool
 func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
@@ -98,11 +101,19 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 	return pool, cleanup
 }
 
+func newTestUserRepository(t *testing.T, pool *pgxpool.Pool) *UserRepository {
+	cipher, err := crypto.NewAESGCMCipher(testEncryptionKey)
+	if err != nil {
+		t.Fatalf("failed to create cipher: %v", err)
+	}
+	return NewUserRepository(pool, cipher)
+}
+
 func TestUserRepository_Create(t *testing.T) {
 	pool, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewUserRepository(pool)
+	repo := newTestUserRepository(t, pool)
 	ctx := context.Background()
 
 	twitchID1 := "123456"
@@ -131,26 +142,26 @@ func TestUserRepository_Create(t *testing.T) {
 		{
 			name: "duplicate twitch_id",
 			user: &models.User{
-				TwitchID:        &twitchID1, // Same as above
-				AuthProvider:    "twitch",
-				Username:        "anotheruser",
-				DisplayName:     "AnotherUser",
-				AccessToken:     "encrypted_access_token",
-				RefreshToken:    "encrypted_refresh_token",
-				TokenExpiresAt:  time.Now().Add(24 * time.Hour),
+				TwitchID:       &twitchID1, // Same as above
+				AuthProvider:   "twitch",
+				Username:       "anotheruser",
+				DisplayName:    "AnotherUser",
+				AccessToken:    "encrypted_access_token",
+				RefreshToken:   "encrypted_refresh_token",
+				TokenExpiresAt: time.Now().Add(24 * time.Hour),
 			},
 			wantErr: true,
 		},
 		{
 			name: "duplicate username",
 			user: &models.User{
-				TwitchID:        &twitchID2,
-				AuthProvider:    "twitch",
-				Username:        "testuser", // Same as first test
-				DisplayName:     "DifferentUser",
-				AccessToken:     "encrypted_access_token",
-				RefreshToken:    "encrypted_refresh_token",
-				TokenExpiresAt:  time.Now().Add(24 * time.Hour),
+				TwitchID:       &twitchID2,
+				AuthProvider:   "twitch",
+				Username:       "testuser", // Same as first test
+				DisplayName:    "DifferentUser",
+				AccessToken:    "encrypted_access_token",
+				RefreshToken:   "encrypted_refresh_token",
+				TokenExpiresAt: time.Now().Add(24 * time.Hour),
 			},
 			wantErr: true,
 		},
@@ -185,7 +196,7 @@ func TestUserRepository_GetByID(t *testing.T) {
 	pool, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewUserRepository(pool)
+	repo := newTestUserRepository(t, pool)
 	ctx := context.Background()
 
 	// Create a test user
@@ -263,7 +274,7 @@ func TestUserRepository_GetByTwitchID(t *testing.T) {
 	pool, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewUserRepository(pool)
+	repo := newTestUserRepository(t, pool)
 	ctx := context.Background()
 
 	// Create a test user
@@ -328,7 +339,7 @@ func TestUserRepository_Update(t *testing.T) {
 	pool, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewUserRepository(pool)
+	repo := newTestUserRepository(t, pool)
 	ctx := context.Background()
 
 	// Create a test user
@@ -405,7 +416,7 @@ func TestUserRepository_Delete(t *testing.T) {
 	pool, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewUserRepository(pool)
+	repo := newTestUserRepository(t, pool)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -417,12 +428,12 @@ func TestUserRepository_Delete(t *testing.T) {
 			name: "successful delete",
 			setup: func() string {
 				user := &models.User{
-					TwitchID:        &[]string{"123456"}[0],
-					Username:        "deleteuser",
-					DisplayName:     "DeleteUser",
-					AccessToken:     "encrypted_access_token",
-					RefreshToken:    "encrypted_refresh_token",
-					TokenExpiresAt:  time.Now().Add(24 * time.Hour),
+					TwitchID:       &[]string{"123456"}[0],
+					Username:       "deleteuser",
+					DisplayName:    "DeleteUser",
+					AccessToken:    "encrypted_access_token",
+					RefreshToken:   "encrypted_refresh_token",
+					TokenExpiresAt: time.Now().Add(24 * time.Hour),
 				}
 				err := repo.Create(ctx, user)
 				if err != nil {
@@ -465,17 +476,17 @@ func TestUserRepository_UpdateTokens(t *testing.T) {
 	pool, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewUserRepository(pool)
+	repo := newTestUserRepository(t, pool)
 	ctx := context.Background()
 
 	// Create a test user
 	testUser := &models.User{
-		TwitchID:        &[]string{"123456"}[0],
-		Username:        "testuser",
-		DisplayName:     "TestUser",
-		AccessToken:     "old_encrypted_access_token",
-		RefreshToken:    "old_encrypted_refresh_token",
-		TokenExpiresAt:  time.Now().Add(1 * time.Hour),
+		TwitchID:       &[]string{"123456"}[0],
+		Username:       "testuser",
+		DisplayName:    "TestUser",
+		AccessToken:    "old_encrypted_access_token",
+		RefreshToken:   "old_encrypted_refresh_token",
+		TokenExpiresAt: time.Now().Add(1 * time.Hour),
 	}
 
 	err := repo.Create(ctx, testUser)

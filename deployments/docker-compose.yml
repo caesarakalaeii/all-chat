@@ -68,6 +68,7 @@ services:
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
       TWITCH_REDIRECT_URL: ${TWITCH_REDIRECT_URL:-http://localhost:8080/api/v1/auth/callback}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
       JWT_EXPIRY_HOURS: "24"
     ports:
       - "8081:8081"
