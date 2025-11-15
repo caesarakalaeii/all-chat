@@ -168,11 +168,15 @@ func (r *UserRepository) UpdateTokens(ctx context.Context, userID, accessToken, 
 
 // StoreYouTubeToken stores YouTube OAuth token in youtube_oauth_tokens table
 func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID string, token *oauth2.Token) error {
+	// Use a default channel_id for user-level tokens (not channel-specific)
+	// The YouTube Listener will use these tokens to access any channel the user can read
+	channelID := "default"
+
 	query := `
 		INSERT INTO youtube_oauth_tokens (
-			user_id, access_token, refresh_token, token_type, expiry, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (user_id)
+			user_id, channel_id, access_token, refresh_token, token_type, expiry, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (user_id, channel_id)
 		DO UPDATE SET
 			access_token = EXCLUDED.access_token,
 			refresh_token = EXCLUDED.refresh_token,
@@ -182,8 +186,13 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID string, t
 	`
 
 	now := time.Now()
+	tokenType := token.TokenType
+	if tokenType == "" {
+		tokenType = "Bearer"
+	}
+
 	_, err := r.db.Exec(ctx, query,
-		userID, token.AccessToken, token.RefreshToken, token.TokenType,
+		userID, channelID, token.AccessToken, token.RefreshToken, tokenType,
 		token.Expiry, now, now,
 	)
 
