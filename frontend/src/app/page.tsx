@@ -30,7 +30,7 @@ export default function LandingPage() {
     }
   }, [user, token, router]);
 
-  const handleLogin = async (platform: 'twitch' | 'youtube' | 'tiktok') => {
+  const handleLogin = async (platform: 'twitch' | 'youtube' | 'tiktok' | 'kick') => {
     try {
       // Use relative URL - Nginx will proxy to API Gateway
       const endpoint = platform === 'twitch' ? '/api/v1/auth/login' : `/api/v1/auth/${platform}/login`;
@@ -54,7 +54,7 @@ export default function LandingPage() {
           {/* Hero Section */}
           <h1 className="text-6xl font-bold text-white mb-6 drop-shadow-lg">All-Chat</h1>
           <p className="text-xl text-gray-300 mb-12 max-w-2xl mx-auto">
-            Aggregate chat from Twitch, YouTube, TikTok and more in one beautiful overlay for your stream
+            Aggregate chat from Twitch, YouTube, Kick, TikTok and more in one beautiful overlay for your stream
           </p>
 
           {/* Login Buttons */}
@@ -110,6 +110,22 @@ export default function LandingPage() {
               </span>
             </button>
 
+            <button
+              onClick={() => handleLogin('kick')}
+              className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-4 px-6 rounded-lg text-lg transition-colors flex items-center justify-center gap-2"
+            >
+              {/* Kick Logo SVG */}
+              <svg
+                className="w-6 h-6"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M21 0H3C1.343 0 0 1.343 0 3v18c0 1.657 1.343 3 3 3h18c1.657 0 3-1.343 3-3V3c0-1.657-1.343-3-3-3zm-9.5 17.5l-4-4 4-4v3h6v2h-6v3z" />
+              </svg>
+              Login with Kick
+            </button>
+
             {/* Platform Indicators */}
             <div className="flex items-center justify-center gap-4 text-gray-400 text-sm flex-wrap">
               <div className="flex items-center gap-2">
@@ -131,7 +147,12 @@ export default function LandingPage() {
                 TikTok
                 <span className="text-xs bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">Beta</span>
               </div>
-              <div className="text-xs text-gray-500">+ More coming</div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M21 0H3C1.343 0 0 1.343 0 3v18c0 1.657 1.343 3 3 3h18c1.657 0 3-1.343 3-3V3c0-1.657-1.343-3-3-3zm-9.5 17.5l-4-4 4-4v3h6v2h-6v3z" />
+                </svg>
+                Kick
+              </div>
             </div>
           </div>
 
@@ -141,7 +162,7 @@ export default function LandingPage() {
               <div className="text-4xl mb-4">🌐</div>
               <h3 className="text-xl font-semibold text-white mb-2">Multi-Platform</h3>
               <p className="text-gray-400">
-                Combine chat from Twitch, YouTube, and TikTok in one unified overlay
+                Combine chat from Twitch, YouTube, Kick, TikTok in one unified overlay
               </p>
             </div>
 
