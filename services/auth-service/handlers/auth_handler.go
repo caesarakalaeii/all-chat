@@ -123,8 +123,8 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 		return
 	}
 
-	// Get user info from Twitch
-	twitchUser, err := h.twitchOAuth.GetUserInfo(c.Request.Context(), token.AccessToken)
+	// Get user info from Twitch (use the specific Twitch method)
+	twitchUser, err := h.twitchOAuth.GetUserInfoTwitch(c.Request.Context(), token.AccessToken)
 	if err != nil {
 		h.logger.Error("Failed to get user info", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
@@ -219,8 +219,8 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	// Get user info from Google
-	youtubeUser, err := h.youtubeOAuth.GetUserInfo(c.Request.Context(), token.AccessToken)
+	// Get user info from Google (use the specific YouTube method)
+	youtubeUser, err := h.youtubeOAuth.GetUserInfoYouTube(c.Request.Context(), token.AccessToken)
 	if err != nil {
 		h.logger.Error("Failed to get user info", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
@@ -325,7 +325,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	}
 
 	// Get user info to find user ID
-	twitchUser, err := h.twitchOAuth.GetUserInfo(c.Request.Context(), token.AccessToken)
+	twitchUser, err := h.twitchOAuth.GetUserInfoTwitch(c.Request.Context(), token.AccessToken)
 	if err != nil {
 		h.logger.Error("Failed to get user info", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})

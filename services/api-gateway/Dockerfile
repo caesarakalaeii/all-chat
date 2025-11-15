@@ -27,6 +27,9 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/api-gateway .
 
+# Copy static files
+COPY static/ ./static/
+
 # Expose port
 EXPOSE 8080
 
