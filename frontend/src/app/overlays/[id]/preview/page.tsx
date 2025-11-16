@@ -28,6 +28,7 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { WebSocketClient } from '@/lib/api/websocket';
 import type { ChatMessage } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
+import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 
 export default function OverlayPreviewPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -55,7 +56,8 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     wsClient.connect(params.id, token);
 
     // Listen for messages
-    const unsubscribe = wsClient.onMessage((message) => {
+    const unsubscribe = wsClient.onMessage(async (incoming) => {
+      const message = await resolveTwitchBadgeIcons(incoming);
       setMessages((prev) => [...prev, message].slice(-maxMessages));
       setConnected(true);
     });
