@@ -17,8 +17,8 @@ type PusherConnectionEstablished struct {
 
 // PusherSubscribe is used to subscribe to a channel
 type PusherSubscribe struct {
-	Event string                  `json:"event"`
-	Data  PusherSubscribeData     `json:"data"`
+	Event string              `json:"event"`
+	Data  PusherSubscribeData `json:"data"`
 }
 
 type PusherSubscribeData struct {
@@ -27,8 +27,8 @@ type PusherSubscribeData struct {
 
 // PusherUnsubscribe is used to unsubscribe from a channel
 type PusherUnsubscribe struct {
-	Event string                    `json:"event"`
-	Data  PusherUnsubscribeData     `json:"data"`
+	Event string                `json:"event"`
+	Data  PusherUnsubscribeData `json:"data"`
 }
 
 type PusherUnsubscribeData struct {
@@ -38,26 +38,36 @@ type PusherUnsubscribeData struct {
 // KickChatMessage represents a Kick chat message from the WebSocket
 // Event: "App\\Events\\ChatMessageSentEvent"
 type KickChatMessage struct {
-	ID         string            `json:"id"`
-	ChatroomID int               `json:"chatroom_id"`
-	Content    string            `json:"content"`
-	Type       string            `json:"type"` // "message", "reply", etc.
-	CreatedAt  string            `json:"created_at"`
-	Sender     KickMessageSender `json:"sender"`
+	ID           string            `json:"id"`
+	ChatroomID   int               `json:"chatroom_id"`
+	Content      string            `json:"content"`
+	Type         string            `json:"type"` // "message", "reply", etc.
+	CreatedAt    string            `json:"created_at"`
+	Sender       KickMessageSender `json:"sender"`
+	MessageParts []KickMessagePart `json:"message_parts,omitempty"`
 }
 
 // KickMessageSender represents the sender of a Kick message
 type KickMessageSender struct {
-	ID       int                  `json:"id"`
-	Username string               `json:"username"`
-	Slug     string               `json:"slug"`
-	Identity KickSenderIdentity   `json:"identity"`
+	ID       int                `json:"id"`
+	Username string             `json:"username"`
+	Slug     string             `json:"slug"`
+	Identity KickSenderIdentity `json:"identity"`
 }
 
 // KickSenderIdentity represents badges and identity info
 type KickSenderIdentity struct {
-	Color  string              `json:"color"`
-	Badges []KickBadge         `json:"badges"`
+	Color  string      `json:"color"`
+	Badges []KickBadge `json:"badges"`
+}
+
+// KickMessagePart represents segmented content such as emotes
+type KickMessagePart struct {
+	Type  string `json:"type"`
+	Text  string `json:"text,omitempty"`
+	Name  string `json:"name,omitempty"`
+	Value string `json:"value,omitempty"`
+	URL   string `json:"url,omitempty"`
 }
 
 // KickBadge represents a user badge
@@ -68,12 +78,12 @@ type KickBadge struct {
 
 // KickChannelInfo represents channel information from Kick API
 type KickChannelInfo struct {
-	ID              int                `json:"id"`
-	UserID          int                `json:"user_id"`
-	Slug            string             `json:"slug"`
-	IsLive          bool               `json:"is_live"`
-	Playback        KickPlaybackInfo   `json:"playback_url"`
-	Chatroom        KickChatroomInfo   `json:"chatroom"`
+	ID       int              `json:"id"`
+	UserID   int              `json:"user_id"`
+	Slug     string           `json:"slug"`
+	IsLive   bool             `json:"is_live"`
+	Playback KickPlaybackInfo `json:"playback_url"`
+	Chatroom KickChatroomInfo `json:"chatroom"`
 }
 
 // KickPlaybackInfo contains stream playback information
@@ -83,12 +93,12 @@ type KickPlaybackInfo struct {
 
 // KickChatroomInfo contains chatroom information
 type KickChatroomInfo struct {
-	ID             int    `json:"id"`
-	ChatroomID     int    `json:"chatroom_id"`
-	ChannelID      int    `json:"channel_id"`
-	SlowMode       bool   `json:"slow_mode"`
-	SubscribersMode bool  `json:"subscribers_mode"`
-	FollowersMode  bool   `json:"followers_mode"`
+	ID              int  `json:"id"`
+	ChatroomID      int  `json:"chatroom_id"`
+	ChannelID       int  `json:"channel_id"`
+	SlowMode        bool `json:"slow_mode"`
+	SubscribersMode bool `json:"subscribers_mode"`
+	FollowersMode   bool `json:"followers_mode"`
 }
 
 // PusherErrorMessage represents an error from Pusher
