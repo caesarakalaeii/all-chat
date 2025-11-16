@@ -181,18 +181,21 @@ func (k *KickOAuth) GetUserInfoKick(ctx context.Context, accessToken string) (*m
 		return nil, fmt.Errorf("kick API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Kick API returns an array of users; for authenticated user it's a single-element array
-	var users []models.KickUserInfo
-	if err := json.Unmarshal(body, &users); err != nil {
+	// Kick API returns response wrapped in {"data": [...], "message": "OK"}
+	var response struct {
+		Data    []models.KickUserInfo `json:"data"`
+		Message string                `json:"message"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
 		// Log the actual response body for debugging
 		return nil, fmt.Errorf("failed to decode response (status %d, body preview: %.200s...): %w", resp.StatusCode, string(body), err)
 	}
 
-	if len(users) == 0 {
+	if len(response.Data) == 0 {
 		return nil, fmt.Errorf("kick API returned empty user array")
 	}
 
-	return &users[0], nil
+	return &response.Data[0], nil
 }
 
 // GetUserInfo fetches user information (generic interface implementation)
