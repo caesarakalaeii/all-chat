@@ -19,6 +19,7 @@ const (
 type OAuthState struct {
 	CSRFToken string      `json:"csrf_token"` // Random string for CSRF protection
 	OverlayID string      `json:"overlay_id,omitempty"` // Target overlay for source addition
+	UserID    string      `json:"user_id,omitempty"` // Current user ID for account linking
 	Action    OAuthAction `json:"action"` // Action to take after callback
 }
 
@@ -31,10 +32,11 @@ func NewLoginState(csrfToken string) *OAuthState {
 }
 
 // NewAddSourceState creates a new state for adding a source to an overlay
-func NewAddSourceState(csrfToken, overlayID string) *OAuthState {
+func NewAddSourceState(csrfToken, overlayID, userID string) *OAuthState {
 	return &OAuthState{
 		CSRFToken: csrfToken,
 		OverlayID: overlayID,
+		UserID:    userID,
 		Action:    ActionAddSource,
 	}
 }

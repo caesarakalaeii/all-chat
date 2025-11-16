@@ -102,6 +102,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
       });
 

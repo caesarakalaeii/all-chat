@@ -19,7 +19,7 @@ func TestNewLoginState(t *testing.T) {
 }
 
 func TestNewAddSourceState(t *testing.T) {
-	state := NewAddSourceState("test-csrf-token", "overlay-123")
+	state := NewAddSourceState("test-csrf-token", "overlay-123", "user-456")
 
 	if state.CSRFToken != "test-csrf-token" {
 		t.Errorf("Expected CSRFToken to be 'test-csrf-token', got '%s'", state.CSRFToken)
@@ -29,6 +29,9 @@ func TestNewAddSourceState(t *testing.T) {
 	}
 	if state.OverlayID != "overlay-123" {
 		t.Errorf("Expected OverlayID to be 'overlay-123', got '%s'", state.OverlayID)
+	}
+	if state.UserID != "user-456" {
+		t.Errorf("Expected UserID to be 'user-456', got '%s'", state.UserID)
 	}
 }
 
@@ -51,6 +54,7 @@ func TestOAuthState_Encode(t *testing.T) {
 			state: &OAuthState{
 				CSRFToken: "test-token",
 				OverlayID: "overlay-123",
+				UserID:    "user-456",
 				Action:    ActionAddSource,
 			},
 			wantErr: false,
@@ -89,10 +93,11 @@ func TestDecodeOAuthState(t *testing.T) {
 		},
 		{
 			name:    "valid add source state",
-			encoded: `{"csrf_token":"test-token","overlay_id":"overlay-123","action":"add_source"}`,
+			encoded: `{"csrf_token":"test-token","overlay_id":"overlay-123","user_id":"user-456","action":"add_source"}`,
 			want: &OAuthState{
 				CSRFToken: "test-token",
 				OverlayID: "overlay-123",
+				UserID:    "user-456",
 				Action:    ActionAddSource,
 			},
 			wantErr: false,
@@ -131,6 +136,7 @@ func TestOAuthState_EncodeAndDecode(t *testing.T) {
 	original := &OAuthState{
 		CSRFToken: "test-csrf-token",
 		OverlayID: "overlay-123",
+		UserID:    "user-456",
 		Action:    ActionAddSource,
 	}
 
@@ -149,6 +155,9 @@ func TestOAuthState_EncodeAndDecode(t *testing.T) {
 	}
 	if decoded.OverlayID != original.OverlayID {
 		t.Errorf("OverlayID = %v, want %v", decoded.OverlayID, original.OverlayID)
+	}
+	if decoded.UserID != original.UserID {
+		t.Errorf("UserID = %v, want %v", decoded.UserID, original.UserID)
 	}
 	if decoded.Action != original.Action {
 		t.Errorf("Action = %v, want %v", decoded.Action, original.Action)
@@ -228,6 +237,7 @@ func TestOAuthState_Validate(t *testing.T) {
 			state: &OAuthState{
 				CSRFToken: "test-token",
 				OverlayID: "overlay-123",
+				UserID:    "user-456",
 				Action:    ActionAddSource,
 			},
 			wantErr: false,
