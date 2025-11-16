@@ -1,7 +1,10 @@
 package normalizer
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
@@ -21,44 +24,67 @@ func (n *KickNormalizer) Normalize(raw *models.RawChatMessage, overlayID string)
 		return nil, fmt.Errorf("unsupported platform: %s", raw.Platform)
 	}
 
+	var kickMsg *kickChatMessage
+	if len(raw.RawMessage) > 0 {
+		if event, err := parseKickMessage(raw.RawMessage); err == nil {
+			kickMsg = event
+		}
+	}
+
 	if err := validateChannelID(raw.ChannelID); err != nil {
 		return nil, fmt.Errorf("invalid channel ID: %w", err)
 	}
 
-	// For Kick, the raw.Text might contain JSON data
-	// Try to parse it as a Kick message structure
-	// The Kick listener should have stored the message in the Text field as JSON
-
-	// Parse timestamp
-	timestamp := raw.Timestamp
-	if timestamp.IsZero() {
-		timestamp = time.Now()
+	timestamp := n.resolveTimestamp(raw.Timestamp, kickMsg)
+	text := raw.Text
+	if text == "" && kickMsg != nil {
+		text = kickMsg.Content
 	}
 
-	// Extract badges from tags
-	badges := n.extractBadges(raw)
+	messageID := raw.MessageID
+	if messageID == "" && kickMsg != nil {
+		messageID = kickMsg.ID
+	}
+	if messageID == "" {
+		messageID = fmt.Sprintf("kick-%d", timestamp.UnixNano())
+	}
 
-	// Extract metadata
-	metadata := n.extractMetadata(raw)
+	userID := raw.UserID
+	if userID == "" && kickMsg != nil && kickMsg.Sender.ID != 0 {
+		userID = strconv.Itoa(kickMsg.Sender.ID)
+	}
 
-	// Create unified message
+	username := raw.Username
+	if username == "" && kickMsg != nil {
+		username = firstNonEmpty(kickMsg.Sender.Username, kickMsg.Sender.Slug)
+	}
+
+	color := raw.Tags["color"]
+	if color == "" && kickMsg != nil {
+		color = kickMsg.Sender.Identity.Color
+	}
+
+	badges := n.extractBadges(raw, kickMsg)
+	metadata := n.extractMetadata(raw, kickMsg)
+	emotes := extractKickEmotes(kickMsg)
+
 	unified := &models.UnifiedChatMessage{
-		ID:          raw.MessageID,
+		ID:          messageID,
 		OverlayID:   overlayID,
 		Platform:    "kick",
 		ChannelID:   raw.ChannelID,
-		ChannelName: raw.ChannelID, // Use channel ID as name
+		ChannelName: firstNonEmpty(raw.ChannelName, raw.ChannelID),
 		User: models.UserInfo{
-			ID:          raw.UserID,
-			Username:    raw.Username,
-			DisplayName: raw.Username,
-			AvatarURL:   "", // Kick doesn't provide avatar in raw messages
+			ID:          userID,
+			Username:    username,
+			DisplayName: username,
+			AvatarURL:   "",
 			Badges:      badges,
-			Color:       raw.Tags["color"],
+			Color:       color,
 		},
 		Message: models.MessageInfo{
-			Text:   raw.Text,
-			Emotes: []models.Emote{}, // Emotes will be enriched by emote enricher
+			Text:   text,
+			Emotes: emotes,
 		},
 		Timestamp: timestamp,
 		Metadata:  metadata,
@@ -67,19 +93,46 @@ func (n *KickNormalizer) Normalize(raw *models.RawChatMessage, overlayID string)
 	return unified, nil
 }
 
-// extractBadges extracts badges from tags
-func (n *KickNormalizer) extractBadges(raw *models.RawChatMessage) []models.Badge {
+func (n *KickNormalizer) resolveTimestamp(ts time.Time, kickMsg *kickChatMessage) time.Time {
+	if !ts.IsZero() {
+		return ts
+	}
+
+	if kickMsg != nil && kickMsg.CreatedAt != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, kickMsg.CreatedAt); err == nil {
+			return parsed
+		}
+	}
+
+	return time.Now()
+}
+
+func (n *KickNormalizer) extractBadges(raw *models.RawChatMessage, kickMsg *kickChatMessage) []models.Badge {
 	badges := make([]models.Badge, 0)
 
-	// Kick badges might be in tags as comma-separated values
-	if badgesStr, ok := raw.Tags["badges"]; ok && badgesStr != "" {
-		// Expected format: "subscriber,moderator,vip"
-		badgeNames := splitAndTrim(badgesStr, ",")
-		for _, name := range badgeNames {
+	if raw.Tags != nil {
+		if badgeList := raw.Tags["badges"]; badgeList != "" {
+			for _, name := range strings.Split(badgeList, ",") {
+				name = strings.TrimSpace(name)
+				if name == "" {
+					continue
+				}
+				badges = append(badges, models.Badge{
+					Name:    name,
+					Version: "1",
+				})
+			}
+		}
+	}
+
+	if kickMsg != nil {
+		for _, badge := range kickMsg.Sender.Identity.Badges {
+			if badge.Type == "" {
+				continue
+			}
 			badges = append(badges, models.Badge{
-				Name:    name,
-				Version: "1",
-				IconURL: "", // Kick badge icons would need to be fetched separately
+				Name:    badge.Type,
+				Version: badge.Text,
 			})
 		}
 	}
@@ -87,96 +140,151 @@ func (n *KickNormalizer) extractBadges(raw *models.RawChatMessage) []models.Badg
 	return badges
 }
 
-// extractMetadata extracts metadata from tags
-func (n *KickNormalizer) extractMetadata(raw *models.RawChatMessage) map[string]interface{} {
+func (n *KickNormalizer) extractMetadata(raw *models.RawChatMessage, kickMsg *kickChatMessage) map[string]interface{} {
 	metadata := make(map[string]interface{})
 
-	// Check for subscriber status
-	if sub, ok := raw.Tags["subscriber"]; ok && sub == "1" {
-		metadata["is_subscriber"] = true
-	} else {
-		metadata["is_subscriber"] = false
+	if raw.Tags != nil {
+		if msgType, ok := raw.Tags["message_type"]; ok && msgType != "" {
+			metadata["message_type"] = msgType
+		}
+
+		if chatroomID, ok := raw.Tags["chatroom_id"]; ok && chatroomID != "" {
+			if numeric, err := strconv.Atoi(chatroomID); err == nil {
+				metadata["chatroom_id"] = numeric
+			} else {
+				metadata["chatroom_id"] = chatroomID
+			}
+		}
+
+		if slug, ok := raw.Tags["sender_slug"]; ok && slug != "" {
+			metadata["sender_slug"] = slug
+		}
 	}
 
-	// Check for moderator status
-	if mod, ok := raw.Tags["moderator"]; ok && mod == "1" {
-		metadata["is_moderator"] = true
-	} else {
-		metadata["is_moderator"] = false
+	if kickMsg != nil {
+		if metadata["message_type"] == nil && kickMsg.Type != "" {
+			metadata["message_type"] = kickMsg.Type
+		}
+
+		if metadata["chatroom_id"] == nil && kickMsg.ChatroomID != 0 {
+			metadata["chatroom_id"] = kickMsg.ChatroomID
+		}
+
+		if metadata["sender_slug"] == nil && kickMsg.Sender.Slug != "" {
+			metadata["sender_slug"] = kickMsg.Sender.Slug
+		}
 	}
 
-	// Check for VIP status
-	if vip, ok := raw.Tags["vip"]; ok && vip == "1" {
-		metadata["is_vip"] = true
+	// Derived roles based on tags/badges
+	badgeSet := make(map[string]struct{})
+	if raw.Tags != nil {
+		for _, badge := range strings.Split(raw.Tags["badges"], ",") {
+			if badge = strings.TrimSpace(badge); badge != "" {
+				badgeSet[strings.ToLower(badge)] = struct{}{}
+			}
+		}
+	}
+	if kickMsg != nil {
+		for _, badge := range kickMsg.Sender.Identity.Badges {
+			if badge.Type != "" {
+				badgeSet[strings.ToLower(badge.Type)] = struct{}{}
+			}
+		}
 	}
 
-	// Check for founder status
-	if founder, ok := raw.Tags["founder"]; ok && founder == "1" {
-		metadata["is_founder"] = true
-	}
+	_, isSub := badgeSet["subscriber"]
+	_, isMod := badgeSet["moderator"]
+	_, isVIP := badgeSet["vip"]
+	_, isFounder := badgeSet["founder"]
 
-	// Message type
-	if msgType, ok := raw.Tags["message_type"]; ok {
-		metadata["message_type"] = msgType
-	}
-
-	// Chatroom ID
-	if chatroomID, ok := raw.Tags["chatroom_id"]; ok {
-		metadata["chatroom_id"] = chatroomID
-	}
+	metadata["is_subscriber"] = isSub
+	metadata["is_moderator"] = isMod
+	metadata["is_vip"] = isVIP
+	metadata["is_founder"] = isFounder
 
 	return metadata
 }
 
-// splitAndTrim splits a string by delimiter and trims whitespace
-func splitAndTrim(s, delimiter string) []string {
-	if s == "" {
-		return []string{}
+func parseKickMessage(raw json.RawMessage) (*kickChatMessage, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("empty kick payload")
 	}
 
-	parts := make([]string, 0)
-	for _, part := range splitString(s, delimiter) {
-		trimmed := trimSpace(part)
-		if trimmed != "" {
-			parts = append(parts, trimmed)
-		}
+	var msg kickChatMessage
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return nil, err
 	}
-	return parts
+
+	return &msg, nil
 }
 
-// splitString splits a string by delimiter
-func splitString(s, delimiter string) []string {
-	result := make([]string, 0)
-	current := ""
+func extractKickEmotes(msg *kickChatMessage) []models.Emote {
+	if msg == nil || len(msg.MessageParts) == 0 {
+		return []models.Emote{}
+	}
 
-	for _, char := range s {
-		if string(char) == delimiter {
-			result = append(result, current)
-			current = ""
-		} else {
-			current += string(char)
+	emotes := make([]models.Emote, 0)
+	for _, part := range msg.MessageParts {
+		if part.Type == "" {
+			continue
+		}
+
+		switch strings.ToLower(part.Type) {
+		case "emote", "emoticon":
+			code := firstNonEmpty(part.Text, part.Name, part.Value)
+			if code == "" {
+				continue
+			}
+			emotes = append(emotes, models.Emote{
+				Code:     code,
+				Provider: "kick",
+			})
 		}
 	}
 
-	if current != "" {
-		result = append(result, current)
-	}
-
-	return result
+	return emotes
 }
 
-// trimSpace removes leading and trailing whitespace
-func trimSpace(s string) string {
-	start := 0
-	end := len(s)
-
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
-		start++
+func firstNonEmpty(values ...string) string {
+	for _, val := range values {
+		if val != "" {
+			return val
+		}
 	}
+	return ""
+}
 
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
-		end--
-	}
+type kickChatMessage struct {
+	ID           string            `json:"id"`
+	ChatroomID   int               `json:"chatroom_id"`
+	Content      string            `json:"content"`
+	Type         string            `json:"type"`
+	CreatedAt    string            `json:"created_at"`
+	Sender       kickSender        `json:"sender"`
+	MessageParts []kickMessagePart `json:"message_parts"`
+}
 
-	return s[start:end]
+type kickSender struct {
+	ID       int          `json:"id"`
+	Username string       `json:"username"`
+	Slug     string       `json:"slug"`
+	Identity kickIdentity `json:"identity"`
+}
+
+type kickIdentity struct {
+	Color  string      `json:"color"`
+	Badges []kickBadge `json:"badges"`
+}
+
+type kickBadge struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type kickMessagePart struct {
+	Type  string `json:"type"`
+	Text  string `json:"text"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	URL   string `json:"url"`
 }

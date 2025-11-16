@@ -4,17 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/kick-listener/metrics"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
 
 const (
-	// Pusher WebSocket URL for Kick
-	pusherURL = "wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false"
-
 	// Pusher event types
 	pusherConnectionEstablished = "pusher:connection_established"
 	pusherPing                  = "pusher:ping"
@@ -27,12 +26,78 @@ const (
 	// Kick chat event
 	kickChatMessageEvent = "App\\Events\\ChatMessageSentEvent"
 
+	// Kick channel format (chatrooms.<chatroom_id>.v2)
+	kickChannelFormat = "chatrooms.%d.v2"
+
 	// Connection settings
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
 	pingPeriod     = 30 * time.Second
 	maxMessageSize = 512 * 1024 // 512 KB
+
+	defaultProtocolVersion = 7
+	defaultClientName      = "js"
+	defaultClientVersion   = "8.4.0-rc2"
 )
+
+// Config controls how the Pusher client connects
+type Config struct {
+	AppKey        string
+	Clusters      []string
+	Protocol      int
+	ClientName    string
+	ClientVersion string
+	FlashEnabled  bool
+}
+
+func (cfg Config) withDefaults() Config {
+	if cfg.Protocol == 0 {
+		cfg.Protocol = defaultProtocolVersion
+	}
+	if cfg.ClientName == "" {
+		cfg.ClientName = defaultClientName
+	}
+	if cfg.ClientVersion == "" {
+		cfg.ClientVersion = defaultClientVersion
+	}
+	cfg.Clusters = sanitizeClusters(cfg.Clusters)
+	if len(cfg.Clusters) == 0 {
+		cfg.Clusters = []string{"us2"}
+	}
+	return cfg
+}
+
+func sanitizeClusters(in []string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(in))
+	for _, cluster := range in {
+		cluster = strings.TrimSpace(cluster)
+		if cluster == "" {
+			continue
+		}
+		if _, ok := seen[cluster]; ok {
+			continue
+		}
+		seen[cluster] = struct{}{}
+		result = append(result, cluster)
+	}
+	return result
+}
+
+func (cfg Config) urlForCluster(cluster string) string {
+	flashParam := "false"
+	if cfg.FlashEnabled {
+		flashParam = "true"
+	}
+	return fmt.Sprintf("wss://ws-%s.pusher.com/app/%s?protocol=%d&client=%s&version=%s&flash=%s",
+		cluster,
+		cfg.AppKey,
+		cfg.Protocol,
+		cfg.ClientName,
+		cfg.ClientVersion,
+		flashParam,
+	)
+}
 
 // MessageHandler is called when a chat message is received
 type MessageHandler func(channel string, message *KickChatMessage)
@@ -43,33 +108,40 @@ type Client struct {
 	connMu         sync.RWMutex
 	logger         *zap.Logger
 	messageHandler MessageHandler
+	config         Config
+	clusterOrder   []string
+	activeCluster  string
 
 	// Channel subscriptions
-	subscribedChannels map[string]bool
+	subscribedChannels map[string]int
 	channelsMu         sync.RWMutex
 
 	// Connection state
 	socketID       string
 	connected      bool
+	handshakeReady bool
 	reconnecting   bool
 
 	// Control channels
-	send           chan []byte
-	done           chan struct{}
-	reconnectChan  chan struct{}
+	send          chan []byte
+	done          chan struct{}
+	reconnectChan chan struct{}
 
-	ctx            context.Context
-	cancel         context.CancelFunc
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewClient creates a new Pusher WebSocket client
-func NewClient(messageHandler MessageHandler, logger *zap.Logger) *Client {
+func NewClient(cfg Config, messageHandler MessageHandler, logger *zap.Logger) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
+	cfg = cfg.withDefaults()
 
 	return &Client{
 		logger:             logger,
 		messageHandler:     messageHandler,
-		subscribedChannels: make(map[string]bool),
+		config:             cfg,
+		clusterOrder:       append([]string{}, cfg.Clusters...),
+		subscribedChannels: make(map[string]int),
 		send:               make(chan []byte, 256),
 		done:               make(chan struct{}),
 		reconnectChan:      make(chan struct{}, 1),
@@ -80,13 +152,53 @@ func NewClient(messageHandler MessageHandler, logger *zap.Logger) *Client {
 
 // Connect establishes connection to Pusher WebSocket
 func (c *Client) Connect() error {
-	c.logger.Info("Connecting to Kick Pusher WebSocket", zap.String("url", pusherURL))
+	if c.config.AppKey == "" {
+		return fmt.Errorf("pusher app key is required")
+	}
 
+	attempts := c.clusterAttempts()
+	var lastErr error
+
+	for _, cluster := range attempts {
+		url := c.config.urlForCluster(cluster)
+		c.logger.Info("Connecting to Kick Pusher WebSocket",
+			zap.String("cluster", cluster),
+			zap.String("url", url),
+		)
+
+		if err := c.connectToCluster(url); err != nil {
+			lastErr = err
+			c.logger.Warn("Failed to connect to Kick Pusher WebSocket",
+				zap.String("cluster", cluster),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		c.activeCluster = cluster
+		c.logger.Info("Connected to Kick Pusher WebSocket",
+			zap.String("cluster", cluster),
+		)
+		return nil
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no Pusher clusters available")
+	}
+
+	return fmt.Errorf("failed to connect to any Pusher cluster: %w", lastErr)
+}
+
+func (c *Client) connectToCluster(url string) error {
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 	}
 
-	conn, _, err := dialer.Dial(pusherURL, nil)
+	c.connMu.Lock()
+	c.handshakeReady = false
+	c.connMu.Unlock()
+
+	conn, _, err := dialer.Dial(url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Pusher: %w", err)
 	}
@@ -109,8 +221,23 @@ func (c *Client) Connect() error {
 	go c.readPump()
 	go c.writePump()
 
-	c.logger.Info("Connected to Kick Pusher WebSocket")
 	return nil
+}
+
+func (c *Client) clusterAttempts() []string {
+	order := append([]string{}, c.clusterOrder...)
+	if c.activeCluster == "" || len(order) == 0 {
+		return order
+	}
+
+	attempts := []string{c.activeCluster}
+	for _, cluster := range order {
+		if cluster == c.activeCluster {
+			continue
+		}
+		attempts = append(attempts, cluster)
+	}
+	return attempts
 }
 
 // Disconnect closes the WebSocket connection
@@ -138,23 +265,80 @@ func (c *Client) Disconnect() error {
 	}
 
 	c.connected = false
+	c.handshakeReady = false
+	metrics.SetSocketConnected(false)
 	c.logger.Info("Disconnected from Kick Pusher WebSocket")
 	return nil
 }
 
 // Subscribe subscribes to a Kick chatroom channel
 func (c *Client) Subscribe(chatroomID int) error {
-	channel := fmt.Sprintf("chatrooms.%d", chatroomID)
+	channel := c.formatChannelName(chatroomID)
 
 	c.channelsMu.Lock()
-	if c.subscribedChannels[channel] {
+	if _, exists := c.subscribedChannels[channel]; exists {
 		c.channelsMu.Unlock()
 		c.logger.Debug("Already subscribed to channel", zap.String("channel", channel))
 		return nil
 	}
-	c.subscribedChannels[channel] = true
+	c.subscribedChannels[channel] = chatroomID
 	c.channelsMu.Unlock()
 
+	if !c.isReady() {
+		c.logger.Debug("Connection not ready yet, deferring subscription",
+			zap.String("channel", channel),
+			zap.Int("chatroom_id", chatroomID),
+		)
+		return nil
+	}
+
+	return c.sendSubscribe(channel, chatroomID, false)
+}
+
+// Unsubscribe unsubscribes from a Kick chatroom channel
+func (c *Client) Unsubscribe(chatroomID int) error {
+	channel := c.formatChannelName(chatroomID)
+
+	c.channelsMu.Lock()
+	if _, exists := c.subscribedChannels[channel]; !exists {
+		c.channelsMu.Unlock()
+		c.logger.Debug("Not subscribed to channel", zap.String("channel", channel))
+		return nil
+	}
+	delete(c.subscribedChannels, channel)
+	c.channelsMu.Unlock()
+
+	if !c.isReady() {
+		c.logger.Debug("Connection not ready yet, unsubscribe deferred",
+			zap.String("channel", channel),
+			zap.Int("chatroom_id", chatroomID),
+		)
+		return nil
+	}
+
+	return c.sendUnsubscribe(channel, chatroomID)
+}
+
+// IsConnected returns whether the client is connected
+func (c *Client) IsConnected() bool {
+	c.connMu.RLock()
+	defer c.connMu.RUnlock()
+	return c.connected
+}
+
+// formatChannelName returns a Kick chat channel string
+func (c *Client) formatChannelName(chatroomID int) string {
+	return fmt.Sprintf(kickChannelFormat, chatroomID)
+}
+
+// isReady returns true when the connection is established and handshake completed
+func (c *Client) isReady() bool {
+	c.connMu.RLock()
+	defer c.connMu.RUnlock()
+	return c.connected && c.handshakeReady
+}
+
+func (c *Client) sendSubscribe(channel string, chatroomID int, resubscribe bool) error {
 	subscribeMsg := PusherSubscribe{
 		Event: pusherSubscribe,
 		Data: PusherSubscribeData{
@@ -167,7 +351,12 @@ func (c *Client) Subscribe(chatroomID int) error {
 		return fmt.Errorf("failed to marshal subscribe message: %w", err)
 	}
 
-	c.logger.Info("Subscribing to Kick channel",
+	action := "Subscribing"
+	if resubscribe {
+		action = "Re-subscribing"
+	}
+
+	c.logger.Info(fmt.Sprintf("%s to Kick channel", action),
 		zap.String("channel", channel),
 		zap.Int("chatroom_id", chatroomID),
 	)
@@ -180,19 +369,7 @@ func (c *Client) Subscribe(chatroomID int) error {
 	}
 }
 
-// Unsubscribe unsubscribes from a Kick chatroom channel
-func (c *Client) Unsubscribe(chatroomID int) error {
-	channel := fmt.Sprintf("chatrooms.%d", chatroomID)
-
-	c.channelsMu.Lock()
-	if !c.subscribedChannels[channel] {
-		c.channelsMu.Unlock()
-		c.logger.Debug("Not subscribed to channel", zap.String("channel", channel))
-		return nil
-	}
-	delete(c.subscribedChannels, channel)
-	c.channelsMu.Unlock()
-
+func (c *Client) sendUnsubscribe(channel string, chatroomID int) error {
 	unsubscribeMsg := PusherUnsubscribe{
 		Event: pusherUnsubscribe,
 		Data: PusherUnsubscribeData{
@@ -218,18 +395,81 @@ func (c *Client) Unsubscribe(chatroomID int) error {
 	}
 }
 
-// IsConnected returns whether the client is connected
-func (c *Client) IsConnected() bool {
-	c.connMu.RLock()
-	defer c.connMu.RUnlock()
-	return c.connected
+func (c *Client) resubscribeAll() {
+	if !c.isReady() {
+		return
+	}
+
+	c.channelsMu.RLock()
+	defer c.channelsMu.RUnlock()
+
+	for channel, chatroomID := range c.subscribedChannels {
+		if err := c.sendSubscribe(channel, chatroomID, true); err != nil {
+			c.logger.Error("Failed to re-subscribe to channel",
+				zap.String("channel", channel),
+				zap.Int("chatroom_id", chatroomID),
+				zap.Error(err),
+			)
+		}
+	}
+}
+
+func (c *Client) sendControlEvent(event string) error {
+	controlMsg := map[string]string{"event": event}
+	data, err := json.Marshal(controlMsg)
+	if err != nil {
+		return err
+	}
+
+	select {
+	case c.send <- data:
+		return nil
+	case <-c.ctx.Done():
+		return fmt.Errorf("client is shutting down")
+	}
+}
+
+func (c *Client) handleConnectionEstablished(data json.RawMessage) {
+	var connData PusherConnectionEstablished
+	if err := json.Unmarshal(data, &connData); err != nil {
+		c.logger.Error("Failed to unmarshal connection data", zap.Error(err))
+		return
+	}
+
+	c.connMu.Lock()
+	c.socketID = connData.SocketID
+	c.handshakeReady = true
+	c.connMu.Unlock()
+
+	c.logger.Info("Pusher connection established",
+		zap.String("socket_id", connData.SocketID),
+		zap.Int("activity_timeout", connData.ActivityTimeout),
+	)
+
+	metrics.SetSocketConnected(true)
+	c.resubscribeAll()
+}
+
+func (c *Client) handlePusherError(data json.RawMessage) {
+	var errMsg PusherErrorMessage
+	if err := json.Unmarshal(data, &errMsg); err != nil {
+		c.logger.Error("Failed to unmarshal Pusher error", zap.Error(err))
+		return
+	}
+
+	c.logger.Error("Pusher error received",
+		zap.Int("code", errMsg.Code),
+		zap.String("message", errMsg.Message),
+	)
+
+	c.forceReconnect(fmt.Sprintf("pusher error %d", errMsg.Code))
 }
 
 // readPump reads messages from the WebSocket connection
 func (c *Client) readPump() {
 	defer func() {
 		c.logger.Info("Read pump stopped")
-		c.triggerReconnect()
+		c.triggerReconnect("read loop stopped")
 	}()
 
 	for {
@@ -335,30 +575,22 @@ func (c *Client) handleMessage(data []byte) {
 
 	switch msg.Event {
 	case pusherConnectionEstablished:
-		var connData PusherConnectionEstablished
-		if err := json.Unmarshal(msg.Data, &connData); err != nil {
-			c.logger.Error("Failed to unmarshal connection data", zap.Error(err))
-			return
-		}
-		c.socketID = connData.SocketID
-		c.logger.Info("Pusher connection established",
-			zap.String("socket_id", connData.SocketID),
-			zap.Int("activity_timeout", connData.ActivityTimeout),
-		)
+		c.handleConnectionEstablished(msg.Data)
 
 	case pusherPong:
 		c.logger.Debug("Received pong from Pusher")
+
+	case pusherPing:
+		c.logger.Debug("Received ping from Pusher")
+		if err := c.sendControlEvent(pusherPong); err != nil {
+			c.logger.Error("Failed to send pong response", zap.Error(err))
+		}
 
 	case pusherSubscriptionSucceeded:
 		c.logger.Info("Successfully subscribed to channel", zap.String("channel", msg.Channel))
 
 	case pusherError:
-		var errMsg PusherErrorMessage
-		json.Unmarshal(data, &errMsg)
-		c.logger.Error("Pusher error",
-			zap.Int("code", errMsg.Code),
-			zap.String("message", errMsg.Message),
-		)
+		c.handlePusherError(msg.Data)
 
 	case kickChatMessageEvent:
 		c.handleChatMessage(msg.Channel, msg.Data)
@@ -389,10 +621,32 @@ func (c *Client) handleChatMessage(channel string, data json.RawMessage) {
 }
 
 // triggerReconnect triggers a reconnection attempt
-func (c *Client) triggerReconnect() {
+func (c *Client) forceReconnect(reason string) {
+	c.connMu.Lock()
+	if c.conn != nil {
+		c.conn.Close()
+		c.conn = nil
+	}
+	c.connMu.Unlock()
+
+	c.triggerReconnect(reason)
+}
+
+// triggerReconnect triggers a reconnection attempt
+func (c *Client) triggerReconnect(reason string) {
+	if c.ctx.Err() != nil {
+		// Service shutting down; skip reconnection.
+		return
+	}
+
 	c.connMu.Lock()
 	c.connected = false
+	c.handshakeReady = false
 	c.connMu.Unlock()
+
+	c.logger.Warn("Scheduling Kick Pusher reconnect", zap.String("reason", reason))
+	metrics.SetSocketConnected(false)
+	metrics.IncReconnect(reason)
 
 	select {
 	case c.reconnectChan <- struct{}{}:

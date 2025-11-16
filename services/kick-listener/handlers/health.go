@@ -11,9 +11,9 @@ import (
 
 // HealthHandler handles health check endpoints
 type HealthHandler struct {
-	wsClient      *websocket.Client
-	publisher     *publisher.StreamPublisher
-	channelMgr    *channels.Manager
+	wsClient   *websocket.Client
+	publisher  *publisher.StreamPublisher
+	channelMgr *channels.Manager
 }
 
 // NewHealthHandler creates a new health handler
@@ -32,7 +32,7 @@ func NewHealthHandler(
 // LivenessProbe checks if the service is alive
 func (h *HealthHandler) LivenessProbe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"status": "ok",
+		"status":  "ok",
 		"service": "kick-listener",
 	})
 }
@@ -69,10 +69,10 @@ func (h *HealthHandler) Status(c *gin.Context) {
 	channels := make([]map[string]interface{}, 0)
 	for slug, ch := range subscriptions {
 		channels = append(channels, map[string]interface{}{
-			"channel_slug": slug,
-			"chatroom_id":  ch.ChatroomID,
-			"overlay_id":   ch.OverlayID,
-			"is_active":    ch.IsActive,
+			"channel_slug":  slug,
+			"chatroom_id":   ch.ChatroomID,
+			"overlay_ids":   ch.OverlayIDs,
+			"overlay_count": len(ch.OverlayIDs),
 		})
 	}
 
