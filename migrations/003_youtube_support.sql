@@ -56,7 +56,7 @@ CREATE INDEX idx_supported_platforms_is_enabled ON supported_platforms(is_enable
 INSERT INTO supported_platforms (platform, display_name, is_enabled, requires_oauth, config_schema)
 VALUES
     ('twitch', 'Twitch', true, true, '{
-        "oauth_scopes": ["chat:read", "user:read:email"],
+        "oauth_scopes": ["chat:read"],
         "irc_server": "irc.chat.twitch.tv:6667",
         "rate_limits": {
             "join": "20/10s",

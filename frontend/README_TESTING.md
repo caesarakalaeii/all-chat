@@ -174,7 +174,6 @@ test.beforeEach(async ({ page, context }) => {
           id: 'test-user-id',
           username: 'testuser',
           display_name: 'Test User',
-          email: 'test@example.com',
         },
         token: 'mock-jwt-token',
       },

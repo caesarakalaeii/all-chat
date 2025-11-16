@@ -45,7 +45,6 @@ func JWTAuth(secret string) gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("twitch_id", claims.TwitchID)
-		c.Set("email", claims.Email)
 		c.Set("roles", claims.Roles)
 
 		c.Next()

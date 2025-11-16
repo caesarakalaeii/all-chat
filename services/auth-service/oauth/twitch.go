@@ -25,7 +25,7 @@ func NewTwitchOAuth(clientID, clientSecret, redirectURL string) *TwitchOAuth {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
-		Scopes:       []string{"user:read:email"},
+		Scopes:       []string{},
 		Endpoint:     twitch.Endpoint,
 	}
 
@@ -101,7 +101,6 @@ func (t *TwitchOAuth) GetUserInfo(ctx context.Context, accessToken string) (Plat
 		ID:              twitchInfo.ID,
 		Login:           twitchInfo.Login,
 		DisplayName:     twitchInfo.DisplayName,
-		Email:           twitchInfo.Email,
 		ProfileImageURL: twitchInfo.ProfileImageURL,
 	}, nil
 }

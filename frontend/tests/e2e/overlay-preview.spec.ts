@@ -24,7 +24,6 @@ test.describe('Overlay Preview Page', () => {
             id: 'test-user-id',
             username: 'testuser',
             display_name: 'Test User',
-            email: 'test@example.com',
           },
           token: 'mock-jwt-token',
         },

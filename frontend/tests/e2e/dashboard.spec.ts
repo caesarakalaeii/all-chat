@@ -34,7 +34,6 @@ test.describe('Dashboard Page', () => {
               id: 'test-user-id',
               username: 'testuser',
               display_name: 'Test User',
-              email: 'test@example.com',
               profile_image_url: 'https://static-cdn.jtvnw.net/user-default-pictures-uv/test.png',
             },
             token: 'mock-jwt-token',

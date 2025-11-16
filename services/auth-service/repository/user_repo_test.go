@@ -70,8 +70,7 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			username VARCHAR(50) UNIQUE NOT NULL,
 			display_name VARCHAR(100) NOT NULL,
 			profile_image_url TEXT,
-			email VARCHAR(255),
-			access_token TEXT NOT NULL,
+		access_token TEXT NOT NULL,
 			refresh_token TEXT NOT NULL,
 			token_expires_at TIMESTAMP NOT NULL,
 			created_at TIMESTAMP DEFAULT NOW(),
@@ -132,7 +131,6 @@ func TestUserRepository_Create(t *testing.T) {
 				Username:        "testuser",
 				DisplayName:     "TestUser",
 				ProfileImageURL: "https://example.com/avatar.png",
-				Email:           "test@example.com",
 				AccessToken:     "encrypted_access_token",
 				RefreshToken:    "encrypted_refresh_token",
 				TokenExpiresAt:  time.Now().Add(24 * time.Hour),
@@ -206,7 +204,6 @@ func TestUserRepository_GetByID(t *testing.T) {
 		Username:        "testuser",
 		DisplayName:     "TestUser",
 		ProfileImageURL: "https://example.com/avatar.png",
-		Email:           "test@example.com",
 		AccessToken:     "encrypted_access_token",
 		RefreshToken:    "encrypted_refresh_token",
 		TokenExpiresAt:  time.Now().Add(24 * time.Hour),
@@ -283,7 +280,6 @@ func TestUserRepository_GetByTwitchID(t *testing.T) {
 		Username:        "testuser",
 		DisplayName:     "TestUser",
 		ProfileImageURL: "https://example.com/avatar.png",
-		Email:           "test@example.com",
 		AccessToken:     "encrypted_access_token",
 		RefreshToken:    "encrypted_refresh_token",
 		TokenExpiresAt:  time.Now().Add(24 * time.Hour),
@@ -348,7 +344,6 @@ func TestUserRepository_Update(t *testing.T) {
 		Username:        "testuser",
 		DisplayName:     "TestUser",
 		ProfileImageURL: "https://example.com/avatar.png",
-		Email:           "test@example.com",
 		AccessToken:     "encrypted_access_token",
 		RefreshToken:    "encrypted_refresh_token",
 		TokenExpiresAt:  time.Now().Add(24 * time.Hour),
@@ -369,7 +364,6 @@ func TestUserRepository_Update(t *testing.T) {
 			setup: func() *models.User {
 				user := *testUser
 				user.DisplayName = "UpdatedDisplayName"
-				user.Email = "updated@example.com"
 				user.ProfileImageURL = "https://example.com/new-avatar.png"
 				return &user
 			},
@@ -403,9 +397,6 @@ func TestUserRepository_Update(t *testing.T) {
 				}
 				if updated.DisplayName != user.DisplayName {
 					t.Errorf("Update() DisplayName = %v, want %v", updated.DisplayName, user.DisplayName)
-				}
-				if updated.Email != user.Email {
-					t.Errorf("Update() Email = %v, want %v", updated.Email, user.Email)
 				}
 			}
 		})

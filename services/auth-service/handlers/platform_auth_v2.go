@@ -512,7 +512,6 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			AuthProvider:    string(platform),
 			Username:        platformUser.GetUsername(),
 			DisplayName:     platformUser.GetDisplayName(),
-			Email:           platformUser.GetEmail(),
 			ProfileImageURL: platformUser.GetProfileImageURL(),
 			AccessToken:     token.AccessToken,
 			RefreshToken:    token.RefreshToken,
@@ -543,7 +542,6 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 	} else {
 		// Update existing user
 		user.DisplayName = platformUser.GetDisplayName()
-		user.Email = platformUser.GetEmail()
 		user.ProfileImageURL = platformUser.GetProfileImageURL()
 		user.AccessToken = token.AccessToken
 		user.RefreshToken = token.RefreshToken

@@ -86,7 +86,6 @@ sequenceDiagram
     "sub": "user-uuid-123",               // Subject (user ID)
     "twitch_id": "12345678",              // Twitch user ID
     "username": "streamer123",            // Username
-    "email": "user@example.com",          // Email (optional)
     "roles": ["user"],                    // Roles (future: ["admin", "moderator"])
     "iat": 1699999999,                    // Issued at (Unix timestamp)
     "exp": 1700086399                     // Expires at (24 hours later)
@@ -99,12 +98,11 @@ sequenceDiagram
 
 ```go
 // pkg/auth/jwt.go
-func GenerateJWT(user *domain.User, secret string) (string, error) {
+func GenerateJWT(userID, twitchID, username, secret string) (string, error) {
     claims := jwt.MapClaims{
-        "sub":       user.ID,
-        "twitch_id": user.TwitchID,
-        "username":  user.Username,
-        "email":     user.Email,
+        "sub":       userID,
+        "twitch_id": twitchID,
+        "username":  username,
         "roles":     []string{"user"},
         "iat":       time.Now().Unix(),
         "exp":       time.Now().Add(24 * time.Hour).Unix(),
@@ -237,7 +235,7 @@ func (s *OverlayService) GetOverlay(ctx context.Context, overlayID string, userI
 
 | Platform | OAuth Type | Client Type | Scope Required |
 |----------|------------|-------------|----------------|
-| **Twitch** | OAuth 2.0 | Confidential | `user:read:email` |
+| **Twitch** | OAuth 2.0 | Confidential | `chat:read` (for IRC listener) |
 | **YouTube** | OAuth 2.0 | Confidential | `https://www.googleapis.com/auth/youtube.readonly` |
 | **Kick** | API Key (unofficial) | N/A | N/A (public chat) |
 | **TikTok** | OAuth 2.0 | Confidential | `user.info.basic`, `video.list` |
