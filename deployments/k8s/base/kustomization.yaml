@@ -19,10 +19,13 @@ resources:
   # Phase 2 - Infrastructure Services
   - emote-service/deployment.yaml
   - api-gateway/deployment.yaml
+  - api-gateway/hpa.yaml
 
   # Phase 3 - Twitch Real-Time
   - twitch-listener/deployment.yaml
+  - twitch-listener/hpa.yaml
   - message-processor/deployment.yaml
+  - message-processor/hpa.yaml
 
   # Phase 4 - YouTube Integration
   - youtube-listener/deployment.yaml
