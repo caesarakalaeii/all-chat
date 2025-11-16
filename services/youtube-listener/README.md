@@ -60,6 +60,10 @@ DATABASE_PASSWORD=allchat_dev_password
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
+# Source Manager (leader election)
+SOURCE_MANAGER_URL=http://localhost:8088
+SOURCE_MANAGER_SECRET=dev-service-secret
+
 # Service configuration
 PORT=8086
 LOG_LEVEL=info

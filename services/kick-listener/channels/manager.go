@@ -13,6 +13,7 @@ import (
 	"github.com/caesar/all-chat/services/kick-listener/metrics"
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -51,6 +52,7 @@ type Manager struct {
 	logger     *zap.Logger
 	httpClient *http.Client
 	dbConn     DBConnInterface
+	leader     *sourcemanager.LeadershipCoordinator
 
 	// Track active subscriptions
 	subscriptions map[string]*trackedChannel // key: channel_slug
@@ -69,6 +71,7 @@ func NewManager(
 	wsClient WebSocketClient,
 	publisher *publisher.StreamPublisher,
 	dbConn DBConnInterface,
+	leader *sourcemanager.LeadershipCoordinator,
 	logger *zap.Logger,
 ) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -80,6 +83,7 @@ func NewManager(
 		logger:        logger,
 		httpClient:    &http.Client{Timeout: 10 * time.Second},
 		dbConn:        dbConn,
+		leader:        leader,
 		subscriptions: make(map[string]*trackedChannel),
 		chatroomIndex: make(map[int]*trackedChannel),
 		ctx:           ctx,
@@ -146,6 +150,9 @@ func (m *Manager) Stop() {
 	m.logger.Info("Stopping Kick channel manager")
 	m.cancel()
 	m.wg.Wait()
+	if m.leader != nil {
+		m.leader.Stop()
+	}
 	m.logger.Info("Kick channel manager stopped")
 }
 
@@ -292,6 +299,7 @@ func (m *Manager) syncChannels() error {
 			}
 			delete(m.subscriptions, slug)
 			delete(m.chatroomIndex, ch.ChatroomID)
+			m.releaseLeadership(slug)
 			metrics.ObserveSubscription("unsubscribe")
 		}
 	}
@@ -314,6 +322,27 @@ func (m *Manager) syncChannels() error {
 			continue
 		}
 
+		if m.leader != nil {
+			ok, err := m.leader.EnsureLeadership(m.ctx, slug, func(channel string) func() {
+				return func() {
+					m.handleLeadershipLoss(channel)
+				}
+			}(slug))
+			if err != nil {
+				m.logger.Error("Failed to claim leadership",
+					zap.String("channel", slug),
+					zap.Error(err),
+				)
+				continue
+			}
+			if !ok {
+				m.logger.Debug("Skipping subscription; leadership owned elsewhere",
+					zap.String("channel", slug),
+				)
+				continue
+			}
+		}
+
 		m.logger.Info("Subscribing to channel",
 			zap.String("channel", slug),
 			zap.Int("chatroom_id", desired.ChatroomID),
@@ -325,6 +354,7 @@ func (m *Manager) syncChannels() error {
 				zap.String("channel", slug),
 				zap.Error(err),
 			)
+			m.releaseLeadership(slug)
 			continue
 		}
 
@@ -421,6 +451,42 @@ func (m *Manager) updatePendingMetadata(plans map[string]*channelPlan) {
 			}
 		}
 	}
+}
+
+func (m *Manager) releaseLeadership(channelSlug string) {
+	if m.leader == nil {
+		return
+	}
+	m.leader.Release(channelSlug)
+}
+
+func (m *Manager) handleLeadershipLoss(channelSlug string) {
+	if m.leader == nil {
+		return
+	}
+
+	m.subsMu.Lock()
+	defer m.subsMu.Unlock()
+
+	ch, exists := m.subscriptions[channelSlug]
+	if !exists {
+		return
+	}
+
+	if err := m.wsClient.Unsubscribe(ch.ChatroomID); err != nil {
+		m.logger.Error("Failed to unsubscribe after losing leadership",
+			zap.String("channel", channelSlug),
+			zap.Error(err),
+		)
+	}
+
+	delete(m.subscriptions, channelSlug)
+	delete(m.chatroomIndex, ch.ChatroomID)
+
+	m.logger.Warn("Dropped subscription after leadership loss",
+		zap.String("channel", channelSlug),
+	)
+	metrics.ObserveSubscription("unsubscribe")
 }
 
 // fetchChatroomID fetches the chatroom ID for a Kick channel from the API

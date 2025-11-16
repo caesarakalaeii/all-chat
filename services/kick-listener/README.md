@@ -148,6 +148,10 @@ DATABASE_NAME=allchat
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
+# Source Manager (leadership)
+SOURCE_MANAGER_URL=http://localhost:8088
+SOURCE_MANAGER_SECRET=dev-service-secret
+
 # Application
 APP_VERSION=dev             # Application version
 ```

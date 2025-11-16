@@ -97,7 +97,7 @@ func TestManager_SyncChannels_InitialJoin(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, logger)
+	manager := NewManager(repo, mockJP, nil, nil, logger)
 
 	err := manager.SyncChannels(ctx)
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestManager_SyncChannels_PartRemovedChannels(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, logger)
+	manager := NewManager(repo, mockJP, nil, nil, logger)
 
 	// Initial sync
 	err := manager.SyncChannels(ctx)
@@ -159,7 +159,7 @@ func TestManager_SyncChannels_JoinNewChannels(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, logger)
+	manager := NewManager(repo, mockJP, nil, nil, logger)
 
 	// Initial sync
 	err := manager.SyncChannels(ctx)
@@ -193,7 +193,7 @@ func TestManager_SyncChannels_NoChanges(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, logger)
+	manager := NewManager(repo, mockJP, nil, nil, logger)
 
 	// Initial sync
 	err := manager.SyncChannels(ctx)
@@ -220,7 +220,7 @@ func TestManager_SyncChannels_EmptyChannels(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, logger)
+	manager := NewManager(repo, mockJP, nil, nil, logger)
 
 	err := manager.SyncChannels(ctx)
 	require.NoError(t, err)
@@ -249,16 +249,15 @@ func TestManager_RateLimiting(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, logger)
+	manager := NewManager(repo, mockJP, nil, nil, logger)
 
 	start := time.Now()
 	err := manager.SyncChannels(ctx)
 	require.NoError(t, err)
 	duration := time.Since(start)
 
-	// With rate limit of 20 per 10s, joining 50 channels should take ~25s
-	// We'll check it takes at least 20s (accounting for some overhead)
-	expectedMinDuration := 20 * time.Second
+	// With burst allowance of 20 and 1 event per 500ms afterwards, 50 joins take >=15s
+	expectedMinDuration := 15 * time.Second
 	assert.GreaterOrEqual(t, duration, expectedMinDuration,
 		"Rate limiting should enforce minimum duration")
 
@@ -275,7 +274,7 @@ func TestManager_GetActiveChannels(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, logger)
+	manager := NewManager(repo, mockJP, nil, nil, logger)
 
 	err := manager.SyncChannels(ctx)
 	require.NoError(t, err)
@@ -298,7 +297,7 @@ func TestManager_StartStop(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, logger)
+	manager := NewManager(repo, mockJP, nil, nil, logger)
 
 	// Start manager
 	err := manager.Start(ctx)
@@ -323,7 +322,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, logger)
+	manager := NewManager(repo, mockJP, nil, nil, logger)
 
 	err := manager.SyncChannels(ctx)
 	require.NoError(t, err)

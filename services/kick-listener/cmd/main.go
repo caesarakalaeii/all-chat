@@ -19,6 +19,7 @@ import (
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -85,6 +86,20 @@ func main() {
 		Clusters: clusterList,
 	}
 
+	sourceManagerURL := getEnvOrDefault("SOURCE_MANAGER_URL", "http://source-manager:8088")
+	sourceManagerSecret := getEnvOrDefault("SOURCE_MANAGER_SECRET", "dev-service-secret")
+	var leaderCoord *sourcemanager.LeadershipCoordinator
+	if sourceManagerSecret == "" {
+		log.Warn("SOURCE_MANAGER_SECRET not set; Kick Listener will not coordinate leadership")
+	} else {
+		tokenSource := sourcemanager.NewSigningTokenSource("kick-listener", sourceManagerSecret, 15*time.Minute)
+		smClient, err := sourcemanager.NewClient(sourceManagerURL, tokenSource)
+		if err != nil {
+			log.Fatal("Failed to initialize Source Manager client", zap.Error(err))
+		}
+		leaderCoord = sourcemanager.NewLeadershipCoordinator("kick", smClient, 5*time.Second, log)
+	}
+
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 	channelRepo := channels.NewRepository(db, log)
@@ -106,7 +121,7 @@ func main() {
 	wsClient := websocket.NewClient(wsConfig, messageHandler, log)
 
 	// Now initialize channel manager with the WebSocket client
-	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, log)
+	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, leaderCoord, log)
 
 	// Connect to Kick Pusher WebSocket
 	if err := wsClient.Connect(); err != nil {
