@@ -7,11 +7,12 @@ import (
 
 // ServiceConfig holds the configuration for a backend service
 type ServiceConfig struct {
-	Name        string // Service name (e.g., "auth-service")
-	BaseURL     string // Base URL (e.g., "http://auth-service:8081")
-	HealthPath  string // Health check path (e.g., "/health/live")
-	PathPrefix  string // Request path prefix to match (e.g., "/api/v1/auth")
-	StripPrefix bool   // Whether to strip the path prefix when forwarding
+	Name          string // Service name (e.g., "auth-service")
+	BaseURL       string // Base URL (e.g., "http://auth-service:8081")
+	HealthPath    string // Health check path (e.g., "/health/live")
+	PathPrefix    string // Request path prefix to match (e.g., "/api/v1/auth")
+	StripPrefix   bool   // Whether to strip the path prefix when forwarding
+	RewritePrefix string // Optional prefix to prepend after stripping PathPrefix
 }
 
 // ServiceRegistry holds all configured backend services
@@ -48,11 +49,12 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 	// Emote Service
 	emoteURL := getEnvOrDefault("EMOTE_SERVICE_URL", "http://localhost:8083")
 	registry.Services["emote-service"] = &ServiceConfig{
-		Name:        "emote-service",
-		BaseURL:     emoteURL,
-		HealthPath:  "/health/live",
-		PathPrefix:  "/api/v1/emotes",
-		StripPrefix: true, // Strip /api/v1/emotes, forward remaining path
+		Name:          "emote-service",
+		BaseURL:       emoteURL,
+		HealthPath:    "/health/live",
+		PathPrefix:    "/api/v1/emotes",
+		StripPrefix:   true,      // Strip /api/v1/emotes, forward remaining path
+		RewritePrefix: "/emotes", // Emote service exposes routes under /emotes
 	}
 
 	// Validate all service URLs are set

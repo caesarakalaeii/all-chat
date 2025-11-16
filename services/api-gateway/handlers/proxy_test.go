@@ -31,7 +31,7 @@ func TestProxyHandler_ForwardRequest(t *testing.T) {
 			requestPath:   "/api/v1/emotes/channel/xqc",
 			requestMethod: http.MethodGet,
 			backendHandler: func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, "/api/v1/emotes/channel/xqc", r.URL.Path)
+				assert.Equal(t, "/emotes/channel/xqc", r.URL.Path)
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte(`{"channel":"xqc","emotes":[]}`))
 			},
@@ -128,9 +128,11 @@ func TestProxyHandler_ForwardRequest(t *testing.T) {
 						PathPrefix: "/api/v1/overlays",
 					},
 					"emote-service": {
-						Name:       "emote-service",
-						BaseURL:    backend.URL,
-						PathPrefix: "/api/v1/emotes",
+						Name:          "emote-service",
+						BaseURL:       backend.URL,
+						PathPrefix:    "/api/v1/emotes",
+						StripPrefix:   true,
+						RewritePrefix: "/emotes",
 					},
 				},
 			}

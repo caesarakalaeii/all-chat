@@ -3,6 +3,7 @@ package handlers
 import (
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/api-gateway/models"
@@ -52,6 +53,15 @@ func (p *ProxyHandler) ForwardRequest(c *gin.Context) {
 		if backendPath == "" || backendPath[0] != '/' {
 			backendPath = "/" + backendPath
 		}
+	}
+
+	if service.RewritePrefix != "" {
+		rewrite := service.RewritePrefix
+		if !strings.HasPrefix(rewrite, "/") {
+			rewrite = "/" + rewrite
+		}
+		rewrite = strings.TrimRight(rewrite, "/")
+		backendPath = rewrite + backendPath
 	}
 
 	// Build the backend URL
