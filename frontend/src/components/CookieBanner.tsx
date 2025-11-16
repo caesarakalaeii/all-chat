@@ -21,11 +21,17 @@ export default function CookieBanner() {
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
+    // Do not render the banner on public overlays where it obstructs the chat view
+    if (window.location.pathname.startsWith('/overlay')) {
+      return;
+    }
+
     // Check if user has already acknowledged the banner
     const acknowledged = localStorage.getItem('cookieBannerAcknowledged');
     if (!acknowledged) {
       // Show banner after a short delay for better UX
-      setTimeout(() => setShowBanner(true), 1000);
+      const timer = setTimeout(() => setShowBanner(true), 1000);
+      return () => clearTimeout(timer);
     }
   }, []);
 
