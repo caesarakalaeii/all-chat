@@ -6,7 +6,8 @@
  * Features:
  * - Display overlay info (name, description, status)
  * - List all chat sources (Twitch, YouTube, etc.)
- * - Add new chat sources
+ * - Add new chat sources via OAuth login
+ * - Add sources manually (advanced)
  * - Remove existing sources
  * - Navigate to preview
  *
@@ -16,21 +17,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { overlaysApi } from '@/lib/api/overlays';
 import type { Overlay, ChatSource } from '@/lib/types/overlay';
 
 export default function OverlayEditorPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { token } = useAuthStore();
 
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [sources, setSources] = useState<ChatSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddSource, setShowAddSource] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [newSourcePlatform, setNewSourcePlatform] = useState<string>('twitch');
   const [newSourceChannel, setNewSourceChannel] = useState('');
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Load overlay and sources
   useEffect(() => {
@@ -63,7 +67,63 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     loadData();
   }, [params.id, token, router]);
 
-  const handleAddSource = async () => {
+  // Handle OAuth callback redirects
+  useEffect(() => {
+    const sourceAdded = searchParams.get('source_added');
+    const error = searchParams.get('error');
+
+    if (sourceAdded) {
+      setNotification({
+        type: 'success',
+        message: `Successfully added ${sourceAdded} source!`
+      });
+      // Refresh sources
+      overlaysApi.getSources(params.id).then(setSources).catch(console.error);
+      // Clean up URL
+      window.history.replaceState({}, '', `/overlays/${params.id}`);
+      // Auto-hide notification after 5 seconds
+      setTimeout(() => setNotification(null), 5000);
+    } else if (error === 'failed_to_add_source') {
+      setNotification({
+        type: 'error',
+        message: 'Failed to add source. Please try again or use manual entry.'
+      });
+      // Clean up URL
+      window.history.replaceState({}, '', `/overlays/${params.id}`);
+      // Auto-hide notification after 5 seconds
+      setTimeout(() => setNotification(null), 5000);
+    }
+  }, [searchParams, params.id]);
+
+  const handleOAuthAddSource = async (platform: string) => {
+    try {
+      // Get OAuth URL from backend
+      const response = await fetch(`/api/v1/auth/${platform}/add-source/${params.id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get OAuth URL');
+      }
+
+      const data = await response.json();
+
+      // Redirect to OAuth provider
+      window.location.href = data.auth_url;
+    } catch (error) {
+      console.error('Failed to initiate OAuth:', error);
+      setNotification({
+        type: 'error',
+        message: 'Failed to start login process. Please try again.'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleAddSourceManually = async () => {
     if (!newSourceChannel.trim()) return;
 
     try {
@@ -104,10 +164,20 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
       const updatedSources = await overlaysApi.getSources(params.id);
       setSources(updatedSources);
       setShowAddSource(false);
+      setShowAdvanced(false);
       setNewSourceChannel('');
+      setNotification({
+        type: 'success',
+        message: 'Source added successfully!'
+      });
+      setTimeout(() => setNotification(null), 5000);
     } catch (error) {
       console.error('Failed to add source:', error);
-      alert('Failed to add source');
+      setNotification({
+        type: 'error',
+        message: 'Failed to add source. Please try again.'
+      });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -118,9 +188,18 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
       await overlaysApi.removeSource(params.id, sourceId);
       const updatedSources = await overlaysApi.getSources(params.id);
       setSources(updatedSources);
+      setNotification({
+        type: 'success',
+        message: 'Source removed successfully!'
+      });
+      setTimeout(() => setNotification(null), 5000);
     } catch (error) {
       console.error('Failed to remove source:', error);
-      alert('Failed to remove source');
+      setNotification({
+        type: 'error',
+        message: 'Failed to remove source. Please try again.'
+      });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -132,8 +211,41 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
         return 'bg-red-500/20 text-red-400 border-red-500/30';
       case 'kick':
         return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'tiktok':
+        return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
       default:
         return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    }
+  };
+
+  const getPlatformIcon = (platform: string) => {
+    switch (platform) {
+      case 'twitch':
+        return (
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+          </svg>
+        );
+      case 'youtube':
+        return (
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          </svg>
+        );
+      case 'kick':
+        return (
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 16.97L12 12.053l-5.894 4.917V7.03L12 11.947l5.894-4.917v9.94z"/>
+          </svg>
+        );
+      case 'tiktok':
+        return (
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>
+          </svg>
+        );
+      default:
+        return null;
     }
   };
 
@@ -162,12 +274,55 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     <div className="min-h-screen bg-gray-900">
       {/* Navbar */}
       <nav className="bg-gray-800 border-b border-gray-700">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <a href="/dashboard" className="text-2xl font-bold text-white">
             All-Chat
           </a>
+          <a
+            href="https://github.com/caesarakalaeii/all-chat"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+            </svg>
+            <span>GitHub</span>
+          </a>
         </div>
       </nav>
+
+      {/* Notification */}
+      {notification && (
+        <div className="fixed top-4 right-4 z-50 animate-slide-in">
+          <div className={`rounded-lg p-4 shadow-lg border ${
+            notification.type === 'success'
+              ? 'bg-green-500/20 border-green-500/30 text-green-400'
+              : 'bg-red-500/20 border-red-500/30 text-red-400'
+          }`}>
+            <div className="flex items-center gap-3">
+              {notification.type === 'success' ? (
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+              <p className="font-medium">{notification.message}</p>
+              <button
+                onClick={() => setNotification(null)}
+                className="ml-2 text-gray-400 hover:text-white"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
@@ -225,38 +380,116 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
 
           {/* Add Source Form */}
           {showAddSource && (
-            <div className="mb-6 p-4 bg-gray-750 rounded-lg border border-gray-600">
-              <h3 className="text-sm font-medium text-gray-300 mb-3">Add New Source</h3>
-              <div className="flex gap-4">
-                <select
-                  value={newSourcePlatform}
-                  onChange={(e) => setNewSourcePlatform(e.target.value)}
-                  className="px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
-                >
-                  <option value="twitch">Twitch</option>
-                  <option value="youtube">YouTube</option>
-                  <option value="kick" disabled>
-                    Kick (Coming Soon)
-                  </option>
-                  <option value="tiktok" disabled>
-                    TikTok (Coming Soon)
-                  </option>
-                </select>
-                <input
-                  type="text"
-                  value={newSourceChannel}
-                  onChange={(e) => setNewSourceChannel(e.target.value)}
-                  placeholder="Channel ID or username"
-                  className="flex-1 px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
-                />
+            <div className="mb-6 p-6 bg-gray-750 rounded-lg border border-gray-600">
+              <h3 className="text-lg font-medium text-white mb-4">Add New Source</h3>
+
+              {/* OAuth Buttons */}
+              <div className="mb-6">
+                <p className="text-sm text-gray-400 mb-3">
+                  Login with your streaming platform to automatically add your channel:
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleOAuthAddSource('twitch')}
+                    className="flex items-center justify-center gap-2 px-4 py-3 bg-twitch hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    {getPlatformIcon('twitch')}
+                    Login with Twitch
+                  </button>
+                  <button
+                    onClick={() => handleOAuthAddSource('youtube')}
+                    className="flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    {getPlatformIcon('youtube')}
+                    Login with YouTube
+                  </button>
+                  <button
+                    onClick={() => handleOAuthAddSource('kick')}
+                    className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    {getPlatformIcon('kick')}
+                    Login with Kick
+                  </button>
+                  <button
+                    onClick={() => handleOAuthAddSource('tiktok')}
+                    className="flex items-center justify-center gap-2 px-4 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    {getPlatformIcon('tiktok')}
+                    Login with TikTok
+                  </button>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-600"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-gray-750 text-gray-400">OR</span>
+                </div>
+              </div>
+
+              {/* Advanced: Manual Entry */}
+              <div>
                 <button
-                  onClick={handleAddSource}
-                  className="bg-twitch hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm mb-3"
                 >
-                  Add
+                  <svg
+                    className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced: Enter Channel ID Manually
                 </button>
+
+                {showAdvanced && (
+                  <div className="pl-6 space-y-3">
+                    <p className="text-xs text-gray-500 mb-3">
+                      Enter a specific channel ID or username. For YouTube, you can also enter a URL or @handle.
+                    </p>
+                    <div className="flex gap-3">
+                      <select
+                        value={newSourcePlatform}
+                        onChange={(e) => setNewSourcePlatform(e.target.value)}
+                        className="px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
+                      >
+                        <option value="twitch">Twitch</option>
+                        <option value="youtube">YouTube</option>
+                        <option value="kick">Kick</option>
+                        <option value="tiktok">TikTok</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={newSourceChannel}
+                        onChange={(e) => setNewSourceChannel(e.target.value)}
+                        placeholder="Channel ID, username, or URL"
+                        className="flex-1 px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
+                        onKeyPress={(e) => e.key === 'Enter' && handleAddSourceManually()}
+                      />
+                      <button
+                        onClick={handleAddSourceManually}
+                        className="bg-twitch hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cancel Button */}
+              <div className="mt-4 flex justify-end">
                 <button
-                  onClick={() => setShowAddSource(false)}
+                  onClick={() => {
+                    setShowAddSource(false);
+                    setShowAdvanced(false);
+                    setNewSourceChannel('');
+                  }}
                   className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
                 >
                   Cancel
@@ -269,7 +502,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
           {!sources || sources.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <p className="mb-2">No chat sources added yet</p>
-              <p className="text-sm">Add Twitch or YouTube sources to start aggregating chat</p>
+              <p className="text-sm">Add Twitch, YouTube, Kick, or TikTok sources to start aggregating chat</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -281,13 +514,16 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
                   )}`}
                 >
                   <div className="flex items-center gap-4">
-                    <span
-                      className={`text-xs font-semibold uppercase ${
-                        getPlatformColor(source.platform).split(' ')[1]
-                      }`}
-                    >
-                      {source.platform}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {getPlatformIcon(source.platform)}
+                      <span
+                        className={`text-xs font-semibold uppercase ${
+                          getPlatformColor(source.platform).split(' ')[1]
+                        }`}
+                      >
+                        {source.platform}
+                      </span>
+                    </div>
                     <span className="text-white font-medium">{source.channel_id}</span>
                   </div>
                   <button
