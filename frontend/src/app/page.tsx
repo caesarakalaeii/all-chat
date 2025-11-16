@@ -15,6 +15,7 @@
 
 'use client';
 
+import Link from 'next/link';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
@@ -182,8 +183,17 @@ export default function LandingPage() {
           </div>
 
           {/* Footer */}
-          <div className="mt-20 text-gray-500 text-sm">
+          <div className="mt-20 text-gray-500 text-sm space-y-2">
             <p>Open Source • Built with Go + React • Multi-Platform Chat Aggregation</p>
+            <p className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-400">
+              <Link href="/legal/privacy" className="hover:text-gray-200 underline-offset-4 hover:underline">
+                Privacy Policy
+              </Link>
+              <span aria-hidden="true">•</span>
+              <Link href="/legal/terms" className="hover:text-gray-200 underline-offset-4 hover:underline">
+                Terms of Service
+              </Link>
+            </p>
           </div>
         </div>
       </div>
