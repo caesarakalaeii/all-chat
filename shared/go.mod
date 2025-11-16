@@ -7,6 +7,7 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.2.0
 	github.com/jackc/pgx/v5 v5.5.1
+	github.com/prometheus/client_golang v1.19.1
 	github.com/redis/go-redis/v9 v9.4.0
 	go.uber.org/zap v1.26.0
 )
