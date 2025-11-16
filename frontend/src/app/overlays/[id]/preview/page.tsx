@@ -22,6 +22,7 @@
 
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
@@ -30,6 +31,7 @@ import { overlaysApi } from '@/lib/api/overlays';
 import type { ChatMessage } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
+import { sortMessageBadges } from '@/lib/badgeOrder';
 
 type MockMessageFormState = {
   platform: ChatMessage['platform'];
@@ -253,7 +255,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
 
     // Listen for messages
     const unsubscribe = wsClient.onMessage(async (incoming) => {
-      const message = await resolveTwitchBadgeIcons(incoming);
+      const message = sortMessageBadges(await resolveTwitchBadgeIcons(incoming));
       setMessages((prev) => [...prev, message].slice(-maxMessages));
       setConnected(true);
     });
@@ -464,13 +466,21 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                         className="flex gap-3 p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/80 transition-colors"
                       >
                         {/* Avatar */}
-                        <img
-                          src={message.user.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.user.display_name)}&background=6b7280&color=fff&size=40`}
+                        <Image
+                          src={
+                            message.user.avatar_url ||
+                            `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                              message.user.display_name
+                            )}&background=6b7280&color=fff&size=40`
+                          }
                           alt={message.user.display_name}
-                          className="w-10 h-10 rounded-full flex-shrink-0"
+                          width={40}
+                          height={40}
+                          className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
                           onError={(e) => {
-                            // Fallback to generated avatar if image fails to load
-                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(message.user.display_name)}&background=6b7280&color=fff&size=40`;
+                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                              message.user.display_name
+                            )}&background=6b7280&color=fff&size=40`;
                           }}
                         />
 
@@ -492,14 +502,15 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                               {message.user.display_name}
                             </span>
                             {message.user.badges?.map((badge, index) => (
-                              <img
+                              <Image
                                 key={`${badge.name}-${index}`}
                                 src={badge.icon_url}
                                 alt={badge.name}
                                 title={`${badge.name} (${badge.version})`}
-                                className="w-4 h-4 inline-block"
+                                width={16}
+                                height={16}
+                                className="w-4 h-4 inline-block object-contain"
                                 onError={(e) => {
-                                  // Fallback to text badge if icon fails to load
                                   e.currentTarget.style.display = 'none';
                                 }}
                               />

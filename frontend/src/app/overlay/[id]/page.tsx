@@ -20,10 +20,12 @@
 
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState, useRef } from 'react';
 import type { ChatMessage } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
+import { sortMessageBadges } from '@/lib/badgeOrder';
 
 export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -89,6 +91,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
         if (envelope.type === 'chat_message' && envelope.data) {
           let message: ChatMessage = envelope.data;
           message = await resolveTwitchBadgeIcons(message);
+          message = sortMessageBadges(message);
 
           setMessages((prev) => {
             const newMessages = [...prev, message];
@@ -163,10 +166,12 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
               {/* Avatar */}
               <div className="flex-shrink-0">
                 {message.user?.avatar_url ? (
-                  <img
+                  <Image
                     src={message.user.avatar_url}
                     alt={message.user.username}
-                    className="w-10 h-10 rounded-full"
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 rounded-full object-cover"
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-semibold">
@@ -193,11 +198,13 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
                   {message.user?.badges && message.user.badges.length > 0 && (
                     <div className="flex gap-1">
                       {message.user.badges.map((badge, idx) => (
-                        <img
+                        <Image
                           key={idx}
                           src={badge.icon_url}
                           alt={badge.name}
-                          className="w-4 h-4"
+                          width={16}
+                          height={16}
+                          className="w-4 h-4 object-contain"
                         />
                       ))}
                     </div>
