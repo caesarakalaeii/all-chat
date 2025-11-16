@@ -2,6 +2,11 @@
 
 ## Completed Work
 
+### OAuth Implementation Status: ✅ FULLY WORKING
+
+**Last Updated:** 2025-11-16
+**Status:** Production Ready
+
 ### 1. OAuth Implementation ✅
 
 **Files Created/Modified:**
@@ -18,8 +23,17 @@
 - S256 code challenge method
 - Auth URL: `https://id.kick.com/oauth/authorize`
 - Token URL: `https://id.kick.com/oauth/token`
-- User API: `https://kick.com/api/v2/user`
+- User API: `https://api.kick.com/public/v1/users` (Official Kick Public API v1)
 - Scopes: `chat:read user:read channel:read`
+
+**Known Limitations:**
+- **Profile Pictures:** Kick blocks external hotlinking of profile images (returns 403 Forbidden). The backend correctly fetches and stores the profile picture URL, but browsers cannot load images directly from `kick.com/img/*`.
+  - **Current Solution:** Frontend uses placeholder/fallback when Kick images fail to load
+  - **Recommended:** Use Kick logo or generated avatar as placeholder for Kick users
+  - **Alternative Solutions:**
+    - Image proxy service to re-serve Kick images from our domain
+    - Download and cache images in Redis/S3
+    - Generate avatar from username initials
 
 **OAuth Endpoints:**
 - `GET /api/v1/auth/kick/login` - Initiates OAuth flow
@@ -445,6 +459,37 @@ KICK_REDIRECT_URL=http://localhost:8080/api/v1/auth/kick/callback
 - Consider rate limiting for Kick API calls
 - Kick messages include rich identity/badge information
 - May need to handle Kick-specific emotes differently from Twitch/BTTV/FFZ
+
+## Troubleshooting
+
+### OAuth Issues Fixed (2025-11-16)
+
+**Problem 1: "Failed to get user info" - 403 Forbidden**
+- **Cause:** Using wrong API endpoint and missing headers
+- **Solution:** Changed to `https://api.kick.com/public/v1/users` with proper User-Agent header
+
+**Problem 2: "Failed to decode response" - Invalid JSON**
+- **Cause:** API response has `{"data": [...], "message": "OK"}` wrapper structure
+- **Solution:** Updated parsing to handle wrapper object
+
+**Problem 3: Field mapping errors**
+- **Cause:** API uses `user_id`, `name`, `profile_picture` instead of `id`, `username`, `profile_pic`
+- **Solution:** Updated KickUserInfo model to match actual API field names
+
+**Problem 4: Profile pictures not loading in browser**
+- **Cause:** Kick blocks external hotlinking with 403 Forbidden
+- **Solution:** Documented limitation; frontend uses placeholder fallback
+
+### Common Issues
+
+**OAuth callback fails:**
+- Verify `KICK_CLIENT_ID` and `KICK_CLIENT_SECRET` are set correctly
+- Check `KICK_REDIRECT_URL` matches what's configured in Kick Developer Portal
+- Ensure Redis is running for state/verifier storage
+
+**User info fetch fails:**
+- Verify `user:read` scope is included in OAuth request
+- Check that access token is valid and not expired
 
 ## Questions / Decisions Needed
 
