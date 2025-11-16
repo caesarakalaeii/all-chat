@@ -19,7 +19,7 @@ func TestJWTAuth(t *testing.T) {
 	defer os.Unsetenv("JWT_SECRET")
 
 	// Generate a valid token for testing
-	validToken, err := auth.GenerateJWT("user-123", "twitch-123", "testuser", "test@example.com", jwtSecret)
+	validToken, err := auth.GenerateJWT("user-123", "twitch-123", "testuser", jwtSecret)
 	require.NoError(t, err)
 
 	tests := []struct {

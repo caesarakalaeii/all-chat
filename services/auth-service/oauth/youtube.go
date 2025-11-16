@@ -34,7 +34,6 @@ func NewYouTubeOAuth(clientID, clientSecret, redirectURL string) *YouTubeOAuth {
 		Scopes: []string{
 			"https://www.googleapis.com/auth/youtube.readonly",
 			"https://www.googleapis.com/auth/youtube.force-ssl",
-			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/userinfo.profile",
 		},
 		Endpoint: google.Endpoint,
@@ -151,7 +150,6 @@ func (y *YouTubeOAuth) GetUserInfo(ctx context.Context, accessToken string) (Pla
 	return &YouTubeUserInfoWrapper{
 		ID:      youtubeInfo.ID,
 		Name:    youtubeInfo.Name,
-		Email:   youtubeInfo.Email,
 		Picture: youtubeInfo.Picture,
 	}, nil
 }

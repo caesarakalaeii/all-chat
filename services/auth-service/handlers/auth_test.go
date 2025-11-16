@@ -65,10 +65,10 @@ func (m *mockUserRepository) UpdateTokens(ctx context.Context, userID, accessTok
 }
 
 type mockTwitchClient struct {
-	getAuthURLFunc            func(state string) string
-	exchangeCodeForTokenFunc  func(code string) (*oauth.TokenResponse, error)
-	getUserInfoFunc           func(accessToken string) (*oauth.UserInfo, error)
-	refreshTokenFunc          func(refreshToken string) (*oauth.TokenResponse, error)
+	getAuthURLFunc           func(state string) string
+	exchangeCodeForTokenFunc func(code string) (*oauth.TokenResponse, error)
+	getUserInfoFunc          func(accessToken string) (*oauth.UserInfo, error)
+	refreshTokenFunc         func(refreshToken string) (*oauth.TokenResponse, error)
 }
 
 func (m *mockTwitchClient) GetAuthURL(state string) string {
@@ -175,7 +175,6 @@ func TestAuthHandler_HandleCallback(t *testing.T) {
 						Login:           "testuser",
 						DisplayName:     "TestUser",
 						ProfileImageURL: "https://example.com/avatar.png",
-						Email:           "test@example.com",
 					}, nil
 				},
 			},
@@ -226,13 +225,13 @@ func TestAuthHandler_HandleCallback(t *testing.T) {
 			mockRepo: &mockUserRepository{
 				getByTwitchIDFunc: func(ctx context.Context, twitchID string) (*models.User, error) {
 					return &models.User{
-						ID:              "existing-user-id",
-						TwitchID:        "123456",
-						Username:        "existinguser",
-						DisplayName:     "ExistingUser",
-						AccessToken:     "old_token",
-						RefreshToken:    "old_refresh",
-						TokenExpiresAt:  time.Now().Add(1 * time.Hour),
+						ID:             "existing-user-id",
+						TwitchID:       "123456",
+						Username:       "existinguser",
+						DisplayName:    "ExistingUser",
+						AccessToken:    "old_token",
+						RefreshToken:   "old_refresh",
+						TokenExpiresAt: time.Now().Add(1 * time.Hour),
 					}, nil
 				},
 				updateTokensFunc: func(ctx context.Context, userID, accessToken, refreshToken string, expiresAt time.Time) error {
@@ -419,7 +418,6 @@ func TestAuthHandler_HandleGetMe(t *testing.T) {
 						Username:        "testuser",
 						DisplayName:     "TestUser",
 						ProfileImageURL: "https://example.com/avatar.png",
-						Email:           "test@example.com",
 					}, nil
 				},
 			},

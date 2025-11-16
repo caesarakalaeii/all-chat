@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"context"
+	"fmt"
 
 	"golang.org/x/oauth2"
 )
@@ -21,7 +22,6 @@ type PlatformUserInfo interface {
 	GetID() string
 	GetUsername() string
 	GetDisplayName() string
-	GetEmail() string
 	GetProfileImageURL() string
 	GetPlatform() Platform
 }
@@ -49,14 +49,12 @@ type TwitchUserInfoWrapper struct {
 	ID              string
 	Login           string
 	DisplayName     string
-	Email           string
 	ProfileImageURL string
 }
 
 func (t *TwitchUserInfoWrapper) GetID() string              { return t.ID }
 func (t *TwitchUserInfoWrapper) GetUsername() string        { return t.Login }
 func (t *TwitchUserInfoWrapper) GetDisplayName() string     { return t.DisplayName }
-func (t *TwitchUserInfoWrapper) GetEmail() string           { return t.Email }
 func (t *TwitchUserInfoWrapper) GetProfileImageURL() string { return t.ProfileImageURL }
 func (t *TwitchUserInfoWrapper) GetPlatform() Platform      { return PlatformTwitch }
 
@@ -64,14 +62,17 @@ func (t *TwitchUserInfoWrapper) GetPlatform() Platform      { return PlatformTwi
 type YouTubeUserInfoWrapper struct {
 	ID      string
 	Name    string
-	Email   string
 	Picture string
 }
 
-func (y *YouTubeUserInfoWrapper) GetID() string              { return y.ID }
-func (y *YouTubeUserInfoWrapper) GetUsername() string        { return y.Email }
+func (y *YouTubeUserInfoWrapper) GetID() string { return y.ID }
+func (y *YouTubeUserInfoWrapper) GetUsername() string {
+	if y.ID != "" {
+		return fmt.Sprintf("youtube_%s", y.ID)
+	}
+	return "youtube_user"
+}
 func (y *YouTubeUserInfoWrapper) GetDisplayName() string     { return y.Name }
-func (y *YouTubeUserInfoWrapper) GetEmail() string           { return y.Email }
 func (y *YouTubeUserInfoWrapper) GetProfileImageURL() string { return y.Picture }
 func (y *YouTubeUserInfoWrapper) GetPlatform() Platform      { return PlatformYouTube }
 
@@ -92,7 +93,6 @@ func (t *TikTokUserInfoWrapper) GetUsername() string {
 	return t.DisplayName
 }
 func (t *TikTokUserInfoWrapper) GetDisplayName() string     { return t.DisplayName }
-func (t *TikTokUserInfoWrapper) GetEmail() string           { return "" } // TikTok doesn't provide email
 func (t *TikTokUserInfoWrapper) GetProfileImageURL() string { return t.AvatarURL }
 func (t *TikTokUserInfoWrapper) GetPlatform() Platform      { return PlatformTikTok }
 
@@ -102,12 +102,10 @@ type KickUserInfoWrapper struct {
 	Username    string
 	DisplayName string
 	ProfilePic  string
-	Email       string
 }
 
 func (k *KickUserInfoWrapper) GetID() string              { return k.ID }
 func (k *KickUserInfoWrapper) GetUsername() string        { return k.Username }
 func (k *KickUserInfoWrapper) GetDisplayName() string     { return k.DisplayName }
-func (k *KickUserInfoWrapper) GetEmail() string           { return k.Email }
 func (k *KickUserInfoWrapper) GetProfileImageURL() string { return k.ProfilePic }
 func (k *KickUserInfoWrapper) GetPlatform() Platform      { return PlatformKick }

@@ -393,7 +393,6 @@ erDiagram
         string username UK
         string display_name
         string profile_image_url
-        string email
         text access_token "encrypted"
         text refresh_token "encrypted"
         timestamp token_expires_at
@@ -456,7 +455,6 @@ CREATE TABLE users (
     username VARCHAR(50) UNIQUE NOT NULL,
     display_name VARCHAR(100) NOT NULL,
     profile_image_url TEXT,
-    email VARCHAR(255),
     access_token TEXT NOT NULL,      -- Encrypted OAuth token
     refresh_token TEXT NOT NULL,     -- Encrypted refresh token
     token_expires_at TIMESTAMP NOT NULL,

@@ -21,7 +21,6 @@ func TestUser_Validate(t *testing.T) {
 				Username:        "testuser",
 				DisplayName:     "TestUser",
 				ProfileImageURL: "https://example.com/avatar.png",
-				Email:           "test@example.com",
 				AccessToken:     "encrypted_access_token",
 				RefreshToken:    "encrypted_refresh_token",
 				TokenExpiresAt:  time.Now().Add(24 * time.Hour),
@@ -102,20 +101,6 @@ func TestUser_Validate(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "username must be between 3 and 50 characters",
-		},
-		{
-			name: "invalid email format",
-			user: User{
-				ID:           "550e8400-e29b-41d4-a716-446655440000",
-				TwitchID:     &twitchID,
-				Username:     "testuser",
-				DisplayName:  "TestUser",
-				Email:        "invalid-email",
-				AccessToken:  "encrypted_access_token",
-				RefreshToken: "encrypted_refresh_token",
-			},
-			wantErr: true,
-			errMsg:  "invalid email format",
 		},
 	}
 
