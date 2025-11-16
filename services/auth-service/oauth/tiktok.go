@@ -129,8 +129,12 @@ func (t *TikTokOAuth) GetUserInfoTikTok(ctx context.Context, accessToken string)
 	}
 	defer resp.Body.Close()
 
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", readErr)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("tiktok API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -144,11 +148,12 @@ func (t *TikTokOAuth) GetUserInfoTikTok(ctx context.Context, accessToken string)
 		} `json:"error"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode response (body preview: %.200s...): %w", string(body), err)
 	}
 
-	if result.Error.Code != "" {
+	// TikTok returns error.code = "ok" for successful responses
+	if result.Error.Code != "" && result.Error.Code != "ok" {
 		return nil, fmt.Errorf("tiktok API error: %s - %s", result.Error.Code, result.Error.Message)
 	}
 
