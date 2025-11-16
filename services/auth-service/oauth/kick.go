@@ -206,11 +206,10 @@ func (k *KickOAuth) GetUserInfo(ctx context.Context, accessToken string) (Platfo
 	}
 
 	return &KickUserInfoWrapper{
-		ID:              fmt.Sprintf("%d", kickInfo.ID),
-		Username:        kickInfo.Username,
-		Slug:            kickInfo.Slug,
-		Bio:             kickInfo.Bio,
-		ProfilePic:      kickInfo.ProfilePic,
+		ID:              fmt.Sprintf("%d", kickInfo.UserID),
+		Username:        kickInfo.Name,
+		DisplayName:     kickInfo.Name,
+		ProfilePic:      kickInfo.ProfilePicture,
 		Email:           kickInfo.Email,
 	}, nil
 }

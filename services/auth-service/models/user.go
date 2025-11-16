@@ -60,10 +60,8 @@ type TikTokUserInfo struct {
 
 // KickUserInfo represents Kick user data from OAuth
 type KickUserInfo struct {
-	ID         int    `json:"id"`          // User's unique numeric ID
-	Username   string `json:"username"`    // User's login username
-	Slug       string `json:"slug"`        // User's URL slug
-	Bio        string `json:"bio"`         // User's biography
-	ProfilePic string `json:"profile_pic"` // User's profile picture URL
-	Email      string `json:"email"`       // User's email address
+	UserID         int    `json:"user_id"`        // User's unique numeric ID
+	Name           string `json:"name"`           // User's login username
+	Email          string `json:"email"`          // User's email address
+	ProfilePicture string `json:"profile_picture"` // User's profile picture URL
 }
