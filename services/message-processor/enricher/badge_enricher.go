@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +51,18 @@ type TwitchBadgeResponse struct {
 	} `json:"data"`
 }
 
+// TwitchChannelBadgeResponse represents channel-specific badge metadata
+type TwitchChannelBadgeResponse struct {
+	BadgeSets map[string]struct {
+		Versions map[string]struct {
+			ID         string `json:"id"`
+			ImageURL1x string `json:"image_url_1x"`
+			ImageURL2x string `json:"image_url_2x"`
+			ImageURL4x string `json:"image_url_4x"`
+		} `json:"versions"`
+	} `json:"badge_sets"`
+}
+
 // BadgeEnricher enriches messages with proper Twitch badge icon URLs
 type BadgeEnricher struct {
 	httpClient   *http.Client
@@ -89,13 +102,21 @@ func (e *BadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessa
 	}
 
 	// Load channel-specific badges (for subscriber tiers, etc.)
-	channelBadges, err := e.getChannelBadges(ctx, msg.ChannelID)
-	if err != nil {
-		e.logger.Debug("Failed to get channel badges",
+	var channelBadges map[string]TwitchBadgeSet
+	channelIdentifier := e.extractChannelIdentifier(msg)
+	if channelIdentifier != "" {
+		channelBadges, err = e.getChannelBadges(ctx, channelIdentifier)
+		if err != nil {
+			e.logger.Debug("Failed to get channel badges",
+				zap.String("channel", channelIdentifier),
+				zap.Error(err),
+			)
+			// Continue with just global badges
+		}
+	} else {
+		e.logger.Debug("Skipping channel badges - missing Twitch room ID",
 			zap.String("channel", msg.ChannelID),
-			zap.Error(err),
 		)
-		// Continue with just global badges
 	}
 
 	// Update badge URLs
@@ -199,11 +220,90 @@ func (e *BadgeEnricher) getGlobalBadges(ctx context.Context) (map[string]TwitchB
 }
 
 // getChannelBadges fetches channel-specific badge definitions
-func (e *BadgeEnricher) getChannelBadges(ctx context.Context, channelName string) (map[string]TwitchBadgeSet, error) {
-	// For channel badges, we need the broadcaster ID, not the name
-	// This is a limitation - we'd need to look up the ID first
-	// For now, skip channel badges and rely on global
-	return nil, fmt.Errorf("channel badges require broadcaster ID lookup")
+func (e *BadgeEnricher) getChannelBadges(ctx context.Context, channelID string) (map[string]TwitchBadgeSet, error) {
+	if channelID == "" {
+		return nil, fmt.Errorf("channel ID is required for channel badges")
+	}
+
+	cacheKey := ChannelBadgesCacheKeyPrefix + channelID
+	if cached, err := e.redisClient.Get(ctx, cacheKey).Result(); err == nil && cached != "" {
+		var badges map[string]TwitchBadgeSet
+		if err := json.Unmarshal([]byte(cached), &badges); err == nil {
+			return badges, nil
+		}
+	}
+
+	url := fmt.Sprintf("https://badges.twitch.tv/v1/badges/channels/%s/display", channelID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := e.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("channel badges not found")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("channel badges API returned status %d", resp.StatusCode)
+	}
+
+	var badgeResp TwitchChannelBadgeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&badgeResp); err != nil {
+		return nil, err
+	}
+
+	if len(badgeResp.BadgeSets) == 0 {
+		return nil, fmt.Errorf("channel badges response empty")
+	}
+
+	badges := make(map[string]TwitchBadgeSet, len(badgeResp.BadgeSets))
+	for setID, badgeSet := range badgeResp.BadgeSets {
+		versions := make(map[string]TwitchBadgeVer, len(badgeSet.Versions))
+		for versionID, ver := range badgeSet.Versions {
+			versions[versionID] = TwitchBadgeVer{
+				ImageURL1x: ver.ImageURL1x,
+				ImageURL2x: ver.ImageURL2x,
+				ImageURL4x: ver.ImageURL4x,
+			}
+		}
+		badges[setID] = TwitchBadgeSet{
+			SetID:    setID,
+			Versions: versions,
+		}
+	}
+
+	jsonBytes, _ := json.Marshal(badges)
+	e.redisClient.Set(ctx, cacheKey, string(jsonBytes), BadgeCacheTTL)
+
+	return badges, nil
+}
+
+// extractChannelIdentifier returns the Twitch room ID used by the badges CDN
+func (e *BadgeEnricher) extractChannelIdentifier(msg *models.UnifiedChatMessage) string {
+	if msg == nil || msg.Metadata == nil {
+		return ""
+	}
+	if roomID, ok := msg.Metadata["twitch_room_id"]; ok {
+		var raw string
+		switch v := roomID.(type) {
+		case string:
+			raw = v
+		case fmt.Stringer:
+			raw = v.String()
+		default:
+			raw = fmt.Sprint(v)
+		}
+		trimmed := strings.TrimSpace(raw)
+		if trimmed != "" && trimmed != "<nil>" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 // refreshAccessToken gets a new app access token (same as avatar enricher)
