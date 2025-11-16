@@ -69,6 +69,16 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: REDIS_PORT
+        - name: SOURCE_MANAGER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: SOURCE_MANAGER_URL
+        - name: SOURCE_MANAGER_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: SERVICE_JWT_SECRET
         - name: TWITCH_BOT_USERNAME
           valueFrom:
             secretKeyRef:

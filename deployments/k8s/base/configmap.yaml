@@ -8,6 +8,7 @@ data:
   AUTH_SERVICE_URL: http://auth-service:8081
   OVERLAY_SERVICE_URL: http://overlay-manager:8082
   EMOTE_SERVICE_URL: http://emote-service:8083
+  SOURCE_MANAGER_URL: http://source-manager:8088
 
   # Database Configuration
   DATABASE_HOST: allchat-cluster-rw.allchat.svc.cluster.local

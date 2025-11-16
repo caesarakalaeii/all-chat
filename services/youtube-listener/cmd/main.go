@@ -18,6 +18,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -111,10 +112,24 @@ func main() {
 	// Create message handler that publishes to Redis Streams and tracks quota
 	messageHandler := NewMessageHandler(streamPublisher, quotaTracker, log)
 
+	sourceManagerURL := getEnvOrDefault("SOURCE_MANAGER_URL", "http://source-manager:8088")
+	sourceManagerSecret := getEnvOrDefault("SOURCE_MANAGER_SECRET", "dev-service-secret")
+	var leaderCoord *sourcemanager.LeadershipCoordinator
+	if sourceManagerSecret == "" {
+		log.Warn("SOURCE_MANAGER_SECRET not set; YouTube Listener will not coordinate leadership")
+	} else {
+		tokenSource := sourcemanager.NewSigningTokenSource("youtube-listener", sourceManagerSecret, 15*time.Minute)
+		smClient, err := sourcemanager.NewClient(sourceManagerURL, tokenSource)
+		if err != nil {
+			log.Fatal("Failed to initialize Source Manager client", zap.Error(err))
+		}
+		leaderCoord = sourcemanager.NewLeadershipCoordinator("youtube", smClient, 5*time.Second, log)
+	}
+
 	// Initialize stream manager
 	streamRepo := streams.NewRepository(db, log)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, log)
+	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, leaderCoord, log)
 
 	// Start stream manager
 	if err := streamManager.Start(ctx); err != nil {
