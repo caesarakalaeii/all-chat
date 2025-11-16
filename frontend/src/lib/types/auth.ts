@@ -7,11 +7,14 @@
 
 export interface User {
   id: string;
-  twitch_id: string;
+  twitch_id?: string | null;
+  google_id?: string | null;
+  tiktok_open_id?: string | null;
+  kick_id?: string | null;
+  auth_provider?: string;
   username: string;
   display_name: string;
   profile_image_url?: string;
-  email?: string;
   created_at: string;
   updated_at: string;
 }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -42,13 +43,13 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
 
 	query := `
 INSERT INTO users (
-id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
 access_token, refresh_token, token_expires_at, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 `
 
 	_, err = r.db.Exec(ctx, query,
-		user.ID, user.TwitchID, user.GoogleID, user.TikTokOpenID, user.KickID, user.AuthProvider, user.Username, user.DisplayName, user.Email,
+		user.ID, user.TwitchID, user.GoogleID, user.TikTokOpenID, user.KickID, user.AuthProvider, user.Username, user.DisplayName,
 		user.ProfileImageURL, accessToken, refreshToken,
 		user.TokenExpiresAt, user.CreatedAt, user.UpdatedAt,
 	)
@@ -63,7 +64,7 @@ access_token, refresh_token, token_expires_at, created_at, updated_at
 // GetByTwitchID retrieves a user by Twitch ID
 func (r *UserRepository) GetByTwitchID(ctx context.Context, twitchID string) (*models.User, error) {
 	query := `
-SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE twitch_id = $1
@@ -71,7 +72,10 @@ WHERE twitch_id = $1
 
 	user, err := r.scanUser(r.db.QueryRow(ctx, query, twitchID))
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by Twitch ID: %w", err)
 	}
 
 	return user, nil
@@ -80,7 +84,7 @@ WHERE twitch_id = $1
 // GetByGoogleID retrieves a user by Google ID
 func (r *UserRepository) GetByGoogleID(ctx context.Context, googleID string) (*models.User, error) {
 	query := `
-SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE google_id = $1
@@ -88,7 +92,10 @@ WHERE google_id = $1
 
 	user, err := r.scanUser(r.db.QueryRow(ctx, query, googleID))
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by Google ID: %w", err)
 	}
 
 	return user, nil
@@ -97,7 +104,7 @@ WHERE google_id = $1
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
 	query := `
-SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE id = $1
@@ -105,7 +112,10 @@ WHERE id = $1
 
 	user, err := r.scanUser(r.db.QueryRow(ctx, query, id))
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by ID: %w", err)
 	}
 
 	return user, nil
@@ -125,13 +135,13 @@ func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 
 	query := `
 UPDATE users
-SET username = $2, display_name = $3, email = $4, profile_image_url = $5,
-access_token = $6, refresh_token = $7, token_expires_at = $8, updated_at = $9
+SET username = $2, display_name = $3, profile_image_url = $4,
+	access_token = $5, refresh_token = $6, token_expires_at = $7, updated_at = $8
 WHERE id = $1
 `
 
 	result, err := r.db.Exec(ctx, query,
-		user.ID, user.Username, user.DisplayName, user.Email, user.ProfileImageURL,
+		user.ID, user.Username, user.DisplayName, user.ProfileImageURL,
 		accessToken, refreshToken, user.TokenExpiresAt, user.UpdatedAt,
 	)
 
@@ -140,7 +150,25 @@ WHERE id = $1
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("user not found")
+		return ErrUserNotFound
+	}
+
+	return nil
+}
+
+// Delete removes a user by ID
+func (r *UserRepository) Delete(ctx context.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("user id is required")
+	}
+
+	result, err := r.db.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrUserNotFound
 	}
 
 	return nil
@@ -168,7 +196,7 @@ WHERE id = $1
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("user not found")
+		return ErrUserNotFound
 	}
 
 	return nil
@@ -177,7 +205,7 @@ WHERE id = $1
 // GetByKickID retrieves a user by Kick ID
 func (r *UserRepository) GetByKickID(ctx context.Context, kickID string) (*models.User, error) {
 	query := `
-SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE kick_id = $1
@@ -185,7 +213,10 @@ WHERE kick_id = $1
 
 	user, err := r.scanUser(r.db.QueryRow(ctx, query, kickID))
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by Kick ID: %w", err)
 	}
 
 	return user, nil
@@ -194,7 +225,7 @@ WHERE kick_id = $1
 // GetByTikTokID retrieves a user by TikTok Open ID
 func (r *UserRepository) GetByTikTokID(ctx context.Context, tiktokOpenID string) (*models.User, error) {
 	query := `
-SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, email, profile_image_url,
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE tiktok_open_id = $1
@@ -202,7 +233,10 @@ WHERE tiktok_open_id = $1
 
 	user, err := r.scanUser(r.db.QueryRow(ctx, query, tiktokOpenID))
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by TikTok ID: %w", err)
 	}
 
 	return user, nil
@@ -259,7 +293,7 @@ func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 	var encryptedAccessToken, encryptedRefreshToken string
 
 	err := row.Scan(
-		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName, &user.Email,
+		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName,
 		&user.ProfileImageURL, &encryptedAccessToken, &encryptedRefreshToken,
 		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
 	)

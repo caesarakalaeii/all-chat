@@ -185,6 +185,7 @@ func main() {
 		// Auth service - protected routes
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/me", proxyHandler.ForwardRequest)
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)

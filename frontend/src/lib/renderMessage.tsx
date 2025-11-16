@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import React from 'react';
 
 import type { ChatMessage } from '@/lib/types/message';
@@ -73,15 +74,25 @@ export function renderMessageContent(message: ChatMessage): React.ReactNode {
 			);
 		}
 
-		nodes.push(
-			<img
-				key={emote.key}
-				src={emote.url}
-				alt={emote.code}
-				title={`${emote.code} (${emote.provider})`}
-				className="inline-block h-[1.4em] w-auto align-text-bottom mx-0.5"
-			/>,
-		);
+		if (!emote.url) {
+			nodes.push(
+				<span key={`${emote.key}-text`} className="mx-0.5">
+					{text.slice(emote.start, emote.end + 1)}
+				</span>,
+			);
+		} else {
+			nodes.push(
+				<Image
+					key={emote.key}
+					src={emote.url}
+					alt={emote.code}
+					title={`${emote.code} (${emote.provider})`}
+					width={28}
+					height={28}
+					className="inline-block h-[1.4em] w-auto align-text-bottom mx-0.5"
+				/>,
+			);
+		}
 
 		cursor = emote.end + 1;
 	});
