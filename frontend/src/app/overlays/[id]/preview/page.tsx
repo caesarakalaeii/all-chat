@@ -166,7 +166,7 @@ const scopeCustomCss = (css: string, scopeSelector: string, bodySelector: string
 
     const scopedSelectors = trimmed
       .split(',')
-      .map((selector) => {
+      .map((selector: string) => {
         const sel = selector.trim();
         if (!sel || sel.startsWith(scopeSelector) || sel.startsWith(bodySelector)) {
           return sel;
