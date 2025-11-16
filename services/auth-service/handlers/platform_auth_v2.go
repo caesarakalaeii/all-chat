@@ -502,7 +502,7 @@ func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 	}
 
 	// Make internal API call to overlay-manager
-	url := fmt.Sprintf("%s/api/v1/internal/overlays/%s/sources/auto", h.overlayManagerURL, overlayID)
+	url := fmt.Sprintf("%s/internal/overlays/%s/sources/auto", h.overlayManagerURL, overlayID)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)

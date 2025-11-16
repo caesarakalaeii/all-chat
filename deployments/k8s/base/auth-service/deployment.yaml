@@ -87,6 +87,8 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: FRONTEND_URL
+        - name: OVERLAY_MANAGER_URL
+          value: "http://overlay-manager:8082"
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
