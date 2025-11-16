@@ -525,7 +525,9 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
                         {source.platform}
                       </span>
                     </div>
-                    <span className="text-white font-medium">{source.channel_id}</span>
+                    <span className="text-white font-medium">
+                      {source.channel_name || source.channel_id}
+                    </span>
                   </div>
                   <button
                     onClick={() => handleRemoveSource(source.id)}
