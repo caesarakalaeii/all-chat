@@ -1,41 +1,20 @@
 # Build stage
-# Kick Listener service for Kick.com chat integration
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates
+# Copy shared module
+COPY shared/ ./shared/
 
-# Copy go.mod and go.sum for all modules referenced in go.work
-COPY go.work ./
-COPY go.work.sum ./
-COPY shared/go.mod shared/go.sum ./shared/
-COPY services/api-gateway/go.mod services/api-gateway/go.sum ./services/api-gateway/
-COPY services/auth-service/go.mod services/auth-service/go.sum ./services/auth-service/
-COPY services/emote-service/go.mod services/emote-service/go.sum ./services/emote-service/
-COPY services/kick-listener/go.mod services/kick-listener/go.sum* ./services/kick-listener/
-COPY services/message-processor/go.mod services/message-processor/go.sum ./services/message-processor/
-COPY services/overlay-manager/go.mod services/overlay-manager/go.sum ./services/overlay-manager/
-COPY services/source-manager/go.mod services/source-manager/go.sum ./services/source-manager/
-COPY services/twitch-listener/go.mod services/twitch-listener/go.sum ./services/twitch-listener/
-COPY services/youtube-listener/go.mod services/youtube-listener/go.sum ./services/youtube-listener/
+# Copy service files
+COPY services/kick-listener/ ./services/kick-listener/
 
 # Download dependencies
 WORKDIR /app/services/kick-listener
 RUN go mod download
 
-# Copy source code
-WORKDIR /app
-COPY shared/ ./shared/
-COPY services/kick-listener/ ./services/kick-listener/
-
-# Build the service
-WORKDIR /app/services/kick-listener
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
-    -o /app/kick-listener \
-    ./cmd/
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/kick-listener ./cmd
 
 # Runtime stage
 FROM alpine:latest
