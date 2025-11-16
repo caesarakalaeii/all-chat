@@ -548,13 +548,13 @@ func TestOverlayHandler_RegisterRoutes(t *testing.T) {
 	routes := router.Routes()
 	assert.NotEmpty(t, routes)
 
-	// Check for expected routes
+	// Check for expected routes (API Gateway removes /api/v1/overlays prefix)
 	expectedRoutes := map[string]string{
-		"POST /overlays":      "CreateOverlay",
-		"GET /overlays":       "ListOverlays",
-		"GET /overlays/:id":   "GetOverlay",
-		"PUT /overlays/:id":   "UpdateOverlay",
-		"DELETE /overlays/:id": "DeleteOverlay",
+		"POST /":      "CreateOverlay",
+		"GET /":       "ListOverlays",
+		"GET /:id":    "GetOverlay",
+		"PUT /:id":    "UpdateOverlay",
+		"DELETE /:id": "DeleteOverlay",
 	}
 
 	for route := range expectedRoutes {
