@@ -184,19 +184,15 @@ func main() {
 	// V2 handlers support enhanced state management for add-source flows
 	router.GET("/twitch/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformTwitch))
 	router.GET("/twitch/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformTwitch))
-	router.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))
 
 	router.GET("/youtube/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformYouTube))
 	router.GET("/youtube/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformYouTube))
-	router.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 
 	router.GET("/tiktok/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformTikTok))
 	router.GET("/tiktok/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformTikTok))
-	router.GET("/tiktok/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTikTok))
 
 	router.GET("/kick/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformKick))
 	router.GET("/kick/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformKick))
-	router.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
 
 	// Token refresh
 	router.POST("/refresh", legacyAuthHandler.HandleRefresh)
@@ -207,6 +203,12 @@ func main() {
 	{
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.POST("/logout", legacyAuthHandler.HandleLogout)
+
+		// Add-source routes (require JWT for account linking)
+		protected.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))
+		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
+		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
+		protected.GET("/tiktok/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTikTok))
 	}
 
 	// Get port from environment
