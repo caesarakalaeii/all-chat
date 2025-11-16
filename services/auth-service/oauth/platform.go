@@ -10,10 +10,10 @@ import (
 type Platform string
 
 const (
-	PlatformTwitch Platform = "twitch"
+	PlatformTwitch  Platform = "twitch"
 	PlatformYouTube Platform = "youtube"
-	PlatformKick   Platform = "kick"
-	PlatformTikTok Platform = "tiktok"
+	PlatformKick    Platform = "kick"
+	PlatformTikTok  Platform = "tiktok"
 )
 
 // PlatformUserInfo is a generic user info interface
@@ -80,11 +80,17 @@ type TikTokUserInfoWrapper struct {
 	OpenID      string
 	UnionID     string
 	DisplayName string
+	Username    string
 	AvatarURL   string
 }
 
-func (t *TikTokUserInfoWrapper) GetID() string              { return t.OpenID }
-func (t *TikTokUserInfoWrapper) GetUsername() string        { return t.DisplayName }
+func (t *TikTokUserInfoWrapper) GetID() string { return t.OpenID }
+func (t *TikTokUserInfoWrapper) GetUsername() string {
+	if t.Username != "" {
+		return t.Username
+	}
+	return t.DisplayName
+}
 func (t *TikTokUserInfoWrapper) GetDisplayName() string     { return t.DisplayName }
 func (t *TikTokUserInfoWrapper) GetEmail() string           { return "" } // TikTok doesn't provide email
 func (t *TikTokUserInfoWrapper) GetProfileImageURL() string { return t.AvatarURL }
