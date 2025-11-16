@@ -203,6 +203,7 @@ func main() {
 	{
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.POST("/logout", legacyAuthHandler.HandleLogout)
+		protected.DELETE("/me", legacyAuthHandler.HandleDeleteAccount)
 
 		// Add-source routes (require JWT for account linking)
 		protected.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))

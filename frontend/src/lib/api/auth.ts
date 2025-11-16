@@ -29,5 +29,12 @@ export const authApi = {
    */
   async logout(): Promise<void> {
     await apiClient.post('/api/v1/auth/logout', {});
+  },
+
+  /**
+   * Delete the authenticated user's account
+   */
+  async deleteAccount(): Promise<void> {
+    await apiClient.delete('/api/v1/auth/me');
   }
 };

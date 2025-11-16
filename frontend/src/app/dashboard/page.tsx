@@ -19,6 +19,8 @@
 
 'use client';
 
+import Image from 'next/image';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
@@ -78,12 +80,20 @@ export default function DashboardPage() {
             All-Chat
           </a>
           <div className="flex items-center gap-4">
+            <Link
+              href="/settings"
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              Settings
+            </Link>
             <div className="flex items-center gap-3">
               {user.profile_image_url && (
-                <img
+                <Image
                   src={user.profile_image_url}
                   alt={user.display_name}
-                  className="w-8 h-8 rounded-full"
+                  width={32}
+                  height={32}
+                  className="w-8 h-8 rounded-full object-cover"
                 />
               )}
               <span className="text-white">{user.display_name}</span>

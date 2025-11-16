@@ -13,7 +13,8 @@ const nextConfig = {
       'yt3.ggpht.com', // YouTube avatars
       'cdn.7tv.app', // 7TV emotes
       'cdn.betterttv.net', // BTTV emotes
-      'cdn.frankerfacez.com' // FFZ emotes
+      'cdn.frankerfacez.com', // FFZ emotes
+      'ui-avatars.com' // Generated avatar fallbacks
     ]
   },
 
