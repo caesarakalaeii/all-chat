@@ -17,12 +17,17 @@ const (
 
 // RawMessage represents a raw message to be published to Redis Stream
 type RawMessage struct {
-	Platform    string          `json:"platform"`
-	OverlayID   string          `json:"overlay_id"`
-	ChannelID   string          `json:"channel_id"`
-	ChannelName string          `json:"channel_name"`
-	RawMessage  json.RawMessage `json:"raw_message"`
-	Timestamp   time.Time       `json:"timestamp"`
+	MessageID   string            `json:"message_id,omitempty"`
+	Platform    string            `json:"platform"`
+	OverlayID   string            `json:"overlay_id"`
+	ChannelID   string            `json:"channel_id"`
+	ChannelName string            `json:"channel_name"`
+	UserID      string            `json:"user_id,omitempty"`
+	Username    string            `json:"username,omitempty"`
+	Text        string            `json:"text,omitempty"`
+	Tags        map[string]string `json:"tags,omitempty"`
+	RawMessage  json.RawMessage   `json:"raw_message,omitempty"`
+	Timestamp   time.Time         `json:"timestamp"`
 }
 
 // StreamPublisher publishes messages to Redis Streams

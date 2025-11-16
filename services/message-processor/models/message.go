@@ -7,14 +7,17 @@ import (
 
 // RawChatMessage represents the raw message from Redis Streams (from Twitch Listener)
 type RawChatMessage struct {
-	MessageID string            `json:"message_id"`
-	Platform  string            `json:"platform"`
-	ChannelID string            `json:"channel_id"`
-	UserID    string            `json:"user_id"`
-	Username  string            `json:"username"`
-	Text      string            `json:"text"`
-	Timestamp time.Time         `json:"timestamp"`
-	Tags      map[string]string `json:"tags"`
+	MessageID   string            `json:"message_id"`
+	Platform    string            `json:"platform"`
+	OverlayID   string            `json:"overlay_id,omitempty"`
+	ChannelID   string            `json:"channel_id"`
+	ChannelName string            `json:"channel_name,omitempty"`
+	UserID      string            `json:"user_id"`
+	Username    string            `json:"username"`
+	Text        string            `json:"text"`
+	Timestamp   time.Time         `json:"timestamp"`
+	Tags        map[string]string `json:"tags"`
+	RawMessage  json.RawMessage   `json:"raw_message,omitempty"`
 }
 
 // UnifiedChatMessage represents the normalized, enriched message published to Pub/Sub
