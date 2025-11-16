@@ -100,7 +100,7 @@ Configure in the dashboard:
 - **High Performance**: Built with Go for speed and efficiency
 - **Real-Time**: Redis Streams + Pub/Sub for low-latency messaging
 - **Reliable**: Health checks, auto-reconnection, graceful degradation
-- **Open Source**: MIT licensed, self-hostable
+- **Open Source**: AGPL3.0 licensed, self-hostable
 
 ## 📱 Platform Support
 
@@ -148,7 +148,7 @@ All-Chat uses a modern microservices architecture:
 
 ## 🛠️ Tech Stack
 
-- **Backend**: Go 1.23+ (Gin framework)
+- **Backend**: Go 1.25+ (Gin framework)
 - **Frontend**: React 18 + Next.js 14 (App Router)
 - **Database**: PostgreSQL 16
 - **Cache/Messaging**: Redis 7
@@ -287,7 +287,7 @@ Special thanks to the Twitch, 7TV, BTTV, and FFZ communities!
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the AGPL 3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 📮 Support & Contact
 
