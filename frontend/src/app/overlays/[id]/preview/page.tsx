@@ -30,6 +30,116 @@ import type { ChatMessage } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 
+type MockMessageFormState = {
+  platform: ChatMessage['platform'];
+  displayName: string;
+  username: string;
+  avatarUrl: string;
+  message: string;
+  color: string;
+};
+
+const DEFAULT_MOCK_FORM: MockMessageFormState = {
+  platform: 'twitch',
+  displayName: 'Overlay Fan',
+  username: 'overlayfan',
+  avatarUrl: '',
+  message: 'This overlay looks great! PogChamp',
+  color: '#9146ff'
+};
+
+const SAMPLE_MOCK_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overlay_id'>> = [
+  {
+    platform: 'twitch',
+    channel_id: 'sample-twitch',
+    channel_name: 'Sample Twitch',
+    user: {
+      id: 'sample-user-1',
+      username: 'retro_mod',
+      display_name: 'RetroMod',
+      avatar_url: 'https://i.pravatar.cc/100?img=13',
+      badges: [],
+      color: '#fbbf24'
+    },
+    message: {
+      text: 'Welcome to the overlay preview! PogChamp',
+      emotes: []
+    },
+    metadata: { mock: true }
+  },
+  {
+    platform: 'youtube',
+    channel_id: 'sample-youtube',
+    channel_name: 'Sample YouTube',
+    user: {
+      id: 'sample-user-2',
+      username: 'cybercritic',
+      display_name: 'CyberCritic',
+      avatar_url: 'https://i.pravatar.cc/100?img=32',
+      badges: [],
+      color: '#f87171'
+    },
+    message: {
+      text: 'Picked up the neon CSS preset and it SLAPS 🔥',
+      emotes: []
+    },
+    metadata: { mock: true }
+  },
+  {
+    platform: 'kick',
+    channel_id: 'sample-kick',
+    channel_name: 'Sample Kick',
+    user: {
+      id: 'sample-user-3',
+      username: 'emote_master',
+      display_name: 'EmoteMaster',
+      avatar_url: 'https://i.pravatar.cc/100?img=56',
+      badges: [],
+      color: '#4ade80'
+    },
+    message: {
+      text: 'Drop your favorite emotes in chat 😎',
+      emotes: []
+    },
+    metadata: { mock: true }
+  }
+];
+
+const EXAMPLE_CUSTOM_CSS = `/* Example neon glass theme */
+body {
+  background: transparent !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+
+.space-y-3 > div {
+  background: rgba(74, 29, 150, 0.45) !important;
+  border: 1px solid rgba(236, 72, 153, 0.5) !important;
+  border-radius: 16px !important;
+  padding: 1.25rem !important;
+  backdrop-filter: blur(18px) saturate(180%) !important;
+  box-shadow: 0 25px 45px rgba(0, 0, 0, 0.35) !important;
+}
+
+.text-xs.font-semibold.uppercase {
+  background: rgba(236, 72, 153, 0.2) !important;
+  color: #f472b6 !important;
+  padding: 0.15rem 0.6rem !important;
+  border-radius: 999px !important;
+  letter-spacing: 0.15em !important;
+}
+
+.text-white.break-words {
+  font-size: 18px !important;
+  color: #fff1f2 !important;
+  text-shadow: 0 0 12px rgba(236, 72, 153, 0.65) !important;
+}
+`;
+
+const isMockMessage = (message: ChatMessage): boolean => {
+  const data = message.metadata as { mock?: boolean };
+  return Boolean(data?.mock);
+};
+
 export default function OverlayPreviewPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { token } = useAuthStore();
@@ -37,6 +147,9 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const [maxMessages, setMaxMessages] = useState(50);
+  const [mockForm, setMockForm] = useState<MockMessageFormState>(DEFAULT_MOCK_FORM);
+  const [customCss, setCustomCss] = useState('');
+  const [useCustomCss, setUseCustomCss] = useState(false);
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -75,6 +188,11 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     };
   }, [params.id, token, maxMessages, router]);
 
+  // Trim message buffer when maxMessages changes
+  useEffect(() => {
+    setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev));
+  }, [maxMessages]);
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -99,8 +217,72 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     }
   };
 
+  const handleMockInputChange = <K extends keyof MockMessageFormState>(field: K, value: MockMessageFormState[K]) => {
+    setMockForm((prev) => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleAddMockMessage = () => {
+    if (!mockForm.message.trim()) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const mockMessage: ChatMessage = {
+      id: `mock-${Date.now()}`,
+      overlay_id: params.id,
+      platform: mockForm.platform,
+      channel_id: 'mock-channel',
+      channel_name: 'Mock Channel',
+      user: {
+        id: 'mock-user',
+        username: mockForm.username || mockForm.displayName.toLowerCase().replace(/\s+/g, ''),
+        display_name: mockForm.displayName || mockForm.username || 'Mock Viewer',
+        avatar_url: mockForm.avatarUrl || undefined,
+        badges: [],
+        color: mockForm.color || undefined
+      },
+      message: {
+        text: mockForm.message,
+        emotes: []
+      },
+      timestamp: now,
+      metadata: { mock: true }
+    };
+
+    setMessages((prev) => [...prev, mockMessage].slice(-maxMessages));
+    setMockForm((prev) => ({
+      ...prev,
+      message: ''
+    }));
+  };
+
+  const handleAddSampleTranscript = () => {
+    const seeded = SAMPLE_MOCK_MESSAGES.map((sample, index) => ({
+      ...sample,
+      overlay_id: params.id,
+      id: `mock-seed-${Date.now()}-${index}`,
+      timestamp: new Date(Date.now() + index * 500).toISOString(),
+      metadata: { ...sample.metadata, mock: true }
+    }));
+
+    setMessages((prev) => [...prev, ...seeded].slice(-maxMessages));
+  };
+
+  const handleClearMockMessages = () => {
+    setMessages((prev) => prev.filter((message) => !isMockMessage(message)));
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
+      {useCustomCss && customCss.trim().length > 0 && (
+        <style
+          id="overlay-preview-custom-css"
+          dangerouslySetInnerHTML={{ __html: customCss }}
+        />
+      )}
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 px-4 py-3">
         <div className="container mx-auto flex justify-between items-center">
@@ -134,7 +316,12 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Preview Area (Main) */}
           <div className="lg:col-span-2">
-            <div className="bg-black rounded-lg p-4 h-[700px] overflow-hidden relative">
+            <div
+              id="overlay-preview-root"
+              className={`bg-black rounded-lg p-4 h-[700px] overflow-hidden relative ${
+                useCustomCss ? 'overlay-preview' : ''
+              }`}
+            >
               <div
                 className="h-full overflow-y-auto space-y-3"
                 style={{
@@ -297,6 +484,149 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                       FrankerFaceZ
                     </label>
                   </div>
+                </div>
+
+                {/* Mock Messages */}
+                <div className="border border-gray-700 rounded-lg p-4 bg-gray-900/40">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-white">Mock Messages</h3>
+                    <button
+                      type="button"
+                      onClick={handleClearMockMessages}
+                      className="text-xs text-gray-400 hover:text-white"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Platform</label>
+                      <select
+                        value={mockForm.platform}
+                        onChange={(e) => handleMockInputChange('platform', e.target.value as MockMessageFormState['platform'])}
+                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                      >
+                        <option value="twitch">Twitch</option>
+                        <option value="youtube">YouTube</option>
+                        <option value="kick">Kick</option>
+                        <option value="tiktok">TikTok</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Display Name</label>
+                        <input
+                          type="text"
+                          value={mockForm.displayName}
+                          onChange={(e) => handleMockInputChange('displayName', e.target.value)}
+                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Username</label>
+                        <input
+                          type="text"
+                          value={mockForm.username}
+                          onChange={(e) => handleMockInputChange('username', e.target.value)}
+                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Avatar URL (optional)</label>
+                        <input
+                          type="text"
+                          value={mockForm.avatarUrl}
+                          onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
+                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                          placeholder="https://..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Name Color</label>
+                        <input
+                          type="color"
+                          value={mockForm.color}
+                          onChange={(e) => handleMockInputChange('color', e.target.value)}
+                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Message</label>
+                      <textarea
+                        value={mockForm.message}
+                        onChange={(e) => handleMockInputChange('message', e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white h-20"
+                        placeholder="Type something fun..."
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAddMockMessage}
+                        className="flex-1 bg-twitch hover:bg-purple-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-60"
+                        disabled={!mockForm.message.trim()}
+                      >
+                        Inject Message
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddSampleTranscript}
+                        className="px-3 py-2 text-xs border border-gray-600 rounded-lg text-gray-200 hover:bg-gray-700"
+                      >
+                        Sample Set
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Custom CSS */}
+                <div className="border border-gray-700 rounded-lg p-4 bg-gray-900/40">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-white">Custom CSS</h3>
+                    <label className="flex items-center gap-2 text-xs text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={useCustomCss}
+                        onChange={(e) => setUseCustomCss(e.target.checked)}
+                        className="accent-twitch"
+                      />
+                      Enable
+                    </label>
+                  </div>
+                  <textarea
+                    value={customCss}
+                    onChange={(e) => setCustomCss(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-xs text-gray-100 h-32"
+                    placeholder="Paste your OBS custom CSS here to preview it..."
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomCss(EXAMPLE_CUSTOM_CSS.trim());
+                        setUseCustomCss(true);
+                      }}
+                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded"
+                    >
+                      Load Example
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomCss('');
+                        setUseCustomCss(false);
+                      }}
+                      className="px-3 py-2 text-xs border border-gray-600 rounded text-gray-200 hover:bg-gray-700"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-3">
+                    Need inspiration? Explore <a href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes" target="_blank" rel="noreferrer" className="text-twitch hover:underline">theme docs</a> or paste your OBS CSS to preview in real time.
+                  </p>
                 </div>
 
                 {/* Save Button */}
