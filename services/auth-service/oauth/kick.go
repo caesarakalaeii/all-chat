@@ -29,7 +29,7 @@ type KickOAuth struct {
 const (
 	kickAuthURL  = "https://id.kick.com/oauth/authorize"
 	kickTokenURL = "https://id.kick.com/oauth/token"
-	kickUserURL  = "https://kick.com/api/v2/user"
+	kickUserURL  = "https://api.kick.com/public/v1/users"
 )
 
 // NewKickOAuth creates a new Kick OAuth handler
@@ -181,13 +181,18 @@ func (k *KickOAuth) GetUserInfoKick(ctx context.Context, accessToken string) (*m
 		return nil, fmt.Errorf("kick API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var userInfo models.KickUserInfo
-	if err := json.Unmarshal(body, &userInfo); err != nil {
+	// Kick API returns an array of users; for authenticated user it's a single-element array
+	var users []models.KickUserInfo
+	if err := json.Unmarshal(body, &users); err != nil {
 		// Log the actual response body for debugging
 		return nil, fmt.Errorf("failed to decode response (status %d, body preview: %.200s...): %w", resp.StatusCode, string(body), err)
 	}
 
-	return &userInfo, nil
+	if len(users) == 0 {
+		return nil, fmt.Errorf("kick API returned empty user array")
+	}
+
+	return &users[0], nil
 }
 
 // GetUserInfo fetches user information (generic interface implementation)
