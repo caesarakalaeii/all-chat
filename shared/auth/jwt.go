@@ -18,7 +18,6 @@ type Claims struct {
 	UserID   string   `json:"sub"`
 	TwitchID string   `json:"twitch_id"`
 	Username string   `json:"username"`
-	Email    string   `json:"email,omitempty"`
 	Roles    []string `json:"roles"`
 	jwt.RegisteredClaims
 }
@@ -31,12 +30,11 @@ type ServiceClaims struct {
 }
 
 // GenerateJWT generates a new JWT token for the given user
-func GenerateJWT(userID, twitchID, username, email, secret string) (string, error) {
+func GenerateJWT(userID, twitchID, username, secret string) (string, error) {
 	claims := Claims{
 		UserID:   userID,
 		TwitchID: twitchID,
 		Username: username,
-		Email:    email,
 		Roles:    []string{"user"},
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

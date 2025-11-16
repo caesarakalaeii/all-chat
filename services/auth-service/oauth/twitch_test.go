@@ -213,7 +213,6 @@ func TestTwitchClient_GetUserInfo(t *testing.T) {
 						"login":             "testuser",
 						"display_name":      "TestUser",
 						"profile_image_url": "https://example.com/avatar.png",
-						"email":             "test@example.com",
 					},
 				},
 			},
@@ -228,9 +227,6 @@ func TestTwitchClient_GetUserInfo(t *testing.T) {
 				}
 				if info.DisplayName != "TestUser" {
 					t.Errorf("DisplayName = %v, want TestUser", info.DisplayName)
-				}
-				if info.Email != "test@example.com" {
-					t.Errorf("Email = %v, want test@example.com", info.Email)
 				}
 			},
 		},

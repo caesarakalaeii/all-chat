@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) UNIQUE NOT NULL,
     display_name VARCHAR(100) NOT NULL,
     profile_image_url TEXT,
-    email VARCHAR(255),
     access_token TEXT NOT NULL,           -- Encrypted OAuth token
     refresh_token TEXT NOT NULL,          -- Encrypted refresh token
     token_expires_at TIMESTAMP NOT NULL,

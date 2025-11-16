@@ -19,7 +19,7 @@ ALTER TABLE users ADD CONSTRAINT users_at_least_one_oauth_id
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 CREATE INDEX IF NOT EXISTS idx_users_auth_provider ON users(auth_provider);
 
--- Update username constraint to allow YouTube users (username can be email-based)
+-- Update username constraint to allow longer provider usernames
 ALTER TABLE users ALTER COLUMN username TYPE VARCHAR(100);
 
 -- Comment on changes
