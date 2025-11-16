@@ -79,6 +79,11 @@ func main() {
 		log.Fatal("Failed to create overlay repository", zap.Error(err))
 	}
 
+	configRepo, err := repository.NewOverlayConfigRepository(connString)
+	if err != nil {
+		log.Fatal("Failed to create overlay config repository", zap.Error(err))
+	}
+
 	sourceRepo, err := repository.NewSourceRepository(connString)
 	if err != nil {
 		log.Fatal("Failed to create source repository", zap.Error(err))
@@ -86,6 +91,7 @@ func main() {
 
 	// Initialize handlers
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
+	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo)
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 
@@ -111,6 +117,9 @@ func main() {
 	// Register health routes (no auth required)
 	healthHandler.RegisterRoutes(router)
 
+	// Public config for OBS/browser sources
+	router.GET("/public/:id/config", configHandler.HandleGetPublicConfig)
+
 	// Protected routes (require JWT)
 	protected := router.Group("/")
 	protected.Use(middleware.JWTAuth(config.JWTSecret))
@@ -126,6 +135,9 @@ func main() {
 		protected.GET("/:id/sources", sourcesHandler.HandleListSources)
 		protected.POST("/:id/sources", sourcesHandler.HandleAddSource)
 		protected.DELETE("/:id/sources/:source_id", sourcesHandler.HandleDeleteSource)
+
+		protected.GET("/:id/config", configHandler.HandleGetConfig)
+		protected.PUT("/:id/config", configHandler.HandleUpdateConfig)
 
 		// YouTube helper routes
 		protected.POST("/youtube/resolve", youtubeHandler.ResolveChannel)

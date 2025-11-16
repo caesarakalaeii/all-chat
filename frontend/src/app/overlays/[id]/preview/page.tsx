@@ -26,6 +26,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { WebSocketClient } from '@/lib/api/websocket';
+import { overlaysApi } from '@/lib/api/overlays';
 import type { ChatMessage } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
@@ -147,12 +148,51 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const [maxMessages, setMaxMessages] = useState(50);
+  const [fontSize, setFontSize] = useState(16);
+  const [messageDuration, setMessageDuration] = useState(15);
   const [mockForm, setMockForm] = useState<MockMessageFormState>(DEFAULT_MOCK_FORM);
   const [customCss, setCustomCss] = useState('');
   const [useCustomCss, setUseCustomCss] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch overlay config for customization defaults
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    const loadConfig = async () => {
+      try {
+        const config = await overlaysApi.getConfig(params.id);
+        const display = config.display_settings || {};
+
+        if (typeof display.max_messages === 'number') {
+          setMaxMessages(display.max_messages);
+        }
+        if (typeof display.font_size === 'number') {
+          setFontSize(display.font_size);
+        }
+        if (typeof display.message_duration === 'number') {
+          setMessageDuration(display.message_duration);
+        }
+
+        const css = config.custom_css || '';
+        setCustomCss(css);
+        setUseCustomCss(Boolean(css.trim().length));
+      } catch (error) {
+        console.warn('Failed to load overlay config', error);
+      } finally {
+        setConfigLoaded(true);
+      }
+    };
+
+    loadConfig();
+  }, [params.id, token]);
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -273,6 +313,30 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
 
   const handleClearMockMessages = () => {
     setMessages((prev) => prev.filter((message) => !isMockMessage(message)));
+  };
+
+  const handleSaveCustomization = async () => {
+    setIsSavingConfig(true);
+    setConfigAlert(null);
+
+    try {
+      await overlaysApi.updateConfig(params.id, {
+        display_settings: {
+          font_size: fontSize,
+          message_duration: messageDuration,
+          max_messages: maxMessages
+        },
+        custom_css: useCustomCss ? customCss : ''
+      });
+
+      setConfigAlert({ type: 'success', message: 'Customization saved!' });
+    } catch (error) {
+      console.error('Failed to save overlay config', error);
+      setConfigAlert({ type: 'error', message: 'Failed to save customization' });
+    } finally {
+      setIsSavingConfig(false);
+      setTimeout(() => setConfigAlert(null), 5000);
+    }
   };
 
   return (
@@ -400,7 +464,12 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                           </div>
 
                           {/* Message Text */}
-                          <p className="text-gray-200 break-words">{renderMessageContent(message)}</p>
+                          <p
+                            className="text-gray-200 break-words"
+                            style={{ fontSize: `${fontSize}px` }}
+                          >
+                            {renderMessageContent(message)}
+                          </p>
 
                           {/* Timestamp */}
                           <span className="text-xs text-gray-600 mt-1 block">
@@ -425,13 +494,14 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                 {/* Font Size */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Font Size: <span className="text-twitch">16px</span>
+                    Font Size: <span className="text-twitch">{fontSize}px</span>
                   </label>
                   <input
                     type="range"
                     min="12"
                     max="32"
-                    defaultValue="16"
+                    value={fontSize}
+                    onChange={(e) => setFontSize(parseInt(e.target.value))}
                     className="w-full accent-twitch"
                   />
                 </div>
@@ -454,13 +524,14 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                 {/* Message Duration */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Message Duration: <span className="text-twitch">15s</span>
+                    Message Duration: <span className="text-twitch">{messageDuration}s</span>
                   </label>
                   <input
                     type="range"
                     min="5"
                     max="60"
-                    defaultValue="15"
+                    value={messageDuration}
+                    onChange={(e) => setMessageDuration(parseInt(e.target.value))}
                     className="w-full accent-twitch"
                   />
                 </div>
@@ -630,9 +701,24 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                 </div>
 
                 {/* Save Button */}
-                <button className="w-full bg-twitch hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors mt-6">
-                  Save Configuration
-                </button>
+                <div className="space-y-3">
+                  <button
+                    onClick={handleSaveCustomization}
+                    disabled={!configLoaded || isSavingConfig}
+                    className="w-full bg-twitch hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors mt-6"
+                  >
+                    {isSavingConfig ? 'Saving...' : 'Save Configuration'}
+                  </button>
+                  {configAlert && (
+                    <p
+                      className={`text-sm ${
+                        configAlert.type === 'success' ? 'text-green-400' : 'text-red-400'
+                      }`}
+                    >
+                      {configAlert.message}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Stats */}

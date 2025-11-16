@@ -23,6 +23,7 @@ export interface OverlayConfig {
   enable_7tv: boolean;
   enable_bttv: boolean;
   enable_ffz: boolean;
+  custom_css?: string;
   created_at: string;
   updated_at: string;
 }

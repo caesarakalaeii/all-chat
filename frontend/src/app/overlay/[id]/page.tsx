@@ -27,12 +27,44 @@ import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 
 export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [maxMessages] = useState(50);
-  const [fontSize] = useState(16);
-  const [messageDuration] = useState(15);
+  const [maxMessages, setMaxMessages] = useState(50);
+  const [fontSize, setFontSize] = useState(16);
+  const [messageDuration, setMessageDuration] = useState(15);
+  const [customCss, setCustomCss] = useState('');
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load overlay display configuration (public endpoint)
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const response = await fetch(`/api/v1/overlays/public/${params.id}/config`);
+        if (!response.ok) {
+          throw new Error('failed to load config');
+        }
+
+        const data = await response.json();
+        const display = data.display_settings || {};
+
+        if (typeof display.max_messages === 'number') {
+          setMaxMessages(display.max_messages);
+        }
+        if (typeof display.font_size === 'number') {
+          setFontSize(display.font_size);
+        }
+        if (typeof display.message_duration === 'number') {
+          setMessageDuration(display.message_duration);
+        }
+
+        setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
+      } catch (error) {
+        console.warn('[OBS Overlay] Failed to load config', error);
+      }
+    };
+
+    loadConfig();
+  }, [params.id]);
 
   // Initialize WebSocket connection (no auth required)
   useEffect(() => {
@@ -118,6 +150,9 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="min-h-screen w-full p-4">
+      {customCss.trim().length > 0 && (
+        <style dangerouslySetInnerHTML={{ __html: customCss }} />
+      )}
       <div className="space-y-3">
         {messages.map((message, index) => (
           <div
