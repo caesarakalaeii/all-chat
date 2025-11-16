@@ -255,30 +255,29 @@ Keel monitors these images and automatically:
 
 ### Metrics
 
-All services expose `/metrics` endpoint:
-- Grafana Agent scrapes via Prometheus annotations
-- Metrics stored in Mimir
-- Viewable in Grafana dashboards
+All services expose `/metrics` endpoints that are annotated with `prometheus.io/*`. The kube-prometheus-stack cluster deployment handles:
+- Scraping via the Prometheus Operator.
+- Storage inside the in-cluster Prometheus TSDB (15 day retention by default).
+- Rendering in Grafana (see `monitoring/dashboards/` for the custom JSON we ship).
 
-**Create Dashboards in Grafana:**
-1. Port forward: `kubectl port-forward -n monitoring svc/lgtm-grafana 3000:80`
-2. Access: http://localhost:3000
-3. Import dashboards for All-Chat services
+**Use Grafana:**
+1. Port forward: `kubectl port-forward -n monitoring svc/kube-prometheus-grafana 3000:80`
+2. Open http://localhost:3000 and sign in with the usual admin credentials.
+3. Use the pre-provisioned Kubernetes dashboards and the AllChat dashboards (Listener Observability + Service Health), or import additional ones.
 
 ### Logs
 
-Logs automatically collected by Grafana Agent:
-- No configuration needed per service
-- Stored in Loki
-- Queryable in Grafana Explore
+Promtail (installed with the Loki Helm release) scrapes logs from every pod and stores them in Loki.
 
-**View Logs:**
+**View logs in Grafana**:
+1. Port forward Grafana as above.
+2. Navigate to **Explore → Loki**.
+3. Run queries such as `{namespace="allchat", app="api-gateway"}` or `{pod="kick-listener-.*"}`.
+
+**Direct Loki query (debugging)**:
 ```bash
-# Via kubectl
-kubectl logs -n allchat -l app=youtube-listener --tail=100 -f
-
-# Via Grafana
-# Port forward and access Explore → Loki → {namespace="allchat"}
+kubectl port-forward -n monitoring svc/loki 3100:3100
+curl -G "http://localhost:3100/loki/api/v1/query" --data-urlencode 'query={namespace="monitoring"}'
 ```
 
 ### Alerts
