@@ -1,0 +1,146 @@
+package handlers
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/caesar/all-chat/services/overlay-manager/models"
+	"github.com/gin-gonic/gin"
+)
+
+// OverlayConfigRepository defines persistence operations needed by the handler.
+// Having an interface keeps handlers easy to test.
+type OverlayConfigRepository interface {
+	GetByOverlayID(ctx context.Context, overlayID string) (*models.OverlayConfig, error)
+	Update(ctx context.Context, config *models.OverlayConfig) error
+}
+
+// ConfigHandler manages overlay configuration routes.
+type ConfigHandler struct {
+	repo     OverlayConfigRepository
+	overlays OverlayRepository
+}
+
+// NewConfigHandler returns a ConfigHandler.
+func NewConfigHandler(repo OverlayConfigRepository, overlays OverlayRepository) *ConfigHandler {
+	return &ConfigHandler{repo: repo, overlays: overlays}
+}
+
+// HandleGetConfig returns the configuration for an overlay owned by the requester.
+func (h *ConfigHandler) HandleGetConfig(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	overlayID := c.Param("id")
+	if overlayID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "overlay id is required"})
+		return
+	}
+
+	if _, err := h.overlays.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string)); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+
+	config, err := h.repo.GetByOverlayID(c.Request.Context(), overlayID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "overlay config not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, config)
+}
+
+// HandleUpdateConfig updates the overlay configuration for the owner.
+func (h *ConfigHandler) HandleUpdateConfig(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	overlayID := c.Param("id")
+	if overlayID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "overlay id is required"})
+		return
+	}
+
+	if _, err := h.overlays.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string)); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+
+	config, err := h.repo.GetByOverlayID(c.Request.Context(), overlayID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "overlay config not found"})
+		return
+	}
+
+	var req struct {
+		DisplaySettings map[string]any `json:"display_settings"`
+		FilterSettings  map[string]any `json:"filter_settings"`
+		Enable7TV       *bool          `json:"enable_7tv"`
+		EnableBTTV      *bool          `json:"enable_bttv"`
+		EnableFFZ       *bool          `json:"enable_ffz"`
+		CustomCSS       *string        `json:"custom_css"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.DisplaySettings != nil {
+		config.DisplaySettings = req.DisplaySettings
+	}
+	if req.FilterSettings != nil {
+		config.FilterSettings = req.FilterSettings
+	}
+	if req.Enable7TV != nil {
+		config.Enable7TV = *req.Enable7TV
+	}
+	if req.EnableBTTV != nil {
+		config.EnableBTTV = *req.EnableBTTV
+	}
+	if req.EnableFFZ != nil {
+		config.EnableFFZ = *req.EnableFFZ
+	}
+	if req.CustomCSS != nil {
+		config.CustomCSS = *req.CustomCSS
+	}
+
+	if err := h.repo.Update(c.Request.Context(), config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update overlay config"})
+		return
+	}
+
+	c.JSON(http.StatusOK, config)
+}
+
+// HandleGetPublicConfig exposes safe configuration fields without authentication.
+func (h *ConfigHandler) HandleGetPublicConfig(c *gin.Context) {
+	overlayID := c.Param("id")
+	if overlayID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "overlay id is required"})
+		return
+	}
+
+	if _, err := h.overlays.GetByID(c.Request.Context(), overlayID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+
+	config, err := h.repo.GetByOverlayID(c.Request.Context(), overlayID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "overlay config not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"display_settings": config.DisplaySettings,
+		"custom_css":       config.CustomCSS,
+	})
+}
