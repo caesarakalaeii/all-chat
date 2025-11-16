@@ -121,6 +121,13 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			return
 		}
 
+		// Get user ID from JWT context (set by middleware)
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized - please log in first"})
+			return
+		}
+
 		// Generate random CSRF token
 		csrfToken, err := generateRandomString(32)
 		if err != nil {
@@ -129,8 +136,8 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			return
 		}
 
-		// Create add-source state
-		oauthState := oauth.NewAddSourceState(csrfToken, overlayID)
+		// Create add-source state with current user_id for account linking
+		oauthState := oauth.NewAddSourceState(csrfToken, overlayID, userID.(string))
 		if err := oauthState.Validate(); err != nil {
 			h.logger.Error("Invalid OAuth state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -286,23 +293,55 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			return
 		}
 
-		// Get or create user based on platform
-		user, err := h.getOrCreateUser(c.Request.Context(), platform, platformUser, token)
-		if err != nil {
-			h.logger.Error("Failed to get or create user",
-				zap.String("platform", string(platform)),
-				zap.Error(err),
-			)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process user"})
-			return
-		}
+		// Get or create user based on platform and context
+		var user *models.User
+		var jwtToken string
 
-		// Generate JWT
-		jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
-		if err != nil {
-			h.logger.Error("Failed to generate JWT", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
-			return
+		if oauthState.IsAddSource() && oauthState.UserID != "" {
+			// Account linking: link new platform to existing user
+			user, err = h.linkPlatformToUser(c.Request.Context(), oauthState.UserID, platform, platformUser, token)
+			if err != nil {
+				h.logger.Error("Failed to link platform to user",
+					zap.String("platform", string(platform)),
+					zap.String("user_id", oauthState.UserID),
+					zap.Error(err),
+				)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link account"})
+				return
+			}
+
+			// Generate JWT for the existing user
+			jwtToken, err = auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
+			if err != nil {
+				h.logger.Error("Failed to generate JWT", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+				return
+			}
+
+			h.logger.Info("Linked platform to existing user",
+				zap.String("platform", string(platform)),
+				zap.String("user_id", user.ID),
+				zap.String("platform_user_id", platformUser.GetID()),
+			)
+		} else {
+			// Regular login: get or create user
+			user, err = h.getOrCreateUser(c.Request.Context(), platform, platformUser, token)
+			if err != nil {
+				h.logger.Error("Failed to get or create user",
+					zap.String("platform", string(platform)),
+					zap.Error(err),
+				)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process user"})
+				return
+			}
+
+			// Generate JWT
+			jwtToken, err = auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
+			if err != nil {
+				h.logger.Error("Failed to generate JWT", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+				return
+			}
 		}
 
 		// Handle different actions
@@ -474,6 +513,60 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 				zap.Error(err),
 			)
 			// Don't fail the login
+		}
+	}
+
+	return user, nil
+}
+
+// linkPlatformToUser links a new platform to an existing user account
+func (h *PlatformAuthHandlerV2) linkPlatformToUser(
+	ctx context.Context,
+	userID string,
+	platform oauth.Platform,
+	platformUser oauth.PlatformUserInfo,
+	token *oauth2.Token,
+) (*models.User, error) {
+	// Get the existing user
+	user, err := h.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Update the user with the new platform ID and tokens
+	platformID := platformUser.GetID()
+
+	switch platform {
+	case oauth.PlatformTwitch:
+		user.TwitchID = &platformID
+	case oauth.PlatformYouTube:
+		user.GoogleID = &platformID
+	case oauth.PlatformKick:
+		user.KickID = &platformID
+	case oauth.PlatformTikTok:
+		user.TikTokOpenID = &platformID
+	default:
+		return nil, fmt.Errorf("unsupported platform: %s", platform)
+	}
+
+	// Update tokens (in case they're linking a platform they previously used)
+	user.AccessToken = token.AccessToken
+	user.RefreshToken = token.RefreshToken
+	user.TokenExpiresAt = token.Expiry
+
+	// Update user in database
+	if err := h.userRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to update user: %w", err)
+	}
+
+	// For YouTube, also store tokens in youtube_oauth_tokens table for listener
+	if platform == oauth.PlatformYouTube {
+		if err := h.userRepo.StoreYouTubeToken(ctx, user.ID, token); err != nil {
+			h.logger.Warn("Failed to store YouTube tokens for listener",
+				zap.String("user_id", user.ID),
+				zap.Error(err),
+			)
+			// Don't fail the linking
 		}
 	}
 
