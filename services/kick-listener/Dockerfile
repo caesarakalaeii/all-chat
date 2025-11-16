@@ -8,7 +8,8 @@ WORKDIR /app
 RUN apk add --no-cache git ca-certificates
 
 # Copy go.mod and go.sum for all modules referenced in go.work
-COPY go.work go.work.sum* ./
+COPY go.work ./
+COPY go.work.sum ./
 COPY shared/go.mod shared/go.sum ./shared/
 COPY services/api-gateway/go.mod services/api-gateway/go.sum ./services/api-gateway/
 COPY services/auth-service/go.mod services/auth-service/go.sum ./services/auth-service/
