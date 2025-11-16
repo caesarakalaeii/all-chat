@@ -1,5 +1,7 @@
 # OAuth-Based Source Addition Feature
 
+**Project Repository**: [caesarakalaeii/all-chat](https://github.com/caesarakalaeii/all-chat)
+
 ## Overview
 
 This document describes the OAuth-based source addition feature that allows users to add chat sources to overlays by logging in with the platform (Twitch, YouTube, Kick, TikTok) instead of manually entering channel IDs.
