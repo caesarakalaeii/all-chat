@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -40,6 +41,8 @@ type Manager struct {
 	stopChan    chan struct{}
 	wg          sync.WaitGroup
 	dbConn      DBConnInterface // For PostgreSQL LISTEN
+
+	leader *sourcemanager.LeadershipCoordinator
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -48,11 +51,12 @@ type DBConnInterface interface {
 }
 
 // NewManager creates a new channel manager
-func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn DBConnInterface, logger *zap.Logger) *Manager {
+func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn DBConnInterface, leader *sourcemanager.LeadershipCoordinator, logger *zap.Logger) *Manager {
 	return &Manager{
 		repo:        repo,
 		joinParter:  joinParter,
 		dbConn:      dbConn,
+		leader:      leader,
 		logger:      logger,
 		rateLimiter: rate.NewLimiter(rate.Every(JoinRatePer/JoinRateLimit), JoinRateLimit),
 		activeChans: make(map[string]bool),
@@ -73,8 +77,12 @@ func (m *Manager) Start(ctx context.Context) error {
 	go m.syncLoop(ctx)
 
 	// Start PostgreSQL LISTEN for instant notifications
-	m.wg.Add(1)
-	go m.listenForChanges(ctx)
+	if m.dbConn != nil {
+		m.wg.Add(1)
+		go m.listenForChanges(ctx)
+	} else {
+		m.logger.Warn("Database connection not configured, skipping LISTEN/NOTIFY watcher")
+	}
 
 	m.logger.Info("Channel manager started",
 		zap.Duration("sync_interval", SyncInterval),
@@ -89,6 +97,10 @@ func (m *Manager) Stop() {
 	close(m.stopChan)
 	m.syncTicker.Stop()
 	m.wg.Wait()
+
+	if m.leader != nil {
+		m.leader.Stop()
+	}
 
 	m.logger.Info("Channel manager stopped")
 }
@@ -226,11 +238,32 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 
 	// PART channels first (no rate limit)
 	for _, ch := range toPart {
-		m.partChannel(ch)
+		m.partChannelLocked(ch, true)
 	}
 
 	// JOIN new channels with rate limiting
 	for _, ch := range toJoin {
+		if m.leader != nil {
+			ok, err := m.leader.EnsureLeadership(ctx, ch, func(channel string) func() {
+				return func() {
+					m.handleLeadershipLoss(channel)
+				}
+			}(ch))
+			if err != nil {
+				m.logger.Error("Failed to claim leadership",
+					zap.String("channel", ch),
+					zap.Error(err),
+				)
+				continue
+			}
+			if !ok {
+				m.logger.Debug("Skipping channel because another instance is leader",
+					zap.String("channel", ch),
+				)
+				continue
+			}
+		}
+
 		// Wait for rate limiter
 		if err := m.rateLimiter.Wait(ctx); err != nil {
 			m.logger.Warn("Rate limiter wait interrupted", zap.Error(err))
@@ -258,12 +291,32 @@ func (m *Manager) joinChannel(channel string) {
 	)
 }
 
-// partChannel parts a channel and removes from tracking
-func (m *Manager) partChannel(channel string) {
+// partChannelLocked parts a channel and removes from tracking. Caller must hold m.mu.
+func (m *Manager) partChannelLocked(channel string, releaseLeadership bool) {
 	m.joinParter.Depart(channel)
 	delete(m.activeChans, channel)
 
+	if releaseLeadership && m.leader != nil {
+		m.leader.Release(channel)
+	}
+
 	m.logger.Info("Parted channel",
+		zap.String("channel", channel),
+	)
+}
+
+func (m *Manager) handleLeadershipLoss(channel string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.activeChans[channel] {
+		return
+	}
+
+	m.joinParter.Depart(channel)
+	delete(m.activeChans, channel)
+
+	m.logger.Warn("Parted channel after losing leadership",
 		zap.String("channel", channel),
 	)
 }

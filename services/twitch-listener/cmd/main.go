@@ -15,6 +15,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -82,10 +83,26 @@ func main() {
 	}
 	ircConn := irc.NewConnectionManager(ircConfig, parser, streamPublisher, log)
 
+	// Source Manager client (optional)
+	sourceManagerURL := getEnvOrDefault("SOURCE_MANAGER_URL", "http://source-manager:8088")
+	sourceManagerSecret := getEnvOrDefault("SOURCE_MANAGER_SECRET", "dev-service-secret")
+
+	var leaderCoord *sourcemanager.LeadershipCoordinator
+	if sourceManagerSecret == "" {
+		log.Warn("SOURCE_MANAGER_SECRET not set; Twitch Listener will not coordinate leadership")
+	} else {
+		tokenSource := sourcemanager.NewSigningTokenSource("twitch-listener", sourceManagerSecret, 15*time.Minute)
+		smClient, err := sourcemanager.NewClient(sourceManagerURL, tokenSource)
+		if err != nil {
+			log.Fatal("Failed to initialize Source Manager client", zap.Error(err))
+		}
+		leaderCoord = sourcemanager.NewLeadershipCoordinator("twitch", smClient, 5*time.Second, log)
+	}
+
 	// Initialize channel manager
 	channelRepo := channels.NewRepository(db)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, log)
+	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, leaderCoord, log)
 
 	// Connect to Twitch IRC
 	if err := ircConn.Connect(ctx); err != nil {

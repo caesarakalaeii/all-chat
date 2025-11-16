@@ -9,6 +9,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/api"
 	"github.com/caesar/all-chat/services/youtube-listener/models"
 	"github.com/caesar/all-chat/services/youtube-listener/oauth"
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -19,6 +20,7 @@ type Manager struct {
 	oauthManager   *oauth.Manager
 	messageHandler MessageHandler
 	logger         *zap.Logger
+	leader         *sourcemanager.LeadershipCoordinator
 
 	mu            sync.RWMutex
 	activeStreams map[string]*models.YouTubeStream // streamID -> stream
@@ -41,6 +43,7 @@ func NewManager(
 	oauthManager *oauth.Manager,
 	messageHandler MessageHandler,
 	dbConn DBConnInterface,
+	leader *sourcemanager.LeadershipCoordinator,
 	logger *zap.Logger,
 ) *Manager {
 	return &Manager{
@@ -49,6 +52,7 @@ func NewManager(
 		messageHandler: messageHandler,
 		dbConn:         dbConn,
 		logger:         logger,
+		leader:         leader,
 		activeStreams:  make(map[string]*models.YouTubeStream),
 		pollers:        make(map[string]*Poller),
 		syncInterval:   30 * time.Second,
@@ -89,12 +93,17 @@ func (m *Manager) Stop() {
 	for streamID, poller := range m.pollers {
 		m.logger.Info("Stopping poller", zap.String("stream_id", streamID))
 		poller.Stop()
+		m.releaseLeadership(streamID)
 	}
 	m.pollers = make(map[string]*Poller)
 	m.mu.Unlock()
 
 	// Wait for goroutines
 	m.wg.Wait()
+
+	if m.leader != nil {
+		m.leader.Stop()
+	}
 
 	m.logger.Info("Stream manager stopped")
 }
@@ -293,6 +302,23 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 		return nil
 	}
 
+	if m.leader != nil {
+		ok, err := m.leader.EnsureLeadership(ctx, stream.StreamID, func(streamID string) func() {
+			return func() {
+				m.handleLeadershipLoss(streamID)
+			}
+		}(stream.StreamID))
+		if err != nil {
+			return fmt.Errorf("failed to claim leadership: %w", err)
+		}
+		if !ok {
+			m.logger.Debug("Leadership held by another instance, skipping poller",
+				zap.String("stream_id", stream.StreamID),
+			)
+			return nil
+		}
+	}
+
 	m.logger.Info("Starting poller for stream",
 		zap.String("stream_id", stream.StreamID),
 		zap.String("channel_id", stream.ChannelID),
@@ -303,6 +329,9 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 	poller := NewPoller(stream, apiClient, m.logger)
 	poller.SetMessageHandler(m.messageHandler)
 	if err := poller.Start(ctx); err != nil {
+		if m.leader != nil {
+			m.leader.Release(stream.StreamID)
+		}
 		return fmt.Errorf("failed to start poller: %w", err)
 	}
 
@@ -332,7 +361,32 @@ func (m *Manager) cleanupInactivePollers(activeChannels map[string][]*models.Str
 			poller.Stop()
 			delete(m.pollers, streamID)
 			delete(m.activeStreams, streamID)
+			m.releaseLeadership(streamID)
 		}
+	}
+}
+
+func (m *Manager) releaseLeadership(streamID string) {
+	if m.leader == nil {
+		return
+	}
+	m.leader.Release(streamID)
+}
+
+func (m *Manager) handleLeadershipLoss(streamID string) {
+	m.mu.Lock()
+	poller, exists := m.pollers[streamID]
+	if exists {
+		poller.Stop()
+		delete(m.pollers, streamID)
+	}
+	delete(m.activeStreams, streamID)
+	m.mu.Unlock()
+
+	if exists {
+		m.logger.Warn("Stopped poller after losing leadership",
+			zap.String("stream_id", streamID),
+		)
 	}
 }
 
