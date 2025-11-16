@@ -49,6 +49,7 @@ export interface ChatSource {
   overlay_id: string;
   platform: 'twitch' | 'youtube' | 'kick' | 'tiktok';
   channel_id: string;
+  channel_name?: string;
   config?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
