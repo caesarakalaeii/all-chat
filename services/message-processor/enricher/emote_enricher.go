@@ -115,10 +115,14 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 
 	// Tokenize message text and find matching emotes
 	words := strings.Fields(msg.Message.Text)
-	for i, word := range words {
+	occurrences := make(map[string]int)
+	for _, word := range words {
+		occurrence := occurrences[word]
+		occurrences[word]++
+
 		if emote, found := emoteMap[word]; found {
 			// Calculate positions in the original text
-			position := e.findWordPosition(msg.Message.Text, word, i)
+			position := e.findWordPosition(msg.Message.Text, word, occurrence)
 			if position != nil {
 				msg.Message.Emotes = append(msg.Message.Emotes, models.Emote{
 					Code:      emote.Code,

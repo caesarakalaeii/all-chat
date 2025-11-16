@@ -27,6 +27,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { WebSocketClient } from '@/lib/api/websocket';
 import type { ChatMessage } from '@/lib/types/message';
+import { renderMessageContent } from '@/lib/renderMessage';
 
 export default function OverlayPreviewPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -210,7 +211,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                           </div>
 
                           {/* Message Text */}
-                          <p className="text-gray-200 break-words">{message.message.text}</p>
+                          <p className="text-gray-200 break-words">{renderMessageContent(message)}</p>
 
                           {/* Timestamp */}
                           <span className="text-xs text-gray-600 mt-1 block">

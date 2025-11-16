@@ -22,6 +22,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import type { ChatMessage } from '@/lib/types/message';
+import { renderMessageContent } from '@/lib/renderMessage';
 
 export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -168,7 +169,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
 
                 {/* Message Text with Emotes */}
                 <div className="text-white break-words" style={{ fontSize: `${fontSize}px` }}>
-                  {message.message?.text || ''}
+                  {renderMessageContent(message)}
                 </div>
 
                 {/* Timestamp */}
