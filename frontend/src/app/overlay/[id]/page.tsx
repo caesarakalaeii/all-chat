@@ -23,6 +23,7 @@
 import { useEffect, useState, useRef } from 'react';
 import type { ChatMessage } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
+import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 
 export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -46,7 +47,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
       console.log('[OBS Overlay] Connected');
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       try {
         const envelope = JSON.parse(event.data);
 
@@ -54,7 +55,8 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
 
         // Only process chat messages, ignore connected/ping/pong/error
         if (envelope.type === 'chat_message' && envelope.data) {
-          const message = envelope.data;
+          let message: ChatMessage = envelope.data;
+          message = await resolveTwitchBadgeIcons(message);
 
           setMessages((prev) => {
             const newMessages = [...prev, message];
