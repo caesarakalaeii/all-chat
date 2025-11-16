@@ -8,6 +8,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// Client captures the subset of redis.Client behavior used by shared packages.
+type Client interface {
+	Incr(ctx context.Context, key string) *redis.IntCmd
+	Expire(ctx context.Context, key string, expiration time.Duration) *redis.BoolCmd
+	TTL(ctx context.Context, key string) *redis.DurationCmd
+}
+
 // NewClient creates a new Redis client with optimized settings
 func NewClient(addr, password string) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
