@@ -113,7 +113,7 @@ func (t *TikTokOAuth) GetPlatform() Platform {
 // GetUserInfoTikTok fetches user information from TikTok API (returns platform-specific type)
 func (t *TikTokOAuth) GetUserInfoTikTok(ctx context.Context, accessToken string) (*models.TikTokUserInfo, error) {
 	// TikTok requires fields parameter
-	reqURL := tiktokUserURL + "?fields=open_id,union_id,avatar_url,display_name"
+	reqURL := tiktokUserURL + "?fields=open_id,union_id,avatar_url,display_name,username"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
@@ -171,6 +171,7 @@ func (t *TikTokOAuth) GetUserInfo(ctx context.Context, accessToken string) (Plat
 		OpenID:      tiktokInfo.OpenID,
 		UnionID:     tiktokInfo.UnionID,
 		DisplayName: tiktokInfo.DisplayName,
+		Username:    tiktokInfo.Username,
 		AvatarURL:   tiktokInfo.AvatarURL,
 	}, nil
 }

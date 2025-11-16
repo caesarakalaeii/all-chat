@@ -18,12 +18,12 @@ import (
 
 // PlatformAuthHandler handles authentication for any OAuth platform
 type PlatformAuthHandler struct {
-	providers  map[oauth.Platform]oauth.OAuthProvider
-	userRepo   *repository.UserRepository
-	redis      *redis.Client
-	jwtSecret  string
-	jwtExpiry  time.Duration
-	logger     *zap.Logger
+	providers   map[oauth.Platform]oauth.OAuthProvider
+	userRepo    *repository.UserRepository
+	redis       *redis.Client
+	jwtSecret   string
+	jwtExpiry   time.Duration
+	logger      *zap.Logger
 	frontendURL string
 }
 
@@ -206,6 +206,30 @@ func (h *PlatformAuthHandler) HandleCallback(platform oauth.Platform) gin.Handle
 			return
 		}
 
+		if platform == oauth.PlatformYouTube {
+			youtubeProvider, ok := provider.(*oauth.YouTubeOAuth)
+			if !ok {
+				h.logger.Error("YouTube provider assertion failed")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "YouTube provider misconfigured"})
+				return
+			}
+
+			channelInfo, channelErr := youtubeProvider.GetPrimaryChannel(c.Request.Context(), token.AccessToken)
+			if channelErr != nil {
+				h.logger.Error("Failed to resolve YouTube channel", zap.Error(channelErr))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to resolve YouTube channel"})
+				return
+			}
+
+			if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, channelInfo.ChannelID, token); err != nil {
+				h.logger.Warn("Failed to store YouTube tokens for listener",
+					zap.String("user_id", user.ID),
+					zap.String("channel_id", channelInfo.ChannelID),
+					zap.Error(err),
+				)
+			}
+		}
+
 		// Generate JWT
 		jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
 		if err != nil {
@@ -302,17 +326,6 @@ func (h *PlatformAuthHandler) getOrCreateUser(
 
 		if err := h.userRepo.Update(ctx, user); err != nil {
 			return nil, fmt.Errorf("failed to update user: %w", err)
-		}
-	}
-
-	// For YouTube, also store tokens in youtube_oauth_tokens table for listener
-	if platform == oauth.PlatformYouTube {
-		if err := h.userRepo.StoreYouTubeToken(ctx, user.ID, token); err != nil {
-			h.logger.Warn("Failed to store YouTube tokens for listener",
-				zap.String("user_id", user.ID),
-				zap.Error(err),
-			)
-			// Don't fail the login
 		}
 	}
 
