@@ -57,8 +57,20 @@ function AuthCallbackContent() {
         const user = await authApi.getMe();
         setUser(user);
 
-        // Redirect to dashboard
-        router.push('/dashboard');
+        // Check for redirect_to parameter (used when adding sources via OAuth)
+        const redirectTo = params.get('redirect_to');
+        const sourceAdded = params.get('source_added');
+
+        if (redirectTo) {
+          // Redirect to specific page (e.g., overlay page after adding source)
+          const redirectURL = sourceAdded
+            ? `${redirectTo}?source_added=${sourceAdded}`
+            : redirectTo;
+          router.push(redirectURL);
+        } else {
+          // Default: redirect to dashboard
+          router.push('/dashboard');
+        }
       } catch (err) {
         console.error('Authentication failed:', err);
         setError('Authentication failed. Please try again.');
