@@ -163,12 +163,16 @@ func main() {
 		// Platform-specific OAuth routes
 		publicAPI.GET("/auth/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/twitch/callback", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/twitch/add-source/:overlay_id", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/callback", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/youtube/add-source/:overlay_id", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/callback", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/kick/add-source/:overlay_id", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/callback", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/tiktok/add-source/:overlay_id", proxyHandler.ForwardRequest)
 
 		// Emote service routes (public)
 		publicAPI.GET("/emotes/*path", proxyHandler.ForwardRequest)
@@ -198,6 +202,9 @@ func main() {
 		// YouTube resolver routes (protected)
 		protectedAPI.POST("/youtube/resolve", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/youtube/resolve", proxyHandler.ForwardRequest)
+
+		// Internal API routes (protected - used by other services)
+		protectedAPI.POST("/internal/overlays/:id/sources/auto", proxyHandler.ForwardRequest)
 	}
 
 	// Get port from environment

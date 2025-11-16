@@ -1,4 +1,5 @@
 # Build stage
+# Kick Listener service for Kick.com chat integration
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
