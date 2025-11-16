@@ -1,5 +1,7 @@
 # All-Chat - Multi-Platform Chat Overlays
 
+**GitHub**: [caesarakalaeii/all-chat](https://github.com/caesarakalaeii/all-chat)
+
 **Aggregate chat from Twitch, YouTube, Kick, and TikTok into a single streaming overlay.**
 
 Perfect for streamers who multistream or want unified chat displays across platforms. Supports 7TV, BTTV, and FFZ emotes with full customization.

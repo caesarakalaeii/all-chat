@@ -1,15 +1,23 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates
 
-# Copy go.mod and go.sum for all services
+# Copy go.mod and go.sum for all modules referenced in go.work
 COPY go.work go.work.sum* ./
 COPY shared/go.mod shared/go.sum ./shared/
+COPY services/api-gateway/go.mod services/api-gateway/go.sum ./services/api-gateway/
+COPY services/auth-service/go.mod services/auth-service/go.sum ./services/auth-service/
+COPY services/emote-service/go.mod services/emote-service/go.sum ./services/emote-service/
 COPY services/kick-listener/go.mod services/kick-listener/go.sum* ./services/kick-listener/
+COPY services/message-processor/go.mod services/message-processor/go.sum ./services/message-processor/
+COPY services/overlay-manager/go.mod services/overlay-manager/go.sum ./services/overlay-manager/
+COPY services/source-manager/go.mod services/source-manager/go.sum ./services/source-manager/
+COPY services/twitch-listener/go.mod services/twitch-listener/go.sum ./services/twitch-listener/
+COPY services/youtube-listener/go.mod services/youtube-listener/go.sum ./services/youtube-listener/
 
 # Download dependencies
 WORKDIR /app/services/kick-listener
