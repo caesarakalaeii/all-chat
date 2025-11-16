@@ -96,8 +96,27 @@ func NewEnricher(client EmoteServiceClient, logger *zap.Logger) *Enricher {
 
 // Enrich adds third-party emotes (7TV, BTTV, FFZ) to the message
 func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) error {
+	channelIdentifier := msg.ChannelID
+	if msg.Platform == "twitch" {
+		if roomID, ok := msg.Metadata["twitch_room_id"]; ok {
+			switch v := roomID.(type) {
+			case string:
+				if strings.TrimSpace(v) != "" {
+					channelIdentifier = v
+				}
+			case fmt.Stringer:
+				if s := strings.TrimSpace(v.String()); s != "" {
+					channelIdentifier = s
+				}
+			default:
+				if s := strings.TrimSpace(fmt.Sprint(v)); s != "" {
+					channelIdentifier = s
+				}
+			}
+		}
+	}
 	// Fetch emotes for the channel
-	thirdPartyEmotes, err := e.client.GetEmotesForChannel(ctx, msg.ChannelID)
+	thirdPartyEmotes, err := e.client.GetEmotesForChannel(ctx, channelIdentifier)
 	if err != nil {
 		// Don't fail the message if emote enrichment fails
 		e.logger.Warn("Failed to fetch emotes, skipping enrichment",
