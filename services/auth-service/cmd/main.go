@@ -150,9 +150,10 @@ func main() {
 	}
 
 	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
+	overlayManagerURL := getEnvOrDefault("OVERLAY_MANAGER_URL", "http://localhost:8082")
 
 	// Create handlers
-	platformAuthHandler := handlers.NewPlatformAuthHandler(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, log)
+	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log)
 	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 
@@ -180,17 +181,22 @@ func main() {
 	router.GET("/callback", legacyAuthHandler.HandleCallback)
 
 	// Platform-based OAuth routes (generalized for all platforms)
-	router.GET("/twitch/login", platformAuthHandler.HandleLogin(oauth.PlatformTwitch))
-	router.GET("/twitch/callback", platformAuthHandler.HandleCallback(oauth.PlatformTwitch))
+	// V2 handlers support enhanced state management for add-source flows
+	router.GET("/twitch/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformTwitch))
+	router.GET("/twitch/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformTwitch))
+	router.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))
 
-	router.GET("/youtube/login", platformAuthHandler.HandleLogin(oauth.PlatformYouTube))
-	router.GET("/youtube/callback", platformAuthHandler.HandleCallback(oauth.PlatformYouTube))
+	router.GET("/youtube/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformYouTube))
+	router.GET("/youtube/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformYouTube))
+	router.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 
-	router.GET("/tiktok/login", platformAuthHandler.HandleLogin(oauth.PlatformTikTok))
-	router.GET("/tiktok/callback", platformAuthHandler.HandleCallback(oauth.PlatformTikTok))
+	router.GET("/tiktok/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformTikTok))
+	router.GET("/tiktok/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformTikTok))
+	router.GET("/tiktok/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTikTok))
 
-	router.GET("/kick/login", platformAuthHandler.HandleLogin(oauth.PlatformKick))
-	router.GET("/kick/callback", platformAuthHandler.HandleCallback(oauth.PlatformKick))
+	router.GET("/kick/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformKick))
+	router.GET("/kick/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformKick))
+	router.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
 
 	// Token refresh
 	router.POST("/refresh", legacyAuthHandler.HandleRefresh)

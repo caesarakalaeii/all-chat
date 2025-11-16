@@ -158,10 +158,76 @@ func (h *SourcesHandler) HandleDeleteSource(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// HandleAddSourceAuto handles POST /internal/overlays/:id/sources/auto
+// This is an internal endpoint called by auth-service after OAuth flow
+func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
+	// Get user ID from JWT context (set by auth middleware)
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	overlayID := c.Param("id")
+
+	// Verify user owns this overlay
+	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+
+	var req struct {
+		Platform    string `json:"platform" binding:"required"`
+		ChannelID   string `json:"channel_id" binding:"required"`
+		ChannelName string `json:"channel_name"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Use channel_id as channel_name if not provided
+	channelName := req.ChannelName
+	if channelName == "" {
+		channelName = req.ChannelID
+	}
+
+	source := &models.ChatSource{
+		OverlayID:    overlayID,
+		Platform:     req.Platform,
+		ChannelID:    req.ChannelID,
+		ChannelName:  channelName,
+		AuthRequired: req.Platform == "youtube" || req.Platform == "kick" || req.Platform == "tiktok",
+		Config:       make(map[string]interface{}),
+		IsActive:     true,
+	}
+
+	// Validate
+	if err := source.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Create in database
+	if err := h.sourceRepo.Create(c.Request.Context(), source); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create source"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, source)
+}
+
 // RegisterRoutes registers source routes
 // Note: Must be registered on the overlay detail routes (/:id/sources)
 func (h *SourcesHandler) RegisterRoutes(router gin.IRouter) {
 	router.GET("/sources", h.HandleListSources)
 	router.POST("/sources", h.HandleAddSource)
 	router.DELETE("/sources/:source_id", h.HandleDeleteSource)
+}
+
+// RegisterInternalRoutes registers internal source routes (called by other services)
+func (h *SourcesHandler) RegisterInternalRoutes(router gin.IRouter) {
+	router.POST("/sources/auto", h.HandleAddSourceAuto)
 }

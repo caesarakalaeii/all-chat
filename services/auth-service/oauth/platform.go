@@ -92,17 +92,16 @@ func (t *TikTokUserInfoWrapper) GetPlatform() Platform      { return PlatformTik
 
 // KickUserInfoWrapper wraps KickUserInfo to implement PlatformUserInfo
 type KickUserInfoWrapper struct {
-	ID         string
-	Username   string
-	Slug       string
-	Bio        string
-	ProfilePic string
-	Email      string
+	ID          string
+	Username    string
+	DisplayName string
+	ProfilePic  string
+	Email       string
 }
 
 func (k *KickUserInfoWrapper) GetID() string              { return k.ID }
 func (k *KickUserInfoWrapper) GetUsername() string        { return k.Username }
-func (k *KickUserInfoWrapper) GetDisplayName() string     { return k.Username }
+func (k *KickUserInfoWrapper) GetDisplayName() string     { return k.DisplayName }
 func (k *KickUserInfoWrapper) GetEmail() string           { return k.Email }
 func (k *KickUserInfoWrapper) GetProfileImageURL() string { return k.ProfilePic }
 func (k *KickUserInfoWrapper) GetPlatform() Platform      { return PlatformKick }

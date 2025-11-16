@@ -129,6 +129,12 @@ func main() {
 
 		// YouTube helper routes
 		protected.POST("/youtube/resolve", youtubeHandler.ResolveChannel)
+
+		// Internal API routes (called by other services like auth-service)
+		internal := protected.Group("/internal/overlays")
+		{
+			internal.POST("/:id/sources/auto", sourcesHandler.HandleAddSourceAuto)
+		}
 	}
 
 	// Create HTTP server
