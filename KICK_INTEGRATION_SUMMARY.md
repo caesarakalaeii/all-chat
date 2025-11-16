@@ -5,7 +5,29 @@
 ### OAuth Implementation Status: ✅ FULLY WORKING
 
 **Last Updated:** 2025-11-16
-**Status:** Production Ready
+**OAuth Status:** Production Ready
+**Listener Status:** Code Complete, Not Yet Deployed
+
+### Architecture Note: OAuth vs Chat Listening
+
+**Important:** Kick has two separate systems:
+
+1. **OAuth Authentication** (`user:read` scope) - ✅ COMPLETE
+   - For user login and identification
+   - Used by Auth Service
+   - Requires OAuth credentials from Kick Developer Portal
+
+2. **Chat Message Listening** (Public Pusher WebSocket) - ✅ CODE COMPLETE, NOT DEPLOYED
+   - For receiving live chat messages
+   - Used by Kick Listener service
+   - **Does NOT require OAuth or event:subscribe scope**
+   - Uses Kick's public Pusher WebSocket (`wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679`)
+   - No authentication required - public chat channels are openly accessible
+
+**Why event:subscribe is not needed:**
+- The `event:subscribe` scope is for Kick's **EventSub webhooks** (server-to-server push notifications)
+- Our implementation uses the **public Pusher WebSocket** instead, which anyone can connect to
+- Similar to how Twitch has both IRC (public) and EventSub (authenticated)
 
 ### 1. OAuth Implementation ✅
 
