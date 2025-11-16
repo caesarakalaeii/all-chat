@@ -22,7 +22,7 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { WebSocketClient } from '@/lib/api/websocket';
@@ -141,6 +141,43 @@ const isMockMessage = (message: ChatMessage): boolean => {
   return Boolean(data?.mock);
 };
 
+const scopeCustomCss = (css: string, scopeSelector: string, bodySelector: string): string => {
+  if (!css.trim()) {
+    return '';
+  }
+
+  const replaceBody = css
+    .replace(/:root/gi, scopeSelector)
+    .replace(/\bbody\b/gi, bodySelector);
+
+  return replaceBody.replace(/(^|}|{)\s*([^@}{]+)\s*{/g, (match, prefix, selectorGroup) => {
+    const trimmed = selectorGroup.trim();
+    if (!trimmed) {
+      return match;
+    }
+
+    const isKeyframeStep =
+      ['from', 'to'].includes(trimmed.toLowerCase()) || /^\d+\.?\d*%$/i.test(trimmed);
+    if (isKeyframeStep) {
+      return `${prefix} ${trimmed} {`;
+    }
+
+    const scopedSelectors = trimmed
+      .split(',')
+      .map((selector) => {
+        const sel = selector.trim();
+        if (!sel || sel.startsWith(scopeSelector) || sel.startsWith(bodySelector)) {
+          return sel;
+        }
+        return `${scopeSelector} ${sel}`;
+      })
+      .filter(Boolean)
+      .join(', ');
+
+    return `${prefix} ${scopedSelectors} {`;
+  });
+};
+
 export default function OverlayPreviewPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { token } = useAuthStore();
@@ -159,6 +196,12 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scopedPreviewCss = useMemo(() => {
+    if (!useCustomCss || !customCss.trim()) {
+      return '';
+    }
+    return scopeCustomCss(customCss, '#overlay-preview-root', '#overlay-preview-root .overlay-preview-body');
+  }, [customCss, useCustomCss]);
 
   // Fetch overlay config for customization defaults
   useEffect(() => {
@@ -341,10 +384,10 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
 
   return (
     <div className="min-h-screen bg-gray-900">
-      {useCustomCss && customCss.trim().length > 0 && (
+      {useCustomCss && scopedPreviewCss && (
         <style
           id="overlay-preview-custom-css"
-          dangerouslySetInnerHTML={{ __html: customCss }}
+          dangerouslySetInnerHTML={{ __html: scopedPreviewCss }}
         />
       )}
       {/* Header */}
@@ -382,12 +425,12 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
           <div className="lg:col-span-2">
             <div
               id="overlay-preview-root"
-              className={`bg-black rounded-lg p-4 h-[700px] overflow-hidden relative ${
+              className={`overlay-preview-root bg-black rounded-lg p-4 h-[700px] overflow-hidden relative ${
                 useCustomCss ? 'overlay-preview' : ''
               }`}
             >
               <div
-                className="h-full overflow-y-auto space-y-3"
+                className="overlay-preview-body h-full overflow-y-auto space-y-3"
                 style={{
                   scrollbarWidth: 'thin',
                   scrollbarColor: '#374151 transparent'
