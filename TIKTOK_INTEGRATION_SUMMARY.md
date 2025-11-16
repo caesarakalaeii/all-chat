@@ -458,6 +458,19 @@ Parse official API response format (will likely differ from unofficial library)
 
 ---
 
+## 🔧 Troubleshooting
+
+### OAuth Issues Fixed (2025-11-16)
+
+**Problem: "Failed to get user info" - TikTok API error**
+- **Cause:** TikTok API returns `error.code = "ok"` for successful responses, which was being incorrectly treated as an error
+- **Solution:** Updated error check to treat "ok" as success: `if result.Error.Code != "" && result.Error.Code != "ok"`
+
+**Common Issues:**
+- **Scope errors:** Ensure only `user.info.basic` scope is used (TikTok doesn't require video.list for authentication)
+- **Client key vs client ID:** TikTok uses `client_key` parameter instead of `client_id`
+- **Token exchange fails:** Verify `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` are correct
+
 ## 📞 Support & Resources
 
 - **TikTok Developers**: https://developers.tiktok.com/
