@@ -32,6 +32,8 @@ import type { ChatMessage } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
+import { emotesApi, type EmoteData } from '@/lib/api/emotes';
+import { enrichMessageWithEmotes, getCachedEmotes, setCachedEmotes } from '@/lib/emoteEnricher';
 
 type MockMessageFormState = {
   platform: ChatMessage['platform'];
@@ -195,6 +197,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [configLoaded, setConfigLoaded] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [availableEmotes, setAvailableEmotes] = useState<EmoteData[]>([]);
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -238,6 +241,77 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
 
     loadConfig();
   }, [params.id, token]);
+
+  // Fetch emotes for mock message enrichment
+  useEffect(() => {
+    const loadEmotes = async () => {
+      try {
+        // Fetch overlay sources to get actual channel names
+        const sources = await overlaysApi.getSources(params.id);
+
+        if (sources.length === 0) {
+          console.log('[Preview] No sources configured, using global emotes');
+          // Fallback to global emotes if no sources configured
+          const cached = getCachedEmotes('global');
+          if (cached) {
+            setAvailableEmotes(cached);
+            return;
+          }
+
+          const emotes = await emotesApi.getChannelEmotes('global');
+          setAvailableEmotes(emotes);
+          setCachedEmotes('global', emotes);
+          return;
+        }
+
+        console.log('[Preview] Found sources:', sources);
+
+        // Fetch emotes for each channel and merge them
+        const allEmotes: EmoteData[] = [];
+        const emoteFetchPromises = sources.map(async (source) => {
+          // Use channel_name if available, otherwise fall back to channel_id
+          const channelIdentifier = source.channel_name || source.channel_id;
+
+          console.log(`[Preview] Fetching emotes for ${source.platform}:${channelIdentifier}`);
+
+          // Check cache first
+          const cached = getCachedEmotes(channelIdentifier);
+          if (cached) {
+            console.log(`[Preview] Cache hit for ${channelIdentifier}`);
+            return cached;
+          }
+
+          // Fetch from API
+          const emotes = await emotesApi.getChannelEmotes(channelIdentifier);
+          setCachedEmotes(channelIdentifier, emotes);
+          return emotes;
+        });
+
+        const emoteSets = await Promise.all(emoteFetchPromises);
+
+        // Merge all emote sets (remove duplicates by code)
+        const emoteMap = new Map<string, EmoteData>();
+        for (const emoteSet of emoteSets) {
+          for (const emote of emoteSet) {
+            // Keep first occurrence of each emote code
+            if (!emoteMap.has(emote.code)) {
+              emoteMap.set(emote.code, emote);
+            }
+          }
+        }
+
+        const mergedEmotes = Array.from(emoteMap.values());
+        console.log(`[Preview] Loaded ${mergedEmotes.length} unique emotes from ${sources.length} channels`);
+        setAvailableEmotes(mergedEmotes);
+      } catch (error) {
+        console.error('[Preview] Failed to load emotes:', error);
+        // Fallback to empty array on error
+        setAvailableEmotes([]);
+      }
+    };
+
+    loadEmotes();
+  }, [params.id]);
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -315,6 +389,10 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     }
 
     const now = new Date().toISOString();
+
+    // Enrich message with emotes
+    const enrichedEmotes = enrichMessageWithEmotes(mockForm.message, availableEmotes);
+
     const mockMessage: ChatMessage = {
       id: `mock-${Date.now()}`,
       overlay_id: params.id,
@@ -331,7 +409,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
       },
       message: {
         text: mockForm.message,
-        emotes: []
+        emotes: enrichedEmotes
       },
       timestamp: now,
       metadata: { mock: true }
@@ -345,13 +423,22 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   };
 
   const handleAddSampleTranscript = () => {
-    const seeded = SAMPLE_MOCK_MESSAGES.map((sample, index) => ({
-      ...sample,
-      overlay_id: params.id,
-      id: `mock-seed-${Date.now()}-${index}`,
-      timestamp: new Date(Date.now() + index * 500).toISOString(),
-      metadata: { ...sample.metadata, mock: true }
-    }));
+    const seeded = SAMPLE_MOCK_MESSAGES.map((sample, index) => {
+      // Enrich sample messages with emotes
+      const enrichedEmotes = enrichMessageWithEmotes(sample.message.text, availableEmotes);
+
+      return {
+        ...sample,
+        overlay_id: params.id,
+        id: `mock-seed-${Date.now()}-${index}`,
+        timestamp: new Date(Date.now() + index * 500).toISOString(),
+        message: {
+          ...sample.message,
+          emotes: enrichedEmotes
+        },
+        metadata: { ...sample.metadata, mock: true }
+      };
+    });
 
     setMessages((prev) => [...prev, ...seeded].slice(-maxMessages));
   };
