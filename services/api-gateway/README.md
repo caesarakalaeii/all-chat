@@ -285,3 +285,4 @@ curl -v http://localhost:8080/api/v1/emotes/channel/xqc
 ## License
 
 Copyright © 2025 All-Chat. All rights reserved.
+# Version: 1.0.1
