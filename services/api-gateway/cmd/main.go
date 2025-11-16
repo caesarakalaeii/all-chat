@@ -122,6 +122,7 @@ func main() {
 	// Create handlers
 	proxyHandler := handlers.NewProxyHandler(registry)
 	healthHandler := handlers.NewHealthHandler(registry)
+	badgeHandler := handlers.NewTwitchBadgeHandler(log)
 	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, jwtSecret, log)
 
 	// Set Gin mode
@@ -176,7 +177,14 @@ func main() {
 
 		// Emote service routes (public)
 		publicAPI.GET("/emotes/*path", proxyHandler.ForwardRequest)
+
+		// Overlay config for public overlays
+		publicAPI.GET("/overlays/public/:id/config", proxyHandler.ForwardRequest)
 	}
+
+	// Twitch badge proxy endpoints (public, but not part of /api/v1 service registry)
+	router.GET("/api/twitch/badges/global", badgeHandler.GetGlobalBadges)
+	router.GET("/api/twitch/badges/channels/:room_id", badgeHandler.GetChannelBadges)
 
 	// Protected routes (JWT auth required)
 	protectedAPI := router.Group("/api/v1")
