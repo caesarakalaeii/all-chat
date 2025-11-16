@@ -19,6 +19,12 @@ type YouTubeOAuth struct {
 	client *http.Client
 }
 
+// YouTubeChannelInfo contains channel metadata resolved via the YouTube API
+type YouTubeChannelInfo struct {
+	ChannelID string
+	Title     string
+}
+
 // NewYouTubeOAuth creates a new YouTube OAuth handler
 func NewYouTubeOAuth(clientID, clientSecret, redirectURL string) *YouTubeOAuth {
 	config := &oauth2.Config{
@@ -57,6 +63,54 @@ func (y *YouTubeOAuth) ExchangeCode(ctx context.Context, code string) (*oauth2.T
 // GetPlatform returns the platform identifier
 func (y *YouTubeOAuth) GetPlatform() Platform {
 	return PlatformYouTube
+}
+
+// GetPrimaryChannel fetches the authenticated user's primary YouTube channel information
+func (y *YouTubeOAuth) GetPrimaryChannel(ctx context.Context, accessToken string) (*YouTubeChannelInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := y.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query channels: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("youtube channels API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Snippet struct {
+				Title string `json:"title"`
+			} `json:"snippet"`
+		} `json:"items"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode channel response: %w", err)
+	}
+
+	if len(result.Items) == 0 {
+		return nil, fmt.Errorf("no youtube channels available for this account")
+	}
+
+	channel := result.Items[0]
+	if channel.ID == "" {
+		return nil, fmt.Errorf("youtube channel response missing id")
+	}
+
+	return &YouTubeChannelInfo{
+		ChannelID: channel.ID,
+		Title:     channel.Snippet.Title,
+	}, nil
 }
 
 // GetUserInfo fetches user information from Google API (returns platform-specific type)

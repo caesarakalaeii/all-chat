@@ -52,16 +52,17 @@ type YouTubeUserInfo struct {
 
 // TikTokUserInfo represents TikTok user data from OAuth
 type TikTokUserInfo struct {
-	OpenID      string `json:"open_id"`       // User's unique ID for this app
-	UnionID     string `json:"union_id"`      // User's unique ID across all apps
-	DisplayName string `json:"display_name"`  // User's display name
-	AvatarURL   string `json:"avatar_url"`    // User's profile picture URL
+	OpenID      string `json:"open_id"`      // User's unique ID for this app
+	UnionID     string `json:"union_id"`     // User's unique ID across all apps
+	Username    string `json:"username"`     // User's TikTok handle (@username)
+	DisplayName string `json:"display_name"` // User's display name
+	AvatarURL   string `json:"avatar_url"`   // User's profile picture URL
 }
 
 // KickUserInfo represents Kick user data from OAuth
 type KickUserInfo struct {
-	UserID         int    `json:"user_id"`        // User's unique numeric ID
-	Name           string `json:"name"`           // User's login username
-	Email          string `json:"email"`          // User's email address
+	UserID         int    `json:"user_id"`         // User's unique numeric ID
+	Name           string `json:"name"`            // User's login username
+	Email          string `json:"email"`           // User's email address
 	ProfilePicture string `json:"profile_picture"` // User's profile picture URL
 }

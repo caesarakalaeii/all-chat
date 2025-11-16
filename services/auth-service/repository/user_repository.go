@@ -208,11 +208,11 @@ WHERE tiktok_open_id = $1
 	return user, nil
 }
 
-// StoreYouTubeToken stores YouTube OAuth token in youtube_oauth_tokens table
-func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID string, token *oauth2.Token) error {
-	// Use a default channel_id for user-level tokens (not channel-specific)
-	// The YouTube Listener will use these tokens to access any channel the user can read
-	channelID := "default"
+// StoreYouTubeToken stores YouTube OAuth token in youtube_oauth_tokens table keyed by channel ID
+func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error {
+	if channelID == "" {
+		return fmt.Errorf("channel_id is required for storing YouTube tokens")
+	}
 
 	query := `
 		INSERT INTO youtube_oauth_tokens (

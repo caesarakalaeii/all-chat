@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
@@ -21,14 +22,14 @@ import (
 
 // PlatformAuthHandlerV2 handles authentication for any OAuth platform with enhanced state management
 type PlatformAuthHandlerV2 struct {
-	providers          map[oauth.Platform]oauth.OAuthProvider
-	userRepo           *repository.UserRepository
-	redis              *redis.Client
-	jwtSecret          string
-	jwtExpiry          time.Duration
-	logger             *zap.Logger
-	frontendURL        string
-	overlayManagerURL  string
+	providers         map[oauth.Platform]oauth.OAuthProvider
+	userRepo          *repository.UserRepository
+	redis             *redis.Client
+	jwtSecret         string
+	jwtExpiry         time.Duration
+	logger            *zap.Logger
+	frontendURL       string
+	overlayManagerURL string
 }
 
 // NewPlatformAuthHandlerV2 creates a new platform auth handler v2
@@ -293,6 +294,44 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			return
 		}
 
+		var youtubeChannel *oauth.YouTubeChannelInfo
+		var sourceDetails *OverlaySourceDetails
+
+		if platform == oauth.PlatformYouTube {
+			youtubeProvider, ok := provider.(*oauth.YouTubeOAuth)
+			if !ok {
+				h.logger.Error("YouTube provider assertion failed")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "YouTube provider misconfigured"})
+				return
+			}
+
+			channelInfo, channelErr := youtubeProvider.GetPrimaryChannel(c.Request.Context(), token.AccessToken)
+			if channelErr != nil {
+				h.logger.Error("Failed to resolve YouTube channel",
+					zap.Error(channelErr))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to resolve YouTube channel"})
+				return
+			}
+			youtubeChannel = channelInfo
+			sourceDetails = &OverlaySourceDetails{
+				ChannelID:   channelInfo.ChannelID,
+				ChannelName: channelInfo.Title,
+			}
+		}
+
+		if platform == oauth.PlatformTikTok {
+			username := normalizeTikTokUsername(platformUser.GetUsername())
+			if username == "" {
+				h.logger.Error("TikTok username missing in OAuth profile")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "TikTok username unavailable"})
+				return
+			}
+			sourceDetails = &OverlaySourceDetails{
+				ChannelID:   username,
+				ChannelName: platformUser.GetDisplayName(),
+			}
+		}
+
 		// Get or create user based on platform and context
 		var user *models.User
 		var jwtToken string
@@ -347,7 +386,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 		// Handle different actions
 		if oauthState.IsAddSource() {
 			// Add source to overlay
-			err = h.addSourceToOverlay(c.Request.Context(), user.ID, oauthState.OverlayID, platform, platformUser, jwtToken)
+			err = h.addSourceToOverlay(c.Request.Context(), user.ID, oauthState.OverlayID, platform, platformUser, sourceDetails, jwtToken)
 			if err != nil {
 				h.logger.Error("Failed to add source to overlay",
 					zap.String("platform", string(platform)),
@@ -397,6 +436,16 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			)
 
 			c.Redirect(http.StatusFound, redirectURL)
+		}
+
+		if platform == oauth.PlatformYouTube && youtubeChannel != nil {
+			if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, youtubeChannel.ChannelID, token); err != nil {
+				h.logger.Warn("Failed to store YouTube tokens for listener",
+					zap.String("user_id", user.ID),
+					zap.String("channel_id", youtubeChannel.ChannelID),
+					zap.Error(err),
+				)
+			}
 		}
 	}
 }
@@ -505,17 +554,6 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 		}
 	}
 
-	// For YouTube, also store tokens in youtube_oauth_tokens table for listener
-	if platform == oauth.PlatformYouTube {
-		if err := h.userRepo.StoreYouTubeToken(ctx, user.ID, token); err != nil {
-			h.logger.Warn("Failed to store YouTube tokens for listener",
-				zap.String("user_id", user.ID),
-				zap.Error(err),
-			)
-			// Don't fail the login
-		}
-	}
-
 	return user, nil
 }
 
@@ -559,34 +597,66 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
-	// For YouTube, also store tokens in youtube_oauth_tokens table for listener
-	if platform == oauth.PlatformYouTube {
-		if err := h.userRepo.StoreYouTubeToken(ctx, user.ID, token); err != nil {
-			h.logger.Warn("Failed to store YouTube tokens for listener",
-				zap.String("user_id", user.ID),
-				zap.Error(err),
-			)
-			// Don't fail the linking
-		}
-	}
-
 	return user, nil
 }
 
 // addSourceToOverlay calls the overlay-manager internal API to add a source
+type OverlaySourceDetails struct {
+	ChannelID   string
+	ChannelName string
+}
+
+func normalizeTikTokUsername(input string) string {
+	username := strings.TrimSpace(strings.TrimSuffix(input, "/"))
+	if username == "" {
+		return ""
+	}
+
+	lower := strings.ToLower(username)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		if idx := strings.LastIndex(lower, "/@"); idx != -1 {
+			username = username[idx+2:]
+		} else if idx := strings.LastIndex(lower, "/"); idx != -1 {
+			username = username[idx+1:]
+		}
+	}
+
+	username = strings.TrimPrefix(username, "@")
+	return strings.ToLower(username)
+}
+
 func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 	ctx context.Context,
 	userID string,
 	overlayID string,
 	platform oauth.Platform,
 	platformUser oauth.PlatformUserInfo,
+	details *OverlaySourceDetails,
 	jwtToken string,
 ) error {
 	// Prepare request body
+	channelID := platformUser.GetID()
+	channelName := platformUser.GetDisplayName()
+
+	if details != nil {
+		if details.ChannelID != "" {
+			channelID = details.ChannelID
+		}
+		if details.ChannelName != "" {
+			channelName = details.ChannelName
+		}
+	}
+
+	if platform == oauth.PlatformTikTok && details == nil {
+		if username := normalizeTikTokUsername(platformUser.GetUsername()); username != "" {
+			channelID = username
+		}
+	}
+
 	reqBody := map[string]interface{}{
 		"platform":     string(platform),
-		"channel_id":   platformUser.GetID(),
-		"channel_name": platformUser.GetDisplayName(),
+		"channel_id":   channelID,
+		"channel_name": channelName,
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
