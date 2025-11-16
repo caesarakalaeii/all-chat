@@ -20,7 +20,7 @@ type BadgeCache = Record<string, Record<string, TwitchBadgeSet>>;
 const badgeCache: BadgeCache = {};
 const inflightRequests: Record<string, Promise<Record<string, TwitchBadgeSet> | null>> = {};
 
-const TWITCH_BADGE_BASE = 'https://badges.twitch.tv/v1/badges';
+const TWITCH_BADGE_BASE = '/api/twitch/badges';
 
 async function fetchBadgeSets(cacheKey: string, url: string): Promise<Record<string, TwitchBadgeSet> | null> {
   if (badgeCache[cacheKey]) {
@@ -53,7 +53,7 @@ async function fetchBadgeSets(cacheKey: string, url: string): Promise<Record<str
 }
 
 async function getGlobalBadgeSets() {
-  return fetchBadgeSets('global', `${TWITCH_BADGE_BASE}/global/display`);
+  return fetchBadgeSets('global', `${TWITCH_BADGE_BASE}/global`);
 }
 
 async function getChannelBadgeSets(roomId: string | undefined) {
@@ -64,7 +64,7 @@ async function getChannelBadgeSets(roomId: string | undefined) {
   if (!trimmed) {
     return null;
   }
-  return fetchBadgeSets(`channel:${trimmed}`, `${TWITCH_BADGE_BASE}/channels/${trimmed}/display`);
+  return fetchBadgeSets(`channel:${trimmed}`, `${TWITCH_BADGE_BASE}/channels/${trimmed}`);
 }
 
 function resolveBadgeIcon(
