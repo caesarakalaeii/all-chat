@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -141,7 +142,6 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 			AuthProvider:    "twitch",
 			Username:        twitchUser.Login,
 			DisplayName:     twitchUser.DisplayName,
-			Email:           twitchUser.Email,
 			ProfileImageURL: twitchUser.ProfileImageURL,
 			AccessToken:     token.AccessToken,
 			RefreshToken:    token.RefreshToken,
@@ -157,7 +157,6 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 		// Update existing user
 		user.Username = twitchUser.Login
 		user.DisplayName = twitchUser.DisplayName
-		user.Email = twitchUser.Email
 		user.ProfileImageURL = twitchUser.ProfileImageURL
 		user.AccessToken = token.AccessToken
 		user.RefreshToken = token.RefreshToken
@@ -232,12 +231,12 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	if err != nil {
 		// Create new YouTube user
 		googleID := youtubeUser.ID
+		youtubeUsername := fmt.Sprintf("youtube_%s", youtubeUser.ID)
 		user = &models.User{
 			GoogleID:        &googleID,
 			AuthProvider:    "youtube",
-			Username:        youtubeUser.Email, // Use email as username for YouTube users
+			Username:        youtubeUsername,
 			DisplayName:     youtubeUser.Name,
-			Email:           youtubeUser.Email,
 			ProfileImageURL: youtubeUser.Picture,
 			AccessToken:     token.AccessToken,
 			RefreshToken:    token.RefreshToken,
@@ -252,12 +251,11 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 
 		h.logger.Info("Created new YouTube user",
 			zap.String("user_id", user.ID),
-			zap.String("email", user.Email),
+			zap.String("google_id", googleID),
 		)
 	} else {
 		// Update existing user
 		user.DisplayName = youtubeUser.Name
-		user.Email = youtubeUser.Email
 		user.ProfileImageURL = youtubeUser.Picture
 		user.AccessToken = token.AccessToken
 		user.RefreshToken = token.RefreshToken
@@ -414,6 +412,51 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+}
+
+// HandleDeleteAccount deletes the authenticated user's account and cascades associated data
+func (h *AuthHandler) HandleDeleteAccount(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userID, ok := userIDValue.(string)
+	if !ok || userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	if err := h.userRepo.Delete(c.Request.Context(), userID); err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+
+		h.logger.Error("Failed to delete user account",
+			zap.String("user_id", userID),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete account"})
+		return
+	}
+
+	// Best-effort blacklist of the token used for this request
+	authHeader := c.GetHeader("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if token != "" {
+			if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
+				h.logger.Warn("Failed to blacklist token after account deletion",
+					zap.String("user_id", userID),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Account deleted successfully"})
 }
 
 // generateRandomString generates a cryptographically secure random string
