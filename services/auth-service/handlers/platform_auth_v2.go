@@ -324,9 +324,13 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				return
 			}
 
-			// Redirect back to overlay page with success
-			redirectURL := fmt.Sprintf("%s/overlays/%s?source_added=%s",
+			// Redirect through auth callback to preserve authentication, then to overlay page
+			// The frontend auth callback will store the JWT and then redirect to the overlay
+			redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer&redirect_to=/overlays/%s&source_added=%s",
 				h.frontendURL,
+				jwtToken,
+				token.RefreshToken,
+				int64(h.jwtExpiry.Seconds()),
 				oauthState.OverlayID,
 				platform,
 			)
