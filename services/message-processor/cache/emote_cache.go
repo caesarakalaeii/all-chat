@@ -15,6 +15,8 @@ import (
 // ErrCacheMiss indicates no cached emote entry was found for a channel.
 var ErrCacheMiss = errors.New("emote cache miss")
 
+const cacheNamespace = "mp:emotes:v2:"
+
 // CachedEmote stores the minimum metadata needed to reconstruct emote markup.
 type CachedEmote struct {
 	Code     string `json:"code"`
@@ -43,7 +45,7 @@ func NewEmoteCache(client *redis.Client, logger *zap.Logger, ttl time.Duration) 
 		client: client,
 		logger: logger.With(zap.String("component", "emote-cache")),
 		ttl:    ttl,
-		prefix: "mp:emotes:",
+		prefix: cacheNamespace,
 	}
 }
 
@@ -52,7 +54,11 @@ func (c *EmoteCache) key(channel string) string {
 	if channel == "" {
 		channel = "global"
 	}
-	return c.prefix + channel
+	prefix := c.prefix
+	if prefix == "" {
+		prefix = cacheNamespace
+	}
+	return prefix + channel
 }
 
 func (c *EmoteCache) Get(ctx context.Context, channel string) ([]CachedEmote, error) {
