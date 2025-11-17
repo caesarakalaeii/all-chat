@@ -3,12 +3,14 @@ package enricher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/cache"
 	"github.com/caesar/all-chat/services/message-processor/models"
 	"go.uber.org/zap"
 )
@@ -83,13 +85,15 @@ func (c *HTTPEmoteClient) GetEmotesForChannel(ctx context.Context, channel strin
 // Enricher enriches messages with third-party emotes
 type Enricher struct {
 	client EmoteServiceClient
+	cache  cache.Store
 	logger *zap.Logger
 }
 
 // NewEnricher creates a new emote enricher
-func NewEnricher(client EmoteServiceClient, logger *zap.Logger) *Enricher {
+func NewEnricher(client EmoteServiceClient, cacheStore cache.Store, logger *zap.Logger) *Enricher {
 	return &Enricher{
 		client: client,
+		cache:  cacheStore,
 		logger: logger,
 	}
 }
@@ -116,7 +120,7 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 		}
 	}
 	// Fetch emotes for the channel
-	thirdPartyEmotes, err := e.client.GetEmotesForChannel(ctx, channelIdentifier)
+	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier)
 	if err != nil {
 		// Don't fail the message if emote enrichment fails
 		e.logger.Warn("Failed to fetch emotes, skipping enrichment",
@@ -127,7 +131,7 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	}
 
 	// Build a map of emote code -> emote for quick lookup
-	emoteMap := make(map[string]EmoteServiceEmote)
+	emoteMap := make(map[string]cache.CachedEmote)
 	for _, emote := range thirdPartyEmotes {
 		emoteMap[emote.Code] = emote
 	}
@@ -160,6 +164,57 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	)
 
 	return nil
+}
+
+func (e *Enricher) fetchEmotes(ctx context.Context, channel string) ([]cache.CachedEmote, error) {
+	if e.cache != nil {
+		if cached, err := e.cache.Get(ctx, channel); err == nil {
+			e.logger.Debug("Emote cache hit",
+				zap.String("channel", channel),
+				zap.Int("count", len(cached)),
+			)
+			return cached, nil
+		} else if !errors.Is(err, cache.ErrCacheMiss) {
+			e.logger.Warn("Emote cache error",
+				zap.String("channel", channel),
+				zap.Error(err),
+			)
+		}
+	}
+
+	thirdPartyEmotes, err := e.client.GetEmotesForChannel(ctx, channel)
+	if err != nil {
+		return nil, err
+	}
+	converted := convertToCached(thirdPartyEmotes)
+
+	if e.cache != nil {
+		if err := e.cache.Set(ctx, channel, converted); err != nil {
+			e.logger.Warn("Failed to populate emote cache",
+				zap.String("channel", channel),
+				zap.Error(err),
+			)
+		} else {
+			e.logger.Debug("Emote cache populated",
+				zap.String("channel", channel),
+				zap.Int("count", len(converted)),
+			)
+		}
+	}
+
+	return converted, nil
+}
+
+func convertToCached(emotes []EmoteServiceEmote) []cache.CachedEmote {
+	converted := make([]cache.CachedEmote, 0, len(emotes))
+	for _, emote := range emotes {
+		converted = append(converted, cache.CachedEmote{
+			Code:     emote.Code,
+			Provider: emote.Provider,
+			URL:      emote.URL,
+		})
+	}
+	return converted
 }
 
 // findWordPosition finds the position of a word in the text
