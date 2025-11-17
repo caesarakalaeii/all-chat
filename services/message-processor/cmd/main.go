@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/cache"
 	"github.com/caesar/all-chat/services/message-processor/consumer"
 	"github.com/caesar/all-chat/services/message-processor/enricher"
 	"github.com/caesar/all-chat/services/message-processor/models"
@@ -83,7 +84,8 @@ func main() {
 
 	emoteServiceURL := getEnvOrDefault("EMOTE_SERVICE_URL", "http://localhost:8083")
 	emoteClient := enricher.NewHTTPEmoteClient(emoteServiceURL, log)
-	emoteEnricher := enricher.NewEnricher(emoteClient, log)
+	emoteCacheStore := cache.NewEmoteCache(redisClient, log, 0)
+	emoteEnricher := enricher.NewEnricher(emoteClient, emoteCacheStore, log)
 
 	// Avatar enricher for Twitch users
 	twitchClientID := getEnvOrDefault("TWITCH_CLIENT_ID", "")
