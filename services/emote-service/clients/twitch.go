@@ -15,6 +15,7 @@ import (
 
 const (
 	twitchTokenURL = "https://id.twitch.tv/oauth2/token"
+	twitchAPIBase  = "https://api.twitch.tv"
 	twitchUsersURL = "https://api.twitch.tv/helix/users"
 )
 
@@ -174,4 +175,44 @@ func (c *TwitchClient) setCached(login, id string) {
 		id:        id,
 		expiresAt: time.Now().Add(10 * time.Minute),
 	}
+}
+
+func (c *TwitchClient) apiGet(ctx context.Context, path string, query url.Values, v interface{}) error {
+	token, err := c.getAccessToken(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get twitch access token: %w", err)
+	}
+
+	endpoint := twitchAPIBase + path
+	if len(query) > 0 {
+		endpoint = endpoint + "?" + query.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create twitch request: %w", err)
+	}
+
+	req.Header.Set("Client-Id", c.clientID)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to call twitch api: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("twitch api %s returned status %d", path, resp.StatusCode)
+	}
+
+	if v == nil {
+		return nil
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+		return fmt.Errorf("failed to decode twitch response for %s: %w", path, err)
+	}
+
+	return nil
 }
