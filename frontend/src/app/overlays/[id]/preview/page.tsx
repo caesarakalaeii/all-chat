@@ -269,21 +269,28 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
         // Fetch emotes for each channel and merge them
         const allEmotes: EmoteData[] = [];
         const emoteFetchPromises = sources.map(async (source) => {
-          // Use channel_name if available, otherwise fall back to channel_id
-          const channelIdentifier = source.channel_name || source.channel_id;
+          // Prefer the canonical channel_id (Twitch user ID), fall back to channel_name if missing
+          const channelIdentifier = source.channel_id || source.channel_name;
+
+          if (!channelIdentifier) {
+            console.warn(`[Preview] Skipping source ${source.id} (missing channel identifier)`);
+            return [];
+          }
+
+          const cacheKey = `${source.platform}:${channelIdentifier}`;
 
           console.log(`[Preview] Fetching emotes for ${source.platform}:${channelIdentifier}`);
 
           // Check cache first
-          const cached = getCachedEmotes(channelIdentifier);
+          const cached = getCachedEmotes(cacheKey);
           if (cached) {
-            console.log(`[Preview] Cache hit for ${channelIdentifier}`);
+            console.log(`[Preview] Cache hit for ${source.platform}:${channelIdentifier}`);
             return cached;
           }
 
           // Fetch from API
           const emotes = await emotesApi.getChannelEmotes(channelIdentifier);
-          setCachedEmotes(channelIdentifier, emotes);
+          setCachedEmotes(cacheKey, emotes);
           return emotes;
         });
 

@@ -55,6 +55,9 @@ Thumbs.db
 /dist/
 /build/
 
+# Documentation clones / references
+.docs/
+
 # Node modules (for frontend)
 node_modules/
 /web/node_modules/
