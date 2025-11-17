@@ -64,7 +64,7 @@ func TestEmoteCache_Get(t *testing.T) {
 			provider: "7tv",
 			channel:  "xqc",
 			setupCache: func(m *mockRedisClient) {
-				m.data["emotes:7tv:xqc"] = `[{"code":"OMEGALUL","url":"https://cdn.7tv.app/emote/123/1x.webp","provider":"7tv","channel":"xqc"}]`
+				m.data["emotes:v2:7tv:xqc"] = `[{"code":"OMEGALUL","url":"https://cdn.7tv.app/emote/123/1x.webp","provider":"7tv","channel":"xqc"}]`
 			},
 			wantEmotes: 1,
 			wantErr:    false,
@@ -86,7 +86,7 @@ func TestEmoteCache_Get(t *testing.T) {
 			provider: "ffz",
 			channel:  "newstreamer",
 			setupCache: func(m *mockRedisClient) {
-				m.data["emotes:ffz:newstreamer"] = `[]`
+				m.data["emotes:v2:ffz:newstreamer"] = `[]`
 			},
 			wantEmotes: 0,
 			wantErr:    false,
@@ -97,7 +97,7 @@ func TestEmoteCache_Get(t *testing.T) {
 			provider: "7tv",
 			channel:  "xqc",
 			setupCache: func(m *mockRedisClient) {
-				m.data["emotes:7tv:xqc"] = `{invalid json}`
+				m.data["emotes:v2:7tv:xqc"] = `{invalid json}`
 			},
 			wantEmotes: 0,
 			wantErr:    true,
@@ -217,9 +217,9 @@ func TestEmoteCache_Key(t *testing.T) {
 		channel  string
 		want     string
 	}{
-		{"7tv", "xqc", "emotes:7tv:xqc"},
-		{"bttv", "shroud", "emotes:bttv:shroud"},
-		{"ffz", "lirik", "emotes:ffz:lirik"},
+		{"7tv", "xqc", "emotes:v2:7tv:xqc"},
+		{"bttv", "shroud", "emotes:v2:bttv:shroud"},
+		{"ffz", "lirik", "emotes:v2:ffz:lirik"},
 	}
 
 	for _, tt := range tests {
