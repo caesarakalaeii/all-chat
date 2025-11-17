@@ -29,11 +29,10 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { WebSocketClient } from '@/lib/api/websocket';
 import { overlaysApi } from '@/lib/api/overlays';
 import type { ChatMessage } from '@/lib/types/message';
+import type { ChatSource } from '@/lib/types/overlay';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
-import { emotesApi, type EmoteData } from '@/lib/api/emotes';
-import { enrichMessageWithEmotes, getCachedEmotes, setCachedEmotes } from '@/lib/emoteEnricher';
 
 type MockMessageFormState = {
   platform: ChatMessage['platform'];
@@ -197,7 +196,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [configLoaded, setConfigLoaded] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [availableEmotes, setAvailableEmotes] = useState<EmoteData[]>([]);
+  const [sources, setSources] = useState<ChatSource[]>([]);
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -242,82 +241,18 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     loadConfig();
   }, [params.id, token]);
 
-  // Fetch emotes for mock message enrichment
+  // Load overlay sources for determining mock targets
   useEffect(() => {
-    const loadEmotes = async () => {
+    const loadSources = async () => {
       try {
-        // Fetch overlay sources to get actual channel names
-        const sources = await overlaysApi.getSources(params.id);
-
-        if (sources.length === 0) {
-          console.log('[Preview] No sources configured, using global emotes');
-          // Fallback to global emotes if no sources configured
-          const cached = getCachedEmotes('global');
-          if (cached) {
-            setAvailableEmotes(cached);
-            return;
-          }
-
-          const emotes = await emotesApi.getChannelEmotes('global');
-          setAvailableEmotes(emotes);
-          setCachedEmotes('global', emotes);
-          return;
-        }
-
-        console.log('[Preview] Found sources:', sources);
-
-        // Fetch emotes for each channel and merge them
-        const allEmotes: EmoteData[] = [];
-        const emoteFetchPromises = sources.map(async (source) => {
-          // Prefer the canonical channel_id (Twitch user ID), fall back to channel_name if missing
-          const channelIdentifier = source.channel_id || source.channel_name;
-
-          if (!channelIdentifier) {
-            console.warn(`[Preview] Skipping source ${source.id} (missing channel identifier)`);
-            return [];
-          }
-
-          const cacheKey = `${source.platform}:${channelIdentifier}`;
-
-          console.log(`[Preview] Fetching emotes for ${source.platform}:${channelIdentifier}`);
-
-          // Check cache first
-          const cached = getCachedEmotes(cacheKey);
-          if (cached) {
-            console.log(`[Preview] Cache hit for ${source.platform}:${channelIdentifier}`);
-            return cached;
-          }
-
-          // Fetch from API
-          const emotes = await emotesApi.getChannelEmotes(channelIdentifier);
-          setCachedEmotes(cacheKey, emotes);
-          return emotes;
-        });
-
-        const emoteSets = await Promise.all(emoteFetchPromises);
-
-        // Merge all emote sets (remove duplicates by code)
-        const emoteMap = new Map<string, EmoteData>();
-        for (const emoteSet of emoteSets) {
-          for (const emote of emoteSet) {
-            // Keep first occurrence of each emote code
-            if (!emoteMap.has(emote.code)) {
-              emoteMap.set(emote.code, emote);
-            }
-          }
-        }
-
-        const mergedEmotes = Array.from(emoteMap.values());
-        console.log(`[Preview] Loaded ${mergedEmotes.length} unique emotes from ${sources.length} channels`);
-        setAvailableEmotes(mergedEmotes);
+        const loadedSources = await overlaysApi.getSources(params.id);
+        setSources(loadedSources);
       } catch (error) {
-        console.error('[Preview] Failed to load emotes:', error);
-        // Fallback to empty array on error
-        setAvailableEmotes([]);
+        console.error('[Preview] Failed to load sources:', error);
       }
     };
 
-    loadEmotes();
+    loadSources();
   }, [params.id]);
 
   // Initialize WebSocket connection
@@ -390,64 +325,88 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     }));
   };
 
-  const handleAddMockMessage = () => {
+  const resolveMockTarget = (requestedPlatform?: ChatMessage['platform']) => {
+    const preferred =
+      sources.find((source) =>
+        requestedPlatform ? source.platform === requestedPlatform : true
+      ) ?? sources[0];
+
+    if (!preferred) {
+      return {
+        platform: requestedPlatform || 'twitch',
+        channel_id: 'mock-channel',
+        channel_name: 'Mock Channel'
+      };
+    }
+
+    return {
+      platform: requestedPlatform || (preferred.platform as ChatMessage['platform']),
+      channel_id: preferred.channel_id || 'mock-channel',
+      channel_name: preferred.channel_name || preferred.channel_id || 'Mock Channel'
+    };
+  };
+
+  const handleAddMockMessage = async () => {
     if (!mockForm.message.trim()) {
       return;
     }
 
-    const now = new Date().toISOString();
+    const target = resolveMockTarget(mockForm.platform);
 
-    // Enrich message with emotes
-    const enrichedEmotes = enrichMessageWithEmotes(mockForm.message, availableEmotes);
-
-    const mockMessage: ChatMessage = {
-      id: `mock-${Date.now()}`,
-      overlay_id: params.id,
-      platform: mockForm.platform,
-      channel_id: 'mock-channel',
-      channel_name: 'Mock Channel',
-      user: {
-        id: 'mock-user',
-        username: mockForm.username || mockForm.displayName.toLowerCase().replace(/\s+/g, ''),
+    try {
+      await overlaysApi.sendMockMessage(params.id, {
+        platform: target.platform,
+        channel_id: target.channel_id,
+        channel_name: target.channel_name,
+        text: mockForm.message,
+        username:
+          mockForm.username ||
+          mockForm.displayName.toLowerCase().replace(/\s+/g, '') ||
+          'mockuser',
         display_name: mockForm.displayName || mockForm.username || 'Mock Viewer',
         avatar_url: mockForm.avatarUrl || undefined,
-        badges: [],
-        color: mockForm.color || undefined
-      },
-      message: {
-        text: mockForm.message,
-        emotes: enrichedEmotes
-      },
-      timestamp: now,
-      metadata: { mock: true }
-    };
+        color: mockForm.color || undefined,
+        metadata: { mock: true, source: 'preview-form' }
+      });
 
-    setMessages((prev) => [...prev, mockMessage].slice(-maxMessages));
-    setMockForm((prev) => ({
-      ...prev,
-      message: ''
-    }));
+      setMockForm((prev) => ({
+        ...prev,
+        message: ''
+      }));
+    } catch (error) {
+      console.error('[Preview] Failed to send mock message:', error);
+      alert('Failed to send mock message. Check console for details.');
+    }
   };
 
-  const handleAddSampleTranscript = () => {
-    const seeded = SAMPLE_MOCK_MESSAGES.map((sample, index) => {
-      // Enrich sample messages with emotes
-      const enrichedEmotes = enrichMessageWithEmotes(sample.message.text, availableEmotes);
+  const handleAddSampleTranscript = async () => {
+    for (const [index, sample] of SAMPLE_MOCK_MESSAGES.entries()) {
+      const target = resolveMockTarget(sample.platform);
 
-      return {
-        ...sample,
-        overlay_id: params.id,
-        id: `mock-seed-${Date.now()}-${index}`,
-        timestamp: new Date(Date.now() + index * 500).toISOString(),
-        message: {
-          ...sample.message,
-          emotes: enrichedEmotes
-        },
-        metadata: { ...sample.metadata, mock: true }
-      };
-    });
-
-    setMessages((prev) => [...prev, ...seeded].slice(-maxMessages));
+      try {
+        await overlaysApi.sendMockMessage(params.id, {
+          platform: target.platform,
+          channel_id: target.channel_id,
+          channel_name: target.channel_name,
+          text: sample.message.text,
+          username: sample.user.username,
+          display_name: sample.user.display_name,
+          avatar_url: sample.user.avatar_url,
+          color: sample.user.color,
+          badges: sample.user.badges,
+          metadata: {
+            ...(sample.metadata || {}),
+            mock: true,
+            preset: true,
+            order: index
+          }
+        });
+      } catch (error) {
+        console.error('[Preview] Failed to send sample message:', error);
+        alert('Failed to send sample messages. Check console for details.');
+        break;
+      }
+    }
   };
 
   const handleClearMockMessages = () => {
@@ -784,7 +743,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={handleAddMockMessage}
+                        onClick={() => void handleAddMockMessage()}
                         className="flex-1 bg-twitch hover:bg-purple-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-60"
                         disabled={!mockForm.message.trim()}
                       >
@@ -792,7 +751,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                       </button>
                       <button
                         type="button"
-                        onClick={handleAddSampleTranscript}
+                        onClick={() => void handleAddSampleTranscript()}
                         className="px-3 py-2 text-xs border border-gray-600 rounded-lg text-gray-200 hover:bg-gray-700"
                       >
                         Sample Set

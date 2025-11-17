@@ -12,7 +12,8 @@ import type {
   ChatSource,
   CreateOverlayRequest,
   UpdateOverlayRequest,
-  AddSourceRequest
+  AddSourceRequest,
+  MockMessagePayload
 } from '../types/overlay';
 
 export const overlaysApi = {
@@ -88,5 +89,12 @@ export const overlaysApi = {
    */
   async removeSource(overlayId: string, sourceId: string): Promise<void> {
     await apiClient.delete(`/api/v1/overlays/${overlayId}/sources/${sourceId}`);
+  },
+
+  /**
+   * Send a mock message through the backend pipeline
+   */
+  async sendMockMessage(id: string, payload: MockMessagePayload): Promise<void> {
+    await apiClient.post(`/api/v1/overlays/${id}/mock-messages`, payload);
   }
 };

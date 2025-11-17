@@ -77,6 +77,16 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: AUTH_SERVICE_URL
+        - name: MESSAGE_PROCESSOR_URL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: MESSAGE_PROCESSOR_URL
+        - name: MESSAGE_PROCESSOR_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: MESSAGE_PROCESSOR_API_KEY
         resources:
           requests:
             memory: "128Mi"
