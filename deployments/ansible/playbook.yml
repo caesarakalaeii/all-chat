@@ -29,6 +29,8 @@
     database_user: "{{ database_user | default('allchat') }}"
     redis_host: "{{ redis_host | default('redis') }}"
     redis_port: "{{ redis_port | default('6379') }}"
+    message_processor_url: "{{ message_processor_url | default('http://message-processor:8087') }}"
+    message_processor_api_key: "{{ message_processor_api_key | default(vault_allchat.message_processor_api_key | default('change-me-mock-key')) }}"
 
   tasks:
     - name: Check if k3d is installed
@@ -130,6 +132,7 @@
             EMOTE_SERVICE_URL: http://emote-service:8083
             AUTH_SERVICE_URL: http://auth-service:8081
             OVERLAY_SERVICE_URL: http://overlay-manager:8082
+            MESSAGE_PROCESSOR_URL: "{{ message_processor_url }}"
             CORS_ORIGIN: "{{ cors_origin }}"
             POLLING_INTERVAL_MS: "{{ polling_interval_ms }}"
             QUOTA_LIMIT_DAILY: "{{ quota_limit_daily }}"
@@ -154,6 +157,7 @@
             TWITCH_BOT_OAUTH: "{{ twitch_bot_oauth }}"
             YOUTUBE_CLIENT_ID: "{{ youtube_client_id }}"
             YOUTUBE_CLIENT_SECRET: "{{ youtube_client_secret }}"
+            MESSAGE_PROCESSOR_API_KEY: "{{ message_processor_api_key }}"
 
     - name: Apply PostgreSQL manifests
       command: kubectl apply -f ../k8s/base/postgres/ -n allchat

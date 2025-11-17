@@ -271,6 +271,9 @@ TWITCH_REDIRECT_URI=http://localhost:8080/api/v1/auth/callback
 YOUTUBE_API_KEY=your_youtube_api_key
 YOUTUBE_CLIENT_ID=your_youtube_client_id
 YOUTUBE_CLIENT_SECRET=your_youtube_client_secret
+
+# Internal service auth
+MESSAGE_PROCESSOR_API_KEY=generate_a_strong_shared_key
 ```
 
 ### Optional Variables
@@ -281,6 +284,7 @@ API_GATEWAY_PORT=8080
 TWITCH_LISTENER_PORT=8085
 YOUTUBE_LISTENER_PORT=8086
 MESSAGE_PROCESSOR_PORT=8087
+MESSAGE_PROCESSOR_URL=http://localhost:8087
 SOURCE_MANAGER_PORT=8088
 
 # Frontend

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -98,9 +99,17 @@ func main() {
 	// Define message handler
 	messageHandler := func(ctx context.Context, rawMsg *models.RawChatMessage) error {
 		// Find target overlays for this message
-		overlays, err := overlayRouter.Route(ctx, rawMsg.Platform, rawMsg.ChannelID)
-		if err != nil {
-			return fmt.Errorf("failed to route message: %w", err)
+		var overlays []models.OverlayTarget
+		if rawMsg.OverlayID != "" {
+			overlays = []models.OverlayTarget{
+				{OverlayID: rawMsg.OverlayID},
+			}
+		} else {
+			routed, err := overlayRouter.Route(ctx, rawMsg.Platform, rawMsg.ChannelID)
+			if err != nil {
+				return fmt.Errorf("failed to route message: %w", err)
+			}
+			overlays = routed
 		}
 
 		if len(overlays) == 0 {
@@ -231,6 +240,42 @@ func main() {
 		})
 	})
 
+	mockAPIKey := getEnvOrDefault("MOCK_MESSAGE_API_KEY", "")
+	router.POST("/internal/mock-messages", func(c *gin.Context) {
+		if mockAPIKey == "" {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mock messaging disabled"})
+			return
+		}
+
+		if token := c.GetHeader("X-Internal-Token"); token == "" || token != mockAPIKey {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+
+		var req mockMessageRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		normalizeMockRequest(&req)
+		msg := buildMockMessage(&req)
+
+		if err := emoteEnricher.Enrich(ctx, msg); err != nil {
+			log.Warn("Failed to enrich mock message", zap.Error(err))
+		}
+
+		if err := pubsubPublisher.Publish(ctx, req.OverlayID, msg); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish mock message"})
+			return
+		}
+
+		c.JSON(http.StatusAccepted, gin.H{
+			"status":     "queued",
+			"message_id": msg.ID,
+		})
+	})
+
 	// Get port
 	port := getEnvOrDefault("PORT", "8087")
 
@@ -281,4 +326,90 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+type mockMessageRequest struct {
+	OverlayID   string                 `json:"overlay_id" binding:"required"`
+	Platform    string                 `json:"platform"`
+	ChannelID   string                 `json:"channel_id"`
+	ChannelName string                 `json:"channel_name"`
+	UserID      string                 `json:"user_id"`
+	Username    string                 `json:"username"`
+	DisplayName string                 `json:"display_name"`
+	AvatarURL   string                 `json:"avatar_url"`
+	Color       string                 `json:"color"`
+	Badges      []models.Badge         `json:"badges"`
+	Text        string                 `json:"text" binding:"required"`
+	Metadata    map[string]interface{} `json:"metadata"`
+}
+
+func normalizeMockRequest(req *mockMessageRequest) {
+	req.Platform = strings.ToLower(strings.TrimSpace(req.Platform))
+	if req.Platform == "" {
+		req.Platform = "twitch"
+	}
+
+	req.ChannelID = strings.TrimSpace(req.ChannelID)
+	req.ChannelName = strings.TrimSpace(req.ChannelName)
+	if req.ChannelID == "" {
+		req.ChannelID = req.ChannelName
+	}
+	if req.ChannelID == "" {
+		req.ChannelID = "mock-channel"
+	}
+	if req.ChannelName == "" {
+		req.ChannelName = req.ChannelID
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Username == "" {
+		req.Username = "mockuser"
+	}
+	req.DisplayName = strings.TrimSpace(req.DisplayName)
+	if req.DisplayName == "" {
+		req.DisplayName = req.Username
+	}
+	req.UserID = strings.TrimSpace(req.UserID)
+	if req.UserID == "" {
+		req.UserID = "mock-user"
+	}
+
+	if req.Metadata == nil {
+		req.Metadata = map[string]interface{}{}
+	}
+}
+
+func buildMockMessage(req *mockMessageRequest) *models.UnifiedChatMessage {
+	metadata := map[string]interface{}{
+		"mock": true,
+	}
+	for k, v := range req.Metadata {
+		metadata[k] = v
+	}
+
+	return &models.UnifiedChatMessage{
+		ID:        fmt.Sprintf("mock-%d", time.Now().UnixNano()),
+		OverlayID: req.OverlayID,
+		Platform:  req.Platform,
+		ChannelID: req.ChannelID,
+		ChannelName: func() string {
+			if req.ChannelName != "" {
+				return req.ChannelName
+			}
+			return req.ChannelID
+		}(),
+		User: models.UserInfo{
+			ID:          req.UserID,
+			Username:    req.Username,
+			DisplayName: req.DisplayName,
+			AvatarURL:   req.AvatarURL,
+			Badges:      req.Badges,
+			Color:       req.Color,
+		},
+		Message: models.MessageInfo{
+			Text: req.Text,
+		},
+		Timestamp: time.Now().UTC(),
+		Metadata:  metadata,
+	}
 }
