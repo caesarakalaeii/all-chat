@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,57 +20,91 @@ const (
 
 // SevenTVClient implements EmoteClient for 7TV API
 type SevenTVClient struct {
-	baseURL    string
-	httpClient *http.Client
-	logger     *zap.Logger
+	baseURL      string
+	httpClient   *http.Client
+	logger       *zap.Logger
+	twitchClient TwitchUserLookup
 }
 
-// SevenTVResponse represents the 7TV API response
-type SevenTVResponse struct {
-	User struct {
-		Username    string `json:"username"`
-		Connections []struct {
-			Platform string `json:"platform"`
-			ID       string `json:"id"`
-		} `json:"connections"`
-	} `json:"user"`
-	EmoteSet struct {
-		Emotes []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-			Data struct {
-				Host struct {
-					URL   string `json:"url"`
-					Files []struct {
-						Name string `json:"name"`
-					} `json:"files"`
-				} `json:"host"`
-			} `json:"data"`
-		} `json:"emotes"`
-	} `json:"emote_set"`
+type sevenTVUserResponse struct {
+	EmoteSet sevenTVEmoteSet `json:"emote_set"`
+}
+
+type sevenTVEmoteSet struct {
+	ID     string               `json:"id"`
+	Name   string               `json:"name"`
+	Emotes []sevenTVActiveEmote `json:"emotes"`
+}
+
+type sevenTVActiveEmote struct {
+	ID   string            `json:"id"`
+	Name string            `json:"name"`
+	Data *sevenTVEmoteData `json:"data"`
+}
+
+type sevenTVEmoteData struct {
+	Name  string      `json:"name"`
+	Host  sevenTVHost `json:"host"`
+	Flags int         `json:"flags"`
+}
+
+type sevenTVHost struct {
+	URL   string            `json:"url"`
+	Files []sevenTVHostFile `json:"files"`
+}
+
+type sevenTVHostFile struct {
+	Name       string `json:"name"`
+	StaticName string `json:"static_name"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
 }
 
 // NewSevenTVClient creates a new 7TV API client
-func NewSevenTVClient(logger *zap.Logger) *SevenTVClient {
+func NewSevenTVClient(logger *zap.Logger, twitchClient TwitchUserLookup) *SevenTVClient {
 	return &SevenTVClient{
 		baseURL: seventvAPIURL,
 		httpClient: &http.Client{
 			Timeout: seventvAPITimeout,
 		},
-		logger: logger,
+		logger:       logger,
+		twitchClient: twitchClient,
 	}
 }
 
 // FetchEmotes fetches emotes from 7TV for a given channel
 func (c *SevenTVClient) FetchEmotes(ctx context.Context, channel string) ([]models.Emote, error) {
-	// 7TV API uses Twitch user ID, but we can also query by username
-	url := fmt.Sprintf("%s/v3/users/twitch/%s", c.baseURL, channel)
+	if strings.TrimSpace(channel) == "" {
+		return nil, fmt.Errorf("channel cannot be empty")
+	}
+
+	var (
+		urlPath    string
+		outputChan = channel
+	)
+
+	if strings.EqualFold(channel, "global") {
+		urlPath = fmt.Sprintf("%s/v3/emote-sets/global", c.baseURL)
+	} else {
+		resolved := channel
+		if !isNumeric(channel) {
+			if c.twitchClient == nil {
+				return nil, fmt.Errorf("twitch client is not configured")
+			}
+			twitchID, err := c.twitchClient.GetUserID(ctx, channel)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve twitch user: %w", err)
+			}
+			resolved = twitchID
+		}
+		urlPath = fmt.Sprintf("%s/v3/users/twitch/%s", c.baseURL, resolved)
+	}
 
 	c.logger.Debug("Fetching 7TV emotes",
 		zap.String("channel", channel),
-		zap.String("url", url))
+		zap.String("url", urlPath))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", urlPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -86,33 +121,34 @@ func (c *SevenTVClient) FetchEmotes(ctx context.Context, channel string) ([]mode
 		return nil, fmt.Errorf("failed to fetch emotes: status code %d", resp.StatusCode)
 	}
 
-	var apiResp SevenTVResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	var emoteSet sevenTVEmoteSet
+	if strings.EqualFold(channel, "global") {
+		if err := json.NewDecoder(resp.Body).Decode(&emoteSet); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
+	} else {
+		var apiResp sevenTVUserResponse
+		if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
+		emoteSet = apiResp.EmoteSet
 	}
 
-	// Convert 7TV emotes to our internal format
-	emotes := make([]models.Emote, 0, len(apiResp.EmoteSet.Emotes))
-	for _, e := range apiResp.EmoteSet.Emotes {
-		if len(e.Data.Host.Files) == 0 {
+	emotes := make([]models.Emote, 0, len(emoteSet.Emotes))
+	for _, e := range emoteSet.Emotes {
+		if e.Data == nil {
 			continue
 		}
-
-		// Build emote URL
-		url := e.Data.Host.URL
-		if !strings.HasPrefix(url, "http") {
-			url = "https:" + url
+		url := buildSevenTVURL(e.Data.Host)
+		if url == "" {
+			continue
 		}
-		url = url + "/" + e.Data.Host.Files[0].Name
-
-		emote := models.Emote{
+		emotes = append(emotes, models.Emote{
 			Code:     e.Name,
 			URL:      url,
 			Provider: "7tv",
-			Channel:  channel,
-		}
-
-		emotes = append(emotes, emote)
+			Channel:  outputChan,
+		})
 	}
 
 	c.logger.Debug("Fetched 7TV emotes",
@@ -125,4 +161,32 @@ func (c *SevenTVClient) FetchEmotes(ctx context.Context, channel string) ([]mode
 // Provider returns the provider name
 func (c *SevenTVClient) Provider() string {
 	return "7tv"
+}
+
+func buildSevenTVURL(host sevenTVHost) string {
+	if host.URL == "" || len(host.Files) == 0 {
+		return ""
+	}
+
+	base := host.URL
+	if !strings.HasPrefix(base, "http") {
+		base = "https:" + base
+	}
+
+	best := host.Files[0]
+	for _, file := range host.Files[1:] {
+		if file.Width > best.Width {
+			best = file
+		}
+	}
+
+	return fmt.Sprintf("%s/%s", strings.TrimRight(base, "/"), strings.TrimLeft(best.Name, "/"))
+}
+
+func isNumeric(value string) bool {
+	if value == "" {
+		return false
+	}
+	_, err := strconv.ParseUint(value, 10, 64)
+	return err == nil
 }

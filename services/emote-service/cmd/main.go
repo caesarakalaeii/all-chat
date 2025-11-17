@@ -58,9 +58,17 @@ func main() {
 	// Initialize emote cache
 	emoteCache := cache.NewEmoteCache(redisClient, log, cacheTTL)
 
+	twitchClientID := getEnv("TWITCH_CLIENT_ID", "")
+	twitchClientSecret := getEnv("TWITCH_CLIENT_SECRET", "")
+	if twitchClientID == "" || twitchClientSecret == "" {
+		log.Fatal("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set", zap.String("component", "emote-service"))
+	}
+
+	twitchClient := clients.NewTwitchClient(twitchClientID, twitchClientSecret, log)
+
 	// Initialize emote clients
 	emoteClients := map[string]handlers.EmoteClient{
-		"7tv":  clients.NewSevenTVClient(log),
+		"7tv":  clients.NewSevenTVClient(log, twitchClient),
 		"bttv": clients.NewBTTVClient(log),
 		"ffz":  clients.NewFFZClient(log),
 	}
