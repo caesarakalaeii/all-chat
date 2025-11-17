@@ -68,9 +68,10 @@ func main() {
 
 	// Initialize emote clients
 	emoteClients := map[string]handlers.EmoteClient{
-		"7tv":  clients.NewSevenTVClient(log, twitchClient),
-		"bttv": clients.NewBTTVClient(log),
-		"ffz":  clients.NewFFZClient(log),
+		"twitch": clients.NewTwitchEmoteClient(twitchClient, log),
+		"7tv":    clients.NewSevenTVClient(log, twitchClient),
+		"bttv":   clients.NewBTTVClient(log),
+		"ffz":    clients.NewFFZClient(log),
 	}
 
 	// Initialize handlers
