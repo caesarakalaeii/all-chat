@@ -147,9 +147,13 @@ func buildTwitchEmoteURL(template string, emote twitchChatEmote) string {
 
 	replacer := strings.NewReplacer(
 		"{id}", emote.ID,
+		"{{id}}", emote.ID,
 		"{format}", strings.ToLower(format),
+		"{{format}}", strings.ToLower(format),
 		"{theme_mode}", strings.ToLower(theme),
+		"{{theme_mode}}", strings.ToLower(theme),
 		"{scale}", scale,
+		"{{scale}}", scale,
 	)
 	return replacer.Replace(template)
 }
