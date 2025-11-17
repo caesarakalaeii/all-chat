@@ -42,6 +42,16 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: REDIS_PORT
+        - name: TWITCH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: TWITCH_CLIENT_ID
+        - name: TWITCH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: TWITCH_CLIENT_SECRET
         resources:
           requests:
             memory: "128Mi"
