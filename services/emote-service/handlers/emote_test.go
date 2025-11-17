@@ -100,6 +100,24 @@ func TestEmoteHandler_GetChannelEmotes(t *testing.T) {
 			wantErr:        false,
 		},
 		{
+			name:    "channel name with spaces",
+			channel: "Caesar LP",
+			setupClients: func() map[string]EmoteClient {
+				return map[string]EmoteClient{
+					"7tv": &mockEmoteClient{
+						emotes: []models.Emote{
+							{Code: "PogChamp", URL: "https://7tv.app/pogchamp", Provider: "7tv", Channel: "Caesar LP"},
+						},
+						provider: "7tv",
+					},
+				}
+			},
+			setupCache:     func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode: http.StatusOK,
+			wantEmoteCount: 1,
+			wantErr:        false,
+		},
+		{
 			name:    "cache hit - no external API calls",
 			channel: "shroud",
 			setupClients: func() map[string]EmoteClient {
@@ -162,6 +180,16 @@ func TestEmoteHandler_GetChannelEmotes(t *testing.T) {
 			wantStatusCode: http.StatusOK,
 			wantEmoteCount: 2, // Only 7TV and FFZ succeed
 			wantErr:        false,
+		},
+		{
+			name:    "invalid channel characters rejected",
+			channel: "bad!channel",
+			setupClients: func() map[string]EmoteClient {
+				return map[string]EmoteClient{}
+			},
+			setupCache:     func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode: http.StatusBadRequest,
+			wantErr:        true,
 		},
 	}
 

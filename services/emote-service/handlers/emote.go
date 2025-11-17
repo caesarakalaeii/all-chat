@@ -31,7 +31,8 @@ type EmoteHandler struct {
 	logger  *zap.Logger
 }
 
-var channelPattern = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
+// Allow human-readable channel names (letters, numbers, spaces, dash, dot, underscore)
+var channelPattern = regexp.MustCompile(`^[A-Za-z0-9 _.-]+$`)
 
 // NewEmoteHandler creates a new emote handler
 func NewEmoteHandler(clients map[string]EmoteClient, cache EmoteCache, logger *zap.Logger) *EmoteHandler {
