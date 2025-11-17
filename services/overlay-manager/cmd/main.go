@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/overlay-manager/clients"
 	"github.com/caesar/all-chat/services/overlay-manager/handlers"
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/caesar/all-chat/services/overlay-manager/youtube"
@@ -90,9 +91,11 @@ func main() {
 	}
 
 	// Initialize handlers
+	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo)
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo)
+	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 
 	// YouTube helper
@@ -138,6 +141,7 @@ func main() {
 
 		protected.GET("/:id/config", configHandler.HandleGetConfig)
 		protected.PUT("/:id/config", configHandler.HandleUpdateConfig)
+		protected.POST("/:id/mock-messages", mockHandler.HandleSendMockMessage)
 
 		// YouTube helper routes
 		protected.POST("/youtube/resolve", youtubeHandler.ResolveChannel)
@@ -190,31 +194,35 @@ func main() {
 
 // Config holds application configuration
 type Config struct {
-	Port             string
-	GinMode          string
-	DatabaseHost     string
-	DatabasePort     string
-	DatabaseUser     string
-	DatabasePassword string
-	DatabaseName     string
-	RedisHost        string
-	RedisPort        string
-	JWTSecret        string
+	Port                   string
+	GinMode                string
+	DatabaseHost           string
+	DatabasePort           string
+	DatabaseUser           string
+	DatabasePassword       string
+	DatabaseName           string
+	RedisHost              string
+	RedisPort              string
+	JWTSecret              string
+	MessageProcessorURL    string
+	MessageProcessorAPIKey string
 }
 
 // loadConfig loads configuration from environment variables
 func loadConfig() *Config {
 	return &Config{
-		Port:             getEnv("PORT", "8082"),
-		GinMode:          getEnv("GIN_MODE", "debug"),
-		DatabaseHost:     getEnv("DATABASE_HOST", "localhost"),
-		DatabasePort:     getEnv("DATABASE_PORT", "5432"),
-		DatabaseUser:     getEnv("DATABASE_USER", "allchat"),
-		DatabasePassword: getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
-		DatabaseName:     getEnv("DATABASE_NAME", "allchat"),
-		RedisHost:        getEnv("REDIS_HOST", "localhost"),
-		RedisPort:        getEnv("REDIS_PORT", "6379"),
-		JWTSecret:        getEnv("JWT_SECRET", "default-secret-change-in-production"),
+		Port:                   getEnv("PORT", "8082"),
+		GinMode:                getEnv("GIN_MODE", "debug"),
+		DatabaseHost:           getEnv("DATABASE_HOST", "localhost"),
+		DatabasePort:           getEnv("DATABASE_PORT", "5432"),
+		DatabaseUser:           getEnv("DATABASE_USER", "allchat"),
+		DatabasePassword:       getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		DatabaseName:           getEnv("DATABASE_NAME", "allchat"),
+		RedisHost:              getEnv("REDIS_HOST", "localhost"),
+		RedisPort:              getEnv("REDIS_PORT", "6379"),
+		JWTSecret:              getEnv("JWT_SECRET", "default-secret-change-in-production"),
+		MessageProcessorURL:    getEnv("MESSAGE_PROCESSOR_URL", "http://message-processor:8087"),
+		MessageProcessorAPIKey: getEnv("MESSAGE_PROCESSOR_API_KEY", ""),
 	}
 }
 

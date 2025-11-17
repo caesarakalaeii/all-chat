@@ -1,3 +1,5 @@
+import type { ChatMessage } from './message';
+
 /**
  * Overlay and Chat Source Types
  *
@@ -71,4 +73,21 @@ export interface AddSourceRequest {
   platform: 'twitch' | 'youtube' | 'kick' | 'tiktok';
   channel_id: string;
   config?: Record<string, unknown>;
+}
+
+export interface MockMessagePayload {
+  platform?: ChatMessage['platform'];
+  channel_id?: string;
+  channel_name?: string;
+  text: string;
+  username?: string;
+  display_name?: string;
+  avatar_url?: string;
+  color?: string;
+  badges?: Array<{
+    name: string;
+    version: string;
+    icon_url: string;
+  }>;
+  metadata?: Record<string, unknown>;
 }
