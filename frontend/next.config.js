@@ -8,6 +8,7 @@ const nextConfig = {
 
   // Image optimization
   images: {
+    unoptimized: true,
     domains: [
       'static-cdn.jtvnw.net', // Twitch CDN
       'yt3.ggpht.com', // YouTube avatars
