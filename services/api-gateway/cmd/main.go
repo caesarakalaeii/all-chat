@@ -205,6 +205,7 @@ func main() {
 		protectedAPI.PUT("/overlays/:id/config", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/sources", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/sources", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/mock-messages", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/overlays/:id/sources/:source_id", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/overlays/:id/sources/:source_id", proxyHandler.ForwardRequest)
 
