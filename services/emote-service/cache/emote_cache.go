@@ -17,6 +17,8 @@ var (
 	ErrCacheMiss = errors.New("cache miss")
 )
 
+const cacheNamespace = "emotes:v2"
+
 // RedisClient interface for Redis operations (allows mocking)
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
@@ -28,6 +30,7 @@ type EmoteCache struct {
 	client RedisClient
 	logger *zap.Logger
 	ttl    time.Duration
+	keyNS  string
 }
 
 // NewEmoteCache creates a new emote cache
@@ -36,6 +39,7 @@ func NewEmoteCache(client RedisClient, logger *zap.Logger, ttl time.Duration) *E
 		client: client,
 		logger: logger,
 		ttl:    ttl,
+		keyNS:  cacheNamespace,
 	}
 }
 
@@ -89,5 +93,9 @@ func (c *EmoteCache) Set(ctx context.Context, provider, channel string, emotes [
 
 // key generates a cache key for a provider and channel
 func (c *EmoteCache) key(provider, channel string) string {
-	return fmt.Sprintf("emotes:%s:%s", provider, channel)
+	prefix := c.keyNS
+	if prefix == "" {
+		prefix = cacheNamespace
+	}
+	return fmt.Sprintf("%s:%s:%s", prefix, provider, channel)
 }
