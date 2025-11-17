@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"sync"
+	"time"
 
 	"github.com/caesar/all-chat/services/emote-service/cache"
 	"github.com/caesar/all-chat/services/emote-service/models"
@@ -26,9 +28,10 @@ type EmoteCache interface {
 
 // EmoteHandler handles emote-related HTTP requests
 type EmoteHandler struct {
-	clients map[string]EmoteClient
-	cache   EmoteCache
-	logger  *zap.Logger
+	clients      map[string]EmoteClient
+	cache        EmoteCache
+	logger       *zap.Logger
+	fetchTimeout time.Duration
 }
 
 // Allow human-readable channel names (letters, numbers, spaces, dash, dot, underscore)
@@ -37,9 +40,10 @@ var channelPattern = regexp.MustCompile(`^[A-Za-z0-9 _.-]+$`)
 // NewEmoteHandler creates a new emote handler
 func NewEmoteHandler(clients map[string]EmoteClient, cache EmoteCache, logger *zap.Logger) *EmoteHandler {
 	return &EmoteHandler{
-		clients: clients,
-		cache:   cache,
-		logger:  logger,
+		clients:      clients,
+		cache:        cache,
+		logger:       logger,
+		fetchTimeout: 3 * time.Second,
 	}
 }
 
@@ -59,20 +63,50 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 	h.logger.Info("Fetching emotes for channel",
 		zap.String("channel", channel))
 
-	// Fetch emotes from all providers concurrently
-	allEmotes := make([]models.Emote, 0)
+	ctx := c.Request.Context()
+	type providerResult struct {
+		emotes   []models.Emote
+		err      error
+		provider string
+	}
+
+	results := make(chan providerResult, len(h.clients))
+	var wg sync.WaitGroup
 
 	for provider, client := range h.clients {
-		emotes, err := h.fetchWithCache(c.Request.Context(), client, provider, channel)
-		if err != nil {
-			h.logger.Error("Failed to fetch emotes from provider",
-				zap.String("provider", provider),
+		wg.Add(1)
+		go func(provider string, client EmoteClient) {
+			defer wg.Done()
+			providerCtx := ctx
+			cancel := func() {}
+			if h.fetchTimeout > 0 {
+				providerCtx, cancel = context.WithTimeout(ctx, h.fetchTimeout)
+			}
+			defer cancel()
+
+			emotes, err := h.fetchWithCache(providerCtx, client, provider, channel)
+			select {
+			case results <- providerResult{emotes: emotes, err: err, provider: provider}:
+			case <-ctx.Done():
+			}
+		}(provider, client)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	allEmotes := make([]models.Emote, 0)
+	for res := range results {
+		if res.err != nil {
+			h.logger.Warn("Failed to fetch emotes from provider",
+				zap.String("provider", res.provider),
 				zap.String("channel", channel),
-				zap.Error(err))
-			// Continue with other providers even if one fails
+				zap.Error(res.err))
 			continue
 		}
-		allEmotes = append(allEmotes, emotes...)
+		allEmotes = append(allEmotes, res.emotes...)
 	}
 
 	response := models.EmoteResponse{
