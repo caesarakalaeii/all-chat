@@ -120,6 +120,8 @@ curl http://localhost:8083/emotes/ffz/lirik
 | `RATE_LIMIT_REQUESTS` | `60` | Requests allowed per window for a single IP/API key |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | Window size used by the limiter |
 | `EMOTE_SERVICE_API_KEY` | _empty_ | Optional shared secret; when set, clients must send it via the `X-API-Key` header |
+| `TWITCH_CLIENT_ID` | _required_ | Twitch application client ID used for Helix lookups |
+| `TWITCH_CLIENT_SECRET` | _required_ | Twitch application client secret used to mint app tokens |
 
 ### Rate Limiting & Authentication
 
