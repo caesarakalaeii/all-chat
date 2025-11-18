@@ -393,7 +393,7 @@ export const apiClient = new ApiClient();
   const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 
   function loginWithTwitch() {
-    window.location.href = `${API_URL}/api/v1/auth/login`;
+    window.location.href = `${API_URL}/api/v1/auth/twitch/login`;
   }
 </script>
 

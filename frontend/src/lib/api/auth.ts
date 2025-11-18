@@ -10,11 +10,11 @@ import type { User, LoginResponse } from '../types/auth';
 
 export const authApi = {
   /**
-   * Get the Twitch OAuth login URL
+   * Get the OAuth login URL for a supported platform
    */
-  async getLoginUrl(): Promise<string> {
-    const response = await apiClient.get<LoginResponse>('/api/v1/auth/login');
-    return response.url;
+  async getLoginUrl(platform: 'twitch' | 'youtube' | 'tiktok' | 'kick' = 'twitch'): Promise<string> {
+    const response = await apiClient.get<LoginResponse>(`/api/v1/auth/${platform}/login`);
+    return response.auth_url;
   },
 
   /**

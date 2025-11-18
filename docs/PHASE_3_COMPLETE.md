@@ -407,7 +407,7 @@ curl http://localhost:8080/health | jq
 
 ```bash
 # 1. Login via Twitch OAuth
-open http://localhost:8080/api/v1/auth/login
+open http://localhost:8080/api/v1/auth/twitch/login
 
 # 2. Get JWT token from callback
 TOKEN="your-jwt-token"

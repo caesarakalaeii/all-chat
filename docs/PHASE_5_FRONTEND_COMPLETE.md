@@ -142,7 +142,7 @@ Every file includes:
 ```
 User clicks "Login with Twitch"
   ↓
-Redirected to API Gateway (/api/v1/auth/login)
+Redirected to API Gateway (/api/v1/auth/twitch/login)
   ↓
 Backend redirects to Twitch OAuth
   ↓
@@ -537,7 +537,7 @@ const sources: ChatSource[] = await overlaysApi.getSources(id);
 ```
 Login Button Click
   ↓
-→ /api/v1/auth/login (API Gateway)
+→ /api/v1/auth/twitch/login (API Gateway)
   ↓
 → Twitch OAuth
   ↓

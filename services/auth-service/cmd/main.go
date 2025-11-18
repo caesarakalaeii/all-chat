@@ -37,7 +37,7 @@ func main() {
 	// Get environment variables
 	twitchClientID := os.Getenv("TWITCH_CLIENT_ID")
 	twitchClientSecret := os.Getenv("TWITCH_CLIENT_SECRET")
-	twitchRedirectURL := getEnvOrDefault("TWITCH_REDIRECT_URL", "http://localhost:8080/api/v1/auth/callback")
+	twitchRedirectURL := getEnvOrDefault("TWITCH_REDIRECT_URL", "http://localhost:8080/api/v1/auth/twitch/callback")
 
 	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
@@ -175,10 +175,10 @@ func main() {
 	router.GET("/health/ready", healthHandler.CheckReady)
 
 	// Auth routes (no /auth prefix - API Gateway strips /api/v1/auth and forwards rest)
-	// Twitch OAuth (legacy routes)
-	router.GET("/login", legacyAuthHandler.HandleLogin)
-	router.POST("/login", legacyAuthHandler.HandleLogin)
-	router.GET("/callback", legacyAuthHandler.HandleCallback)
+	// Twitch OAuth legacy endpoints now route through the V2 handler for compatibility
+	router.GET("/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformTwitch))
+	router.POST("/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformTwitch))
+	router.GET("/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformTwitch))
 
 	// Platform-based OAuth routes (generalized for all platforms)
 	// V2 handlers support enhanced state management for add-source flows

@@ -128,7 +128,7 @@ twitch_client_id: "${TWITCH_CLIENT_ID}"
 twitch_client_secret: "${TWITCH_CLIENT_SECRET}"
 twitch_bot_username: "${TWITCH_BOT_USERNAME}"
 twitch_bot_oauth: "${TWITCH_BOT_OAUTH}"
-twitch_redirect_url: "${TWITCH_REDIRECT_URL:-http://localhost:8080/api/v1/auth/callback}"
+twitch_redirect_url: "${TWITCH_REDIRECT_URL:-http://localhost:8080/api/v1/auth/twitch/callback}"
 
 # =============================================================================
 # YOUTUBE INTEGRATION

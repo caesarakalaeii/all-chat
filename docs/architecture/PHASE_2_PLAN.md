@@ -247,8 +247,8 @@ Single entry point for all client HTTP requests. Routes to appropriate backend s
 
 | Path | Target Service | Auth Required |
 |------|----------------|---------------|
-| `/api/v1/auth/login` | auth-service:8081 | No |
-| `/api/v1/auth/callback` | auth-service:8081 | No |
+| `/api/v1/auth/twitch/login` | auth-service:8081 | No |
+| `/api/v1/auth/twitch/callback` | auth-service:8081 | No |
 | `/api/v1/auth/refresh` | auth-service:8081 | No |
 | `/api/v1/auth/me` | auth-service:8081 | Yes |
 | `/api/v1/auth/logout` | auth-service:8081 | Yes |
@@ -267,7 +267,7 @@ router.Use(middleware.Logging())     // Log all requests
 
 // Public routes (no auth)
 public := router.Group("/api/v1")
-public.POST("/auth/login", proxy.ForwardTo("auth-service:8081"))
+public.POST("/auth/twitch/login", proxy.ForwardTo("auth-service:8081"))
 
 // Protected routes (JWT required)
 protected := router.Group("/api/v1")
@@ -421,7 +421,7 @@ func TestJWTMiddleware(t *testing.T) {
 ```go
 func TestGateway_E2E(t *testing.T) {
     // 1. Login via Gateway → Auth Service
-    resp := httptest.POST("/api/v1/auth/login", body)
+    resp := httptest.POST("/api/v1/auth/twitch/login", body)
     token := resp.Body.Token
 
     // 2. Create Overlay via Gateway → Overlay Manager
@@ -458,7 +458,7 @@ make docker-up
 #### Scenario 1: Login Flow
 ```bash
 # 1. Start OAuth flow
-curl http://localhost:8080/api/v1/auth/login
+curl http://localhost:8080/api/v1/auth/twitch/login
 # → Redirects to Twitch
 
 # 2. After OAuth callback, get token
