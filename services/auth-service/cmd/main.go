@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,21 +36,35 @@ func main() {
 	ctx := context.Background()
 
 	// Get environment variables
+	frontendURL := strings.TrimSuffix(getEnvOrDefault("FRONTEND_URL", "http://localhost:3000"), "/")
+
 	twitchClientID := os.Getenv("TWITCH_CLIENT_ID")
 	twitchClientSecret := os.Getenv("TWITCH_CLIENT_SECRET")
-	twitchRedirectURL := getEnvOrDefault("TWITCH_REDIRECT_URL", "http://localhost:8080/api/v1/auth/twitch/callback")
+	twitchRedirectURL := getEnvOrDefault(
+		"TWITCH_REDIRECT_URL",
+		defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/twitch/callback"),
+	)
 
 	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
-	youtubeRedirectURL := getEnvOrDefault("YOUTUBE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/youtube/callback")
+	youtubeRedirectURL := getEnvOrDefault(
+		"YOUTUBE_REDIRECT_URL",
+		defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/youtube/callback"),
+	)
 
 	tiktokClientKey := os.Getenv("TIKTOK_CLIENT_KEY")
 	tiktokClientSecret := os.Getenv("TIKTOK_CLIENT_SECRET")
-	tiktokRedirectURL := getEnvOrDefault("TIKTOK_REDIRECT_URL", "http://localhost:8080/api/v1/auth/tiktok/callback")
+	tiktokRedirectURL := getEnvOrDefault(
+		"TIKTOK_REDIRECT_URL",
+		defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/tiktok/callback"),
+	)
 
 	kickClientID := os.Getenv("KICK_CLIENT_ID")
 	kickClientSecret := os.Getenv("KICK_CLIENT_SECRET")
-	kickRedirectURL := getEnvOrDefault("KICK_REDIRECT_URL", "http://localhost:8080/api/v1/auth/kick/callback")
+	kickRedirectURL := getEnvOrDefault(
+		"KICK_REDIRECT_URL",
+		defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/kick/callback"),
+	)
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)
@@ -149,7 +164,6 @@ func main() {
 		providers[oauth.PlatformKick] = kickOAuth
 	}
 
-	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
 	overlayManagerURL := getEnvOrDefault("OVERLAY_MANAGER_URL", "http://localhost:8082")
 
 	// Create handlers
@@ -259,6 +273,29 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func defaultCallbackURL(frontendURL, fallbackBase, path string) string {
+	normalizedPath := path
+	if !strings.HasPrefix(normalizedPath, "/") {
+		normalizedPath = "/" + normalizedPath
+	}
+
+	trimmedFrontend := strings.TrimSuffix(frontendURL, "/")
+	trimmedFallback := strings.TrimSuffix(fallbackBase, "/")
+	lowerFrontend := strings.ToLower(trimmedFrontend)
+
+	if trimmedFrontend == "" ||
+		strings.Contains(lowerFrontend, "localhost") ||
+		strings.Contains(lowerFrontend, "127.0.0.1") {
+		return trimmedFallback + normalizedPath
+	}
+
+	if strings.HasPrefix(trimmedFrontend, "http://") || strings.HasPrefix(trimmedFrontend, "https://") {
+		return trimmedFrontend + normalizedPath
+	}
+
+	return trimmedFallback + normalizedPath
 }
 
 // getEnvAsIntOrDefault gets an environment variable as int or returns default
