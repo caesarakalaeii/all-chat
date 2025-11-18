@@ -21,11 +21,6 @@ data:
   REDIS_HOST: redis.allchat.svc.cluster.local
   REDIS_PORT: "6379"
 
-  # OAuth Redirect URLs (Production)
-  TWITCH_REDIRECT_URL: https://allch.at/api/v1/auth/twitch/callback
-  YOUTUBE_REDIRECT_URL: https://allch.at/api/v1/auth/youtube/callback
-  TIKTOK_REDIRECT_URL: https://allch.at/api/v1/auth/tiktok/callback
-
   # Frontend URL
   FRONTEND_URL: https://allch.at
 

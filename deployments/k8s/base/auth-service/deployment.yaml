@@ -77,11 +77,6 @@ spec:
             secretKeyRef:
               name: allchat-secrets
               key: TWITCH_CLIENT_SECRET
-        - name: TWITCH_REDIRECT_URL
-          valueFrom:
-            configMapKeyRef:
-              name: allchat-config
-              key: TWITCH_REDIRECT_URL
         - name: FRONTEND_URL
           valueFrom:
             configMapKeyRef:

@@ -89,8 +89,6 @@ spec:
             secretKeyRef:
               name: allchat-secrets
               key: YOUTUBE_CLIENT_SECRET
-        - name: YOUTUBE_REDIRECT_URL
-          value: http://localhost:8080/api/v1/auth/youtube/callback
         - name: POLLING_INTERVAL_MS
           valueFrom:
             configMapKeyRef:
