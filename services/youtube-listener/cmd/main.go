@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -40,7 +41,8 @@ func main() {
 	// Validate required environment variables
 	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
-	youtubeRedirectURL := getEnvOrDefault("YOUTUBE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/youtube/callback")
+	frontendURL := strings.TrimSuffix(getEnvOrDefault("FRONTEND_URL", "http://localhost:3000"), "/")
+	youtubeRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/youtube/callback")
 
 	if youtubeClientID == "" || youtubeClientSecret == "" {
 		log.Fatal("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET are required")
@@ -202,6 +204,29 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func defaultCallbackURL(frontendURL, fallbackBase, path string) string {
+	normalizedPath := path
+	if !strings.HasPrefix(normalizedPath, "/") {
+		normalizedPath = "/" + normalizedPath
+	}
+
+	trimmedFrontend := strings.TrimSuffix(frontendURL, "/")
+	trimmedFallback := strings.TrimSuffix(fallbackBase, "/")
+	lowerFrontend := strings.ToLower(trimmedFrontend)
+
+	if trimmedFrontend == "" ||
+		strings.Contains(lowerFrontend, "localhost") ||
+		strings.Contains(lowerFrontend, "127.0.0.1") {
+		return trimmedFallback + normalizedPath
+	}
+
+	if strings.HasPrefix(trimmedFrontend, "http://") || strings.HasPrefix(trimmedFrontend, "https://") {
+		return trimmedFrontend + normalizedPath
+	}
+
+	return trimmedFallback + normalizedPath
 }
 
 // dbConnWrapper wraps pgxpool.Pool to implement DBConnInterface

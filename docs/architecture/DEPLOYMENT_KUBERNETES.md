@@ -397,11 +397,11 @@ spec:
                 secretKeyRef:
                   name: all-chat-secrets
                   key: twitch_client_secret
-            - name: TWITCH_REDIRECT_URL
+            - name: FRONTEND_URL
               valueFrom:
                 configMapKeyRef:
                   name: all-chat-config
-                  key: twitch_redirect_url
+                  key: frontend_url
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
@@ -807,8 +807,8 @@ data:
   overlay_service_url: "http://overlay-service:8082"
   emote_service_url: "http://emote-service:8083"
 
-  # Twitch OAuth
-  twitch_redirect_url: "https://api.allchat.io/api/v1/auth/twitch/callback"
+  # Frontend URL (used for OAuth redirect generation)
+  frontend_url: "https://app.allchat.io"
 
   # Logging
   log_level: "info"

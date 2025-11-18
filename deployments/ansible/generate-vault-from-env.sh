@@ -128,14 +128,12 @@ twitch_client_id: "${TWITCH_CLIENT_ID}"
 twitch_client_secret: "${TWITCH_CLIENT_SECRET}"
 twitch_bot_username: "${TWITCH_BOT_USERNAME}"
 twitch_bot_oauth: "${TWITCH_BOT_OAUTH}"
-twitch_redirect_url: "${TWITCH_REDIRECT_URL:-http://localhost:8080/api/v1/auth/twitch/callback}"
 
 # =============================================================================
 # YOUTUBE INTEGRATION
 # =============================================================================
 youtube_client_id: "${YOUTUBE_CLIENT_ID:-your-youtube-client-id}"
 youtube_client_secret: "${YOUTUBE_CLIENT_SECRET:-your-youtube-client-secret}"
-youtube_redirect_url: "${YOUTUBE_REDIRECT_URL:-http://localhost:8080/api/v1/auth/youtube/callback}"
 youtube_api_key: "${YOUTUBE_API_KEY:-}"
 
 # =============================================================================

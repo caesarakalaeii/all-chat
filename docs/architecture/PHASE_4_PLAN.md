@@ -224,7 +224,7 @@ tags := map[string]string{
 YOUTUBE_API_KEY=AIzaSyXXXXXXXXXXXX          # For public API calls (optional)
 YOUTUBE_CLIENT_ID=xxx.apps.googleusercontent.com
 YOUTUBE_CLIENT_SECRET=GOCSPX-xxxxx
-YOUTUBE_REDIRECT_URL=http://localhost:8080/api/v1/auth/youtube/callback
+FRONTEND_URL=https://your-frontend-domain
 REDIS_HOST=localhost
 REDIS_PORT=6379
 DATABASE_HOST=localhost
@@ -788,7 +788,7 @@ youtube-listener:
     - LOG_LEVEL=info
     - YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}
     - YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}
-    - YOUTUBE_REDIRECT_URL=${YOUTUBE_REDIRECT_URL}
+    - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
     - REDIS_HOST=redis
     - REDIS_PORT=6379
     - DATABASE_HOST=postgres
@@ -840,7 +840,7 @@ source-manager:
 # YouTube OAuth (required for Phase 4)
 YOUTUBE_CLIENT_ID=xxx.apps.googleusercontent.com
 YOUTUBE_CLIENT_SECRET=GOCSPX-xxxxx
-YOUTUBE_REDIRECT_URL=http://localhost:8080/api/v1/auth/youtube/callback
+FRONTEND_URL=http://localhost:3000
 ```
 
 ---

@@ -98,7 +98,6 @@ vim deployments/.env
 # ==============================================
 TWITCH_CLIENT_ID=your_actual_client_id_here
 TWITCH_CLIENT_SECRET=your_actual_client_secret_here
-TWITCH_REDIRECT_URL=http://localhost:8080/api/v1/auth/twitch/callback
 
 # ==============================================
 # Twitch Bot Account (REQUIRED for Twitch Listener)
@@ -116,7 +115,6 @@ TWITCH_BOT_OAUTH=oauth:your_actual_oauth_token_here
 # ==============================================
 YOUTUBE_CLIENT_ID=xxx.apps.googleusercontent.com
 YOUTUBE_CLIENT_SECRET=GOCSPX-your_actual_secret_here
-YOUTUBE_REDIRECT_URL=http://localhost:8080/api/v1/auth/youtube/callback
 
 # ==============================================
 # JWT Secret (REQUIRED)
@@ -138,6 +136,11 @@ DATABASE_NAME=allchat
 # ==============================================
 REDIS_HOST=localhost
 REDIS_PORT=6379
+
+# ==============================================
+# Frontend URL (used to build OAuth redirect URIs)
+# ==============================================
+FRONTEND_URL=http://localhost:3000
 
 # ==============================================
 # Application Settings
@@ -165,7 +168,7 @@ grep -E "(your_|xxx|GOCSPX-your)" deployments/.env
 1. Go to https://dev.twitch.tv/console/apps
 2. Click "Register Your Application"
 3. Name: "All-Chat Local Dev"
-4. OAuth Redirect URLs: `http://localhost:8080/api/v1/auth/twitch/callback`
+4. OAuth Redirect URLs: `<FRONTEND_URL>/api/v1/auth/twitch/callback` (e.g., `http://localhost:8080/api/v1/auth/twitch/callback` for local Docker)
 5. Category: Chat Bot
 6. Copy Client ID and Client Secret to `.env`
 
@@ -502,7 +505,7 @@ export REDIS_HOST=localhost
 export REDIS_PORT=6379
 export TWITCH_CLIENT_ID=$(grep TWITCH_CLIENT_ID ../../deployments/.env | cut -d'=' -f2)
 export TWITCH_CLIENT_SECRET=$(grep TWITCH_CLIENT_SECRET ../../deployments/.env | cut -d'=' -f2)
-export TWITCH_REDIRECT_URL=http://localhost:8080/api/v1/auth/twitch/callback
+export FRONTEND_URL=http://localhost:3000
 export JWT_SECRET=$(grep JWT_SECRET ../../deployments/.env | cut -d'=' -f2)
 
 # Run service
@@ -662,7 +665,7 @@ export REDIS_HOST=localhost
 export REDIS_PORT=6379
 export YOUTUBE_CLIENT_ID=$(grep YOUTUBE_CLIENT_ID ../../deployments/.env | cut -d'=' -f2)
 export YOUTUBE_CLIENT_SECRET=$(grep YOUTUBE_CLIENT_SECRET ../../deployments/.env | cut -d'=' -f2)
-export YOUTUBE_REDIRECT_URL=http://localhost:8080/api/v1/auth/youtube/callback
+export FRONTEND_URL=http://localhost:3000
 export POLLING_INTERVAL_MS=2000
 export QUOTA_LIMIT_DAILY=10000
 
