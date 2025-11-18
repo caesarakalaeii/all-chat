@@ -808,7 +808,7 @@ data:
   emote_service_url: "http://emote-service:8083"
 
   # Twitch OAuth
-  twitch_redirect_url: "https://api.allchat.io/api/v1/auth/callback"
+  twitch_redirect_url: "https://api.allchat.io/api/v1/auth/twitch/callback"
 
   # Logging
   log_level: "info"

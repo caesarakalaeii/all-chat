@@ -644,7 +644,7 @@ docker-compose up -d
 
 1. **Create Overlay**:
    ```bash
-   TOKEN=$(curl -X POST http://localhost:8080/api/v1/auth/login | jq -r '.token')
+   TOKEN=$(curl -X POST http://localhost:8080/api/v1/auth/twitch/login | jq -r '.token')
 
    OVERLAY_ID=$(curl -X POST \
      -H "Authorization: Bearer $TOKEN" \

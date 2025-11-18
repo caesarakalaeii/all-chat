@@ -440,7 +440,7 @@ Copy from auth-service and modify:
 make docker-up
 
 # 2. Login to get JWT token
-curl http://localhost:8081/auth/login
+curl http://localhost:8081/twitch/login
 # Follow OAuth flow, get JWT token
 
 # 3. Create overlay

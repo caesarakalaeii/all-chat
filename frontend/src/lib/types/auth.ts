@@ -26,7 +26,7 @@ export interface AuthState {
 }
 
 export interface LoginResponse {
-  url: string;
+  auth_url: string;
 }
 
 export interface TokenResponse {
