@@ -98,7 +98,7 @@ vim deployments/.env
 # ==============================================
 TWITCH_CLIENT_ID=your_actual_client_id_here
 TWITCH_CLIENT_SECRET=your_actual_client_secret_here
-TWITCH_REDIRECT_URL=http://localhost:8080/api/v1/auth/callback
+TWITCH_REDIRECT_URL=http://localhost:8080/api/v1/auth/twitch/callback
 
 # ==============================================
 # Twitch Bot Account (REQUIRED for Twitch Listener)
@@ -165,7 +165,7 @@ grep -E "(your_|xxx|GOCSPX-your)" deployments/.env
 1. Go to https://dev.twitch.tv/console/apps
 2. Click "Register Your Application"
 3. Name: "All-Chat Local Dev"
-4. OAuth Redirect URLs: `http://localhost:8080/api/v1/auth/callback`
+4. OAuth Redirect URLs: `http://localhost:8080/api/v1/auth/twitch/callback`
 5. Category: Chat Bot
 6. Copy Client ID and Client Secret to `.env`
 
@@ -502,7 +502,7 @@ export REDIS_HOST=localhost
 export REDIS_PORT=6379
 export TWITCH_CLIENT_ID=$(grep TWITCH_CLIENT_ID ../../deployments/.env | cut -d'=' -f2)
 export TWITCH_CLIENT_SECRET=$(grep TWITCH_CLIENT_SECRET ../../deployments/.env | cut -d'=' -f2)
-export TWITCH_REDIRECT_URL=http://localhost:8080/api/v1/auth/callback
+export TWITCH_REDIRECT_URL=http://localhost:8080/api/v1/auth/twitch/callback
 export JWT_SECRET=$(grep JWT_SECRET ../../deployments/.env | cut -d'=' -f2)
 
 # Run service
@@ -519,7 +519,7 @@ curl http://localhost:8081/health/ready
 # Expected: {"status":"ready"}
 
 # Login endpoint
-curl http://localhost:8081/auth/login
+curl http://localhost:8081/twitch/login
 # Expected: Redirect to Twitch OAuth
 
 # Test with invalid token
@@ -881,13 +881,13 @@ chmod +x /tmp/test-health.sh
 
 ```bash
 # Get login URL
-curl http://localhost:8080/api/v1/auth/login
+curl http://localhost:8080/api/v1/auth/twitch/login
 
 # Expected: Redirect URL to Twitch OAuth
 # Copy the URL and open in browser
 
 # Complete OAuth flow in browser
-# You'll be redirected back to: http://localhost:8080/api/v1/auth/callback?code=...
+# You'll be redirected back to: http://localhost:8080/api/v1/auth/twitch/callback?code=...
 
 # The callback should return a JWT token
 # Copy the token for next tests
@@ -2075,7 +2075,7 @@ if [ $FAILED -eq 0 ]; then
   echo -e "${GREEN}All tests passed!${NC}"
   echo ""
   echo "Next steps:"
-  echo "  - Test Twitch OAuth: curl http://localhost:8080/api/v1/auth/login"
+  echo "  - Test Twitch OAuth: curl http://localhost:8080/api/v1/auth/twitch/login"
   echo "  - Create overlay: See docs/TESTING_COMPREHENSIVE.md"
   echo "  - Test WebSocket: websocat ws://localhost:8080/ws/overlay/{id}?token={jwt}"
 else

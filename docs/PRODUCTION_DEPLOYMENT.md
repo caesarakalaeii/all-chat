@@ -109,7 +109,7 @@ allchat:
   twitch_bot_oauth: "{{ vault_allchat_twitch_bot_oauth }}"
   youtube_client_id: "{{ vault_allchat_youtube_client_id }}"
   youtube_client_secret: "{{ vault_allchat_youtube_client_secret }}"
-  twitch_redirect_url: "https://allchat.yourdomain.com/api/v1/auth/callback"
+  twitch_redirect_url: "https://allchat.yourdomain.com/api/v1/auth/twitch/callback"
   youtube_redirect_url: "https://allchat.yourdomain.com/api/v1/auth/youtube/callback"
   log_level: "info"
   cors_origin: "https://allchat.yourdomain.com"

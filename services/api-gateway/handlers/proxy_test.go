@@ -221,7 +221,7 @@ func TestProxyHandler_BackendUnavailable(t *testing.T) {
 	router := gin.New()
 	router.Any("/api/v1/*path", handler.ForwardRequest)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/login", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/twitch/login", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

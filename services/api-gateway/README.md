@@ -105,8 +105,8 @@ Returns aggregated health status of all backend services.
 
 | Method | Path | Auth Required | Description |
 |--------|------|---------------|-------------|
-| GET | `/api/v1/auth/login` | No | Start OAuth flow |
-| GET | `/api/v1/auth/callback` | No | OAuth callback |
+| GET | `/api/v1/auth/twitch/login` | No | Start Twitch OAuth flow |
+| GET | `/api/v1/auth/twitch/callback` | No | Twitch OAuth callback |
 | POST | `/api/v1/auth/refresh` | No | Refresh token |
 | GET | `/api/v1/auth/me` | Yes | Get current user |
 | POST | `/api/v1/auth/logout` | Yes | Logout |

@@ -222,7 +222,7 @@ ansible-playbook -i inventory.yml playbook.yml --ask-vault-pass
 1. Go to https://dev.twitch.tv/console/apps
 2. Click "Register Your Application"
 3. Name: "All-Chat"
-4. OAuth Redirect URLs: `http://localhost:8080/api/v1/auth/callback`
+4. OAuth Redirect URLs: `http://localhost:8080/api/v1/auth/twitch/callback`
 5. Category: "Application Integration"
 6. Save Client ID and Secret
 

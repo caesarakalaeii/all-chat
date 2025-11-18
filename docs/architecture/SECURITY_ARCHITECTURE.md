@@ -55,13 +55,13 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     User->>Frontend: Click "Login with Twitch"
-    Frontend->>Gateway: GET /api/v1/auth/login
+    Frontend->>Gateway: GET /api/v1/auth/twitch/login
     Gateway->>Auth: GetAuthURL()
     Auth-->>Gateway: https://id.twitch.tv/oauth2/authorize?...
     Gateway-->>Frontend: Redirect URL
     Frontend->>User: 302 Redirect to Twitch
     User->>Twitch: Login & Authorize
-    Twitch->>Gateway: GET /api/v1/auth/callback?code=ABC123
+    Twitch->>Gateway: GET /api/v1/auth/twitch/callback?code=ABC123
     Gateway->>Auth: ExchangeCodeForToken(code)
     Auth->>Twitch: POST /oauth2/token<br/>{code, client_id, client_secret}
     Twitch-->>Auth: {access_token, refresh_token, expires_in}
@@ -216,8 +216,8 @@ func (s *OverlayService) GetOverlay(ctx context.Context, overlayID string, userI
 
 | Endpoint | Auth Required | Authorization Check |
 |----------|---------------|---------------------|
-| `GET /auth/login` | No | N/A |
-| `GET /auth/callback` | No | N/A |
+| `GET /auth/twitch/login` | No | N/A |
+| `GET /auth/twitch/callback` | No | N/A |
 | `POST /auth/refresh` | Yes (refresh token) | Token validity |
 | `GET /auth/me` | Yes (JWT) | Valid JWT |
 | `GET /overlays` | Yes (JWT) | User's own overlays |

@@ -34,7 +34,7 @@ export default function LandingPage() {
   const handleLogin = async (platform: 'twitch' | 'youtube' | 'tiktok' | 'kick') => {
     try {
       // Use relative URL - Nginx will proxy to API Gateway
-      const endpoint = platform === 'twitch' ? '/api/v1/auth/login' : `/api/v1/auth/${platform}/login`;
+      const endpoint = `/api/v1/auth/${platform}/login`;
       const response = await fetch(endpoint);
       const data = await response.json();
 

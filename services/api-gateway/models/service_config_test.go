@@ -121,12 +121,12 @@ func TestServiceRegistry_GetServiceForPath(t *testing.T) {
 	}{
 		{
 			name:            "auth login path",
-			path:            "/api/v1/auth/login",
+			path:            "/api/v1/auth/twitch/login",
 			expectedService: "auth-service",
 		},
 		{
 			name:            "auth callback path",
-			path:            "/api/v1/auth/callback",
+			path:            "/api/v1/auth/twitch/callback",
 			expectedService: "auth-service",
 		},
 		{
@@ -195,7 +195,7 @@ func TestMatchesPrefix(t *testing.T) {
 		},
 		{
 			name:     "path longer than prefix",
-			path:     "/api/v1/auth/login",
+			path:     "/api/v1/auth/twitch/login",
 			prefix:   "/api/v1/auth",
 			expected: true,
 		},
