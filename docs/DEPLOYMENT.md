@@ -30,7 +30,7 @@ This guide covers deploying your own instance of All-Chat. If you just want to u
 
 1. Go to https://dev.twitch.tv/console/apps
 2. Create a new application
-3. Set OAuth Redirect URL to: `http://localhost:8080/api/v1/auth/twitch/callback` (adjust for production)
+3. Set OAuth Redirect URL to: `<FRONTEND_URL>/api/v1/auth/twitch/callback` (e.g., `http://localhost:8080/api/v1/auth/twitch/callback` for Docker Compose)
 4. Copy **Client ID** and **Client Secret**
 5. Get IRC OAuth token from https://twitchapps.com/tmi/
 
@@ -265,7 +265,6 @@ TWITCH_BOT_OAUTH=oauth:your_bot_oauth_token
 # Twitch OAuth (for user authentication)
 TWITCH_CLIENT_ID=your_client_id
 TWITCH_CLIENT_SECRET=your_client_secret
-TWITCH_REDIRECT_URL=http://localhost:8080/api/v1/auth/twitch/callback
 
 # YouTube API (optional)
 YOUTUBE_API_KEY=your_youtube_api_key
@@ -289,6 +288,7 @@ SOURCE_MANAGER_PORT=8088
 
 # Frontend
 NEXT_PUBLIC_API_URL=http://localhost:8080
+FRONTEND_URL=https://your-domain.example  # Used to auto-generate OAuth redirect URLs
 
 # Logging
 LOG_LEVEL=info  # debug, info, warn, error

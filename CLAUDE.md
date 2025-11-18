@@ -312,12 +312,13 @@ YOUTUBE_CLIENT_SECRET=
 # Kick OAuth (required for Kick OAuth support)
 KICK_CLIENT_ID=
 KICK_CLIENT_SECRET=
-KICK_REDIRECT_URL=http://localhost:8080/api/v1/auth/kick/callback
 
 # TikTok OAuth (required for TikTok OAuth support)
 TIKTOK_CLIENT_KEY=
 TIKTOK_CLIENT_SECRET=
-TIKTOK_REDIRECT_URL=http://localhost:8080/api/v1/auth/tiktok/callback
+
+# Frontend (used to build OAuth redirect URIs)
+FRONTEND_URL=http://localhost:3000
 
 # Database (defaults for local dev)
 DATABASE_HOST=localhost

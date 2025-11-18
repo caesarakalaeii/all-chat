@@ -40,31 +40,19 @@ func main() {
 
 	twitchClientID := os.Getenv("TWITCH_CLIENT_ID")
 	twitchClientSecret := os.Getenv("TWITCH_CLIENT_SECRET")
-	twitchRedirectURL := getEnvOrDefault(
-		"TWITCH_REDIRECT_URL",
-		defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/twitch/callback"),
-	)
+	twitchRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/twitch/callback")
 
 	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
-	youtubeRedirectURL := getEnvOrDefault(
-		"YOUTUBE_REDIRECT_URL",
-		defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/youtube/callback"),
-	)
+	youtubeRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/youtube/callback")
 
 	tiktokClientKey := os.Getenv("TIKTOK_CLIENT_KEY")
 	tiktokClientSecret := os.Getenv("TIKTOK_CLIENT_SECRET")
-	tiktokRedirectURL := getEnvOrDefault(
-		"TIKTOK_REDIRECT_URL",
-		defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/tiktok/callback"),
-	)
+	tiktokRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/tiktok/callback")
 
 	kickClientID := os.Getenv("KICK_CLIENT_ID")
 	kickClientSecret := os.Getenv("KICK_CLIENT_SECRET")
-	kickRedirectURL := getEnvOrDefault(
-		"KICK_REDIRECT_URL",
-		defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/kick/callback"),
-	)
+	kickRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/kick/callback")
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)

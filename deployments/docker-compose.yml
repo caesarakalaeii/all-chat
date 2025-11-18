@@ -66,7 +66,6 @@ services:
       REDIS_PORT: "6379"
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
-      TWITCH_REDIRECT_URL: ${TWITCH_REDIRECT_URL:-http://localhost:8080/api/v1/auth/twitch/callback}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
       JWT_EXPIRY_HOURS: "24"
@@ -273,7 +272,6 @@ services:
       LOG_LEVEL: "info"
       YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID}
       YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET}
-      YOUTUBE_REDIRECT_URL: ${YOUTUBE_REDIRECT_URL:-http://localhost:8080/api/v1/auth/youtube/callback}
       DATABASE_HOST: postgres
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
