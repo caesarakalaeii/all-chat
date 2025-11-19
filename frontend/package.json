@@ -16,6 +16,7 @@
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.2.0",
     "lucide-react": "^0.309.0",

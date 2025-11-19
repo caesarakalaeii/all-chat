@@ -33,6 +33,17 @@ import type { ChatSource } from '@/lib/types/overlay';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
+import dynamic from 'next/dynamic';
+
+// Dynamically import Monaco Editor to avoid SSR issues
+const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[300px] bg-gray-900 border border-gray-700 rounded-lg flex items-center justify-center">
+      <div className="text-gray-400 text-sm">Loading editor...</div>
+    </div>
+  )
+});
 
 type MockMessageFormState = {
   platform: ChatMessage['platform'];
@@ -198,6 +209,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [sources, setSources] = useState<ChatSource[]>([]);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -761,51 +773,92 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                   </div>
                 </div>
 
-                {/* Custom CSS */}
-                <div className="border border-gray-700 rounded-lg p-4 bg-gray-900/40">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-semibold text-white">Custom CSS</h3>
-                    <label className="flex items-center gap-2 text-xs text-gray-300">
-                      <input
-                        type="checkbox"
-                        checked={useCustomCss}
-                        onChange={(e) => setUseCustomCss(e.target.checked)}
-                        className="accent-twitch"
+                {/* Advanced Settings (Custom CSS Editor) */}
+                <div className="border border-gray-700 rounded-lg bg-gray-900/40">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-800/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-white">Advanced</h3>
+                      <span className="text-xs text-gray-500">(Custom CSS Editor)</span>
+                    </div>
+                    <svg
+                      className={`w-5 h-5 text-gray-400 transition-transform ${
+                        isAdvancedOpen ? 'rotate-180' : ''
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
                       />
-                      Enable
-                    </label>
-                  </div>
-                  <textarea
-                    value={customCss}
-                    onChange={(e) => setCustomCss(e.target.value)}
-                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-xs text-gray-100 h-32"
-                    placeholder="Paste your OBS custom CSS here to preview it..."
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomCss(EXAMPLE_CUSTOM_CSS.trim());
-                        setUseCustomCss(true);
-                      }}
-                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded"
-                    >
-                      Load Example
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomCss('');
-                        setUseCustomCss(false);
-                      }}
-                      className="px-3 py-2 text-xs border border-gray-600 rounded text-gray-200 hover:bg-gray-700"
-                    >
-                      Reset
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-gray-500 mt-3">
-                    Need inspiration? Explore <a href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes" target="_blank" rel="noreferrer" className="text-twitch hover:underline">theme docs</a> or paste your OBS CSS to preview in real time.
-                  </p>
+                    </svg>
+                  </button>
+
+                  {isAdvancedOpen && (
+                    <div className="px-4 pb-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 text-xs text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={useCustomCss}
+                            onChange={(e) => setUseCustomCss(e.target.checked)}
+                            className="accent-twitch"
+                          />
+                          Enable Custom CSS
+                        </label>
+                      </div>
+
+                      <MonacoCSSEditor
+                        value={customCss}
+                        onChange={setCustomCss}
+                        height="300px"
+                        placeholder="/* Enter your custom CSS here */"
+                      />
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomCss(EXAMPLE_CUSTOM_CSS.trim());
+                            setUseCustomCss(true);
+                          }}
+                          className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded"
+                        >
+                          Load Example
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomCss('');
+                            setUseCustomCss(false);
+                          }}
+                          className="px-3 py-2 text-xs border border-gray-600 rounded text-gray-200 hover:bg-gray-700"
+                        >
+                          Reset
+                        </button>
+                      </div>
+
+                      <p className="text-[11px] text-gray-500">
+                        Need inspiration? Explore{' '}
+                        <a
+                          href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-twitch hover:underline"
+                        >
+                          theme docs
+                        </a>{' '}
+                        or paste your OBS CSS to preview in real time.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Save Button */}
