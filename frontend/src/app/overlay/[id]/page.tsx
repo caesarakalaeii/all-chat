@@ -153,6 +153,19 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="min-h-screen w-full p-4">
+      {/* Hide scrollbars */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        body {
+          overflow: hidden !important;
+        }
+        body::-webkit-scrollbar {
+          display: none !important;
+        }
+        * {
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+        }
+      ` }} />
       {customCss.trim().length > 0 && (
         <style dangerouslySetInnerHTML={{ __html: customCss }} />
       )}
