@@ -1,7 +1,6 @@
 package oauth
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -113,23 +112,16 @@ func (t *TikTokOAuth) GetPlatform() Platform {
 
 // GetUserInfoTikTok fetches user information from TikTok API (returns platform-specific type)
 func (t *TikTokOAuth) GetUserInfoTikTok(ctx context.Context, accessToken string) (*models.TikTokUserInfo, error) {
-	// TikTok requires the fields list in the POST body
-	payload := map[string]interface{}{
-		"fields": []string{"open_id", "union_id", "avatar_url", "display_name", "username"},
-	}
+	// TikTok v2 API requires fields as query parameters in a GET request
+	fields := "open_id,union_id,avatar_url,display_name,username"
+	urlWithParams := fmt.Sprintf("%s?fields=%s", tiktokUserURL, url.QueryEscape(fields))
 
-	bodyBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal user info payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", tiktokUserURL, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "GET", urlWithParams, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := t.client.Do(req)
 	if err != nil {
