@@ -14,8 +14,8 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/handlers"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
-	"github.com/caesar/all-chat/shared/crypto"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
@@ -82,7 +82,12 @@ func main() {
 		log.Fatal("TOKEN_ENCRYPTION_KEY must be set and must be 16, 24, or 32 bytes")
 	}
 
-	tokenCipher, err := crypto.NewAESGCMCipher(tokenEncryptionKey)
+	parsedKey, err := encryption.ParseKey(tokenEncryptionKey)
+	if err != nil {
+		log.Fatal("failed to parse TOKEN_ENCRYPTION_KEY", zap.Error(err))
+	}
+
+	tokenCipher, err := encryption.NewAESEncryptor(parsedKey)
 	if err != nil {
 		log.Fatal("failed to initialize token cipher", zap.Error(err))
 	}
