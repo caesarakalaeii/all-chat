@@ -115,7 +115,8 @@ body {
   font-family: 'Space Grotesk', sans-serif !important;
 }
 
-.space-y-3 > div {
+/* Target only message containers */
+.space-y-3 > div.bg-gray-900\\/90 {
   background: rgba(74, 29, 150, 0.45) !important;
   border: 1px solid rgba(236, 72, 153, 0.5) !important;
   border-radius: 16px !important;
