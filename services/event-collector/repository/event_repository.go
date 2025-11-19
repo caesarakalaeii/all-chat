@@ -28,11 +28,6 @@ func (r *EventRepository) CreateEvent(ctx context.Context, event *models.StreamE
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	platformUserJSON, err := json.Marshal(event.PlatformUser)
-	if err != nil {
-		return fmt.Errorf("failed to marshal platform user: %w", err)
-	}
-
 	query := `
 		INSERT INTO stream_events (
 			id, stream_session_id, user_id, platform, event_type, event_subtype,

@@ -9,12 +9,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/event-collector/collectors"
 	"github.com/caesar/all-chat/services/event-collector/handlers"
 	"github.com/caesar/all-chat/services/event-collector/normalizers"
 	"github.com/caesar/all-chat/services/event-collector/repository"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
-	sharedRedis "github.com/caesar/all-chat/shared/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -22,19 +22,30 @@ import (
 
 func main() {
 	// Initialize logger
-	log := logger.NewLogger()
+	logLevel := getEnv("LOG_LEVEL", "info")
+	log := logger.NewLogger("event-collector", logLevel)
 	defer log.Sync()
 
 	log.Info("Starting Event Collector service...")
 
+	ctx := context.Background()
+
 	// Get environment variables
 	port := getEnv("PORT", "8090")
-	dbURL := getEnv("DATABASE_URL", "postgresql://allchat:allchat_dev_password@localhost:5432/allchat")
+	dbHost := getEnv("DATABASE_HOST", "localhost")
+	dbPort := getEnv("DATABASE_PORT", "5432")
+	dbUser := getEnv("DATABASE_USER", "allchat")
+	dbPassword := getEnv("DATABASE_PASSWORD", "allchat_dev_password")
+	dbName := getEnv("DATABASE_NAME", "allchat")
 	redisHost := getEnv("REDIS_HOST", "localhost")
 	redisPort := getEnv("REDIS_PORT", "6379")
 
+	// Build connection string
+	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+		dbUser, dbPassword, dbHost, dbPort, dbName)
+
 	// Initialize database connection
-	db, err := database.NewPool(context.Background(), dbURL)
+	db, err := database.NewPostgresPool(connString)
 	if err != nil {
 		log.Fatal("Failed to connect to database", zap.Error(err))
 	}
@@ -43,13 +54,12 @@ func main() {
 	log.Info("Connected to database")
 
 	// Initialize Redis connection
-	redisClient := sharedRedis.NewClient(redisHost, redisPort)
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+	})
 	defer redisClient.Close()
 
 	// Test Redis connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
@@ -66,19 +76,20 @@ func main() {
 	// Get Twitch credentials from environment
 	twitchClientID := getEnv("TWITCH_CLIENT_ID", "")
 	twitchClientSecret := getEnv("TWITCH_CLIENT_SECRET", "")
-	twitchAccessToken := getEnv("TWITCH_ACCESS_TOKEN", "")
 
-	// TODO: Initialize Twitch EventSub collector (requires user broadcaster ID)
-	// For now, we'll initialize it when we know which broadcasters to track
-	// This will be done via API endpoint or configuration
+	// Initialize collector manager
+	collectorManager := collectors.NewCollectorManager(
+		eventRepo,
+		sessionRepo,
+		twitchNormalizer,
+		twitchClientID,
+		twitchClientSecret,
+		log,
+	)
 
 	// TODO: Initialize YouTube event extractor
 	// TODO: Initialize Kick event listener
 	// TODO: Initialize TikTok webhook handler
-
-	_ = twitchClientID
-	_ = twitchClientSecret
-	_ = twitchAccessToken
 
 	// Initialize Gin router
 	gin.SetMode(gin.ReleaseMode)
@@ -91,12 +102,13 @@ func main() {
 	// Initialize handlers
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	eventsHandler := handlers.NewEventsHandler(eventRepo, sessionRepo, log)
+	collectorHandler := handlers.NewCollectorHandler(collectorManager, log)
 
 	// Health check endpoints
 	router.GET("/health/live", healthHandler.LivenessProbe)
 	router.GET("/health/ready", healthHandler.ReadinessProbe)
 
-	// TODO: Add webhook endpoints for EventSub
+	// TODO: Add webhook endpoints for EventSub (alternative to WebSocket)
 	// webhooks := router.Group("/webhooks")
 	// {
 	// 	webhooks.POST("/twitch", twitchHandler.HandleWebhook)
@@ -112,9 +124,14 @@ func main() {
 		v1.GET("/users/:id/sessions", eventsHandler.GetUserSessions)
 		v1.GET("/users/:id/sessions/active", eventsHandler.GetActiveSession)
 
-		// TODO: Add endpoints to manage EventSub connections
-		// v1.POST("/collectors/twitch/start", twitchCollectorHandler.Start)
-		// v1.POST("/collectors/twitch/stop", twitchCollectorHandler.Stop)
+		// Collector management endpoints
+		collectors := v1.Group("/collectors")
+		{
+			collectors.POST("/twitch/start", collectorHandler.StartTwitchCollector)
+			collectors.POST("/twitch/stop", collectorHandler.StopTwitchCollector)
+			collectors.GET("/twitch/:user_id", collectorHandler.GetCollectorStatus)
+			collectors.GET("/active", collectorHandler.ListActiveCollectors)
+		}
 	}
 
 	// Start HTTP server
@@ -138,11 +155,14 @@ func main() {
 
 	log.Info("Shutting down Event Collector service...")
 
-	// Graceful shutdown with 25-second timeout
-	ctx, cancel = context.WithTimeout(context.Background(), 25*time.Second)
-	defer cancel()
+	// Shutdown all collectors first
+	collectorManager.Shutdown()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	// Graceful shutdown with 25-second timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("Server forced to shutdown", zap.Error(err))
 	}
 

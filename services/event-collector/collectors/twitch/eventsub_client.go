@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/event-collector/models"
@@ -27,6 +28,14 @@ type EventSubClient struct {
 	reconnectDelay   time.Duration
 	keepaliveTimeout time.Duration
 	done             chan struct{}
+
+	// User and broadcaster mapping
+	UserID        uuid.UUID
+	BroadcasterID string
+
+	// Current stream session
+	currentSessionID *uuid.UUID
+	sessionMux       sync.RWMutex
 }
 
 // EventSubMessage represents the WebSocket message format
@@ -259,21 +268,15 @@ func (c *EventSubClient) handleFollowEvent(ctx context.Context, eventData json.R
 		return fmt.Errorf("failed to unmarshal follow event: %w", err)
 	}
 
-	// TODO: Get actual user ID and session ID from context/state
-	userID := uuid.MustParse("00000000-0000-0000-0000-000000000000") // Placeholder
-
-	// Get active session for broadcaster
-	session, err := c.sessionRepo.GetActiveSession(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("failed to get active session: %w", err)
-	}
-	if session == nil {
-		c.logger.Warn("No active session found for follow event")
+	// Get current session ID
+	sessionID := c.getCurrentSession()
+	if sessionID == nil {
+		c.logger.Warn("No active session found for follow event - event will be skipped")
 		return nil
 	}
 
 	// Normalize event
-	streamEvent := c.normalizer.NormalizeFollow(&followEvent, session.ID, userID)
+	streamEvent := c.normalizer.NormalizeFollow(&followEvent, *sessionID, c.UserID)
 
 	// Store event
 	if err := c.eventRepo.CreateEvent(ctx, streamEvent); err != nil {
@@ -281,13 +284,13 @@ func (c *EventSubClient) handleFollowEvent(ctx context.Context, eventData json.R
 	}
 
 	// Update session stats
-	if err := c.eventRepo.UpdateSessionStats(ctx, session.ID, models.EventTypeFollow, 1); err != nil {
+	if err := c.eventRepo.UpdateSessionStats(ctx, *sessionID, models.EventTypeFollow, 1); err != nil {
 		c.logger.Error("Failed to update session stats", zap.Error(err))
 	}
 
 	c.logger.Info("Processed follow event",
 		zap.String("user", followEvent.UserName),
-		zap.String("session_id", session.ID.String()),
+		zap.String("session_id", sessionID.String()),
 	)
 
 	return nil
@@ -300,21 +303,19 @@ func (c *EventSubClient) handleSubscribeEvent(ctx context.Context, eventData jso
 		return fmt.Errorf("failed to unmarshal subscribe event: %w", err)
 	}
 
-	userID := uuid.MustParse("00000000-0000-0000-0000-000000000000") // Placeholder
-
-	session, err := c.sessionRepo.GetActiveSession(ctx, userID)
-	if err != nil || session == nil {
-		c.logger.Warn("No active session found for subscribe event")
-		return err
+	sessionID := c.getCurrentSession()
+	if sessionID == nil {
+		c.logger.Warn("No active session found for subscribe event - event will be skipped")
+		return nil
 	}
 
-	streamEvent := c.normalizer.NormalizeSubscribe(&subEvent, session.ID, userID)
+	streamEvent := c.normalizer.NormalizeSubscribe(&subEvent, *sessionID, c.UserID)
 
 	if err := c.eventRepo.CreateEvent(ctx, streamEvent); err != nil {
 		return fmt.Errorf("failed to store subscribe event: %w", err)
 	}
 
-	if err := c.eventRepo.UpdateSessionStats(ctx, session.ID, models.EventTypeSub, 1); err != nil {
+	if err := c.eventRepo.UpdateSessionStats(ctx, *sessionID, models.EventTypeSub, 1); err != nil {
 		c.logger.Error("Failed to update session stats", zap.Error(err))
 	}
 
@@ -333,21 +334,19 @@ func (c *EventSubClient) handleSubscriptionMessageEvent(ctx context.Context, eve
 		return fmt.Errorf("failed to unmarshal resub event: %w", err)
 	}
 
-	userID := uuid.MustParse("00000000-0000-0000-0000-000000000000") // Placeholder
-
-	session, err := c.sessionRepo.GetActiveSession(ctx, userID)
-	if err != nil || session == nil {
-		c.logger.Warn("No active session found for resub event")
-		return err
+	sessionID := c.getCurrentSession()
+	if sessionID == nil {
+		c.logger.Warn("No active session found for resub event - event will be skipped")
+		return nil
 	}
 
-	streamEvent := c.normalizer.NormalizeSubscriptionMessage(&resubEvent, session.ID, userID)
+	streamEvent := c.normalizer.NormalizeSubscriptionMessage(&resubEvent, *sessionID, c.UserID)
 
 	if err := c.eventRepo.CreateEvent(ctx, streamEvent); err != nil {
 		return fmt.Errorf("failed to store resub event: %w", err)
 	}
 
-	if err := c.eventRepo.UpdateSessionStats(ctx, session.ID, models.EventTypeSub, 1); err != nil {
+	if err := c.eventRepo.UpdateSessionStats(ctx, *sessionID, models.EventTypeSub, 1); err != nil {
 		c.logger.Error("Failed to update session stats", zap.Error(err))
 	}
 
@@ -366,21 +365,19 @@ func (c *EventSubClient) handleGiftSubEvent(ctx context.Context, eventData json.
 		return fmt.Errorf("failed to unmarshal gift sub event: %w", err)
 	}
 
-	userID := uuid.MustParse("00000000-0000-0000-0000-000000000000") // Placeholder
-
-	session, err := c.sessionRepo.GetActiveSession(ctx, userID)
-	if err != nil || session == nil {
-		c.logger.Warn("No active session found for gift sub event")
-		return err
+	sessionID := c.getCurrentSession()
+	if sessionID == nil {
+		c.logger.Warn("No active session found for gift sub event - event will be skipped")
+		return nil
 	}
 
-	streamEvent := c.normalizer.NormalizeGiftSub(&giftEvent, session.ID, userID)
+	streamEvent := c.normalizer.NormalizeGiftSub(&giftEvent, *sessionID, c.UserID)
 
 	if err := c.eventRepo.CreateEvent(ctx, streamEvent); err != nil {
 		return fmt.Errorf("failed to store gift sub event: %w", err)
 	}
 
-	if err := c.eventRepo.UpdateSessionStats(ctx, session.ID, models.EventTypeGiftSub, giftEvent.Total); err != nil {
+	if err := c.eventRepo.UpdateSessionStats(ctx, *sessionID, models.EventTypeGiftSub, giftEvent.Total); err != nil {
 		c.logger.Error("Failed to update session stats", zap.Error(err))
 	}
 
@@ -399,21 +396,19 @@ func (c *EventSubClient) handleCheerEvent(ctx context.Context, eventData json.Ra
 		return fmt.Errorf("failed to unmarshal cheer event: %w", err)
 	}
 
-	userID := uuid.MustParse("00000000-0000-0000-0000-000000000000") // Placeholder
-
-	session, err := c.sessionRepo.GetActiveSession(ctx, userID)
-	if err != nil || session == nil {
-		c.logger.Warn("No active session found for cheer event")
-		return err
+	sessionID := c.getCurrentSession()
+	if sessionID == nil {
+		c.logger.Warn("No active session found for cheer event - event will be skipped")
+		return nil
 	}
 
-	streamEvent := c.normalizer.NormalizeCheer(&cheerEvent, session.ID, userID)
+	streamEvent := c.normalizer.NormalizeCheer(&cheerEvent, *sessionID, c.UserID)
 
 	if err := c.eventRepo.CreateEvent(ctx, streamEvent); err != nil {
 		return fmt.Errorf("failed to store cheer event: %w", err)
 	}
 
-	if err := c.eventRepo.UpdateSessionStats(ctx, session.ID, models.EventTypeBits, cheerEvent.Bits); err != nil {
+	if err := c.eventRepo.UpdateSessionStats(ctx, *sessionID, models.EventTypeBits, cheerEvent.Bits); err != nil {
 		c.logger.Error("Failed to update session stats", zap.Error(err))
 	}
 
@@ -432,15 +427,13 @@ func (c *EventSubClient) handleRaidEvent(ctx context.Context, eventData json.Raw
 		return fmt.Errorf("failed to unmarshal raid event: %w", err)
 	}
 
-	userID := uuid.MustParse("00000000-0000-0000-0000-000000000000") // Placeholder
-
-	session, err := c.sessionRepo.GetActiveSession(ctx, userID)
-	if err != nil || session == nil {
-		c.logger.Warn("No active session found for raid event")
-		return err
+	sessionID := c.getCurrentSession()
+	if sessionID == nil {
+		c.logger.Warn("No active session found for raid event - event will be skipped")
+		return nil
 	}
 
-	streamEvent := c.normalizer.NormalizeRaid(&raidEvent, session.ID, userID)
+	streamEvent := c.normalizer.NormalizeRaid(&raidEvent, *sessionID, c.UserID)
 
 	if err := c.eventRepo.CreateEvent(ctx, streamEvent); err != nil {
 		return fmt.Errorf("failed to store raid event: %w", err)
@@ -454,18 +447,145 @@ func (c *EventSubClient) handleRaidEvent(ctx context.Context, eventData json.Raw
 	return nil
 }
 
-// handleStreamOnlineEvent processes stream.online events
+// StreamOnlineEvent represents a stream.online EventSub notification
+type StreamOnlineEvent struct {
+	ID                   string    `json:"id"`
+	BroadcasterUserID    string    `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string    `json:"broadcaster_user_login"`
+	BroadcasterUserName  string    `json:"broadcaster_user_name"`
+	Type                 string    `json:"type"` // "live", "playlist", "watch_party", etc.
+	StartedAt            time.Time `json:"started_at"`
+}
+
+// StreamOfflineEvent represents a stream.offline EventSub notification
+type StreamOfflineEvent struct {
+	BroadcasterUserID    string `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string `json:"broadcaster_user_login"`
+	BroadcasterUserName  string `json:"broadcaster_user_name"`
+}
+
+// handleStreamOnlineEvent processes stream.online events and creates a new session
 func (c *EventSubClient) handleStreamOnlineEvent(ctx context.Context, eventData json.RawMessage) error {
-	c.logger.Info("Stream went online")
-	// TODO: Create new stream session
+	var onlineEvent StreamOnlineEvent
+	if err := json.Unmarshal(eventData, &onlineEvent); err != nil {
+		return fmt.Errorf("failed to unmarshal stream.online event: %w", err)
+	}
+
+	c.logger.Info("Stream went online",
+		zap.String("broadcaster", onlineEvent.BroadcasterUserName),
+		zap.String("type", onlineEvent.Type),
+		zap.Time("started_at", onlineEvent.StartedAt),
+	)
+
+	// Check if there's already an active session
+	existingSession, err := c.sessionRepo.GetActiveSession(ctx, c.UserID)
+	if err != nil {
+		c.logger.Error("Failed to check for existing session", zap.Error(err))
+	}
+
+	if existingSession != nil {
+		c.logger.Warn("Active session already exists, not creating new one",
+			zap.String("existing_session_id", existingSession.ID.String()),
+		)
+		c.setCurrentSession(existingSession.ID)
+		return nil
+	}
+
+	// Create new stream session
+	sessionID := uuid.New()
+	session := &models.StreamSession{
+		ID:        sessionID,
+		UserID:    c.UserID,
+		StartedAt: onlineEvent.StartedAt,
+		PlatformInfo: map[string]interface{}{
+			"twitch": map[string]interface{}{
+				"broadcaster_id":    onlineEvent.BroadcasterUserID,
+				"broadcaster_login": onlineEvent.BroadcasterUserLogin,
+				"broadcaster_name":  onlineEvent.BroadcasterUserName,
+				"stream_type":       onlineEvent.Type,
+				"stream_id":         onlineEvent.ID,
+			},
+		},
+		Status: models.SessionStatusLive,
+		Stats: models.SessionStats{
+			TotalEvents:    0,
+			Followers:      0,
+			Subscribers:    0,
+			BitsTotal:      0,
+			SuperChatTotal: 0,
+			UniqueChatters: 0,
+			PeakViewers:    0,
+		},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := c.sessionRepo.CreateSession(ctx, session); err != nil {
+		return fmt.Errorf("failed to create session: %w", err)
+	}
+
+	// Store current session ID
+	c.setCurrentSession(sessionID)
+
+	c.logger.Info("Created new stream session",
+		zap.String("session_id", sessionID.String()),
+		zap.String("user_id", c.UserID.String()),
+	)
+
 	return nil
 }
 
-// handleStreamOfflineEvent processes stream.offline events
+// handleStreamOfflineEvent processes stream.offline events and ends the current session
 func (c *EventSubClient) handleStreamOfflineEvent(ctx context.Context, eventData json.RawMessage) error {
-	c.logger.Info("Stream went offline")
-	// TODO: End current stream session
+	var offlineEvent StreamOfflineEvent
+	if err := json.Unmarshal(eventData, &offlineEvent); err != nil {
+		return fmt.Errorf("failed to unmarshal stream.offline event: %w", err)
+	}
+
+	c.logger.Info("Stream went offline",
+		zap.String("broadcaster", offlineEvent.BroadcasterUserName),
+	)
+
+	// Get current session ID
+	sessionID := c.getCurrentSession()
+	if sessionID == nil {
+		c.logger.Warn("No active session to end")
+		return nil
+	}
+
+	// End the session
+	if err := c.sessionRepo.EndSession(ctx, *sessionID); err != nil {
+		return fmt.Errorf("failed to end session: %w", err)
+	}
+
+	// Clear current session
+	c.setCurrentSession(uuid.Nil)
+
+	c.logger.Info("Ended stream session",
+		zap.String("session_id", sessionID.String()),
+	)
+
 	return nil
+}
+
+// setCurrentSession sets the current session ID (thread-safe)
+func (c *EventSubClient) setCurrentSession(sessionID uuid.UUID) {
+	c.sessionMux.Lock()
+	defer c.sessionMux.Unlock()
+
+	if sessionID == uuid.Nil {
+		c.currentSessionID = nil
+	} else {
+		c.currentSessionID = &sessionID
+	}
+}
+
+// getCurrentSession gets the current session ID (thread-safe)
+func (c *EventSubClient) getCurrentSession() *uuid.UUID {
+	c.sessionMux.RLock()
+	defer c.sessionMux.RUnlock()
+
+	return c.currentSessionID
 }
 
 // Close gracefully closes the WebSocket connection
