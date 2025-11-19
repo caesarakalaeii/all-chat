@@ -63,14 +63,22 @@ func main() {
 	// Initialize normalizers
 	twitchNormalizer := normalizers.NewTwitchNormalizer()
 
-	// TODO: Initialize Twitch EventSub collector
+	// Get Twitch credentials from environment
+	twitchClientID := getEnv("TWITCH_CLIENT_ID", "")
+	twitchClientSecret := getEnv("TWITCH_CLIENT_SECRET", "")
+	twitchAccessToken := getEnv("TWITCH_ACCESS_TOKEN", "")
+
+	// TODO: Initialize Twitch EventSub collector (requires user broadcaster ID)
+	// For now, we'll initialize it when we know which broadcasters to track
+	// This will be done via API endpoint or configuration
+
 	// TODO: Initialize YouTube event extractor
 	// TODO: Initialize Kick event listener
 	// TODO: Initialize TikTok webhook handler
 
-	_ = eventRepo
-	_ = sessionRepo
-	_ = twitchNormalizer
+	_ = twitchClientID
+	_ = twitchClientSecret
+	_ = twitchAccessToken
 
 	// Initialize Gin router
 	gin.SetMode(gin.ReleaseMode)
@@ -82,22 +90,31 @@ func main() {
 
 	// Initialize handlers
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
+	eventsHandler := handlers.NewEventsHandler(eventRepo, sessionRepo, log)
 
 	// Health check endpoints
 	router.GET("/health/live", healthHandler.LivenessProbe)
 	router.GET("/health/ready", healthHandler.ReadinessProbe)
 
-	// TODO: Add event collector endpoints
-	// router.POST("/webhooks/twitch", twitchHandler.HandleWebhook)
-	// router.POST("/webhooks/tiktok", tiktokHandler.HandleWebhook)
+	// TODO: Add webhook endpoints for EventSub
+	// webhooks := router.Group("/webhooks")
+	// {
+	// 	webhooks.POST("/twitch", twitchHandler.HandleWebhook)
+	// 	webhooks.POST("/tiktok", tiktokHandler.HandleWebhook)
+	// }
 
 	// API v1 endpoints
 	v1 := router.Group("/api/v1")
 	{
-		// TODO: Add session endpoints
-		// v1.GET("/sessions/:id/events", eventHandler.GetEvents)
-		// v1.GET("/sessions/:id/events/stats", eventHandler.GetStats)
-		_ = v1
+		// Session endpoints
+		v1.GET("/sessions/:id/events", eventsHandler.GetEventsBySession)
+		v1.GET("/sessions/:id/stats", eventsHandler.GetSessionStats)
+		v1.GET("/users/:id/sessions", eventsHandler.GetUserSessions)
+		v1.GET("/users/:id/sessions/active", eventsHandler.GetActiveSession)
+
+		// TODO: Add endpoints to manage EventSub connections
+		// v1.POST("/collectors/twitch/start", twitchCollectorHandler.Start)
+		// v1.POST("/collectors/twitch/stop", twitchCollectorHandler.Stop)
 	}
 
 	// Start HTTP server
