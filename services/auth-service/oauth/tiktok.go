@@ -113,7 +113,8 @@ func (t *TikTokOAuth) GetPlatform() Platform {
 // GetUserInfoTikTok fetches user information from TikTok API (returns platform-specific type)
 func (t *TikTokOAuth) GetUserInfoTikTok(ctx context.Context, accessToken string) (*models.TikTokUserInfo, error) {
 	// TikTok v2 API requires fields as query parameters in a GET request
-	fields := "open_id,union_id,avatar_url,display_name,username"
+	// Note: username is not available with user.info.basic scope, only display_name
+	fields := "open_id,union_id,avatar_url,display_name"
 	urlWithParams := fmt.Sprintf("%s?fields=%s", tiktokUserURL, url.QueryEscape(fields))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", urlWithParams, nil)
