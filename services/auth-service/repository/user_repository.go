@@ -250,14 +250,15 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelI
 
 	query := `
 		INSERT INTO youtube_oauth_tokens (
-			user_id, channel_id, access_token, refresh_token, token_type, expiry, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			user_id, channel_id, access_token, refresh_token, token_type, expiry, encryption_version, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (user_id, channel_id)
 		DO UPDATE SET
 			access_token = EXCLUDED.access_token,
 			refresh_token = EXCLUDED.refresh_token,
 			token_type = EXCLUDED.token_type,
 			expiry = EXCLUDED.expiry,
+			encryption_version = EXCLUDED.encryption_version,
 			updated_at = EXCLUDED.updated_at
 	`
 
@@ -278,7 +279,7 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelI
 
 	_, err = r.db.Exec(ctx, query,
 		userID, channelID, accessToken, refreshToken, tokenType,
-		token.Expiry, now, now,
+		token.Expiry, 1, now, now,
 	)
 
 	if err != nil {
