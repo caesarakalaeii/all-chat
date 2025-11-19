@@ -41,11 +41,11 @@ func NewTikTokOAuth(clientKey, clientSecret, redirectURL string) *TikTokOAuth {
 }
 
 // GetAuthURL generates the OAuth authorization URL
-// TikTok scopes: user.info.basic is the only scope needed for user authentication
+// TikTok scopes: user.info.profile needed to get username field
 func (t *TikTokOAuth) GetAuthURL(state string) string {
 	params := url.Values{}
 	params.Set("client_key", t.clientKey)
-	params.Set("scope", "user.info.basic")
+	params.Set("scope", "user.info.basic,user.info.profile")
 	params.Set("response_type", "code")
 	params.Set("redirect_uri", t.redirectURL)
 	params.Set("state", state)
@@ -113,8 +113,8 @@ func (t *TikTokOAuth) GetPlatform() Platform {
 // GetUserInfoTikTok fetches user information from TikTok API (returns platform-specific type)
 func (t *TikTokOAuth) GetUserInfoTikTok(ctx context.Context, accessToken string) (*models.TikTokUserInfo, error) {
 	// TikTok v2 API requires fields as query parameters in a GET request
-	// Note: username is not available with user.info.basic scope, only display_name
-	fields := "open_id,union_id,avatar_url,display_name"
+	// username requires user.info.profile scope
+	fields := "open_id,union_id,avatar_url,display_name,username"
 	urlWithParams := fmt.Sprintf("%s?fields=%s", tiktokUserURL, url.QueryEscape(fields))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", urlWithParams, nil)
