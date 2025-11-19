@@ -85,3 +85,13 @@ func (e *AESEncryptor) DecryptString(ciphertext string) (string, error) {
 
 	return string(plaintext), nil
 }
+
+// Encrypt is an alias for EncryptString to match crypto.StringCipher interface
+func (e *AESEncryptor) Encrypt(plaintext string) (string, error) {
+	return e.EncryptString(plaintext)
+}
+
+// Decrypt is an alias for DecryptString to match crypto.StringCipher interface
+func (e *AESEncryptor) Decrypt(ciphertext string) (string, error) {
+	return e.DecryptString(ciphertext)
+}

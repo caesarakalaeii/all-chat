@@ -7,21 +7,26 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
-	"github.com/caesar/all-chat/shared/crypto"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 )
 
+// StringCipher interface for encryption/decryption
+type StringCipher interface {
+	Encrypt(plaintext string) (string, error)
+	Decrypt(ciphertext string) (string, error)
+}
+
 // UserRepository handles user data persistence
 type UserRepository struct {
 	db     *pgxpool.Pool
-	cipher crypto.StringCipher
+	cipher StringCipher
 }
 
 // NewUserRepository creates a new user repository
-func NewUserRepository(db *pgxpool.Pool, cipher crypto.StringCipher) *UserRepository {
+func NewUserRepository(db *pgxpool.Pool, cipher StringCipher) *UserRepository {
 	return &UserRepository{db: db, cipher: cipher}
 }
 
