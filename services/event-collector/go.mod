@@ -1,6 +1,6 @@
 module github.com/caesar/all-chat/services/event-collector
 
-go 1.23
+go 1.25.3
 
 replace github.com/caesar/all-chat/shared => ../../shared
 

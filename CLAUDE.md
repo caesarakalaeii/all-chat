@@ -501,3 +501,4 @@ This guide includes:
 - Development workflows and commands
 - Known issues and technical debt references
 - just commit and push, cicd will automagically update the image in the cluster
+- use go 1.25, NEVER DOWNGRADE
