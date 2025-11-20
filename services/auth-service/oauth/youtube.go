@@ -68,7 +68,8 @@ func (y *YouTubeOAuth) GetPlatform() Platform {
 
 // GetPrimaryChannel fetches the authenticated user's primary YouTube channel information
 func (y *YouTubeOAuth) GetPrimaryChannel(ctx context.Context, accessToken string) (*YouTubeChannelInfo, error) {
-	url := fmt.Sprintf("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true&key=%s", y.apiKey)
+	// When using OAuth with mine=true, don't include API key - OAuth token is sufficient
+	url := "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true"
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
