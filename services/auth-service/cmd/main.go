@@ -44,6 +44,7 @@ func main() {
 
 	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
+	youtubeAPIKey := os.Getenv("YOUTUBE_API_KEY")
 	youtubeRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/youtube/callback")
 
 	tiktokClientKey := os.Getenv("TIKTOK_CLIENT_KEY")
@@ -62,8 +63,8 @@ func main() {
 		log.Fatal("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set")
 	}
 
-	if youtubeClientID == "" || youtubeClientSecret == "" {
-		log.Warn("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET not set, YouTube OAuth will not be available")
+	if youtubeClientID == "" || youtubeClientSecret == "" || youtubeAPIKey == "" {
+		log.Warn("YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, and YOUTUBE_API_KEY not set, YouTube OAuth will not be available")
 	}
 
 	if tiktokClientKey == "" || tiktokClientSecret == "" {
@@ -128,8 +129,8 @@ func main() {
 	twitchOAuth := oauth.NewTwitchOAuth(twitchClientID, twitchClientSecret, twitchRedirectURL)
 
 	var youtubeOAuth *oauth.YouTubeOAuth
-	if youtubeClientID != "" && youtubeClientSecret != "" {
-		youtubeOAuth = oauth.NewYouTubeOAuth(youtubeClientID, youtubeClientSecret, youtubeRedirectURL)
+	if youtubeClientID != "" && youtubeClientSecret != "" && youtubeAPIKey != "" {
+		youtubeOAuth = oauth.NewYouTubeOAuth(youtubeClientID, youtubeClientSecret, youtubeRedirectURL, youtubeAPIKey)
 	}
 
 	var tiktokOAuth *oauth.TikTokOAuth
