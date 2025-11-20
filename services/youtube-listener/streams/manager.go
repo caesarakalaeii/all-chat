@@ -9,6 +9,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/api"
 	"github.com/caesar/all-chat/services/youtube-listener/models"
 	"github.com/caesar/all-chat/services/youtube-listener/oauth"
+	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -21,7 +22,7 @@ type Manager struct {
 	messageHandler MessageHandler
 	logger         *zap.Logger
 	leader         *sourcemanager.LeadershipCoordinator
-	quotaTracker   QuotaTrackerInterface
+	quotaTracker   *quota.Tracker
 
 	mu            sync.RWMutex
 	activeStreams map[string]*models.YouTubeStream // streamID -> stream
@@ -32,9 +33,6 @@ type Manager struct {
 	wg           sync.WaitGroup
 	dbConn       DBConnInterface // For PostgreSQL LISTEN
 }
-
-// QuotaTrackerInterface defines the interface for quota tracking
-type QuotaTrackerInterface interface{}
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
 type DBConnInterface interface {
@@ -48,7 +46,7 @@ func NewManager(
 	messageHandler MessageHandler,
 	dbConn DBConnInterface,
 	leader *sourcemanager.LeadershipCoordinator,
-	quotaTracker QuotaTrackerInterface,
+	quotaTracker *quota.Tracker,
 	logger *zap.Logger,
 ) *Manager {
 	return &Manager{
