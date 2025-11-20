@@ -97,7 +97,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
 
   const handleOAuthAddSource = async (platform: string) => {
     try {
-      // Get OAuth URL from backend
+      // Get OAuth URL (or short-circuit response) from backend
       const response = await fetch(`/api/v1/auth/${platform}/add-source/${params.id}`, {
         method: 'GET',
         headers: {
@@ -112,8 +112,24 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
 
       const data = await response.json();
 
-      // Redirect to OAuth provider
-      window.location.href = data.auth_url;
+      if (data.source_added) {
+        setNotification({
+          type: 'success',
+          message: `Successfully added ${data.source_added} source!`
+        });
+        overlaysApi.getSources(params.id).then(setSources).catch(console.error);
+        setShowAddSource(false);
+        setTimeout(() => setNotification(null), 5000);
+        return;
+      }
+
+      if (data.auth_url) {
+        // Redirect to OAuth provider when server requires a new auth flow
+        window.location.href = data.auth_url;
+        return;
+      }
+
+      throw new Error('Server response missing auth_url');
     } catch (error) {
       console.error('Failed to initiate OAuth:', error);
       setNotification({

@@ -45,7 +45,7 @@ Visit **[allch.at](https://allch.at)** and:
 
 ### 3. Customize the Look (Optional)
 
-Want a custom theme? Check out our [theme gallery](./docs/overlay-themes/):
+Want a custom theme? We have comprehensive documentation for CSS customization:
 
 1. Browse available themes (Win98, Cyberpunk, Minimalist, etc.)
 2. Copy the CSS from the theme file
@@ -56,7 +56,10 @@ Want a custom theme? Check out our [theme gallery](./docs/overlay-themes/):
 - 🪟 [Windows 98](./docs/overlay-themes/win98-theme.css) - Nostalgic retro style
 - 🌈 More themes coming soon!
 
-[📖 Learn how to create your own theme](./docs/overlay-themes/README.md)
+**📚 Customization Documentation:**
+- [**CSS Customization Guide**](./docs/CSS_CUSTOMIZATION.md) - Complete CSS reference and guide
+- [Theme Gallery & Creation Guide](./docs/overlay-themes/README.md) - Create your own themes
+- [Quick Start Guide](./docs/overlay-themes/QUICK-START.md) - Apply themes quickly
 
 ## 🎨 Customization Features
 
@@ -69,7 +72,9 @@ Every theme can be customized with CSS. Toggle visibility of:
 - ✅ Timestamps
 - ✅ Message size and colors
 
-[🎨 View Theme Documentation](./docs/overlay-themes/README.md)
+**📚 Customization Documentation:**
+- [**CSS Customization Guide**](./docs/CSS_CUSTOMIZATION.md) - Complete CSS reference for developers
+- [Theme Gallery & Examples](./docs/overlay-themes/README.md) - Browse and create themes
 
 ### Overlay Settings
 
@@ -159,11 +164,15 @@ All-Chat uses a modern microservices architecture:
 
 ## 📖 Documentation
 
-- **[Theme Creation Guide](./docs/overlay-themes/README.md)** - Create custom overlay themes
-- **[Win98 Theme Quick Start](./docs/overlay-themes/QUICK-START.md)** - Apply the Win98 theme
+### For Users & Streamers
+- **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** - Complete CSS reference for customizing overlays
+- **[Theme Gallery](./docs/overlay-themes/README.md)** - Browse and create custom overlay themes
+- **[Win98 Theme Quick Start](./docs/overlay-themes/QUICK-START.md)** - Apply the Win98 theme in minutes
+
+### For Developers & Self-Hosting
 - **[Deployment Guide](./docs/DEPLOYMENT.md)** - Self-host your own instance
 - **[Developer Guide](./CLAUDE.md)** - Architecture and development
-- **[Getting Started (Developers)](./GETTING_STARTED.md)** - Navigate the codebase
+- **[Getting Started Guide](./GETTING_STARTED.md)** - Navigate the codebase
 
 ## 🔧 Self-Hosting
 
