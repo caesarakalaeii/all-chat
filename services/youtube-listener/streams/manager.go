@@ -21,6 +21,7 @@ type Manager struct {
 	messageHandler MessageHandler
 	logger         *zap.Logger
 	leader         *sourcemanager.LeadershipCoordinator
+	quotaTracker   QuotaTrackerInterface
 
 	mu            sync.RWMutex
 	activeStreams map[string]*models.YouTubeStream // streamID -> stream
@@ -31,6 +32,9 @@ type Manager struct {
 	wg           sync.WaitGroup
 	dbConn       DBConnInterface // For PostgreSQL LISTEN
 }
+
+// QuotaTrackerInterface defines the interface for quota tracking
+type QuotaTrackerInterface interface{}
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
 type DBConnInterface interface {
@@ -44,6 +48,7 @@ func NewManager(
 	messageHandler MessageHandler,
 	dbConn DBConnInterface,
 	leader *sourcemanager.LeadershipCoordinator,
+	quotaTracker QuotaTrackerInterface,
 	logger *zap.Logger,
 ) *Manager {
 	return &Manager{
@@ -53,6 +58,7 @@ func NewManager(
 		dbConn:         dbConn,
 		logger:         logger,
 		leader:         leader,
+		quotaTracker:   quotaTracker,
 		activeStreams:  make(map[string]*models.YouTubeStream),
 		pollers:        make(map[string]*Poller),
 		syncInterval:   30 * time.Second,
@@ -260,7 +266,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	}
 
 	// Create API client
-	apiClient := api.NewClient(service, m.logger)
+	apiClient := api.NewClient(service, m.quotaTracker, m.logger)
 
 	// Get live streams for channel
 	liveStreams, err := apiClient.GetLiveStreams(ctx, channelID)
