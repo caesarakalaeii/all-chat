@@ -1,6 +1,6 @@
 module github.com/caesar/all-chat/services/kick-listener
 
-go 1.25.3
+go 1.23
 
 require (
 	github.com/caesar/all-chat/shared v0.0.0

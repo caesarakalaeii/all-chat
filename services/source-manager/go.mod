@@ -1,6 +1,6 @@
 module github.com/caesar/all-chat/services/source-manager
 
-go 1.25.4
+go 1.23
 
 require (
 	github.com/alicebob/miniredis/v2 v2.35.0
