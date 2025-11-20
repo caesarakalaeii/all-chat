@@ -364,21 +364,29 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				return
 			}
 
-			channelInfo, channelErr := youtubeProvider.GetPrimaryChannel(c.Request.Context(), token.AccessToken)
-			if channelErr != nil {
-				h.logger.Error("Failed to resolve YouTube channel",
-					zap.Error(channelErr),
+			// Only fetch channel info when adding a source, not during login
+			// This saves YouTube API quota and allows login without a channel
+			if oauthState.IsAddSource() {
+				channelInfo, channelErr := youtubeProvider.GetPrimaryChannel(c.Request.Context(), token.AccessToken)
+				if channelErr != nil {
+					h.logger.Error("Failed to resolve YouTube channel for add-source",
+						zap.Error(channelErr),
+						zap.String("platform_user_id", platformUser.GetID()))
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error":   "Unable to resolve YouTube channel. Please ensure your Google account has a YouTube channel.",
+						"details": channelErr.Error(),
+					})
+					return
+				}
+				youtubeChannel = channelInfo
+				sourceDetails = &OverlaySourceDetails{
+					ChannelID:   channelInfo.ChannelID,
+					ChannelName: channelInfo.Title,
+				}
+			} else {
+				// For login flow, skip channel resolution to save quota
+				h.logger.Info("Skipping YouTube channel resolution during login (will fetch when adding source)",
 					zap.String("platform_user_id", platformUser.GetID()))
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error":   "Unable to resolve YouTube channel",
-					"details": channelErr.Error(),
-				})
-				return
-			}
-			youtubeChannel = channelInfo
-			sourceDetails = &OverlaySourceDetails{
-				ChannelID:   channelInfo.ChannelID,
-				ChannelName: channelInfo.Title,
 			}
 		}
 
