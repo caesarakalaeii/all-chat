@@ -6,21 +6,24 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener/models"
+	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"go.uber.org/zap"
 	"google.golang.org/api/youtube/v3"
 )
 
 // Client wraps the YouTube API client with helper methods
 type Client struct {
-	service *youtube.Service
-	logger  *zap.Logger
+	service      *youtube.Service
+	quotaTracker *quota.Tracker
+	logger       *zap.Logger
 }
 
 // NewClient creates a new YouTube API client wrapper
-func NewClient(service *youtube.Service, logger *zap.Logger) *Client {
+func NewClient(service *youtube.Service, quotaTracker *quota.Tracker, logger *zap.Logger) *Client {
 	return &Client{
-		service: service,
-		logger:  logger,
+		service:      service,
+		quotaTracker: quotaTracker,
+		logger:       logger,
 	}
 }
 
@@ -33,6 +36,14 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 		MaxResults(5)
 
 	response, err := call.Do()
+
+	// Record quota usage for search.list (100 units)
+	if c.quotaTracker != nil {
+		if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostSearch); recordErr != nil {
+			c.logger.Warn("Failed to record search.list quota usage", zap.Error(recordErr))
+		}
+	}
+
 	if err != nil {
 		c.logger.Error("Failed to fetch live streams",
 			zap.String("channel_id", channelID),
@@ -52,6 +63,14 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 		videoID := item.Id.VideoId
 		videoCall := c.service.Videos.List([]string{"liveStreamingDetails", "snippet"}).Id(videoID)
 		videoResponse, err := videoCall.Do()
+
+		// Record quota usage for videos.list (1 unit)
+		if c.quotaTracker != nil {
+			if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostVideos); recordErr != nil {
+				c.logger.Warn("Failed to record videos.list quota usage", zap.Error(recordErr))
+			}
+		}
+
 		if err != nil {
 			c.logger.Warn("Failed to get video details",
 				zap.String("video_id", videoID),
