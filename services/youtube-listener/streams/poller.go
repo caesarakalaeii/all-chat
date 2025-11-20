@@ -3,6 +3,7 @@ package streams
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -96,6 +97,14 @@ func (p *Poller) pollLoop(ctx context.Context) {
 					zap.String("stream_id", p.stream.StreamID),
 					zap.Error(err),
 				)
+
+				// Stop polling if the stream has ended
+				if strings.Contains(err.Error(), "liveChatEnded") || strings.Contains(err.Error(), "live chat is no longer live") {
+					p.logger.Info("Stream ended, stopping poller",
+						zap.String("stream_id", p.stream.StreamID),
+					)
+					return
+				}
 			}
 
 			// Update ticker interval if it changed
