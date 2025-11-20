@@ -18,7 +18,9 @@ import (
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -67,6 +69,10 @@ func main() {
 
 	log.Info("Connected to Redis")
 
+	// Initialize metrics (available via /metrics endpoint)
+	gatewayMetrics := metrics.NewGatewayMetrics()
+	log.Info("Initialized Prometheus metrics")
+
 	// Load service registry from environment
 	registry, err := models.NewServiceRegistry()
 	if err != nil {
@@ -78,7 +84,7 @@ func main() {
 	)
 
 	// Create WebSocket components
-	wsManager := wsconn.NewManager(log)
+	wsManager := wsconn.NewManager(log, gatewayMetrics)
 
 	// Create Redis Pub/Sub subscriber with message handler
 	messageHandler := func(overlayID string, message []byte) {
@@ -142,6 +148,9 @@ func main() {
 
 	// Health check endpoint (no auth required)
 	router.GET("/health", healthHandler.CheckHealth)
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Static legal pages (no auth required)
 	router.StaticFile("/legal/terms", "./static/legal/terms.html")
