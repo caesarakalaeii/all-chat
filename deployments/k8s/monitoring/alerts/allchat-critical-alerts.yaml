@@ -1,0 +1,97 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: allchat-critical-alerts
+  namespace: monitoring
+  labels:
+    app: kube-prometheus-stack
+    release: kube-prometheus
+spec:
+  groups:
+    - name: allchat-critical
+      interval: 30s
+      rules:
+        # Service Down - Critical alert when any All-Chat service is unavailable
+        - alert: AllChatServiceDown
+          expr: up{namespace="allchat"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: allchat
+          annotations:
+            summary: "All-Chat service {{ $labels.app }} is down"
+            description: |
+              Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been reporting down (up=0) for more than 2 minutes.
+
+              Impact: Platform functionality degraded or unavailable.
+
+              Action Required:
+              1. Check pod status: kubectl get pods -n allchat -l app={{ $labels.app }}
+              2. View pod logs: kubectl logs -n allchat {{ $labels.pod }} --tail=100
+              3. Check pod events: kubectl describe pod -n allchat {{ $labels.pod }}
+
+        # YouTube Quota Critical - Prevent API shutdown
+        - alert: YouTubeQuotaCritical
+          expr: listener_quota_usage_percentage{platform="youtube"} > 90
+          for: 1m
+          labels:
+            severity: critical
+            team: allchat
+            platform: youtube
+          annotations:
+            summary: "YouTube API quota critical (>90%)"
+            description: |
+              YouTube API quota usage is at {{ $value | humanizePercentage }} (threshold: 90%).
+
+              Impact: Risk of YouTube API shutdown within hours.
+
+              Immediate Actions:
+              1. Check quota in dashboard: /d/allchat-youtube-quota
+              2. Reduce polling interval: kubectl set env -n allchat deployment/youtube-listener POLLING_INTERVAL=15
+              3. Contact Google for emergency quota increase
+              4. Consider disabling low-activity streams
+
+        # Listener Disconnected - Platform offline
+        - alert: AllChatListenerDisconnected
+          expr: listener_connection_status == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: allchat
+          annotations:
+            summary: "{{ $labels.platform }} listener disconnected"
+            description: |
+              The {{ $labels.platform }} listener has been disconnected for more than 2 minutes.
+
+              Impact: No messages from {{ $labels.platform }} are being received.
+
+              Action Required:
+              1. Check listener logs: kubectl logs -n allchat -l app={{ $labels.platform }}-listener --tail=100
+              2. Verify platform API status
+              3. Check authentication tokens/credentials
+              4. Restart if needed: kubectl rollout restart -n allchat deployment/{{ $labels.platform }}-listener
+
+        # High Message Drop Rate - Data loss
+        - alert: AllChatHighMessageDropRate
+          expr: |
+            (
+              sum(rate(listener_messages_received_total[5m]))
+              -
+              sum(rate(listener_messages_published_total{result="success"}[5m]))
+            ) / sum(rate(listener_messages_received_total[5m])) * 100 > 5
+          for: 5m
+          labels:
+            severity: critical
+            team: allchat
+          annotations:
+            summary: "High message drop rate (>5%)"
+            description: |
+              Message drop rate is {{ $value | humanizePercentage }} (threshold: 5%).
+
+              Impact: Users are missing chat messages.
+
+              Action Required:
+              1. Check Redis stream health
+              2. Check processor logs: kubectl logs -n allchat -l app=message-processor
+              3. Verify Redis connection pool
+              4. Check for backpressure or rate limiting
