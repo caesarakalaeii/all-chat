@@ -17,6 +17,7 @@ import (
 type YouTubeOAuth struct {
 	config *oauth2.Config
 	client *http.Client
+	apiKey string
 }
 
 // YouTubeChannelInfo contains channel metadata resolved via the YouTube API
@@ -26,7 +27,7 @@ type YouTubeChannelInfo struct {
 }
 
 // NewYouTubeOAuth creates a new YouTube OAuth handler
-func NewYouTubeOAuth(clientID, clientSecret, redirectURL string) *YouTubeOAuth {
+func NewYouTubeOAuth(clientID, clientSecret, redirectURL, apiKey string) *YouTubeOAuth {
 	config := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -42,6 +43,7 @@ func NewYouTubeOAuth(clientID, clientSecret, redirectURL string) *YouTubeOAuth {
 	return &YouTubeOAuth{
 		config: config,
 		client: &http.Client{Timeout: 10 * time.Second},
+		apiKey: apiKey,
 	}
 }
 
@@ -66,7 +68,8 @@ func (y *YouTubeOAuth) GetPlatform() Platform {
 
 // GetPrimaryChannel fetches the authenticated user's primary YouTube channel information
 func (y *YouTubeOAuth) GetPrimaryChannel(ctx context.Context, accessToken string) (*YouTubeChannelInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", nil)
+	url := fmt.Sprintf("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true&key=%s", y.apiKey)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
