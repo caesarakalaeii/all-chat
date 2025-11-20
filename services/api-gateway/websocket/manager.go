@@ -4,21 +4,24 @@ import (
 	"context"
 	"sync"
 
+	"github.com/caesar/all-chat/shared/metrics"
 	"go.uber.org/zap"
 )
 
 // Manager manages all WebSocket connections grouped by overlay
 type Manager struct {
-	pools  map[string]*Pool // overlay_id -> connection pool
-	mu     sync.RWMutex
-	logger *zap.Logger
+	pools   map[string]*Pool // overlay_id -> connection pool
+	mu      sync.RWMutex
+	logger  *zap.Logger
+	metrics *metrics.GatewayMetrics
 }
 
 // NewManager creates a new WebSocket manager
-func NewManager(logger *zap.Logger) *Manager {
+func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics) *Manager {
 	return &Manager{
-		pools:  make(map[string]*Pool),
-		logger: logger,
+		pools:   make(map[string]*Pool),
+		logger:  logger,
+		metrics: m,
 	}
 }
 
@@ -37,9 +40,16 @@ func (m *Manager) AddConnection(ctx context.Context, conn *Connection) {
 		m.logger.Info("Created connection pool",
 			zap.String("overlay_id", overlayID),
 		)
+		m.metrics.RecordSubscriptionEvent("api-gateway", "pool_created")
 	}
 
 	pool.Add(conn)
+
+	// Record metrics
+	m.metrics.RecordWebSocketConnectionAttempt("api-gateway", "success")
+	m.metrics.RecordWebSocketConnection("api-gateway", "overlay", 1)
+	m.metrics.RecordOverlaySubscription("api-gateway", overlayID, 1)
+	m.metrics.RecordSubscriptionEvent("api-gateway", "subscribed")
 
 	m.logger.Info("WebSocket connection added",
 		zap.String("overlay_id", overlayID),
@@ -62,6 +72,11 @@ func (m *Manager) RemoveConnection(conn *Connection) {
 
 	pool.Remove(conn)
 
+	// Record metrics
+	m.metrics.RecordWebSocketConnection("api-gateway", "overlay", -1)
+	m.metrics.RecordOverlaySubscription("api-gateway", overlayID, -1)
+	m.metrics.RecordSubscriptionEvent("api-gateway", "unsubscribed")
+
 	m.logger.Info("WebSocket connection removed",
 		zap.String("overlay_id", overlayID),
 		zap.String("user_id", conn.UserID()),
@@ -71,6 +86,7 @@ func (m *Manager) RemoveConnection(conn *Connection) {
 	// Remove pool if empty
 	if pool.Size() == 0 {
 		delete(m.pools, overlayID)
+		m.metrics.RecordSubscriptionEvent("api-gateway", "pool_destroyed")
 		m.logger.Info("Removed empty connection pool",
 			zap.String("overlay_id", overlayID),
 		)

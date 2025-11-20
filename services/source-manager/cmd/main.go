@@ -14,8 +14,10 @@ import (
 	"github.com/caesar/all-chat/services/source-manager/registry"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -64,6 +66,10 @@ func main() {
 
 	log.Info("Connected to Redis")
 
+	// Initialize metrics (available via /metrics endpoint)
+	_ = metrics.NewBusinessMetrics()
+	log.Info("Initialized Prometheus metrics")
+
 	// Initialize components
 	repo := registry.NewRepository(db, log)
 	sourceRegistry := registry.NewRegistry(repo, 30*time.Second, log)
@@ -89,6 +95,9 @@ func main() {
 	router.GET("/health/live", healthHandler.LivenessProbe)
 	router.GET("/health/ready", healthHandler.ReadinessProbe)
 	router.GET("/status", healthHandler.Status)
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	serviceAuthSecret := getEnvOrDefault("SERVICE_JWT_SECRET", "dev-service-secret")
 	protected := router.Group("/")

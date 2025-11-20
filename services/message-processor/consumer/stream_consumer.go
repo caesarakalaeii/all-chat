@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -34,15 +35,17 @@ type MessageHandler func(ctx context.Context, msg *models.RawChatMessage) error
 type StreamConsumer struct {
 	client  *redis.Client
 	logger  *zap.Logger
+	metrics *metrics.ProcessorMetrics
 	handler MessageHandler
 	stopCh  chan struct{}
 }
 
 // NewStreamConsumer creates a new Redis Streams consumer
-func NewStreamConsumer(client *redis.Client, logger *zap.Logger, handler MessageHandler) *StreamConsumer {
+func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.ProcessorMetrics, handler MessageHandler) *StreamConsumer {
 	return &StreamConsumer{
 		client:  client,
 		logger:  logger,
+		metrics: m,
 		handler: handler,
 		stopCh:  make(chan struct{}),
 	}
@@ -162,14 +165,19 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 	// Extract the "data" field which contains the full JSON
 	dataStr, ok := msg.Values["data"].(string)
 	if !ok {
+		c.metrics.RecordStreamError("message-processor", "invalid_data")
 		return fmt.Errorf("missing or invalid 'data' field in message")
 	}
 
 	// Parse the raw message
 	rawMsg, err := models.ParseRawMessage([]byte(dataStr))
 	if err != nil {
+		c.metrics.RecordStreamError("message-processor", "parse_error")
 		return fmt.Errorf("failed to parse raw message: %w", err)
 	}
+
+	// Record message consumed
+	c.metrics.RecordMessageConsumed("message-processor", rawMsg.Platform, ConsumerGroup)
 
 	c.logger.Debug("Processing message",
 		zap.String("message_id", rawMsg.MessageID),
@@ -178,10 +186,16 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 		zap.String("user", rawMsg.Username),
 	)
 
-	// Call the handler
+	// Call the handler (which does normalization + enrichment + publishing)
+	start := time.Now()
 	if err := c.handler(ctx, rawMsg); err != nil {
+		c.metrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "handler", "failed")
 		return fmt.Errorf("handler failed: %w", err)
 	}
+
+	// Record successful processing and duration
+	c.metrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "handler", "success")
+	c.metrics.ProcessingDuration.WithLabelValues("message-processor", rawMsg.Platform).Observe(time.Since(start).Seconds())
 
 	return nil
 }

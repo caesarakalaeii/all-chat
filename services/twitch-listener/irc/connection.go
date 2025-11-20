@@ -6,20 +6,23 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gempir/go-twitch-irc/v4"
 	"go.uber.org/zap"
 )
 
 // ConnectionManager manages the Twitch IRC connection
 type ConnectionManager struct {
-	client    *twitch.Client
-	parser    *Parser
-	publisher *publisher.StreamPublisher
-	logger    *zap.Logger
-	connected bool
-	mu        sync.RWMutex
-	stopChan  chan struct{}
-	wg        sync.WaitGroup
+	client      *twitch.Client
+	parser      *Parser
+	publisher   *publisher.StreamPublisher
+	logger      *zap.Logger
+	metrics     *metrics.ListenerMetrics
+	connected   bool
+	connectedAt time.Time
+	mu          sync.RWMutex
+	stopChan    chan struct{}
+	wg          sync.WaitGroup
 }
 
 // Config holds the configuration for IRC connection
@@ -34,6 +37,7 @@ func NewConnectionManager(
 	parser *Parser,
 	pub *publisher.StreamPublisher,
 	logger *zap.Logger,
+	m *metrics.ListenerMetrics,
 ) *ConnectionManager {
 	client := twitch.NewClient(config.Username, config.OAuth)
 
@@ -42,6 +46,7 @@ func NewConnectionManager(
 		parser:    parser,
 		publisher: pub,
 		logger:    logger,
+		metrics:   m,
 		stopChan:  make(chan struct{}),
 	}
 
@@ -57,6 +62,7 @@ func NewConnectionManager(
 // Connect establishes connection to Twitch IRC
 func (cm *ConnectionManager) Connect(ctx context.Context) error {
 	cm.logger.Info("Connecting to Twitch IRC")
+	cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "attempting")
 
 	// Start client in goroutine
 	cm.wg.Add(1)
@@ -64,6 +70,9 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 		defer cm.wg.Done()
 		if err := cm.client.Connect(); err != nil {
 			cm.logger.Error("IRC connection error", zap.Error(err))
+			cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "failed")
+			cm.metrics.RecordConnection("twitch", "twitch-listener", "irc", false)
+			cm.metrics.RecordError("twitch", "twitch-listener", "connection", "error")
 		}
 	}()
 
@@ -76,11 +85,23 @@ func (cm *ConnectionManager) Disconnect() error {
 
 	close(cm.stopChan)
 
+	// Record connection duration if we were connected
+	cm.mu.RLock()
+	if cm.connected && !cm.connectedAt.IsZero() {
+		duration := time.Since(cm.connectedAt).Seconds()
+		cm.metrics.ConnectionDuration.WithLabelValues("twitch", "twitch-listener", "normal").Observe(duration)
+	}
+	cm.mu.RUnlock()
+
 	if err := cm.client.Disconnect(); err != nil {
 		cm.logger.Warn("Error during disconnect", zap.Error(err))
+		cm.metrics.RecordError("twitch", "twitch-listener", "connection", "warning")
 	}
 
 	cm.wg.Wait()
+
+	// Mark as disconnected
+	cm.metrics.RecordConnection("twitch", "twitch-listener", "irc", false)
 
 	cm.logger.Info("Disconnected from Twitch IRC")
 	return nil
@@ -109,13 +130,23 @@ func (cm *ConnectionManager) IsConnected() bool {
 func (cm *ConnectionManager) handleConnect() {
 	cm.mu.Lock()
 	cm.connected = true
+	cm.connectedAt = time.Now()
 	cm.mu.Unlock()
+
+	// Record successful connection
+	cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "success")
+	cm.metrics.RecordConnection("twitch", "twitch-listener", "irc", true)
 
 	cm.logger.Info("Connected to Twitch IRC")
 }
 
 // handlePrivateMessage processes incoming PRIVMSG from Twitch
 func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage) {
+	start := time.Now()
+
+	// Record message received
+	cm.metrics.RecordMessage("twitch", "twitch-listener", message.Channel, "chat")
+
 	// Parse IRC message into RawChatMessage
 	rawMsg, err := cm.parser.ParsePrivateMessage(message)
 	if err != nil {
@@ -124,6 +155,7 @@ func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage)
 			zap.String("user", message.User.Name),
 			zap.Error(err),
 		)
+		cm.metrics.RecordError("twitch", "twitch-listener", "parsing", "warning")
 		return
 	}
 
@@ -137,8 +169,14 @@ func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage)
 			zap.String("channel", rawMsg.ChannelID),
 			zap.Error(err),
 		)
+		cm.metrics.RecordPublish("twitch", "twitch-listener", "failed")
+		cm.metrics.RecordError("twitch", "twitch-listener", "internal", "error")
 		return
 	}
+
+	// Record successful publish and latency
+	cm.metrics.RecordPublish("twitch", "twitch-listener", "success")
+	cm.metrics.MessageLatency.WithLabelValues("twitch", "twitch-listener").Observe(time.Since(start).Seconds())
 
 	cm.logger.Debug("Published message",
 		zap.String("message_id", rawMsg.MessageID),

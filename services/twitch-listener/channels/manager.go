@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -34,6 +35,7 @@ type Manager struct {
 	repo        RepositoryInterface
 	joinParter  JoinParterInterface
 	logger      *zap.Logger
+	metrics     *metrics.ListenerMetrics
 	rateLimiter *rate.Limiter
 	activeChans map[string]bool // Currently joined channels
 	mu          sync.RWMutex
@@ -51,13 +53,14 @@ type DBConnInterface interface {
 }
 
 // NewManager creates a new channel manager
-func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn DBConnInterface, leader *sourcemanager.LeadershipCoordinator, logger *zap.Logger) *Manager {
+func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn DBConnInterface, leader *sourcemanager.LeadershipCoordinator, logger *zap.Logger, m *metrics.ListenerMetrics) *Manager {
 	return &Manager{
 		repo:        repo,
 		joinParter:  joinParter,
 		dbConn:      dbConn,
 		leader:      leader,
 		logger:      logger,
+		metrics:     m,
 		rateLimiter: rate.NewLimiter(rate.Every(JoinRatePer/JoinRateLimit), JoinRateLimit),
 		activeChans: make(map[string]bool),
 		syncTicker:  time.NewTicker(SyncInterval),
@@ -270,6 +273,15 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			break
 		}
 		m.joinChannel(ch)
+	}
+
+	// Record active sources and source events
+	m.metrics.SetActiveSources("twitch", "twitch-listener", len(m.activeChans))
+	for range toJoin {
+		m.metrics.RecordSourceEvent("twitch", "twitch-listener", "added")
+	}
+	for range toPart {
+		m.metrics.RecordSourceEvent("twitch", "twitch-listener", "removed")
 	}
 
 	m.logger.Info("Channel sync completed",

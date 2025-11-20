@@ -19,7 +19,9 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/router"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -67,6 +69,10 @@ func main() {
 	}
 
 	log.Info("Connected to Redis")
+
+	// Initialize metrics (available via /metrics endpoint)
+	processorMetrics := metrics.NewProcessorMetrics()
+	log.Info("Initialized Prometheus metrics")
 
 	// Initialize components
 	twitchNormalizer := normalizer.NewTwitchNormalizer()
@@ -135,6 +141,7 @@ func main() {
 		// Process message for each overlay
 		for _, overlay := range overlays {
 			// Normalize message using platform-specific normalizer
+			startNormalize := time.Now()
 			unified, err := platformNormalizer.Normalize(rawMsg, overlay.OverlayID)
 			if err != nil {
 				log.Warn("Failed to normalize message",
@@ -142,10 +149,14 @@ func main() {
 					zap.String("platform", rawMsg.Platform),
 					zap.Error(err),
 				)
+				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized", "failed")
 				continue
 			}
+			processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized", "success")
+			processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "normalization").Observe(time.Since(startNormalize).Seconds())
 
 			// Enrich with avatars (Twitch only, cached in Redis)
+			startAvatar := time.Now()
 			if err := avatarEnricher.Enrich(ctx, unified); err != nil {
 				log.Warn("Failed to enrich avatar",
 					zap.String("message_id", rawMsg.MessageID),
@@ -153,8 +164,10 @@ func main() {
 				)
 				// Continue even if enrichment fails
 			}
+			processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "avatar_enrichment").Observe(time.Since(startAvatar).Seconds())
 
 			// Enrich with badge icons (Twitch only, cached in Redis)
+			startBadge := time.Now()
 			if err := badgeEnricher.Enrich(ctx, unified); err != nil {
 				log.Warn("Failed to enrich badges",
 					zap.String("message_id", rawMsg.MessageID),
@@ -162,32 +175,42 @@ func main() {
 				)
 				// Continue even if enrichment fails
 			}
+			processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "badge_enrichment").Observe(time.Since(startBadge).Seconds())
 
 			// Enrich with emotes
+			startEmote := time.Now()
 			if err := emoteEnricher.Enrich(ctx, unified); err != nil {
 				log.Warn("Failed to enrich message",
 					zap.String("message_id", rawMsg.MessageID),
 					zap.Error(err),
 				)
+				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "enriched", "failed")
 				// Continue even if enrichment fails
+			} else {
+				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "enriched", "success")
 			}
+			processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "emote_enrichment").Observe(time.Since(startEmote).Seconds())
 
 			// Publish to overlay channel
+			startPublish := time.Now()
 			if err := pubsubPublisher.Publish(ctx, overlay.OverlayID, unified); err != nil {
 				log.Error("Failed to publish to overlay",
 					zap.String("overlay_id", overlay.OverlayID),
 					zap.String("message_id", rawMsg.MessageID),
 					zap.Error(err),
 				)
+				processorMetrics.RecordMessagePublished("message-processor", overlay.OverlayID, rawMsg.Platform, "failed")
 				continue
 			}
+			processorMetrics.RecordMessagePublished("message-processor", overlay.OverlayID, rawMsg.Platform, "success")
+			processorMetrics.FanoutDuration.WithLabelValues("message-processor").Observe(time.Since(startPublish).Seconds())
 		}
 
 		return nil
 	}
 
 	// Create and start stream consumer
-	streamConsumer := consumer.NewStreamConsumer(redisClient, log, messageHandler)
+	streamConsumer := consumer.NewStreamConsumer(redisClient, log, processorMetrics, messageHandler)
 	if err := streamConsumer.Start(ctx); err != nil {
 		log.Fatal("Failed to start stream consumer", zap.Error(err))
 	}
@@ -241,6 +264,9 @@ func main() {
 			},
 		})
 	})
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	mockAPIKey := getEnvOrDefault("MOCK_MESSAGE_API_KEY", "")
 	router.POST("/internal/mock-messages", func(c *gin.Context) {
