@@ -1,6 +1,6 @@
 module github.com/caesar/all-chat/services/auth-service
 
-go 1.23
+go 1.25.4
 
 require (
 	github.com/caesar/all-chat/shared v0.0.0
