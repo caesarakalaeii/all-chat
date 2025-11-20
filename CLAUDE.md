@@ -478,6 +478,7 @@ Each service has:
 
 ## Resources
 
+### External APIs & Documentation
 - **Twitch IRC OAuth**: https://twitchapps.com/tmi/
 - **Twitch Developer Console**: https://dev.twitch.tv/console/apps
 - **YouTube Live Chat API**: https://developers.google.com/youtube/v3/live/docs
@@ -487,6 +488,11 @@ Each service has:
 - **FFZ API**: https://www.frankerfacez.com/developers
 - **React Docs**: https://react.dev
 - **Next.js Docs**: https://nextjs.org/docs
+
+### Project Documentation
+- **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** - Complete CSS reference for overlay customization
+- **[Theme Gallery](./docs/overlay-themes/README.md)** - Browse and create custom overlay themes
+- **[Getting Started Guide](./GETTING_STARTED.md)** - Navigate the codebase efficiently
 
 ## Additional Navigation Help
 

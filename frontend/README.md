@@ -16,7 +16,7 @@ Modern web application for managing multi-platform chat overlays, built with **N
 - 📊 **Dashboard** - Manage multiple overlays
 - 🌐 **Multi-Platform Sources** - Add Twitch and YouTube channels
 - ⚡ **Real-Time Preview** - WebSocket-powered live chat display
-- 🎨 **Customization** - Configure appearance and emote providers
+- 🎨 **Customization** - Configure appearance and emote providers (see [CSS Guide](../docs/CSS_CUSTOMIZATION.md))
 - 📋 **OBS Integration** - Copy overlay URL for OBS Browser Source
 
 ## Project Structure
@@ -349,6 +349,17 @@ npm run dev -- -p 3001
 - Check JWT token is valid
 - Check browser console for errors
 
+## Documentation
+
+### Frontend Customization
+- **[CSS Customization Guide](../docs/CSS_CUSTOMIZATION.md)** - Complete CSS reference for overlay styling
+- **[Theme Gallery](../docs/overlay-themes/README.md)** - Browse and create custom themes
+
+### Development
+- **[Main README](../README.md)** - Project overview and quick start
+- **[Developer Guide](../CLAUDE.md)** - Architecture and development principles
+- **[Getting Started](../GETTING_STARTED.md)** - Navigate the codebase
+
 ## Support
 
 For issues:
@@ -356,6 +367,7 @@ For issues:
 2. Check browser console (F12)
 3. Verify backend services are running
 4. Check CHECKPOINT.md in main repository
+5. For CSS issues, see [CSS Customization Guide](../docs/CSS_CUSTOMIZATION.md)
 
 ## License
 

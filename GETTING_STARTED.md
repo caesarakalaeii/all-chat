@@ -13,6 +13,7 @@
 | [CLAUDE.md](./CLAUDE.md) | Project overview, tech stack, architecture principles | **START HERE** - Every session |
 | [README.md](./README.md) | User-facing documentation, setup instructions | Understanding project from user perspective |
 | [CHECKPOINT.md](./CHECKPOINT.md) | Current project status, completed phases | Checking what's done and what's next |
+| [docs/CSS_CUSTOMIZATION.md](./docs/CSS_CUSTOMIZATION.md) | Complete CSS reference for overlay customization | Working on frontend, overlay themes, CSS |
 | [docs/CRITICAL_ARCHITECTURE_ANALYSIS.md](./docs/CRITICAL_ARCHITECTURE_ANALYSIS.md) | Known issues, security gaps, scalability limits | Understanding technical debt and blockers |
 | [Makefile](./Makefile) | Build commands, test targets | Running builds, tests, docker commands |
 | [deployments/docker-compose.yml](./deployments/docker-compose.yml) | Local development environment | Understanding service configuration |
@@ -169,6 +170,8 @@ all-chat/
 
 | File | Purpose | Read When |
 |------|---------|-----------|
+| `CSS_CUSTOMIZATION.md` | Complete CSS reference for overlay customization | Working on frontend, overlay display, themes |
+| `overlay-themes/README.md` | Theme gallery and creation guide | Creating or modifying overlay themes |
 | `CRITICAL_ARCHITECTURE_ANALYSIS.md` | Known issues, security gaps, technical debt | Understanding what needs fixing |
 | `TESTING_COMPREHENSIVE.md` | Test strategy, coverage, integration tests | Writing tests |
 | `PHASE_4_IMPLEMENTATION_COMPLETE.md` | Phase 4 completion report | Understanding what was delivered |

@@ -2,6 +2,22 @@
 
 Custom CSS themes for your All-Chat overlays in OBS. These themes allow you to completely transform the look of your chat overlay without touching any code.
 
+---
+
+## 📚 Looking for the Complete CSS Reference?
+
+**For developers and advanced customization**, see the **[CSS Customization Guide](../CSS_CUSTOMIZATION.md)** which includes:
+- Complete DOM structure reference
+- All CSS classes and selectors
+- Platform-specific styling
+- Advanced techniques (web fonts, animations, pseudo-elements)
+- Troubleshooting guide
+- Example themes with detailed explanations
+
+**This page** focuses on quick theme application and basic customization.
+
+---
+
 ## How to Apply a Theme in OBS
 
 1. **Add Browser Source** (if you haven't already)
@@ -63,7 +79,9 @@ Transform your chat into a nostalgic Windows 98 experience!
 
 ## Creating Your Own Theme
 
-Want to create a custom theme? Here's the structure:
+Want to create a custom theme? Here's a quick overview. **For detailed documentation, see the [CSS Customization Guide](../CSS_CUSTOMIZATION.md)**.
+
+### Quick Start
 
 ### Key CSS Classes to Target
 
@@ -207,6 +225,12 @@ Here are some ideas for future themes:
 - **macOS Aqua** - Classic macOS X style (circa 2001)
 - **Comic Book** - Bold outlines, speech bubble design
 - **Paper/Card** - Physical cards with shadows and texture
+
+## Additional Resources
+
+- **[CSS Customization Guide](../CSS_CUSTOMIZATION.md)** - Complete developer documentation
+- **[Quick Start Guide](./QUICK-START.md)** - Apply themes in minutes
+- **[Main Repository](../../README.md)** - All-Chat project homepage
 
 ## Credits
 
