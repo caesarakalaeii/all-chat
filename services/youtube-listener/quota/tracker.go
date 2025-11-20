@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -28,6 +29,7 @@ const (
 type Tracker struct {
 	db         *pgxpool.Pool
 	logger     *zap.Logger
+	metrics    *metrics.ListenerMetrics
 	dailyLimit int
 
 	mu          sync.RWMutex
@@ -36,7 +38,7 @@ type Tracker struct {
 }
 
 // NewTracker creates a new quota tracker
-func NewTracker(db *pgxpool.Pool, dailyLimit int, logger *zap.Logger) *Tracker {
+func NewTracker(db *pgxpool.Pool, dailyLimit int, logger *zap.Logger, m *metrics.ListenerMetrics) *Tracker {
 	if dailyLimit <= 0 {
 		dailyLimit = DefaultDailyQuota
 	}
@@ -44,6 +46,7 @@ func NewTracker(db *pgxpool.Pool, dailyLimit int, logger *zap.Logger) *Tracker {
 	return &Tracker{
 		db:         db,
 		logger:     logger,
+		metrics:    m,
 		dailyLimit: dailyLimit,
 	}
 }
@@ -103,6 +106,11 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 
 	// Check if approaching limit
 	percentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
+	remaining := t.dailyLimit - t.usageToday
+
+	// Record quota metrics
+	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
+	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
 
 	if percentage >= 90 {
 		t.logger.Error("Quota usage critical",
@@ -110,12 +118,14 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 			zap.Int("limit", t.dailyLimit),
 			zap.Float64("percentage", percentage),
 		)
+		t.metrics.RateLimitHits.WithLabelValues("youtube", "youtube-listener", "api_quota_critical").Inc()
 	} else if percentage >= 80 {
 		t.logger.Warn("Quota usage high",
 			zap.Int("used", t.usageToday),
 			zap.Int("limit", t.dailyLimit),
 			zap.Float64("percentage", percentage),
 		)
+		t.metrics.RateLimitHits.WithLabelValues("youtube", "youtube-listener", "api_quota_warning").Inc()
 	}
 
 	t.logger.Debug("Recorded quota usage",

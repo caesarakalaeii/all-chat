@@ -17,8 +17,10 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -125,6 +127,10 @@ func main() {
 
 	log.Info("Connected to Redis")
 
+	// Initialize metrics (available via /metrics endpoint)
+	_ = metrics.NewBusinessMetrics()
+	log.Info("Initialized Prometheus metrics")
+
 	// Initialize components
 	twitchOAuth := oauth.NewTwitchOAuth(twitchClientID, twitchClientSecret, twitchRedirectURL)
 
@@ -181,6 +187,9 @@ func main() {
 	// Health check endpoints
 	router.GET("/health/live", healthHandler.CheckLive)
 	router.GET("/health/ready", healthHandler.CheckReady)
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Auth routes (no /auth prefix - API Gateway strips /api/v1/auth and forwards rest)
 	// Twitch OAuth legacy endpoints now route through the V2 handler for compatibility

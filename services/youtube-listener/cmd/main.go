@@ -19,9 +19,11 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -92,6 +94,10 @@ func main() {
 
 	log.Info("Connected to Redis")
 
+	// Initialize metrics (available via /metrics endpoint)
+	listenerMetrics := metrics.NewListenerMetrics("youtube", "youtube-listener")
+	log.Info("Initialized Prometheus metrics")
+
 	// Initialize components
 	tokenStore := oauth.NewPostgresTokenStore(db, tokenEncryptor, log)
 	oauthManager := oauth.NewManager(youtubeClientID, youtubeClientSecret, youtubeRedirectURL, tokenStore, log)
@@ -106,7 +112,7 @@ func main() {
 		quotaLimit = 10000
 	}
 
-	quotaTracker := quota.NewTracker(db, quotaLimit, log)
+	quotaTracker := quota.NewTracker(db, quotaLimit, log, listenerMetrics)
 	if err := quotaTracker.Start(ctx); err != nil {
 		log.Fatal("Failed to start quota tracker", zap.Error(err))
 	}
@@ -153,6 +159,9 @@ func main() {
 	router.GET("/health/live", healthHandler.LivenessProbe)
 	router.GET("/health/ready", healthHandler.ReadinessProbe)
 	router.GET("/status", healthHandler.Status)
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Get port
 	port := getEnvOrDefault("PORT", "8086")

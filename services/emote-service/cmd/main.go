@@ -16,8 +16,10 @@ import (
 	"github.com/caesar/all-chat/services/emote-service/clients"
 	"github.com/caesar/all-chat/services/emote-service/handlers"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/metrics"
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
@@ -55,6 +57,10 @@ func main() {
 	}
 	log.Info("Connected to Redis")
 
+	// Initialize metrics (available via /metrics endpoint)
+	_ = metrics.NewProcessorMetrics()
+	log.Info("Initialized Prometheus metrics")
+
 	// Initialize emote cache
 	emoteCache := cache.NewEmoteCache(redisClient, log, cacheTTL)
 
@@ -91,6 +97,9 @@ func main() {
 	// Register routes
 	emoteHandler.RegisterRoutes(router)
 	healthHandler.RegisterRoutes(router)
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Create HTTP server
 	srv := &http.Server{

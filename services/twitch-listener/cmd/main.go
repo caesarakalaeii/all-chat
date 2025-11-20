@@ -15,9 +15,11 @@ import (
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -73,6 +75,10 @@ func main() {
 
 	log.Info("Connected to Redis")
 
+	// Initialize metrics (available via /metrics endpoint)
+	listenerMetrics := metrics.NewListenerMetrics("twitch", "twitch-listener")
+	log.Info("Initialized Prometheus metrics")
+
 	// Initialize components
 	parser := irc.NewParser()
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
@@ -81,7 +87,7 @@ func main() {
 		Username: twitchUsername,
 		OAuth:    twitchOAuth,
 	}
-	ircConn := irc.NewConnectionManager(ircConfig, parser, streamPublisher, log)
+	ircConn := irc.NewConnectionManager(ircConfig, parser, streamPublisher, log, listenerMetrics)
 
 	// Source Manager client (optional)
 	sourceManagerURL := getEnvOrDefault("SOURCE_MANAGER_URL", "http://source-manager:8088")
@@ -102,7 +108,7 @@ func main() {
 	// Initialize channel manager
 	channelRepo := channels.NewRepository(db)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, leaderCoord, log)
+	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, leaderCoord, log, listenerMetrics)
 
 	// Connect to Twitch IRC
 	if err := ircConn.Connect(ctx); err != nil {
@@ -132,6 +138,9 @@ func main() {
 	router.GET("/health/live", healthHandler.LivenessProbe)
 	router.GET("/health/ready", healthHandler.ReadinessProbe)
 	router.GET("/status", healthHandler.Status)
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Get port
 	port := getEnvOrDefault("PORT", "8085")
