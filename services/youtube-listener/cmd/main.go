@@ -137,7 +137,7 @@ func main() {
 	// Initialize stream manager
 	streamRepo := streams.NewRepository(db, log)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, leaderCoord, log)
+	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, leaderCoord, quotaTracker, log)
 
 	// Start stream manager
 	if err := streamManager.Start(ctx); err != nil {
