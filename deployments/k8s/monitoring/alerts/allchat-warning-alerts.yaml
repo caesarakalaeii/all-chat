@@ -1,0 +1,162 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: allchat-warning-alerts
+  namespace: monitoring
+  labels:
+    app: kube-prometheus-stack
+    release: kube-prometheus
+spec:
+  groups:
+    - name: allchat-warnings
+      interval: 1m
+      rules:
+        # YouTube Quota Warning - Early warning at 80%
+        - alert: YouTubeQuotaWarning
+          expr: listener_quota_usage_percentage{platform="youtube"} > 80
+          for: 5m
+          labels:
+            severity: warning
+            team: allchat
+            platform: youtube
+          annotations:
+            summary: "YouTube API quota warning (>80%)"
+            description: |
+              YouTube API quota usage is at {{ $value | humanizePercentage }} (threshold: 80%).
+
+              Impact: Approaching quota limit, may hit 100% within hours.
+
+              Recommended Actions:
+              1. Monitor quota trend in dashboard: /d/allchat-youtube-quota
+              2. Plan to reduce polling interval if approaching 90%
+              3. Prepare quota increase request
+              4. Review stream activity and disable low-priority streams if needed
+
+        # High Processing Latency
+        - alert: AllChatHighProcessingLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(processor_message_processing_duration_seconds_bucket[5m])) by (platform, le)
+            ) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "High message processing latency (p95 > 500ms)"
+            description: |
+              Message processing p95 latency is {{ $value }}s for {{ $labels.platform }} (threshold: 500ms).
+
+              Impact: Delayed message delivery to overlays.
+
+              Action Required:
+              1. Check processor dashboard: /d/allchat-message-pipeline
+              2. Review stage durations to identify bottleneck
+              3. Check emote cache hit rate
+              4. Consider scaling message processors
+              5. Review external API latencies (7TV, BTTV, FFZ)
+
+        # Message Stream Backlog
+        - alert: AllChatMessageBacklog
+          expr: processor_stream_lag > 5000
+          for: 5m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "High message stream backlog"
+            description: |
+              Redis stream has {{ $value }} pending messages (threshold: 5000).
+
+              Impact: Increasing message delay, potential memory pressure.
+
+              Action Required:
+              1. Check processor performance: kubectl top pods -n allchat -l app=message-processor
+              2. Scale processors: kubectl scale -n allchat deployment/message-processor --replicas=5
+              3. Monitor backlog reduction in dashboard
+              4. Check for stuck messages or processing errors
+
+        # Listener Reconnection Loop
+        - alert: AllChatListenerReconnecting
+          expr: rate(listener_connection_attempts_total{result="failure"}[5m]) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "{{ $labels.platform }} listener reconnecting frequently"
+            description: |
+              {{ $labels.platform }} listener is reconnecting at {{ $value }} failures/sec.
+
+              Impact: Potential message loss, unstable connection.
+
+              Action Required:
+              1. Check listener logs for connection errors
+              2. Verify platform API status
+              3. Check network connectivity
+              4. Review authentication credentials
+
+        # High Stream Errors
+        - alert: AllChatHighStreamErrors
+          expr: rate(processor_stream_errors_total[5m]) > 1
+          for: 5m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "High Redis stream consumption errors"
+            description: |
+              Message processor is encountering {{ $value }} stream errors/sec.
+
+              Impact: Messages may be lost or stuck.
+
+              Action Required:
+              1. Check processor logs: kubectl logs -n allchat -l app=message-processor
+              2. Verify Redis connectivity
+              3. Check consumer group health
+              4. Review message format issues
+
+        # Pod Crash Loop
+        - alert: AllChatPodCrashLoop
+          expr: rate(kube_pod_container_status_restarts_total{namespace="allchat"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "Pod {{ $labels.pod }} is crash looping"
+            description: |
+              Pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes.
+
+              Impact: Service instability, potential data loss.
+
+              Action Required:
+              1. Check pod logs: kubectl logs -n allchat {{ $labels.pod }} --previous
+              2. Check pod events: kubectl describe pod -n allchat {{ $labels.pod }}
+              3. Review resource limits and requests
+              4. Check for OOM kills or startup failures
+
+        # Emote Cache Miss Rate High
+        - alert: AllChatLowEmoteCacheHitRate
+          expr: |
+            (
+              sum(rate(processor_emote_cache_operations_total{operation="hit"}[10m]))
+              /
+              sum(rate(processor_emote_cache_operations_total[10m]))
+            ) < 0.8
+          for: 15m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "Low emote cache hit rate (<80%)"
+            description: |
+              Emote cache hit rate is {{ $value | humanizePercentage }} (threshold: 80%).
+
+              Impact: Increased latency from external emote API calls.
+
+              Action Required:
+              1. Check emote cache size and TTL settings
+              2. Review popular emotes not being cached
+              3. Consider increasing cache size
+              4. Monitor 7TV/BTTV/FFZ API response times
