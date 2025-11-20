@@ -77,6 +77,21 @@ spec:
             secretKeyRef:
               name: allchat-secrets
               key: TWITCH_CLIENT_SECRET
+        - name: YOUTUBE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: YOUTUBE_CLIENT_ID
+        - name: YOUTUBE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: YOUTUBE_CLIENT_SECRET
+        - name: YOUTUBE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: YOUTUBE_API_KEY
         - name: FRONTEND_URL
           valueFrom:
             configMapKeyRef:
