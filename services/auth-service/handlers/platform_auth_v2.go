@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -129,6 +130,64 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			return
 		}
 
+		userIDStr, ok := userID.(string)
+		if !ok || userIDStr == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user context"})
+			return
+		}
+
+		// Short-circuit Twitch add-source when the user already authenticated via Twitch.
+		// TODO: remove this workaround once the Twitch add-source OAuth regression is fixed.
+		if platform == oauth.PlatformTwitch {
+			user, err := h.userRepo.GetByID(c.Request.Context(), userIDStr)
+			if err != nil {
+				if errors.Is(err, repository.ErrUserNotFound) {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+					return
+				}
+				h.logger.Error("Failed to fetch user for Twitch add-source", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
+
+			if user.TwitchID != nil && *user.TwitchID != "" && user.AuthProvider == string(oauth.PlatformTwitch) {
+				authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
+				jwtToken := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer"))
+				if jwtToken == "" {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing authorization token"})
+					return
+				}
+
+				platformUser := &oauth.TwitchUserInfoWrapper{
+					ID:              *user.TwitchID,
+					Login:           user.Username,
+					DisplayName:     user.DisplayName,
+					ProfileImageURL: user.ProfileImageURL,
+				}
+
+				if err := h.addSourceToOverlay(c.Request.Context(), user.ID, overlayID, platform, platformUser, nil, jwtToken); err != nil {
+					h.logger.Error("Failed to add Twitch source via existing session",
+						zap.String("user_id", user.ID),
+						zap.String("overlay_id", overlayID),
+						zap.Error(err),
+					)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add source"})
+					return
+				}
+
+				h.logger.Info("Added Twitch source without OAuth reflow",
+					zap.String("user_id", user.ID),
+					zap.String("overlay_id", overlayID),
+				)
+
+				c.JSON(http.StatusOK, gin.H{
+					"source_added":                string(platform),
+					"reused_existing_credentials": true,
+				})
+				return
+			}
+		}
+
 		// Generate random CSRF token
 		csrfToken, err := generateRandomString(32)
 		if err != nil {
@@ -138,7 +197,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 		}
 
 		// Create add-source state with current user_id for account linking
-		oauthState := oauth.NewAddSourceState(csrfToken, overlayID, userID.(string))
+		oauthState := oauth.NewAddSourceState(csrfToken, overlayID, userIDStr)
 		if err := oauthState.Validate(); err != nil {
 			h.logger.Error("Invalid OAuth state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -308,8 +367,12 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			channelInfo, channelErr := youtubeProvider.GetPrimaryChannel(c.Request.Context(), token.AccessToken)
 			if channelErr != nil {
 				h.logger.Error("Failed to resolve YouTube channel",
-					zap.Error(channelErr))
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to resolve YouTube channel"})
+					zap.Error(channelErr),
+					zap.String("platform_user_id", platformUser.GetID()))
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error":   "Unable to resolve YouTube channel",
+					"details": channelErr.Error(),
+				})
 				return
 			}
 			youtubeChannel = channelInfo
