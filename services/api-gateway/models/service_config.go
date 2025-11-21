@@ -57,6 +57,24 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		RewritePrefix: "/emotes", // Emote service exposes routes under /emotes
 	}
 
+	// Admin routes - Auth Service (users)
+	registry.Services["admin-auth"] = &ServiceConfig{
+		Name:        "admin-auth",
+		BaseURL:     authURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/admin/users",
+		StripPrefix: true, // Strip /api/v1, forward /admin/users
+	}
+
+	// Admin routes - Overlay Manager (overlays and sources)
+	registry.Services["admin-overlay"] = &ServiceConfig{
+		Name:        "admin-overlay",
+		BaseURL:     overlayURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/admin",
+		StripPrefix: true, // Strip /api/v1, forward /admin/*
+	}
+
 	// Validate all service URLs are set
 	for name, service := range registry.Services {
 		if service.BaseURL == "" {
