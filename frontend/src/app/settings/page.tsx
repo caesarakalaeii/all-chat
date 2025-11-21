@@ -3,32 +3,20 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { authApi } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
-  const { user, token, loading } = useAuthStore((state) => ({
-    user: state.user,
-    token: state.token,
-    loading: state.loading
+  const { user } = useAuthStore((state) => ({
+    user: state.user
   }));
-  const init = useAuthStore((state) => state.init);
   const logout = useAuthStore((state) => state.logout);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  useEffect(() => {
-    init();
-  }, [init]);
-
-  useEffect(() => {
-    if (!loading && !token) {
-      router.replace('/');
-    }
-  }, [loading, token, router]);
 
   const handleLogout = () => {
     logout();
@@ -181,5 +169,13 @@ export default function SettingsPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <ProtectedRoute>
+      <SettingsContent />
+    </ProtectedRoute>
   );
 }

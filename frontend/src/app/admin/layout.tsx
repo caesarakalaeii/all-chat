@@ -1,7 +1,10 @@
+'use client';
+
 import Link from 'next/link';
 import { ReactNode } from 'react';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+function AdminLayoutContent({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Admin Navigation */}
@@ -50,5 +53,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         {children}
       </main>
     </div>
+  );
+}
+
+export default function AdminLayout({ children }: { children: ReactNode }) {
+  return (
+    <ProtectedRoute requireAdmin={true}>
+      <AdminLayoutContent>{children}</AdminLayoutContent>
+    </ProtectedRoute>
   );
 }
