@@ -170,7 +170,7 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 	}
 
 	// Generate JWT
-	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
+	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry, user.IsAdmin)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
@@ -282,7 +282,7 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	}
 
 	// Generate JWT
-	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
+	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry, user.IsAdmin)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
@@ -354,7 +354,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	}
 
 	// Generate new JWT
-	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
+	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry, user.IsAdmin)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})

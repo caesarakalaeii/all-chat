@@ -50,3 +50,47 @@ func JWTAuth(secret string) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// AdminOnly middleware checks if the authenticated user has admin role
+// Must be used after JWTAuth middleware
+func AdminOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get roles from context (set by JWTAuth middleware)
+		rolesInterface, exists := c.Get("roles")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "User not authenticated",
+			})
+			c.Abort()
+			return
+		}
+
+		roles, ok := rolesInterface.([]string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid roles format",
+			})
+			c.Abort()
+			return
+		}
+
+		// Check if user has admin role
+		hasAdmin := false
+		for _, role := range roles {
+			if role == "admin" {
+				hasAdmin = true
+				break
+			}
+		}
+
+		if !hasAdmin {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Admin access required",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}

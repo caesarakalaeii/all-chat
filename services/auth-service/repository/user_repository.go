@@ -49,13 +49,13 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
 	query := `
 INSERT INTO users (
 id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
-access_token, refresh_token, token_expires_at, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 `
 
 	_, err = r.db.Exec(ctx, query,
 		user.ID, user.TwitchID, user.GoogleID, user.TikTokOpenID, user.KickID, user.AuthProvider, user.Username, user.DisplayName,
-		user.ProfileImageURL, accessToken, refreshToken,
+		user.ProfileImageURL, user.IsAdmin, accessToken, refreshToken,
 		user.TokenExpiresAt, user.CreatedAt, user.UpdatedAt,
 	)
 
@@ -70,7 +70,7 @@ access_token, refresh_token, token_expires_at, created_at, updated_at
 func (r *UserRepository) GetByTwitchID(ctx context.Context, twitchID string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE twitch_id = $1
 `
@@ -90,7 +90,7 @@ WHERE twitch_id = $1
 func (r *UserRepository) GetByGoogleID(ctx context.Context, googleID string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE google_id = $1
 `
@@ -110,7 +110,7 @@ WHERE google_id = $1
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE id = $1
 `
@@ -211,7 +211,7 @@ WHERE id = $1
 func (r *UserRepository) GetByKickID(ctx context.Context, kickID string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE kick_id = $1
 `
@@ -231,7 +231,7 @@ WHERE kick_id = $1
 func (r *UserRepository) GetByTikTokID(ctx context.Context, tiktokOpenID string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE tiktok_open_id = $1
 `
@@ -300,7 +300,7 @@ func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 
 	err := row.Scan(
 		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName,
-		&user.ProfileImageURL, &encryptedAccessToken, &encryptedRefreshToken,
+		&user.ProfileImageURL, &user.IsAdmin, &encryptedAccessToken, &encryptedRefreshToken,
 		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -338,7 +338,7 @@ func (r *UserRepository) decryptToken(token string) (string, error) {
 func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 ORDER BY created_at DESC
 `
@@ -369,7 +369,7 @@ ORDER BY created_at DESC
 func (r *UserRepository) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE id = $1
 `
@@ -392,7 +392,7 @@ func (r *UserRepository) scanUserFromRows(rows pgx.Rows) (*models.User, error) {
 
 	err := rows.Scan(
 		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider,
-		&user.Username, &user.DisplayName, &user.ProfileImageURL,
+		&user.Username, &user.DisplayName, &user.ProfileImageURL, &user.IsAdmin,
 		&encryptedAccessToken, &encryptedRefreshToken,
 		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
 	)
