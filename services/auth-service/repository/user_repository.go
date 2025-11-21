@@ -333,3 +333,84 @@ func (r *UserRepository) decryptToken(token string) (string, error) {
 	}
 	return r.cipher.Decrypt(token)
 }
+
+// GetAllUsers retrieves all users (admin only)
+func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) {
+	query := `
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
+           access_token, refresh_token, token_expires_at, created_at, updated_at
+FROM users
+ORDER BY created_at DESC
+`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		user, err := r.scanUserFromRows(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
+}
+
+// GetUserByID retrieves a user by their ID (admin only)
+func (r *UserRepository) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
+	query := `
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
+           access_token, refresh_token, token_expires_at, created_at, updated_at
+FROM users
+WHERE id = $1
+`
+
+	user, err := r.scanUser(r.db.QueryRow(ctx, query, userID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by ID: %w", err)
+	}
+
+	return user, nil
+}
+
+// scanUserFromRows scans a user from pgx.Rows
+func (r *UserRepository) scanUserFromRows(rows pgx.Rows) (*models.User, error) {
+	var user models.User
+	var encryptedAccessToken, encryptedRefreshToken string
+
+	err := rows.Scan(
+		&user.ID, &user.TwitchID, &user.GoogleID, &user.TikTokOpenID, &user.KickID, &user.AuthProvider,
+		&user.Username, &user.DisplayName, &user.ProfileImageURL,
+		&encryptedAccessToken, &encryptedRefreshToken,
+		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	accessToken, err := r.decryptToken(encryptedAccessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt access token: %w", err)
+	}
+	user.AccessToken = accessToken
+
+	refreshToken, err := r.decryptToken(encryptedRefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt refresh token: %w", err)
+	}
+	user.RefreshToken = refreshToken
+
+	return &user, nil
+}

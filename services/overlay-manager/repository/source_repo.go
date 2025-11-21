@@ -153,3 +153,33 @@ func (r *SourceRepository) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
+
+// GetAllSources returns all sources across all overlays (admin only)
+func (r *SourceRepository) GetAllSources(ctx context.Context) ([]*models.ChatSource, error) {
+	query := `
+		SELECT id, overlay_id, platform, channel_id, channel_name, is_active, created_at, updated_at
+		FROM overlay_chat_sources
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sources: %w", err)
+	}
+	defer rows.Close()
+
+	var sources []*models.ChatSource
+	for rows.Next() {
+		var source models.ChatSource
+		if err := rows.Scan(&source.ID, &source.OverlayID, &source.Platform, &source.ChannelID, &source.ChannelName, &source.IsActive, &source.CreatedAt, &source.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan source: %w", err)
+		}
+		sources = append(sources, &source)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating sources: %w", err)
+	}
+
+	return sources, nil
+}

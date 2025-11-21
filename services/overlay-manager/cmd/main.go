@@ -103,6 +103,7 @@ func main() {
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo)
 	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
+	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)
 
 	// YouTube helper
 	youtubeAPIKey := getEnv("YOUTUBE_API_KEY", "")
@@ -160,6 +161,15 @@ func main() {
 		{
 			internal.POST("/:id/sources/auto", sourcesHandler.HandleAddSourceAuto)
 		}
+	}
+
+	// Admin routes (JWT protected)
+	// TODO: Add admin role check middleware in production
+	admin := router.Group("/admin")
+	admin.Use(middleware.JWTAuth(config.JWTSecret))
+	{
+		admin.GET("/overlays", adminHandler.ListOverlays)
+		admin.GET("/sources", adminHandler.ListAllSources)
 	}
 
 	// Create HTTP server
