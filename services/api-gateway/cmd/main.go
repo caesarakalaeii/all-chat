@@ -224,6 +224,12 @@ func main() {
 
 		// Internal API routes (protected - used by other services)
 		protectedAPI.POST("/internal/overlays/:id/sources/auto", proxyHandler.ForwardRequest)
+
+		// Admin routes (protected - TODO: add admin role check)
+		protectedAPI.GET("/admin/users", proxyHandler.ForwardRequest)           // -> auth-service
+		protectedAPI.GET("/admin/users/:id", proxyHandler.ForwardRequest)       // -> auth-service
+		protectedAPI.GET("/admin/overlays", proxyHandler.ForwardRequest)        // -> overlay-manager
+		protectedAPI.GET("/admin/sources", proxyHandler.ForwardRequest)         // -> overlay-manager
 	}
 
 	// Get port from environment
