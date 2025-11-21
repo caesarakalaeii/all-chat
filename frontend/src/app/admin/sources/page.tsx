@@ -28,7 +28,7 @@ export default function SourcesPage() {
   useEffect(() => {
     async function fetchSources() {
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('jwt_token');
         if (!token) {
           setError('Not authenticated');
           setLoading(false);
