@@ -163,10 +163,10 @@ func main() {
 		}
 	}
 
-	// Admin routes (JWT protected)
-	// TODO: Add admin role check middleware in production
+	// Admin routes (JWT + Admin role required)
 	admin := router.Group("/admin")
 	admin.Use(middleware.JWTAuth(config.JWTSecret))
+	admin.Use(middleware.AdminOnly())
 	{
 		admin.GET("/overlays", adminHandler.ListOverlays)
 		admin.GET("/sources", adminHandler.ListAllSources)

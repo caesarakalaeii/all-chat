@@ -30,12 +30,17 @@ type ServiceClaims struct {
 }
 
 // GenerateJWT generates a new JWT token for the given user
-func GenerateJWT(userID, twitchID, username, secret string) (string, error) {
+func GenerateJWT(userID, twitchID, username, secret string, isAdmin bool) (string, error) {
+	roles := []string{"user"}
+	if isAdmin {
+		roles = append(roles, "admin")
+	}
+
 	claims := Claims{
 		UserID:   userID,
 		TwitchID: twitchID,
 		Username: username,
-		Roles:    []string{"user"},
+		Roles:    roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
@@ -49,11 +54,16 @@ func GenerateJWT(userID, twitchID, username, secret string) (string, error) {
 
 // GenerateToken generates a JWT token with custom expiry duration
 // This is a simpler version for services that don't need all user details
-func GenerateToken(userID, username, secret string, expiry time.Duration) (string, error) {
+func GenerateToken(userID, username, secret string, expiry time.Duration, isAdmin bool) (string, error) {
+	roles := []string{"user"}
+	if isAdmin {
+		roles = append(roles, "admin")
+	}
+
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
-		Roles:    []string{"user"},
+		Roles:    roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),

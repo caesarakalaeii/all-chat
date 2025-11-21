@@ -13,8 +13,9 @@ type User struct {
 	Username        string    `json:"username"`
 	DisplayName     string    `json:"display_name"`
 	ProfileImageURL string    `json:"profile_image_url"`
-	AccessToken     string    `json:"-"` // Never expose in JSON
-	RefreshToken    string    `json:"-"` // Never expose in JSON
+	IsAdmin         bool      `json:"is_admin"`                 // Admin role for access control
+	AccessToken     string    `json:"-"`                        // Never expose in JSON
+	RefreshToken    string    `json:"-"`                        // Never expose in JSON
 	TokenExpiresAt  time.Time `json:"-"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`

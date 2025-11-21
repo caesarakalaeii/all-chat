@@ -230,10 +230,10 @@ func main() {
 		protected.GET("/tiktok/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTikTok))
 	}
 
-	// Admin routes (JWT protected)
-	// TODO: Add admin role check middleware in production
+	// Admin routes (JWT + Admin role required)
 	admin := router.Group("/admin")
 	admin.Use(middleware.JWTAuth(jwtSecret))
+	admin.Use(middleware.AdminOnly())
 	{
 		admin.GET("/users", adminHandler.ListUsers)
 		admin.GET("/users/:id", adminHandler.GetUser)

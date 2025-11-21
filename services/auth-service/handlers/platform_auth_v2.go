@@ -421,7 +421,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			}
 
 			// Generate JWT for the existing user
-			jwtToken, err = auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
+			jwtToken, err = auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry, user.IsAdmin)
 			if err != nil {
 				h.logger.Error("Failed to generate JWT", zap.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
@@ -446,7 +446,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			}
 
 			// Generate JWT
-			jwtToken, err = auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry)
+			jwtToken, err = auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry, user.IsAdmin)
 			if err != nil {
 				h.logger.Error("Failed to generate JWT", zap.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
