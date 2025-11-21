@@ -152,11 +152,12 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   };
 
   return (
-    <div className="min-h-screen w-full p-4">
-      {/* Hide scrollbars */}
+    <div className="min-h-screen w-full p-4 bg-transparent">
+      {/* Hide scrollbars and ensure transparent background */}
       <style dangerouslySetInnerHTML={{ __html: `
         body {
           overflow: hidden !important;
+          background: transparent !important;
         }
         body::-webkit-scrollbar {
           display: none !important;
