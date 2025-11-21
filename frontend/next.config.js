@@ -19,23 +19,24 @@ const nextConfig = {
     ]
   },
 
-  // API rewrites for local development only
-  // In production, Nginx handles /api/* and /ws/* proxying
+  // API rewrites - proxy to API Gateway
+  // In development: localhost:8080
+  // In production: api-gateway service (Docker/K8s networking)
   async rewrites() {
-    // Only apply rewrites in development mode
-    if (process.env.NODE_ENV === 'development') {
-      return [
-        {
-          source: '/api/:path*',
-          destination: 'http://localhost:8080/api/:path*'
-        },
-        {
-          source: '/ws/:path*',
-          destination: 'http://localhost:8080/ws/:path*'
-        }
-      ];
-    }
-    return [];
+    const apiGatewayURL = process.env.NODE_ENV === 'production'
+      ? process.env.API_GATEWAY_URL || 'http://api-gateway:8080'
+      : 'http://localhost:8080';
+
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiGatewayURL}/api/:path*`
+      },
+      {
+        source: '/ws/:path*',
+        destination: `${apiGatewayURL}/ws/:path*`
+      }
+    ];
   }
 };
 
