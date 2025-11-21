@@ -39,12 +39,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
       router.push('/');
       return;
     }
-
-    if (requireAdmin && !user.is_admin) {
-      router.push('/dashboard');
-      return;
-    }
-  }, [token, user, loading, isInitialized, requireAdmin, router]);
+  }, [token, user, loading, isInitialized, router]);
 
   // Show loading spinner while initializing or checking auth
   if (!isInitialized || loading || !token || !user) {
@@ -55,13 +50,22 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     );
   }
 
-  // Check admin requirement
+  // Check admin requirement - Show 403 Forbidden
   if (requireAdmin && !user.is_admin) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-white mb-4">Access Denied</h1>
-          <p className="text-gray-400">You don't have permission to access this page.</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-8 text-center">
+          <div className="text-6xl mb-4">🚫</div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">403 Forbidden</h1>
+          <p className="text-gray-600 mb-6">
+            You do not have permission to access this page. Admin privileges are required.
+          </p>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+          >
+            Go to Dashboard
+          </button>
         </div>
       </div>
     );
