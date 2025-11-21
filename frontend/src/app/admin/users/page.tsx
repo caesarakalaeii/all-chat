@@ -33,7 +33,7 @@ export default function UsersPage() {
   useEffect(() => {
     async function fetchUsers() {
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('jwt_token');
         if (!token) {
           setError('Not authenticated');
           setLoading(false);
@@ -72,7 +72,7 @@ export default function UsersPage() {
       }
 
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('jwt_token');
         const response = await fetch('/api/v1/overlays', {
           headers: {
             'Authorization': `Bearer ${token}`,
