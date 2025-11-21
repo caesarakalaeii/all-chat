@@ -26,26 +26,18 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useOverlayStore } from '@/lib/stores/overlay-store';
 import { formatDistanceToNow } from 'date-fns';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter();
-  const { user, token, init } = useAuthStore();
+  const { user } = useAuthStore();
   const { overlays, loading, fetchOverlays, deleteOverlay } = useOverlayStore();
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  // Initialize auth and fetch overlays
+  // Fetch overlays on mount
   useEffect(() => {
-    init();
-  }, [init]);
-
-  useEffect(() => {
-    if (!token) {
-      router.push('/');
-      return;
-    }
-
     fetchOverlays();
-  }, [token, fetchOverlays, router]);
+  }, [fetchOverlays]);
 
   const handleDelete = async (overlayId: string, overlayName: string) => {
     if (!confirm(`Are you sure you want to delete "${overlayName}"? This action cannot be undone.`)) {
@@ -63,14 +55,6 @@ export default function DashboardPage() {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-twitch"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-900">
       {/* Navbar */}
@@ -86,8 +70,16 @@ export default function DashboardPage() {
             >
               Settings
             </Link>
+            {user?.is_admin && (
+              <Link
+                href="/admin"
+                className="text-purple-400 hover:text-purple-300 transition-colors font-semibold"
+              >
+                Admin
+              </Link>
+            )}
             <div className="flex items-center gap-3">
-              {user.profile_image_url && (
+              {user?.profile_image_url && (
                 <Image
                   src={user.profile_image_url}
                   alt={user.display_name}
@@ -96,7 +88,7 @@ export default function DashboardPage() {
                   className="w-8 h-8 rounded-full object-cover"
                 />
               )}
-              <span className="text-white">{user.display_name}</span>
+              <span className="text-white">{user?.display_name}</span>
             </div>
             <button
               onClick={() => {
@@ -216,5 +208,13 @@ export default function DashboardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }
