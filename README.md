@@ -302,6 +302,7 @@ This project is licensed under the AGPL 3.0 - see the [LICENSE](LICENSE) file fo
 
 ## 📮 Support & Contact
 
+- **💬 Discord**: [Join our Discord server](https://discord.gg/xCGBSuz39P) - Get help and chat with the community
 - **🐛 Bug Reports**: [GitHub Issues](https://github.com/caesar/all-chat/issues)
 - **💬 Questions**: [GitHub Discussions](https://github.com/caesar/all-chat/discussions)
 - **📧 Email**: support@allch.at
