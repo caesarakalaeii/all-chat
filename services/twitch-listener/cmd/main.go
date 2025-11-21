@@ -89,21 +89,12 @@ func main() {
 	}
 	ircConn := irc.NewConnectionManager(ircConfig, parser, streamPublisher, log, listenerMetrics)
 
-	// Source Manager client (optional)
-	sourceManagerURL := getEnvOrDefault("SOURCE_MANAGER_URL", "http://source-manager:8088")
-	sourceManagerSecret := getEnvOrDefault("SOURCE_MANAGER_SECRET", "dev-service-secret")
-
-	var leaderCoord *sourcemanager.LeadershipCoordinator
-	if sourceManagerSecret == "" {
-		log.Warn("SOURCE_MANAGER_SECRET not set; Twitch Listener will not coordinate leadership")
-	} else {
-		tokenSource := sourcemanager.NewSigningTokenSource("twitch-listener", sourceManagerSecret, 15*time.Minute)
-		smClient, err := sourcemanager.NewClient(sourceManagerURL, tokenSource)
-		if err != nil {
-			log.Fatal("Failed to initialize Source Manager client", zap.Error(err))
-		}
-		leaderCoord = sourcemanager.NewLeadershipCoordinator("twitch", smClient, 5*time.Second, log)
-	}
+	// Twitch Listener does NOT use leadership coordination
+	// Twitch IRC is stateless and event-driven (push, not pull like YouTube polling)
+	// Multiple IRC clients can connect to the same channels without conflicts
+	// Each message gets a unique UUID, and Redis Streams consumer groups handle deduplication
+	var leaderCoord *sourcemanager.LeadershipCoordinator = nil
+	log.Info("Twitch Listener running without leadership coordination (IRC is stateless)")
 
 	// Initialize channel manager
 	channelRepo := channels.NewRepository(db)
