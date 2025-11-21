@@ -26,16 +26,17 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 // GetActiveChannels returns all active Twitch channels that should be monitored
 // based on active overlays with Twitch sources
+// For Twitch IRC, we need the channel_name (username) not the channel_id (numeric ID)
 func (r *Repository) GetActiveChannels(ctx context.Context) ([]models.ChannelSource, error) {
 	query := `
 		SELECT DISTINCT
 			o.id as overlay_id,
-			ocs.channel_id
+			ocs.channel_name
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
 		  AND ocs.platform = 'twitch'
-		ORDER BY ocs.channel_id
+		ORDER BY ocs.channel_name
 	`
 
 	rows, err := r.db.Query(ctx, query)
@@ -60,15 +61,16 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]models.ChannelSou
 	return channels, nil
 }
 
-// GetUniqueChannels returns a deduplicated list of channel IDs
+// GetUniqueChannels returns a deduplicated list of channel names (usernames)
+// For Twitch IRC, we need the channel_name (username) not the channel_id (numeric ID)
 func (r *Repository) GetUniqueChannels(ctx context.Context) ([]string, error) {
 	query := `
-		SELECT DISTINCT ocs.channel_id
+		SELECT DISTINCT ocs.channel_name
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
 		  AND ocs.platform = 'twitch'
-		ORDER BY ocs.channel_id
+		ORDER BY ocs.channel_name
 	`
 
 	rows, err := r.db.Query(ctx, query)
