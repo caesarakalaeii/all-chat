@@ -8,6 +8,7 @@ type YouTubeStream struct {
 	ChannelID       string    `json:"channel_id"`       // YouTube channel ID (e.g., "UCxxxxxx")
 	ChannelName     string    `json:"channel_name"`     // Display name
 	LiveChatID      string    `json:"live_chat_id"`     // Live chat ID for API calls
+	OverlayID       string    `json:"overlay_id"`       // Overlay that requested this stream
 	IsLive          bool      `json:"is_live"`          // Stream is currently live
 	PollingInterval int       `json:"polling_interval"` // Milliseconds between polls (from API)
 	NextPageToken   string    `json:"next_page_token"`  // Token for next page of messages

@@ -84,7 +84,7 @@ func main() {
 	)
 
 	// Create WebSocket components
-	wsManager := wsconn.NewManager(log, gatewayMetrics)
+	wsManager := wsconn.NewManager(log, gatewayMetrics, redisClient)
 
 	// Create Redis Pub/Sub subscriber with message handler
 	messageHandler := func(overlayID string, message []byte) {

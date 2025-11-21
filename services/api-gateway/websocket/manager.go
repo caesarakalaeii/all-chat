@@ -2,26 +2,38 @@ package websocket
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
+// OverlayConnectionEvent represents an overlay connection/disconnection event
+type OverlayConnectionEvent struct {
+	Type      string    `json:"type"`       // "connected" or "disconnected"
+	OverlayID string    `json:"overlay_id"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // Manager manages all WebSocket connections grouped by overlay
 type Manager struct {
-	pools   map[string]*Pool // overlay_id -> connection pool
-	mu      sync.RWMutex
-	logger  *zap.Logger
-	metrics *metrics.GatewayMetrics
+	pools       map[string]*Pool // overlay_id -> connection pool
+	mu          sync.RWMutex
+	logger      *zap.Logger
+	metrics     *metrics.GatewayMetrics
+	redisClient *redis.Client
 }
 
 // NewManager creates a new WebSocket manager
-func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics) *Manager {
+func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redis.Client) *Manager {
 	return &Manager{
-		pools:   make(map[string]*Pool),
-		logger:  logger,
-		metrics: m,
+		pools:       make(map[string]*Pool),
+		logger:      logger,
+		metrics:     m,
+		redisClient: redisClient,
 	}
 }
 
@@ -34,6 +46,8 @@ func (m *Manager) AddConnection(ctx context.Context, conn *Connection) {
 
 	// Get or create pool for this overlay
 	pool, exists := m.pools[overlayID]
+	isFirstConnection := !exists
+
 	if !exists {
 		pool = NewPool(overlayID, m.logger)
 		m.pools[overlayID] = pool
@@ -55,6 +69,44 @@ func (m *Manager) AddConnection(ctx context.Context, conn *Connection) {
 		zap.String("overlay_id", overlayID),
 		zap.String("user_id", conn.UserID()),
 		zap.Int("pool_size", pool.Size()),
+	)
+
+	// Publish overlay connection event if this is the first connection
+	if isFirstConnection {
+		m.publishConnectionEvent(ctx, overlayID, "connected")
+	}
+}
+
+// publishConnectionEvent publishes an overlay connection event to Redis
+func (m *Manager) publishConnectionEvent(ctx context.Context, overlayID, eventType string) {
+	event := OverlayConnectionEvent{
+		Type:      eventType,
+		OverlayID: overlayID,
+		Timestamp: time.Now(),
+	}
+
+	payload, err := json.Marshal(event)
+	if err != nil {
+		m.logger.Error("Failed to marshal overlay connection event",
+			zap.String("overlay_id", overlayID),
+			zap.String("event_type", eventType),
+			zap.Error(err),
+		)
+		return
+	}
+
+	if err := m.redisClient.Publish(ctx, "overlay:connections", payload).Err(); err != nil {
+		m.logger.Error("Failed to publish overlay connection event",
+			zap.String("overlay_id", overlayID),
+			zap.String("event_type", eventType),
+			zap.Error(err),
+		)
+		return
+	}
+
+	m.logger.Info("Published overlay connection event",
+		zap.String("overlay_id", overlayID),
+		zap.String("event_type", eventType),
 	)
 }
 
@@ -83,13 +135,17 @@ func (m *Manager) RemoveConnection(conn *Connection) {
 		zap.Int("pool_size", pool.Size()),
 	)
 
-	// Remove pool if empty
+	// Remove pool if empty and publish disconnection event
 	if pool.Size() == 0 {
 		delete(m.pools, overlayID)
 		m.metrics.RecordSubscriptionEvent("api-gateway", "pool_destroyed")
 		m.logger.Info("Removed empty connection pool",
 			zap.String("overlay_id", overlayID),
 		)
+
+		// Publish overlay disconnection event
+		ctx := context.Background()
+		m.publishConnectionEvent(ctx, overlayID, "disconnected")
 	}
 }
 

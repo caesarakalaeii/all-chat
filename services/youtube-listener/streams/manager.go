@@ -2,6 +2,7 @@ package streams
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -12,8 +13,16 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// OverlayConnectionEvent represents an overlay connection event from API Gateway
+type OverlayConnectionEvent struct {
+	Type      string    `json:"type"`       // "connected" or "disconnected"
+	OverlayID string    `json:"overlay_id"`
+	Timestamp time.Time `json:"timestamp"`
+}
 
 // Manager manages active YouTube streams and coordinates polling
 type Manager struct {
@@ -27,6 +36,11 @@ type Manager struct {
 	mu            sync.RWMutex
 	activeStreams map[string]*models.YouTubeStream // streamID -> stream
 	pollers       map[string]*Poller               // streamID -> poller
+
+	// Overlay connection tracking
+	connMu            sync.RWMutex
+	connectedOverlays map[string]time.Time // overlay_id -> connection_time
+	redisClient       *redis.Client
 
 	syncInterval time.Duration
 	stopChan     chan struct{}
@@ -47,20 +61,23 @@ func NewManager(
 	dbConn DBConnInterface,
 	leader *sourcemanager.LeadershipCoordinator,
 	quotaTracker *quota.Tracker,
+	redisClient *redis.Client,
 	logger *zap.Logger,
 ) *Manager {
 	return &Manager{
-		repository:     repository,
-		oauthManager:   oauthManager,
-		messageHandler: messageHandler,
-		dbConn:         dbConn,
-		logger:         logger,
-		leader:         leader,
-		quotaTracker:   quotaTracker,
-		activeStreams:  make(map[string]*models.YouTubeStream),
-		pollers:        make(map[string]*Poller),
-		syncInterval:   30 * time.Second,
-		stopChan:       make(chan struct{}),
+		repository:        repository,
+		oauthManager:      oauthManager,
+		messageHandler:    messageHandler,
+		dbConn:            dbConn,
+		logger:            logger,
+		leader:            leader,
+		quotaTracker:      quotaTracker,
+		redisClient:       redisClient,
+		activeStreams:     make(map[string]*models.YouTubeStream),
+		pollers:           make(map[string]*Poller),
+		connectedOverlays: make(map[string]time.Time),
+		syncInterval:      30 * time.Second,
+		stopChan:          make(chan struct{}),
 	}
 }
 
@@ -81,6 +98,10 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Start PostgreSQL LISTEN for instant notifications
 	m.wg.Add(1)
 	go m.listenForChanges(ctx)
+
+	// Start Redis subscription for overlay connection events
+	m.wg.Add(1)
+	go m.listenForOverlayConnections(ctx)
 
 	return nil
 }
@@ -221,15 +242,31 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		return fmt.Errorf("failed to get active sources: %w", err)
 	}
 
-	// Group sources by channel ID
-	channelSources := make(map[string][]*models.StreamSource)
+	// Filter sources to only those with connected overlays
+	m.connMu.RLock()
+	connectedSources := make([]*models.StreamSource, 0)
 	for _, source := range sources {
+		if _, connected := m.connectedOverlays[source.OverlayID]; connected {
+			connectedSources = append(connectedSources, source)
+		}
+	}
+	m.connMu.RUnlock()
+
+	m.logger.Info("Filtered YouTube sources by overlay connections",
+		zap.Int("total_sources", len(sources)),
+		zap.Int("connected_sources", len(connectedSources)),
+		zap.Int("connected_overlays", len(m.connectedOverlays)),
+	)
+
+	// Group connected sources by channel ID
+	channelSources := make(map[string][]*models.StreamSource)
+	for _, source := range connectedSources {
 		channelSources[source.ChannelID] = append(channelSources[source.ChannelID], source)
 	}
 
-	m.logger.Info("Found active YouTube channels",
+	m.logger.Info("Found active YouTube channels with connected overlays",
 		zap.Int("channel_count", len(channelSources)),
-		zap.Int("source_count", len(sources)),
+		zap.Int("source_count", len(connectedSources)),
 	)
 
 	// For each channel, check for live streams
@@ -280,7 +317,14 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	}
 
 	// Start pollers for each live stream
+	// Note: A channel can have multiple overlay sources, but we only poll once per stream
+	// We'll use the first overlay's ID for tracking purposes
 	for _, stream := range liveStreams {
+		// Set the overlay ID from sources (use first one if multiple)
+		if len(sources) > 0 {
+			stream.OverlayID = sources[0].OverlayID
+		}
+
 		if err := m.startPoller(ctx, stream, apiClient); err != nil {
 			m.logger.Error("Failed to start poller",
 				zap.String("stream_id", stream.StreamID),
@@ -405,4 +449,110 @@ func (m *Manager) GetActiveStreams() []*models.YouTubeStream {
 	}
 
 	return streams
+}
+
+// listenForOverlayConnections subscribes to Redis overlay connection events
+func (m *Manager) listenForOverlayConnections(ctx context.Context) {
+	defer m.wg.Done()
+
+	m.logger.Info("Starting overlay connection listener")
+
+	pubsub := m.redisClient.Subscribe(ctx, "overlay:connections")
+	defer pubsub.Close()
+
+	ch := pubsub.Channel()
+
+	for {
+		select {
+		case msg := <-ch:
+			var event OverlayConnectionEvent
+			if err := json.Unmarshal([]byte(msg.Payload), &event); err != nil {
+				m.logger.Error("Failed to unmarshal overlay connection event",
+					zap.Error(err),
+					zap.String("payload", msg.Payload),
+				)
+				continue
+			}
+
+			m.logger.Info("Received overlay connection event",
+				zap.String("type", event.Type),
+				zap.String("overlay_id", event.OverlayID),
+			)
+
+			switch event.Type {
+			case "connected":
+				m.handleOverlayConnected(ctx, event.OverlayID)
+			case "disconnected":
+				m.handleOverlayDisconnected(ctx, event.OverlayID)
+			default:
+				m.logger.Warn("Unknown overlay connection event type",
+					zap.String("type", event.Type),
+				)
+			}
+
+		case <-m.stopChan:
+			m.logger.Info("Stopping overlay connection listener")
+			return
+		case <-ctx.Done():
+			m.logger.Info("Context cancelled, stopping overlay connection listener")
+			return
+		}
+	}
+}
+
+// handleOverlayConnected handles an overlay connection event
+func (m *Manager) handleOverlayConnected(ctx context.Context, overlayID string) {
+	m.connMu.Lock()
+	m.connectedOverlays[overlayID] = time.Now()
+	m.connMu.Unlock()
+
+	m.logger.Info("Overlay connected, starting polling",
+		zap.String("overlay_id", overlayID),
+	)
+
+	// Trigger immediate sync to start polling for this overlay's sources
+	if err := m.syncStreams(ctx); err != nil {
+		m.logger.Error("Failed to sync streams after overlay connection",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+	}
+}
+
+// handleOverlayDisconnected handles an overlay disconnection event
+func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID string) {
+	m.connMu.Lock()
+	delete(m.connectedOverlays, overlayID)
+	m.connMu.Unlock()
+
+	m.logger.Info("Overlay disconnected, stopping polling",
+		zap.String("overlay_id", overlayID),
+	)
+
+	// Stop pollers for sources belonging to this overlay
+	m.mu.Lock()
+	for streamID, stream := range m.activeStreams {
+		if stream.OverlayID == overlayID {
+			if poller, exists := m.pollers[streamID]; exists {
+				m.logger.Info("Stopping poller for disconnected overlay",
+					zap.String("stream_id", streamID),
+					zap.String("overlay_id", overlayID),
+				)
+				poller.Stop()
+				delete(m.pollers, streamID)
+				delete(m.activeStreams, streamID)
+				m.releaseLeadership(streamID)
+			}
+		}
+	}
+	m.mu.Unlock()
+}
+
+// IsOverlayConnected checks if an overlay has active WebSocket connections
+func (m *Manager) IsOverlayConnected(overlayID string) bool {
+	m.connMu.RLock()
+	defer m.connMu.RUnlock()
+
+	_, connected := m.connectedOverlays[overlayID]
+	return connected
 }
