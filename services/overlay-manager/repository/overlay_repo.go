@@ -209,3 +209,33 @@ func (r *OverlayRepository) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
+
+// GetAllOverlays returns all overlays (admin only)
+func (r *OverlayRepository) GetAllOverlays(ctx context.Context) ([]*models.Overlay, error) {
+	query := `
+		SELECT id, user_id, name, created_at, updated_at
+		FROM overlays
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query overlays: %w", err)
+	}
+	defer rows.Close()
+
+	var overlays []*models.Overlay
+	for rows.Next() {
+		var overlay models.Overlay
+		if err := rows.Scan(&overlay.ID, &overlay.UserID, &overlay.Name, &overlay.CreatedAt, &overlay.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan overlay: %w", err)
+		}
+		overlays = append(overlays, &overlay)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating overlays: %w", err)
+	}
+
+	return overlays, nil
+}

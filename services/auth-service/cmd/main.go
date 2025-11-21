@@ -170,6 +170,7 @@ func main() {
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log)
 	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
+	adminHandler := handlers.NewAdminHandler(userRepo, log)
 
 	// Set Gin mode
 	if logLevel == "debug" {
@@ -227,6 +228,15 @@ func main() {
 		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
 		protected.GET("/tiktok/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTikTok))
+	}
+
+	// Admin routes (JWT protected)
+	// TODO: Add admin role check middleware in production
+	admin := router.Group("/admin")
+	admin.Use(middleware.JWTAuth(jwtSecret))
+	{
+		admin.GET("/users", adminHandler.ListUsers)
+		admin.GET("/users/:id", adminHandler.GetUser)
 	}
 
 	// Get port from environment
