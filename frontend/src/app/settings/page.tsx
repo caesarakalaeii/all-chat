@@ -11,8 +11,9 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 function SettingsContent() {
   const router = useRouter();
-  const { user } = useAuthStore((state) => ({
-    user: state.user
+  const { user, loading } = useAuthStore((state) => ({
+    user: state.user,
+    loading: state.loading
   }));
   const logout = useAuthStore((state) => state.logout);
   const [deleteLoading, setDeleteLoading] = useState(false);
