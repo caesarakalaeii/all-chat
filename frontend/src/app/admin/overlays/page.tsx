@@ -33,7 +33,7 @@ export default function OverlaysPage() {
   useEffect(() => {
     async function fetchOverlays() {
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('jwt_token');
         if (!token) {
           setError('Not authenticated');
           setLoading(false);
@@ -73,7 +73,7 @@ export default function OverlaysPage() {
 
       setSourcesLoading(true);
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('jwt_token');
         const response = await fetch(`/api/v1/overlays/${selectedOverlay.id}/sources`, {
           headers: {
             'Authorization': `Bearer ${token}`,
