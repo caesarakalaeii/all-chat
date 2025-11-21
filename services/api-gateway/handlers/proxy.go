@@ -49,8 +49,10 @@ func (p *ProxyHandler) ForwardRequest(c *gin.Context) {
 	if service.StripPrefix && len(path) >= len(service.PathPrefix) {
 		// Strip the matched prefix from the path
 		backendPath = path[len(service.PathPrefix):]
-		// Ensure backendPath starts with /
-		if backendPath == "" || backendPath[0] != '/' {
+		// Ensure backendPath starts with / (unless it will be rewritten)
+		if service.RewritePrefix == "" && (backendPath == "" || backendPath[0] != '/') {
+			backendPath = "/" + backendPath
+		} else if backendPath != "" && backendPath[0] != '/' {
 			backendPath = "/" + backendPath
 		}
 	}
@@ -61,7 +63,12 @@ func (p *ProxyHandler) ForwardRequest(c *gin.Context) {
 			rewrite = "/" + rewrite
 		}
 		rewrite = strings.TrimRight(rewrite, "/")
-		backendPath = rewrite + backendPath
+		// Only append backendPath if it's not empty
+		if backendPath != "" && backendPath != "/" {
+			backendPath = rewrite + backendPath
+		} else {
+			backendPath = rewrite
+		}
 	}
 
 	// Build the backend URL
