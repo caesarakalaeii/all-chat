@@ -25,9 +25,19 @@ type Poller struct {
 	messageHandler MessageHandler
 	logger         *zap.Logger
 
-	mu       sync.RWMutex
-	stopChan chan struct{}
-	wg       sync.WaitGroup
+	mu               sync.RWMutex
+	stopChan         chan struct{}
+	wg               sync.WaitGroup
+
+	// Exponential backoff state
+	consecutiveErrors int
+	backoffDuration   time.Duration
+	maxBackoff        time.Duration
+
+	// Polling limits
+	pollStartTime     time.Time
+	maxPollingTime    time.Duration
+	totalPollCount    int
 }
 
 // NewPoller creates a new stream poller
@@ -37,11 +47,17 @@ func NewPoller(
 	logger *zap.Logger,
 ) *Poller {
 	return &Poller{
-		stream:    stream,
-		apiClient: apiClient,
-		parser:    api.NewParser(),
-		logger:    logger,
-		stopChan:  make(chan struct{}),
+		stream:            stream,
+		apiClient:         apiClient,
+		parser:            api.NewParser(),
+		logger:            logger,
+		stopChan:          make(chan struct{}),
+		maxBackoff:        5 * time.Minute, // Maximum backoff of 5 minutes
+		backoffDuration:   0,               // Start with no backoff
+		consecutiveErrors: 0,
+		pollStartTime:     time.Now(),
+		maxPollingTime:    5 * time.Minute, // Maximum 5 minutes of polling per source
+		totalPollCount:    0,
 	}
 }
 
@@ -73,7 +89,7 @@ func (p *Poller) Stop() {
 	p.wg.Wait()
 }
 
-// pollLoop continuously polls for new messages
+// pollLoop continuously polls for new messages with exponential backoff and time limits
 func (p *Poller) pollLoop(ctx context.Context) {
 	defer p.wg.Done()
 
@@ -83,20 +99,49 @@ func (p *Poller) pollLoop(ctx context.Context) {
 
 	// Initial poll
 	if err := p.poll(ctx); err != nil {
-		p.logger.Error("Initial poll failed",
-			zap.String("stream_id", p.stream.StreamID),
-			zap.Error(err),
-		)
+		p.handlePollError(err)
+	} else {
+		p.resetBackoff()
 	}
 
 	for {
+		// Check if we've exceeded the maximum polling time per source
+		if time.Since(p.pollStartTime) >= p.maxPollingTime {
+			p.logger.Warn("Maximum polling time exceeded, pausing for backoff",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.Duration("total_time", time.Since(p.pollStartTime)),
+				zap.Int("total_polls", p.totalPollCount),
+			)
+			// Reset counters and wait for a longer backoff period
+			p.pollStartTime = time.Now()
+			p.totalPollCount = 0
+			// Apply a long backoff (5 minutes) before resuming
+			select {
+			case <-time.After(5 * time.Minute):
+			case <-p.stopChan:
+				return
+			}
+			continue
+		}
+
 		select {
 		case <-ticker.C:
-			if err := p.poll(ctx); err != nil {
-				p.logger.Error("Poll failed",
+			// Apply exponential backoff if we have errors
+			if p.backoffDuration > 0 {
+				p.logger.Debug("Applying exponential backoff",
 					zap.String("stream_id", p.stream.StreamID),
-					zap.Error(err),
+					zap.Duration("backoff", p.backoffDuration),
+					zap.Int("consecutive_errors", p.consecutiveErrors),
 				)
+				select {
+				case <-time.After(p.backoffDuration):
+				case <-p.stopChan:
+					return
+				}
+			}
+
+			if err := p.poll(ctx); err != nil {
+				p.handlePollError(err)
 
 				// Stop polling if the stream has ended
 				if strings.Contains(err.Error(), "liveChatEnded") || strings.Contains(err.Error(), "live chat is no longer live") {
@@ -105,6 +150,23 @@ func (p *Poller) pollLoop(ctx context.Context) {
 					)
 					return
 				}
+
+				// Stop polling if quota exceeded
+				if strings.Contains(err.Error(), "quotaExceeded") {
+					p.logger.Warn("Quota exceeded, stopping poller temporarily",
+						zap.String("stream_id", p.stream.StreamID),
+					)
+					// Wait 1 hour before retrying
+					select {
+					case <-time.After(1 * time.Hour):
+					case <-p.stopChan:
+						return
+					}
+				}
+			} else {
+				// Success - reset backoff
+				p.resetBackoff()
+				p.totalPollCount++
 			}
 
 			// Update ticker interval if it changed
@@ -124,6 +186,44 @@ func (p *Poller) pollLoop(ctx context.Context) {
 		case <-p.stopChan:
 			return
 		}
+	}
+}
+
+// handlePollError implements exponential backoff on consecutive errors
+func (p *Poller) handlePollError(err error) {
+	p.logger.Error("Poll failed",
+		zap.String("stream_id", p.stream.StreamID),
+		zap.Error(err),
+		zap.Int("consecutive_errors", p.consecutiveErrors+1),
+	)
+
+	p.consecutiveErrors++
+
+	// Calculate exponential backoff: 2^n seconds, capped at maxBackoff
+	// 1st error: 2s, 2nd: 4s, 3rd: 8s, 4th: 16s, 5th: 32s, 6th: 64s, 7th: 128s, 8th: 256s (4.2min), 9th+: 5min
+	backoffSeconds := 1 << uint(p.consecutiveErrors) // 2^n
+	p.backoffDuration = time.Duration(backoffSeconds) * time.Second
+
+	if p.backoffDuration > p.maxBackoff {
+		p.backoffDuration = p.maxBackoff
+	}
+
+	p.logger.Info("Applying exponential backoff",
+		zap.String("stream_id", p.stream.StreamID),
+		zap.Duration("backoff_duration", p.backoffDuration),
+		zap.Int("consecutive_errors", p.consecutiveErrors),
+	)
+}
+
+// resetBackoff resets the exponential backoff state after a successful poll
+func (p *Poller) resetBackoff() {
+	if p.consecutiveErrors > 0 {
+		p.logger.Info("Resetting backoff after successful poll",
+			zap.String("stream_id", p.stream.StreamID),
+			zap.Int("previous_errors", p.consecutiveErrors),
+		)
+		p.consecutiveErrors = 0
+		p.backoffDuration = 0
 	}
 }
 
