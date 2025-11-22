@@ -29,15 +29,10 @@ type Poller struct {
 	stopChan         chan struct{}
 	wg               sync.WaitGroup
 
-	// Exponential backoff state
+	// Exponential backoff state (only for errors)
 	consecutiveErrors int
 	backoffDuration   time.Duration
 	maxBackoff        time.Duration
-
-	// Polling limits
-	pollStartTime     time.Time
-	maxPollingTime    time.Duration
-	totalPollCount    int
 }
 
 // NewPoller creates a new stream poller
@@ -52,12 +47,9 @@ func NewPoller(
 		parser:            api.NewParser(),
 		logger:            logger,
 		stopChan:          make(chan struct{}),
-		maxBackoff:        5 * time.Minute, // Maximum backoff of 5 minutes
+		maxBackoff:        5 * time.Minute, // Maximum backoff of 5 minutes (only for errors)
 		backoffDuration:   0,               // Start with no backoff
 		consecutiveErrors: 0,
-		pollStartTime:     time.Now(),
-		maxPollingTime:    5 * time.Minute, // Maximum 5 minutes of polling per source
-		totalPollCount:    0,
 	}
 }
 
@@ -89,7 +81,7 @@ func (p *Poller) Stop() {
 	p.wg.Wait()
 }
 
-// pollLoop continuously polls for new messages with exponential backoff and time limits
+// pollLoop continuously polls for new messages with exponential backoff only on errors
 func (p *Poller) pollLoop(ctx context.Context) {
 	defer p.wg.Done()
 
@@ -105,30 +97,11 @@ func (p *Poller) pollLoop(ctx context.Context) {
 	}
 
 	for {
-		// Check if we've exceeded the maximum polling time per source
-		if time.Since(p.pollStartTime) >= p.maxPollingTime {
-			p.logger.Warn("Maximum polling time exceeded, pausing for backoff",
-				zap.String("stream_id", p.stream.StreamID),
-				zap.Duration("total_time", time.Since(p.pollStartTime)),
-				zap.Int("total_polls", p.totalPollCount),
-			)
-			// Reset counters and wait for a longer backoff period
-			p.pollStartTime = time.Now()
-			p.totalPollCount = 0
-			// Apply a long backoff (5 minutes) before resuming
-			select {
-			case <-time.After(5 * time.Minute):
-			case <-p.stopChan:
-				return
-			}
-			continue
-		}
-
 		select {
 		case <-ticker.C:
-			// Apply exponential backoff if we have errors
+			// Apply exponential backoff only if we have consecutive errors
 			if p.backoffDuration > 0 {
-				p.logger.Debug("Applying exponential backoff",
+				p.logger.Warn("Applying error backoff before next poll",
 					zap.String("stream_id", p.stream.StreamID),
 					zap.Duration("backoff", p.backoffDuration),
 					zap.Int("consecutive_errors", p.consecutiveErrors),
@@ -164,12 +137,11 @@ func (p *Poller) pollLoop(ctx context.Context) {
 					}
 				}
 			} else {
-				// Success - reset backoff
+				// Success - reset error backoff
 				p.resetBackoff()
-				p.totalPollCount++
 			}
 
-			// Update ticker interval if it changed
+			// Update ticker interval if it changed (YouTube API tells us optimal interval)
 			p.mu.RLock()
 			newInterval := time.Duration(p.stream.PollingInterval) * time.Millisecond
 			p.mu.RUnlock()
