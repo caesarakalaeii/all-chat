@@ -44,8 +44,8 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, e
 	query := `
 		SELECT
 			ocs.overlay_id,
-			ocs.channel_identifier as channel_slug,
-			ocs.metadata->>'chatroom_id' as chatroom_id,
+			ocs.channel_id as channel_slug,
+			ocs.config->>'chatroom_id' as chatroom_id,
 			ocs.is_active
 		FROM overlay_chat_sources ocs
 		WHERE ocs.platform = 'kick'
@@ -107,13 +107,13 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, e
 func (r *Repository) UpdateChatroomID(ctx context.Context, overlayID, channelSlug string, chatroomID int) error {
 	query := `
 		UPDATE overlay_chat_sources
-		SET metadata = jsonb_set(
-			COALESCE(metadata, '{}'::jsonb),
+		SET config = jsonb_set(
+			COALESCE(config, '{}'::jsonb),
 			'{chatroom_id}',
 			to_jsonb($3::int)
 		)
 		WHERE overlay_id = $1
-		  AND channel_identifier = $2
+		  AND channel_id = $2
 		  AND platform = 'kick'
 	`
 
