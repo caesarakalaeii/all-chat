@@ -62,6 +62,19 @@ func (t *Tracker) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to load today's usage: %w", err)
 	}
 
+	// Initialize metrics with current values to ensure Prometheus has accurate data
+	// This is critical for pod restarts to avoid showing stale gauge values
+	percentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
+	remaining := t.dailyLimit - t.usageToday
+	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
+	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
+
+	t.logger.Info("Initialized quota metrics",
+		zap.Int("usage_today", t.usageToday),
+		zap.Int("remaining", remaining),
+		zap.Float64("percentage", percentage),
+	)
+
 	return nil
 }
 
@@ -80,6 +93,10 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 		)
 		t.currentDate = today
 		t.usageToday = 0
+
+		// Immediately update metrics to reflect the reset (prevents stale gauge values)
+		t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(t.dailyLimit))
+		t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", 0.0)
 	}
 
 	// Update in-memory counter
