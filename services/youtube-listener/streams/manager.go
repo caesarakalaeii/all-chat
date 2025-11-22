@@ -102,11 +102,9 @@ func (m *Manager) Start(ctx context.Context) error {
 		// Don't fail startup, just log the error
 	}
 
-	// Initial sync
-	if err := m.syncStreams(ctx); err != nil {
-		m.logger.Error("Failed initial stream sync", zap.Error(err))
-		return fmt.Errorf("failed initial sync: %w", err)
-	}
+	// Skip initial sync to avoid quota usage on pod restarts
+	// The periodic sync and PostgreSQL LISTEN will handle updates
+	m.logger.Info("Skipping initial sync to preserve quota, periodic sync will handle updates")
 
 	// Start periodic sync (fallback)
 	m.wg.Add(1)
