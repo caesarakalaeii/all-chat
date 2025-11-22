@@ -42,6 +42,13 @@ type Manager struct {
 	connectedOverlays map[string]time.Time // overlay_id -> connection_time
 	redisClient       *redis.Client
 
+	// Livestream detection backoff
+	detectionMu         sync.RWMutex
+	channelLastCheck    map[string]time.Time // channelID -> last check time
+	channelBackoff      map[string]time.Duration // channelID -> current backoff duration
+	baseDetectionInterval time.Duration
+	maxDetectionInterval  time.Duration
+
 	syncInterval time.Duration
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
@@ -65,19 +72,23 @@ func NewManager(
 	logger *zap.Logger,
 ) *Manager {
 	return &Manager{
-		repository:        repository,
-		oauthManager:      oauthManager,
-		messageHandler:    messageHandler,
-		dbConn:            dbConn,
-		logger:            logger,
-		leader:            leader,
-		quotaTracker:      quotaTracker,
-		redisClient:       redisClient,
-		activeStreams:     make(map[string]*models.YouTubeStream),
-		pollers:           make(map[string]*Poller),
-		connectedOverlays: make(map[string]time.Time),
-		syncInterval:      30 * time.Second,
-		stopChan:          make(chan struct{}),
+		repository:            repository,
+		oauthManager:          oauthManager,
+		messageHandler:        messageHandler,
+		dbConn:                dbConn,
+		logger:                logger,
+		leader:                leader,
+		quotaTracker:          quotaTracker,
+		redisClient:           redisClient,
+		activeStreams:         make(map[string]*models.YouTubeStream),
+		pollers:               make(map[string]*Poller),
+		connectedOverlays:     make(map[string]time.Time),
+		channelLastCheck:      make(map[string]time.Time),
+		channelBackoff:        make(map[string]time.Duration),
+		baseDetectionInterval: 30 * time.Second,  // Start checking every 30s
+		maxDetectionInterval:  10 * time.Minute,  // Max 10 minutes between checks
+		syncInterval:          30 * time.Second,
+		stopChan:              make(chan struct{}),
 	}
 }
 
@@ -269,15 +280,25 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		zap.Int("source_count", len(connectedSources)),
 	)
 
-	// For each channel, check for live streams
+	// For each channel, check for live streams (with exponential backoff)
 	for channelID, channelSourceList := range channelSources {
+		// Check if we should skip this channel due to backoff
+		if m.shouldSkipDetection(channelID) {
+			continue
+		}
+
 		if err := m.syncChannel(ctx, channelID, channelSourceList); err != nil {
 			m.logger.Error("Failed to sync channel",
 				zap.String("channel_id", channelID),
 				zap.Error(err),
 			)
+			// Increase backoff on error
+			m.increaseDetectionBackoff(channelID)
 			continue
 		}
+
+		// Successfully checked - update backoff
+		m.updateDetectionBackoff(channelID)
 	}
 
 	// Stop pollers for streams that are no longer active
@@ -555,4 +576,105 @@ func (m *Manager) IsOverlayConnected(overlayID string) bool {
 
 	_, connected := m.connectedOverlays[overlayID]
 	return connected
+}
+
+// shouldSkipDetection checks if we should skip livestream detection for a channel due to backoff
+func (m *Manager) shouldSkipDetection(channelID string) bool {
+	m.detectionMu.RLock()
+	defer m.detectionMu.RUnlock()
+
+	lastCheck, exists := m.channelLastCheck[channelID]
+	if !exists {
+		return false // First check, don't skip
+	}
+
+	backoff := m.channelBackoff[channelID]
+	if backoff == 0 {
+		backoff = m.baseDetectionInterval
+	}
+
+	timeSinceLastCheck := time.Since(lastCheck)
+	shouldSkip := timeSinceLastCheck < backoff
+
+	if shouldSkip {
+		m.logger.Debug("Skipping livestream detection due to backoff",
+			zap.String("channel_id", channelID),
+			zap.Duration("backoff", backoff),
+			zap.Duration("time_since_last_check", timeSinceLastCheck),
+		)
+	}
+
+	return shouldSkip
+}
+
+// updateDetectionBackoff updates backoff after successful livestream detection
+func (m *Manager) updateDetectionBackoff(channelID string) {
+	m.detectionMu.Lock()
+	defer m.detectionMu.Unlock()
+
+	m.channelLastCheck[channelID] = time.Now()
+
+	// Check if we found a stream (have active poller)
+	m.mu.RLock()
+	hasActivePoller := false
+	for streamID := range m.pollers {
+		// Check if this poller is for this channel
+		if stream, ok := m.activeStreams[streamID]; ok && stream.ChannelID == channelID {
+			hasActivePoller = true
+			break
+		}
+	}
+	m.mu.RUnlock()
+
+	if hasActivePoller {
+		// Stream found - use longer backoff (no need to check frequently)
+		currentBackoff := m.channelBackoff[channelID]
+		if currentBackoff == 0 {
+			currentBackoff = m.baseDetectionInterval
+		}
+		// Double the backoff (exponential), up to max
+		newBackoff := currentBackoff * 2
+		if newBackoff > m.maxDetectionInterval {
+			newBackoff = m.maxDetectionInterval
+		}
+		m.channelBackoff[channelID] = newBackoff
+
+		m.logger.Debug("Increased livestream detection backoff (stream active)",
+			zap.String("channel_id", channelID),
+			zap.Duration("new_backoff", newBackoff),
+		)
+	} else {
+		// No stream found - keep checking at base interval
+		m.channelBackoff[channelID] = m.baseDetectionInterval
+
+		m.logger.Debug("Reset livestream detection backoff (no stream)",
+			zap.String("channel_id", channelID),
+			zap.Duration("backoff", m.baseDetectionInterval),
+		)
+	}
+}
+
+// increaseDetectionBackoff increases backoff after detection error
+func (m *Manager) increaseDetectionBackoff(channelID string) {
+	m.detectionMu.Lock()
+	defer m.detectionMu.Unlock()
+
+	m.channelLastCheck[channelID] = time.Now()
+
+	currentBackoff := m.channelBackoff[channelID]
+	if currentBackoff == 0 {
+		currentBackoff = m.baseDetectionInterval
+	}
+
+	// Double the backoff on error
+	newBackoff := currentBackoff * 2
+	if newBackoff > m.maxDetectionInterval {
+		newBackoff = m.maxDetectionInterval
+	}
+	m.channelBackoff[channelID] = newBackoff
+
+	m.logger.Warn("Increased livestream detection backoff due to error",
+		zap.String("channel_id", channelID),
+		zap.Duration("new_backoff", newBackoff),
+	)
 }
