@@ -95,6 +95,23 @@ func (m *Manager) publishConnectionEvent(ctx context.Context, overlayID, eventTy
 		return
 	}
 
+	// Update Redis SET to track connected overlays
+	if eventType == "connected" {
+		if err := m.redisClient.SAdd(ctx, "overlay:connected", overlayID).Err(); err != nil {
+			m.logger.Error("Failed to add overlay to connected set",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		}
+	} else if eventType == "disconnected" {
+		if err := m.redisClient.SRem(ctx, "overlay:connected", overlayID).Err(); err != nil {
+			m.logger.Error("Failed to remove overlay from connected set",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		}
+	}
+
 	if err := m.redisClient.Publish(ctx, "overlay:connections", payload).Err(); err != nil {
 		m.logger.Error("Failed to publish overlay connection event",
 			zap.String("overlay_id", overlayID),

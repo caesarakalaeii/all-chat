@@ -96,6 +96,12 @@ func NewManager(
 func (m *Manager) Start(ctx context.Context) error {
 	m.logger.Info("Starting stream manager")
 
+	// Load existing overlay connections from Redis
+	if err := m.loadExistingConnections(ctx); err != nil {
+		m.logger.Error("Failed to load existing overlay connections", zap.Error(err))
+		// Don't fail startup, just log the error
+	}
+
 	// Initial sync
 	if err := m.syncStreams(ctx); err != nil {
 		m.logger.Error("Failed initial stream sync", zap.Error(err))
@@ -470,6 +476,35 @@ func (m *Manager) GetActiveStreams() []*models.YouTubeStream {
 	}
 
 	return streams
+}
+
+// loadExistingConnections loads currently connected overlays from Redis on startup
+func (m *Manager) loadExistingConnections(ctx context.Context) error {
+	// Query Redis SET for connected overlays
+	overlayIDs, err := m.redisClient.SMembers(ctx, "overlay:connected").Result()
+	if err != nil {
+		return fmt.Errorf("failed to query connected overlays: %w", err)
+	}
+
+	if len(overlayIDs) == 0 {
+		m.logger.Info("No existing overlay connections found")
+		return nil
+	}
+
+	// Add to connectedOverlays map
+	m.connMu.Lock()
+	now := time.Now()
+	for _, overlayID := range overlayIDs {
+		m.connectedOverlays[overlayID] = now
+	}
+	m.connMu.Unlock()
+
+	m.logger.Info("Loaded existing overlay connections",
+		zap.Int("count", len(overlayIDs)),
+		zap.Strings("overlay_ids", overlayIDs),
+	)
+
+	return nil
 }
 
 // listenForOverlayConnections subscribes to Redis overlay connection events
