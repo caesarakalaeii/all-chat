@@ -106,6 +106,7 @@ type MessageHandler func(channel string, message *KickChatMessage)
 type Client struct {
 	conn           *websocket.Conn
 	connMu         sync.RWMutex
+	writeMu        sync.Mutex // Protects concurrent writes to WebSocket
 	logger         *zap.Logger
 	messageHandler MessageHandler
 	config         Config
@@ -252,10 +253,12 @@ func (c *Client) Disconnect() error {
 
 	if c.conn != nil {
 		// Send close message
+		c.writeMu.Lock()
 		err := c.conn.WriteMessage(
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
 		)
+		c.writeMu.Unlock()
 		if err != nil {
 			c.logger.Warn("Error sending close message", zap.Error(err))
 		}
@@ -523,14 +526,19 @@ func (c *Client) writePump() {
 				return
 			}
 
+			c.writeMu.Lock()
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
 
 			if !ok {
 				conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.writeMu.Unlock()
 				return
 			}
 
-			if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
+			err := conn.WriteMessage(websocket.TextMessage, message)
+			c.writeMu.Unlock()
+
+			if err != nil {
 				c.logger.Error("Failed to write message", zap.Error(err))
 				return
 			}
@@ -544,13 +552,16 @@ func (c *Client) writePump() {
 				return
 			}
 
-			conn.SetWriteDeadline(time.Now().Add(writeWait))
-
 			// Send Pusher ping
 			pingMsg := map[string]string{"event": pusherPing}
 			data, _ := json.Marshal(pingMsg)
 
-			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			c.writeMu.Lock()
+			conn.SetWriteDeadline(time.Now().Add(writeWait))
+			err := conn.WriteMessage(websocket.TextMessage, data)
+			c.writeMu.Unlock()
+
+			if err != nil {
 				c.logger.Error("Failed to send ping", zap.Error(err))
 				return
 			}
