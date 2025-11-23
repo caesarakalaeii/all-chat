@@ -78,31 +78,52 @@ func (t *Tracker) Start(ctx context.Context) error {
 	return nil
 }
 
-// RecordUsage records API quota usage
-func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
+// checkDateRollover checks if the date has changed and resets quota if needed
+// This method must be called WITHOUT holding the lock, as it will acquire a write lock if needed
+func (t *Tracker) checkDateRollover() {
+	today := time.Now().Format("2006-01-02")
+
+	// Fast path: check with read lock first
+	t.mu.RLock()
+	if t.currentDate == today {
+		t.mu.RUnlock()
+		return
+	}
+	t.mu.RUnlock()
+
+	// Slow path: date changed, acquire write lock and reset
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	today := time.Now().Format("2006-01-02")
-
-	// Check if date rolled over
-	if t.currentDate != today {
-		t.logger.Info("Date rolled over, resetting quota",
-			zap.String("old_date", t.currentDate),
-			zap.String("new_date", today),
-		)
-		t.currentDate = today
-		t.usageToday = 0
-
-		// Immediately update metrics to reflect the reset (prevents stale gauge values)
-		t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(t.dailyLimit))
-		t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", 0.0)
+	// Double-check after acquiring write lock (another goroutine might have reset already)
+	if t.currentDate == today {
+		return
 	}
+
+	t.logger.Info("Date rolled over, resetting quota",
+		zap.String("old_date", t.currentDate),
+		zap.String("new_date", today),
+	)
+	t.currentDate = today
+	t.usageToday = 0
+
+	// Immediately update metrics to reflect the reset (prevents stale gauge values)
+	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(t.dailyLimit))
+	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", 0.0)
+}
+
+// RecordUsage records API quota usage
+func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
+	// Check for date rollover before acquiring lock
+	t.checkDateRollover()
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// Update in-memory counter
 	t.usageToday += units
 
-	// Update database
+	// Update database (use currentDate which is guaranteed to be today after checkDateRollover)
 	query := `
 		INSERT INTO youtube_quota_usage (date, units_used, units_limit)
 		VALUES ($1, $2, $3)
@@ -112,7 +133,7 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 			updated_at = NOW()
 	`
 
-	_, err := t.db.Exec(ctx, query, today, units, t.dailyLimit)
+	_, err := t.db.Exec(ctx, query, t.currentDate, units, t.dailyLimit)
 	if err != nil {
 		t.logger.Error("Failed to record quota usage",
 			zap.Int("units", units),
@@ -157,6 +178,7 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 
 // GetUsageToday returns today's quota usage
 func (t *Tracker) GetUsageToday() int {
+	t.checkDateRollover()
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.usageToday
@@ -164,6 +186,7 @@ func (t *Tracker) GetUsageToday() int {
 
 // GetRemainingQuota returns remaining quota for today
 func (t *Tracker) GetRemainingQuota() int {
+	t.checkDateRollover()
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	remaining := t.dailyLimit - t.usageToday
@@ -180,6 +203,7 @@ func (t *Tracker) CanMakeRequest(units int) bool {
 
 // GetUsagePercentage returns usage as a percentage
 func (t *Tracker) GetUsagePercentage() float64 {
+	t.checkDateRollover()
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return float64(t.usageToday) / float64(t.dailyLimit) * 100

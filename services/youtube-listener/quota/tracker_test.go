@@ -2,12 +2,28 @@ package quota
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 )
+
+var (
+	testMetrics     *metrics.ListenerMetrics
+	testMetricsOnce sync.Once
+)
+
+// getTestMetrics returns a singleton metrics instance for tests to avoid duplicate registration
+func getTestMetrics() *metrics.ListenerMetrics {
+	testMetricsOnce.Do(func() {
+		testMetrics = metrics.NewListenerMetrics("test", "test")
+	})
+	return testMetrics
+}
 
 // MockDB is a mock database for testing
 type MockDB struct {
@@ -41,6 +57,7 @@ func (r *MockRow) Scan(dest ...interface{}) error {
 
 func TestNewTracker(t *testing.T) {
 	logger := zap.NewNop()
+	m := getTestMetrics()
 
 	tests := []struct {
 		name       string
@@ -54,7 +71,7 @@ func TestNewTracker(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tracker := NewTracker(nil, tt.dailyLimit, logger)
+			tracker := NewTracker(nil, tt.dailyLimit, logger, m)
 			assert.NotNil(t, tracker)
 			assert.Equal(t, tt.expected, tracker.dailyLimit)
 		})
@@ -63,10 +80,12 @@ func TestNewTracker(t *testing.T) {
 
 func TestGetUsageToday(t *testing.T) {
 	logger := zap.NewNop()
-	tracker := NewTracker(nil, 10000, logger)
+	m := getTestMetrics()
+	tracker := NewTracker(nil, 10000, logger, m)
 
 	tracker.mu.Lock()
 	tracker.usageToday = 5000
+	tracker.currentDate = time.Now().Format("2006-01-02")
 	tracker.mu.Unlock()
 
 	usage := tracker.GetUsageToday()
@@ -75,7 +94,8 @@ func TestGetUsageToday(t *testing.T) {
 
 func TestGetRemainingQuota(t *testing.T) {
 	logger := zap.NewNop()
-	tracker := NewTracker(nil, 10000, logger)
+	m := getTestMetrics()
+	tracker := NewTracker(nil, 10000, logger, m)
 
 	tests := []struct {
 		name     string
@@ -92,6 +112,7 @@ func TestGetRemainingQuota(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tracker.mu.Lock()
 			tracker.usageToday = tt.used
+			tracker.currentDate = time.Now().Format("2006-01-02")
 			tracker.mu.Unlock()
 
 			remaining := tracker.GetRemainingQuota()
@@ -102,7 +123,8 @@ func TestGetRemainingQuota(t *testing.T) {
 
 func TestCanMakeRequest(t *testing.T) {
 	logger := zap.NewNop()
-	tracker := NewTracker(nil, 10000, logger)
+	m := getTestMetrics()
+	tracker := NewTracker(nil, 10000, logger, m)
 
 	tests := []struct {
 		name     string
@@ -120,6 +142,7 @@ func TestCanMakeRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tracker.mu.Lock()
 			tracker.usageToday = tt.used
+			tracker.currentDate = time.Now().Format("2006-01-02")
 			tracker.mu.Unlock()
 
 			can := tracker.CanMakeRequest(tt.units)
@@ -130,7 +153,8 @@ func TestCanMakeRequest(t *testing.T) {
 
 func TestGetUsagePercentage(t *testing.T) {
 	logger := zap.NewNop()
-	tracker := NewTracker(nil, 10000, logger)
+	m := getTestMetrics()
+	tracker := NewTracker(nil, 10000, logger, m)
 
 	tests := []struct {
 		name     string
@@ -149,12 +173,78 @@ func TestGetUsagePercentage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tracker.mu.Lock()
 			tracker.usageToday = tt.used
+			tracker.currentDate = time.Now().Format("2006-01-02")
 			tracker.mu.Unlock()
 
 			percentage := tracker.GetUsagePercentage()
 			assert.Equal(t, tt.expected, percentage)
 		})
 	}
+}
+
+func TestDateRollover(t *testing.T) {
+	logger := zap.NewNop()
+	m := getTestMetrics()
+	tracker := NewTracker(nil, 10000, logger, m)
+
+	// Set up tracker with yesterday's date and usage
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	tracker.mu.Lock()
+	tracker.currentDate = yesterday
+	tracker.usageToday = 5000
+	tracker.mu.Unlock()
+
+	// Call GetUsageToday which should trigger date rollover
+	usage := tracker.GetUsageToday()
+
+	// Usage should be reset to 0 after date rollover
+	assert.Equal(t, 0, usage)
+
+	// Current date should be updated to today
+	tracker.mu.RLock()
+	today := time.Now().Format("2006-01-02")
+	assert.Equal(t, today, tracker.currentDate)
+	tracker.mu.RUnlock()
+}
+
+func TestDateRolloverConcurrency(t *testing.T) {
+	logger := zap.NewNop()
+	m := getTestMetrics()
+	tracker := NewTracker(nil, 10000, logger, m)
+
+	// Set up tracker with yesterday's date and usage
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	tracker.mu.Lock()
+	tracker.currentDate = yesterday
+	tracker.usageToday = 5000
+	tracker.mu.Unlock()
+
+	// Simulate multiple goroutines calling getter methods concurrently
+	// This tests that the double-check locking in checkDateRollover works correctly
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			tracker.GetUsageToday()
+			tracker.GetRemainingQuota()
+			tracker.GetUsagePercentage()
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines to finish
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// All methods should have triggered rollover, usage should be 0
+	usage := tracker.GetUsageToday()
+	assert.Equal(t, 0, usage)
+
+	// Current date should be today
+	tracker.mu.RLock()
+	today := time.Now().Format("2006-01-02")
+	assert.Equal(t, today, tracker.currentDate)
+	tracker.mu.RUnlock()
 }
 
 func TestQuotaCosts(t *testing.T) {
