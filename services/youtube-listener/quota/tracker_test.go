@@ -247,6 +247,32 @@ func TestDateRolloverConcurrency(t *testing.T) {
 	tracker.mu.RUnlock()
 }
 
+func TestStopTracker(t *testing.T) {
+	logger := zap.NewNop()
+	m := getTestMetrics()
+	tracker := NewTracker(nil, 10000, logger, m)
+
+	// Start the periodic check
+	go tracker.periodicDateCheck()
+
+	// Give it a moment to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Stop should complete without hanging
+	done := make(chan bool)
+	go func() {
+		tracker.Stop()
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// Success - Stop() completed
+	case <-time.After(1 * time.Second):
+		t.Fatal("Stop() did not complete within 1 second")
+	}
+}
+
 func TestQuotaCosts(t *testing.T) {
 	// Verify quota cost constants
 	assert.Equal(t, 5, QuotaCostLiveChatMessages)
