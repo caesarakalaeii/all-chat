@@ -35,6 +35,8 @@ type Tracker struct {
 	mu          sync.RWMutex
 	usageToday  int
 	currentDate string
+
+	stopChan chan struct{}
 }
 
 // NewTracker creates a new quota tracker
@@ -48,6 +50,7 @@ func NewTracker(db *pgxpool.Pool, dailyLimit int, logger *zap.Logger, m *metrics
 		logger:     logger,
 		metrics:    m,
 		dailyLimit: dailyLimit,
+		stopChan:   make(chan struct{}),
 	}
 }
 
@@ -75,7 +78,34 @@ func (t *Tracker) Start(ctx context.Context) error {
 		zap.Float64("percentage", percentage),
 	)
 
+	// Start background goroutine to check for date rollover periodically
+	go t.periodicDateCheck()
+
 	return nil
+}
+
+// Stop gracefully stops the quota tracker background goroutine
+func (t *Tracker) Stop() {
+	close(t.stopChan)
+	t.logger.Info("Quota tracker stopped")
+}
+
+// periodicDateCheck runs in a background goroutine and checks for date rollover every minute
+func (t *Tracker) periodicDateCheck() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	t.logger.Info("Started periodic date rollover check (every 1 minute)")
+
+	for {
+		select {
+		case <-ticker.C:
+			t.checkDateRollover()
+		case <-t.stopChan:
+			t.logger.Info("Periodic date rollover check stopped")
+			return
+		}
+	}
 }
 
 // checkDateRollover checks if the date has changed and resets quota if needed
