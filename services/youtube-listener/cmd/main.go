@@ -196,6 +196,9 @@ func main() {
 	// Stop stream manager
 	streamManager.Stop()
 
+	// Stop quota tracker
+	quotaTracker.Stop()
+
 	// Shutdown HTTP server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
