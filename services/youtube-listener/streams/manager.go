@@ -313,6 +313,15 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 
 // syncChannel checks for live streams on a channel and starts pollers
 func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*models.StreamSource) error {
+	// Check quota before making expensive API call (search.list costs 100 units)
+	if !m.quotaTracker.CanMakeRequest(100) {
+		m.logger.Warn("Insufficient quota to check for live streams, skipping",
+			zap.String("channel_id", channelID),
+			zap.Int("remaining_quota", m.quotaTracker.GetRemainingQuota()),
+		)
+		return fmt.Errorf("insufficient quota: %d units remaining, need 100", m.quotaTracker.GetRemainingQuota())
+	}
+
 	// Get user ID for OAuth
 	userID, err := m.repository.GetUserIDForChannel(ctx, channelID)
 	if err != nil {
@@ -660,7 +669,17 @@ func (m *Manager) updateDetectionBackoff(channelID string) {
 	m.mu.RUnlock()
 
 	if hasActivePoller {
-		// Stream found - use longer backoff (no need to check frequently)
+		// Stream found - set to max backoff since we're now polling chat messages
+		// No need to keep checking for stream existence while actively polling
+		m.channelBackoff[channelID] = m.maxDetectionInterval
+
+		m.logger.Info("Set livestream detection to max backoff (stream active, polling chat)",
+			zap.String("channel_id", channelID),
+			zap.Duration("backoff", m.maxDetectionInterval),
+		)
+	} else {
+		// No stream found - INCREASE backoff exponentially to conserve quota
+		// This prevents burning quota checking for streams that aren't live
 		currentBackoff := m.channelBackoff[channelID]
 		if currentBackoff == 0 {
 			currentBackoff = m.baseDetectionInterval
@@ -672,17 +691,10 @@ func (m *Manager) updateDetectionBackoff(channelID string) {
 		}
 		m.channelBackoff[channelID] = newBackoff
 
-		m.logger.Debug("Increased livestream detection backoff (stream active)",
+		m.logger.Info("Increased livestream detection backoff (no stream found)",
 			zap.String("channel_id", channelID),
+			zap.Duration("previous_backoff", currentBackoff),
 			zap.Duration("new_backoff", newBackoff),
-		)
-	} else {
-		// No stream found - keep checking at base interval
-		m.channelBackoff[channelID] = m.baseDetectionInterval
-
-		m.logger.Debug("Reset livestream detection backoff (no stream)",
-			zap.String("channel_id", channelID),
-			zap.Duration("backoff", m.baseDetectionInterval),
 		)
 	}
 }
