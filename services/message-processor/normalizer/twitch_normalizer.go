@@ -66,14 +66,12 @@ func (n *TwitchNormalizer) extractUserInfo(raw *models.RawChatMessage) models.Us
 				name := parts[0]
 				version := parts[1]
 
-				// Generate Twitch badge URL
-				// Format: https://static-cdn.jtvnw.net/badges/v1/{name}/{version}/1
-				iconURL := fmt.Sprintf("https://static-cdn.jtvnw.net/badges/v1/%s/%s/1", name, version)
-
+				// Don't set placeholder URLs - let the badge enricher populate them
+				// The old CDN format https://static-cdn.jtvnw.net/badges/v1/{name}/{version}/1 returns 404
 				badges = append(badges, models.Badge{
 					Name:    name,
 					Version: version,
-					IconURL: iconURL,
+					IconURL: "", // Will be enriched by badge enricher
 				})
 			}
 		}
