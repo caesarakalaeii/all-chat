@@ -120,25 +120,60 @@ func (e *BadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessa
 	}
 
 	// Update badge URLs
+	enrichedCount := 0
+	missingBadges := make([]string, 0)
+
 	for i := range msg.User.Badges {
 		badge := &msg.User.Badges[i]
+		originalURL := badge.IconURL
+		found := false
 
 		// Try channel badges first (for subscriber tiers)
 		if channelBadges != nil {
 			if badgeSet, ok := channelBadges[badge.Name]; ok {
 				if ver, ok := badgeSet.Versions[badge.Version]; ok {
 					badge.IconURL = ver.ImageURL1x
+					if originalURL != badge.IconURL {
+						enrichedCount++
+					}
+					found = true
 					continue
 				}
 			}
 		}
 
 		// Fallback to global badges
-		if badgeSet, ok := globalBadges[badge.Name]; ok {
-			if ver, ok := badgeSet.Versions[badge.Version]; ok {
-				badge.IconURL = ver.ImageURL1x
+		if !found {
+			if badgeSet, ok := globalBadges[badge.Name]; ok {
+				if ver, ok := badgeSet.Versions[badge.Version]; ok {
+					badge.IconURL = ver.ImageURL1x
+					if originalURL != badge.IconURL {
+						enrichedCount++
+					}
+					found = true
+				}
 			}
 		}
+
+		// Track badges that couldn't be enriched
+		if !found {
+			missingBadges = append(missingBadges, fmt.Sprintf("%s/%s", badge.Name, badge.Version))
+		}
+	}
+
+	if enrichedCount > 0 {
+		e.logger.Debug("Enriched badge icons",
+			zap.String("channel", msg.ChannelID),
+			zap.Int("count", enrichedCount),
+			zap.Int("total_badges", len(msg.User.Badges)),
+		)
+	}
+
+	if len(missingBadges) > 0 {
+		e.logger.Warn("Some badges could not be enriched",
+			zap.String("channel", msg.ChannelID),
+			zap.Strings("missing", missingBadges),
+		)
 	}
 
 	return nil
