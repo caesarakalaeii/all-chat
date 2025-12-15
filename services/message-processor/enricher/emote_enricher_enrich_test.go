@@ -42,6 +42,10 @@ func (m *mockEmoteCacheStore) Set(ctx context.Context, channel string, emotes []
 	return nil
 }
 
+func (m *mockEmoteCacheStore) Delete(ctx context.Context, channel string) error {
+	return nil
+}
+
 func TestEnrichAddsEmotesForLaterOccurrences(t *testing.T) {
 	client := &mockEmoteServiceClient{
 		emotes: []EmoteServiceEmote{

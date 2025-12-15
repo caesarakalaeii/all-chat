@@ -17,6 +17,7 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/normalizer"
 	"github.com/caesar/all-chat/services/message-processor/publisher"
 	"github.com/caesar/all-chat/services/message-processor/router"
+	"github.com/caesar/all-chat/services/message-processor/seventv"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
@@ -34,6 +35,23 @@ func main() {
 
 	log.Info("Starting Message Processor",
 		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
+	)
+
+	// Parse message age cutoff (default 60 seconds)
+	messageAgeCutoffSeconds := 60
+	if cutoffStr := getEnvOrDefault("MESSAGE_AGE_CUTOFF_SECONDS", "60"); cutoffStr != "" {
+		if parsed, err := time.ParseDuration(cutoffStr + "s"); err == nil {
+			messageAgeCutoffSeconds = int(parsed.Seconds())
+		} else {
+			log.Warn("Invalid MESSAGE_AGE_CUTOFF_SECONDS, using default",
+				zap.String("value", cutoffStr),
+				zap.Int("default", 60),
+			)
+		}
+	}
+	messageAgeCutoff := time.Duration(messageAgeCutoffSeconds) * time.Second
+	log.Info("Message age cutoff configured",
+		zap.Duration("cutoff", messageAgeCutoff),
 	)
 
 	ctx := context.Background()
@@ -93,6 +111,17 @@ func main() {
 	emoteCacheStore := cache.NewEmoteCache(redisClient, log, 0)
 	emoteEnricher := enricher.NewEnricher(emoteClient, emoteCacheStore, log)
 
+	// Initialize 7TV event manager for real-time emote updates
+	seventvManager := seventv.NewManager(emoteCacheStore, log)
+	if err := seventvManager.Start(ctx); err != nil {
+		log.Warn("Failed to start 7TV event manager, continuing without real-time updates",
+			zap.Error(err),
+		)
+	} else {
+		log.Info("7TV event manager started successfully")
+	}
+	defer seventvManager.Stop()
+
 	// Avatar enricher for Twitch users
 	twitchClientID := getEnvOrDefault("TWITCH_CLIENT_ID", "")
 	twitchClientSecret := getEnvOrDefault("TWITCH_CLIENT_SECRET", "")
@@ -106,6 +135,21 @@ func main() {
 
 	// Define message handler
 	messageHandler := func(ctx context.Context, rawMsg *models.RawChatMessage) error {
+		// Filter out old messages based on timestamp
+		messageAge := time.Since(rawMsg.Timestamp)
+		if messageAge > messageAgeCutoff {
+			log.Debug("Ignoring old message",
+				zap.String("message_id", rawMsg.MessageID),
+				zap.String("platform", rawMsg.Platform),
+				zap.String("channel_id", rawMsg.ChannelID),
+				zap.Duration("message_age", messageAge),
+				zap.Duration("cutoff", messageAgeCutoff),
+				zap.Time("timestamp", rawMsg.Timestamp),
+			)
+			processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "filtered_old", "success")
+			return nil
+		}
+
 		// Find target overlays for this message
 		var overlays []models.OverlayTarget
 		if rawMsg.OverlayID != "" {
@@ -137,6 +181,17 @@ func main() {
 			)
 			return nil
 		}
+
+		// Track channel for 7TV real-time emote updates (fire-and-forget)
+		go func() {
+			if err := seventvManager.TrackChannel(context.Background(), rawMsg.Platform, rawMsg.ChannelID); err != nil {
+				log.Debug("Failed to track channel for 7TV updates",
+					zap.String("platform", rawMsg.Platform),
+					zap.String("channel_id", rawMsg.ChannelID),
+					zap.Error(err),
+				)
+			}
+		}()
 
 		// Process message for each overlay
 		for _, overlay := range overlays {
@@ -333,6 +388,11 @@ func main() {
 	<-quit
 
 	log.Info("Shutting down service...")
+
+	// Stop 7TV event manager
+	if err := seventvManager.Stop(); err != nil {
+		log.Error("Failed to stop 7TV event manager", zap.Error(err))
+	}
 
 	// Stop stream consumer
 	streamConsumer.Stop()
