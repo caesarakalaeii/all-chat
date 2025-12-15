@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,41 @@ const (
 type badgeCacheEntry struct {
 	data    []byte
 	expires time.Time
+}
+
+// Helix API response structures
+type helixBadgeVersion struct {
+	ID          string `json:"id"`
+	ImageURL1x  string `json:"image_url_1x"`
+	ImageURL2x  string `json:"image_url_2x"`
+	ImageURL4x  string `json:"image_url_4x"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+type helixBadgeSet struct {
+	SetID    string              `json:"set_id"`
+	Versions []helixBadgeVersion `json:"versions"`
+}
+
+type helixBadgeResponse struct {
+	Data []helixBadgeSet `json:"data"`
+}
+
+// V1 API response structures (what frontend expects)
+type v1BadgeVersion struct {
+	ID         string `json:"id"`
+	ImageURL1x string `json:"image_url_1x"`
+	ImageURL2x string `json:"image_url_2x"`
+	ImageURL4x string `json:"image_url_4x"`
+}
+
+type v1BadgeSet struct {
+	Versions map[string]v1BadgeVersion `json:"versions"`
+}
+
+type v1BadgeResponse struct {
+	BadgeSets map[string]v1BadgeSet `json:"badge_sets"`
 }
 
 // TwitchBadgeHandler proxies badge requests through our API gateway.
@@ -98,9 +134,41 @@ func (h *TwitchBadgeHandler) getBadgePayload(url, cacheKey string) ([]byte, erro
 		return nil, fmt.Errorf("twitch badge request failed: status=%d body=%s", resp.StatusCode, string(body))
 	}
 
-	payload, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+
+	// Parse Helix response
+	var helixResp helixBadgeResponse
+	if err := json.Unmarshal(body, &helixResp); err != nil {
+		return nil, fmt.Errorf("failed to parse helix response: %w", err)
+	}
+
+	// Transform to v1 format
+	v1Resp := v1BadgeResponse{
+		BadgeSets: make(map[string]v1BadgeSet),
+	}
+
+	for _, badgeSet := range helixResp.Data {
+		versions := make(map[string]v1BadgeVersion)
+		for _, version := range badgeSet.Versions {
+			versions[version.ID] = v1BadgeVersion{
+				ID:         version.ID,
+				ImageURL1x: version.ImageURL1x,
+				ImageURL2x: version.ImageURL2x,
+				ImageURL4x: version.ImageURL4x,
+			}
+		}
+		v1Resp.BadgeSets[badgeSet.SetID] = v1BadgeSet{
+			Versions: versions,
+		}
+	}
+
+	// Marshal v1 response
+	payload, err := json.Marshal(v1Resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal v1 response: %w", err)
 	}
 
 	h.saveToCache(cacheKey, payload)
