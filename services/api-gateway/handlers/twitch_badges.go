@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	twitchBadgeBaseURL = "https://badges.twitch.tv/v1/badges"
-	badgeCacheTTL      = 15 * time.Minute
+	twitchBadgeGlobalURL  = "https://api.twitch.tv/helix/chat/badges/global"
+	twitchBadgeChannelURL = "https://api.twitch.tv/helix/chat/badges"
+	badgeCacheTTL         = 15 * time.Minute
 )
 
 type badgeCacheEntry struct {
@@ -24,24 +25,28 @@ type badgeCacheEntry struct {
 
 // TwitchBadgeHandler proxies badge requests through our API gateway.
 type TwitchBadgeHandler struct {
-	httpClient *http.Client
-	log        *zap.Logger
-	cacheMux   sync.RWMutex
-	cache      map[string]badgeCacheEntry
+	httpClient  *http.Client
+	log         *zap.Logger
+	cacheMux    sync.RWMutex
+	cache       map[string]badgeCacheEntry
+	clientID    string
+	accessToken string
 }
 
 // NewTwitchBadgeHandler creates a new badge handler with sensible defaults.
-func NewTwitchBadgeHandler(log *zap.Logger) *TwitchBadgeHandler {
+func NewTwitchBadgeHandler(log *zap.Logger, clientID, accessToken string) *TwitchBadgeHandler {
 	return &TwitchBadgeHandler{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		log:        log.Named("twitch-badges"),
-		cache:      make(map[string]badgeCacheEntry),
+		httpClient:  &http.Client{Timeout: 10 * time.Second},
+		log:         log.Named("twitch-badges"),
+		cache:       make(map[string]badgeCacheEntry),
+		clientID:    clientID,
+		accessToken: accessToken,
 	}
 }
 
 // GetGlobalBadges proxies the Twitch global badge list.
 func (h *TwitchBadgeHandler) GetGlobalBadges(c *gin.Context) {
-	h.serveBadgePath(c, "/global/display")
+	h.serveBadges(c, twitchBadgeGlobalURL, "global")
 }
 
 // GetChannelBadges proxies the Twitch channel-specific badge list.
@@ -52,13 +57,15 @@ func (h *TwitchBadgeHandler) GetChannelBadges(c *gin.Context) {
 		return
 	}
 
-	h.serveBadgePath(c, fmt.Sprintf("/channels/%s/display", roomID))
+	cacheKey := fmt.Sprintf("channel:%s", roomID)
+	url := fmt.Sprintf("%s?broadcaster_id=%s", twitchBadgeChannelURL, roomID)
+	h.serveBadges(c, url, cacheKey)
 }
 
-func (h *TwitchBadgeHandler) serveBadgePath(c *gin.Context, path string) {
-	payload, err := h.getBadgePayload(path)
+func (h *TwitchBadgeHandler) serveBadges(c *gin.Context, url, cacheKey string) {
+	payload, err := h.getBadgePayload(url, cacheKey)
 	if err != nil {
-		h.log.Warn("Failed to fetch Twitch badges", zap.String("path", path), zap.Error(err))
+		h.log.Warn("Failed to fetch Twitch badges", zap.String("url", url), zap.Error(err))
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch Twitch badges"})
 		return
 	}
@@ -67,17 +74,18 @@ func (h *TwitchBadgeHandler) serveBadgePath(c *gin.Context, path string) {
 	c.Data(http.StatusOK, "application/json", payload)
 }
 
-func (h *TwitchBadgeHandler) getBadgePayload(path string) ([]byte, error) {
-	if data, ok := h.getFromCache(path); ok {
+func (h *TwitchBadgeHandler) getBadgePayload(url, cacheKey string) ([]byte, error) {
+	if data, ok := h.getFromCache(cacheKey); ok {
 		return data, nil
 	}
 
-	url := twitchBadgeBaseURL + path
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Client-ID", h.clientID)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", h.accessToken))
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -95,7 +103,7 @@ func (h *TwitchBadgeHandler) getBadgePayload(path string) ([]byte, error) {
 		return nil, err
 	}
 
-	h.saveToCache(path, payload)
+	h.saveToCache(cacheKey, payload)
 	return payload, nil
 }
 
