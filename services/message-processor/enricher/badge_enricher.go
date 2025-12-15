@@ -51,18 +51,6 @@ type TwitchBadgeResponse struct {
 	} `json:"data"`
 }
 
-// TwitchChannelBadgeResponse represents channel-specific badge metadata
-type TwitchChannelBadgeResponse struct {
-	BadgeSets map[string]struct {
-		Versions map[string]struct {
-			ID         string `json:"id"`
-			ImageURL1x string `json:"image_url_1x"`
-			ImageURL2x string `json:"image_url_2x"`
-			ImageURL4x string `json:"image_url_4x"`
-		} `json:"versions"`
-	} `json:"badge_sets"`
-}
-
 // BadgeEnricher enriches messages with proper Twitch badge icon URLs
 type BadgeEnricher struct {
 	httpClient   *http.Client
@@ -268,17 +256,36 @@ func (e *BadgeEnricher) getChannelBadges(ctx context.Context, channelID string) 
 		}
 	}
 
-	url := fmt.Sprintf("https://badges.twitch.tv/v1/badges/channels/%s/display", channelID)
+	// Ensure we have access token
+	if e.accessToken == "" {
+		if err := e.refreshAccessToken(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	// Use Helix API for channel badges
+	url := fmt.Sprintf("https://api.twitch.tv/helix/chat/badges?broadcaster_id=%s", channelID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.accessToken))
+	req.Header.Set("Client-Id", e.clientID)
 
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		// Refresh token and retry
+		if err := e.refreshAccessToken(ctx); err != nil {
+			return nil, err
+		}
+		return e.getChannelBadges(ctx, channelID)
+	}
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("channel badges not found")
@@ -287,27 +294,25 @@ func (e *BadgeEnricher) getChannelBadges(ctx context.Context, channelID string) 
 		return nil, fmt.Errorf("channel badges API returned status %d", resp.StatusCode)
 	}
 
-	var badgeResp TwitchChannelBadgeResponse
+	// Parse Helix response
+	var badgeResp TwitchBadgeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&badgeResp); err != nil {
 		return nil, err
 	}
 
-	if len(badgeResp.BadgeSets) == 0 {
-		return nil, fmt.Errorf("channel badges response empty")
-	}
-
-	badges := make(map[string]TwitchBadgeSet, len(badgeResp.BadgeSets))
-	for setID, badgeSet := range badgeResp.BadgeSets {
-		versions := make(map[string]TwitchBadgeVer, len(badgeSet.Versions))
-		for versionID, ver := range badgeSet.Versions {
-			versions[versionID] = TwitchBadgeVer{
+	// Convert to map for easy lookup
+	badges := make(map[string]TwitchBadgeSet)
+	for _, badgeSet := range badgeResp.Data {
+		versions := make(map[string]TwitchBadgeVer)
+		for _, ver := range badgeSet.Versions {
+			versions[ver.ID] = TwitchBadgeVer{
 				ImageURL1x: ver.ImageURL1x,
 				ImageURL2x: ver.ImageURL2x,
 				ImageURL4x: ver.ImageURL4x,
 			}
 		}
-		badges[setID] = TwitchBadgeSet{
-			SetID:    setID,
+		badges[badgeSet.SetID] = TwitchBadgeSet{
+			SetID:    badgeSet.SetID,
 			Versions: versions,
 		}
 	}
