@@ -125,10 +125,17 @@ func main() {
 		log.Fatal("JWT_SECRET environment variable is required")
 	}
 
+	// Get Twitch API credentials for badge fetching
+	twitchClientID := strings.TrimSpace(os.Getenv("TWITCH_CLIENT_ID"))
+	twitchAccessToken := strings.TrimSpace(os.Getenv("TWITCH_ACCESS_TOKEN"))
+	if twitchClientID == "" || twitchAccessToken == "" {
+		log.Fatal("TWITCH_CLIENT_ID and TWITCH_ACCESS_TOKEN environment variables are required")
+	}
+
 	// Create handlers
 	proxyHandler := handlers.NewProxyHandler(registry)
 	healthHandler := handlers.NewHealthHandler(registry)
-	badgeHandler := handlers.NewTwitchBadgeHandler(log)
+	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchAccessToken)
 	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, jwtSecret, log)
 
 	// Set Gin mode
