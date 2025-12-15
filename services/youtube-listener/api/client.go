@@ -143,6 +143,7 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 }
 
 // CheckStreamStatus checks if a stream is still live
+// This is a lightweight check that costs 1 quota unit
 func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (bool, error) {
 	call := c.service.Videos.List([]string{"liveStreamingDetails"}).Id(videoID)
 
@@ -169,4 +170,70 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (bool, e
 		video.LiveStreamingDetails.ActualEndTime == ""
 
 	return isLive, nil
+}
+
+// GetVideoDetails fetches detailed information about a video
+// This costs 1 quota unit and is used after status check confirms stream is live
+func (c *Client) GetVideoDetails(ctx context.Context, videoID string) (*models.YouTubeStream, error) {
+	call := c.service.Videos.List([]string{"snippet", "liveStreamingDetails"}).Id(videoID)
+
+	response, err := call.Do()
+	if err != nil {
+		c.logger.Error("Failed to get video details",
+			zap.String("video_id", videoID),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to get video details: %w", err)
+	}
+
+	if len(response.Items) == 0 {
+		return nil, fmt.Errorf("video not found: %s", videoID)
+	}
+
+	video := response.Items[0]
+
+	// Extract basic info
+	stream := &models.YouTubeStream{
+		VideoID:     videoID,
+		ChannelID:   video.Snippet.ChannelId,
+		ChannelName: video.Snippet.ChannelTitle,
+		Title:       video.Snippet.Title,
+		IsLive:      false,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Add thumbnail URL if available
+	if video.Snippet.Thumbnails != nil {
+		if video.Snippet.Thumbnails.Medium != nil {
+			stream.ThumbnailURL = video.Snippet.Thumbnails.Medium.Url
+		} else if video.Snippet.Thumbnails.Default != nil {
+			stream.ThumbnailURL = video.Snippet.Thumbnails.Default.Url
+		}
+	}
+
+	// Add live streaming details if available
+	if video.LiveStreamingDetails != nil {
+		stream.IsLive = video.LiveStreamingDetails.ActualStartTime != "" &&
+			video.LiveStreamingDetails.ActualEndTime == ""
+
+		if video.LiveStreamingDetails.ActiveLiveChatId != "" {
+			stream.LiveChatID = video.LiveStreamingDetails.ActiveLiveChatId
+		}
+
+		// Parse published date if available
+		if video.Snippet.PublishedAt != "" {
+			if publishedAt, parseErr := time.Parse(time.RFC3339, video.Snippet.PublishedAt); parseErr == nil {
+				stream.PublishedAt = publishedAt
+			}
+		}
+	}
+
+	c.logger.Debug("Fetched video details",
+		zap.String("video_id", videoID),
+		zap.String("title", stream.Title),
+		zap.Bool("is_live", stream.IsLive),
+	)
+
+	return stream, nil
 }
