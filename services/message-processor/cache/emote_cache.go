@@ -28,6 +28,7 @@ type CachedEmote struct {
 type Store interface {
 	Get(ctx context.Context, channel string) ([]CachedEmote, error)
 	Set(ctx context.Context, channel string, emotes []CachedEmote) error
+	Delete(ctx context.Context, channel string) error
 }
 
 type EmoteCache struct {
@@ -83,6 +84,13 @@ func (c *EmoteCache) Set(ctx context.Context, channel string, emotes []CachedEmo
 	}
 	if err := c.client.Set(ctx, c.key(channel), data, c.ttl).Err(); err != nil {
 		return fmt.Errorf("failed to store emotes: %w", err)
+	}
+	return nil
+}
+
+func (c *EmoteCache) Delete(ctx context.Context, channel string) error {
+	if err := c.client.Del(ctx, c.key(channel)).Err(); err != nil {
+		return fmt.Errorf("failed to delete emotes: %w", err)
 	}
 	return nil
 }
