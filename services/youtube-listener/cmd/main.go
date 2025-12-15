@@ -104,7 +104,7 @@ func main() {
 
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 
-	// Initialize quota tracker
+	// Initialize quota tracker (legacy - kept for backward compatibility)
 	quotaLimitStr := getEnvOrDefault("QUOTA_LIMIT_DAILY", "10000")
 	quotaLimit, err := strconv.Atoi(quotaLimitStr)
 	if err != nil {
@@ -116,6 +116,53 @@ func main() {
 	if err := quotaTracker.Start(ctx); err != nil {
 		log.Fatal("Failed to start quota tracker", zap.Error(err))
 	}
+
+	// Initialize per-channel quota tracker (new)
+	perChannelQuotaConfig := quota.Config{
+		GlobalDailyQuota:  parseIntEnv("YOUTUBE_GLOBAL_DAILY_QUOTA", 10000),
+		HighTierQuota:     parseIntEnv("YOUTUBE_HIGH_TIER_QUOTA", 200),
+		StandardTierQuota: parseIntEnv("YOUTUBE_STANDARD_TIER_QUOTA", 100),
+		LowTierQuota:      parseIntEnv("YOUTUBE_LOW_TIER_QUOTA", 50),
+	}
+	perChannelQuotaTracker := quota.NewPerChannelTracker(db, redisClient, log, perChannelQuotaConfig)
+
+	// Start daily quota reset scheduler
+	go func() {
+		// Calculate time until next midnight UTC
+		now := time.Now().UTC()
+		nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+		durationUntilMidnight := nextMidnight.Sub(now)
+
+		log.Info("Daily quota reset scheduler started",
+			zap.Duration("time_until_first_reset", durationUntilMidnight),
+		)
+
+		// Wait until midnight, then reset every 24 hours
+		timer := time.NewTimer(durationUntilMidnight)
+		defer timer.Stop()
+
+		for {
+			select {
+			case <-timer.C:
+				log.Info("Performing daily quota reset")
+				if err := perChannelQuotaTracker.ResetDailyQuotas(context.Background()); err != nil {
+					log.Error("Failed to reset daily quotas", zap.Error(err))
+				}
+
+				// Also demote inactive channels
+				if err := perChannelQuotaTracker.DemoteInactiveChannels(context.Background()); err != nil {
+					log.Error("Failed to demote inactive channels", zap.Error(err))
+				}
+
+				// Schedule next reset in 24 hours
+				timer.Reset(24 * time.Hour)
+
+			case <-ctx.Done():
+				log.Info("Quota reset scheduler stopped")
+				return
+			}
+		}
+	}()
 
 	// Create message handler that publishes to Redis Streams and tracks quota
 	messageHandler := NewMessageHandler(streamPublisher, quotaTracker, log)
@@ -216,6 +263,19 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// parseIntEnv parses an integer environment variable or returns default
+func parseIntEnv(key string, defaultValue int) int {
+	valueStr := os.Getenv(key)
+	if valueStr == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+	return value
 }
 
 func defaultCallbackURL(frontendURL, fallbackBase, path string) string {

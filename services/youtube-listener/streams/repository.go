@@ -92,3 +92,50 @@ func (r *Repository) GetUserIDForChannel(ctx context.Context, channelID string) 
 
 	return userID, nil
 }
+
+// UpdateStreamHistory updates the stream history when live status changes
+// Uses the database function created in migration 010
+func (r *Repository) UpdateStreamHistory(ctx context.Context, channelID, channelName string, isLive bool) error {
+	_, err := r.db.Exec(ctx,
+		`SELECT update_stream_history_on_detection($1, $2, $3, $4)`,
+		"youtube", channelID, channelName, isLive,
+	)
+	if err != nil {
+		r.logger.Error("Failed to update stream history",
+			zap.String("channel_id", channelID),
+			zap.Bool("is_live", isLive),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to update stream history: %w", err)
+	}
+
+	r.logger.Debug("Updated stream history",
+		zap.String("channel_id", channelID),
+		zap.Bool("is_live", isLive),
+	)
+
+	return nil
+}
+
+// GetChannelName gets the channel name for a given channel ID
+func (r *Repository) GetChannelName(ctx context.Context, channelID string) (string, error) {
+	query := `
+		SELECT channel_name
+		FROM overlay_chat_sources
+		WHERE platform = 'youtube'
+		  AND channel_id = $1
+		LIMIT 1
+	`
+
+	var channelName string
+	err := r.db.QueryRow(ctx, query, channelID).Scan(&channelName)
+	if err != nil {
+		r.logger.Warn("Failed to get channel name, using channel ID",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		return channelID, nil // Fallback to channel ID
+	}
+
+	return channelName, nil
+}

@@ -23,6 +23,11 @@ import { randomUUID } from 'crypto';
 import http from 'http';
 import { EventEmitter } from 'events';
 
+// Import new live detection modules
+import { TikTokStatusChecker } from './livestream/status-checker';
+import { BackoffManager } from './livestream/backoff-manager';
+import { LiveStreamPoller } from './livestream/poller';
+
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
@@ -34,6 +39,14 @@ const DATABASE_PASSWORD = process.env.DATABASE_PASSWORD || 'allchat_dev_password
 const DATABASE_NAME = process.env.DATABASE_NAME || 'allchat';
 const HTTP_PORT = parseInt(process.env.PORT || '8089');
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '30000'); // 30 seconds
+
+// New TikTok live detection configuration
+const TIKTOK_STATUS_CHECK_CACHE_TTL_MS = parseInt(process.env.TIKTOK_STATUS_CHECK_CACHE_TTL_MS || '10000');
+const TIKTOK_POLLER_INTERVAL_MS = parseInt(process.env.TIKTOK_POLLER_INTERVAL_MS || '30000');
+const TIKTOK_BASE_OFFLINE_BACKOFF_MS = parseInt(process.env.TIKTOK_BASE_OFFLINE_BACKOFF_MS || '60000');
+const TIKTOK_MAX_OFFLINE_BACKOFF_MS = parseInt(process.env.TIKTOK_MAX_OFFLINE_BACKOFF_MS || '600000');
+const TIKTOK_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_ERROR_BACKOFF_MS || '2000');
+const TIKTOK_MAX_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_MAX_ERROR_BACKOFF_MS || '300000');
 
 // Configure logger
 const logger = winston.createLogger({
@@ -83,6 +96,11 @@ class TikTokListenerService {
   private pollTimer?: NodeJS.Timeout;
   private httpServer?: http.Server;
 
+  // New live detection modules
+  private statusChecker: TikTokStatusChecker;
+  private backoffManager: BackoffManager;
+  private livePoller: LiveStreamPoller;
+
   constructor() {
     // Initialize Redis client
     this.redis = createClient({
@@ -101,17 +119,42 @@ class TikTokListenerService {
       database: DATABASE_NAME,
       max: 10
     });
+
+    // Initialize live detection modules
+    this.statusChecker = new TikTokStatusChecker(logger, TIKTOK_STATUS_CHECK_CACHE_TTL_MS);
+    this.backoffManager = new BackoffManager(logger, {
+      baseOfflineBackoffMs: TIKTOK_BASE_OFFLINE_BACKOFF_MS,
+      maxOfflineBackoffMs: TIKTOK_MAX_OFFLINE_BACKOFF_MS,
+      errorBackoffMs: TIKTOK_ERROR_BACKOFF_MS,
+      maxErrorBackoffMs: TIKTOK_MAX_ERROR_BACKOFF_MS
+    });
+    this.livePoller = new LiveStreamPoller(
+      this.statusChecker,
+      this.backoffManager,
+      logger,
+      { pollIntervalMs: TIKTOK_POLLER_INTERVAL_MS }
+    );
+
+    // Set up callback for when poller detects a live stream
+    this.livePoller.setOnLiveCallback(async (username: string, overlayId: string) => {
+      await this.connectToStream(username, overlayId);
+    });
   }
 
   async start(): Promise<void> {
     logger.info('Starting TikTok Listener Service', {
-      version: process.env.APP_VERSION || 'dev'
+      version: process.env.APP_VERSION || 'dev',
+      live_detection_enabled: true
     });
 
     try {
       // Connect to Redis
       await this.redis.connect();
       logger.info('Connected to Redis', { host: REDIS_HOST, port: REDIS_PORT });
+
+      // Start live stream poller
+      this.livePoller.start();
+      logger.info('Live stream poller started');
 
       // Test database connection
       await this.db.query('SELECT NOW()');
@@ -282,7 +325,29 @@ class TikTokListenerService {
 
   private async connectToStream(username: string, overlayId: string): Promise<void> {
     try {
-      logger.info('Connecting to TikTok stream', { username, overlay_id: overlayId });
+      logger.info('Pre-checking live status before connection', { username, overlay_id: overlayId });
+
+      // NEW: Pre-check if user is live before attempting connection
+      const statusResult = await this.statusChecker.checkLiveStatus(username);
+
+      if (!statusResult.isLive) {
+        logger.info('User not live, adding to poller and skipping connection', {
+          username,
+          overlay_id: overlayId
+        });
+
+        // Add to polling targets
+        this.livePoller.addTarget(username, overlayId);
+
+        // Record offline check for backoff
+        this.backoffManager.recordOfflineCheck(username);
+
+        // Store in activeStreams as "pending" so we don't retry immediately
+        // (but no connection object)
+        return;
+      }
+
+      logger.info('User is live, proceeding with connection', { username, overlay_id: overlayId });
 
       const connection = new TikTokLiveConnection(username, {
         processInitialData: false, // Don't process historical messages
@@ -307,6 +372,13 @@ class TikTokListenerService {
         if (stream) {
           stream.is_connected = true;
         }
+
+        // SUCCESS: Reset backoff and remove from poller
+        this.backoffManager.recordSuccessfulConnection(username);
+        this.livePoller.removeTarget(username);
+
+        // Update database: stream is live
+        this.updateStreamHistory(username, true);
       });
 
       emitter.on('disconnected', () => {
@@ -315,10 +387,21 @@ class TikTokListenerService {
         if (stream) {
           stream.is_connected = false;
         }
+
+        // Stream ended - reset to quick re-check
+        this.backoffManager.recordDisconnection(username);
+        this.livePoller.addTarget(username, overlayId);
+
+        // Update database: stream went offline
+        this.updateStreamHistory(username, false);
       });
 
       emitter.on('error', (err: Error) => {
         logger.error('TikTok stream error', { username, error: err });
+
+        // Connection error - record for backoff
+        this.backoffManager.recordConnectionError(username, err);
+        this.livePoller.addTarget(username, overlayId);
       });
 
       // Store before connecting
@@ -333,7 +416,14 @@ class TikTokListenerService {
       await connection.connect();
     } catch (error) {
       logger.error('Failed to connect to TikTok stream', { username, error });
-      this.activeStreams.delete(username);
+
+      // Record error for backoff
+      this.backoffManager.recordConnectionError(username, error as Error);
+
+      // Add to poller for retry
+      this.livePoller.addTarget(username, overlayId);
+
+      // Don't delete from activeStreams - keep it for tracking
     }
   }
 
@@ -345,8 +435,25 @@ class TikTokListenerService {
       logger.info('Disconnecting from TikTok stream', { username });
       stream.connection.disconnect();
       this.activeStreams.delete(username);
+
+      // Remove from poller and clear backoff state
+      this.livePoller.removeTarget(username);
+      this.backoffManager.removeState(username);
+      this.statusChecker.clearCache(username);
     } catch (error) {
       logger.error('Failed to disconnect from TikTok stream', { username, error });
+    }
+  }
+
+  private async updateStreamHistory(username: string, isLive: boolean): Promise<void> {
+    try {
+      await this.db.query(
+        `SELECT update_stream_history_on_detection($1, $2, $3, $4)`,
+        ['tiktok', username, username, isLive]
+      );
+      logger.debug('Updated stream history', { username, is_live: isLive });
+    } catch (error) {
+      logger.error('Failed to update stream history', { username, error });
     }
   }
 
@@ -396,6 +503,10 @@ class TikTokListenerService {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
     }
+
+    // Stop live stream poller
+    this.livePoller.stop();
+    logger.info('Live stream poller stopped');
 
     // Disconnect all streams
     for (const [username, _] of this.activeStreams.entries()) {
