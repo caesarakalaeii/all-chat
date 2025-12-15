@@ -264,16 +264,23 @@ This unified format allows the frontend to display messages from all platforms c
 - `services/message-processor/enricher/emote_enricher.go` - Emote enrichment
 - `services/message-processor/publisher/pubsub.go` - Publishes to `overlay:{overlay_id}`
 - `services/message-processor/router/router.go` - Routes messages based on platform
+- `services/message-processor/seventv/` - Real-time 7TV emote updates via WebSocket
 
 **Features**:
 - Redis Streams consumer (consumer group `message-processors`)
 - Message normalization (Twitch + YouTube + Kick + TikTok → Unified format)
+- **Message age filtering** (ignores messages older than 60s by default, configurable via `MESSAGE_AGE_CUTOFF_SECONDS`)
 - Emote enrichment (7TV, BTTV, FFZ via external APIs)
+- **Real-time 7TV emote updates** via EventAPI WebSocket (immediate cache invalidation)
 - Platform detection and routing
 - Overlay-specific publishing via Redis Pub/Sub
 - Health checks and status
 
-**Documentation**: See `services/message-processor/README.md`
+**Environment Variables**:
+- `MESSAGE_AGE_CUTOFF_SECONDS` - Maximum age of messages to process in seconds (default: 60)
+- `EMOTE_SERVICE_URL` - URL of emote service (default: http://localhost:8083)
+
+**Documentation**: See `services/message-processor/seventv/README.md`
 
 ### Source Manager (Port 8088) ✅
 **Purpose**: Active source registry and Redis-based leader election for YouTube polling
