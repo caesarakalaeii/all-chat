@@ -24,9 +24,9 @@ import http from 'http';
 import { EventEmitter } from 'events';
 
 // Import new live detection modules
-import { TikTokStatusChecker } from './livestream/status-checker';
-import { BackoffManager } from './livestream/backoff-manager';
-import { LiveStreamPoller } from './livestream/poller';
+import { TikTokStatusChecker } from './livestream/status-checker.js';
+import { BackoffManager } from './livestream/backoff-manager.js';
+import { LiveStreamPoller } from './livestream/poller.js';
 
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';

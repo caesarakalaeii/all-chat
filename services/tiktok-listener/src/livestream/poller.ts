@@ -6,8 +6,8 @@
  */
 
 import winston from 'winston';
-import { TikTokStatusChecker } from './status-checker';
-import { BackoffManager } from './backoff-manager';
+import { TikTokStatusChecker } from './status-checker.js';
+import { BackoffManager } from './backoff-manager.js';
 
 /**
  * Target to poll for live status
