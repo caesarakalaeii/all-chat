@@ -435,10 +435,17 @@ func (m *Manager) ensureChatroomIDs(plans map[string]*channelPlan) {
 
 		chatroomID, err := m.fetchChatroomID(slug)
 		if err != nil {
-			m.logger.Error("Failed to fetch chatroom ID",
+			m.logger.Error("Failed to fetch chatroom ID, marking source inactive",
 				zap.String("channel", slug),
 				zap.Error(err),
 			)
+			// Mark source as inactive - channel not found or API error
+			if setErr := m.repo.SetSourceActive(m.ctx, slug, false); setErr != nil {
+				m.logger.Error("Failed to mark source inactive after chatroom lookup failure",
+					zap.String("channel", slug),
+					zap.Error(setErr),
+				)
+			}
 			continue
 		}
 
