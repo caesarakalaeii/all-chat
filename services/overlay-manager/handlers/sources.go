@@ -105,7 +105,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		ChannelName:  channelName,
 		AuthRequired: req.Platform == "youtube", // YouTube requires OAuth
 		Config:       make(map[string]interface{}),
-		IsActive:     true,
+		IsActive:     false, // Will be set to true by listeners when they connect
 	}
 
 	// Validate
