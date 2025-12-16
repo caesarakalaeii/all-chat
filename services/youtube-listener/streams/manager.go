@@ -306,7 +306,7 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 	}
 
 	// Stop pollers for streams that are no longer active
-	m.cleanupInactivePollers(channelSources)
+	m.cleanupInactivePollers(ctx, channelSources)
 
 	return nil
 }
@@ -386,8 +386,10 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 
 	if m.leader != nil {
 		ok, err := m.leader.EnsureLeadership(ctx, stream.StreamID, func(streamID string) func() {
+			// Capture context for leadership loss callback
+			lossCtx := context.Background()
 			return func() {
-				m.handleLeadershipLoss(streamID)
+				m.handleLeadershipLoss(lossCtx, streamID)
 			}
 		}(stream.StreamID))
 		if err != nil {
@@ -420,11 +422,19 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 	m.activeStreams[stream.StreamID] = stream
 	m.pollers[stream.StreamID] = poller
 
+	// Update database status to active
+	if err := m.repository.SetSourceActive(ctx, stream.ChannelID, true); err != nil {
+		m.logger.Error("Failed to update source status after starting poller",
+			zap.String("channel_id", stream.ChannelID),
+			zap.Error(err),
+		)
+	}
+
 	return nil
 }
 
 // cleanupInactivePollers stops pollers for channels that are no longer active
-func (m *Manager) cleanupInactivePollers(activeChannels map[string][]*models.StreamSource) {
+func (m *Manager) cleanupInactivePollers(ctx context.Context, activeChannels map[string][]*models.StreamSource) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -444,6 +454,14 @@ func (m *Manager) cleanupInactivePollers(activeChannels map[string][]*models.Str
 			delete(m.pollers, streamID)
 			delete(m.activeStreams, streamID)
 			m.releaseLeadership(streamID)
+
+			// Update database status to inactive
+			if err := m.repository.SetSourceActive(ctx, stream.ChannelID, false); err != nil {
+				m.logger.Error("Failed to update source status after stopping poller",
+					zap.String("channel_id", stream.ChannelID),
+					zap.Error(err),
+				)
+			}
 		}
 	}
 }
@@ -455,14 +473,25 @@ func (m *Manager) releaseLeadership(streamID string) {
 	m.leader.Release(streamID)
 }
 
-func (m *Manager) handleLeadershipLoss(streamID string) {
+func (m *Manager) handleLeadershipLoss(ctx context.Context, streamID string) {
 	m.mu.Lock()
+	stream := m.activeStreams[streamID]
 	poller, exists := m.pollers[streamID]
 	if exists {
 		poller.Stop()
 		delete(m.pollers, streamID)
 	}
 	delete(m.activeStreams, streamID)
+
+	// Update database status to inactive if we have stream info
+	if stream != nil {
+		if err := m.repository.SetSourceActive(ctx, stream.ChannelID, false); err != nil {
+			m.logger.Error("Failed to update source status after leadership loss",
+				zap.String("channel_id", stream.ChannelID),
+				zap.Error(err),
+			)
+		}
+	}
 	m.mu.Unlock()
 
 	if exists {

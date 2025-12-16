@@ -12,6 +12,7 @@ import (
 type RepositoryInterface interface {
 	GetActiveChannels(ctx context.Context) ([]models.ChannelSource, error)
 	GetUniqueChannels(ctx context.Context) ([]string, error)
+	SetSourceActive(ctx context.Context, channelName string, isActive bool) error
 }
 
 // Repository handles database queries for channel management
@@ -93,4 +94,27 @@ func (r *Repository) GetUniqueChannels(ctx context.Context) ([]string, error) {
 	}
 
 	return channels, nil
+}
+
+// SetSourceActive updates the is_active flag for all Twitch sources with the given channel name
+func (r *Repository) SetSourceActive(ctx context.Context, channelName string, isActive bool) error {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = $1, updated_at = NOW()
+		WHERE platform = 'twitch'
+		  AND channel_name = $2
+	`
+
+	result, err := r.db.Exec(ctx, query, isActive, channelName)
+	if err != nil {
+		return fmt.Errorf("failed to update source status: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		// Not an error - channel may have been removed
+		return nil
+	}
+
+	return nil
 }

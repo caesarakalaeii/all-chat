@@ -241,15 +241,17 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 
 	// PART channels first (no rate limit)
 	for _, ch := range toPart {
-		m.partChannelLocked(ch, true)
+		m.partChannelLocked(ctx, ch, true)
 	}
 
 	// JOIN new channels with rate limiting
 	for _, ch := range toJoin {
 		if m.leader != nil {
 			ok, err := m.leader.EnsureLeadership(ctx, ch, func(channel string) func() {
+				// Capture context for leadership loss callback
+				lossCtx := context.Background()
 				return func() {
-					m.handleLeadershipLoss(channel)
+					m.handleLeadershipLoss(lossCtx, channel)
 				}
 			}(ch))
 			if err != nil {
@@ -272,7 +274,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			m.logger.Warn("Rate limiter wait interrupted", zap.Error(err))
 			break
 		}
-		m.joinChannel(ch)
+		m.joinChannel(ctx, ch)
 	}
 
 	// Record active sources and source events
@@ -294,9 +296,17 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 }
 
 // joinChannel joins a channel and tracks it
-func (m *Manager) joinChannel(channel string) {
+func (m *Manager) joinChannel(ctx context.Context, channel string) {
 	m.joinParter.Join(channel)
 	m.activeChans[channel] = true
+
+	// Update database status
+	if err := m.repo.SetSourceActive(ctx, channel, true); err != nil {
+		m.logger.Error("Failed to update source status after join",
+			zap.String("channel", channel),
+			zap.Error(err),
+		)
+	}
 
 	m.logger.Info("Joined channel",
 		zap.String("channel", channel),
@@ -304,7 +314,7 @@ func (m *Manager) joinChannel(channel string) {
 }
 
 // partChannelLocked parts a channel and removes from tracking. Caller must hold m.mu.
-func (m *Manager) partChannelLocked(channel string, releaseLeadership bool) {
+func (m *Manager) partChannelLocked(ctx context.Context, channel string, releaseLeadership bool) {
 	m.joinParter.Depart(channel)
 	delete(m.activeChans, channel)
 
@@ -312,12 +322,20 @@ func (m *Manager) partChannelLocked(channel string, releaseLeadership bool) {
 		m.leader.Release(channel)
 	}
 
+	// Update database status
+	if err := m.repo.SetSourceActive(ctx, channel, false); err != nil {
+		m.logger.Error("Failed to update source status after part",
+			zap.String("channel", channel),
+			zap.Error(err),
+		)
+	}
+
 	m.logger.Info("Parted channel",
 		zap.String("channel", channel),
 	)
 }
 
-func (m *Manager) handleLeadershipLoss(channel string) {
+func (m *Manager) handleLeadershipLoss(ctx context.Context, channel string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -327,6 +345,14 @@ func (m *Manager) handleLeadershipLoss(channel string) {
 
 	m.joinParter.Depart(channel)
 	delete(m.activeChans, channel)
+
+	// Update database status
+	if err := m.repo.SetSourceActive(ctx, channel, false); err != nil {
+		m.logger.Error("Failed to update source status after leadership loss",
+			zap.String("channel", channel),
+			zap.Error(err),
+		)
+	}
 
 	m.logger.Warn("Parted channel after losing leadership",
 		zap.String("channel", channel),

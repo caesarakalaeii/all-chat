@@ -301,6 +301,14 @@ func (m *Manager) syncChannels() error {
 			delete(m.chatroomIndex, ch.ChatroomID)
 			m.releaseLeadership(slug)
 			metrics.ObserveSubscription("unsubscribe")
+
+			// Update database status to inactive
+			if err := m.repo.SetSourceActive(m.ctx, slug, false); err != nil {
+				m.logger.Error("Failed to update source status after unsubscribe",
+					zap.String("channel", slug),
+					zap.Error(err),
+				)
+			}
 		}
 	}
 
@@ -324,8 +332,10 @@ func (m *Manager) syncChannels() error {
 
 		if m.leader != nil {
 			ok, err := m.leader.EnsureLeadership(m.ctx, slug, func(channel string) func() {
+				// Capture context for leadership loss callback
+				lossCtx := context.Background()
 				return func() {
-					m.handleLeadershipLoss(channel)
+					m.handleLeadershipLoss(lossCtx, channel)
 				}
 			}(slug))
 			if err != nil {
@@ -361,6 +371,14 @@ func (m *Manager) syncChannels() error {
 		m.subscriptions[slug] = desired
 		m.chatroomIndex[desired.ChatroomID] = desired
 		metrics.ObserveSubscription("subscribe")
+
+		// Update database status to active
+		if err := m.repo.SetSourceActive(m.ctx, slug, true); err != nil {
+			m.logger.Error("Failed to update source status after subscribe",
+				zap.String("channel", slug),
+				zap.Error(err),
+			)
+		}
 	}
 
 	metrics.SetActiveSubscriptions(len(m.subscriptions))
@@ -460,7 +478,7 @@ func (m *Manager) releaseLeadership(channelSlug string) {
 	m.leader.Release(channelSlug)
 }
 
-func (m *Manager) handleLeadershipLoss(channelSlug string) {
+func (m *Manager) handleLeadershipLoss(ctx context.Context, channelSlug string) {
 	if m.leader == nil {
 		return
 	}
@@ -482,6 +500,14 @@ func (m *Manager) handleLeadershipLoss(channelSlug string) {
 
 	delete(m.subscriptions, channelSlug)
 	delete(m.chatroomIndex, ch.ChatroomID)
+
+	// Update database status to inactive
+	if err := m.repo.SetSourceActive(ctx, channelSlug, false); err != nil {
+		m.logger.Error("Failed to update source status after leadership loss",
+			zap.String("channel", channelSlug),
+			zap.Error(err),
+		)
+	}
 
 	m.logger.Warn("Dropped subscription after leadership loss",
 		zap.String("channel", channelSlug),

@@ -134,3 +134,40 @@ func (r *Repository) UpdateChatroomID(ctx context.Context, overlayID, channelSlu
 
 	return nil
 }
+
+// SetSourceActive updates the is_active flag for Kick sources with the given channel slug
+func (r *Repository) SetSourceActive(ctx context.Context, channelSlug string, isActive bool) error {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = $1, updated_at = NOW()
+		WHERE platform = 'kick'
+		  AND channel_id = $2
+	`
+
+	result, err := r.db.Exec(ctx, query, isActive, channelSlug)
+	if err != nil {
+		r.logger.Error("Failed to update source status",
+			zap.String("channel_slug", channelSlug),
+			zap.Bool("is_active", isActive),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to update source status: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		// Not an error - source may have been removed
+		r.logger.Debug("No sources updated (may have been removed)",
+			zap.String("channel_slug", channelSlug),
+		)
+		return nil
+	}
+
+	r.logger.Debug("Updated source status",
+		zap.String("channel_slug", channelSlug),
+		zap.Bool("is_active", isActive),
+		zap.Int64("rows_affected", rowsAffected),
+	)
+
+	return nil
+}

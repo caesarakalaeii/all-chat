@@ -139,3 +139,40 @@ func (r *Repository) GetChannelName(ctx context.Context, channelID string) (stri
 
 	return channelName, nil
 }
+
+// SetSourceActive updates the is_active flag for YouTube sources with the given channel ID
+func (r *Repository) SetSourceActive(ctx context.Context, channelID string, isActive bool) error {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = $1, updated_at = NOW()
+		WHERE platform = 'youtube'
+		  AND channel_id = $2
+	`
+
+	result, err := r.db.Exec(ctx, query, isActive, channelID)
+	if err != nil {
+		r.logger.Error("Failed to update source status",
+			zap.String("channel_id", channelID),
+			zap.Bool("is_active", isActive),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to update source status: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		// Not an error - source may have been removed
+		r.logger.Debug("No sources updated (may have been removed)",
+			zap.String("channel_id", channelID),
+		)
+		return nil
+	}
+
+	r.logger.Debug("Updated source status",
+		zap.String("channel_id", channelID),
+		zap.Bool("is_active", isActive),
+		zap.Int64("rows_affected", rowsAffected),
+	)
+
+	return nil
+}
