@@ -14,9 +14,10 @@
 5. [Common Customizations](#common-customizations)
 6. [Platform-Specific Styling](#platform-specific-styling)
 7. [Display Settings](#display-settings)
-8. [Advanced Techniques](#advanced-techniques)
-9. [Example Themes](#example-themes)
-10. [Troubleshooting](#troubleshooting)
+8. [Platform Status Indicators](#platform-status-indicators)
+9. [Advanced Techniques](#advanced-techniques)
+10. [Example Themes](#example-themes)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -496,6 +497,180 @@ While the above settings are preferred, you can override them with CSS:
 /* Force hide avatars (overrides show_avatars setting) */
 .flex-shrink-0 {
   display: none !important;
+}
+```
+
+---
+
+## Platform Status Indicators
+
+### What Are Platform Status Indicators?
+
+Platform status indicators are small icons displayed in the top-right corner of your overlay that show which backend listeners are actively monitoring your chat sources. Each platform (Twitch, YouTube, Kick, TikTok) has its own icon that appears:
+- **In color** when the backend listener is actively monitoring that platform
+- **In grayscale** when the listener is not active or disconnected
+
+This helps you quickly see at a glance which platforms are being monitored by All-Chat.
+
+### Default Behavior
+
+Platform status indicators are **shown by default** and will automatically update every 30 seconds to reflect the current status of your backend listeners.
+
+### Hide All Platform Indicators
+
+To completely hide the platform status indicators:
+
+```css
+/* Hide platform status indicators entirely */
+.platform-status-indicators {
+  display: none !important;
+}
+```
+
+### Hide Specific Platform Indicators
+
+To hide specific platforms while keeping others visible:
+
+```css
+/* Hide only Twitch indicator */
+.platform-indicator-twitch {
+  display: none !important;
+}
+
+/* Hide only YouTube indicator */
+.platform-indicator-youtube {
+  display: none !important;
+}
+
+/* Hide only Kick indicator */
+.platform-indicator-kick {
+  display: none !important;
+}
+
+/* Hide only TikTok indicator */
+.platform-indicator-tiktok {
+  display: none !important;
+}
+```
+
+### Customize Indicator Position
+
+```css
+/* Move indicators to bottom-right */
+.platform-status-indicators {
+  top: auto !important;
+  bottom: 16px !important;
+  right: 16px !important;
+}
+
+/* Move indicators to top-left */
+.platform-status-indicators {
+  left: 16px !important;
+  right: auto !important;
+}
+
+/* Move indicators to bottom-left */
+.platform-status-indicators {
+  top: auto !important;
+  bottom: 16px !important;
+  left: 16px !important;
+  right: auto !important;
+}
+
+/* Center indicators at the top */
+.platform-status-indicators {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+}
+```
+
+### Customize Indicator Appearance
+
+```css
+/* Change indicator size */
+.platform-indicator {
+  width: 48px !important;
+  height: 48px !important;
+}
+
+/* Change indicator spacing */
+.platform-status-indicators {
+  gap: 8px !important;
+}
+
+/* Change container background */
+.platform-status-indicators {
+  background: rgba(0, 0, 0, 0.9) !important;
+}
+
+/* Change inactive indicator opacity */
+.platform-indicator.grayscale {
+  opacity: 0.2 !important;
+}
+
+/* Remove background from container */
+.platform-status-indicators {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  padding: 0 !important;
+}
+
+/* Add custom border to active indicators */
+.platform-indicator:not(.grayscale) {
+  border: 2px solid white !important;
+}
+```
+
+### Advanced: Platform-Specific Styling
+
+```css
+/* Custom styling for active Twitch indicator */
+.platform-indicator-twitch:not(.grayscale) {
+  background: rgba(145, 70, 255, 0.3) !important;
+  box-shadow: 0 0 10px rgba(145, 70, 255, 0.5) !important;
+}
+
+/* Custom styling for active YouTube indicator */
+.platform-indicator-youtube:not(.grayscale) {
+  background: rgba(255, 0, 0, 0.3) !important;
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.5) !important;
+}
+
+/* Custom styling for active Kick indicator */
+.platform-indicator-kick:not(.grayscale) {
+  background: rgba(83, 252, 24, 0.3) !important;
+  box-shadow: 0 0 10px rgba(83, 252, 24, 0.5) !important;
+}
+
+/* Custom styling for active TikTok indicator */
+.platform-indicator-tiktok:not(.grayscale) {
+  background: rgba(6, 217, 210, 0.3) !important;
+  box-shadow: 0 0 10px rgba(6, 217, 210, 0.5) !important;
+}
+```
+
+### Make Indicators More Subtle
+
+```css
+/* Reduce size and opacity for minimal look */
+.platform-status-indicators {
+  opacity: 0.6 !important;
+}
+
+.platform-indicator {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+/* Show indicators only on hover */
+.platform-status-indicators {
+  opacity: 0 !important;
+  transition: opacity 0.3s !important;
+}
+
+.platform-status-indicators:hover {
+  opacity: 1 !important;
 }
 ```
 
