@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/source-manager/cleanup"
 	"github.com/caesar/all-chat/services/source-manager/election"
 	"github.com/caesar/all-chat/services/source-manager/handlers"
 	"github.com/caesar/all-chat/services/source-manager/registry"
@@ -74,10 +75,16 @@ func main() {
 	repo := registry.NewRepository(db, log)
 	sourceRegistry := registry.NewRegistry(repo, 30*time.Second, log)
 	leaderManager := election.NewManager(redisClient, log)
+	cleanupJob := cleanup.NewJob(db, log)
 
 	// Start registry
 	if err := sourceRegistry.Start(ctx); err != nil {
 		log.Fatal("Failed to start source registry", zap.Error(err))
+	}
+
+	// Start cleanup job
+	if err := cleanupJob.Start(ctx); err != nil {
+		log.Fatal("Failed to start cleanup job", zap.Error(err))
 	}
 
 	// Set up HTTP server
@@ -142,8 +149,9 @@ func main() {
 
 	log.Info("Shutting down service...")
 
-	// Stop registry
+	// Stop registry and cleanup job
 	sourceRegistry.Stop()
+	cleanupJob.Stop()
 
 	// Shutdown HTTP server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

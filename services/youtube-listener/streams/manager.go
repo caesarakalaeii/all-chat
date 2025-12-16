@@ -315,22 +315,43 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*models.StreamSource) error {
 	// Check quota before making expensive API call (search.list costs 100 units)
 	if !m.quotaTracker.CanMakeRequest(100) {
-		m.logger.Warn("Insufficient quota to check for live streams, skipping",
+		m.logger.Warn("Insufficient quota to check for live streams, marking inactive",
 			zap.String("channel_id", channelID),
 			zap.Int("remaining_quota", m.quotaTracker.GetRemainingQuota()),
 		)
+		// Mark source as inactive due to quota exhaustion
+		if err := m.repository.SetSourceActive(ctx, channelID, false); err != nil {
+			m.logger.Error("Failed to mark source inactive after quota exhaustion",
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+		}
 		return fmt.Errorf("insufficient quota: %d units remaining, need 100", m.quotaTracker.GetRemainingQuota())
 	}
 
 	// Get user ID for OAuth
 	userID, err := m.repository.GetUserIDForChannel(ctx, channelID)
 	if err != nil {
+		// Mark source as inactive - can't get OAuth
+		if setErr := m.repository.SetSourceActive(ctx, channelID, false); setErr != nil {
+			m.logger.Error("Failed to mark source inactive after OAuth error",
+				zap.String("channel_id", channelID),
+				zap.Error(setErr),
+			)
+		}
 		return fmt.Errorf("failed to get user ID: %w", err)
 	}
 
 	// Create YouTube service with OAuth
 	service, err := m.oauthManager.CreateYouTubeService(ctx, userID, channelID)
 	if err != nil {
+		// Mark source as inactive - OAuth failed
+		if setErr := m.repository.SetSourceActive(ctx, channelID, false); setErr != nil {
+			m.logger.Error("Failed to mark source inactive after OAuth creation error",
+				zap.String("channel_id", channelID),
+				zap.Error(setErr),
+			)
+		}
 		return fmt.Errorf("failed to create YouTube service: %w", err)
 	}
 
@@ -340,13 +361,27 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	// Get live streams for channel
 	liveStreams, err := apiClient.GetLiveStreams(ctx, channelID)
 	if err != nil {
+		// Mark source as inactive - API call failed
+		if setErr := m.repository.SetSourceActive(ctx, channelID, false); setErr != nil {
+			m.logger.Error("Failed to mark source inactive after API error",
+				zap.String("channel_id", channelID),
+				zap.Error(setErr),
+			)
+		}
 		return fmt.Errorf("failed to get live streams: %w", err)
 	}
 
 	if len(liveStreams) == 0 {
-		m.logger.Debug("No live streams found for channel",
+		m.logger.Debug("No live streams found for channel, marking inactive",
 			zap.String("channel_id", channelID),
 		)
+		// Mark source as inactive - no live streams
+		if err := m.repository.SetSourceActive(ctx, channelID, false); err != nil {
+			m.logger.Error("Failed to mark source inactive when no streams found",
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+		}
 		return nil
 	}
 
@@ -634,6 +669,14 @@ func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID strin
 				delete(m.pollers, streamID)
 				delete(m.activeStreams, streamID)
 				m.releaseLeadership(streamID)
+
+				// Mark source as inactive - overlay disconnected, no longer monitoring
+				if err := m.repository.SetSourceActive(ctx, stream.ChannelID, false); err != nil {
+					m.logger.Error("Failed to mark source inactive after overlay disconnect",
+						zap.String("channel_id", stream.ChannelID),
+						zap.Error(err),
+					)
+				}
 			}
 		}
 	}
