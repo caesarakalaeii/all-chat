@@ -19,11 +19,12 @@ type OverlayConfigRepository interface {
 type ConfigHandler struct {
 	repo     OverlayConfigRepository
 	overlays OverlayRepository
+	sources  SourceRepository
 }
 
 // NewConfigHandler returns a ConfigHandler.
-func NewConfigHandler(repo OverlayConfigRepository, overlays OverlayRepository) *ConfigHandler {
-	return &ConfigHandler{repo: repo, overlays: overlays}
+func NewConfigHandler(repo OverlayConfigRepository, overlays OverlayRepository, sources SourceRepository) *ConfigHandler {
+	return &ConfigHandler{repo: repo, overlays: overlays, sources: sources}
 }
 
 // HandleGetConfig returns the configuration for an overlay owned by the requester.
@@ -139,8 +140,25 @@ func (h *ConfigHandler) HandleGetPublicConfig(c *gin.Context) {
 		return
 	}
 
+	// Get sources with their active status
+	sources, err := h.sources.ListByOverlayID(c.Request.Context(), overlayID)
+	if err != nil {
+		// Log error but don't fail the request
+		sources = []*models.ChatSource{}
+	}
+
+	// Build simplified source status for public consumption
+	sourceStatus := make([]map[string]interface{}, 0, len(sources))
+	for _, source := range sources {
+		sourceStatus = append(sourceStatus, map[string]interface{}{
+			"platform":  source.Platform,
+			"is_active": source.IsActive,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"display_settings": config.DisplaySettings,
 		"custom_css":       config.CustomCSS,
+		"sources":          sourceStatus,
 	})
 }
