@@ -26,6 +26,7 @@ import type { ChatMessage } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
+import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
 
 export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -33,6 +34,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [fontSize, setFontSize] = useState(16);
   const [messageDuration, setMessageDuration] = useState(15);
   const [customCss, setCustomCss] = useState('');
+  const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set());
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -60,12 +62,27 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
         }
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
+
+        // Load active platforms from sources
+        if (Array.isArray(data.sources)) {
+          const active = new Set<string>();
+          data.sources.forEach((source: { platform: string; is_active: boolean }) => {
+            if (source.is_active) {
+              active.add(source.platform);
+            }
+          });
+          setActivePlatforms(active);
+        }
       } catch (error) {
         console.warn('[OBS Overlay] Failed to load config', error);
       }
     };
 
     loadConfig();
+
+    // Refresh source status periodically (every 30 seconds)
+    const interval = setInterval(loadConfig, 30000);
+    return () => clearInterval(interval);
   }, [params.id]);
 
   // Initialize WebSocket connection (no auth required)
@@ -170,6 +187,10 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
       {customCss.trim().length > 0 && (
         <style dangerouslySetInnerHTML={{ __html: customCss }} />
       )}
+
+      {/* Platform Status Indicators */}
+      <PlatformStatusIndicators activePlatforms={activePlatforms} />
+
       <div className="space-y-3">
         {messages.map((message, index) => (
           <div
