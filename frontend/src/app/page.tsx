@@ -16,13 +16,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { BetaWarning } from '@/components/BetaWarning';
 
 export default function LandingPage() {
   const router = useRouter();
   const { user, token } = useAuthStore();
+  const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | 'tiktok' | null>(null);
 
   // Redirect to dashboard if already logged in
   useEffect(() => {
@@ -32,8 +34,31 @@ export default function LandingPage() {
   }, [user, token, router]);
 
   const handleLogin = async (platform: 'twitch' | 'youtube' | 'tiktok' | 'kick') => {
+    // Show beta warning for YouTube and TikTok
+    if (platform === 'youtube' || platform === 'tiktok') {
+      setShowBetaWarning(platform);
+      return;
+    }
+
     try {
       // Use relative URL - Nginx will proxy to API Gateway
+      const endpoint = `/api/v1/auth/${platform}/login`;
+      const response = await fetch(endpoint);
+      const data = await response.json();
+
+      if (data.auth_url) {
+        window.location.href = data.auth_url;
+      } else {
+        console.error('No auth_url in response:', data);
+      }
+    } catch (error) {
+      console.error('Failed to initiate login:', error);
+    }
+  };
+
+  const proceedWithLogin = async (platform: 'youtube' | 'tiktok') => {
+    setShowBetaWarning(null);
+    try {
       const endpoint = `/api/v1/auth/${platform}/login`;
       const response = await fetch(endpoint);
       const data = await response.json();
@@ -209,6 +234,19 @@ export default function LandingPage() {
           </div>
         </div>
       </div>
+
+      {/* Beta Warning Modal */}
+      {showBetaWarning && (
+        <BetaWarning
+          platform={showBetaWarning}
+          onCancel={() => setShowBetaWarning(null)}
+          onContinue={() => {
+            const platform = showBetaWarning;
+            setShowBetaWarning(null);
+            proceedWithLogin(platform);
+          }}
+        />
+      )}
     </div>
   );
 }

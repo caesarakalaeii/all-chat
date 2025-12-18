@@ -21,6 +21,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { overlaysApi } from '@/lib/api/overlays';
 import type { Overlay, ChatSource } from '@/lib/types/overlay';
+import { BetaWarning } from '@/components/BetaWarning';
 
 export default function OverlayEditorPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -35,6 +36,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
   const [newSourcePlatform, setNewSourcePlatform] = useState<string>('twitch');
   const [newSourceChannel, setNewSourceChannel] = useState('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | 'tiktok' | null>(null);
 
   // Load overlay and sources
   useEffect(() => {
@@ -96,6 +98,16 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
   }, [searchParams, params.id]);
 
   const handleOAuthAddSource = async (platform: string) => {
+    // Show beta warning for YouTube and TikTok
+    if (platform === 'youtube' || platform === 'tiktok') {
+      setShowBetaWarning(platform);
+      return;
+    }
+
+    proceedWithOAuthAddSource(platform);
+  };
+
+  const proceedWithOAuthAddSource = async (platform: string) => {
     try {
       // Get OAuth URL (or short-circuit response) from backend
       const response = await fetch(`/api/v1/auth/${platform}/add-source/${params.id}`, {
@@ -565,6 +577,19 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
           )}
         </div>
       </div>
+
+      {/* Beta Warning Modal */}
+      {showBetaWarning && (
+        <BetaWarning
+          platform={showBetaWarning}
+          onCancel={() => setShowBetaWarning(null)}
+          onContinue={() => {
+            const platform = showBetaWarning;
+            setShowBetaWarning(null);
+            proceedWithOAuthAddSource(platform);
+          }}
+        />
+      )}
     </div>
   );
 }
