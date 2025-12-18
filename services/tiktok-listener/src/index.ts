@@ -281,15 +281,16 @@ class TikTokListenerService {
 
     try {
       // Query database for active TikTok channels
-      // This assumes there's a table tracking which TikTok usernames should be monitored
+      // Filters by overlay.is_active (not source.is_active) to allow connecting to inactive sources
       const result = await this.db.query(`
         SELECT DISTINCT
           ocs.overlay_id,
           ocs.channel_id as tiktok_username,
           ocs.is_active
         FROM overlay_chat_sources ocs
+        JOIN overlays o ON ocs.overlay_id = o.id
         WHERE ocs.platform = 'tiktok'
-          AND ocs.is_active = true
+          AND o.is_active = true
       `);
 
       const activeUsernames = new Map<string, string>(); // username -> overlay_id
@@ -314,9 +315,20 @@ class TikTokListenerService {
         }
       }
 
+      // Update status for all connected streams to keep updated_at fresh
+      // This prevents the 5-minute stale cleanup from marking them inactive
+      let statusUpdates = 0;
+      for (const [username, stream] of this.activeStreams.entries()) {
+        if (stream.is_connected) {
+          await this.setSourceActive(username, true);
+          statusUpdates++;
+        }
+      }
+
       logger.debug('Active streams poll complete', {
         total: activeUsernames.size,
-        connected: this.activeStreams.size
+        connected: this.activeStreams.size,
+        status_updates: statusUpdates
       });
     } catch (error) {
       logger.error('Failed to poll active streams', { error });
@@ -377,8 +389,9 @@ class TikTokListenerService {
         this.backoffManager.recordSuccessfulConnection(username);
         this.livePoller.removeTarget(username);
 
-        // Update database: stream is live
+        // Update database: stream is live and source is active
         this.updateStreamHistory(username, true);
+        this.setSourceActive(username, true);
       });
 
       emitter.on('disconnected', () => {
@@ -392,8 +405,9 @@ class TikTokListenerService {
         this.backoffManager.recordDisconnection(username);
         this.livePoller.addTarget(username, overlayId);
 
-        // Update database: stream went offline
+        // Update database: stream went offline and source is inactive
         this.updateStreamHistory(username, false);
+        this.setSourceActive(username, false);
       });
 
       emitter.on('error', (err: Error) => {
@@ -454,6 +468,20 @@ class TikTokListenerService {
       logger.debug('Updated stream history', { username, is_live: isLive });
     } catch (error) {
       logger.error('Failed to update stream history', { username, error });
+    }
+  }
+
+  private async setSourceActive(username: string, isActive: boolean): Promise<void> {
+    try {
+      await this.db.query(
+        `UPDATE overlay_chat_sources
+         SET is_active = $1, updated_at = NOW()
+         WHERE platform = 'tiktok' AND channel_id = $2`,
+        [isActive, username]
+      );
+      logger.debug('Updated source active status', { username, is_active: isActive });
+    } catch (error) {
+      logger.error('Failed to update source active status', { username, error });
     }
   }
 
