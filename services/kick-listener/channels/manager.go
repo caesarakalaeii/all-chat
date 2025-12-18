@@ -327,6 +327,15 @@ func (m *Manager) syncChannels() error {
 			existing.ChatroomID = desired.ChatroomID
 			existing.OverlayIDs = desired.OverlayIDs
 			m.chatroomIndex[existing.ChatroomID] = existing
+
+			// Update database status even when subscription already exists
+			// This ensures database reflects actual subscription state
+			if err := m.repo.SetSourceActive(m.ctx, slug, true); err != nil {
+				m.logger.Error("Failed to update source status for existing subscription",
+					zap.String("channel", slug),
+					zap.Error(err),
+				)
+			}
 			continue
 		}
 

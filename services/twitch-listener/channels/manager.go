@@ -277,6 +277,20 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		m.joinChannel(ctx, ch)
 	}
 
+	// Update database status for all active channels (including already-connected ones)
+	// This ensures the database reflects actual IRC connection state
+	statusUpdates := 0
+	for ch := range m.activeChans {
+		if err := m.repo.SetSourceActive(ctx, ch, true); err != nil {
+			m.logger.Error("Failed to update source status during sync",
+				zap.String("channel", ch),
+				zap.Error(err),
+			)
+		} else {
+			statusUpdates++
+		}
+	}
+
 	// Record active sources and source events
 	m.metrics.SetActiveSources("twitch", "twitch-listener", len(m.activeChans))
 	for range toJoin {
@@ -290,6 +304,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		zap.Int("total_active", len(m.activeChans)),
 		zap.Int("joined", len(toJoin)),
 		zap.Int("parted", len(toPart)),
+		zap.Int("status_updates", statusUpdates),
 	)
 
 	return nil

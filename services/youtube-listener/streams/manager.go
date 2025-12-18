@@ -416,6 +416,14 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 		m.logger.Debug("Poller already running for stream",
 			zap.String("stream_id", stream.StreamID),
 		)
+		// Update database status even when poller already exists
+		// This ensures database reflects actual polling state
+		if err := m.repository.SetSourceActive(ctx, stream.ChannelID, true); err != nil {
+			m.logger.Error("Failed to update source status for existing poller",
+				zap.String("channel_id", stream.ChannelID),
+				zap.Error(err),
+			)
+		}
 		return nil
 	}
 

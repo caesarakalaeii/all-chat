@@ -40,16 +40,18 @@ func NewRepository(db *pgxpool.Pool, logger *zap.Logger) *Repository {
 }
 
 // GetActiveChannels retrieves all active Kick channels from the database
+// Filters by overlay.is_active (not source.is_active) to allow connecting to inactive sources
 func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, error) {
 	query := `
 		SELECT
 			ocs.overlay_id,
-			ocs.channel_id as channel_slug,
+			ocs.channel_name as channel_slug,
 			ocs.config->>'chatroom_id' as chatroom_id,
 			ocs.is_active
 		FROM overlay_chat_sources ocs
+		JOIN overlays o ON ocs.overlay_id = o.id
 		WHERE ocs.platform = 'kick'
-		  AND ocs.is_active = true
+		  AND o.is_active = true
 	`
 
 	rows, err := r.db.Query(ctx, query)
