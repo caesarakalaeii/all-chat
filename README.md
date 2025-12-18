@@ -18,7 +18,7 @@ Create your multi-platform chat overlay in minutes - no installation required!
 
 All-Chat lets you create beautiful chat overlays for OBS that combine messages from multiple streaming platforms in real-time:
 
-- **🎮 Multi-Platform**: Twitch, YouTube, Kick, and TikTok (Twitch & YouTube currently supported)
+- **🎮 Multi-Platform**: Twitch, YouTube, Kick, and TikTok (Twitch & Kick fully supported, YouTube in beta)
 - **🎨 Customizable Themes**: Use CSS to create custom themes (Win98, cyberpunk, minimalist, etc.)
 - **💬 Emote Support**: Full support for 7TV, BTTV, and FFZ emotes
 - **⚡ Real-Time**: WebSocket-based for instant message delivery
@@ -114,9 +114,9 @@ Configure in the dashboard:
 | Platform | Status | Features |
 |----------|--------|----------|
 | **Twitch** | ✅ Working | Chat, emotes (Twitch/7TV/BTTV/FFZ), badges, colors |
-| **YouTube** | 🧪 Testing | Chat, Super Chat, member badges |
-| **Kick** | 🔜 Planned | Coming in Phase 2 |
-| **TikTok** | 🔜 Planned | Coming in Phase 2 |
+| **YouTube** | 🧪 Beta | Chat, Super Chat, member badges (closed beta) |
+| **Kick** | ✅ Working | Chat, emotes, badges via Pusher WebSocket |
+| **TikTok** | 🚧 Development | OAuth complete, listener in development (closed beta) |
 
 ## 🏗️ Architecture
 
@@ -145,11 +145,13 @@ All-Chat uses a modern microservices architecture:
 ```
 
 **Key Services:**
-- **API Gateway**: WebSocket server, HTTP routing
+- **API Gateway**: WebSocket server, HTTP routing, OAuth callbacks
 - **Twitch Listener**: IRC connection, message normalization
-- **YouTube Listener**: API polling, message normalization
-- **Message Processor**: Emote enrichment, message routing
-- **Source Manager**: Active source tracking, leader election
+- **YouTube Listener**: API polling, message normalization (leader election)
+- **Kick Listener**: Pusher WebSocket, message normalization
+- **TikTok Listener**: WebSocket polling (in development)
+- **Message Processor**: Emote enrichment, message routing, platform normalization
+- **Source Manager**: Active source tracking, Redis leader election
 
 [📖 Read full architecture docs](./CLAUDE.md#architecture-principles)
 
@@ -242,17 +244,17 @@ We welcome contributions! Here's how you can help:
 - [x] Message normalization
 - [x] Emote enrichment (7TV, BTTV, FFZ)
 
-### Phase 2: Enhanced Features (🚧 In Progress)
-- [ ] React + Next.js frontend
-- [ ] User dashboard
-- [ ] Overlay configuration UI
+### Phase 2: Enhanced Features (✅ Complete)
+- [x] React + Next.js frontend
+- [x] User dashboard
+- [x] Overlay configuration UI
 - [ ] Theme marketplace
 - [x] Custom CSS themes (Win98 theme available!)
 - [ ] Message filtering and moderation
 
-### Phase 3: Platform Expansion (🔜 Planned)
-- [ ] Kick integration
-- [ ] TikTok integration
+### Phase 3: Platform Expansion (🚧 In Progress)
+- [x] Kick integration (OAuth + WebSocket listener complete)
+- [🚧] TikTok integration (OAuth complete, listener in development)
 - [ ] Rumble integration
 - [ ] Custom emote animations
 - [ ] Advanced filtering (keywords, users, etc.)
@@ -267,22 +269,25 @@ We welcome contributions! Here's how you can help:
 
 ## 📊 Project Status
 
-**Current Version**: 0.9.0 (Beta)
-**Status**: Phase 1 Complete (~90%), Phase 2 in progress
+**Current Version**: 1.0.0 (Beta)
+**Status**: Phase 2 Complete, Phase 3 in progress
 
 **What's Working:**
 - ✅ Twitch chat fully functional
-- ✅ YouTube chat implemented (testing phase)
+- ✅ Kick chat fully functional
+- ✅ YouTube chat (closed beta)
+- ✅ React + Next.js frontend
+- ✅ User dashboard and overlay management
 - ✅ Real-time WebSocket streaming
 - ✅ Emote support (7TV, BTTV, FFZ)
 - ✅ Custom CSS themes
-- ✅ Docker deployment
+- ✅ Docker + Kubernetes deployment
 
 **What's Next:**
-- 🔄 Frontend dashboard UI
-- 🔄 User overlay management
-- 🔄 Complete YouTube testing
+- 🔄 TikTok listener implementation
+- 🔄 Complete YouTube/TikTok beta testing
 - 🔄 Theme marketplace
+- 🔄 Message filtering and moderation
 
 ## 🙏 Acknowledgments
 
