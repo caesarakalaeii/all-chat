@@ -32,6 +32,7 @@ func (r *ViewerRepository) GetByPlatformUserID(ctx context.Context, platform, pl
 		       access_token, refresh_token, token_expires_at,
 		       last_message_at, message_count_1min, message_count_1hour,
 		       rate_limit_reset_1min, rate_limit_reset_1hour,
+		       is_banned, banned_at, banned_reason,
 		       created_at, updated_at
 		FROM viewer_sessions
 		WHERE platform = $1 AND platform_user_id = $2
@@ -53,6 +54,9 @@ func (r *ViewerRepository) GetByPlatformUserID(ctx context.Context, platform, pl
 		&session.MessageCount1Hour,
 		&session.RateLimitReset1Min,
 		&session.RateLimitReset1Hour,
+		&session.IsBanned,
+		&session.BannedAt,
+		&session.BannedReason,
 		&session.CreatedAt,
 		&session.UpdatedAt,
 	)
@@ -74,6 +78,7 @@ func (r *ViewerRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.V
 		       access_token, refresh_token, token_expires_at,
 		       last_message_at, message_count_1min, message_count_1hour,
 		       rate_limit_reset_1min, rate_limit_reset_1hour,
+		       is_banned, banned_at, banned_reason,
 		       created_at, updated_at
 		FROM viewer_sessions
 		WHERE id = $1
@@ -95,6 +100,9 @@ func (r *ViewerRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.V
 		&session.MessageCount1Hour,
 		&session.RateLimitReset1Min,
 		&session.RateLimitReset1Hour,
+		&session.IsBanned,
+		&session.BannedAt,
+		&session.BannedReason,
 		&session.CreatedAt,
 		&session.UpdatedAt,
 	)
@@ -269,4 +277,103 @@ func (r *ViewerRepository) DecryptRefreshToken(token string) (string, error) {
 		return token, nil
 	}
 	return r.cipher.Decrypt(token)
+}
+
+// ListAll returns all viewer sessions with pagination
+func (r *ViewerRepository) ListAll(ctx context.Context, limit, offset int) ([]models.ViewerSession, error) {
+	query := `
+		SELECT id, platform, platform_user_id, username, display_name, avatar_url,
+		       access_token, refresh_token, token_expires_at,
+		       last_message_at, message_count_1min, message_count_1hour,
+		       rate_limit_reset_1min, rate_limit_reset_1hour,
+		       is_banned, banned_at, banned_reason,
+		       created_at, updated_at
+		FROM viewer_sessions
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	rows, err := r.db.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list viewer sessions: %w", err)
+	}
+	defer rows.Close()
+
+	sessions := make([]models.ViewerSession, 0)
+	for rows.Next() {
+		var session models.ViewerSession
+		err := rows.Scan(
+			&session.ID,
+			&session.Platform,
+			&session.PlatformUserID,
+			&session.Username,
+			&session.DisplayName,
+			&session.AvatarURL,
+			&session.AccessToken,
+			&session.RefreshToken,
+			&session.TokenExpiresAt,
+			&session.LastMessageAt,
+			&session.MessageCount1Min,
+			&session.MessageCount1Hour,
+			&session.RateLimitReset1Min,
+			&session.RateLimitReset1Hour,
+			&session.IsBanned,
+			&session.BannedAt,
+			&session.BannedReason,
+			&session.CreatedAt,
+			&session.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan viewer session: %w", err)
+		}
+		sessions = append(sessions, session)
+	}
+
+	return sessions, nil
+}
+
+// BanViewer bans a viewer from sending messages
+func (r *ViewerRepository) BanViewer(ctx context.Context, sessionID uuid.UUID, reason string) error {
+	query := `
+		UPDATE viewer_sessions
+		SET is_banned = true,
+		    banned_at = NOW(),
+		    banned_reason = $2,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	result, err := r.db.Exec(ctx, query, sessionID, reason)
+	if err != nil {
+		return fmt.Errorf("failed to ban viewer: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("viewer session not found")
+	}
+
+	return nil
+}
+
+// UnbanViewer removes the ban from a viewer
+func (r *ViewerRepository) UnbanViewer(ctx context.Context, sessionID uuid.UUID) error {
+	query := `
+		UPDATE viewer_sessions
+		SET is_banned = false,
+		    banned_at = NULL,
+		    banned_reason = NULL,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	result, err := r.db.Exec(ctx, query, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to unban viewer: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("viewer session not found")
+	}
+
+	return nil
 }
