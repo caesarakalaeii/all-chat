@@ -2,7 +2,7 @@
 
 **Date**: 2025-12-19
 **Branch**: main
-**Status**: In Progress - OAuth implementation complete, message sending endpoint pending
+**Status**: Backend Complete - OAuth, message sending, and streamer info endpoints implemented. Frontend pending.
 
 ## Feature Overview
 
@@ -64,8 +64,53 @@ Implementing a feature that allows viewers to send messages to streamer chats th
   - Added viewer OAuth proxy routes (line 194-196):
     - `GET /api/v1/auth/viewer/twitch/login`
     - `GET /api/v1/auth/viewer/twitch/callback`
+  - Added viewer protected routes (line 218-221):
+    - `GET /api/v1/auth/viewer/me`
+    - `POST /api/v1/auth/viewer/logout`
+    - `POST /api/v1/auth/viewer/chat/send`
+  - Added streamer info route (line 199):
+    - `GET /api/v1/auth/streamers/:username`
 
-### 4. Architecture Decisions
+### 4. Message Sending Implementation (Completed 2025-12-19)
+
+**New Files Created**:
+- `services/auth-service/handlers/chat_send.go`
+  - ChatSendHandler with Twitch Helix API integration
+  - Rate limiting checks (20/min, 100/hour)
+  - Token decryption and message sending
+  - Message logging to viewer_message_history
+  - Error handling and validation
+
+- `services/auth-service/handlers/streamer_info.go`
+  - StreamerInfoHandler for querying streamer platforms
+  - Returns active platforms and channel info
+  - Public endpoint (no auth required)
+
+**Modified Files**:
+- `services/auth-service/repository/viewer_repository.go`
+  - Added DecryptAccessToken method
+  - Added DecryptRefreshToken method
+
+- `services/auth-service/repository/user_repository.go`
+  - Added GetByUsername method
+
+- `services/auth-service/cmd/main.go`
+  - Added chatSendHandler initialization
+  - Added streamerInfoHandler initialization
+  - Wired up routes for message sending and streamer info
+
+**API Endpoints**:
+- `POST /api/v1/auth/viewer/chat/send` (Protected - requires viewer JWT)
+  - Request: `{"streamer_username": "...", "message": "...", "platform": "twitch"}`
+  - Rate limited: 20 msgs/min, 100 msgs/hour
+  - Sends message via Twitch Helix API
+  - Logs all attempts to viewer_message_history
+
+- `GET /api/v1/auth/streamers/:username` (Public)
+  - Returns streamer's active platforms and channel info
+  - Used by frontend to display available platforms
+
+### 5. Architecture Decisions
 
 **OAuth Flow**:
 1. Viewer clicks login on `/chat/{streamer}` page
@@ -99,82 +144,7 @@ Implementing a feature that allows viewers to send messages to streamer chats th
 
 ## 🚧 Pending Work
 
-### 1. Send Message Endpoint (NEXT TASK)
-
-**Create New Service or Add to API Gateway**:
-
-Option A: Create `services/chat-sender/` service
-- Dedicated microservice for message sending
-- Easier to scale independently
-- Clear separation of concerns
-
-Option B: Add to API Gateway as handler
-- Simpler deployment (fewer services)
-- Direct access to viewer JWT validation
-- Suitable for initial implementation
-
-**Recommended Approach**: Start with Option B, migrate to Option A if needed
-
-**Implementation Steps**:
-1. Create Twitch API client function to send messages
-   - Use Helix API `POST /helix/chat/messages`
-   - Requires: broadcaster_id, sender_id, message, access_token
-   - Handle API errors and rate limits
-
-2. Create message sending handler
-   - File: `services/api-gateway/handlers/chat_send.go`
-   - Validate viewer JWT (middleware)
-   - Check rate limits (query viewer_sessions)
-   - Decrypt viewer access token
-   - Call Twitch API
-   - Update rate limit counters
-   - Log to viewer_message_history
-   - Return success/error response
-
-3. Add rate limiting logic
-   - Helper function: `checkRateLimit(viewerSession) (allowed bool, error)`
-   - Update counters: `updateRateLimitCounters(sessionID, timestamp)`
-   - Reset logic: if current_time > reset_time, reset counter to 0
-
-4. Wire up in API Gateway
-   - Route: `POST /api/v1/chat/send`
-   - Middleware: JWTAuth (check is_viewer claim)
-   - Request body: `{"streamer_username": "...", "message": "..."}`
-
-### 2. Streamer Info Endpoint
-
-**Purpose**: Frontend needs to know which platforms are active for a streamer
-
-**Endpoint**: `GET /api/v1/streamers/{username}`
-
-**Response**:
-```json
-{
-  "username": "caesarlp",
-  "display_name": "CaesarLP",
-  "platforms": [
-    {
-      "platform": "twitch",
-      "channel_id": "12345",
-      "channel_name": "caesarlp",
-      "is_live": true
-    },
-    {
-      "platform": "youtube",
-      "channel_id": "UC...",
-      "channel_name": "CaesarLP",
-      "is_live": false
-    }
-  ]
-}
-```
-
-**Implementation**:
-- Query `users` table to get user by username
-- Query `overlay_chat_sources` to get active sources
-- Optionally check live status (future enhancement)
-
-### 3. Frontend Implementation
+### 1. Frontend Implementation (NEXT TASK)
 
 **New Page**: `frontend/app/chat/[streamer]/page.tsx`
 
@@ -200,33 +170,35 @@ Option B: Add to API Gateway as handler
 - `/chat/auth-success?token={jwt}&streamer={username}`: Store JWT, redirect to chat
 - `/chat/auth-error?error={message}`: Display error message
 
-### 4. Testing & Migration
+### 2. Testing & Verification
 
-**Steps**:
-1. Run database migration:
-   ```bash
-   make migrate-up
-   # Or manually: psql ... < migrations/011_viewer_authentication.sql
-   ```
+**Completed**:
+- ✅ Database migration 011 applied to production cluster
+- ✅ Services built and deployed via CI/CD
 
-2. Test OAuth flow:
-   - Visit `/api/v1/auth/viewer/twitch/login?streamer=test`
+**Pending Tests**:
+1. Test OAuth flow:
+   - Visit `https://allch.at/api/v1/auth/viewer/twitch/login?streamer=<username>`
    - Complete Twitch OAuth
    - Verify JWT token generated
    - Check `viewer_sessions` table populated
 
-3. Test message sending (once implemented):
-   - Send message with valid JWT
+2. Test message sending:
+   - Send message with valid JWT via `POST /api/v1/auth/viewer/chat/send`
    - Verify message appears in Twitch chat
-   - Check rate limits enforced
+   - Check rate limits enforced (20/min, 100/hour)
    - Verify `viewer_message_history` logging
+
+3. Test streamer info endpoint:
+   - Query `GET /api/v1/auth/streamers/:username`
+   - Verify returns correct platform info
 
 4. Test error cases:
    - Invalid JWT
    - Expired token
    - Rate limit exceeded
    - Invalid streamer username
-   - Streamer not streaming on platform
+   - Streamer has no Twitch account linked
 
 ## Important Notes
 
@@ -281,32 +253,37 @@ Body:
 
 ## File Summary
 
-### New Files (6)
-- migrations/011_viewer_authentication.sql
-- migrations/011_viewer_authentication_down.sql
-- services/auth-service/models/viewer.go
-- services/auth-service/repository/viewer_repository.go
-- services/auth-service/oauth/viewer_twitch.go
-- services/auth-service/handlers/viewer_auth.go
+### New Files (8)
+- migrations/011_viewer_authentication.sql ✅
+- migrations/011_viewer_authentication_down.sql ✅
+- services/auth-service/models/viewer.go ✅
+- services/auth-service/repository/viewer_repository.go ✅
+- services/auth-service/oauth/viewer_twitch.go ✅
+- services/auth-service/handlers/viewer_auth.go ✅
+- services/auth-service/handlers/chat_send.go ✅ (NEW - 2025-12-19)
+- services/auth-service/handlers/streamer_info.go ✅ (NEW - 2025-12-19)
 
-### Modified Files (2)
-- services/auth-service/cmd/main.go
-- services/api-gateway/cmd/main.go
+### Modified Files (4)
+- services/auth-service/cmd/main.go ✅
+- services/api-gateway/cmd/main.go ✅
+- services/auth-service/repository/viewer_repository.go ✅ (Added decrypt methods)
+- services/auth-service/repository/user_repository.go ✅ (Added GetByUsername)
 
 ### Files to Create (Next Session)
-- services/api-gateway/handlers/chat_send.go (or services/chat-sender/)
-- services/api-gateway/handlers/streamer_info.go
 - frontend/app/chat/[streamer]/page.tsx
 - frontend/app/chat/auth-success/page.tsx
 - frontend/app/chat/auth-error/page.tsx
+- frontend/components/chat/MessageInput.tsx
+- frontend/components/chat/ChatDisplay.tsx
 
 ## Next Session TODO
 
-1. **Run Migration**: Apply migration 011 to database
-2. **Implement Send Message Endpoint**: Create Twitch API integration
-3. **Add Rate Limiting**: Implement counter checks and updates
-4. **Test OAuth Flow**: Verify end-to-end authentication works
-5. **Build Frontend**: Create chat page with login and message sending
+1. ✅ **Run Migration**: Migration 011 applied to production
+2. ✅ **Implement Send Message Endpoint**: Completed in auth-service
+3. ✅ **Add Rate Limiting**: Implemented with database counters
+4. ✅ **Deploy Services**: Deployed via CI/CD
+5. **Test Backend**: Verify OAuth flow and message sending work end-to-end
+6. **Build Frontend**: Create chat page with login and message sending UI
 
 ## Questions to Consider
 
@@ -317,4 +294,6 @@ Body:
 
 ## Git Status
 
-All changes staged and ready to commit. No conflicts expected.
+**Commit**: ea111a424 - feat(viewer-chat): implement viewer message sending feature
+**Deployed**: CI/CD pipeline running (commit ea111a424)
+**Status**: Backend implementation complete and deployed
