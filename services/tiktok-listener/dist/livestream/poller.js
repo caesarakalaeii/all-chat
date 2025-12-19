@@ -1,0 +1,235 @@
+/**
+ * TikTok Live Stream Poller
+ *
+ * Background task that periodically checks if inactive TikTok channels went live.
+ * Respects backoff intervals and coordinates with status checker and backoff manager.
+ */
+/**
+ * LiveStreamPoller periodically checks if offline users went live
+ */
+export class LiveStreamPoller {
+    logger;
+    statusChecker;
+    backoffManager;
+    pollingTargets = new Map();
+    pollingTimer;
+    POLL_INTERVAL_MS;
+    isRunning = false;
+    // Callback for when a target goes live
+    onLiveCallback;
+    /**
+     * @param statusChecker TikTokStatusChecker instance
+     * @param backoffManager BackoffManager instance
+     * @param logger Winston logger instance
+     * @param config Optional poller configuration
+     */
+    constructor(statusChecker, backoffManager, logger, config) {
+        this.statusChecker = statusChecker;
+        this.backoffManager = backoffManager;
+        this.logger = logger;
+        this.POLL_INTERVAL_MS = config?.pollIntervalMs ?? 30000; // 30 seconds default
+    }
+    /**
+     * Set callback function to be called when a target goes live
+     *
+     * @param callback Function to call with username and overlayId
+     */
+    setOnLiveCallback(callback) {
+        this.onLiveCallback = callback;
+    }
+    /**
+     * Start periodic polling
+     */
+    start() {
+        if (this.isRunning) {
+            this.logger.warn('Poller already running');
+            return;
+        }
+        this.isRunning = true;
+        this.logger.info('Starting livestream poller', {
+            interval_ms: this.POLL_INTERVAL_MS,
+            interval_seconds: this.POLL_INTERVAL_MS / 1000
+        });
+        // Run immediately, then on interval
+        this.runPollingCycle().catch(err => {
+            this.logger.error('Error in initial polling cycle', { error: err.message });
+        });
+        this.pollingTimer = setInterval(() => {
+            this.runPollingCycle().catch(err => {
+                this.logger.error('Error in polling cycle', { error: err.message });
+            });
+        }, this.POLL_INTERVAL_MS);
+    }
+    /**
+     * Stop periodic polling
+     */
+    stop() {
+        if (this.pollingTimer) {
+            clearInterval(this.pollingTimer);
+            this.pollingTimer = undefined;
+        }
+        this.isRunning = false;
+        this.logger.info('Stopped livestream poller');
+    }
+    /**
+     * Add a username to polling targets
+     *
+     * @param username TikTok username
+     * @param overlayId Overlay ID that needs this stream
+     */
+    addTarget(username, overlayId) {
+        this.pollingTargets.set(username, { username, overlayId });
+        this.logger.debug('Added polling target', { username, overlay_id: overlayId });
+    }
+    /**
+     * Remove a username from polling targets
+     *
+     * @param username TikTok username
+     */
+    removeTarget(username) {
+        const deleted = this.pollingTargets.delete(username);
+        if (deleted) {
+            this.backoffManager.removeState(username);
+            this.statusChecker.clearCache(username);
+            this.logger.debug('Removed polling target', { username });
+        }
+    }
+    /**
+     * Get current polling targets count
+     *
+     * @returns Number of targets being polled
+     */
+    getTargetCount() {
+        return this.pollingTargets.size;
+    }
+    /**
+     * Get all current targets
+     *
+     * @returns Array of polling targets
+     */
+    getTargets() {
+        return Array.from(this.pollingTargets.values());
+    }
+    /**
+     * Check if a username is being polled
+     *
+     * @param username TikTok username
+     * @returns true if currently being polled
+     */
+    isTargetActive(username) {
+        return this.pollingTargets.has(username);
+    }
+    /**
+     * Get poller status
+     */
+    getStatus() {
+        return {
+            isRunning: this.isRunning,
+            targetCount: this.pollingTargets.size,
+            pollIntervalMs: this.POLL_INTERVAL_MS,
+            backoffStats: this.backoffManager.getStats(),
+            cacheStats: this.statusChecker.getCacheStats()
+        };
+    }
+    /**
+     * Single polling cycle - checks all targets respecting backoff
+     *
+     * @private
+     */
+    async runPollingCycle() {
+        const targets = Array.from(this.pollingTargets.values());
+        if (targets.length === 0) {
+            this.logger.debug('No polling targets, skipping cycle');
+            return;
+        }
+        this.logger.debug('Running polling cycle', {
+            target_count: targets.length
+        });
+        // Check all targets in parallel
+        const checkPromises = targets.map(target => this.checkTarget(target));
+        const results = await Promise.allSettled(checkPromises);
+        // Log any failures
+        let successCount = 0;
+        let liveCount = 0;
+        let skippedCount = 0;
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                successCount++;
+                if (result.value) {
+                    liveCount++;
+                }
+            }
+            else {
+                this.logger.error('Target check failed', {
+                    username: targets[index].username,
+                    error: result.reason
+                });
+            }
+        });
+        skippedCount = targets.length - successCount;
+        this.logger.debug('Polling cycle complete', {
+            total_targets: targets.length,
+            checked: successCount,
+            skipped_backoff: skippedCount,
+            found_live: liveCount
+        });
+        // Clean up expired cache entries
+        this.statusChecker.cleanupExpiredCache();
+    }
+    /**
+     * Check a single target, respecting backoff
+     *
+     * @param target Polling target to check
+     * @returns true if live (and callback was called), false otherwise
+     * @private
+     */
+    async checkTarget(target) {
+        const { username, overlayId } = target;
+        // Check if backoff allows checking now
+        if (!this.backoffManager.shouldCheckNow(username)) {
+            const timeUntilNext = this.backoffManager.getTimeUntilNextCheck(username);
+            this.logger.debug('Skipping check due to backoff', {
+                username,
+                time_until_next_check_ms: timeUntilNext,
+                time_until_next_check_minutes: Math.round(timeUntilNext / 60000)
+            });
+            return false;
+        }
+        // Perform live status check
+        this.logger.debug('Checking target status', { username });
+        const result = await this.statusChecker.checkLiveStatus(username);
+        if (result.error) {
+            this.backoffManager.recordConnectionError(username, result.error);
+            return false;
+        }
+        if (result.isLive) {
+            this.logger.info('User is now live!', {
+                username,
+                overlay_id: overlayId
+            });
+            // Call the live callback if set
+            if (this.onLiveCallback) {
+                try {
+                    await this.onLiveCallback(username, overlayId);
+                    // Note: Successful connection will be recorded by the connection handler
+                    // We don't reset backoff here to avoid race conditions
+                }
+                catch (error) {
+                    this.logger.error('Error in live callback', {
+                        username,
+                        error: error instanceof Error ? error.message : String(error)
+                    });
+                    // Record as error so we retry sooner
+                    this.backoffManager.recordConnectionError(username, error instanceof Error ? error : new Error(String(error)));
+                }
+            }
+            return true;
+        }
+        else {
+            // Not live - record offline check
+            this.backoffManager.recordOfflineCheck(username);
+            return false;
+        }
+    }
+}
+//# sourceMappingURL=poller.js.map

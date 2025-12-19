@@ -191,6 +191,10 @@ func main() {
 		publicAPI.GET("/auth/tiktok/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/add-source/:overlay_id", proxyHandler.ForwardRequest)
 
+		// Viewer OAuth routes (for sending messages)
+		publicAPI.GET("/auth/viewer/twitch/login", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/viewer/twitch/callback", proxyHandler.ForwardRequest)
+
 		// Emote service routes (public)
 		publicAPI.GET("/emotes/*path", proxyHandler.ForwardRequest)
 
