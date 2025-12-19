@@ -16,11 +16,13 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store';
 import { viewerApi } from '@/lib/api/viewer';
+import { apiClient } from '@/lib/api/client';
 import type { StreamerInfo, SendMessageRequest } from '@/lib/types/viewer';
+import type { ChatMessage } from '@/lib/types/message';
 
 export default function ViewerChatPage() {
   const params = useParams();
@@ -34,6 +36,10 @@ export default function ViewerChatPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [overlayId, setOverlayId] = useState<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Initialize viewer auth store
   useEffect(() => {
@@ -50,13 +56,32 @@ export default function ViewerChatPage() {
     }
   }, [streamerUsername, setStreamer]);
 
-  // Fetch streamer info
+  // Fetch streamer info and overlay ID
   useEffect(() => {
     async function fetchStreamerInfo() {
       try {
         setLoadingStreamer(true);
         const info = await viewerApi.getStreamerInfo(streamerUsername);
         setStreamerInfo(info);
+
+        // Fetch user's public overlay ID for WebSocket connection
+        try {
+          const overlays = await apiClient.get<any>(`/api/v1/overlays/public/${streamerUsername}`);
+          if (overlays && overlays.id) {
+            setOverlayId(overlays.id);
+          }
+        } catch (err) {
+          console.warn('No public overlay found, will try to fetch overlays');
+          // Try to get any overlay for this user
+          try {
+            const userOverlays = await apiClient.get<any[]>(`/api/v1/admin/users/search?username=${streamerUsername}`);
+            if (userOverlays && userOverlays.length > 0 && userOverlays[0].overlays?.[0]) {
+              setOverlayId(userOverlays[0].overlays[0].id);
+            }
+          } catch {
+            console.warn('Could not fetch overlay ID for chat display');
+          }
+        }
       } catch (err) {
         console.error('Failed to fetch streamer info:', err);
         setError('Streamer not found or has no active platforms');
@@ -69,6 +94,52 @@ export default function ViewerChatPage() {
       fetchStreamerInfo();
     }
   }, [streamerUsername]);
+
+  // WebSocket connection for live chat display (no auth required)
+  useEffect(() => {
+    if (!overlayId) return;
+
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/overlay/${overlayId}`;
+    console.log('[Viewer Chat] Connecting to:', wsUrl);
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('[Viewer Chat] WebSocket connected');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const envelope = JSON.parse(event.data);
+        if (envelope.type === 'chat_message' && envelope.data) {
+          const message: ChatMessage = envelope.data;
+          setChatMessages((prev) => [...prev, message].slice(-100)); // Keep last 100 messages
+        }
+      } catch (error) {
+        console.error('[Viewer Chat] Failed to parse message:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('[Viewer Chat] WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('[Viewer Chat] Disconnected, will reconnect...');
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [overlayId]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
 
   const handleLogin = async () => {
     try {
@@ -201,6 +272,53 @@ export default function ViewerChatPage() {
             </div>
           )}
         </div>
+
+        {/* Live Chat Display */}
+        {overlayId && (
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold text-white mb-4">Live Chat</h2>
+            <div className="bg-gray-900 rounded-lg p-4 h-96 overflow-y-auto">
+              {chatMessages.length === 0 ? (
+                <div className="text-gray-500 text-center py-8">
+                  No messages yet. Chat will appear here when streamer is live.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {chatMessages.map((msg, idx) => (
+                    <div key={idx} className="flex gap-3">
+                      <div className="flex-shrink-0">
+                        {msg.user.avatar_url && (
+                          <img
+                            src={msg.user.avatar_url}
+                            alt={msg.user.username}
+                            className="w-8 h-8 rounded-full"
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span
+                            className="font-semibold"
+                            style={{ color: msg.user.color || '#FFFFFF' }}
+                          >
+                            {msg.user.display_name || msg.user.username}
+                          </span>
+                          <span className="text-xs text-gray-500 uppercase">
+                            {msg.platform}
+                          </span>
+                        </div>
+                        <div className="text-gray-200 break-words">
+                          {msg.message.text}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Message Input Section */}
         {viewerInfo ? (

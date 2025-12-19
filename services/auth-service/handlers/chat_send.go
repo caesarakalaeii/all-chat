@@ -92,6 +92,19 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 		return
 	}
 
+	// Check if viewer is banned
+	if session.IsBanned {
+		reason := "No reason provided"
+		if session.BannedReason != nil {
+			reason = *session.BannedReason
+		}
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":  "You have been banned from sending messages",
+			"reason": reason,
+		})
+		return
+	}
+
 	// Check if platform matches (if specified)
 	if req.Platform != "" && req.Platform != session.Platform {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "platform mismatch"})

@@ -181,6 +181,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(userRepo, log)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, twitchClientID)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
+	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 
 	// Set Gin mode
 	if logLevel == "debug" {
@@ -263,6 +264,11 @@ func main() {
 	{
 		admin.GET("/users", adminHandler.ListUsers)
 		admin.GET("/users/:id", adminHandler.GetUser)
+
+		// Viewer management
+		admin.GET("/viewers", adminViewerHandler.HandleListViewers)
+		admin.POST("/viewers/:session_id/ban", adminViewerHandler.HandleBanViewer)
+		admin.POST("/viewers/:session_id/unban", adminViewerHandler.HandleUnbanViewer)
 	}
 
 	// Get port from environment
