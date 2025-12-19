@@ -31,7 +31,20 @@ func JWTAuth(secret string) gin.HandlerFunc {
 			return
 		}
 
-		// Try to validate as regular user token first
+		// Try to validate as viewer token first (more specific)
+		viewerClaims, err := auth.ValidateViewerJWT(tokenString, secret)
+		if err == nil && viewerClaims.IsViewer {
+			// Viewer token
+			c.Set("session_id", viewerClaims.SessionID)
+			c.Set("username", viewerClaims.Username)
+			c.Set("platform", viewerClaims.Platform)
+			c.Set("platform_user_id", viewerClaims.PlatformUserID)
+			c.Set("is_viewer", viewerClaims.IsViewer)
+			c.Next()
+			return
+		}
+
+		// Try to validate as regular user token
 		claims, err := auth.ValidateJWT(tokenString, secret)
 		if err == nil {
 			// Regular user token
@@ -39,19 +52,6 @@ func JWTAuth(secret string) gin.HandlerFunc {
 			c.Set("username", claims.Username)
 			c.Set("twitch_id", claims.TwitchID)
 			c.Set("roles", claims.Roles)
-			c.Next()
-			return
-		}
-
-		// Try to validate as viewer token
-		viewerClaims, err := auth.ValidateViewerJWT(tokenString, secret)
-		if err == nil {
-			// Viewer token
-			c.Set("session_id", viewerClaims.SessionID)
-			c.Set("username", viewerClaims.Username)
-			c.Set("platform", viewerClaims.Platform)
-			c.Set("platform_user_id", viewerClaims.PlatformUserID)
-			c.Set("is_viewer", viewerClaims.IsViewer)
 			c.Next()
 			return
 		}

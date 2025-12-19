@@ -1,6 +1,6 @@
 package main
 
-// Updated: 2025-12-19 20:42 - Viewer JWT support in shared middleware (force rebuild)
+// Updated: 2025-12-19 20:57 - Viewer JWT checked first in middleware
 
 import (
 	"context"
