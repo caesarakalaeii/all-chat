@@ -166,9 +166,17 @@ func main() {
 
 	overlayManagerURL := getEnvOrDefault("OVERLAY_MANAGER_URL", "http://localhost:8082")
 
+	// Create viewer OAuth providers (with chat write scopes)
+	viewerTwitchRedirectURL := frontendURL + "/api/v1/auth/viewer/twitch/callback"
+	viewerTwitchOAuth := oauth.NewViewerTwitchOAuth(twitchClientID, twitchClientSecret, viewerTwitchRedirectURL)
+
+	// Create viewer repository
+	viewerRepo := repository.NewViewerRepository(db, tokenCipher)
+
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log)
 	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
+	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, log)
 
@@ -215,6 +223,10 @@ func main() {
 	// Token refresh
 	router.POST("/refresh", legacyAuthHandler.HandleRefresh)
 
+	// Viewer auth routes (separate from streamer auth)
+	router.GET("/viewer/twitch/login", viewerAuthHandler.HandleTwitchLogin)
+	router.GET("/viewer/twitch/callback", viewerAuthHandler.HandleTwitchCallback)
+
 	// Protected routes (require JWT)
 	protected := router.Group("/")
 	protected.Use(middleware.JWTAuth(jwtSecret))
@@ -228,6 +240,14 @@ func main() {
 		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
 		protected.GET("/tiktok/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTikTok))
+	}
+
+	// Viewer protected routes (require viewer JWT)
+	viewerProtected := router.Group("/viewer")
+	viewerProtected.Use(middleware.JWTAuth(jwtSecret))
+	{
+		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
+		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
 	}
 
 	// Admin routes (JWT + Admin role required)
