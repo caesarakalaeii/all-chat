@@ -28,6 +28,7 @@ export interface StreamerInfo {
   username: string;
   display_name: string;
   platforms: StreamerPlatform[];
+  overlay_id?: string;
 }
 
 export interface StreamerPlatform {

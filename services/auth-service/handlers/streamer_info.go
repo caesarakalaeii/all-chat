@@ -38,6 +38,7 @@ type StreamerInfoResponse struct {
 	Username    string         `json:"username"`
 	DisplayName string         `json:"display_name,omitempty"`
 	Platforms   []PlatformInfo `json:"platforms"`
+	OverlayID   string         `json:"overlay_id,omitempty"` // For WebSocket connection
 }
 
 // HandleGetStreamerInfo returns information about a streamer and their active platforms
@@ -57,6 +58,16 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "streamer not found"})
 		return
 	}
+
+	// Get user's first overlay ID for WebSocket connection
+	var overlayID string
+	overlayQuery := `
+		SELECT id FROM overlays
+		WHERE user_id = $1
+		ORDER BY created_at ASC
+		LIMIT 1
+	`
+	_ = h.db.QueryRow(ctx, overlayQuery, user.ID).Scan(&overlayID)
 
 	// Query active sources from overlay_chat_sources
 	query := `
@@ -94,6 +105,7 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 		Username:    user.Username,
 		DisplayName: user.Username, // TODO: Add display_name field to users table if needed
 		Platforms:   platforms,
+		OverlayID:   overlayID,
 	}
 
 	c.JSON(http.StatusOK, response)

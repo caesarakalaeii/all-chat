@@ -64,23 +64,9 @@ export default function ViewerChatPage() {
         const info = await viewerApi.getStreamerInfo(streamerUsername);
         setStreamerInfo(info);
 
-        // Fetch user's public overlay ID for WebSocket connection
-        try {
-          const overlays = await apiClient.get<any>(`/api/v1/overlays/public/${streamerUsername}`);
-          if (overlays && overlays.id) {
-            setOverlayId(overlays.id);
-          }
-        } catch (err) {
-          console.warn('No public overlay found, will try to fetch overlays');
-          // Try to get any overlay for this user
-          try {
-            const userOverlays = await apiClient.get<any[]>(`/api/v1/admin/users/search?username=${streamerUsername}`);
-            if (userOverlays && userOverlays.length > 0 && userOverlays[0].overlays?.[0]) {
-              setOverlayId(userOverlays[0].overlays[0].id);
-            }
-          } catch {
-            console.warn('Could not fetch overlay ID for chat display');
-          }
+        // Set overlay ID from streamer info response for WebSocket connection
+        if (info.overlay_id) {
+          setOverlayId(info.overlay_id);
         }
       } catch (err) {
         console.error('Failed to fetch streamer info:', err);
