@@ -10,6 +10,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
+	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -317,26 +318,20 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession) (st
 	now := time.Now()
 	expiresAt := now.Add(h.jwtExpiry)
 
-	claims := models.ViewerJWTClaims{
-		SessionID:      session.ID,
+	claims := sharedAuth.ViewerClaims{
+		SessionID:      session.ID.String(),
 		Platform:       session.Platform,
 		PlatformUserID: session.PlatformUserID,
 		Username:       session.Username,
 		IsViewer:       true,
-		ExpiresAt:      expiresAt.Unix(),
-		IssuedAt:       now.Unix(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    "all-chat",
+		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"session_id":       claims.SessionID.String(),
-		"platform":         claims.Platform,
-		"platform_user_id": claims.PlatformUserID,
-		"username":         claims.Username,
-		"is_viewer":        claims.IsViewer,
-		"exp":              claims.ExpiresAt,
-		"iat":              claims.IssuedAt,
-	})
-
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(h.jwtSecret))
 }
 
