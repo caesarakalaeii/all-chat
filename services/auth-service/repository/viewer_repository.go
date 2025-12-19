@@ -254,3 +254,19 @@ func (r *ViewerRepository) LogMessage(ctx context.Context, log *models.ViewerMes
 
 	return nil
 }
+
+// DecryptAccessToken decrypts the access token
+func (r *ViewerRepository) DecryptAccessToken(token string) (string, error) {
+	if r.cipher == nil || token == "" {
+		return token, nil
+	}
+	return r.cipher.Decrypt(token)
+}
+
+// DecryptRefreshToken decrypts the refresh token
+func (r *ViewerRepository) DecryptRefreshToken(token string) (string, error) {
+	if r.cipher == nil || token == "" {
+		return token, nil
+	}
+	return r.cipher.Decrypt(token)
+}

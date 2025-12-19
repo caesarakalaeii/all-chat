@@ -126,6 +126,26 @@ WHERE id = $1
 	return user, nil
 }
 
+// GetByUsername retrieves a user by username
+func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*models.User, error) {
+	query := `
+SELECT id, twitch_id, google_id, tiktok_open_id, kick_id, auth_provider, username, display_name, profile_image_url,
+           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
+FROM users
+WHERE username = $1
+`
+
+	user, err := r.scanUser(r.db.QueryRow(ctx, query, username))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by username: %w", err)
+	}
+
+	return user, nil
+}
+
 // Update updates an existing user
 func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 	user.UpdatedAt = time.Now()
