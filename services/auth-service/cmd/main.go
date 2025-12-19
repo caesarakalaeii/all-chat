@@ -179,6 +179,8 @@ func main() {
 	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, log)
+	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, twitchClientID)
+	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 
 	// Set Gin mode
 	if logLevel == "debug" {
@@ -227,6 +229,9 @@ func main() {
 	router.GET("/viewer/twitch/login", viewerAuthHandler.HandleTwitchLogin)
 	router.GET("/viewer/twitch/callback", viewerAuthHandler.HandleTwitchCallback)
 
+	// Public streamer info routes
+	router.GET("/streamers/:username", streamerInfoHandler.HandleGetStreamerInfo)
+
 	// Protected routes (require JWT)
 	protected := router.Group("/")
 	protected.Use(middleware.JWTAuth(jwtSecret))
@@ -248,6 +253,7 @@ func main() {
 	{
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
+		viewerProtected.POST("/chat/send", chatSendHandler.HandleSendMessage)
 	}
 
 	// Admin routes (JWT + Admin role required)
