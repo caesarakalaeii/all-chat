@@ -31,23 +31,36 @@ func JWTAuth(secret string) gin.HandlerFunc {
 			return
 		}
 
-		// Validate token
+		// Try to validate as regular user token first
 		claims, err := auth.ValidateJWT(tokenString, secret)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid or expired token",
-			})
-			c.Abort()
+		if err == nil {
+			// Regular user token
+			c.Set("user_id", claims.UserID)
+			c.Set("username", claims.Username)
+			c.Set("twitch_id", claims.TwitchID)
+			c.Set("roles", claims.Roles)
+			c.Next()
 			return
 		}
 
-		// Set user info in context
-		c.Set("user_id", claims.UserID)
-		c.Set("username", claims.Username)
-		c.Set("twitch_id", claims.TwitchID)
-		c.Set("roles", claims.Roles)
+		// Try to validate as viewer token
+		viewerClaims, err := auth.ValidateViewerJWT(tokenString, secret)
+		if err == nil {
+			// Viewer token
+			c.Set("session_id", viewerClaims.SessionID)
+			c.Set("username", viewerClaims.Username)
+			c.Set("platform", viewerClaims.Platform)
+			c.Set("platform_user_id", viewerClaims.PlatformUserID)
+			c.Set("is_viewer", viewerClaims.IsViewer)
+			c.Next()
+			return
+		}
 
-		c.Next()
+		// Both validations failed
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid or expired token",
+		})
+		c.Abort()
 	}
 }
 
