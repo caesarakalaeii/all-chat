@@ -1,5 +1,7 @@
 package main
 
+// Updated: 2025-12-19 - Viewer JWT support in shared middleware
+
 import (
 	"context"
 	"encoding/json"
