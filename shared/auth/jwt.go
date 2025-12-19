@@ -22,6 +22,16 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// ViewerClaims represents JWT claims for viewer authentication
+type ViewerClaims struct {
+	SessionID      string `json:"session_id"`
+	Platform       string `json:"platform"`
+	PlatformUserID string `json:"platform_user_id"`
+	Username       string `json:"username"`
+	IsViewer       bool   `json:"is_viewer"`
+	jwt.RegisteredClaims
+}
+
 // ServiceClaims represents JWT claims used for service-to-service auth
 type ServiceClaims struct {
 	ServiceName string   `json:"service_name"`
@@ -93,6 +103,29 @@ func ValidateJWT(tokenString, secret string) (*Claims, error) {
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, ErrInvalidToken
+}
+
+// ValidateViewerJWT validates a viewer JWT token and returns the claims
+func ValidateViewerJWT(tokenString, secret string) (*ViewerClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &ViewerClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(secret), nil
+	})
+
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
+	}
+
+	if claims, ok := token.Claims.(*ViewerClaims); ok && token.Valid {
 		return claims, nil
 	}
 
