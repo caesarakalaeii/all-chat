@@ -195,6 +195,9 @@ func main() {
 		publicAPI.GET("/auth/viewer/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/twitch/callback", proxyHandler.ForwardRequest)
 
+		// Streamer info (public)
+		publicAPI.GET("/auth/streamers/:username", proxyHandler.ForwardRequest)
+
 		// Emote service routes (public)
 		publicAPI.GET("/emotes/*path", proxyHandler.ForwardRequest)
 
@@ -214,6 +217,11 @@ func main() {
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", proxyHandler.ForwardRequest)
+
+		// Viewer protected routes
+		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/auth/viewer/logout", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/auth/viewer/chat/send", proxyHandler.ForwardRequest)
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)
