@@ -27,6 +27,8 @@ import { EventEmitter } from 'events';
 import { TikTokStatusChecker } from './livestream/status-checker.js';
 import { BackoffManager } from './livestream/backoff-manager.js';
 import { LiveStreamPoller } from './livestream/poller.js';
+import { PrometheusMetrics } from './metrics/prometheus.js';
+import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
@@ -47,6 +49,8 @@ const TIKTOK_BASE_OFFLINE_BACKOFF_MS = parseInt(process.env.TIKTOK_BASE_OFFLINE_
 const TIKTOK_MAX_OFFLINE_BACKOFF_MS = parseInt(process.env.TIKTOK_MAX_OFFLINE_BACKOFF_MS || '600000');
 const TIKTOK_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_ERROR_BACKOFF_MS || '2000');
 const TIKTOK_MAX_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_MAX_ERROR_BACKOFF_MS || '300000');
+const TIKTOK_HEARTBEAT_INTERVAL_MS = parseInt(process.env.TIKTOK_HEARTBEAT_INTERVAL_MS || '30000');
+const TIKTOK_HEARTBEAT_TIMEOUT_MS = parseInt(process.env.TIKTOK_HEARTBEAT_TIMEOUT_MS || '90000');
 
 // Configure logger
 const logger = winston.createLogger({
@@ -101,6 +105,12 @@ class TikTokListenerService {
   private backoffManager: BackoffManager;
   private livePoller: LiveStreamPoller;
 
+  // Prometheus metrics
+  private metrics: PrometheusMetrics;
+
+  // Heartbeat monitoring
+  private heartbeatMonitor: HeartbeatMonitor;
+
   constructor() {
     // Initialize Redis client
     this.redis = createClient({
@@ -139,6 +149,17 @@ class TikTokListenerService {
     this.livePoller.setOnLiveCallback(async (username: string, overlayId: string) => {
       await this.connectToStream(username, overlayId);
     });
+
+    // Initialize Prometheus metrics
+    this.metrics = new PrometheusMetrics(logger);
+
+    // Initialize heartbeat monitor
+    this.heartbeatMonitor = new HeartbeatMonitor(
+      logger,
+      this.metrics,
+      TIKTOK_HEARTBEAT_INTERVAL_MS,
+      TIKTOK_HEARTBEAT_TIMEOUT_MS
+    );
   }
 
   async start(): Promise<void> {
@@ -199,6 +220,16 @@ class TikTokListenerService {
           active_streams_count: this.activeStreams.size,
           streams
         }));
+      } else if (req.url === '/metrics' && req.method === 'GET') {
+        // Prometheus metrics endpoint
+        this.metrics.getMetrics().then((metrics) => {
+          res.writeHead(200, { 'Content-Type': this.metrics.getContentType() });
+          res.end(metrics);
+        }).catch((error) => {
+          logger.error('Failed to generate metrics', { error });
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Error generating metrics');
+        });
       } else {
         res.writeHead(404);
         res.end();
@@ -389,6 +420,9 @@ class TikTokListenerService {
         this.backoffManager.recordSuccessfulConnection(username);
         this.livePoller.removeTarget(username);
 
+        // Start heartbeat monitoring
+        this.heartbeatMonitor.start(username, connection);
+
         // Update database: stream is live and source is active
         this.updateStreamHistory(username, true);
         this.setSourceActive(username, true);
@@ -400,6 +434,9 @@ class TikTokListenerService {
         if (stream) {
           stream.is_connected = false;
         }
+
+        // Stop heartbeat monitoring
+        this.heartbeatMonitor.stop(username);
 
         // Stream ended - reset to quick re-check
         this.backoffManager.recordDisconnection(username);
@@ -487,6 +524,9 @@ class TikTokListenerService {
 
   private async handleChatMessage(username: string, overlayId: string, data: any): Promise<void> {
     try {
+      // Record message for heartbeat monitoring
+      this.heartbeatMonitor.recordMessage(username);
+
       // Create raw message in standardized format
       const rawMessage: RawChatMessage = {
         message_id: randomUUID(),
@@ -535,6 +575,10 @@ class TikTokListenerService {
     // Stop live stream poller
     this.livePoller.stop();
     logger.info('Live stream poller stopped');
+
+    // Stop all heartbeat monitoring
+    this.heartbeatMonitor.stopAll();
+    logger.info('Heartbeat monitoring stopped');
 
     // Disconnect all streams
     for (const [username, _] of this.activeStreams.entries()) {
