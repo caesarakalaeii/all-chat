@@ -100,7 +100,13 @@ export default function ViewerChatPage() {
         const envelope = JSON.parse(event.data);
         if (envelope.type === 'chat_message' && envelope.data) {
           const message: ChatMessage = envelope.data;
-          setChatMessages((prev) => [...prev, message].slice(-100)); // Keep last 100 messages
+          setChatMessages((prev) => {
+            // Prevent duplicate messages (check if message ID already exists)
+            if (message.id && prev.some(m => m.id === message.id)) {
+              return prev;
+            }
+            return [...prev, message].slice(-100); // Keep last 100 messages
+          });
         }
       } catch (error) {
         console.error('[Viewer Chat] Failed to parse message:', error);
@@ -270,8 +276,8 @@ export default function ViewerChatPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {chatMessages.map((msg, idx) => (
-                    <div key={idx} className="flex gap-3">
+                  {chatMessages.map((msg) => (
+                    <div key={msg.id || `${msg.timestamp}-${msg.user.username}`} className="flex gap-3">
                       <div className="flex-shrink-0">
                         {msg.user.avatar_url && (
                           <img
