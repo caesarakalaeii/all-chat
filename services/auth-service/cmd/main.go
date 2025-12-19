@@ -184,6 +184,7 @@ func main() {
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, twitchClientID)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
+	debugHandler := handlers.NewDebugHandler(log, jwtSecret)
 
 	// Set Gin mode
 	if logLevel == "debug" {
@@ -234,6 +235,9 @@ func main() {
 
 	// Public streamer info routes
 	router.GET("/streamers/:username", streamerInfoHandler.HandleGetStreamerInfo)
+
+	// Debug routes (TODO: remove in production)
+	router.GET("/debug/test-jwt", debugHandler.HandleTestViewerJWT)
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
