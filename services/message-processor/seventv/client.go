@@ -96,6 +96,8 @@ type Client struct {
 	mu                sync.RWMutex
 	done              chan struct{}
 	reconnectDelay    time.Duration
+	reconnecting      bool // flag to prevent multiple concurrent reconnects
+	readLoopDone      chan struct{} // signal when read loop exits
 }
 
 // NewClient creates a new 7TV EventAPI client
@@ -106,12 +108,26 @@ func NewClient(logger *zap.Logger, handler EventHandler) *Client {
 		eventHandler:   handler,
 		done:           make(chan struct{}),
 		reconnectDelay: 5 * time.Second,
+		readLoopDone:   make(chan struct{}),
 	}
 }
 
 // Connect establishes the WebSocket connection and starts listening
 func (c *Client) Connect(ctx context.Context) error {
 	c.logger.Info("Connecting to 7TV EventAPI", zap.String("url", eventAPIURL))
+
+	// Close old connection if exists and wait for read loop to exit
+	c.mu.Lock()
+	if c.conn != nil {
+		oldConn := c.conn
+		c.conn = nil
+		c.mu.Unlock()
+		oldConn.Close()
+		// Wait for read loop to fully exit
+		<-c.readLoopDone
+		c.mu.Lock()
+	}
+	c.mu.Unlock()
 
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, eventAPIURL, nil)
 	if err != nil {
@@ -120,6 +136,7 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	c.mu.Lock()
 	c.conn = conn
+	c.readLoopDone = make(chan struct{}) // Create new channel for this connection
 	c.mu.Unlock()
 
 	c.logger.Info("Connected to 7TV EventAPI")
@@ -134,10 +151,15 @@ func (c *Client) Connect(ctx context.Context) error {
 func (c *Client) readMessages(ctx context.Context) {
 	defer func() {
 		c.mu.Lock()
-		if c.conn != nil {
-			c.conn.Close()
-		}
+		conn := c.conn
 		c.mu.Unlock()
+
+		if conn != nil {
+			conn.Close()
+		}
+
+		// Signal that read loop has exited
+		close(c.readLoopDone)
 	}()
 
 	for {
@@ -147,13 +169,29 @@ func (c *Client) readMessages(ctx context.Context) {
 		case <-c.done:
 			return
 		default:
+			// Get connection with lock
+			c.mu.RLock()
+			conn := c.conn
+			c.mu.RUnlock()
+
+			if conn == nil {
+				return
+			}
+
 			var msg Message
-			if err := c.conn.ReadJSON(&msg); err != nil {
+			if err := conn.ReadJSON(&msg); err != nil {
 				c.logger.Error("Failed to read message from 7TV EventAPI",
 					zap.Error(err),
 				)
-				// Attempt reconnection
-				go c.reconnect(ctx)
+				// Attempt reconnection (only if not already reconnecting)
+				c.mu.Lock()
+				if !c.reconnecting {
+					c.reconnecting = true
+					c.mu.Unlock()
+					go c.reconnect(ctx)
+				} else {
+					c.mu.Unlock()
+				}
 				return
 			}
 
@@ -186,11 +224,25 @@ func (c *Client) handleMessage(ctx context.Context, msg *Message) error {
 		return nil
 	case OpReconnect:
 		c.logger.Info("7TV EventAPI requested reconnection")
-		go c.reconnect(ctx)
+		c.mu.Lock()
+		if !c.reconnecting {
+			c.reconnecting = true
+			c.mu.Unlock()
+			go c.reconnect(ctx)
+		} else {
+			c.mu.Unlock()
+		}
 		return nil
 	case OpEndOfStream:
 		c.logger.Info("7TV EventAPI stream ended")
-		go c.reconnect(ctx)
+		c.mu.Lock()
+		if !c.reconnecting {
+			c.reconnecting = true
+			c.mu.Unlock()
+			go c.reconnect(ctx)
+		} else {
+			c.mu.Unlock()
+		}
 		return nil
 	default:
 		c.logger.Warn("Unknown opcode received",
@@ -383,6 +435,12 @@ func (c *Client) Unsubscribe(ctx context.Context, emoteSetID string) error {
 
 // reconnect attempts to reconnect to the 7TV EventAPI
 func (c *Client) reconnect(ctx context.Context) {
+	defer func() {
+		c.mu.Lock()
+		c.reconnecting = false
+		c.mu.Unlock()
+	}()
+
 	c.logger.Info("Attempting to reconnect to 7TV EventAPI",
 		zap.Duration("delay", c.reconnectDelay),
 	)
@@ -392,16 +450,23 @@ func (c *Client) reconnect(ctx context.Context) {
 	if err := c.Connect(ctx); err != nil {
 		c.logger.Error("Failed to reconnect", zap.Error(err))
 		// Exponential backoff
+		c.mu.Lock()
 		c.reconnectDelay = c.reconnectDelay * 2
 		if c.reconnectDelay > 5*time.Minute {
 			c.reconnectDelay = 5 * time.Minute
 		}
-		go c.reconnect(ctx)
+		c.mu.Unlock()
+
+		// Try again
+		time.Sleep(c.reconnectDelay)
+		c.reconnect(ctx)
 		return
 	}
 
 	// Reset reconnect delay on successful connection
+	c.mu.Lock()
 	c.reconnectDelay = 5 * time.Second
+	c.mu.Unlock()
 
 	// Resubscribe to all previous subscriptions
 	c.mu.RLock()
