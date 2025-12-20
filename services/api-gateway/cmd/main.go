@@ -263,7 +263,16 @@ func main() {
 	router.GET("/api/twitch/badges/global", badgeHandler.GetGlobalBadges)
 	router.GET("/api/twitch/badges/channels/:room_id", badgeHandler.GetChannelBadges)
 
-	// Protected routes (JWT auth required)
+	// Viewer protected routes (use ViewerJWTAuth middleware)
+	viewerAPI := router.Group("/api/v1/auth/viewer")
+	viewerAPI.Use(sharedmiddleware.ViewerJWTAuth(jwtSecret))
+	{
+		viewerAPI.GET("/me", proxyHandler.ForwardRequest)
+		viewerAPI.POST("/logout", proxyHandler.ForwardRequest)
+		viewerAPI.POST("/chat/send", proxyHandler.ForwardRequest)
+	}
+
+	// Protected routes (JWT auth required for streamers/admins)
 	protectedAPI := router.Group("/api/v1")
 	protectedAPI.Use(sharedmiddleware.JWTAuth(jwtSecret))
 	{
@@ -271,11 +280,6 @@ func main() {
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", proxyHandler.ForwardRequest)
-
-		// Viewer protected routes
-		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
-		protectedAPI.POST("/auth/viewer/logout", proxyHandler.ForwardRequest)
-		protectedAPI.POST("/auth/viewer/chat/send", proxyHandler.ForwardRequest)
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)
