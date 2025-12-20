@@ -135,8 +135,7 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 	case "twitch":
 		messageErr = h.sendTwitchMessage(ctx, session, streamerUser, req.Message)
 	case "youtube":
-		c.JSON(http.StatusNotImplemented, gin.H{"error": "YouTube message sending not yet implemented"})
-		return
+		messageErr = h.sendYouTubeMessage(ctx, session, streamerUser, req.Message)
 	case "kick":
 		c.JSON(http.StatusNotImplemented, gin.H{"error": "Kick message sending not yet implemented"})
 		return
@@ -300,4 +299,107 @@ func (h *ChatSendHandler) sendTwitchMessage(ctx context.Context, session *models
 	}
 
 	return nil
+}
+
+// sendYouTubeMessage sends a message to YouTube live chat using the Live Chat API
+func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *models.ViewerSession, streamer *models.User, message string) error {
+	// Decrypt access token
+	accessToken, err := h.viewerRepo.DecryptAccessToken(session.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt access token: %w", err)
+	}
+
+	// Get streamer's Google ID
+	if streamer.GoogleID == nil || *streamer.GoogleID == "" {
+		return fmt.Errorf("streamer has no YouTube account linked")
+	}
+
+	// First, get the streamer's active livestream to find the liveChatId
+	// This requires querying the YouTube API for active broadcasts
+	liveChatID, err := h.getYouTubeLiveChatID(ctx, accessToken, *streamer.GoogleID)
+	if err != nil {
+		return fmt.Errorf("failed to get live chat ID: %w", err)
+	}
+
+	// Insert the message into the live chat
+	reqBody := map[string]interface{}{
+		"snippet": map[string]interface{}{
+			"liveChatId": liveChatID,
+			"type":       "textMessageEvent",
+			"textMessageDetails": map[string]string{
+				"messageText": message,
+			},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	// Create HTTP request
+	url := "https://www.googleapis.com/youtube/v3/liveChat/messages?part=snippet"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send request
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check response
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("youtube API error: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// getYouTubeLiveChatID gets the live chat ID for a streamer's active broadcast
+func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, accessToken, channelID string) (string, error) {
+	// Query for active livestreams for this channel
+	url := fmt.Sprintf("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet&broadcastStatus=active&maxResults=1")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch broadcasts: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return "", fmt.Errorf("youtube broadcasts API error: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Items []struct {
+			Snippet struct {
+				LiveChatID string `json:"liveChatId"`
+			} `json:"snippet"`
+		} `json:"items"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if len(result.Items) == 0 || result.Items[0].Snippet.LiveChatID == "" {
+		return "", fmt.Errorf("streamer is not currently live on YouTube")
+	}
+
+	return result.Items[0].Snippet.LiveChatID, nil
 }

@@ -196,6 +196,8 @@ func main() {
 		// Viewer OAuth routes (for sending messages)
 		publicAPI.GET("/auth/viewer/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/twitch/callback", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/viewer/youtube/login", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/viewer/youtube/callback", proxyHandler.ForwardRequest)
 
 		// Streamer info (public)
 		publicAPI.GET("/auth/streamers/:username", proxyHandler.ForwardRequest)
