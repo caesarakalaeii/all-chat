@@ -26,19 +26,21 @@ type StringEncryptor interface {
 
 // ViewerAuthHandler handles authentication for viewers who want to send messages
 type ViewerAuthHandler struct {
-	twitchProvider *oauth.ViewerTwitchOAuth
-	viewerRepo     *repository.ViewerRepository
-	redis          *redis.Client
-	jwtSecret      string
-	jwtExpiry      time.Duration
-	logger         *zap.Logger
-	frontendURL    string
-	cipher         StringEncryptor
+	twitchProvider  *oauth.ViewerTwitchOAuth
+	youtubeProvider *oauth.ViewerYouTubeOAuth
+	viewerRepo      *repository.ViewerRepository
+	redis           *redis.Client
+	jwtSecret       string
+	jwtExpiry       time.Duration
+	logger          *zap.Logger
+	frontendURL     string
+	cipher          StringEncryptor
 }
 
 // NewViewerAuthHandler creates a new viewer auth handler
 func NewViewerAuthHandler(
 	twitchProvider *oauth.ViewerTwitchOAuth,
+	youtubeProvider *oauth.ViewerYouTubeOAuth,
 	viewerRepo *repository.ViewerRepository,
 	redisClient *redis.Client,
 	jwtSecret string,
@@ -48,14 +50,15 @@ func NewViewerAuthHandler(
 	logger *zap.Logger,
 ) *ViewerAuthHandler {
 	return &ViewerAuthHandler{
-		twitchProvider: twitchProvider,
-		viewerRepo:     viewerRepo,
-		redis:          redisClient,
-		jwtSecret:      jwtSecret,
-		jwtExpiry:      time.Duration(jwtExpiryHours) * time.Hour,
-		frontendURL:    frontendURL,
-		cipher:         cipher,
-		logger:         logger,
+		twitchProvider:  twitchProvider,
+		youtubeProvider: youtubeProvider,
+		viewerRepo:      viewerRepo,
+		redis:           redisClient,
+		jwtSecret:       jwtSecret,
+		jwtExpiry:       time.Duration(jwtExpiryHours) * time.Hour,
+		frontendURL:     frontendURL,
+		cipher:          cipher,
+		logger:          logger,
 	}
 }
 
@@ -338,5 +341,132 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession) (st
 // redirectToFrontendWithError redirects to frontend with error message
 func (h *ViewerAuthHandler) redirectToFrontendWithError(c *gin.Context, errorMsg string) {
 	redirectURL := fmt.Sprintf("%s/chat/auth-error?error=%s", h.frontendURL, errorMsg)
+	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// HandleYouTubeLogin initiates the OAuth flow for viewers on YouTube
+func (h *ViewerAuthHandler) HandleYouTubeLogin(c *gin.Context) {
+	streamer := c.Query("streamer")
+
+	state, err := generateRandomString(32)
+	if err != nil {
+		h.logger.Error("Failed to generate state", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate login"})
+		return
+	}
+	stateData := map[string]string{
+		"type": "viewer_youtube",
+	}
+	if streamer != "" {
+		stateData["streamer"] = streamer
+	}
+
+	stateJSON, _ := json.Marshal(stateData)
+	if err := h.redis.Set(c.Request.Context(), "oauth_state:"+state, stateJSON, 10*time.Minute).Err(); err != nil {
+		h.logger.Error("Failed to store OAuth state", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate login"})
+		return
+	}
+
+	authURL := h.youtubeProvider.GetAuthURL(state)
+	c.JSON(http.StatusOK, gin.H{"auth_url": authURL})
+}
+
+// HandleYouTubeCallback handles the OAuth callback for YouTube viewers
+func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
+	code := c.Query("code")
+	state := c.Query("state")
+
+	if code == "" || state == "" {
+		h.redirectToFrontendWithError(c, "Missing code or state parameter")
+		return
+	}
+
+	stateData, err := h.redis.Get(c.Request.Context(), "oauth_state:"+state).Result()
+	if err != nil {
+		h.redirectToFrontendWithError(c, "Invalid or expired state")
+		return
+	}
+
+	var storedState map[string]string
+	if err := json.Unmarshal([]byte(stateData), &storedState); err != nil {
+		h.redirectToFrontendWithError(c, "Invalid state data")
+		return
+	}
+
+	h.redis.Del(c.Request.Context(), "oauth_state:"+state)
+
+	token, err := h.youtubeProvider.ExchangeCode(c.Request.Context(), code)
+	if err != nil {
+		h.redirectToFrontendWithError(c, "Failed to exchange code")
+		return
+	}
+
+	userInfo, err := h.youtubeProvider.GetUserInfo(c.Request.Context(), token.AccessToken)
+	if err != nil {
+		h.redirectToFrontendWithError(c, "Failed to get user info")
+		return
+	}
+
+	session, err := h.viewerRepo.GetByPlatformUserID(c.Request.Context(), "youtube", userInfo.ID)
+	if err != nil {
+		h.redirectToFrontendWithError(c, "Failed to get session")
+		return
+	}
+
+	encryptedAccess, _ := h.cipher.Encrypt(token.AccessToken)
+	var encryptedRefresh *string
+	if token.RefreshToken != "" {
+		encrypted, _ := h.cipher.Encrypt(token.RefreshToken)
+		encryptedRefresh = &encrypted
+	}
+
+	if session == nil {
+		session = &models.ViewerSession{
+			Platform:       "youtube",
+			PlatformUserID: userInfo.ID,
+			Username:       userInfo.Name,
+			DisplayName:    userInfo.Name,
+			AccessToken:    encryptedAccess,
+			RefreshToken:   encryptedRefresh,
+			TokenExpiresAt: token.Expiry,
+		}
+
+		if userInfo.Picture != "" {
+			session.AvatarURL = &userInfo.Picture
+		}
+
+		if err := h.viewerRepo.Create(c.Request.Context(), session); err != nil {
+			h.redirectToFrontendWithError(c, "Failed to create session")
+			return
+		}
+	} else {
+		session.Username = userInfo.Name
+		session.DisplayName = userInfo.Name
+		session.AccessToken = encryptedAccess
+		session.RefreshToken = encryptedRefresh
+		session.TokenExpiresAt = token.Expiry
+
+		if userInfo.Picture != "" {
+			session.AvatarURL = &userInfo.Picture
+		}
+
+		if err := h.viewerRepo.Update(c.Request.Context(), session); err != nil {
+			h.redirectToFrontendWithError(c, "Failed to update session")
+			return
+		}
+	}
+
+	jwtToken, err := h.generateViewerJWT(session)
+	if err != nil {
+		h.redirectToFrontendWithError(c, "Failed to generate token")
+		return
+	}
+
+	redirectURL := fmt.Sprintf("%s/chat/auth-success?token=%s", h.frontendURL, jwtToken)
+	if streamer, ok := storedState["streamer"]; ok {
+		redirectURL += fmt.Sprintf("&streamer=%s", streamer)
+	}
+
 	c.Redirect(http.StatusFound, redirectURL)
 }

@@ -133,11 +133,10 @@ export default function ViewerChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  const handleLogin = async () => {
+  const handleLogin = async (platform: 'twitch' | 'youtube') => {
     try {
       setError(null);
-      const authUrl = await viewerApi.getLoginUrl('twitch', streamerUsername);
-      // Redirect to Twitch OAuth
+      const authUrl = await viewerApi.getLoginUrl(platform, streamerUsername);
       window.location.href = authUrl;
     } catch (err) {
       console.error('Login failed:', err);
@@ -223,12 +222,20 @@ export default function ViewerChatPage() {
                 </button>
               </>
             ) : (
-              <button
-                onClick={handleLogin}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                Login with Twitch
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleLogin('twitch')}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  Twitch
+                </button>
+                <button
+                  onClick={() => handleLogin('youtube')}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  YouTube
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -365,14 +372,22 @@ export default function ViewerChatPage() {
         ) : (
           <div className="bg-gray-800 rounded-lg p-6 text-center">
             <p className="text-gray-300 mb-4">
-              Please log in with your Twitch account to send messages
+              Please log in to send messages
             </p>
-            <button
-              onClick={handleLogin}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors inline-block"
-            >
-              Login with Twitch
-            </button>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => handleLogin('twitch')}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+              >
+                Login with Twitch
+              </button>
+              <button
+                onClick={() => handleLogin('youtube')}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+              >
+                Login with YouTube
+              </button>
+            </div>
           </div>
         )}
       </div>
