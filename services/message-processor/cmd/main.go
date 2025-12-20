@@ -21,6 +21,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -36,6 +37,26 @@ func main() {
 	log.Info("Starting Message Processor",
 		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
 	)
+
+	// Initialize OpenTelemetry tracing
+	tracingEnabled := getEnvOrDefault("OTEL_ENABLED", "false") == "true"
+	if tracingEnabled {
+		tracingCfg := tracing.Config{
+			ServiceName:    "message-processor",
+			ServiceVersion: getEnvOrDefault("APP_VERSION", "dev"),
+			Environment:    getEnvOrDefault("ENVIRONMENT", "development"),
+			OTLPEndpoint:   getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+			Enabled:        true,
+		}
+
+		shutdownTracer, err := tracing.InitTracer(tracingCfg, log)
+		if err != nil {
+			log.Error("Failed to initialize tracer (continuing without tracing)", zap.Error(err))
+		} else {
+			defer shutdownTracer(context.Background())
+			log.Info("OpenTelemetry tracing enabled")
+		}
+	}
 
 	// Parse message age cutoff (default 60 seconds)
 	messageAgeCutoffSeconds := 60
@@ -281,6 +302,11 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Add tracing middleware if enabled
+	if tracingEnabled {
+		router.Use(tracing.GinMiddleware("message-processor"))
+	}
 
 	// Health check endpoints
 	router.GET("/health/live", func(c *gin.Context) {
