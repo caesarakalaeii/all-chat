@@ -34,11 +34,12 @@ type PlatformInfo struct {
 }
 
 // StreamerInfoResponse is the response for streamer info
+// Note: overlay_id is intentionally NOT included to prevent viewers from
+// accessing the secret overlay ID or triggering YouTube listener polling
 type StreamerInfoResponse struct {
 	Username    string         `json:"username"`
 	DisplayName string         `json:"display_name,omitempty"`
 	Platforms   []PlatformInfo `json:"platforms"`
-	OverlayID   string         `json:"overlay_id,omitempty"` // For WebSocket connection
 }
 
 // HandleGetStreamerInfo returns information about a streamer and their active platforms
@@ -58,16 +59,6 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "streamer not found"})
 		return
 	}
-
-	// Get user's first overlay ID for WebSocket connection
-	var overlayID string
-	overlayQuery := `
-		SELECT id FROM overlays
-		WHERE user_id = $1
-		ORDER BY created_at ASC
-		LIMIT 1
-	`
-	_ = h.db.QueryRow(ctx, overlayQuery, user.ID).Scan(&overlayID)
 
 	// Query active sources from overlay_chat_sources
 	query := `
@@ -100,12 +91,11 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 		platforms = append(platforms, p)
 	}
 
-	// Return response
+	// Return response (overlay_id intentionally excluded for security)
 	response := StreamerInfoResponse{
 		Username:    user.Username,
-		DisplayName: user.Username, // TODO: Add display_name field to users table if needed
+		DisplayName: user.Username,
 		Platforms:   platforms,
-		OverlayID:   overlayID,
 	}
 
 	c.JSON(http.StatusOK, response)

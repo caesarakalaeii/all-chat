@@ -37,7 +37,6 @@ export default function ViewerChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [overlayId, setOverlayId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -56,18 +55,13 @@ export default function ViewerChatPage() {
     }
   }, [streamerUsername, setStreamer]);
 
-  // Fetch streamer info and overlay ID
+  // Fetch streamer info
   useEffect(() => {
     async function fetchStreamerInfo() {
       try {
         setLoadingStreamer(true);
         const info = await viewerApi.getStreamerInfo(streamerUsername);
         setStreamerInfo(info);
-
-        // Set overlay ID from streamer info response for WebSocket connection
-        if (info.overlay_id) {
-          setOverlayId(info.overlay_id);
-        }
       } catch (err) {
         console.error('Failed to fetch streamer info:', err);
         setError('Streamer not found or has no active platforms');
@@ -81,11 +75,14 @@ export default function ViewerChatPage() {
     }
   }, [streamerUsername]);
 
-  // WebSocket connection for live chat display (no auth required)
+  // WebSocket connection for live chat display (optional auth via token query param)
   useEffect(() => {
-    if (!overlayId) return;
+    if (!streamerUsername) return;
 
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/overlay/${overlayId}`;
+    // Use viewer-specific WebSocket endpoint (does NOT trigger YouTube polling)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const tokenParam = viewerToken ? `?token=${viewerToken}` : '';
+    const wsUrl = `${protocol}//${window.location.host}/ws/chat/${streamerUsername}${tokenParam}`;
     console.log('[Viewer Chat] Connecting to:', wsUrl);
 
     const ws = new WebSocket(wsUrl);
@@ -126,7 +123,7 @@ export default function ViewerChatPage() {
         ws.close();
       }
     };
-  }, [overlayId]);
+  }, [streamerUsername, viewerToken]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -273,7 +270,7 @@ export default function ViewerChatPage() {
         </div>
 
         {/* Live Chat Display */}
-        {overlayId && (
+        {streamerInfo && (
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold text-white mb-4">Live Chat</h2>
             <div className="bg-gray-900 rounded-lg p-4 h-96 overflow-y-auto">
