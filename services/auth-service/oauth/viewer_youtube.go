@@ -85,3 +85,16 @@ func (y *ViewerYouTubeOAuth) GetUserInfo(ctx context.Context, accessToken string
 func (y *ViewerYouTubeOAuth) GetPlatform() Platform {
 	return PlatformYouTube
 }
+
+// RefreshToken refreshes an OAuth token
+func (y *ViewerYouTubeOAuth) RefreshToken(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
+	token := &oauth2.Token{
+		RefreshToken: refreshToken,
+	}
+	tokenSource := y.config.TokenSource(ctx, token)
+	newToken, err := tokenSource.Token()
+	if err != nil {
+		return nil, fmt.Errorf("failed to refresh token: %w", err)
+	}
+	return newToken, nil
+}

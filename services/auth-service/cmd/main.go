@@ -187,7 +187,7 @@ func main() {
 	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, log)
-	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, twitchClientID)
+	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	debugHandler := handlers.NewDebugHandler(log, jwtSecret)
