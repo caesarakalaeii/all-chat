@@ -36,10 +36,38 @@ function AuthSuccessContent() {
       if (!token) {
         setError('No authentication token received');
         setLoading(false);
+
+        // Notify opener (extension) about error
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'ALLCHAT_AUTH_ERROR',
+            error: 'No authentication token received',
+          }, '*');
+        }
         return;
       }
 
-      // Store viewer token
+      // Check if this was opened from an extension popup
+      const isExtensionPopup = window.opener && !window.opener.closed;
+
+      if (isExtensionPopup) {
+        // Extension flow: post message to opener and close
+        console.log('[AllChat Auth] Posting token to extension opener');
+        window.opener.postMessage({
+          type: 'ALLCHAT_AUTH_SUCCESS',
+          token,
+          streamer,
+        }, '*');
+
+        // Show success message briefly before closing
+        setLoading(false);
+        setTimeout(() => {
+          window.close();
+        }, 1000);
+        return;
+      }
+
+      // Web app flow: store token and redirect
       setViewerToken(token);
 
       try {
@@ -74,6 +102,12 @@ function AuthSuccessContent() {
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500 mx-auto mb-4"></div>
           <p className="text-white text-lg">Completing authentication...</p>
           <p className="text-gray-400 text-sm mt-2">Please wait</p>
+        </div>
+      ) : !error && window.opener ? (
+        <div className="text-center">
+          <div className="text-6xl mb-4">✅</div>
+          <p className="text-green-500 text-lg mb-4">Authentication successful!</p>
+          <p className="text-gray-400 text-sm">You can close this window</p>
         </div>
       ) : error ? (
         <div className="text-center">
