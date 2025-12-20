@@ -304,3 +304,26 @@ Body:
 **Total Commits**: 10 for this feature
 **Status**: ✅ **FEATURE LIVE IN PRODUCTION**
 **URL**: https://allch.at/chat/caesarlp
+
+---
+
+## Browser Extension Development (NEW!)
+
+**Repository:** https://github.com/caesarakalaeii/all-chat-extension
+
+A browser extension has been created to replace native platform chat (Twitch, YouTube) with All-Chat's unified interface directly in the browser.
+
+**Status:** Phase 1 Complete ✅
+- Extension loads and injects on Twitch/YouTube
+- WebSocket connection to API Gateway working
+- Real-time message display functional
+- Graceful fallback when streamer not configured
+
+**Next:** Phase 2 - Emote rendering, OAuth authentication, message sending
+
+**See:** [Extension CHECKPOINT.md](https://github.com/caesarakalaeii/all-chat-extension/blob/main/CHECKPOINT.md) for details
+
+**Requirements from All-Chat backend:**
+- API Gateway must allow `chrome-extension://*` in CORS_ORIGIN
+- All existing WebSocket endpoints work without changes
+- OAuth endpoints will be used in Phase 2
