@@ -29,9 +29,9 @@ func GinMiddleware(serviceName string) gin.HandlerFunc {
 				semconv.HTTPMethod(c.Request.Method),
 				semconv.HTTPTarget(c.Request.URL.Path),
 				semconv.HTTPRoute(c.FullPath()),
-				semconv.HTTPScheme(c.Request.URL.Scheme),
-				semconv.HTTPHost(c.Request.Host),
-				semconv.HTTPUserAgent(c.Request.UserAgent()),
+				attribute.String("http.scheme", c.Request.URL.Scheme),
+				attribute.String("http.host", c.Request.Host),
+				attribute.String("http.user_agent", c.Request.UserAgent()),
 			),
 		)
 		defer span.End()
