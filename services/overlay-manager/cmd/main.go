@@ -18,6 +18,7 @@ import (
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
+	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -32,6 +33,26 @@ func main() {
 	log.Info("Starting Overlay Manager Service",
 		zap.String("version", getEnv("APP_VERSION", "0.1.0")),
 	)
+
+	// Initialize OpenTelemetry tracing
+	tracingEnabled := getEnv("OTEL_ENABLED", "false") == "true"
+	if tracingEnabled {
+		tracingCfg := tracing.Config{
+			ServiceName:    "overlay-manager",
+			ServiceVersion: getEnv("APP_VERSION", "0.1.0"),
+			Environment:    getEnv("ENVIRONMENT", "development"),
+			OTLPEndpoint:   getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+			Enabled:        true,
+		}
+
+		shutdownTracer, err := tracing.InitTracer(tracingCfg, log)
+		if err != nil {
+			log.Error("Failed to initialize tracer (continuing without tracing)", zap.Error(err))
+		} else {
+			defer shutdownTracer(context.Background())
+			log.Info("OpenTelemetry tracing enabled")
+		}
+	}
 
 	// Load configuration from environment
 	config := loadConfig()
@@ -119,6 +140,12 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Add tracing middleware if enabled
+	if tracingEnabled {
+		router.Use(tracing.GinMiddleware("overlay-manager"))
+	}
+
 	// CORS is handled by API Gateway, not by individual services
 	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
 		SkipPaths: []string{"/health/live", "/health/ready"},
