@@ -198,6 +198,8 @@ func main() {
 		publicAPI.GET("/auth/viewer/twitch/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/callback", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/viewer/kick/login", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/viewer/kick/callback", proxyHandler.ForwardRequest)
 
 		// Streamer info (public)
 		publicAPI.GET("/auth/streamers/:username", proxyHandler.ForwardRequest)

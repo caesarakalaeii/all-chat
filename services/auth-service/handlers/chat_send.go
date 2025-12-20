@@ -137,8 +137,7 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 	case "youtube":
 		messageErr = h.sendYouTubeMessage(ctx, session, streamerUser, req.Message)
 	case "kick":
-		c.JSON(http.StatusNotImplemented, gin.H{"error": "Kick message sending not yet implemented"})
-		return
+		messageErr = h.sendKickMessage(ctx, session, streamerUser, req.Message)
 	case "tiktok":
 		c.JSON(http.StatusNotImplemented, gin.H{"error": "TikTok message sending not yet implemented"})
 		return
@@ -402,4 +401,56 @@ func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, accessToken,
 	}
 
 	return result.Items[0].Snippet.LiveChatID, nil
+}
+
+// sendKickMessage sends a message to Kick chat using the Kick API
+func (h *ChatSendHandler) sendKickMessage(ctx context.Context, session *models.ViewerSession, streamer *models.User, message string) error {
+	// Decrypt access token
+	accessToken, err := h.viewerRepo.DecryptAccessToken(session.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt access token: %w", err)
+	}
+
+	// Get broadcaster ID (streamer's Kick user ID)
+	if streamer.KickID == nil || *streamer.KickID == "" {
+		return fmt.Errorf("streamer has no Kick account linked")
+	}
+
+	// Prepare request body
+	// Kick API expects: {"type": "user", "content": "message", "broadcaster_user_id": 123456}
+	reqBody := map[string]interface{}{
+		"type":                "user",
+		"content":             message,
+		"broadcaster_user_id": *streamer.KickID,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.kick.com/public/v1/chat", bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Send request
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check response
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("kick API error: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }

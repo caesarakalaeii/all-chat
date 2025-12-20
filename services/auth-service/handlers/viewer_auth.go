@@ -28,6 +28,7 @@ type StringEncryptor interface {
 type ViewerAuthHandler struct {
 	twitchProvider  *oauth.ViewerTwitchOAuth
 	youtubeProvider *oauth.ViewerYouTubeOAuth
+	kickProvider    *oauth.ViewerKickOAuth
 	viewerRepo      *repository.ViewerRepository
 	redis           *redis.Client
 	jwtSecret       string
@@ -41,6 +42,7 @@ type ViewerAuthHandler struct {
 func NewViewerAuthHandler(
 	twitchProvider *oauth.ViewerTwitchOAuth,
 	youtubeProvider *oauth.ViewerYouTubeOAuth,
+	kickProvider *oauth.ViewerKickOAuth,
 	viewerRepo *repository.ViewerRepository,
 	redisClient *redis.Client,
 	jwtSecret string,
@@ -52,6 +54,7 @@ func NewViewerAuthHandler(
 	return &ViewerAuthHandler{
 		twitchProvider:  twitchProvider,
 		youtubeProvider: youtubeProvider,
+		kickProvider:    kickProvider,
 		viewerRepo:      viewerRepo,
 		redis:           redisClient,
 		jwtSecret:       jwtSecret,
@@ -463,6 +466,174 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
+	redirectURL := fmt.Sprintf("%s/chat/auth-success?token=%s", h.frontendURL, jwtToken)
+	if streamer, ok := storedState["streamer"]; ok {
+		redirectURL += fmt.Sprintf("&streamer=%s", streamer)
+	}
+
+	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// HandleKickLogin initiates the OAuth flow for viewers on Kick
+func (h *ViewerAuthHandler) HandleKickLogin(c *gin.Context) {
+	streamer := c.Query("streamer")
+
+	state, err := generateRandomString(32)
+	if err != nil {
+		h.logger.Error("Failed to generate state", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate login"})
+		return
+	}
+
+	// Generate PKCE parameters
+	authURL, codeVerifier := h.kickProvider.GetAuthURLWithPKCE(state)
+
+	// Store state and code verifier in Redis
+	stateData := map[string]string{
+		"type":          "viewer_kick",
+		"code_verifier": codeVerifier,
+	}
+	if streamer != "" {
+		stateData["streamer"] = streamer
+	}
+
+	stateJSON, _ := json.Marshal(stateData)
+	if err := h.redis.Set(c.Request.Context(), "oauth_state:"+state, stateJSON, 10*time.Minute).Err(); err != nil {
+		h.logger.Error("Failed to store OAuth state", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate login"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"auth_url": authURL})
+}
+
+// HandleKickCallback handles the OAuth callback for Kick viewers
+func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
+	code := c.Query("code")
+	state := c.Query("state")
+
+	if code == "" || state == "" {
+		h.redirectToFrontendWithError(c, "Missing code or state parameter")
+		return
+	}
+
+	// Retrieve state data from Redis
+	stateData, err := h.redis.Get(c.Request.Context(), "oauth_state:"+state).Result()
+	if err != nil {
+		h.redirectToFrontendWithError(c, "Invalid or expired state")
+		return
+	}
+
+	var storedState map[string]string
+	if err := json.Unmarshal([]byte(stateData), &storedState); err != nil {
+		h.redirectToFrontendWithError(c, "Invalid state data")
+		return
+	}
+
+	// Delete state from Redis
+	h.redis.Del(c.Request.Context(), "oauth_state:"+state)
+
+	// Get code verifier from stored state
+	codeVerifier, ok := storedState["code_verifier"]
+	if !ok {
+		h.redirectToFrontendWithError(c, "Missing code verifier")
+		return
+	}
+
+	// Exchange code for token using PKCE
+	token, err := h.kickProvider.ExchangeCodeWithPKCE(c.Request.Context(), code, codeVerifier)
+	if err != nil {
+		h.logger.Error("Failed to exchange code", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to exchange code")
+		return
+	}
+
+	// Get user info
+	userInfo, err := h.kickProvider.GetUserInfoKick(c.Request.Context(), token.AccessToken)
+	if err != nil {
+		h.logger.Error("Failed to get user info", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to get user info")
+		return
+	}
+
+	// Check if session exists
+	platformUserID := fmt.Sprintf("%d", userInfo.UserID)
+	session, err := h.viewerRepo.GetByPlatformUserID(c.Request.Context(), "kick", platformUserID)
+	if err != nil {
+		h.logger.Error("Failed to get session", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to get session")
+		return
+	}
+
+	// Encrypt tokens
+	encryptedAccess, err := h.cipher.Encrypt(token.AccessToken)
+	if err != nil {
+		h.logger.Error("Failed to encrypt access token", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to process authentication")
+		return
+	}
+
+	var encryptedRefresh *string
+	if token.RefreshToken != "" {
+		encrypted, err := h.cipher.Encrypt(token.RefreshToken)
+		if err != nil {
+			h.logger.Error("Failed to encrypt refresh token", zap.Error(err))
+			// Continue without refresh token
+		} else {
+			encryptedRefresh = &encrypted
+		}
+	}
+
+	// Create or update session
+	if session == nil {
+		// Create new session
+		session = &models.ViewerSession{
+			Platform:       "kick",
+			PlatformUserID: platformUserID,
+			Username:       userInfo.Name,
+			DisplayName:    userInfo.Name,
+			AccessToken:    encryptedAccess,
+			RefreshToken:   encryptedRefresh,
+			TokenExpiresAt: token.Expiry,
+		}
+
+		if userInfo.ProfilePicture != "" {
+			session.AvatarURL = &userInfo.ProfilePicture
+		}
+
+		if err := h.viewerRepo.Create(c.Request.Context(), session); err != nil {
+			h.logger.Error("Failed to create session", zap.Error(err))
+			h.redirectToFrontendWithError(c, "Failed to create session")
+			return
+		}
+	} else {
+		// Update existing session
+		session.Username = userInfo.Name
+		session.DisplayName = userInfo.Name
+		session.AccessToken = encryptedAccess
+		session.RefreshToken = encryptedRefresh
+		session.TokenExpiresAt = token.Expiry
+
+		if userInfo.ProfilePicture != "" {
+			session.AvatarURL = &userInfo.ProfilePicture
+		}
+
+		if err := h.viewerRepo.Update(c.Request.Context(), session); err != nil {
+			h.logger.Error("Failed to update session", zap.Error(err))
+			h.redirectToFrontendWithError(c, "Failed to update session")
+			return
+		}
+	}
+
+	// Generate JWT token
+	jwtToken, err := h.generateViewerJWT(session)
+	if err != nil {
+		h.logger.Error("Failed to generate JWT", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to generate token")
+		return
+	}
+
+	// Redirect to frontend
 	redirectURL := fmt.Sprintf("%s/chat/auth-success?token=%s", h.frontendURL, jwtToken)
 	if streamer, ok := storedState["streamer"]; ok {
 		redirectURL += fmt.Sprintf("&streamer=%s", streamer)
