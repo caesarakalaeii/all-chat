@@ -153,7 +153,7 @@ func main() {
 	// Apply global middleware
 	router.Use(gin.Recovery()) // Panic recovery
 	router.Use(middleware.Logging(log))
-	router.Use(middleware.CORS())
+	router.Use(middleware.CORSFromEnv(log))
 
 	// Health check endpoint (no auth required)
 	router.GET("/health", healthHandler.CheckHealth)
