@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -24,21 +26,38 @@ const (
 
 // ChatSendHandler handles viewer message sending
 type ChatSendHandler struct {
-	log        *zap.Logger
-	viewerRepo *repository.ViewerRepository
-	userRepo   *repository.UserRepository
-	httpClient *http.Client
-	clientID   string
+	log             *zap.Logger
+	viewerRepo      *repository.ViewerRepository
+	userRepo        *repository.UserRepository
+	httpClient      *http.Client
+	clientID        string
+	twitchProvider  *oauth.ViewerTwitchOAuth
+	youtubeProvider *oauth.ViewerYouTubeOAuth
+	kickProvider    *oauth.ViewerKickOAuth
+	cipher          StringEncryptor
 }
 
 // NewChatSendHandler creates a new chat send handler
-func NewChatSendHandler(log *zap.Logger, viewerRepo *repository.ViewerRepository, userRepo *repository.UserRepository, clientID string) *ChatSendHandler {
+func NewChatSendHandler(
+	log *zap.Logger,
+	viewerRepo *repository.ViewerRepository,
+	userRepo *repository.UserRepository,
+	clientID string,
+	twitchProvider *oauth.ViewerTwitchOAuth,
+	youtubeProvider *oauth.ViewerYouTubeOAuth,
+	kickProvider *oauth.ViewerKickOAuth,
+	cipher StringEncryptor,
+) *ChatSendHandler {
 	return &ChatSendHandler{
-		log:        log.Named("chat-send"),
-		viewerRepo: viewerRepo,
-		userRepo:   userRepo,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		clientID:   clientID,
+		log:             log.Named("chat-send"),
+		viewerRepo:      viewerRepo,
+		userRepo:        userRepo,
+		httpClient:      &http.Client{Timeout: 10 * time.Second},
+		clientID:        clientID,
+		twitchProvider:  twitchProvider,
+		youtubeProvider: youtubeProvider,
+		kickProvider:    kickProvider,
+		cipher:          cipher,
 	}
 }
 
@@ -108,6 +127,13 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 	// Check if platform matches (if specified)
 	if req.Platform != "" && req.Platform != session.Platform {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "platform mismatch"})
+		return
+	}
+
+	// Refresh token if expired or expiring soon
+	if err := h.refreshTokenIfNeeded(ctx, session); err != nil {
+		h.log.Error("Failed to refresh token", zap.Error(err))
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "token expired, please re-authenticate"})
 		return
 	}
 
@@ -246,6 +272,77 @@ func (h *ChatSendHandler) updateRateLimits(ctx context.Context, session *models.
 	}
 
 	return h.viewerRepo.UpdateRateLimits(ctx, session.ID, count1Min, count1Hour, *reset1Min, *reset1Hour)
+}
+
+// refreshTokenIfNeeded checks if the access token is expired and refreshes it if needed
+func (h *ChatSendHandler) refreshTokenIfNeeded(ctx context.Context, session *models.ViewerSession) error {
+	// Check if token is expired or will expire in the next 5 minutes
+	if session.TokenExpiresAt.After(time.Now().Add(5 * time.Minute)) {
+		return nil // Token is still valid
+	}
+
+	h.log.Info("Access token expired or expiring soon, refreshing",
+		zap.String("platform", session.Platform),
+		zap.Time("expires_at", session.TokenExpiresAt))
+
+	// Check if refresh token exists
+	if session.RefreshToken == nil {
+		return fmt.Errorf("no refresh token available")
+	}
+
+	// Decrypt refresh token
+	refreshToken, err := h.viewerRepo.DecryptRefreshToken(*session.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt refresh token: %w", err)
+	}
+
+	// Refresh token using the appropriate provider
+	var newToken *oauth2.Token
+	switch session.Platform {
+	case "twitch":
+		newToken, err = h.twitchProvider.RefreshToken(ctx, refreshToken)
+	case "youtube":
+		newToken, err = h.youtubeProvider.RefreshToken(ctx, refreshToken)
+	case "kick":
+		newToken, err = h.kickProvider.RefreshToken(ctx, refreshToken)
+	default:
+		return fmt.Errorf("unsupported platform for token refresh: %s", session.Platform)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to refresh token: %w", err)
+	}
+
+	// Encrypt new tokens
+	encryptedAccess, err := h.cipher.Encrypt(newToken.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt new access token: %w", err)
+	}
+
+	var encryptedRefresh *string
+	if newToken.RefreshToken != "" {
+		encrypted, err := h.cipher.Encrypt(newToken.RefreshToken)
+		if err != nil {
+			h.log.Warn("Failed to encrypt new refresh token", zap.Error(err))
+		} else {
+			encryptedRefresh = &encrypted
+		}
+	}
+
+	// Update session with new tokens
+	session.AccessToken = encryptedAccess
+	session.RefreshToken = encryptedRefresh
+	session.TokenExpiresAt = newToken.Expiry
+
+	if err := h.viewerRepo.Update(ctx, session); err != nil {
+		return fmt.Errorf("failed to update session with new tokens: %w", err)
+	}
+
+	h.log.Info("Successfully refreshed access token",
+		zap.String("platform", session.Platform),
+		zap.Time("new_expiry", newToken.Expiry))
+
+	return nil
 }
 
 // sendTwitchMessage sends a message to Twitch chat using the Helix API
