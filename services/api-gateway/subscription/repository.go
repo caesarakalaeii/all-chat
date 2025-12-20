@@ -50,3 +50,28 @@ func (r *Repository) IsOverlayActive(ctx context.Context, overlayID string) (boo
 
 	return isActive, nil
 }
+
+// GetPublicOverlayByUsername gets the public overlay ID for a streamer by username
+// Returns the overlay ID if the streamer has a public overlay, empty string if not found
+func (r *Repository) GetPublicOverlayByUsername(ctx context.Context, username string) (string, error) {
+	query := `
+		SELECT o.id
+		FROM overlays o
+		JOIN users u ON o.user_id = u.id
+		WHERE u.username = $1
+		  AND o.is_active = true
+		  AND o.is_public_for_viewers = true
+		LIMIT 1
+	`
+
+	var overlayID string
+	err := r.db.QueryRow(ctx, query, username).Scan(&overlayID)
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get public overlay: %w", err)
+	}
+
+	return overlayID, nil
+}

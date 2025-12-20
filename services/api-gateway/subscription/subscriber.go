@@ -183,3 +183,89 @@ func (s *Subscriber) IsSubscribed(overlayID string) bool {
 	_, exists := s.subscriptions[overlayID]
 	return exists
 }
+
+// SubscribeViewerOnly subscribes to an overlay channel for viewer connections
+// Same as Subscribe() but does NOT publish connection events to avoid triggering YouTube polling
+// This is critical for viewer-only WebSocket connections at /ws/chat/{streamer}
+func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Increment reference count
+	s.refCounts[overlayID]++
+
+	// If already subscribed, just return (shared subscription)
+	if _, exists := s.subscriptions[overlayID]; exists {
+		s.logger.Debug("Already subscribed to overlay (viewer connection)",
+			zap.String("overlay_id", overlayID),
+			zap.Int("ref_count", s.refCounts[overlayID]),
+		)
+		return nil
+	}
+
+	// Subscribe to Redis channel
+	channel := fmt.Sprintf("overlay:%s", overlayID)
+	pubsub := s.client.Subscribe(ctx, channel)
+
+	// Verify subscription
+	if _, err := pubsub.Receive(ctx); err != nil {
+		return fmt.Errorf("failed to subscribe to channel: %w", err)
+	}
+
+	s.subscriptions[overlayID] = pubsub
+
+	s.logger.Info("Subscribed to overlay channel (viewer-only, no polling trigger)",
+		zap.String("overlay_id", overlayID),
+		zap.String("channel", channel),
+	)
+
+	// Start listening for messages
+	s.wg.Add(1)
+	go s.listen(ctx, overlayID, pubsub)
+
+	return nil
+}
+
+// UnsubscribeViewerOnly unsubscribes from an overlay channel (viewer connection)
+// Same as Unsubscribe() but does NOT publish disconnection events
+func (s *Subscriber) UnsubscribeViewerOnly(ctx context.Context, overlayID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Decrement reference count
+	s.refCounts[overlayID]--
+
+	// If still has connections, don't unsubscribe
+	if s.refCounts[overlayID] > 0 {
+		s.logger.Debug("Still has connections to overlay (viewer)",
+			zap.String("overlay_id", overlayID),
+			zap.Int("ref_count", s.refCounts[overlayID]),
+		)
+		return nil
+	}
+
+	// Remove from ref counts
+	delete(s.refCounts, overlayID)
+
+	// Get subscription
+	pubsub, exists := s.subscriptions[overlayID]
+	if !exists {
+		return nil
+	}
+
+	// Unsubscribe
+	if err := pubsub.Close(); err != nil {
+		s.logger.Warn("Error closing subscription (viewer)",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+	}
+
+	delete(s.subscriptions, overlayID)
+
+	s.logger.Info("Unsubscribed from overlay channel (viewer-only)",
+		zap.String("overlay_id", overlayID),
+	)
+
+	return nil
+}

@@ -162,6 +162,15 @@ func main() {
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchAccessToken)
 	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, jwtSecret, log)
 
+	// Create viewer WebSocket handler (same origin policy as owner handler)
+	viewerWsHandler := handlers.NewViewerWebSocketHandler(
+		wsManager,
+		subscriber,
+		subRepo,
+		jwtSecret,
+		log,
+	)
+
 	// Set Gin mode
 	if logLevel == "debug" {
 		gin.SetMode(gin.DebugMode)
@@ -193,8 +202,11 @@ func main() {
 	router.StaticFile("/legal/terms", "./static/legal/terms.html")
 	router.StaticFile("/legal/privacy", "./static/legal/privacy.html")
 
-	// WebSocket endpoint for overlays
+	// WebSocket endpoint for overlay owners/OBS (triggers YouTube polling)
 	router.GET("/ws/overlay/:overlay_id", wsHandler.HandleOverlayConnection)
+
+	// WebSocket endpoint for viewers (does NOT trigger polling, no overlay ID exposed)
+	router.GET("/ws/chat/:streamer_username", viewerWsHandler.HandleViewerChatConnection)
 
 	// API routes - Group by authentication requirements
 
