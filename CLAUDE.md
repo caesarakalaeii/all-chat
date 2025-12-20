@@ -513,3 +513,4 @@ This guide includes:
 - Architecture documentation map
 - Development workflows and commands
 - Known issues and technical debt references
+- the postgres is in the k8s cluster, ns all-chat deployed as a cnpg cluster
