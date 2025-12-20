@@ -190,7 +190,15 @@ func main() {
 		router.Use(tracing.GinMiddleware("api-gateway"))
 	}
 
-	router.Use(localmiddleware.CORS()) // TODO: Update to CORSFromEnv() after shared module rebuild
+	// CORS middleware - but skip for WebSocket routes
+	router.Use(func(c *gin.Context) {
+		// Skip CORS for WebSocket routes (they handle origin checking in upgrader)
+		if strings.HasPrefix(c.Request.URL.Path, "/ws/") {
+			c.Next()
+			return
+		}
+		localmiddleware.CORS()(c)
+	}) // TODO: Update to CORSFromEnv() after shared module rebuild
 
 	// Health check endpoint (no auth required)
 	router.GET("/health", healthHandler.CheckHealth)
