@@ -79,7 +79,7 @@ export const viewerApi = {
   /**
    * Get the OAuth login URL for a viewer to authenticate
    */
-  async getLoginUrl(platform: 'twitch' = 'twitch', streamer: string): Promise<string> {
+  async getLoginUrl(platform: 'twitch' | 'youtube', streamer: string): Promise<string> {
     const response = await apiClient.get<ViewerLoginResponse>(
       `/api/v1/auth/viewer/${platform}/login?streamer=${encodeURIComponent(streamer)}`
     );

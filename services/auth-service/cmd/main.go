@@ -172,13 +172,16 @@ func main() {
 	viewerTwitchRedirectURL := frontendURL + "/api/v1/auth/viewer/twitch/callback"
 	viewerTwitchOAuth := oauth.NewViewerTwitchOAuth(twitchClientID, twitchClientSecret, viewerTwitchRedirectURL)
 
+	viewerYouTubeRedirectURL := frontendURL + "/api/v1/auth/viewer/youtube/callback"
+	viewerYouTubeOAuth := oauth.NewViewerYouTubeOAuth(youtubeClientID, youtubeClientSecret, viewerYouTubeRedirectURL)
+
 	// Create viewer repository
 	viewerRepo := repository.NewViewerRepository(db, tokenCipher)
 
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log)
 	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
-	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
+	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, log)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, twitchClientID)
@@ -232,6 +235,8 @@ func main() {
 	// Viewer auth routes (separate from streamer auth)
 	router.GET("/viewer/twitch/login", viewerAuthHandler.HandleTwitchLogin)
 	router.GET("/viewer/twitch/callback", viewerAuthHandler.HandleTwitchCallback)
+	router.GET("/viewer/youtube/login", viewerAuthHandler.HandleYouTubeLogin)
+	router.GET("/viewer/youtube/callback", viewerAuthHandler.HandleYouTubeCallback)
 
 	// Public streamer info routes
 	router.GET("/streamers/:username", streamerInfoHandler.HandleGetStreamerInfo)
