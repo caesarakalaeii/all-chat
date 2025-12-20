@@ -12,6 +12,7 @@ import (
 
 	"github.com/caesar/all-chat/services/message-processor/cache"
 	"github.com/caesar/all-chat/services/message-processor/consumer"
+	"github.com/caesar/all-chat/services/message-processor/dedup"
 	"github.com/caesar/all-chat/services/message-processor/enricher"
 	"github.com/caesar/all-chat/services/message-processor/models"
 	"github.com/caesar/all-chat/services/message-processor/normalizer"
@@ -154,6 +155,9 @@ func main() {
 
 	pubsubPublisher := publisher.NewPubSubPublisher(redisClient, log)
 
+	// Create deduplicator to prevent duplicate message publishing
+	deduplicator := dedup.NewDeduplicator(redisClient, log)
+
 	// Define message handler
 	messageHandler := func(ctx context.Context, rawMsg *models.RawChatMessage) error {
 		// Filter out old messages based on timestamp
@@ -168,6 +172,25 @@ func main() {
 				zap.Time("timestamp", rawMsg.Timestamp),
 			)
 			processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "filtered_old", "success")
+			return nil
+		}
+
+		// Check for duplicate messages (prevents double-publishing to overlays)
+		isDup, dedupErr := deduplicator.IsDuplicate(ctx, rawMsg.Platform, rawMsg.ChannelID, rawMsg.UserID, rawMsg.Text, rawMsg.Timestamp)
+		if dedupErr != nil {
+			log.Warn("Deduplication check failed, processing message anyway",
+				zap.Error(dedupErr),
+				zap.String("message_id", rawMsg.MessageID),
+			)
+			// Continue processing on error (fail open)
+		} else if isDup {
+			log.Debug("Duplicate message detected, skipping",
+				zap.String("platform", rawMsg.Platform),
+				zap.String("channel", rawMsg.ChannelID),
+				zap.String("user", rawMsg.UserID),
+				zap.String("message_id", rawMsg.MessageID),
+			)
+			processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "deduplicated", "skipped")
 			return nil
 		}
 
