@@ -14,8 +14,9 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/api-gateway/handlers"
-	"github.com/caesar/all-chat/services/api-gateway/middleware"
+	localmiddleware "github.com/caesar/all-chat/services/api-gateway/middleware"
 	"github.com/caesar/all-chat/services/api-gateway/models"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 	"github.com/caesar/all-chat/shared/database"
@@ -173,14 +174,14 @@ func main() {
 
 	// Apply global middleware
 	router.Use(gin.Recovery()) // Panic recovery
-	router.Use(middleware.Logging(log))
+	router.Use(localmiddleware.Logging(log))
 
 	// Add tracing middleware if enabled
 	if tracingEnabled {
 		router.Use(tracing.GinMiddleware("api-gateway"))
 	}
 
-	router.Use(middleware.CORS()) // TODO: Update to CORSFromEnv() after shared module rebuild
+	router.Use(localmiddleware.CORS()) // TODO: Update to CORSFromEnv() after shared module rebuild
 
 	// Health check endpoint (no auth required)
 	router.GET("/health", healthHandler.CheckHealth)
@@ -244,7 +245,7 @@ func main() {
 
 	// Protected routes (JWT auth required)
 	protectedAPI := router.Group("/api/v1")
-	protectedAPI.Use(middleware.JWTAuth(jwtSecret))
+	protectedAPI.Use(sharedmiddleware.JWTAuth(jwtSecret))
 	{
 		// Auth service - protected routes
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
