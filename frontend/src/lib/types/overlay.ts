@@ -13,6 +13,7 @@ export interface Overlay {
   name: string;
   description?: string;
   is_active: boolean;
+  is_public_for_viewers: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -67,6 +68,7 @@ export interface UpdateOverlayRequest {
   name?: string;
   description?: string;
   is_active?: boolean;
+  is_public_for_viewers?: boolean;
 }
 
 export interface AddSourceRequest {
