@@ -301,6 +301,7 @@ func main() {
 		// Admin routes (protected - TODO: add admin role check)
 		protectedAPI.GET("/admin/users", proxyHandler.ForwardRequest)           // -> auth-service
 		protectedAPI.GET("/admin/users/:id", proxyHandler.ForwardRequest)       // -> auth-service
+		protectedAPI.POST("/admin/users/:id/impersonate", proxyHandler.ForwardRequest) // -> auth-service
 
 		// Admin viewer management routes
 		protectedAPI.GET("/admin/viewers", proxyHandler.ForwardRequest)         // -> auth-service
