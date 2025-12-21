@@ -45,8 +45,8 @@ func (r *OverlayRepository) Create(ctx context.Context, overlay *models.Overlay)
 	}
 
 	query := `
-		INSERT INTO overlays (id, user_id, name, description, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+		INSERT INTO overlays (id, user_id, name, description, is_active, is_public_for_viewers, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 		RETURNING created_at, updated_at
 	`
 
@@ -56,6 +56,7 @@ func (r *OverlayRepository) Create(ctx context.Context, overlay *models.Overlay)
 		overlay.Name,
 		overlay.Description,
 		overlay.IsActive,
+		overlay.IsPublicForViewers,
 	).Scan(&overlay.CreatedAt, &overlay.UpdatedAt)
 
 	if err != nil {
@@ -68,7 +69,7 @@ func (r *OverlayRepository) Create(ctx context.Context, overlay *models.Overlay)
 // GetByID retrieves an overlay by ID
 func (r *OverlayRepository) GetByID(ctx context.Context, id string) (*models.Overlay, error) {
 	query := `
-		SELECT id, user_id, name, description, is_active, created_at, updated_at
+		SELECT id, user_id, name, description, is_active, is_public_for_viewers, created_at, updated_at
 		FROM overlays
 		WHERE id = $1
 	`
@@ -80,6 +81,7 @@ func (r *OverlayRepository) GetByID(ctx context.Context, id string) (*models.Ove
 		&overlay.Name,
 		&overlay.Description,
 		&overlay.IsActive,
+		&overlay.IsPublicForViewers,
 		&overlay.CreatedAt,
 		&overlay.UpdatedAt,
 	)
@@ -97,7 +99,7 @@ func (r *OverlayRepository) GetByID(ctx context.Context, id string) (*models.Ove
 // GetByIDAndUserID retrieves an overlay by ID and user ID (authorization check)
 func (r *OverlayRepository) GetByIDAndUserID(ctx context.Context, id, userID string) (*models.Overlay, error) {
 	query := `
-		SELECT id, user_id, name, description, is_active, created_at, updated_at
+		SELECT id, user_id, name, description, is_active, is_public_for_viewers, created_at, updated_at
 		FROM overlays
 		WHERE id = $1 AND user_id = $2
 	`
@@ -109,6 +111,7 @@ func (r *OverlayRepository) GetByIDAndUserID(ctx context.Context, id, userID str
 		&overlay.Name,
 		&overlay.Description,
 		&overlay.IsActive,
+		&overlay.IsPublicForViewers,
 		&overlay.CreatedAt,
 		&overlay.UpdatedAt,
 	)
@@ -126,7 +129,7 @@ func (r *OverlayRepository) GetByIDAndUserID(ctx context.Context, id, userID str
 // ListByUserID retrieves all overlays for a user
 func (r *OverlayRepository) ListByUserID(ctx context.Context, userID string) ([]*models.Overlay, error) {
 	query := `
-		SELECT id, user_id, name, description, is_active, created_at, updated_at
+		SELECT id, user_id, name, description, is_active, is_public_for_viewers, created_at, updated_at
 		FROM overlays
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -147,6 +150,7 @@ func (r *OverlayRepository) ListByUserID(ctx context.Context, userID string) ([]
 			&overlay.Name,
 			&overlay.Description,
 			&overlay.IsActive,
+			&overlay.IsPublicForViewers,
 			&overlay.CreatedAt,
 			&overlay.UpdatedAt,
 		)
@@ -172,8 +176,8 @@ func (r *OverlayRepository) Update(ctx context.Context, overlay *models.Overlay)
 
 	query := `
 		UPDATE overlays
-		SET name = $1, description = $2, is_active = $3, updated_at = NOW()
-		WHERE id = $4
+		SET name = $1, description = $2, is_active = $3, is_public_for_viewers = $4, updated_at = NOW()
+		WHERE id = $5
 		RETURNING updated_at
 	`
 
@@ -181,6 +185,7 @@ func (r *OverlayRepository) Update(ctx context.Context, overlay *models.Overlay)
 		overlay.Name,
 		overlay.Description,
 		overlay.IsActive,
+		overlay.IsPublicForViewers,
 		overlay.ID,
 	).Scan(&overlay.UpdatedAt)
 
