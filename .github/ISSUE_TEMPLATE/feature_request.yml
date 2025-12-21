@@ -1,0 +1,126 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for All-Chat
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please describe your idea below.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which component would this affect?
+      description: Select the service or component this feature relates to
+      options:
+        - Not sure / Multiple
+        - Frontend (Web Dashboard / Overlay)
+        - API Gateway (WebSocket / HTTP)
+        - Twitch Listener
+        - YouTube Listener
+        - Kick Listener
+        - TikTok Listener
+        - Message Processor (Emotes / Normalization)
+        - Source Manager
+        - Auth Service
+        - Emote Service
+        - Overlay Manager
+        - New Platform Integration
+        - Documentation
+        - Deployment / Infrastructure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: feature-type
+    attributes:
+      label: Feature Type
+      description: What kind of feature is this?
+      options:
+        - New Platform Support (e.g., Rumble, Discord)
+        - Overlay Customization
+        - Performance Improvement
+        - Security Enhancement
+        - Developer Experience
+        - User Experience
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see
+      placeholder: "I would like to see..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or features?
+      placeholder: "I've also thought about..."
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Describe your use case for this feature
+      placeholder: "I would use this feature to..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (from your perspective)
+      description: How important is this feature to you?
+      options:
+        - Nice to have
+        - Would improve my workflow
+        - Important for my use case
+        - Critical / Blocking
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context, mockups, or examples about the feature request here
+      placeholder: "Any relevant links, screenshots, or examples..."
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to contribute to this feature?
+      options:
+        - label: I would be willing to submit a PR for this feature
+          required: false
+        - label: I would be willing to help test this feature
+          required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched for similar feature requests and this is not a duplicate
+          required: true
+        - label: I have checked the roadmap and this feature is not already planned
+          required: true
