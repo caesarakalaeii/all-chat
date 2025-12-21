@@ -4,7 +4,31 @@
 
 ## 🔴 High Priority (Security & Critical)
 
+### CORS Configuration
+- [ ] **Update CORS middleware to use CORSFromEnv()**
+  - Location: `services/api-gateway/cmd/main.go:201`
+  - Current: Uses basic CORS() function
+  - Blocker: Waiting for shared module rebuild
+  - Impact: Better environment-based CORS configuration
+  - Note: Currently using inline function to skip WebSocket routes
+
 ### Security Improvements
+- [ ] **Harden CORS for browser extensions using manifest key**
+  - Location: `all-chat-extension/manifest.json` and `caesar-deployment/apps/workloads/all-chat/configmap.yaml`
+  - Current: Allowing `chrome-extension://*` and `moz-extension://*` wildcards
+  - Risk: Any malicious extension could make authenticated requests (mitigated by JWT validation)
+  - **Implementation Steps**:
+    1. Generate RSA keypair: `openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt -out key.pem`
+    2. Extract public key: `openssl rsa -in key.pem -pubout -outform DER | base64 -w 0`
+    3. Add `"key": "<base64_public_key>"` to extension manifest.json
+    4. Derive consistent extension ID from key (Chrome will generate same ID for all users)
+    5. Update CORS_ORIGIN to specific extension ID: `chrome-extension://<consistent-id>`
+    6. Store key.pem securely (DO NOT commit to git!)
+  - **Firefox Note**: Still requires `moz-extension://*` wildcard unless published to AMO
+  - Impact: High security improvement - only official extension can access API
+  - References: Chrome Extension Manifest V3 docs, MDN Web Extensions
+  - **Temporary Decision (2025-12-21)**: Using wildcard origins for rapid development, relying on JWT auth + rate limiting for security
+
 - [ ] **Implement AES-GCM encryption for OAuth tokens**
   - Location: Token storage across all services
   - Current: Basic encryption
@@ -92,8 +116,8 @@
 
 ## Summary Statistics
 
-- **Total Tasks**: 19
-- **High Priority**: 3 (Security critical)
+- **Total Tasks**: 20
+- **High Priority**: 4 (Security critical)
 - **Medium Priority**: 8 (Quality & features)
 - **Low Priority**: 8 (Enhancements & scaling)
 
