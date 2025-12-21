@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Discord Community
+    url: https://discord.gg/xCGBSuz39P
+    about: Join our Discord server for questions, discussions, and community support
+  - name: 💡 GitHub Discussions
+    url: https://github.com/caesarakalaeii/all-chat/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📖 Documentation
+    url: https://github.com/caesarakalaeii/all-chat#-documentation
+    about: Browse the comprehensive documentation
+  - name: 🗺️ Roadmap
+    url: https://github.com/caesarakalaeii/all-chat#%EF%B8%8F-roadmap
+    about: Check the project roadmap to see what's planned
