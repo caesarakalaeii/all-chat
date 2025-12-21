@@ -7,13 +7,14 @@ import (
 
 // Overlay represents an overlay configuration
 type Overlay struct {
-	ID          string    `json:"id"`
-	UserID      string    `json:"user_id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	IsActive    bool      `json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID                  string    `json:"id"`
+	UserID              string    `json:"user_id"`
+	Name                string    `json:"name"`
+	Description         string    `json:"description"`
+	IsActive            bool      `json:"is_active"`
+	IsPublicForViewers  bool      `json:"is_public_for_viewers"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // Validate validates the overlay fields
