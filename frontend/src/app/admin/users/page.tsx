@@ -247,7 +247,7 @@ export default function UsersPage() {
                       {userOverlays.map((overlay) => (
                         <li key={overlay.id}>
                           <Link
-                            href={`/admin/overlays/${overlay.id}`}
+                            href={`/overlays/${overlay.id}`}
                             className="block px-3 py-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
                           >
                             <div className="text-sm font-medium text-gray-900">{overlay.name}</div>
