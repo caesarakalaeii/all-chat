@@ -210,6 +210,32 @@ export default function LandingPage() {
             </div>
           </div>
 
+          {/* Browser Extension CTA */}
+          <div className="mt-16 p-8 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-2xl backdrop-blur-sm border border-purple-500/30">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="text-center md:text-left">
+                <h3 className="text-2xl font-bold text-white mb-2">All-Chat Browser Extension</h3>
+                <p className="text-gray-300">
+                  Watch your favorite streamers with All-Chat directly on Twitch
+                </p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Automatically replaces Twitch chat with All-Chat when available
+                </p>
+              </div>
+              <a
+                href="https://github.com/caesarakalaeii/all-chat-extension/releases/latest"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-white hover:bg-gray-100 text-purple-900 font-semibold py-3 px-8 rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download Extension
+              </a>
+            </div>
+          </div>
+
           {/* Footer */}
           <div className="mt-20 text-gray-500 text-sm space-y-2">
             <p>Open Source • Built with Go + React • Multi-Platform Chat Aggregation</p>
