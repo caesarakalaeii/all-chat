@@ -11,9 +11,28 @@ import (
 // CORS returns a CORS middleware configured from environment variables
 func CORS() gin.HandlerFunc {
 	corsOrigin := getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000")
+	allowedOrigins := parseOrigins(corsOrigin)
 
 	config := cors.Config{
-		AllowOrigins:     parseOrigins(corsOrigin),
+		AllowOriginFunc: func(origin string) bool {
+			// Check exact matches first
+			for _, allowed := range allowedOrigins {
+				if allowed == "*" {
+					return true
+				}
+				if allowed == origin {
+					return true
+				}
+				// Handle wildcard patterns (e.g., chrome-extension://*, moz-extension://*)
+				if strings.HasSuffix(allowed, "/*") {
+					prefix := strings.TrimSuffix(allowed, "/*")
+					if strings.HasPrefix(origin, prefix) {
+						return true
+					}
+				}
+			}
+			return false
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
