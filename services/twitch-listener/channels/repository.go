@@ -64,6 +64,9 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]models.ChannelSou
 
 // GetUniqueChannels returns a deduplicated list of channel names (usernames)
 // For Twitch IRC, we need the channel_name (username) not the channel_id (numeric ID)
+// NOTE: This query intentionally does NOT check ocs.is_active because that field
+// is used as a runtime status indicator (is the listener currently connected),
+// not a configuration flag. We determine what to listen to based on active overlays.
 func (r *Repository) GetUniqueChannels(ctx context.Context) ([]string, error) {
 	query := `
 		SELECT DISTINCT ocs.channel_name
