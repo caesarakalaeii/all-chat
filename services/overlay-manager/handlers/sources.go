@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
@@ -98,10 +99,19 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		channelName = req.ChannelID
 	}
 
+	// For Twitch, ensure channel_id is the lowercase username, not numeric ID
+	// Twitch IRC uses channel names (usernames), not numeric IDs
+	// The Twitch Listener publishes messages with channel_id=<lowercase_username>
+	// so the database must match this format for overlay routing to work
+	channelID := req.ChannelID
+	if req.Platform == "twitch" {
+		channelID = strings.ToLower(channelName)
+	}
+
 	source := &models.ChatSource{
 		OverlayID:    overlayID,
 		Platform:     req.Platform,
-		ChannelID:    req.ChannelID,
+		ChannelID:    channelID,
 		ChannelName:  channelName,
 		AuthRequired: req.Platform == "youtube", // YouTube requires OAuth
 		Config:       make(map[string]interface{}),
@@ -194,10 +204,19 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		channelName = req.ChannelID
 	}
 
+	// For Twitch, ensure channel_id is the lowercase username, not numeric ID
+	// Twitch IRC uses channel names (usernames), not numeric IDs
+	// The Twitch Listener publishes messages with channel_id=<lowercase_username>
+	// so the database must match this format for overlay routing to work
+	channelID := req.ChannelID
+	if req.Platform == "twitch" {
+		channelID = strings.ToLower(channelName)
+	}
+
 	source := &models.ChatSource{
 		OverlayID:    overlayID,
 		Platform:     req.Platform,
-		ChannelID:    req.ChannelID,
+		ChannelID:    channelID,
 		ChannelName:  channelName,
 		AuthRequired: req.Platform == "youtube" || req.Platform == "kick" || req.Platform == "tiktok",
 		Config:       make(map[string]interface{}),
