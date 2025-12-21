@@ -265,7 +265,7 @@ func main() {
 
 	// Viewer protected routes (use ViewerJWTAuth middleware)
 	viewerAPI := router.Group("/api/v1/auth/viewer")
-	viewerAPI.Use(sharedmiddleware.ViewerJWTAuth(jwtSecret))
+	viewerAPI.Use(localmiddleware.ViewerJWTAuth(jwtSecret))
 	{
 		viewerAPI.GET("/me", proxyHandler.ForwardRequest)
 		viewerAPI.POST("/logout", proxyHandler.ForwardRequest)
