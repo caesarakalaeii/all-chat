@@ -4,21 +4,24 @@ import (
 	"net/http"
 
 	"github.com/caesar/all-chat/services/auth-service/repository"
+	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 // AdminHandler handles admin-specific endpoints
 type AdminHandler struct {
-	repo   *repository.UserRepository
-	logger *zap.Logger
+	repo      *repository.UserRepository
+	logger    *zap.Logger
+	jwtSecret string
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(repo *repository.UserRepository, logger *zap.Logger) *AdminHandler {
+func NewAdminHandler(repo *repository.UserRepository, logger *zap.Logger, jwtSecret string) *AdminHandler {
 	return &AdminHandler{
-		repo:   repo,
-		logger: logger,
+		repo:      repo,
+		logger:    logger,
+		jwtSecret: jwtSecret,
 	}
 }
 
@@ -99,4 +102,73 @@ func (h *AdminHandler) GetUser(c *gin.Context) {
 
 	h.logger.Info("Fetched user", zap.String("user_id", userID))
 	c.JSON(http.StatusOK, response)
+}
+
+// ImpersonateUser generates an impersonation token for an admin to act as another user
+// POST /api/v1/admin/users/:id/impersonate
+func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
+	// Get admin user ID from context (set by auth middleware)
+	adminUserID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	// Get admin username from context
+	adminUsername, _ := c.Get("username")
+
+	// Get target user ID from URL
+	targetUserID := c.Param("id")
+	if targetUserID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user ID required"})
+		return
+	}
+
+	// Fetch target user from database
+	targetUser, err := h.repo.GetUserByID(c.Request.Context(), targetUserID)
+	if err != nil {
+		h.logger.Error("Failed to fetch target user for impersonation",
+			zap.String("target_user_id", targetUserID),
+			zap.Error(err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	// Get target's Twitch ID (if available)
+	targetTwitchID := ""
+	if targetUser.TwitchID != nil {
+		targetTwitchID = *targetUser.TwitchID
+	}
+
+	// Generate impersonation JWT
+	token, err := auth.GenerateImpersonationJWT(
+		adminUserID.(string),
+		adminUsername.(string),
+		targetUser.ID,
+		targetUser.Username,
+		targetTwitchID,
+		h.jwtSecret,
+	)
+	if err != nil {
+		h.logger.Error("Failed to generate impersonation token",
+			zap.String("admin_id", adminUserID.(string)),
+			zap.String("target_id", targetUserID),
+			zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	h.logger.Info("Admin impersonating user",
+		zap.String("admin_id", adminUserID.(string)),
+		zap.String("admin_username", adminUsername.(string)),
+		zap.String("target_id", targetUserID),
+		zap.String("target_username", targetUser.Username))
+
+	c.JSON(http.StatusOK, gin.H{
+		"token":       token,
+		"user_id":     targetUser.ID,
+		"username":    targetUser.Username,
+		"expires_in":  7200, // 2 hours in seconds
+		"impersonating": true,
+	})
 }
