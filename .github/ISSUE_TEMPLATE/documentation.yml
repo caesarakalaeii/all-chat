@@ -1,0 +1,97 @@
+name: Documentation Improvement
+description: Suggest improvements to documentation or report missing/unclear docs
+title: "[Docs]: "
+labels: ["documentation", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation! Please describe what needs to be improved.
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What kind of documentation needs improvement?
+      options:
+        - README
+        - Getting Started Guide
+        - API Documentation
+        - Deployment Guide
+        - CSS Customization Guide
+        - Theme Documentation
+        - Architecture Documentation
+        - Service-specific Documentation
+        - Code Comments
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What's wrong with the documentation?
+      options:
+        - Missing information
+        - Incorrect information
+        - Outdated information
+        - Unclear / Confusing
+        - Typo / Grammar
+        - Broken link
+        - Missing example
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Which file or section needs improvement? (Provide file path or URL)
+      placeholder: "e.g., docs/CSS_CUSTOMIZATION.md, README.md section 'Quick Start', etc."
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: Describe what's wrong or missing
+      placeholder: "The documentation doesn't explain..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Improvement
+      description: How would you improve this documentation?
+      placeholder: "I suggest adding/changing..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context, links, or examples here
+      placeholder: "Any relevant information..."
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to help?
+      options:
+        - label: I would be willing to submit a PR to fix this documentation
+          required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have checked if this issue already exists
+          required: true

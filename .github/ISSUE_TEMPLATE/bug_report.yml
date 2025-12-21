@@ -1,0 +1,140 @@
+name: Bug Report
+description: Report a bug or issue with All-Chat
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the information below to help us diagnose and fix the issue.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which component is affected?
+      description: Select the service or component where you're experiencing the issue. If unsure, select "Not sure / Multiple"
+      options:
+        - Not sure / Multiple
+        - Frontend (Web Dashboard / Overlay)
+        - API Gateway (WebSocket / HTTP)
+        - Twitch Listener
+        - YouTube Listener
+        - Kick Listener
+        - TikTok Listener
+        - Message Processor (Emotes / Normalization)
+        - Source Manager
+        - Auth Service
+        - Emote Service
+        - Overlay Manager
+        - Database / PostgreSQL
+        - Redis / Caching
+        - Deployment / Docker / Kubernetes
+        - Documentation
+    validations:
+      required: true
+
+  - type: dropdown
+    id: instance
+    attributes:
+      label: Which instance are you using?
+      description: Are you using the hosted service or self-hosting?
+      options:
+        - Hosted (allch.at)
+        - Self-hosted (Docker Compose)
+        - Self-hosted (Kubernetes)
+        - Local development
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Tell us what you see!
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Tell us what you expected!
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Tell us what actually happened!
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error Messages
+      description: If applicable, paste any relevant logs or error messages
+      render: shell
+      placeholder: Paste logs here...
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / Videos
+      description: If applicable, add screenshots or videos to help explain the problem
+      placeholder: Drag and drop images here...
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Details
+      description: Please provide relevant environment information
+      placeholder: |
+        - Browser (if frontend): Chrome 120.0.0
+        - Operating System: Ubuntu 22.04
+        - Go version (if self-hosted): 1.25
+        - Docker version (if self-hosted): 24.0.0
+        - Kubernetes version (if self-hosted): 1.28
+      value: |
+        - Browser (if frontend): 
+        - Operating System: 
+        - Go version (if self-hosted): 
+        - Docker version (if self-hosted): 
+        - Kubernetes version (if self-hosted): 
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here (e.g., frequency, impact, workarounds)
+      placeholder: Any other relevant information...
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched for similar issues and this is not a duplicate
+          required: true
+        - label: I have provided all the requested information above
+          required: true
+        - label: This issue affects the latest version (or I've specified my version)
+          required: false

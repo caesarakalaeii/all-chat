@@ -212,9 +212,9 @@ We welcome contributions! Here's how you can help:
 ### For Non-Developers
 
 - 🎨 **Create themes** - Share your custom CSS themes
-- 📝 **Report bugs** - Open issues for problems you encounter
-- 💡 **Suggest features** - Tell us what you'd like to see
-- 📖 **Improve docs** - Help make documentation clearer
+- 📝 **Report bugs** - Use our [bug report template](https://github.com/caesarakalaeii/all-chat/issues/new/choose) to report issues
+- 💡 **Suggest features** - Use our [feature request template](https://github.com/caesarakalaeii/all-chat/issues/new/choose) to propose ideas
+- 📖 **Improve docs** - Use our [documentation template](https://github.com/caesarakalaeii/all-chat/issues/new/choose) to suggest improvements
 
 ### For Developers
 
