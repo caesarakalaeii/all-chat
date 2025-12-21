@@ -139,9 +139,10 @@ func (h *OverlayHandler) HandleUpdateOverlay(c *gin.Context) {
 
 	// Bind update request
 	var req struct {
-		Name        *string `json:"name"`
-		Description *string `json:"description"`
-		IsActive    *bool   `json:"is_active"`
+		Name                *string `json:"name"`
+		Description         *string `json:"description"`
+		IsActive            *bool   `json:"is_active"`
+		IsPublicForViewers  *bool   `json:"is_public_for_viewers"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -158,6 +159,9 @@ func (h *OverlayHandler) HandleUpdateOverlay(c *gin.Context) {
 	}
 	if req.IsActive != nil {
 		overlay.IsActive = *req.IsActive
+	}
+	if req.IsPublicForViewers != nil {
+		overlay.IsPublicForViewers = *req.IsPublicForViewers
 	}
 
 	// Validate
