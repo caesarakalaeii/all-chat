@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface User {
@@ -23,11 +24,13 @@ interface UserOverlay {
 }
 
 export default function UsersPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userOverlays, setUserOverlays] = useState<UserOverlay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [impersonating, setImpersonating] = useState(false);
 
   // Fetch all users from the database
   useEffect(() => {
@@ -90,6 +93,44 @@ export default function UsersPage() {
 
     fetchUserOverlays();
   }, [selectedUser]);
+
+  // Handle impersonation
+  const handleImpersonate = async (userId: string) => {
+    if (!confirm('Are you sure you want to impersonate this user? This will replace your current session.')) {
+      return;
+    }
+
+    setImpersonating(true);
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const response = await fetch(`/api/v1/admin/users/${userId}/impersonate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to impersonate user');
+      }
+
+      const data = await response.json();
+
+      // Store the impersonation token
+      localStorage.setItem('jwt_token', data.token);
+      localStorage.setItem('impersonating', 'true');
+      localStorage.setItem('impersonated_user', data.username);
+
+      // Redirect to home page
+      router.push('/');
+    } catch (err) {
+      console.error('Failed to impersonate user:', err);
+      alert('Failed to start impersonation. Please try again.');
+    } finally {
+      setImpersonating(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -237,6 +278,22 @@ export default function UsersPage() {
                     </dd>
                   </div>
                 </dl>
+
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={() => handleImpersonate(selectedUser.id)}
+                    disabled={impersonating}
+                    className="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                    View as {selectedUser.username}
+                  </button>
+                  <p className="mt-2 text-xs text-gray-500 text-center">
+                    Temporarily act as this user to debug issues
+                  </p>
+                </div>
 
                 <div className="mt-6">
                   <h4 className="text-sm font-medium text-gray-500 mb-2">

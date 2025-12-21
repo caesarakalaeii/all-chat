@@ -207,7 +207,7 @@ func main() {
 	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
 	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
-	adminHandler := handlers.NewAdminHandler(userRepo, log)
+	adminHandler := handlers.NewAdminHandler(userRepo, log, jwtSecret)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
@@ -307,6 +307,7 @@ func main() {
 	{
 		admin.GET("/users", adminHandler.ListUsers)
 		admin.GET("/users/:id", adminHandler.GetUser)
+		admin.POST("/users/:id/impersonate", adminHandler.ImpersonateUser)
 
 		// Viewer management
 		admin.GET("/viewers", adminViewerHandler.HandleListViewers)

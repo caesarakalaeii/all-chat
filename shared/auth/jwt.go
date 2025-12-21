@@ -15,11 +15,32 @@ var (
 
 // Claims represents the JWT claims for All-Chat
 type Claims struct {
-	UserID   string   `json:"sub"`
-	TwitchID string   `json:"twitch_id"`
-	Username string   `json:"username"`
-	Roles    []string `json:"roles"`
+	UserID            string   `json:"sub"`
+	TwitchID          string   `json:"twitch_id"`
+	Username          string   `json:"username"`
+	Roles             []string `json:"roles"`
+	ImpersonatedBy    string   `json:"impersonated_by,omitempty"`    // Admin UserID who is impersonating
+	ImpersonatedUser  string   `json:"impersonated_user,omitempty"`  // Target user being impersonated
 	jwt.RegisteredClaims
+}
+
+// IsImpersonating returns true if this token represents an admin impersonating another user
+func (c *Claims) IsImpersonating() bool {
+	return c.ImpersonatedBy != "" && c.ImpersonatedUser != ""
+}
+
+// GetEffectiveUserID returns the user ID to use for authorization
+// If impersonating, returns the impersonated user ID, otherwise returns the actual user ID
+func (c *Claims) GetEffectiveUserID() string {
+	if c.IsImpersonating() {
+		return c.ImpersonatedUser
+	}
+	return c.UserID
+}
+
+// GetActualUserID returns the real user ID (admin if impersonating)
+func (c *Claims) GetActualUserID() string {
+	return c.UserID
 }
 
 // ViewerClaims represents JWT claims for viewer authentication
@@ -78,6 +99,30 @@ func GenerateToken(userID, username, secret string, expiry time.Duration, isAdmi
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			Issuer:    "all-chat",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
+}
+
+// GenerateImpersonationJWT generates a JWT for an admin to impersonate another user
+// The admin's identity is preserved in ImpersonatedBy, while UserID becomes the target user
+func GenerateImpersonationJWT(adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, secret string) (string, error) {
+	// Impersonation tokens always have admin role (from the real admin)
+	roles := []string{"user", "admin"}
+
+	claims := Claims{
+		UserID:           targetUserID,  // Use target user's ID as the primary ID
+		TwitchID:         targetTwitchID,
+		Username:         targetUsername,
+		Roles:            roles,
+		ImpersonatedBy:   adminUserID,
+		ImpersonatedUser: targetUserID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(2 * time.Hour)), // Shorter expiry for security
+			Issuer:    "all-chat-admin",
 		},
 	}
 

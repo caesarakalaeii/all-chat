@@ -14,6 +14,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import CookieBanner from '@/components/CookieBanner';
+import ImpersonationBanner from '@/components/ImpersonationBanner';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -31,6 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        <ImpersonationBanner />
         {children}
         <CookieBanner />
       </body>
