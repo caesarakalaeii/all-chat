@@ -232,6 +232,31 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     }
   };
 
+  const handleTogglePublicForViewers = async () => {
+    if (!overlay) return;
+
+    try {
+      const updatedOverlay = await overlaysApi.update(params.id, {
+        is_public_for_viewers: !overlay.is_public_for_viewers
+      });
+      setOverlay(updatedOverlay);
+      setNotification({
+        type: 'success',
+        message: updatedOverlay.is_public_for_viewers
+          ? 'Overlay is now public for viewers (browser extension can connect)'
+          : 'Overlay is now private (browser extension cannot connect)'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } catch (error) {
+      console.error('Failed to update overlay:', error);
+      setNotification({
+        type: 'error',
+        message: 'Failed to update overlay setting. Please try again.'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
   const getPlatformColor = (platform: string): string => {
     switch (platform) {
       case 'twitch':
@@ -371,6 +396,33 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
               </span>
             </div>
             {overlay.description && <p className="text-gray-400 mt-2">{overlay.description}</p>}
+
+            {/* Public for Viewers Toggle */}
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={handleTogglePublicForViewers}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  overlay.is_public_for_viewers ? 'bg-green-600' : 'bg-gray-600'
+                }`}
+                title={overlay.is_public_for_viewers ? 'Viewers can connect via browser extension' : 'Browser extension connections disabled'}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    overlay.is_public_for_viewers ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+              <div>
+                <p className="text-sm font-medium text-white">
+                  Public for Viewers {overlay.is_public_for_viewers && <span className="text-green-400">✓</span>}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {overlay.is_public_for_viewers
+                    ? 'Browser extension can connect to this overlay'
+                    : 'Browser extension connections are disabled'}
+                </p>
+              </div>
+            </div>
           </div>
 
           <button
