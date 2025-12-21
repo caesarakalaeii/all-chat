@@ -89,6 +89,11 @@ type ConnectedData struct {
 	Message   string `json:"message"`
 }
 
+// ViewerConnectedData is sent when a viewer successfully connects (no overlay_id exposed)
+type ViewerConnectedData struct {
+	Message string `json:"message"`
+}
+
 // NewChatMessage creates a new chat message WebSocket message
 func NewChatMessage(data ChatMessageData) *WSMessage {
 	return &WSMessage{
@@ -133,6 +138,17 @@ func NewConnected(overlayID string) *WSMessage {
 		Data: ConnectedData{
 			OverlayID: overlayID,
 			Message:   "Connected to overlay stream",
+		},
+		Timestamp: time.Now().UTC(),
+	}
+}
+
+// NewViewerConnected creates a new connected message for viewers (no overlay_id)
+func NewViewerConnected() *WSMessage {
+	return &WSMessage{
+		Type: WSMessageTypeConnected,
+		Data: ViewerConnectedData{
+			Message: "Connected to chat stream",
 		},
 		Timestamp: time.Now().UTC(),
 	}

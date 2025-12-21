@@ -127,9 +127,9 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 		return
 	}
 
-	// Create WebSocket connection wrapper
-	// Use overlayID internally but viewer never sees it
-	wsConn := wsconn.NewConnection(conn, overlayID, viewerID, h.logger)
+	// Create WebSocket connection wrapper for viewer (marks as viewer connection)
+	// Viewer connections will have overlay_id stripped from all messages
+	wsConn := wsconn.NewViewerConnection(conn, overlayID, viewerID, h.logger)
 
 	// Subscribe to overlay's Redis Pub/Sub channel WITHOUT publishing connection event
 	// This is critical: viewers should NOT trigger YouTube polling
@@ -147,8 +147,8 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 	// Add connection to manager (but mark it as viewer connection)
 	h.wsManager.AddConnection(context.Background(), wsConn)
 
-	// Send connected message
-	connectedMsg := models.NewConnected(overlayID)
+	// Send connected message (without overlay_id for security)
+	connectedMsg := models.NewViewerConnected()
 	connectedJSON, _ := connectedMsg.ToJSON()
 	wsConn.Send(connectedJSON)
 
