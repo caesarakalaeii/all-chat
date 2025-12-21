@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"sync"
 
 	"go.uber.org/zap"
@@ -51,13 +52,20 @@ func (p *Pool) Remove(conn *Connection) {
 
 // Broadcast sends a message to all connections in the pool
 // Returns the number of successful sends
+// For viewer connections, overlay_id is stripped from the message
 func (p *Pool) Broadcast(message []byte) int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
 	successCount := 0
 	for conn := range p.connections {
-		if conn.Send(message) {
+		// Strip overlay_id from message if this is a viewer connection
+		messageToSend := message
+		if conn.IsViewer() {
+			messageToSend = stripOverlayID(message)
+		}
+
+		if conn.Send(messageToSend) {
 			successCount++
 		}
 	}
@@ -69,6 +77,30 @@ func (p *Pool) Broadcast(message []byte) int {
 	)
 
 	return successCount
+}
+
+// stripOverlayID removes overlay_id field from WebSocket messages
+// This prevents leaking sensitive overlay IDs to viewers
+func stripOverlayID(message []byte) []byte {
+	var data map[string]interface{}
+	if err := json.Unmarshal(message, &data); err != nil {
+		// If we can't parse it, return original (better than failing)
+		return message
+	}
+
+	// Remove overlay_id from data.overlay_id (for ChatMessageData)
+	if msgData, ok := data["data"].(map[string]interface{}); ok {
+		delete(msgData, "overlay_id")
+	}
+
+	// Re-marshal without overlay_id
+	cleaned, err := json.Marshal(data)
+	if err != nil {
+		// If marshaling fails, return original
+		return message
+	}
+
+	return cleaned
 }
 
 // Size returns the number of connections in the pool

@@ -26,16 +26,17 @@ const (
 
 // Connection wraps a WebSocket connection for an overlay
 type Connection struct {
-	conn      *websocket.Conn
-	overlayID string
-	userID    string
-	send      chan []byte
-	logger    *zap.Logger
-	mu        sync.Mutex
-	closed    bool
+	conn       *websocket.Conn
+	overlayID  string
+	userID     string
+	send       chan []byte
+	logger     *zap.Logger
+	mu         sync.Mutex
+	closed     bool
+	isViewer   bool // True for viewer connections (extension, public viewers)
 }
 
-// NewConnection creates a new WebSocket connection
+// NewConnection creates a new WebSocket connection for overlay owners
 func NewConnection(conn *websocket.Conn, overlayID, userID string, logger *zap.Logger) *Connection {
 	return &Connection{
 		conn:      conn,
@@ -43,7 +44,26 @@ func NewConnection(conn *websocket.Conn, overlayID, userID string, logger *zap.L
 		userID:    userID,
 		send:      make(chan []byte, 256),
 		logger:    logger,
+		isViewer:  false,
 	}
+}
+
+// NewViewerConnection creates a new WebSocket connection for viewers
+// Viewer connections should never receive overlay_id in messages
+func NewViewerConnection(conn *websocket.Conn, overlayID, userID string, logger *zap.Logger) *Connection {
+	return &Connection{
+		conn:      conn,
+		overlayID: overlayID,
+		userID:    userID,
+		send:      make(chan []byte, 256),
+		logger:    logger,
+		isViewer:  true,
+	}
+}
+
+// IsViewer returns true if this is a viewer connection
+func (c *Connection) IsViewer() bool {
+	return c.isViewer
 }
 
 // Start starts the read and write pumps for the connection
