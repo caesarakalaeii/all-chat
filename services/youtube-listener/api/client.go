@@ -148,6 +148,14 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (bool, e
 	call := c.service.Videos.List([]string{"liveStreamingDetails"}).Id(videoID)
 
 	response, err := call.Do()
+
+	// Record quota usage for videos.list (1 unit)
+	if c.quotaTracker != nil {
+		if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostVideos); recordErr != nil {
+			c.logger.Warn("Failed to record videos.list quota usage", zap.Error(recordErr))
+		}
+	}
+
 	if err != nil {
 		c.logger.Error("Failed to check stream status",
 			zap.String("video_id", videoID),
@@ -178,6 +186,14 @@ func (c *Client) GetVideoDetails(ctx context.Context, videoID string) (*models.Y
 	call := c.service.Videos.List([]string{"snippet", "liveStreamingDetails"}).Id(videoID)
 
 	response, err := call.Do()
+
+	// Record quota usage for videos.list (1 unit)
+	if c.quotaTracker != nil {
+		if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostVideos); recordErr != nil {
+			c.logger.Warn("Failed to record videos.list quota usage", zap.Error(recordErr))
+		}
+	}
+
 	if err != nil {
 		c.logger.Error("Failed to get video details",
 			zap.String("video_id", videoID),
