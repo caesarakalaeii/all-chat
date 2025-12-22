@@ -132,7 +132,7 @@ Configure in the dashboard:
 | **Twitch** | ✅ Working | Chat, emotes (Twitch/7TV/BTTV/FFZ), badges, colors |
 | **YouTube** | 🧪 Beta | Chat, Super Chat, member badges (closed beta) |
 | **Kick** | ✅ Working | Chat, emotes, badges via Pusher WebSocket |
-| **TikTok** | 🚧 Development | OAuth complete, listener in development (closed beta) |
+| **TikTok** | 🧪 Beta | Unofficial listener via TikTok-Live-Connector; username-based with limited metadata (see [service README](services/tiktok-listener/README.md)) |
 
 ## 🏗️ Architecture
 
