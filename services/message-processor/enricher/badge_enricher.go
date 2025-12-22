@@ -107,7 +107,7 @@ func (e *BadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessa
 		)
 	}
 
-	// Update badge URLs
+	// Enrich regular badges
 	enrichedCount := 0
 	missingBadges := make([]string, 0)
 
@@ -149,11 +149,60 @@ func (e *BadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessa
 		}
 	}
 
+	// Enrich source badges (for shared chat messages)
+	if len(msg.User.SourceBadges) > 0 {
+		sourceRoomID := e.extractSourceRoomID(msg)
+		var sourceBadges map[string]TwitchBadgeSet
+		
+		if sourceRoomID != "" {
+			sourceBadges, err = e.getChannelBadges(ctx, sourceRoomID)
+			if err != nil {
+				e.logger.Debug("Failed to get source channel badges",
+					zap.String("source_room_id", sourceRoomID),
+					zap.Error(err),
+				)
+			}
+		}
+
+		for i := range msg.User.SourceBadges {
+			badge := &msg.User.SourceBadges[i]
+			found := false
+
+			// Try source channel badges first
+			if sourceBadges != nil {
+				if badgeSet, ok := sourceBadges[badge.Name]; ok {
+					if ver, ok := badgeSet.Versions[badge.Version]; ok {
+						badge.IconURL = ver.ImageURL1x
+						enrichedCount++
+						found = true
+						continue
+					}
+				}
+			}
+
+			// Fallback to global badges
+			if !found {
+				if badgeSet, ok := globalBadges[badge.Name]; ok {
+					if ver, ok := badgeSet.Versions[badge.Version]; ok {
+						badge.IconURL = ver.ImageURL1x
+						enrichedCount++
+						found = true
+					}
+				}
+			}
+
+			if !found {
+				missingBadges = append(missingBadges, fmt.Sprintf("source:%s/%s", badge.Name, badge.Version))
+			}
+		}
+	}
+
 	if enrichedCount > 0 {
 		e.logger.Debug("Enriched badge icons",
 			zap.String("channel", msg.ChannelID),
 			zap.Int("count", enrichedCount),
 			zap.Int("total_badges", len(msg.User.Badges)),
+			zap.Int("source_badges", len(msg.User.SourceBadges)),
 		)
 	}
 
@@ -331,6 +380,29 @@ func (e *BadgeEnricher) extractChannelIdentifier(msg *models.UnifiedChatMessage)
 	if roomID, ok := msg.Metadata["twitch_room_id"]; ok {
 		var raw string
 		switch v := roomID.(type) {
+		case string:
+			raw = v
+		case fmt.Stringer:
+			raw = v.String()
+		default:
+			raw = fmt.Sprint(v)
+		}
+		trimmed := strings.TrimSpace(raw)
+		if trimmed != "" && trimmed != "<nil>" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+// extractSourceRoomID returns the source room ID for shared chat messages
+func (e *BadgeEnricher) extractSourceRoomID(msg *models.UnifiedChatMessage) string {
+	if msg == nil || msg.Metadata == nil {
+		return ""
+	}
+	if sourceRoomID, ok := msg.Metadata["source_room_id"]; ok {
+		var raw string
+		switch v := sourceRoomID.(type) {
 		case string:
 			raw = v
 		case fmt.Stringer:
