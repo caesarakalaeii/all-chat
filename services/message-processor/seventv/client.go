@@ -27,6 +27,10 @@ const (
 	OpResume    = 34
 	OpSubscribe = 35
 	OpUnsubscribe = 36
+
+	// Delays for connection stability and rate limiting
+	helloProcessingDelay = 100 * time.Millisecond // Delay after HELLO before accepting subscriptions
+	subscriptionDelay    = 50 * time.Millisecond  // Delay between subscription requests for rate limiting
 )
 
 // Message represents a 7TV EventAPI message
@@ -283,7 +287,9 @@ func (c *Client) handleHello(ctx context.Context, data json.RawMessage) error {
 	go c.heartbeatLoop(ctx)
 
 	// Mark connection as ready after a small delay
-	time.Sleep(100 * time.Millisecond)
+	// This delay allows the WebSocket connection to stabilize and ensures
+	// we don't send subscriptions immediately after HELLO
+	time.Sleep(helloProcessingDelay)
 	c.mu.Lock()
 	c.isReady = true
 	oldReady := c.ready
@@ -298,7 +304,7 @@ func (c *Client) handleHello(ctx context.Context, data json.RawMessage) error {
 	c.mu.Unlock()
 
 	for _, emoteSetID := range pending {
-		time.Sleep(50 * time.Millisecond) // Rate limit subscriptions
+		time.Sleep(subscriptionDelay) // Rate limit subscriptions
 		if err := c.subscribeNow(emoteSetID); err != nil {
 			c.logger.Error("Failed to send pending subscription",
 				zap.String("emote_set_id", emoteSetID),
