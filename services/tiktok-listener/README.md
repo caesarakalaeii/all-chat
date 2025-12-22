@@ -20,11 +20,14 @@ This service uses the **unofficial** [TikTok-Live-Connector](https://github.com/
 
 - ✅ Monitor multiple TikTok live streams simultaneously
 - ✅ Real-time chat message capture
+- ✅ **Message deduplication** (prevents replay on reconnect using native TikTok message IDs)
+- ✅ **Native timestamp preservation** (uses TikTok's original message timestamps)
 - ✅ Publishes to Redis Streams (`chat:raw`)
 - ✅ Dynamic stream management (polls database for active channels)
 - ✅ Health check endpoints
 - ✅ Graceful shutdown handling
 - ✅ TypeScript implementation
+- ✅ Resource-optimized with deduplication cache limits
 
 ## Architecture
 
@@ -85,6 +88,11 @@ DATABASE_NAME=allchat
 PORT=8089
 LOG_LEVEL=info
 POLL_INTERVAL_MS=30000  # Poll for active streams every 30 seconds
+
+# Message Deduplication (prevents replay on reconnect)
+TIKTOK_DEDUP_TTL_MS=300000           # Keep dedup cache for 5 minutes (default)
+TIKTOK_DEDUP_CLEANUP_INTERVAL_MS=60000  # Cleanup interval: 1 minute (default)
+TIKTOK_DEDUP_MAX_CACHE_SIZE=10000    # Max messages in dedup cache (default)
 ```
 
 ## Development
@@ -106,7 +114,7 @@ The service publishes messages to Redis Stream `chat:raw` in the following forma
 
 ```json
 {
-  "message_id": "uuid",
+  "message_id": "tiktok_native_msg_id",
   "platform": "tiktok",
   "channel_id": "tiktok_username",
   "stream_id": null,
@@ -120,6 +128,17 @@ The service publishes messages to Redis Stream `chat:raw` in the following forma
     "profile_picture_url": "https://...",
     "is_follower": "true",
     "is_subscriber": "false",
+    "badge_level": "0",
+    "native_msg_id": "tiktok_native_msg_id",
+    "native_create_time": "1731675296"
+  }
+}
+```
+
+**Note**: 
+- `message_id` now uses TikTok's native message ID for accurate deduplication
+- `timestamp` uses TikTok's original `createTime` (converted from Unix timestamp)
+- This prevents duplicate messages from appearing when the service reconnects
     "badge_level": "0"
   }
 }
@@ -155,8 +174,29 @@ WHERE ocs.platform = 'tiktok'
 1. **Polling**: Every 30 seconds (configurable), the service polls PostgreSQL for active TikTok channels
 2. **Connection**: For each active channel, creates a TikTok-Live-Connector instance
 3. **Event Listening**: Subscribes to `WebcastEvent.CHAT` events from the library
-4. **Message Publishing**: Normalizes chat messages to `RawChatMessage` format and publishes to Redis Stream
-5. **Dynamic Management**: Automatically connects to new channels and disconnects from removed ones
+4. **Message Deduplication**: Uses TikTok's native message ID to detect and skip duplicate messages (important during reconnects)
+5. **Timestamp Preservation**: Extracts TikTok's original `createTime` timestamp instead of generating new ones
+6. **Message Publishing**: Normalizes chat messages to `RawChatMessage` format and publishes to Redis Stream
+7. **Dynamic Management**: Automatically connects to new channels and disconnects from removed ones
+
+## Resource Optimizations
+
+### Message Deduplication
+
+The service implements message deduplication to prevent replayed messages on reconnection:
+
+- **Native Message ID Tracking**: Uses TikTok's `msgId` from the message's `common` property
+- **TTL-based Cache**: Keeps track of seen messages for 5 minutes (configurable via `TIKTOK_DEDUP_TTL_MS`)
+- **Automatic Cleanup**: Expired entries are cleaned up every minute to prevent memory leaks
+- **Size Limits**: Cache limited to 10,000 messages by default (`TIKTOK_DEDUP_MAX_CACHE_SIZE`)
+
+When the service restarts or reconnects, TikTok may replay recent messages. The deduplicator detects these replays and prevents them from being published to Redis.
+
+### Memory Management
+
+- **Increased Memory Limits**: Default memory limit increased to 1GB for better stability
+- **Bounded Cache**: Deduplication cache has hard limits to prevent unbounded growth
+- **Periodic Cleanup**: Automatic cleanup of expired cache entries every minute
 
 ## Limitations & Known Issues
 
