@@ -7,6 +7,12 @@ import (
 
 // RawChatMessage represents a raw chat message from Twitch IRC
 // This is published to Redis Streams for processing
+//
+// Shared Chat Tags (when message is from collaborative stream):
+//   - source-room-id: Room ID where message originated
+//   - source-id: User ID of original sender
+//   - source-badges: User badges in source room (format: "badge1/version1,badge2/version2")
+//   - source-badge-info: Additional metadata for source badges
 type RawChatMessage struct {
 	MessageID string            `json:"message_id"` // UUID
 	Platform  string            `json:"platform"`   // "twitch"
