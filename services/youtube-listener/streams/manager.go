@@ -580,6 +580,9 @@ func (m *Manager) cleanupInactivePollers(ctx context.Context, activeChannels map
 			delete(m.activeStreams, streamID)
 			m.releaseLeadership(streamID)
 
+			// Reset detection backoff to allow quick re-detection when channel goes live again
+			m.resetDetectionBackoff(stream.ChannelID)
+
 			// Update database status to inactive
 			if err := m.repository.SetSourceActive(ctx, stream.ChannelID, false); err != nil {
 				m.logger.Error("Failed to update source status after stopping poller",
@@ -883,5 +886,20 @@ func (m *Manager) increaseDetectionBackoff(channelID string) {
 	m.logger.Warn("Increased livestream detection backoff due to error",
 		zap.String("channel_id", channelID),
 		zap.Duration("new_backoff", newBackoff),
+	)
+}
+
+// resetDetectionBackoff resets backoff to base interval when a poller stops
+// This allows quick re-detection if the channel goes live again shortly after
+func (m *Manager) resetDetectionBackoff(channelID string) {
+	m.detectionMu.Lock()
+	defer m.detectionMu.Unlock()
+
+	m.channelBackoff[channelID] = m.baseDetectionInterval
+	m.channelLastCheck[channelID] = time.Now()
+
+	m.logger.Info("Reset livestream detection backoff (stream ended)",
+		zap.String("channel_id", channelID),
+		zap.Duration("backoff", m.baseDetectionInterval),
 	)
 }
