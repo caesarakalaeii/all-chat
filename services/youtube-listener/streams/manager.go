@@ -55,6 +55,8 @@ type Manager struct {
 	dbConn       DBConnInterface // For PostgreSQL LISTEN
 
 	// Global sync leadership (prevents multiple replicas from doing expensive discovery)
+	// Safe to share the same LeadershipCoordinator because stream IDs are globally unique
+	// ("global-sync" will never conflict with actual video IDs which are alphanumeric)
 	syncLeader         *sourcemanager.LeadershipCoordinator
 	syncLeaderStreamID string // Constant stream ID for global sync leadership
 }
@@ -166,6 +168,10 @@ func (m *Manager) periodicSync(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			// Try to acquire global sync leadership
+			// Note: No callback is needed for global sync leadership because:
+			// 1. Losing leadership just means another replica will take over syncing
+			// 2. There's no local state to clean up (unlike per-stream pollers)
+			// 3. The next periodic sync will re-acquire leadership if available
 			if m.syncLeader != nil {
 				isLeader, err := m.syncLeader.EnsureLeadership(ctx, m.syncLeaderStreamID, nil)
 				if err != nil {
@@ -186,6 +192,8 @@ func (m *Manager) periodicSync(ctx context.Context) {
 			// Release global sync leadership on shutdown
 			if m.syncLeader != nil {
 				m.syncLeader.Release(m.syncLeaderStreamID)
+				// Note: Ignoring error on shutdown - lock will expire naturally (10s TTL)
+				// and failure to release is not critical during graceful shutdown
 			}
 			return
 		}
