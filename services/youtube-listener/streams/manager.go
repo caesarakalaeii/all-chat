@@ -312,23 +312,9 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 }
 
 // syncChannel checks for live streams on a channel and starts pollers
+// Uses a two-tier approach: lightweight status check (1 unit) for cached videos,
+// full search (100 units) only when needed
 func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*models.StreamSource) error {
-	// Check quota before making expensive API call (search.list costs 100 units)
-	if !m.quotaTracker.CanMakeRequest(100) {
-		m.logger.Warn("Insufficient quota to check for live streams, marking inactive",
-			zap.String("channel_id", channelID),
-			zap.Int("remaining_quota", m.quotaTracker.GetRemainingQuota()),
-		)
-		// Mark source as inactive due to quota exhaustion
-		if err := m.repository.SetSourceActive(ctx, channelID, false); err != nil {
-			m.logger.Error("Failed to mark source inactive after quota exhaustion",
-				zap.String("channel_id", channelID),
-				zap.Error(err),
-			)
-		}
-		return fmt.Errorf("insufficient quota: %d units remaining, need 100", m.quotaTracker.GetRemainingQuota())
-	}
-
 	// Get user ID for OAuth
 	userID, err := m.repository.GetUserIDForChannel(ctx, channelID)
 	if err != nil {
@@ -358,6 +344,84 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	// Create API client
 	apiClient := api.NewClient(service, m.quotaTracker, m.logger)
 
+	// Try lightweight status check first if we have a cached video ID
+	cachedVideoID, err := m.repository.GetCachedVideoID(ctx, channelID)
+	if err == nil && cachedVideoID != "" {
+		m.logger.Debug("Attempting lightweight status check using cached video ID",
+			zap.String("channel_id", channelID),
+			zap.String("cached_video_id", cachedVideoID),
+		)
+
+		// Check quota for status check (only 1 unit!)
+		if !m.quotaTracker.CanMakeRequest(1) {
+			m.logger.Warn("Insufficient quota even for lightweight status check",
+				zap.String("channel_id", channelID),
+				zap.Int("remaining_quota", m.quotaTracker.GetRemainingQuota()),
+			)
+			return fmt.Errorf("insufficient quota: %d units remaining", m.quotaTracker.GetRemainingQuota())
+		}
+
+		// Perform lightweight status check
+		isLive, statusErr := apiClient.CheckStreamStatus(ctx, cachedVideoID)
+		if statusErr == nil {
+			if isLive {
+				m.logger.Info("Cached video is live, using lightweight check (saved 99 quota units)",
+					zap.String("channel_id", channelID),
+					zap.String("video_id", cachedVideoID),
+				)
+
+				// Get full video details to start polling
+				stream, detailsErr := apiClient.GetVideoDetails(ctx, cachedVideoID)
+				if detailsErr == nil && stream.IsLive && stream.LiveChatID != "" {
+					// Set the overlay ID from sources
+					if len(sources) > 0 {
+						stream.OverlayID = sources[0].OverlayID
+					}
+					stream.StreamID = cachedVideoID
+
+					if err := m.startPoller(ctx, stream, apiClient); err != nil {
+						m.logger.Error("Failed to start poller for cached video",
+							zap.String("stream_id", cachedVideoID),
+							zap.Error(err),
+						)
+					}
+					return nil
+				}
+			}
+
+			// Cached video is not live, clear the cache and fall through to full search
+			m.logger.Debug("Cached video is not live, clearing cache",
+				zap.String("channel_id", channelID),
+				zap.String("video_id", cachedVideoID),
+			)
+			if clearErr := m.repository.ClearCachedVideoID(ctx, channelID); clearErr != nil {
+				m.logger.Warn("Failed to clear cached video ID",
+					zap.String("channel_id", channelID),
+					zap.Error(clearErr),
+				)
+			}
+		} else {
+			m.logger.Debug("Status check failed for cached video, falling back to full search",
+				zap.String("channel_id", channelID),
+				zap.Error(statusErr),
+			)
+		}
+	}
+
+	// Fallback to full search (expensive: 100 units)
+	// Check quota before making expensive API call
+	if !m.quotaTracker.CanMakeRequest(100) {
+		m.logger.Warn("Insufficient quota for full stream search, skipping",
+			zap.String("channel_id", channelID),
+			zap.Int("remaining_quota", m.quotaTracker.GetRemainingQuota()),
+		)
+		return fmt.Errorf("insufficient quota: %d units remaining, need 100", m.quotaTracker.GetRemainingQuota())
+	}
+
+	m.logger.Debug("Performing full live stream search",
+		zap.String("channel_id", channelID),
+	)
+
 	// Get live streams for channel
 	liveStreams, err := apiClient.GetLiveStreams(ctx, channelID)
 	if err != nil {
@@ -383,6 +447,27 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 			)
 		}
 		return nil
+	}
+
+	// Cache the first live stream's video ID for future lightweight checks
+	if len(liveStreams) > 0 {
+		videoID := liveStreams[0].StreamID
+		videoTitle := liveStreams[0].Title
+		if videoTitle == "" {
+			videoTitle = liveStreams[0].ChannelName // Fallback if title is empty
+		}
+		if cacheErr := m.repository.UpdateCachedVideoID(ctx, channelID, videoID, videoTitle); cacheErr != nil {
+			m.logger.Warn("Failed to cache video ID",
+				zap.String("channel_id", channelID),
+				zap.String("video_id", videoID),
+				zap.Error(cacheErr),
+			)
+		} else {
+			m.logger.Info("Cached video ID for future lightweight checks",
+				zap.String("channel_id", channelID),
+				zap.String("video_id", videoID),
+			)
+		}
 	}
 
 	// Start pollers for each live stream
@@ -497,6 +582,9 @@ func (m *Manager) cleanupInactivePollers(ctx context.Context, activeChannels map
 			delete(m.pollers, streamID)
 			delete(m.activeStreams, streamID)
 			m.releaseLeadership(streamID)
+
+			// Reset detection backoff to allow quick re-detection when channel goes live again
+			m.resetDetectionBackoff(stream.ChannelID)
 
 			// Update database status to inactive
 			if err := m.repository.SetSourceActive(ctx, stream.ChannelID, false); err != nil {
@@ -801,5 +889,20 @@ func (m *Manager) increaseDetectionBackoff(channelID string) {
 	m.logger.Warn("Increased livestream detection backoff due to error",
 		zap.String("channel_id", channelID),
 		zap.Duration("new_backoff", newBackoff),
+	)
+}
+
+// resetDetectionBackoff resets backoff to base interval when a poller stops
+// This allows quick re-detection if the channel goes live again shortly after
+func (m *Manager) resetDetectionBackoff(channelID string) {
+	m.detectionMu.Lock()
+	defer m.detectionMu.Unlock()
+
+	m.channelBackoff[channelID] = m.baseDetectionInterval
+	m.channelLastCheck[channelID] = time.Now()
+
+	m.logger.Info("Reset livestream detection backoff (stream ended)",
+		zap.String("channel_id", channelID),
+		zap.Duration("backoff", m.baseDetectionInterval),
 	)
 }
