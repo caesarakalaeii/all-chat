@@ -86,8 +86,9 @@ DATABASE_NAME=allchat
 
 # Service
 PORT=8089
-LOG_LEVEL=info
-POLL_INTERVAL_MS=30000  # Poll for active streams every 30 seconds
+LOG_LEVEL=info           # debug, info, warn, error
+LOG_FORMAT=json          # json (default, for production/K8s) or simple (for development)
+POLL_INTERVAL_MS=30000   # Poll for active streams every 30 seconds
 
 # Message Deduplication (prevents replay on reconnect)
 TIKTOK_DEDUP_TTL_MS=300000           # Keep dedup cache for 5 minutes (default)
