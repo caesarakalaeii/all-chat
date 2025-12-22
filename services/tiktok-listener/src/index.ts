@@ -33,6 +33,7 @@ import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
 
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+const LOG_FORMAT = process.env.LOG_FORMAT || 'json'; // 'json' or 'simple'
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379');
 const DATABASE_HOST = process.env.DATABASE_HOST || 'localhost';
@@ -59,20 +60,26 @@ const TIKTOK_DEDUP_CLEANUP_INTERVAL_MS = parseInt(process.env.TIKTOK_DEDUP_CLEAN
 const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_SIZE || '10000');
 
 // Configure logger
+// In production/Kubernetes, use JSON format for log collectors
+// In development, use colorized simple format for readability
 const logger = winston.createLogger({
   level: LOG_LEVEL,
   format: winston.format.combine(
     winston.format.timestamp(),
-    winston.format.json()
+    winston.format.errors({ stack: true }),
+    LOG_FORMAT === 'simple'
+      ? winston.format.combine(
+          winston.format.colorize(),
+          winston.format.simple()
+        )
+      : winston.format.json()
   ),
-  defaultMeta: { service: 'tiktok-listener' },
+  defaultMeta: { 
+    service: 'tiktok-listener',
+    version: process.env.APP_VERSION || 'dev'
+  },
   transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    })
+    new winston.transports.Console()
   ]
 });
 
