@@ -2,7 +2,7 @@
 
 **Purpose**: This guide helps LLM agents quickly navigate the All-Chat repository and locate relevant files for any task.
 
-**Last Updated**: 2025-11-13 (Phase 4.5)
+**Last Updated**: 2026-02-26 (Current services snapshot)
 
 ---
 
@@ -12,7 +12,7 @@
 |------|---------|--------------|
 | [CLAUDE.md](./CLAUDE.md) | Project overview, tech stack, architecture principles | **START HERE** - Every session |
 | [README.md](./README.md) | User-facing documentation, setup instructions | Understanding project from user perspective |
-| [CHECKPOINT.md](./CHECKPOINT.md) | Current project status, completed phases | Checking what's done and what's next |
+| [TODO.md](./TODO.md) | Current priorities and open tasks | Checking what's in progress and what's next |
 | [docs/CSS_CUSTOMIZATION.md](./docs/CSS_CUSTOMIZATION.md) | Complete CSS reference for overlay customization | Working on frontend, overlay themes, CSS |
 | [docs/CRITICAL_ARCHITECTURE_ANALYSIS.md](./docs/CRITICAL_ARCHITECTURE_ANALYSIS.md) | Known issues, security gaps, scalability limits | Understanding technical debt and blockers |
 | [Makefile](./Makefile) | Build commands, test targets | Running builds, tests, docker commands |
@@ -24,19 +24,32 @@
 
 ```
 all-chat/
-├── services/                      # 🔹 All microservices (Go)
-│   ├── twitch-listener/          # Twitch IRC chat listener
-│   ├── youtube-listener/         # YouTube Live Chat API listener
+├── services/                      # 🔹 All microservices (Go unless noted)
+│   ├── api-gateway/              # HTTP proxy + WebSocket hub
+│   ├── auth-service/             # OAuth flows + JWT issuance
+│   ├── emote-service/            # External emote aggregation & caching
+│   ├── kick-listener/            # Kick chat listener (Pusher WebSocket)
 │   ├── message-processor/        # Message normalization & enrichment
+│   ├── overlay-manager/          # Overlay configs, mock chat, source management
 │   ├── source-manager/           # Active source registry & leader election
-│   └── api-gateway/              # HTTP proxy + WebSocket hub
+│   ├── tiktok-listener/          # TikTok chat listener (Node.js, beta)
+│   ├── twitch-listener/          # Twitch IRC chat listener
+│   └── youtube-listener/         # YouTube Live Chat API listener
 ├── shared/                        # 🔹 Shared Go packages
 │   ├── auth/                     # JWT utilities
-│   ├── database/                 # PostgreSQL connection
-│   ├── redis/                    # Redis client wrapper
+│   ├── cmd/                      # Cobra/Viper helpers for CLIs
+│   ├── crypto/                   # Cryptographic helpers (deprecated)
+│   ├── database/                 # PostgreSQL connection pooling
+│   ├── encryption/               # Encryption utilities
 │   ├── logger/                   # Zap logger
-│   └── middleware/               # HTTP middleware (CORS, Auth)
-├── frontend/                      # 🔹 React + Next.js (Phase 5)
+│   ├── metrics/                  # Prometheus business metrics
+│   ├── middleware/               # HTTP middleware (CORS, Auth)
+│   ├── ratelimit/                # Rate limiting primitives
+│   ├── redis/                    # Redis client wrapper
+│   ├── signing/                  # Request signing helpers
+│   ├── sourcemanager/            # Source activation helpers
+│   └── tracing/                  # OpenTelemetry helpers
+├── frontend/                      # 🔹 React + Next.js overlay UI
 ├── deployments/                   # 🔹 Infrastructure as Code
 │   ├── docker-compose.yml        # Local dev environment
 │   ├── k8s/                      # Kubernetes manifests
@@ -57,22 +70,21 @@ all-chat/
 
 ### Twitch Listener (`services/twitch-listener/`)
 
-**Purpose**: Connects to Twitch IRC, joins channels, publishes raw messages to Redis Streams
+**Purpose**: Connects to Twitch IRC, joins channels, publishes raw messages to Redis Streams.
 
 **Key Files**:
 - `cmd/main.go` - Service entry point, initialization
 - `irc/client.go` - Twitch IRC client implementation
 - `channels/manager.go` - Dynamic channel join/leave management
 - `publisher/redis.go` - Publishes to Redis Stream `chat:raw`
-- `go.mod` - Dependencies (gempir/go-twitch-irc)
 
-**Read When**: Working on Twitch integration, IRC issues, channel management
+**Read When**: Working on Twitch integration, IRC issues, channel management.
 
 ---
 
 ### YouTube Listener (`services/youtube-listener/`)
 
-**Purpose**: Polls YouTube Live Chat API, publishes messages to Redis Streams, leader election
+**Purpose**: Polls YouTube Live Chat API, publishes messages to Redis Streams, coordinates with leader election.
 
 **Key Files**:
 - `cmd/main.go` - Service entry point with leader election
@@ -82,30 +94,70 @@ all-chat/
 - `publisher/redis.go` - Publishes to Redis Stream `chat:raw`
 - `README.md` - Service-specific documentation
 
-**Read When**: Working on YouTube integration, leader election, API polling
+**Read When**: Working on YouTube integration, leader election, API polling.
+
+---
+
+### Kick Listener (`services/kick-listener/`)
+
+**Purpose**: Listens to Kick chat via Pusher WebSocket and publishes raw messages to Redis Streams.
+
+**Key Files**:
+- `cmd/main.go` - Service entry point
+- `websocket/client.go` - Pusher Protocol 7 WebSocket client
+- `channels/manager.go` - Active Kick channel tracking
+- `publisher/redis.go` - Writes to `chat:raw`
+
+**Read When**: Working on Kick transport reliability, channel activation, or WebSocket handling.
+
+---
+
+### TikTok Listener (`services/tiktok-listener/`)
+
+**Purpose**: (Beta, Node.js) Monitors TikTok LIVE chat using the unofficial TikTok-Live-Connector library and publishes to Redis Streams.
+
+**Key Files**:
+- `src/index.ts` - Service entry point and wiring
+- `src/listeners/` - Live chat listener setup and event handling
+- `README.md` - Beta limitations and architecture
+
+**Read When**: Investigating TikTok connectivity issues or normalizing TikTok events.
 
 ---
 
 ### Message Processor (`services/message-processor/`)
 
-**Purpose**: Consumes from Redis Streams, normalizes messages, enriches with emotes, publishes to overlay-specific Pub/Sub
+**Purpose**: Consumes from Redis Streams, normalizes messages, enriches with emotes, publishes to overlay-specific Pub/Sub.
 
 **Key Files**:
 - `cmd/main.go` - Consumer group initialization
 - `consumer/streams.go` - Redis Streams XREADGROUP consumer
-- `normalizer/twitch_normalizer.go` - Twitch-specific message parsing
-- `normalizer/youtube_normalizer.go` - YouTube-specific message parsing
+- `normalizer/*_normalizer.go` - Platform-specific parsers (Twitch/YouTube/Kick)
 - `enricher/emote_enricher.go` - Fetches emotes from Emote Service
 - `publisher/pubsub.go` - Publishes to `overlay:{overlay_id}`
 - `router/router.go` - Routes messages based on platform
 
-**Read When**: Working on message normalization, emote enrichment, multi-platform support
+**Read When**: Working on message normalization, emote enrichment, multi-platform support.
+
+---
+
+### Emote Service (`services/emote-service/`)
+
+**Purpose**: Aggregates and caches emotes from 7TV, BTTV, and FFZ to support downstream enrichment.
+
+**Key Files**:
+- `cmd/main.go` - Service entry point and routing
+- `providers/*` - Individual provider clients
+- `cache/redis.go` - Cache-aside Redis layer
+- `handlers/emotes.go` - HTTP handlers for channel emotes
+
+**Read When**: Adding emote providers, adjusting caching, or debugging emote fetches.
 
 ---
 
 ### Source Manager (`services/source-manager/`)
 
-**Purpose**: Maintains registry of active chat sources, provides leader election for YouTube Listener
+**Purpose**: Maintains registry of active chat sources and drives leader election for listeners.
 
 **Key Files**:
 - `cmd/main.go` - HTTP server + registry initialization
@@ -115,15 +167,43 @@ all-chat/
 - `handlers/sources.go` - REST API for active sources
 - `handlers/health.go` - Health checks (liveness/readiness)
 
-**Read When**: Working on leader election, active source tracking, service coordination
+**Read When**: Working on leader election, active source tracking, service coordination.
 
-**Note**: Renamed from "Source Controller" in Phase 4.5 - it is NOT a Kubernetes controller/operator
+---
+
+### Overlay Manager (`services/overlay-manager/`)
+
+**Purpose**: Manages overlays, display configurations, mock chat injection, and exposes overlay-friendly config endpoints.
+
+**Key Files**:
+- `cmd/main.go` - Service entry point and dependency wiring
+- `handlers/config.go` - Overlay configuration CRUD
+- `handlers/mock.go` - Mock chat message injection to Message Processor
+- `handlers/youtube.go` - YouTube channel resolution helpers
+- `repository/*` - Database access for overlays and sources
+
+**Read When**: Changing overlay configuration APIs or integrating overlay-specific helpers.
+
+---
+
+### Auth Service (`services/auth-service/`)
+
+**Purpose**: Handles OAuth flows (Twitch-first), token encryption, and JWT issuance for clients and services.
+
+**Key Files**:
+- `cmd/main.go` - Service entry point and route registration
+- `handlers/auth.go` - OAuth callbacks and login/logout flows
+- `oauth/*` - OAuth provider logic
+- `repository/*` - Token/user persistence
+- `shared/jwt.go` - JWT signing helpers used by the service
+
+**Read When**: Working on authentication flows, JWT handling, or token storage.
 
 ---
 
 ### API Gateway (`services/api-gateway/`)
 
-**Purpose**: HTTP reverse proxy, WebSocket server, Redis Pub/Sub to WebSocket bridge
+**Purpose**: HTTP reverse proxy, WebSocket server, Redis Pub/Sub to WebSocket bridge.
 
 **Key Files**:
 - `cmd/main.go` - HTTP server + WebSocket hub
@@ -131,7 +211,7 @@ all-chat/
 - `proxy/reverse_proxy.go` - Routes to backend services
 - `pubsub/subscriber.go` - Subscribes to `overlay:{overlay_id}`
 
-**Read When**: Working on WebSocket, HTTP routing, real-time message delivery
+**Read When**: Working on WebSocket delivery, HTTP routing, or service aggregation.
 
 ---
 
@@ -142,10 +222,17 @@ all-chat/
 | Package | Files | Purpose |
 |---------|-------|---------|
 | `shared/auth/` | `jwt.go`, `claims.go` | JWT generation, validation, claims parsing |
+| `shared/cmd/` | `root.go` | Cobra/Viper CLI helpers |
 | `shared/database/` | `postgres.go` | PostgreSQL connection pooling with pgx |
-| `shared/redis/` | `client.go` | Redis client initialization |
+| `shared/encryption/` | `encryption.go` | Encryption utilities for secrets/tokens |
 | `shared/logger/` | `logger.go` | Zap structured logger |
+| `shared/metrics/` | `metrics.go` | Prometheus business metrics primitives |
 | `shared/middleware/` | `cors.go`, `auth.go` | HTTP middleware for Gin |
+| `shared/ratelimit/` | `limiter.go` | Rate limiting primitives |
+| `shared/redis/` | `client.go` | Redis client initialization |
+| `shared/signing/` | `signer.go` | Request signing/verifier helpers |
+| `shared/sourcemanager/` | `client.go` | Source activation helpers shared by listeners |
+| `shared/tracing/` | `tracing.go` | OpenTelemetry initialization |
 
 **Read When**: Implementing auth, database queries, logging, CORS configuration
 
@@ -208,11 +295,16 @@ deployments/k8s/
 **Services Defined**:
 - `postgres` - PostgreSQL 16 with pgvector
 - `redis` - Redis 7 with AOF persistence
+- `api-gateway` - HTTP + WebSocket server
+- `auth-service` - OAuth + JWT issuer
+- `emote-service` - Emote aggregation + caching
+- `kick-listener` - Kick Pusher listener
+- `message-processor` - Message normalizer
+- `overlay-manager` - Overlay configuration + mock chat
+- `source-manager` - Source registry
+- `tiktok-listener` - TikTok listener (beta)
 - `twitch-listener` - Twitch IRC listener
 - `youtube-listener` - YouTube API poller
-- `message-processor` - Message normalizer
-- `source-manager` - Source registry
-- `api-gateway` - HTTP + WebSocket server
 
 **Read When**: Setting up local development, understanding service dependencies
 
@@ -485,9 +577,9 @@ go test -v ./services/twitch-listener/...  # Single service
 **Critical Issues** (🔴):
 1. OAuth tokens stored in plaintext (no encryption implemented)
 2. Cannot achieve 10,000 msg/s (Redis bottleneck)
-3. No service-to-service authentication
+3. Service-to-service authentication is incomplete across newer services (Auth Service exists but enforcement is partial)
 4. Missing NetworkPolicies
-5. Auth Service, Overlay Manager, Emote Service missing from codebase
+5. Metrics/tracing coverage still minimal outside health endpoints
 
 **High Priority** (🟠):
 1. Single Redis instance (no cluster)
@@ -503,7 +595,7 @@ go test -v ./services/twitch-listener/...  # Single service
 ### Before Starting Any Task
 
 1. ✅ Read `CLAUDE.md` - Project overview and architecture principles
-2. ✅ Read `CHECKPOINT.md` - Current status and what's done
+2. ✅ Skim `TODO.md` - Current priorities and what's in flight
 3. ✅ Check `docs/CRITICAL_ARCHITECTURE_ANALYSIS.md` - Known issues
 4. ✅ Run `git status` - See uncommitted changes
 5. ✅ Check relevant service README (if exists)
@@ -538,7 +630,7 @@ go test -v ./services/twitch-listener/...  # Single service
 **Start Here**:
 - [CLAUDE.md](./CLAUDE.md) - Project instructions
 - [README.md](./README.md) - User guide
-- [CHECKPOINT.md](./CHECKPOINT.md) - Current status
+- [TODO.md](./TODO.md) - Current priorities
 
 **Architecture**:
 - [docs/architecture/DATA_FLOW_INTEGRATION.md](./docs/architecture/DATA_FLOW_INTEGRATION.md)
@@ -551,14 +643,19 @@ go test -v ./services/twitch-listener/...  # Single service
 - [docs/TESTING_COMPREHENSIVE.md](./docs/TESTING_COMPREHENSIVE.md) - Testing guide
 
 **Services** (Read cmd/main.go for entry point):
+- [services/api-gateway/](./services/api-gateway/)
+- [services/auth-service/](./services/auth-service/)
+- [services/emote-service/](./services/emote-service/)
+- [services/kick-listener/](./services/kick-listener/)
+- [services/message-processor/](./services/message-processor/)
+- [services/overlay-manager/](./services/overlay-manager/)
+- [services/source-manager/](./services/source-manager/)
+- [services/tiktok-listener/](./services/tiktok-listener/)
 - [services/twitch-listener/](./services/twitch-listener/)
 - [services/youtube-listener/](./services/youtube-listener/)
-- [services/message-processor/](./services/message-processor/)
-- [services/source-manager/](./services/source-manager/)
-- [services/api-gateway/](./services/api-gateway/)
 
 ---
 
-**Last Updated**: 2025-11-13 (Phase 4.5)
+**Last Updated**: 2026-02-26 (Current services snapshot)
 **Maintained By**: Claude Code Agents
 **Questions?**: Check [CLAUDE.md](./CLAUDE.md) or [docs/CRITICAL_ARCHITECTURE_ANALYSIS.md](./docs/CRITICAL_ARCHITECTURE_ANALYSIS.md)
