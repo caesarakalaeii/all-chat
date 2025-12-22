@@ -452,7 +452,10 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	// Cache the first live stream's video ID for future lightweight checks
 	if len(liveStreams) > 0 {
 		videoID := liveStreams[0].StreamID
-		videoTitle := liveStreams[0].ChannelName // Using channel name as fallback
+		videoTitle := liveStreams[0].Title
+		if videoTitle == "" {
+			videoTitle = liveStreams[0].ChannelName // Fallback if title is empty
+		}
 		if cacheErr := m.repository.UpdateCachedVideoID(ctx, channelID, videoID, videoTitle); cacheErr != nil {
 			m.logger.Warn("Failed to cache video ID",
 				zap.String("channel_id", channelID),

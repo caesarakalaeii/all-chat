@@ -189,8 +189,8 @@ func (r *Repository) GetCachedVideoID(ctx context.Context, channelID string) (st
 	var cachedVideoID string
 	err := r.db.QueryRow(ctx, query, channelID).Scan(&cachedVideoID)
 	if err != nil {
-		// No cached video ID is not an error, just return empty string
-		return "", err
+		// No cached video ID found - not an error, just no cache available
+		return "", nil
 	}
 
 	return cachedVideoID, nil
@@ -216,21 +216,35 @@ func (r *Repository) UpdateCachedVideoID(ctx context.Context, channelID, videoID
 		r.logger.Warn("No quota record found to update cached video ID",
 			zap.String("channel_id", channelID),
 		)
-		// Try to create quota record
+		// Try to create quota record with a simpler approach
+		// First, try to find user_id from existing overlay_chat_sources
+		var userID string
+		userQuery := `
+			SELECT o.user_id
+			FROM overlay_chat_sources ocs
+			JOIN overlays o ON ocs.overlay_id = o.id
+			WHERE ocs.channel_id = $1 AND ocs.platform = 'youtube'
+			LIMIT 1
+		`
+		err := r.db.QueryRow(ctx, userQuery, channelID).Scan(&userID)
+		if err != nil {
+			r.logger.Error("Failed to find user_id for channel",
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+			return fmt.Errorf("failed to find user_id for channel: %w", err)
+		}
+
+		// Insert new quota record with the user_id we found
 		insertQuery := `
 			INSERT INTO youtube_channel_quota (channel_id, user_id, cached_video_id, cached_video_title)
-			SELECT $1, 
-			       (SELECT user_id FROM overlays WHERE id = (
-			           SELECT overlay_id FROM overlay_chat_sources 
-			           WHERE channel_id = $1 AND platform = 'youtube' LIMIT 1
-			       ) LIMIT 1),
-			       $2, $3
+			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (channel_id) DO UPDATE
 			SET cached_video_id = EXCLUDED.cached_video_id,
 			    cached_video_title = EXCLUDED.cached_video_title,
 			    consecutive_offline_checks = 0
 		`
-		_, err := r.db.Exec(ctx, insertQuery, channelID, videoID, videoTitle)
+		_, err = r.db.Exec(ctx, insertQuery, channelID, userID, videoID, videoTitle)
 		if err != nil {
 			return fmt.Errorf("failed to insert cached video ID: %w", err)
 		}
