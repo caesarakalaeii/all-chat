@@ -127,31 +127,41 @@ All-Chat uses a modern microservices architecture:
 │   Your Stream   │
 │  (OBS Browser)  │
 └────────┬────────┘
-         │ WebSocket
-┌────────▼────────┐         ┌──────────────────┐
-│   API Gateway   │◄────────┤  Platform APIs   │
-└────────┬────────┘         │ (Twitch/YouTube) │
-         │                  └──────────────────┘
+         │ WebSocket overlays
+┌────────▼────────┐        ┌────────────────────┐
+│  api-gateway    │◄──────►│   auth-service     │
+└────────┬────────┘        └────────────────────┘
          │ Redis Pub/Sub
          │
+┌────────▼──────────┐        ┌──────────────────┐
+│ message-processor │◄──────►│  emote-service   │
+└────────┬──────────┘        └──────────────────┘
+         │
 ┌────────▼──────────┐
-│ Message Processor │ ← Enriches messages with emotes
+│  chat listeners   │ ← twitch-listener, youtube-listener,
+│ (multi-platform)  │    kick-listener, tiktok-listener
 └────────┬──────────┘
          │
 ┌────────▼──────────┐
-│ Chat Listeners    │ ← Connects to chat platforms
-│ (Twitch/YouTube)  │
+│  source-manager   │ ← Active source tracking
+└────────┬──────────┘
+         │
+┌────────▼──────────┐
+│ overlay-manager   │ → Feeds overlays to OBS
 └───────────────────┘
 ```
 
-**Key Services:**
-- **API Gateway**: WebSocket server, HTTP routing, OAuth callbacks
-- **Twitch Listener**: IRC connection, message normalization
-- **YouTube Listener**: API polling, message normalization (leader election)
-- **Kick Listener**: Pusher WebSocket, message normalization
-- **TikTok Listener**: WebSocket polling (in development)
-- **Message Processor**: Emote enrichment, message routing, platform normalization
-- **Source Manager**: Active source tracking, Redis leader election
+**Key Services (mirrors `services/`):**
+- **api-gateway**: WebSocket server for overlays, HTTP routing, OAuth callbacks
+- **auth-service**: Manages authentication, sessions, and OAuth flows
+- **emote-service**: Fetches platform emotes and enriches chat payloads
+- **kick-listener**: Connects to Kick (Pusher) WebSocket and normalizes chat
+- **message-processor**: Routes messages via Redis and orchestrates enrichment
+- **overlay-manager**: Maintains overlay state and renders scenes for OBS clients
+- **source-manager**: Tracks active sources and coordinates Redis leader election
+- **tiktok-listener**: Polls TikTok live WebSocket feed and normalizes chat
+- **twitch-listener**: Handles IRC ingestion and normalization for Twitch chat
+- **youtube-listener**: Polls YouTube Live API, normalizes chat (leader election)
 
 [📖 Read full architecture docs](./CLAUDE.md#architecture-principles)
 
