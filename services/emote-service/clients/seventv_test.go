@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/caesar/all-chat/services/emote-service/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -31,7 +32,7 @@ func (m *mockTwitchLookup) GetUserID(ctx context.Context, login string) (string,
 }
 
 func TestSevenTVClient_FetchEmotes(t *testing.T) {
-	successResponse := `{
+	channelResponse := `{
 		"emote_set": {
 			"id": "set-123",
 			"name": "Cool Emotes",
@@ -48,18 +49,6 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 							]
 						}
 					}
-				},
-				{
-					"id": "603cac391cd55c0014d989be",
-					"name": "OMEGALUL",
-					"data": {
-						"host": {
-							"url": "//cdn.7tv.app/emote/603cac391cd55c0014d989be",
-							"files": [
-								{"name": "1x.webp", "width": 28}
-							]
-						}
-					}
 				}
 			]
 		}
@@ -70,11 +59,11 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 		"name": "Global Emotes",
 		"emotes": [
 			{
-				"id": "60ae7316f7c927fad14e6ca2",
-				"name": "xqcL",
+				"id": "603cac391cd55c0014d989be",
+				"name": "Stare",
 				"data": {
 					"host": {
-						"url": "//cdn.7tv.app/emote/60ae7316f7c927fad14e6ca2",
+						"url": "//cdn.7tv.app/emote/603cac391cd55c0014d989be",
 						"files": [
 							{"name": "1x.webp", "width": 28}
 						]
@@ -82,11 +71,11 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 				}
 			},
 			{
-				"id": "603cac391cd55c0014d989be",
+				"id": "603cac391cd55c0014d989bf",
 				"name": "OMEGALUL",
 				"data": {
 					"host": {
-						"url": "//cdn.7tv.app/emote/603cac391cd55c0014d989be",
+						"url": "//cdn.7tv.app/emote/603cac391cd55c0014d989bf",
 						"files": [
 							{"name": "1x.webp", "width": 28}
 						]
@@ -97,73 +86,73 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 	}`
 
 	tests := []struct {
-		name           string
-		channel        string
-		pathAssertion  func(t *testing.T, path string)
-		mockStatusCode int
-		mockResponse   string
-		mockTwitchID   string
-		mockTwitchErr  error
-		wantEmoteCount int
-		wantErr        bool
-		errContains    string
-		twitchCalled   bool
+		name                 string
+		channel              string
+		mockTwitchID         string
+		mockTwitchErr        error
+		channelStatusCode    int
+		channelResponse      string
+		globalStatusCode     int
+		globalResponse       string
+		wantEmoteCount       int
+		wantErr              bool
+		errContains          string
+		twitchCalled         bool
+		expectChannelEmotes  bool
+		expectGlobalEmotes   bool
 	}{
 		{
-			name:    "successful fetch with twitch lookup",
-			channel: "xqc",
-			pathAssertion: func(t *testing.T, path string) {
-				assert.Equal(t, "/v3/users/twitch/71092938", path)
-			},
-			mockStatusCode: http.StatusOK,
-			mockResponse:   successResponse,
-			mockTwitchID:   "71092938",
-			wantEmoteCount: 2,
-			twitchCalled:   true,
+			name:                "successful fetch with channel and global emotes",
+			channel:             "xqc",
+			mockTwitchID:        "71092938",
+			channelStatusCode:   http.StatusOK,
+			channelResponse:     channelResponse,
+			globalStatusCode:    http.StatusOK,
+			globalResponse:      globalResponse,
+			wantEmoteCount:      3, // 1 channel + 2 global
+			twitchCalled:        true,
+			expectChannelEmotes: true,
+			expectGlobalEmotes:  true,
 		},
 		{
-			name:    "channel already numeric",
-			channel: "12345",
-			pathAssertion: func(t *testing.T, path string) {
-				assert.Equal(t, "/v3/users/twitch/12345", path)
-			},
-			mockStatusCode: http.StatusOK,
-			mockResponse:   successResponse,
-			wantEmoteCount: 2,
-			twitchCalled:   false,
+			name:                "channel already numeric",
+			channel:             "12345",
+			channelStatusCode:   http.StatusOK,
+			channelResponse:     channelResponse,
+			globalStatusCode:    http.StatusOK,
+			globalResponse:      globalResponse,
+			wantEmoteCount:      3, // 1 channel + 2 global
+			twitchCalled:        false,
+			expectChannelEmotes: true,
+			expectGlobalEmotes:  true,
 		},
 		{
-			name:    "global emotes",
-			channel: "global",
-			pathAssertion: func(t *testing.T, path string) {
-				assert.Equal(t, "/v3/emote-sets/global", path)
-			},
-			mockStatusCode: http.StatusOK,
-			mockResponse:   globalResponse,
-			wantEmoteCount: 2,
-			twitchCalled:   false,
+			name:               "global emotes only",
+			channel:            "global",
+			globalStatusCode:   http.StatusOK,
+			globalResponse:     globalResponse,
+			wantEmoteCount:     2, // Only global emotes
+			twitchCalled:       false,
+			expectGlobalEmotes: true,
 		},
 		{
-			name:           "user not found",
-			channel:        "missing",
-			pathAssertion:  func(t *testing.T, path string) {},
-			mockStatusCode: http.StatusNotFound,
-			mockResponse:   `{"error": "User not found"}`,
-			mockTwitchID:   "9999",
-			wantErr:        true,
-			errContains:    "status code 404",
-			twitchCalled:   true,
+			name:              "channel not found fails",
+			channel:           "missing",
+			mockTwitchID:      "9999",
+			channelStatusCode: http.StatusNotFound,
+			wantErr:           true,
+			errContains:       "status code 404",
+			twitchCalled:      true,
 		},
 		{
-			name:           "invalid JSON response",
-			channel:        "xqc",
-			pathAssertion:  func(t *testing.T, path string) {},
-			mockStatusCode: http.StatusOK,
-			mockResponse:   `{invalid json}`,
-			mockTwitchID:   "71092938",
-			wantErr:        true,
-			errContains:    "failed to decode",
-			twitchCalled:   true,
+			name:            "invalid JSON response",
+			channel:         "xqc",
+			mockTwitchID:    "71092938",
+			channelStatusCode: http.StatusOK,
+			channelResponse: `{invalid json}`,
+			wantErr:         true,
+			errContains:     "failed to decode",
+			twitchCalled:    true,
 		},
 		{
 			name:          "twitch lookup error",
@@ -173,18 +162,42 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 			errContains:   "failed to resolve",
 			twitchCalled:  true,
 		},
+		{
+			name:                "channel emotes with global fetch failure",
+			channel:             "xqc",
+			mockTwitchID:        "71092938",
+			channelStatusCode:   http.StatusOK,
+			channelResponse:     channelResponse,
+			globalStatusCode:    http.StatusInternalServerError,
+			wantEmoteCount:      1, // Only channel emotes (global fetch failed gracefully)
+			twitchCalled:        true,
+			expectChannelEmotes: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if tt.pathAssertion != nil {
-					tt.pathAssertion(t, r.URL.Path)
+				// Handle global emote requests
+				if strings.HasSuffix(r.URL.Path, "/v3/emote-sets/global") {
+					w.WriteHeader(tt.globalStatusCode)
+					if tt.globalResponse != "" {
+						w.Write([]byte(tt.globalResponse))
+					}
+					return
 				}
-				w.WriteHeader(tt.mockStatusCode)
-				if tt.mockResponse != "" {
-					w.Write([]byte(tt.mockResponse))
+
+				// Handle channel emote requests
+				if strings.Contains(r.URL.Path, "/v3/users/twitch/") {
+					w.WriteHeader(tt.channelStatusCode)
+					if tt.channelResponse != "" {
+						w.Write([]byte(tt.channelResponse))
+					}
+					return
 				}
+
+				// Unknown path
+				w.WriteHeader(http.StatusNotFound)
 			}))
 			defer server.Close()
 
@@ -207,12 +220,26 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.Len(t, emotes, tt.wantEmoteCount)
+				
+				// Verify emote properties
+				emoteMap := make(map[string]models.Emote)
 				for _, emote := range emotes {
 					assert.NotEmpty(t, emote.Code)
 					assert.NotEmpty(t, emote.URL)
 					assert.Equal(t, "7tv", emote.Provider)
 					assert.Equal(t, tt.channel, emote.Channel)
 					assert.NoError(t, emote.Validate())
+					emoteMap[emote.Code] = emote
+				}
+
+				// Verify specific emotes are present if expected
+				if tt.expectChannelEmotes {
+					_, hasChannelEmote := emoteMap["xqcL"]
+					assert.True(t, hasChannelEmote, "Expected channel emote 'xqcL' to be present")
+				}
+				if tt.expectGlobalEmotes {
+					_, hasGlobalEmote := emoteMap["Stare"]
+					assert.True(t, hasGlobalEmote, "Expected global emote 'Stare' to be present")
 				}
 			}
 
