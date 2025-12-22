@@ -53,6 +53,12 @@ type Manager struct {
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
 	dbConn       DBConnInterface // For PostgreSQL LISTEN
+
+	// Global sync leadership (prevents multiple replicas from doing expensive discovery)
+	// Safe to share the same LeadershipCoordinator because stream IDs are globally unique
+	// ("global-sync" will never conflict with actual video IDs which are alphanumeric)
+	syncLeader         *sourcemanager.LeadershipCoordinator
+	syncLeaderStreamID string // Constant stream ID for global sync leadership
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -89,6 +95,8 @@ func NewManager(
 		maxDetectionInterval:  10 * time.Minute,  // Max 10 minutes between checks
 		syncInterval:          30 * time.Second,
 		stopChan:              make(chan struct{}),
+		syncLeader:            leader, // Use same coordinator for global sync leadership
+		syncLeaderStreamID:    "global-sync", // Constant stream ID for global sync leadership
 	}
 }
 
@@ -149,6 +157,7 @@ func (m *Manager) Stop() {
 }
 
 // periodicSync periodically syncs streams from database
+// Only the global sync leader performs this work to avoid quota waste
 func (m *Manager) periodicSync(ctx context.Context) {
 	defer m.wg.Done()
 
@@ -158,10 +167,34 @@ func (m *Manager) periodicSync(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
+			// Try to acquire global sync leadership
+			// Note: No callback is needed for global sync leadership because:
+			// 1. Losing leadership just means another replica will take over syncing
+			// 2. There's no local state to clean up (unlike per-stream pollers)
+			// 3. The next periodic sync will re-acquire leadership if available
+			if m.syncLeader != nil {
+				isLeader, err := m.syncLeader.EnsureLeadership(ctx, m.syncLeaderStreamID, nil)
+				if err != nil {
+					m.logger.Error("Failed to check global sync leadership", zap.Error(err))
+					continue
+				}
+				if !isLeader {
+					m.logger.Debug("Not global sync leader, skipping periodic sync")
+					continue
+				}
+				m.logger.Debug("Global sync leader, performing periodic sync")
+			}
+
 			if err := m.syncStreams(ctx); err != nil {
 				m.logger.Error("Failed to sync streams", zap.Error(err))
 			}
 		case <-m.stopChan:
+			// Release global sync leadership on shutdown
+			if m.syncLeader != nil {
+				m.syncLeader.Release(m.syncLeaderStreamID)
+				// Note: Ignoring error on shutdown - lock will expire naturally (10s TTL)
+				// and failure to release is not critical during graceful shutdown
+			}
 			return
 		}
 	}
@@ -238,6 +271,21 @@ func (m *Manager) listenAndWait(ctx context.Context, poolInterface interface{}) 
 			m.logger.Info("Source change notification received",
 				zap.String("payload", notification.Payload),
 			)
+
+			// Try to acquire global sync leadership before syncing
+			// This prevents multiple replicas from racing to sync on the same notification
+			if m.syncLeader != nil {
+				isLeader, err := m.syncLeader.EnsureLeadership(ctx, m.syncLeaderStreamID, nil)
+				if err != nil {
+					m.logger.Error("Failed to check global sync leadership after notification", zap.Error(err))
+					continue
+				}
+				if !isLeader {
+					m.logger.Debug("Not global sync leader, skipping sync after notification")
+					continue
+				}
+				m.logger.Debug("Global sync leader, performing sync after notification")
+			}
 
 			// Trigger immediate sync
 			if err := m.syncStreams(ctx); err != nil {
@@ -732,6 +780,21 @@ func (m *Manager) handleOverlayConnected(ctx context.Context, overlayID string) 
 	m.logger.Info("Overlay connected, starting polling",
 		zap.String("overlay_id", overlayID),
 	)
+
+	// Try to acquire global sync leadership before syncing
+	// This prevents multiple replicas from racing to start polling
+	if m.syncLeader != nil {
+		isLeader, err := m.syncLeader.EnsureLeadership(ctx, m.syncLeaderStreamID, nil)
+		if err != nil {
+			m.logger.Error("Failed to check global sync leadership after overlay connection", zap.Error(err))
+			return
+		}
+		if !isLeader {
+			m.logger.Debug("Not global sync leader, skipping sync after overlay connection")
+			return
+		}
+		m.logger.Debug("Global sync leader, performing sync after overlay connection")
+	}
 
 	// Trigger immediate sync to start polling for this overlay's sources
 	if err := m.syncStreams(ctx); err != nil {

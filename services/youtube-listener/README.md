@@ -19,9 +19,9 @@ YouTube Live Chat API
         ↓
   OAuth Manager
         ↓
-   Stream Manager
-    ↓        ↓
- Poller1  Poller2  (one per live stream)
+   Stream Manager (with Global Sync Leader Election)
+     ↓        ↓
+  Poller1  Poller2  (one per live stream, per-stream leader election)
         ↓
    API Client
         ↓
@@ -29,6 +29,16 @@ YouTube Live Chat API
         ↓
 Redis Streams (chat:raw)
 ```
+
+**Leader Election Strategy:**
+- **Global Sync Leader**: Only one replica performs expensive stream discovery (100 units/search)
+  - Uses Redis lock with stream ID: `"global-sync"`
+  - Checked before periodic sync, PostgreSQL LISTEN events, and overlay connections
+  - Prevents quota waste when running multiple replicas (e.g., 3 replicas = 66% quota savings)
+- **Per-Stream Leader**: Only one replica polls chat messages for each live stream
+  - Uses Redis lock with actual stream ID (e.g., video ID)
+  - Prevents duplicate message publishing
+  - Ensures high availability (if leader fails, another replica takes over)
 
 ## Features
 
@@ -290,9 +300,15 @@ docker run -d \
 ## Production Considerations
 
 1. **Quota**: Request increase to 1,000,000 units/day
-2. **Leader Election**: Use Source Manager to prevent duplicate polling
+2. **Leader Election**: 
+   - **Global Sync Leader**: Only one replica performs stream discovery (100 units per search) to avoid quota waste
+   - **Per-Stream Leader**: Prevents duplicate chat message polling across replicas
+   - Both use Source Manager for distributed leadership coordination
 3. **Token Management**: Monitor token refresh success rate
-4. **Scaling**: One instance can handle ~50 concurrent streams
+4. **Scaling**: 
+   - Multiple replicas supported (HPA scales 1-5 pods)
+   - Global sync leader election ensures only one replica does expensive API calls
+   - One instance can handle ~50 concurrent streams of chat polling
 5. **Monitoring**: Export Prometheus metrics for quota and polling rates
 
 ## Related Services
