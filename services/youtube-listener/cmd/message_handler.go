@@ -35,11 +35,8 @@ func (h *MessageHandler) HandleMessages(ctx context.Context, messages []*models.
 		return nil
 	}
 
-	// Record quota usage (liveChatMessages.list costs 5 units per API call)
-	if err := h.quotaTracker.RecordUsage(ctx, quota.QuotaCostLiveChatMessages); err != nil {
-		h.logger.Error("Failed to record quota usage", zap.Error(err))
-		// Continue anyway - don't fail the message publishing
-	}
+	// Quota is now tracked in api.Client.GetChatMessages() before the API call
+	// This ensures we don't exceed quota and can fail fast if quota is exhausted
 
 	// Publish messages to Redis Streams
 	if err := h.publisher.PublishBatch(ctx, messages); err != nil {

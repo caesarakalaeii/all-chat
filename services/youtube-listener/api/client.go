@@ -29,6 +29,12 @@ func NewClient(service *youtube.Service, quotaTracker *quota.Tracker, logger *za
 
 // GetLiveStreams fetches active live streams for a channel
 func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*models.YouTubeStream, error) {
+	// Check quota BEFORE making expensive search.list call (100 units)
+	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostSearch) {
+		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d for search", 
+			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostSearch)
+	}
+
 	call := c.service.Search.List([]string{"id", "snippet"}).
 		ChannelId(channelID).
 		EventType("live").
@@ -61,6 +67,16 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 
 		// Get live streaming details including liveChatId
 		videoID := item.Id.VideoId
+		
+		// Check quota BEFORE making videos.list call (1 unit)
+		if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostVideos) {
+			c.logger.Warn("Insufficient quota for videos.list call, stopping stream enumeration",
+				zap.String("video_id", videoID),
+				zap.Int("remaining_quota", c.quotaTracker.GetRemainingQuota()),
+			)
+			break
+		}
+
 		videoCall := c.service.Videos.List([]string{"liveStreamingDetails", "snippet"}).Id(videoID)
 		videoResponse, err := videoCall.Do()
 
@@ -116,7 +132,14 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 }
 
 // GetChatMessages fetches messages from a live chat
+// This costs 5 quota units per call
 func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken string) (*youtube.LiveChatMessageListResponse, error) {
+	// Check quota BEFORE making the API call
+	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostLiveChatMessages) {
+		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d", 
+			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostLiveChatMessages)
+	}
+
 	call := c.service.LiveChatMessages.List(liveChatID, []string{"id", "snippet", "authorDetails"}).
 		MaxResults(200)
 
@@ -125,6 +148,14 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 	}
 
 	response, err := call.Do()
+
+	// Record quota usage AFTER the API call (whether success or failure)
+	if c.quotaTracker != nil {
+		if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostLiveChatMessages); recordErr != nil {
+			c.logger.Warn("Failed to record liveChatMessages.list quota usage", zap.Error(recordErr))
+		}
+	}
+
 	if err != nil {
 		c.logger.Error("Failed to fetch chat messages",
 			zap.String("live_chat_id", liveChatID),
@@ -145,6 +176,12 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 // CheckStreamStatus checks if a stream is still live
 // This is a lightweight check that costs 1 quota unit
 func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (bool, error) {
+	// Check quota BEFORE making the API call
+	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostVideos) {
+		return false, fmt.Errorf("insufficient quota: %d units remaining, need %d", 
+			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostVideos)
+	}
+
 	call := c.service.Videos.List([]string{"liveStreamingDetails"}).Id(videoID)
 
 	response, err := call.Do()
@@ -183,6 +220,12 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (bool, e
 // GetVideoDetails fetches detailed information about a video
 // This costs 1 quota unit and is used after status check confirms stream is live
 func (c *Client) GetVideoDetails(ctx context.Context, videoID string) (*models.YouTubeStream, error) {
+	// Check quota BEFORE making the API call
+	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostVideos) {
+		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d", 
+			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostVideos)
+	}
+
 	call := c.service.Videos.List([]string{"snippet", "liveStreamingDetails"}).Id(videoID)
 
 	response, err := call.Do()
