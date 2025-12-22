@@ -177,10 +177,7 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			requestCount := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				requestCount++
-				
 				// Handle global emote requests
 				if strings.HasSuffix(r.URL.Path, "/v3/emote-sets/global") {
 					w.WriteHeader(tt.globalStatusCode)

@@ -58,7 +58,9 @@ curl http://localhost:8083/emotes/channel/xqc
 ```
 
 #### GET `/emotes/7tv/:channel`
-**Description**: Fetch 7TV emotes only
+**Description**: Fetch 7TV emotes only (includes channel-specific emotes + global emotes)
+
+**Note**: For channels, this returns both the channel's personal emote set and 7TV's global emotes. For the special channel "global", only global emotes are returned.
 
 **Example**:
 ```bash
@@ -306,9 +308,9 @@ graph LR
 
 ### 7TV API
 
-- **Endpoint**: `GET https://7tv.io/v3/users/twitch/{channel}`
+- **Endpoint**: `GET https://7tv.io/v3/users/twitch/{channel}` (channel emotes) + `GET https://7tv.io/v3/emote-sets/global` (global emotes)
 - **Rate Limit**: ~10 req/s
-- **Response**: Emote sets with metadata
+- **Response**: Emote sets with metadata (channel emotes are merged with global emotes)
 - **Docs**: https://7tv.io/docs
 
 ### BTTV API
