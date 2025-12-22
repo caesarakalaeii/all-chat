@@ -14,6 +14,22 @@ Perfect for streamers who multistream or want unified chat displays across platf
 
 Create your multi-platform chat overlay in minutes - no installation required!
 
+### 🧭 Prefer working from your browser?
+
+Check out the **[All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-browser-extension)**. It replaces the native site chat (Twitch/YouTube/Kick/TikTok) with an All-Chat panel so you can talk with everyone else across platforms right from your browser, without running a local server.
+
+**What it solves**
+- Native chat swap: automatically swaps the site's chat UI with All-Chat so you can read and send messages across platforms from one place
+- Built-in auth: uses browser-native OAuth to sign you into supported platforms without sharing tokens elsewhere
+- Automatic source bridging: connects to the public chat sources the streamer has shared through All-Chat—no need to keep platform tabs open
+- Zero extra setup: the extension connects to All-Chat out of the box—no local services needed
+
+**Install / setup** (follows the extension README)
+1. Download the latest packaged zip from the **Releases** section of the browser extension repo and unzip it.
+2. Chrome/Edge: open `chrome://extensions` or `edge://extensions`, enable **Developer mode**, and click **Load unpacked** on the unzipped folder.
+3. Firefox: open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on**, and choose `manifest.json` inside the unzipped folder.
+4. Open a supported site; the native chat will be replaced with All-Chat. Use the extension popup to sign in with Twitch and start chatting across platforms.
+
 ## 🎯 What is All-Chat?
 
 All-Chat lets you create beautiful chat overlays for OBS that combine messages from multiple streaming platforms in real-time:
