@@ -77,19 +77,44 @@ func (n *TwitchNormalizer) extractUserInfo(raw *models.RawChatMessage) models.Us
 		}
 	}
 
+	// Extract source badges for shared chat (if present)
+	sourceBadges := make([]models.Badge, 0)
+	if sourceBadgesStr, ok := tags["source-badges"]; ok && sourceBadgesStr != "" {
+		// Format: "subscriber/12,moderator/1"
+		badgePairs := strings.Split(sourceBadgesStr, ",")
+		for _, pair := range badgePairs {
+			parts := strings.Split(pair, "/")
+			if len(parts) >= 2 {
+				name := parts[0]
+				version := parts[1]
+
+				sourceBadges = append(sourceBadges, models.Badge{
+					Name:    name,
+					Version: version,
+					IconURL: "", // Will be enriched by badge enricher using source channel
+				})
+			}
+		}
+	}
+
 	// Get display name (fallback to username)
 	displayName := tags["display-name"]
 	if displayName == "" {
 		displayName = raw.Username
 	}
 
+	// Extract source user ID for shared chat
+	sourceUserID := tags["source-id"]
+
 	return models.UserInfo{
-		ID:          raw.UserID,
-		Username:    raw.Username,
-		DisplayName: displayName,
-		AvatarURL:   "", // Will be enriched by avatar enricher
-		Badges:      badges,
-		Color:       tags["color"],
+		ID:           raw.UserID,
+		Username:     raw.Username,
+		DisplayName:  displayName,
+		AvatarURL:    "", // Will be enriched by avatar enricher
+		Badges:       badges,
+		Color:        tags["color"],
+		SourceBadges: sourceBadges,
+		SourceUserID: sourceUserID,
 	}
 }
 
@@ -161,6 +186,17 @@ func (n *TwitchNormalizer) extractMetadata(raw *models.RawChatMessage) map[strin
 	metadata["is_subscriber"] = tags["subscriber"] == "1"
 	metadata["is_moderator"] = tags["mod"] == "1"
 	metadata["is_turbo"] = tags["turbo"] == "1"
+
+	// Shared Chat detection and metadata
+	sourceRoomID := tags["source-room-id"]
+	if sourceRoomID != "" {
+		metadata["is_shared_chat"] = true
+		metadata["source_room_id"] = sourceRoomID
+		// Note: source channel name would need to be resolved via Twitch API
+		// For now, we just track the room ID
+	} else {
+		metadata["is_shared_chat"] = false
+	}
 
 	// Message ID
 	if msgID, ok := tags["id"]; ok {

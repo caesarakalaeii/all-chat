@@ -86,6 +86,24 @@ func (p *Parser) ParsePrivateMessage(msg twitch.PrivateMessage) (*models.RawChat
 		tags["emotes"] = strings.Join(emoteStrs, "/")
 	}
 
+	// Shared Chat tags (for multi-channel collaborative streams)
+	// These tags indicate the message's true origin when channels share chat
+	if msg.Tags["source-room-id"] != "" {
+		tags["source-room-id"] = msg.Tags["source-room-id"]
+	}
+
+	if msg.Tags["source-id"] != "" {
+		tags["source-id"] = msg.Tags["source-id"]
+	}
+
+	if msg.Tags["source-badges"] != "" {
+		tags["source-badges"] = msg.Tags["source-badges"]
+	}
+
+	if msg.Tags["source-badge-info"] != "" {
+		tags["source-badge-info"] = msg.Tags["source-badge-info"]
+	}
+
 	// Message metadata
 	tags["id"] = msg.ID
 	if msg.RoomID != "" {

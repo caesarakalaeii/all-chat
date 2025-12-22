@@ -141,6 +141,110 @@ func TestTwitchNormalizer_Normalize(t *testing.T) {
 			},
 		},
 		{
+			name: "shared chat - all source tags present",
+			raw: &models.RawChatMessage{
+				MessageID: "msg-shared-1",
+				Platform:  "twitch",
+				ChannelID: "hostchannel",
+				UserID:    "123456",
+				Username:  "guestuser",
+				Text:      "Hello from shared chat!",
+				Timestamp: time.Now().UTC(),
+				Tags: map[string]string{
+					"display-name":      "GuestUser",
+					"color":             "#00FF00",
+					"badges":            "subscriber/6",
+					"subscriber":        "1",
+					"source-room-id":    "987654321",
+					"source-id":         "123456",
+					"source-badges":     "subscriber/6,moderator/1",
+					"source-badge-info": "subscriber/6",
+					"room-id":           "111222333",
+				},
+			},
+			overlayID: "overlay-shared-1",
+			check: func(t *testing.T, msg *models.UnifiedChatMessage) {
+				assert.Equal(t, "msg-shared-1", msg.ID)
+				assert.Equal(t, "overlay-shared-1", msg.OverlayID)
+				assert.Equal(t, "hostchannel", msg.ChannelID)
+				assert.Equal(t, "guestuser", msg.User.Username)
+				assert.Equal(t, "GuestUser", msg.User.DisplayName)
+				
+				// Verify regular badges
+				assertBadgePresent(t, msg.User.Badges, "subscriber")
+				
+				// Verify source badges extracted
+				assert.Len(t, msg.User.SourceBadges, 2)
+				assertBadgePresent(t, msg.User.SourceBadges, "subscriber")
+				assertBadgePresent(t, msg.User.SourceBadges, "moderator")
+				
+				// Verify source user ID
+				assert.Equal(t, "123456", msg.User.SourceUserID)
+				
+				// Verify shared chat metadata
+				assert.True(t, msg.Metadata["is_shared_chat"].(bool))
+				assert.Equal(t, "987654321", msg.Metadata["source_room_id"])
+				assert.Equal(t, "111222333", msg.Metadata["twitch_room_id"])
+			},
+		},
+		{
+			name: "shared chat - partial source tags",
+			raw: &models.RawChatMessage{
+				MessageID: "msg-shared-2",
+				Platform:  "twitch",
+				ChannelID: "hostchannel",
+				UserID:    "789",
+				Username:  "partialuser",
+				Text:      "Partial shared chat",
+				Timestamp: time.Now().UTC(),
+				Tags: map[string]string{
+					"display-name":   "PartialUser",
+					"source-room-id": "444555666",
+					// No source-badges, source-id
+				},
+			},
+			overlayID: "overlay-shared-2",
+			check: func(t *testing.T, msg *models.UnifiedChatMessage) {
+				// Verify shared chat is detected
+				assert.True(t, msg.Metadata["is_shared_chat"].(bool))
+				assert.Equal(t, "444555666", msg.Metadata["source_room_id"])
+				
+				// Source badges should be empty
+				assert.Empty(t, msg.User.SourceBadges)
+				assert.Empty(t, msg.User.SourceUserID)
+			},
+		},
+		{
+			name: "regular message - no shared chat tags",
+			raw: &models.RawChatMessage{
+				MessageID: "msg-regular",
+				Platform:  "twitch",
+				ChannelID: "regularchannel",
+				UserID:    "999",
+				Username:  "regularuser",
+				Text:      "Regular message",
+				Timestamp: time.Now().UTC(),
+				Tags: map[string]string{
+					"display-name": "RegularUser",
+					"badges":       "subscriber/3",
+					"subscriber":   "1",
+				},
+			},
+			overlayID: "overlay-regular",
+			check: func(t *testing.T, msg *models.UnifiedChatMessage) {
+				// Verify NOT shared chat
+				assert.False(t, msg.Metadata["is_shared_chat"].(bool))
+				
+				// No source fields should be present
+				assert.Empty(t, msg.User.SourceBadges)
+				assert.Empty(t, msg.User.SourceUserID)
+				assert.NotContains(t, msg.Metadata, "source_room_id")
+				
+				// Regular badges should work
+				assertBadgePresent(t, msg.User.Badges, "subscriber")
+			},
+		},
+		{
 			name: "unsupported platform",
 			raw: &models.RawChatMessage{
 				MessageID: "msg-error",
@@ -245,4 +349,59 @@ func TestTwitchNormalizer_ExtractMetadata(t *testing.T) {
 	assert.Equal(t, "71092938", metadata["twitch_room_id"])
 	assert.Equal(t, 0, metadata["bits"])
 	assert.Equal(t, 0, metadata["super_chat_amount"])
+}
+
+func TestTwitchNormalizer_ExtractMetadata_SharedChat(t *testing.T) {
+normalizer := NewTwitchNormalizer()
+
+raw := &models.RawChatMessage{
+Tags: map[string]string{
+"subscriber":     "1",
+"mod":            "0",
+"source-room-id": "987654321",
+"room-id":        "111222333",
+},
+}
+
+metadata := normalizer.extractMetadata(raw)
+
+assert.True(t, metadata["is_shared_chat"].(bool))
+assert.Equal(t, "987654321", metadata["source_room_id"])
+assert.Equal(t, "111222333", metadata["twitch_room_id"])
+assert.True(t, metadata["is_subscriber"].(bool))
+}
+
+func TestTwitchNormalizer_ExtractUserInfo_SharedChat(t *testing.T) {
+normalizer := NewTwitchNormalizer()
+
+raw := &models.RawChatMessage{
+UserID:   "12345",
+Username: "guestuser",
+Tags: map[string]string{
+"display-name":  "GuestUser",
+"color":         "#00FF00",
+"badges":        "subscriber/6",
+"source-id":     "12345",
+"source-badges": "subscriber/6,moderator/1,vip/1",
+},
+}
+
+userInfo := normalizer.extractUserInfo(raw)
+
+assert.Equal(t, "12345", userInfo.ID)
+assert.Equal(t, "guestuser", userInfo.Username)
+assert.Equal(t, "GuestUser", userInfo.DisplayName)
+assert.Equal(t, "#00FF00", userInfo.Color)
+
+// Regular badges
+assertBadgePresent(t, userInfo.Badges, "subscriber")
+
+// Source badges
+assert.Len(t, userInfo.SourceBadges, 3)
+assertBadgePresent(t, userInfo.SourceBadges, "subscriber")
+assertBadgePresent(t, userInfo.SourceBadges, "moderator")
+assertBadgePresent(t, userInfo.SourceBadges, "vip")
+
+// Source user ID
+assert.Equal(t, "12345", userInfo.SourceUserID)
 }

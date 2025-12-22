@@ -192,10 +192,17 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
       <PlatformStatusIndicators activePlatforms={activePlatforms} />
 
       <div className="space-y-3">
-        {messages.map((message, index) => (
+        {messages.map((message, index) => {
+          const isSharedChat = message.metadata?.is_shared_chat === true;
+          
+          return (
           <div
             key={`${message.id}-${index}`}
-            className="bg-gray-900/90 backdrop-blur-sm rounded-lg p-3 shadow-lg animate-in slide-in-from-bottom-2 duration-300"
+            className={`backdrop-blur-sm rounded-lg p-3 shadow-lg animate-in slide-in-from-bottom-2 duration-300 ${
+              isSharedChat 
+                ? 'bg-purple-900/40 border-2 border-purple-500/50' 
+                : 'bg-gray-900/90'
+            }`}
           >
             <div className="flex items-start gap-3">
               {/* Avatar */}
@@ -218,10 +225,18 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
               {/* Message Content */}
               <div className="flex-1 min-w-0">
                 {/* Username and Platform */}
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className={`text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
                     {message.platform}
                   </span>
+                  
+                  {/* Shared Chat Indicator */}
+                  {isSharedChat && (
+                    <span className="text-xs font-semibold uppercase px-1.5 py-0.5 rounded bg-purple-600/80 text-purple-100 border border-purple-400/50">
+                      Shared Chat
+                    </span>
+                  )}
+                  
                   <span
                     className="font-semibold text-sm"
                     style={{ color: message.user?.color || '#FFFFFF' }}
@@ -229,7 +244,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
                     {message.user?.display_name || message.user?.username}
                   </span>
 
-                  {/* Badges */}
+                  {/* Regular Badges */}
                   {message.user?.badges && message.user.badges.length > 0 && (
                     <div className="flex gap-1">
                       {message.user.badges.map((badge, idx) => (
@@ -240,9 +255,30 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
                           width={16}
                           height={16}
                           className="w-4 h-4 object-contain"
+                          title={`${badge.name} (receiving channel)`}
                         />
                       ))}
                     </div>
+                  )}
+                  
+                  {/* Source Channel Badges (for shared chat) */}
+                  {isSharedChat && message.user?.source_badges && message.user.source_badges.length > 0 && (
+                    <>
+                      <span className="text-xs text-purple-300">|</span>
+                      <div className="flex gap-1">
+                        {message.user.source_badges.map((badge, idx) => (
+                          <Image
+                            key={`source-${idx}`}
+                            src={badge.icon_url}
+                            alt={badge.name}
+                            width={16}
+                            height={16}
+                            className="w-4 h-4 object-contain ring-1 ring-purple-400/50 rounded-sm"
+                            title={`${badge.name} (source channel)`}
+                          />
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
 
@@ -258,7 +294,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
               </div>
             </div>
           </div>
-        ))}
+        )})}
         <div ref={messagesEndRef} />
       </div>
     </div>

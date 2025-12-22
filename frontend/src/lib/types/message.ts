@@ -24,6 +24,8 @@ export interface UserInfo {
   avatar_url?: string;
   badges: Badge[];
   color?: string;
+  source_badges?: Badge[];  // Badges from source channel (shared chat)
+  source_user_id?: string;  // User ID in source channel (shared chat)
 }
 
 export interface Badge {
