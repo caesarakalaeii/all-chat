@@ -27,6 +27,10 @@ const (
 	OpResume    = 34
 	OpSubscribe = 35
 	OpUnsubscribe = 36
+
+	// Delays for connection stability and rate limiting
+	helloProcessingDelay = 100 * time.Millisecond // Delay after HELLO before accepting subscriptions
+	subscriptionDelay    = 50 * time.Millisecond  // Delay between subscription requests for rate limiting
 )
 
 // Message represents a 7TV EventAPI message
@@ -96,19 +100,24 @@ type Client struct {
 	mu                sync.RWMutex
 	done              chan struct{}
 	reconnectDelay    time.Duration
-	reconnecting      bool // flag to prevent multiple concurrent reconnects
+	reconnecting      bool          // flag to prevent multiple concurrent reconnects
 	readLoopDone      chan struct{} // signal when read loop exits
+	ready             chan struct{} // signal when connection is ready for subscriptions
+	isReady           bool          // ready state flag
+	pendingSubscribe  []string      // queue for subscriptions during connection setup
 }
 
 // NewClient creates a new 7TV EventAPI client
 func NewClient(logger *zap.Logger, handler EventHandler) *Client {
 	return &Client{
-		logger:         logger,
-		subscriptions:  make(map[string]bool),
-		eventHandler:   handler,
-		done:           make(chan struct{}),
-		reconnectDelay: 5 * time.Second,
-		readLoopDone:   make(chan struct{}),
+		logger:           logger,
+		subscriptions:    make(map[string]bool),
+		eventHandler:     handler,
+		done:             make(chan struct{}),
+		reconnectDelay:   5 * time.Second,
+		readLoopDone:     make(chan struct{}),
+		ready:            make(chan struct{}),
+		pendingSubscribe: make([]string, 0),
 	}
 }
 
@@ -121,12 +130,16 @@ func (c *Client) Connect(ctx context.Context) error {
 	if c.conn != nil {
 		oldConn := c.conn
 		c.conn = nil
+		c.isReady = false // Mark as not ready
 		c.mu.Unlock()
 		oldConn.Close()
 		// Wait for read loop to fully exit
 		<-c.readLoopDone
 		c.mu.Lock()
 	}
+
+	c.ready = make(chan struct{}) // Reset ready channel
+	c.isReady = false              // Mark as not ready
 	c.mu.Unlock()
 
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, eventAPIURL, nil)
@@ -273,6 +286,32 @@ func (c *Client) handleHello(ctx context.Context, data json.RawMessage) error {
 	// Start heartbeat loop
 	go c.heartbeatLoop(ctx)
 
+	// Mark connection as ready after a small delay
+	// This delay allows the WebSocket connection to stabilize and ensures
+	// we don't send subscriptions immediately after HELLO
+	time.Sleep(helloProcessingDelay)
+	c.mu.Lock()
+	c.isReady = true
+	oldReady := c.ready
+	c.ready = make(chan struct{})
+	c.mu.Unlock()
+	close(oldReady) // Signal that connection is ready
+
+	// Process pending subscriptions
+	c.mu.Lock()
+	pending := c.pendingSubscribe
+	c.pendingSubscribe = make([]string, 0)
+	c.mu.Unlock()
+
+	for _, emoteSetID := range pending {
+		time.Sleep(subscriptionDelay) // Rate limit subscriptions
+		if err := c.subscribeNow(emoteSetID); err != nil {
+			c.logger.Error("Failed to send pending subscription",
+				zap.String("emote_set_id", emoteSetID),
+				zap.Error(err))
+		}
+	}
+
 	return nil
 }
 
@@ -344,6 +383,31 @@ func (c *Client) handleDispatch(ctx context.Context, data json.RawMessage) error
 
 // Subscribe subscribes to emote set updates for a specific emote set ID
 func (c *Client) Subscribe(ctx context.Context, emoteSetID string) error {
+	c.mu.RLock()
+	isReady := c.isReady
+	c.mu.RUnlock()
+
+	// If not ready, queue the subscription
+	if !isReady {
+		c.mu.Lock()
+		// Double-check after acquiring write lock
+		if !c.isReady {
+			c.pendingSubscribe = append(c.pendingSubscribe, emoteSetID)
+			c.mu.Unlock()
+			c.logger.Debug("Queued subscription until connection ready",
+				zap.String("emote_set_id", emoteSetID))
+			return nil
+		}
+		// If became ready while we were acquiring the lock, continue
+		c.mu.Unlock()
+	}
+
+	// Connection is ready, subscribe immediately
+	return c.subscribeNow(emoteSetID)
+}
+
+// subscribeNow sends the subscription immediately without checks
+func (c *Client) subscribeNow(emoteSetID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
