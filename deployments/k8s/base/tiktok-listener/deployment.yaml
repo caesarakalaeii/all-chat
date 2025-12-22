@@ -76,12 +76,18 @@ spec:
           value: "8089"
         - name: POLL_INTERVAL_MS
           value: "30000"  # Poll for active streams every 30 seconds
+        - name: TIKTOK_DEDUP_TTL_MS
+          value: "300000"  # Keep deduplication cache for 5 minutes
+        - name: TIKTOK_DEDUP_CLEANUP_INTERVAL_MS
+          value: "60000"  # Clean up expired entries every minute
+        - name: TIKTOK_DEDUP_MAX_CACHE_SIZE
+          value: "10000"  # Max 10k messages in dedup cache
         resources:
           requests:
-            memory: "128Mi"
+            memory: "256Mi"  # Increased from 128Mi
             cpu: "100m"
           limits:
-            memory: "512Mi"
+            memory: "1Gi"  # Increased from 512Mi for better stability
             cpu: "500m"
         livenessProbe:
           httpGet:

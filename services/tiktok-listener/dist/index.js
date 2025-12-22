@@ -26,6 +26,7 @@ import { BackoffManager } from './livestream/backoff-manager.js';
 import { LiveStreamPoller } from './livestream/poller.js';
 import { PrometheusMetrics } from './metrics/prometheus.js';
 import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
+import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
@@ -46,6 +47,10 @@ const TIKTOK_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_ERROR_BACKOFF_MS || 
 const TIKTOK_MAX_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_MAX_ERROR_BACKOFF_MS || '300000');
 const TIKTOK_HEARTBEAT_INTERVAL_MS = parseInt(process.env.TIKTOK_HEARTBEAT_INTERVAL_MS || '30000');
 const TIKTOK_HEARTBEAT_TIMEOUT_MS = parseInt(process.env.TIKTOK_HEARTBEAT_TIMEOUT_MS || '90000');
+// Message deduplication configuration
+const TIKTOK_DEDUP_TTL_MS = parseInt(process.env.TIKTOK_DEDUP_TTL_MS || '300000'); // 5 minutes
+const TIKTOK_DEDUP_CLEANUP_INTERVAL_MS = parseInt(process.env.TIKTOK_DEDUP_CLEANUP_INTERVAL_MS || '60000'); // 1 minute
+const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_SIZE || '10000');
 // Configure logger
 const logger = winston.createLogger({
     level: LOG_LEVEL,
@@ -73,6 +78,8 @@ class TikTokListenerService {
     metrics;
     // Heartbeat monitoring
     heartbeatMonitor;
+    // Message deduplication
+    messageDeduplicator;
     constructor() {
         // Initialize Redis client
         this.redis = createClient({
@@ -107,6 +114,12 @@ class TikTokListenerService {
         this.metrics = new PrometheusMetrics(logger);
         // Initialize heartbeat monitor
         this.heartbeatMonitor = new HeartbeatMonitor(logger, this.metrics, TIKTOK_HEARTBEAT_INTERVAL_MS, TIKTOK_HEARTBEAT_TIMEOUT_MS);
+        // Initialize message deduplicator
+        this.messageDeduplicator = new MessageDeduplicator(logger, {
+            ttlMs: TIKTOK_DEDUP_TTL_MS,
+            cleanupIntervalMs: TIKTOK_DEDUP_CLEANUP_INTERVAL_MS,
+            maxCacheSize: TIKTOK_DEDUP_MAX_CACHE_SIZE
+        });
     }
     async start() {
         logger.info('Starting TikTok Listener Service', {
@@ -120,6 +133,9 @@ class TikTokListenerService {
             // Start live stream poller
             this.livePoller.start();
             logger.info('Live stream poller started');
+            // Start message deduplicator cleanup
+            this.messageDeduplicator.start();
+            logger.info('Message deduplicator started');
             // Test database connection
             await this.db.query('SELECT NOW()');
             logger.info('Connected to PostgreSQL', { host: DATABASE_HOST, port: DATABASE_PORT });
@@ -160,7 +176,8 @@ class TikTokListenerService {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     active_streams_count: this.activeStreams.size,
-                    streams
+                    streams,
+                    deduplication: this.messageDeduplicator.getStats()
                 }));
             }
             else if (req.url === '/metrics' && req.method === 'GET') {
@@ -419,23 +436,53 @@ class TikTokListenerService {
         try {
             // Record message for heartbeat monitoring
             this.heartbeatMonitor.recordMessage(username);
+            // Extract TikTok's native message ID and timestamp
+            const msgId = data.common?.msgId;
+            const createTime = data.common?.createTime;
+            // Convert TikTok timestamp (Unix timestamp in string format, usually in seconds)
+            // to ISO 8601 format
+            let timestamp;
+            if (createTime) {
+                // TikTok createTime is typically Unix timestamp in seconds (as string)
+                const timestampMs = parseInt(createTime) * 1000;
+                timestamp = new Date(timestampMs).toISOString();
+            }
+            else {
+                // Fallback to current time if no timestamp provided
+                timestamp = new Date().toISOString();
+                logger.warn('Message without createTime, using current time', {
+                    username,
+                    msg_id: msgId
+                });
+            }
+            // Check for duplicate messages (prevents replay on reconnect)
+            if (this.messageDeduplicator.isDuplicate(msgId, username, data.comment || '')) {
+                logger.debug('Skipping duplicate message', {
+                    msg_id: msgId,
+                    username,
+                    text_preview: (data.comment || '').substring(0, 50)
+                });
+                return; // Skip publishing duplicate
+            }
             // Create raw message in standardized format
             const rawMessage = {
-                message_id: randomUUID(),
+                message_id: msgId || randomUUID(), // Use TikTok's msgId, fallback to UUID
                 platform: 'tiktok',
                 channel_id: username,
                 stream_id: undefined, // TikTok doesn't provide stream ID via unofficial lib
                 user_id: data.user?.uniqueId || data.user?.userId || 'unknown',
                 username: data.user?.nickname || data.user?.uniqueId || 'Anonymous',
                 text: data.comment || '',
-                timestamp: new Date().toISOString(),
+                timestamp: timestamp, // Use TikTok's native timestamp
                 tags: {
                     overlay_id: overlayId,
                     user_unique_id: data.user?.uniqueId || '',
                     profile_picture_url: data.user?.profilePictureUrl || '',
                     is_follower: data.user?.isFollower?.toString() || 'false',
                     is_subscriber: data.user?.isSubscriber?.toString() || 'false',
-                    badge_level: data.user?.badgeLevel?.toString() || '0'
+                    badge_level: data.user?.badgeLevel?.toString() || '0',
+                    native_msg_id: msgId || '', // Store native ID for reference
+                    native_create_time: createTime || '' // Store native timestamp for reference
                 }
             };
             // Publish to Redis Stream
@@ -446,7 +493,8 @@ class TikTokListenerService {
                 username,
                 overlay_id: overlayId,
                 user: rawMessage.username,
-                message_id: rawMessage.message_id
+                message_id: rawMessage.message_id,
+                native_timestamp: timestamp
             });
         }
         catch (error) {
@@ -466,6 +514,9 @@ class TikTokListenerService {
         // Stop all heartbeat monitoring
         this.heartbeatMonitor.stopAll();
         logger.info('Heartbeat monitoring stopped');
+        // Stop message deduplicator cleanup
+        this.messageDeduplicator.stop();
+        logger.info('Message deduplicator stopped');
         // Disconnect all streams
         for (const [username, _] of this.activeStreams.entries()) {
             await this.disconnectFromStream(username);
