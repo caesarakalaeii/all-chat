@@ -176,3 +176,105 @@ func (r *Repository) SetSourceActive(ctx context.Context, channelID string, isAc
 
 	return nil
 }
+
+// GetCachedVideoID retrieves the cached video ID for a channel from youtube_channel_quota table
+func (r *Repository) GetCachedVideoID(ctx context.Context, channelID string) (string, error) {
+	query := `
+		SELECT cached_video_id
+		FROM youtube_channel_quota
+		WHERE channel_id = $1
+		  AND cached_video_id IS NOT NULL
+	`
+
+	var cachedVideoID string
+	err := r.db.QueryRow(ctx, query, channelID).Scan(&cachedVideoID)
+	if err != nil {
+		// No cached video ID found - not an error, just no cache available
+		return "", nil
+	}
+
+	return cachedVideoID, nil
+}
+
+// UpdateCachedVideoID updates the cached video ID for a channel in youtube_channel_quota table
+func (r *Repository) UpdateCachedVideoID(ctx context.Context, channelID, videoID, videoTitle string) error {
+	query := `
+		UPDATE youtube_channel_quota
+		SET cached_video_id = $2,
+		    cached_video_title = $3,
+		    consecutive_offline_checks = 0
+		WHERE channel_id = $1
+	`
+
+	result, err := r.db.Exec(ctx, query, channelID, videoID, videoTitle)
+	if err != nil {
+		return fmt.Errorf("failed to update cached video ID: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		r.logger.Warn("No quota record found to update cached video ID",
+			zap.String("channel_id", channelID),
+		)
+		// Try to create quota record with a simpler approach
+		// First, try to find user_id from existing overlay_chat_sources
+		var userID string
+		userQuery := `
+			SELECT o.user_id
+			FROM overlay_chat_sources ocs
+			JOIN overlays o ON ocs.overlay_id = o.id
+			WHERE ocs.channel_id = $1 AND ocs.platform = 'youtube'
+			LIMIT 1
+		`
+		err := r.db.QueryRow(ctx, userQuery, channelID).Scan(&userID)
+		if err != nil {
+			r.logger.Error("Failed to find user_id for channel",
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+			return fmt.Errorf("failed to find user_id for channel: %w", err)
+		}
+
+		// Insert new quota record with the user_id we found
+		insertQuery := `
+			INSERT INTO youtube_channel_quota (channel_id, user_id, cached_video_id, cached_video_title)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (channel_id) DO UPDATE
+			SET cached_video_id = EXCLUDED.cached_video_id,
+			    cached_video_title = EXCLUDED.cached_video_title,
+			    consecutive_offline_checks = 0
+		`
+		_, err = r.db.Exec(ctx, insertQuery, channelID, userID, videoID, videoTitle)
+		if err != nil {
+			return fmt.Errorf("failed to insert cached video ID: %w", err)
+		}
+	}
+
+	r.logger.Debug("Updated cached video ID",
+		zap.String("channel_id", channelID),
+		zap.String("video_id", videoID),
+	)
+
+	return nil
+}
+
+// ClearCachedVideoID clears the cached video ID for a channel
+func (r *Repository) ClearCachedVideoID(ctx context.Context, channelID string) error {
+	query := `
+		UPDATE youtube_channel_quota
+		SET cached_video_id = NULL,
+		    cached_video_title = NULL
+		WHERE channel_id = $1
+	`
+
+	_, err := r.db.Exec(ctx, query, channelID)
+	if err != nil {
+		return fmt.Errorf("failed to clear cached video ID: %w", err)
+	}
+
+	r.logger.Debug("Cleared cached video ID",
+		zap.String("channel_id", channelID),
+	)
+
+	return nil
+}
