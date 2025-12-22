@@ -16,7 +16,7 @@ Create your multi-platform chat overlay in minutes - no installation required!
 
 ### 🧭 Prefer working from your browser?
 
-Check out the **[All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-browser-extension)**. It replaces the native site chat (Twitch/YouTube/Kick/TikTok) with an All-Chat panel so you can talk with everyone else across platforms right from your browser, without running a local server.
+Check out the **[All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-extension)**. It replaces the native site chat (Twitch/YouTube/Kick/TikTok) with an All-Chat panel so you can talk with everyone else across platforms right from your browser, without running a local server.
 
 **What it solves**
 - Native chat swap: automatically swaps the site's chat UI with All-Chat so you can read and send messages across platforms from one place
