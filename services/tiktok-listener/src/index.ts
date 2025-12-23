@@ -62,7 +62,7 @@ const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_
 // Configure logger
 // In production/Kubernetes, use JSON format for log collectors
 // In development, use colorized simple format for readability
-console.log(`[STARTUP] Initializing logger with level=${LOG_LEVEL}, format=${LOG_FORMAT}`);
+// IMPORTANT: Explicitly use process.stdout to ensure logs reach Kubernetes
 const logger = winston.createLogger({
   level: LOG_LEVEL,
   format: winston.format.combine(
@@ -80,18 +80,13 @@ const logger = winston.createLogger({
     version: process.env.APP_VERSION || 'dev'
   },
   transports: [
-    new winston.transports.Console({
+    new winston.transports.Stream({
+      stream: process.stdout,
       handleExceptions: true,
       handleRejections: true
     })
   ]
 });
-console.log('[STARTUP] Logger created, testing Winston...');
-logger.info('Logger initialized successfully', {
-  log_level: LOG_LEVEL,
-  log_format: LOG_FORMAT
-});
-console.log('[STARTUP] Winston test complete');
 
 // Raw message format (matches YouTube/Twitch format)
 interface RawChatMessage {
