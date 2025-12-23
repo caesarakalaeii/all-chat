@@ -60,7 +60,8 @@ const TIKTOK_DEDUP_CLEANUP_INTERVAL_MS = parseInt(process.env.TIKTOK_DEDUP_CLEAN
 const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_SIZE || '10000');
 
 // Configure logger
-// WORKAROUND: Winston Console transport doesn't work, so we use File transport with stdout
+// WORKAROUND: Winston Console transport doesn't work, use File transport with fd reference
+// Using /proc/self/fd/1 (stdout file descriptor) instead of /dev/stdout
 const logger = winston.createLogger({
   level: LOG_LEVEL,
   format: winston.format.combine(
@@ -74,7 +75,7 @@ const logger = winston.createLogger({
   },
   transports: [
     new winston.transports.File({
-      filename: '/dev/stdout',
+      filename: '/proc/self/fd/1',
       handleExceptions: true,
       handleRejections: true
     })
