@@ -356,18 +356,34 @@ class TikTokListenerService {
     if (this.isShuttingDown) return;
 
     try {
-      // Query database for active TikTok channels
-      // Filters by overlay.is_active (not source.is_active) to allow connecting to inactive sources
+      // Get list of overlays with active WebSocket connections from Redis
+      const connectedOverlays = await this.redis.sMembers('overlay:connected');
+
+      if (connectedOverlays.length === 0) {
+        logger.debug('No overlays with active connections, skipping poll');
+
+        // Disconnect all streams since no one is watching
+        for (const [username, _] of this.activeStreams.entries()) {
+          await this.disconnectFromStream(username);
+        }
+
+        return;
+      }
+
+      logger.debug('Polling for active TikTok streams', {
+        connected_overlays_count: connectedOverlays.length
+      });
+
+      // Query database for TikTok channels that belong to overlays with active connections
       const result = await this.db.query(`
         SELECT DISTINCT
           ocs.overlay_id,
           ocs.channel_id as tiktok_username,
           ocs.is_active
         FROM overlay_chat_sources ocs
-        JOIN overlays o ON ocs.overlay_id = o.id
         WHERE ocs.platform = 'tiktok'
-          AND o.is_active = true
-      `);
+          AND ocs.overlay_id = ANY($1::uuid[])
+      `, [connectedOverlays]);
 
       const activeUsernames = new Map<string, string>(); // username -> overlay_id
 
@@ -376,6 +392,10 @@ class TikTokListenerService {
         const overlayId = row.overlay_id;
         activeUsernames.set(username, overlayId);
       }
+
+      logger.debug('Found TikTok sources for connected overlays', {
+        source_count: activeUsernames.size
+      });
 
       // Connect to new streams
       for (const [username, overlayId] of activeUsernames.entries()) {
