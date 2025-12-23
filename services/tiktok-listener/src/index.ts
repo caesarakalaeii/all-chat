@@ -82,16 +82,18 @@ const createLogger = (): Logger => {
     }
   };
 
+  const logLevel = LOG_LEVEL.toLowerCase();
+
   return {
     error: (message: string, meta?: any) => _log('error', message, meta),
     warn: (message: string, meta?: any) => _log('warn', message, meta),
     info: (message: string, meta?: any) => {
-      if (LOG_LEVEL === 'info' || LOG_LEVEL === 'debug') {
+      if (logLevel === 'info' || logLevel === 'debug') {
         _log('info', message, meta);
       }
     },
     debug: (message: string, meta?: any) => {
-      if (LOG_LEVEL === 'debug') {
+      if (logLevel === 'debug') {
         _log('debug', message, meta);
       }
     }
