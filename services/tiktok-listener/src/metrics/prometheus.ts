@@ -6,11 +6,11 @@
  */
 
 import { Counter, Gauge, Histogram, Registry } from 'prom-client';
-import winston from 'winston';
+import { Logger } from '../types/logger.js';
 
 export class PrometheusMetrics {
   private registry: Registry;
-  private logger: winston.Logger;
+  private logger: Logger;
 
   // Connection health metrics
   private heartbeatTimeouts: Counter<string>;
@@ -32,7 +32,7 @@ export class PrometheusMetrics {
   // Error classification metrics
   private errorsByType: Counter<string>;
 
-  constructor(logger: winston.Logger) {
+  constructor(logger: Logger) {
     this.logger = logger;
     this.registry = new Registry();
 

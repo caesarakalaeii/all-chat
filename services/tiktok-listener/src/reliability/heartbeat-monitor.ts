@@ -9,7 +9,7 @@
  * dead without triggering the 'disconnected' event, causing messages to be lost.
  */
 
-import winston from 'winston';
+import { Logger } from '../types/logger.js';
 import { TikTokLiveConnection } from 'tiktok-live-connector';
 import { PrometheusMetrics } from '../metrics/prometheus.js';
 
@@ -21,7 +21,7 @@ interface MonitorState {
 }
 
 export class HeartbeatMonitor {
-  private logger: winston.Logger;
+  private logger: Logger;
   private metrics: PrometheusMetrics;
   private monitors: Map<string, MonitorState> = new Map();
 
@@ -35,7 +35,7 @@ export class HeartbeatMonitor {
    * @param heartbeatTimeoutMs How long to wait before considering connection dead (default: 90s)
    */
   constructor(
-    logger: winston.Logger,
+    logger: Logger,
     metrics: PrometheusMetrics,
     heartbeatIntervalMs: number = 30000,
     heartbeatTimeoutMs: number = 90000

@@ -9,7 +9,7 @@
  * memory leaks.
  */
 
-import winston from 'winston';
+import { Logger } from '../types/logger.js';
 
 /**
  * Message fingerprint for deduplication
@@ -37,7 +37,7 @@ export interface DeduplicatorConfig {
  * MessageDeduplicator tracks recently seen messages to prevent duplicates
  */
 export class MessageDeduplicator {
-  private logger: winston.Logger;
+  private logger: Logger;
   private seenMessages: Map<string, MessageFingerprint> = new Map();
   private cleanupTimer?: NodeJS.Timeout;
   private duplicateCount = 0;
@@ -51,7 +51,7 @@ export class MessageDeduplicator {
    * @param logger Winston logger instance
    * @param config Optional deduplicator configuration
    */
-  constructor(logger: winston.Logger, config?: Partial<DeduplicatorConfig>) {
+  constructor(logger: Logger, config?: Partial<DeduplicatorConfig>) {
     this.logger = logger;
     
     // Apply configuration with defaults

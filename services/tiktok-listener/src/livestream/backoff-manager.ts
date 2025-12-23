@@ -7,7 +7,7 @@
  * - Connection errors: Network/API failures (2s → 5m)
  */
 
-import winston from 'winston';
+import { Logger } from '../types/logger.js';
 
 /**
  * Backoff state for a single username
@@ -36,7 +36,7 @@ export interface BackoffConfig {
  * BackoffManager handles exponential backoff for TikTok live detection
  */
 export class BackoffManager {
-  private logger: winston.Logger;
+  private logger: Logger;
   private backoffStates: Map<string, BackoffState> = new Map();
 
   // Configuration with defaults
@@ -49,7 +49,7 @@ export class BackoffManager {
    * @param logger Winston logger instance
    * @param config Optional backoff configuration
    */
-  constructor(logger: winston.Logger, config?: Partial<BackoffConfig>) {
+  constructor(logger: Logger, config?: Partial<BackoffConfig>) {
     this.logger = logger;
 
     // Apply configuration with defaults
