@@ -7,7 +7,7 @@
  */
 
 import { TikTokLiveConnection } from 'tiktok-live-connector';
-import winston from 'winston';
+import { Logger } from '../types/logger.js';
 
 /**
  * Result of a live status check
@@ -30,7 +30,7 @@ interface CachedStatus {
  * TikTokStatusChecker handles lightweight live status checks for TikTok users
  */
 export class TikTokStatusChecker {
-  private logger: winston.Logger;
+  private logger: Logger;
   private statusCache: Map<string, CachedStatus> = new Map();
   private readonly cacheTTLMs: number;
 
@@ -38,7 +38,7 @@ export class TikTokStatusChecker {
    * @param logger Winston logger instance
    * @param cacheTTLMs Cache TTL in milliseconds (default: 10 seconds)
    */
-  constructor(logger: winston.Logger, cacheTTLMs: number = 10000) {
+  constructor(logger: Logger, cacheTTLMs: number = 10000) {
     this.logger = logger;
     this.cacheTTLMs = cacheTTLMs;
   }

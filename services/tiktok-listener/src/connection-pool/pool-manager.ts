@@ -12,7 +12,7 @@
  */
 
 import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
-import winston from 'winston';
+import { Logger } from '../types/logger.js';
 import { EventEmitter } from 'events';
 
 /**
@@ -51,7 +51,7 @@ export interface ConnectionPoolConfig {
  * ConnectionPoolManager manages shared TikTok connections
  */
 export class ConnectionPoolManager {
-  private logger: winston.Logger;
+  private logger: Logger;
   private connections: Map<string, PooledConnection> = new Map();
   private cleanupTimer?: NodeJS.Timeout;
   
@@ -62,7 +62,7 @@ export class ConnectionPoolManager {
    * @param logger Winston logger instance
    * @param config Optional pool configuration
    */
-  constructor(logger: winston.Logger, config?: Partial<ConnectionPoolConfig>) {
+  constructor(logger: Logger, config?: Partial<ConnectionPoolConfig>) {
     this.logger = logger;
     
     // Apply configuration with defaults

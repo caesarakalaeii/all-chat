@@ -6,7 +6,7 @@
  * historical messages after a connection restart.
  */
 
-import winston from 'winston';
+import { Logger } from '../types/logger.js';
 
 /**
  * Configuration for the timestamp filter
@@ -20,7 +20,7 @@ export interface TimestampFilterConfig {
  * TimestampFilter rejects messages older than a configured threshold
  */
 export class TimestampFilter {
-  private logger: winston.Logger;
+  private logger: Logger;
   private readonly MAX_AGE_MS: number;
   private droppedCount = 0;
   private acceptedCount = 0;
@@ -29,7 +29,7 @@ export class TimestampFilter {
    * @param logger Winston logger instance
    * @param config Optional filter configuration
    */
-  constructor(logger: winston.Logger, config?: Partial<TimestampFilterConfig>) {
+  constructor(logger: Logger, config?: Partial<TimestampFilterConfig>) {
     this.logger = logger;
     
     // Apply configuration with defaults
