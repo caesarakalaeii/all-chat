@@ -60,28 +60,21 @@ const TIKTOK_DEDUP_CLEANUP_INTERVAL_MS = parseInt(process.env.TIKTOK_DEDUP_CLEAN
 const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_SIZE || '10000');
 
 // Configure logger
-// In production/Kubernetes, use JSON format for log collectors
-// In development, use colorized simple format for readability
-// IMPORTANT: Explicitly use process.stdout to ensure logs reach Kubernetes
+// WORKAROUND: Winston Console transport doesn't work, so we use File transport with stdout
 const logger = winston.createLogger({
   level: LOG_LEVEL,
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.errors({ stack: true }),
-    LOG_FORMAT === 'simple'
-      ? winston.format.combine(
-          winston.format.colorize(),
-          winston.format.simple()
-        )
-      : winston.format.json()
+    winston.format.json()
   ),
   defaultMeta: {
     service: 'tiktok-listener',
     version: process.env.APP_VERSION || 'dev'
   },
   transports: [
-    new winston.transports.Stream({
-      stream: process.stdout,
+    new winston.transports.File({
+      filename: '/dev/stdout',
       handleExceptions: true,
       handleRejections: true
     })
