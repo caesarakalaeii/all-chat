@@ -5,7 +5,7 @@
  * Respects backoff intervals and coordinates with status checker and backoff manager.
  */
 
-import winston from 'winston';
+import { Logger } from '../types/logger.js';
 import { TikTokStatusChecker } from './status-checker.js';
 import { BackoffManager } from './backoff-manager.js';
 
@@ -33,7 +33,7 @@ export interface PollerConfig {
  * LiveStreamPoller periodically checks if offline users went live
  */
 export class LiveStreamPoller {
-  private logger: winston.Logger;
+  private logger: Logger;
   private statusChecker: TikTokStatusChecker;
   private backoffManager: BackoffManager;
 
@@ -54,7 +54,7 @@ export class LiveStreamPoller {
   constructor(
     statusChecker: TikTokStatusChecker,
     backoffManager: BackoffManager,
-    logger: winston.Logger,
+    logger: Logger,
     config?: Partial<PollerConfig>
   ) {
     this.statusChecker = statusChecker;

@@ -18,7 +18,6 @@
 import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
 import { Pool, Client, Notification } from 'pg';
-import winston from 'winston';
 import { randomUUID } from 'crypto';
 import http from 'http';
 import { EventEmitter } from 'events';
@@ -59,28 +58,47 @@ const TIKTOK_DEDUP_TTL_MS = parseInt(process.env.TIKTOK_DEDUP_TTL_MS || '300000'
 const TIKTOK_DEDUP_CLEANUP_INTERVAL_MS = parseInt(process.env.TIKTOK_DEDUP_CLEANUP_INTERVAL_MS || '60000'); // 1 minute
 const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_SIZE || '10000');
 
-// Configure logger
-// WORKAROUND: Winston Console transport doesn't work, use File transport with fd reference
-// Using /proc/self/fd/1 (stdout file descriptor) instead of /dev/stdout
-const logger = winston.createLogger({
-  level: LOG_LEVEL,
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.json()
-  ),
-  defaultMeta: {
-    service: 'tiktok-listener',
-    version: process.env.APP_VERSION || 'dev'
-  },
-  transports: [
-    new winston.transports.File({
-      filename: '/proc/self/fd/1',
-      handleExceptions: true,
-      handleRejections: true
-    })
-  ]
-});
+// Import logger interface
+import { Logger } from './types/logger.js';
+
+// Simple, reliable logger using console (Winston was causing issues)
+// Outputs JSON format for log aggregation
+const createLogger = (): Logger => {
+  const _log = (level: string, message: string, meta?: any) => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      service: 'tiktok-listener',
+      version: process.env.APP_VERSION || 'dev',
+      message,
+      ...(meta || {})
+    };
+
+    const output = JSON.stringify(logEntry);
+    if (level === 'error') {
+      console.error(output);
+    } else {
+      console.log(output);
+    }
+  };
+
+  return {
+    error: (message: string, meta?: any) => _log('error', message, meta),
+    warn: (message: string, meta?: any) => _log('warn', message, meta),
+    info: (message: string, meta?: any) => {
+      if (LOG_LEVEL === 'info' || LOG_LEVEL === 'debug') {
+        _log('info', message, meta);
+      }
+    },
+    debug: (message: string, meta?: any) => {
+      if (LOG_LEVEL === 'debug') {
+        _log('debug', message, meta);
+      }
+    }
+  };
+};
+
+const logger = createLogger();
 
 // Raw message format (matches YouTube/Twitch format)
 interface RawChatMessage {
