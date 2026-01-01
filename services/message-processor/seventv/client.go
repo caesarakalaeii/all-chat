@@ -95,6 +95,7 @@ type Client struct {
 	logger            *zap.Logger
 	sessionID         string
 	heartbeatInterval time.Duration
+	lastHeartbeat     time.Time     // last time we received a heartbeat from server
 	subscriptions     map[string]bool // track active subscriptions
 	eventHandler      EventHandler
 	mu                sync.RWMutex
@@ -224,7 +225,13 @@ func (c *Client) handleMessage(ctx context.Context, msg *Message) error {
 	case OpHello:
 		return c.handleHello(ctx, msg.D)
 	case OpHeartbeat:
-		return c.sendHeartbeat()
+		// Server sends heartbeats for connection health monitoring
+		// Clients should NOT respond - just track receipt time
+		c.mu.Lock()
+		c.lastHeartbeat = time.Now()
+		c.mu.Unlock()
+		c.logger.Debug("Received heartbeat from 7TV EventAPI")
+		return nil
 	case OpDispatch:
 		return c.handleDispatch(ctx, msg.D)
 	case OpAck:
@@ -275,6 +282,7 @@ func (c *Client) handleHello(ctx context.Context, data json.RawMessage) error {
 	c.mu.Lock()
 	c.sessionID = hello.SessionID
 	c.heartbeatInterval = time.Duration(hello.HeartbeatInterval) * time.Millisecond
+	c.lastHeartbeat = time.Now() // Initialize heartbeat tracking
 	c.mu.Unlock()
 
 	c.logger.Info("Received HELLO from 7TV EventAPI",
@@ -283,8 +291,8 @@ func (c *Client) handleHello(ctx context.Context, data json.RawMessage) error {
 		zap.Int("subscription_limit", hello.SubscriptionLimit),
 	)
 
-	// Start heartbeat loop
-	go c.heartbeatLoop(ctx)
+	// Start heartbeat monitor (NOT sender - server sends heartbeats to us)
+	go c.heartbeatMonitor(ctx)
 
 	// Mark connection as ready after a small delay
 	// This delay allows the WebSocket connection to stabilize and ensures
@@ -315,9 +323,16 @@ func (c *Client) handleHello(ctx context.Context, data json.RawMessage) error {
 	return nil
 }
 
-// heartbeatLoop sends periodic heartbeats to keep the connection alive
-func (c *Client) heartbeatLoop(ctx context.Context) {
-	ticker := time.NewTicker(c.heartbeatInterval)
+// heartbeatMonitor monitors incoming heartbeats from the server
+// If 3 consecutive heartbeats are missed (timeout = 3 * heartbeatInterval),
+// the connection is considered dead and reconnection is triggered
+func (c *Client) heartbeatMonitor(ctx context.Context) {
+	// Check every heartbeatInterval for missed heartbeats
+	c.mu.RLock()
+	interval := c.heartbeatInterval
+	c.mu.RUnlock()
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -327,27 +342,34 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 		case <-c.done:
 			return
 		case <-ticker.C:
-			if err := c.sendHeartbeat(); err != nil {
-				c.logger.Error("Failed to send heartbeat", zap.Error(err))
+			c.mu.RLock()
+			lastHB := c.lastHeartbeat
+			hbInterval := c.heartbeatInterval
+			c.mu.RUnlock()
+
+			// Check if we've missed 3 consecutive heartbeats
+			timeSinceLastHB := time.Since(lastHB)
+			missedHeartbeats := int(timeSinceLastHB / hbInterval)
+
+			if missedHeartbeats >= 3 {
+				c.logger.Warn("Missed 3+ consecutive heartbeats from 7TV EventAPI, reconnecting",
+					zap.Duration("time_since_last", timeSinceLastHB),
+					zap.Int("missed_count", missedHeartbeats),
+				)
+
+				// Trigger reconnection
+				c.mu.Lock()
+				if !c.reconnecting {
+					c.reconnecting = true
+					c.mu.Unlock()
+					go c.reconnect(ctx)
+				} else {
+					c.mu.Unlock()
+				}
+				return
 			}
 		}
 	}
-}
-
-// sendHeartbeat sends a heartbeat message to the server
-func (c *Client) sendHeartbeat() error {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if c.conn == nil {
-		return fmt.Errorf("connection not established")
-	}
-
-	msg := Message{
-		Op: OpHeartbeat,
-	}
-
-	return c.conn.WriteJSON(msg)
 }
 
 // handleDispatch processes DISPATCH events
