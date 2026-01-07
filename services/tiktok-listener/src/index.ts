@@ -58,6 +58,9 @@ const TIKTOK_DEDUP_TTL_MS = parseInt(process.env.TIKTOK_DEDUP_TTL_MS || '300000'
 const TIKTOK_DEDUP_CLEANUP_INTERVAL_MS = parseInt(process.env.TIKTOK_DEDUP_CLEANUP_INTERVAL_MS || '60000'); // 1 minute
 const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_SIZE || '10000');
 
+// Notification debouncing configuration
+const NOTIFICATION_DEBOUNCE_MS = parseInt(process.env.NOTIFICATION_DEBOUNCE_MS || '1000'); // 1 second
+
 // Import logger interface
 import { Logger } from './types/logger.js';
 
@@ -145,6 +148,13 @@ class TikTokListenerService {
 
   // Message deduplication
   private messageDeduplicator: MessageDeduplicator;
+
+  // Notification debouncing
+  private notificationDebounceTimer?: NodeJS.Timeout;
+  private pendingNotificationCount = 0;
+
+  // Connection state tracking to prevent concurrent connections
+  private connectingStreams: Set<string> = new Set();
 
   constructor() {
     // Initialize Redis client
@@ -323,17 +333,37 @@ class TikTokListenerService {
         channel: 'chat_source_changes'
       });
 
-      // Set up notification handler with proper typing
+      // Set up notification handler with debouncing to prevent thundering herd
       this.listenClient.on('notification', (msg: Notification) => {
         if (msg.channel === 'chat_source_changes') {
-          logger.info('Source change notification received', {
-            payload: msg.payload
+          this.pendingNotificationCount++;
+
+          logger.debug('Source change notification received (debouncing)', {
+            payload: msg.payload,
+            pending_count: this.pendingNotificationCount
           });
 
-          // Trigger immediate sync
-          this.pollActiveStreams().catch(err => {
-            logger.error('Failed to sync after notification', { error: err });
-          });
+          // Clear existing timer if present
+          if (this.notificationDebounceTimer) {
+            clearTimeout(this.notificationDebounceTimer);
+          }
+
+          // Set new timer - only sync after debounce period
+          this.notificationDebounceTimer = setTimeout(() => {
+            const count = this.pendingNotificationCount;
+            this.pendingNotificationCount = 0;
+            this.notificationDebounceTimer = undefined;
+
+            logger.info('Processing debounced notifications', {
+              notification_count: count,
+              debounce_ms: NOTIFICATION_DEBOUNCE_MS
+            });
+
+            // Trigger sync after debounce
+            this.pollActiveStreams().catch(err => {
+              logger.error('Failed to sync after notification', { error: err });
+            });
+          }, NOTIFICATION_DEBOUNCE_MS);
         }
       });
 
@@ -399,9 +429,9 @@ class TikTokListenerService {
         source_count: activeUsernames.size
       });
 
-      // Connect to new streams
+      // Connect to new streams (prevent concurrent connections to same stream)
       for (const [username, overlayId] of activeUsernames.entries()) {
-        if (!this.activeStreams.has(username)) {
+        if (!this.activeStreams.has(username) && !this.connectingStreams.has(username)) {
           await this.connectToStream(username, overlayId);
         }
       }
@@ -434,6 +464,14 @@ class TikTokListenerService {
   }
 
   private async connectToStream(username: string, overlayId: string): Promise<void> {
+    // Mark as connecting to prevent concurrent attempts
+    if (this.connectingStreams.has(username)) {
+      logger.debug('Already connecting to stream, skipping duplicate attempt', { username, overlay_id: overlayId });
+      return;
+    }
+
+    this.connectingStreams.add(username);
+
     try {
       logger.info('Pre-checking live status before connection', { username, overlay_id: overlayId });
 
@@ -542,6 +580,9 @@ class TikTokListenerService {
       this.livePoller.addTarget(username, overlayId);
 
       // Don't delete from activeStreams - keep it for tracking
+    } finally {
+      // Always remove from connecting set when done (success or failure)
+      this.connectingStreams.delete(username);
     }
   }
 
@@ -684,6 +725,12 @@ class TikTokListenerService {
     // Stop polling
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
+    }
+
+    // Clear debounce timer
+    if (this.notificationDebounceTimer) {
+      clearTimeout(this.notificationDebounceTimer);
+      this.notificationDebounceTimer = undefined;
     }
 
     // Stop live stream poller
