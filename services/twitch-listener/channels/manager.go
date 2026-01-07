@@ -337,15 +337,11 @@ func (m *Manager) partChannelLocked(ctx context.Context, channel string, release
 		m.leader.Release(channel)
 	}
 
-	// Update database status
-	if err := m.repo.SetSourceActive(ctx, channel, false); err != nil {
-		m.logger.Error("Failed to update source status after part",
-			zap.String("channel", channel),
-			zap.Error(err),
-		)
-	}
+	// Don't deactivate database sources when parting
+	// Sources should remain active in DB even if temporarily not connected
+	// This allows multiple overlays to share the same channel
 
-	m.logger.Info("Parted channel",
+	m.logger.Info("Parted channel (sources remain active in DB)",
 		zap.String("channel", channel),
 	)
 }
@@ -361,15 +357,11 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, channel string) {
 	m.joinParter.Depart(channel)
 	delete(m.activeChans, channel)
 
-	// Update database status
-	if err := m.repo.SetSourceActive(ctx, channel, false); err != nil {
-		m.logger.Error("Failed to update source status after leadership loss",
-			zap.String("channel", channel),
-			zap.Error(err),
-		)
-	}
+	// Don't deactivate database sources when losing leadership
+	// Another instance will take over polling
+	// Sources should remain active in DB
 
-	m.logger.Warn("Parted channel after losing leadership",
+	m.logger.Warn("Parted channel after losing leadership (sources remain active in DB)",
 		zap.String("channel", channel),
 	)
 }

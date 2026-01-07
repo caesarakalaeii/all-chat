@@ -177,6 +177,47 @@ func (r *Repository) SetSourceActive(ctx context.Context, channelID string, isAc
 	return nil
 }
 
+// SetSourceActiveByOverlay updates the is_active flag for a specific overlay's YouTube source
+func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, channelID string, isActive bool) error {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = $1, updated_at = NOW()
+		WHERE platform = 'youtube'
+		  AND overlay_id = $2
+		  AND channel_id = $3
+	`
+
+	result, err := r.db.Exec(ctx, query, isActive, overlayID, channelID)
+	if err != nil {
+		r.logger.Error("Failed to update overlay-specific source status",
+			zap.String("overlay_id", overlayID),
+			zap.String("channel_id", channelID),
+			zap.Bool("is_active", isActive),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to update source status: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		// Not an error - source may have been removed
+		r.logger.Debug("No overlay-specific sources updated (may have been removed)",
+			zap.String("overlay_id", overlayID),
+			zap.String("channel_id", channelID),
+		)
+		return nil
+	}
+
+	r.logger.Debug("Updated overlay-specific source status",
+		zap.String("overlay_id", overlayID),
+		zap.String("channel_id", channelID),
+		zap.Bool("is_active", isActive),
+		zap.Int64("rows_affected", rowsAffected),
+	)
+
+	return nil
+}
+
 // GetCachedVideoID retrieves the cached video ID for a channel from youtube_channel_quota table
 func (r *Repository) GetCachedVideoID(ctx context.Context, channelID string) (string, error) {
 	query := `
