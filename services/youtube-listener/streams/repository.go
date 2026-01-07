@@ -141,12 +141,14 @@ func (r *Repository) GetChannelName(ctx context.Context, channelID string) (stri
 }
 
 // SetSourceActive updates the is_active flag for YouTube sources with the given channel ID
+// OPTIMIZATION: Only updates if the status actually changed to prevent notification spam
 func (r *Repository) SetSourceActive(ctx context.Context, channelID string, isActive bool) error {
 	query := `
 		UPDATE overlay_chat_sources
 		SET is_active = $1, updated_at = NOW()
 		WHERE platform = 'youtube'
 		  AND channel_id = $2
+		  AND is_active != $1
 	`
 
 	result, err := r.db.Exec(ctx, query, isActive, channelID)
@@ -178,6 +180,7 @@ func (r *Repository) SetSourceActive(ctx context.Context, channelID string, isAc
 }
 
 // SetSourceActiveByOverlay updates the is_active flag for a specific overlay's YouTube source
+// OPTIMIZATION: Only updates if the status actually changed to prevent notification spam
 func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, channelID string, isActive bool) error {
 	query := `
 		UPDATE overlay_chat_sources
@@ -185,6 +188,7 @@ func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, ch
 		WHERE platform = 'youtube'
 		  AND overlay_id = $2
 		  AND channel_id = $3
+		  AND is_active != $1
 	`
 
 	result, err := r.db.Exec(ctx, query, isActive, overlayID, channelID)

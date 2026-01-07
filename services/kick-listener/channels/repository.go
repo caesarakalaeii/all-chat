@@ -138,12 +138,14 @@ func (r *Repository) UpdateChatroomID(ctx context.Context, overlayID, channelSlu
 }
 
 // SetSourceActive updates the is_active flag for Kick sources with the given channel slug
+// OPTIMIZATION: Only updates if the status actually changed to prevent notification spam
 func (r *Repository) SetSourceActive(ctx context.Context, channelSlug string, isActive bool) error {
 	query := `
 		UPDATE overlay_chat_sources
 		SET is_active = $1, updated_at = NOW()
 		WHERE platform = 'kick'
 		  AND channel_id = $2
+		  AND is_active != $1
 	`
 
 	result, err := r.db.Exec(ctx, query, isActive, channelSlug)
@@ -175,6 +177,7 @@ func (r *Repository) SetSourceActive(ctx context.Context, channelSlug string, is
 }
 
 // SetSourceActiveByOverlay updates the is_active flag for a specific overlay's Kick source
+// OPTIMIZATION: Only updates if the status actually changed to prevent notification spam
 func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, channelSlug string, isActive bool) error {
 	query := `
 		UPDATE overlay_chat_sources
@@ -182,6 +185,7 @@ func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, ch
 		WHERE platform = 'kick'
 		  AND overlay_id = $2
 		  AND channel_id = $3
+		  AND is_active != $1
 	`
 
 	result, err := r.db.Exec(ctx, query, isActive, overlayID, channelSlug)
