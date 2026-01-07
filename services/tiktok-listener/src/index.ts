@@ -509,9 +509,9 @@ class TikTokListenerService {
         this.backoffManager.recordDisconnection(username);
         this.livePoller.addTarget(username, overlayId);
 
-        // Update database: stream went offline and source is inactive
+        // Update database: stream went offline (but keep source active for other overlays)
         this.updateStreamHistory(username, false);
-        this.setSourceActive(username, false);
+        // Don't deactivate source - multiple overlays may share this channel
       });
 
       emitter.on('error', (err: Error) => {
@@ -586,6 +586,20 @@ class TikTokListenerService {
       logger.debug('Updated source active status', { username, is_active: isActive });
     } catch (error) {
       logger.error('Failed to update source active status', { username, error });
+    }
+  }
+
+  private async setSourceActiveByOverlay(overlayId: string, username: string, isActive: boolean): Promise<void> {
+    try {
+      await this.db.query(
+        `UPDATE overlay_chat_sources
+         SET is_active = $1, updated_at = NOW()
+         WHERE platform = 'tiktok' AND overlay_id = $2 AND channel_id = $3`,
+        [isActive, overlayId, username]
+      );
+      logger.debug('Updated overlay-specific source active status', { overlay_id: overlayId, username, is_active: isActive });
+    } catch (error) {
+      logger.error('Failed to update overlay-specific source active status', { overlay_id: overlayId, username, error });
     }
   }
 
