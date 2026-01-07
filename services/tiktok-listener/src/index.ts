@@ -618,10 +618,11 @@ class TikTokListenerService {
 
   private async setSourceActive(username: string, isActive: boolean): Promise<void> {
     try {
+      // OPTIMIZATION: Only update if status actually changed to prevent notification spam
       await this.db.query(
         `UPDATE overlay_chat_sources
          SET is_active = $1, updated_at = NOW()
-         WHERE platform = 'tiktok' AND channel_id = $2`,
+         WHERE platform = 'tiktok' AND channel_id = $2 AND is_active != $1`,
         [isActive, username]
       );
       logger.debug('Updated source active status', { username, is_active: isActive });
@@ -632,10 +633,11 @@ class TikTokListenerService {
 
   private async setSourceActiveByOverlay(overlayId: string, username: string, isActive: boolean): Promise<void> {
     try {
+      // OPTIMIZATION: Only update if status actually changed to prevent notification spam
       await this.db.query(
         `UPDATE overlay_chat_sources
          SET is_active = $1, updated_at = NOW()
-         WHERE platform = 'tiktok' AND overlay_id = $2 AND channel_id = $3`,
+         WHERE platform = 'tiktok' AND overlay_id = $2 AND channel_id = $3 AND is_active != $1`,
         [isActive, overlayId, username]
       );
       logger.debug('Updated overlay-specific source active status', { overlay_id: overlayId, username, is_active: isActive });

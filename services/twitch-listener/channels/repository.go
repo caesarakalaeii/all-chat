@@ -100,12 +100,14 @@ func (r *Repository) GetUniqueChannels(ctx context.Context) ([]string, error) {
 }
 
 // SetSourceActive updates the is_active flag for all Twitch sources with the given channel name
+// OPTIMIZATION: Only updates if the status actually changed to prevent notification spam
 func (r *Repository) SetSourceActive(ctx context.Context, channelName string, isActive bool) error {
 	query := `
 		UPDATE overlay_chat_sources
 		SET is_active = $1, updated_at = NOW()
 		WHERE platform = 'twitch'
 		  AND channel_name = $2
+		  AND is_active != $1
 	`
 
 	result, err := r.db.Exec(ctx, query, isActive, channelName)
@@ -115,7 +117,7 @@ func (r *Repository) SetSourceActive(ctx context.Context, channelName string, is
 
 	rowsAffected := result.RowsAffected()
 	if rowsAffected == 0 {
-		// Not an error - channel may have been removed
+		// Not an error - channel status unchanged or channel removed
 		return nil
 	}
 
@@ -123,6 +125,7 @@ func (r *Repository) SetSourceActive(ctx context.Context, channelName string, is
 }
 
 // SetSourceActiveByOverlay updates the is_active flag for a specific overlay's Twitch source
+// OPTIMIZATION: Only updates if the status actually changed to prevent notification spam
 func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, channelName string, isActive bool) error {
 	query := `
 		UPDATE overlay_chat_sources
@@ -130,6 +133,7 @@ func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, ch
 		WHERE platform = 'twitch'
 		  AND overlay_id = $2
 		  AND channel_name = $3
+		  AND is_active != $1
 	`
 
 	result, err := r.db.Exec(ctx, query, isActive, overlayID, channelName)
