@@ -655,12 +655,12 @@ class TikTokListenerService {
       const msgId = data.common?.msgId;
       const createTime = data.common?.createTime;
       
-      // Convert TikTok timestamp (Unix timestamp in string format, usually in seconds)
+      // Convert TikTok timestamp (Unix timestamp in string format, in milliseconds)
       // to ISO 8601 format
       let timestamp: string;
       if (createTime) {
-        // TikTok createTime is typically Unix timestamp in seconds (as string)
-        const timestampMs = parseInt(createTime) * 1000;
+        // TikTok createTime is Unix timestamp in milliseconds (as string)
+        const timestampMs = parseInt(createTime);
         timestamp = new Date(timestampMs).toISOString();
       } else {
         // Fallback to current time if no timestamp provided
