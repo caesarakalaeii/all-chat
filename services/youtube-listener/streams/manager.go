@@ -370,6 +370,29 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 
 	// For each channel, check for live streams (with exponential backoff)
 	for channelID, channelSourceList := range channelSources {
+		// CRITICAL OPTIMIZATION: Skip expensive discovery if poller already running
+		// This prevents wasting 100 quota units on redundant searches
+		m.mu.RLock()
+		hasActivePoller := false
+		for streamID := range m.pollers {
+			stream := m.activeStreams[streamID]
+			if stream != nil && stream.ChannelID == channelID {
+				hasActivePoller = true
+				m.logger.Debug("Skipping discovery for channel with active poller (saved 100 quota units)",
+					zap.String("channel_id", channelID),
+					zap.String("stream_id", streamID),
+				)
+				break
+			}
+		}
+		m.mu.RUnlock()
+
+		if hasActivePoller {
+			// Reset backoff since we have an active stream
+			m.resetDetectionBackoff(channelID)
+			continue
+		}
+
 		// Check if we should skip this channel due to backoff
 		if m.shouldSkipDetection(channelID) {
 			continue
@@ -494,12 +517,20 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 
 	// Fallback to full search (expensive: 100 units)
 	// Check quota before making expensive API call
-	if !m.quotaTracker.CanMakeRequest(100) {
-		m.logger.Warn("Insufficient quota for full stream search, skipping",
+	// IMPORTANT: Reserve quota for active polling (5 units per poll)
+	// Estimate: If we have N active pollers polling every 2-5s, we need ~500 units/hour reserve
+	// Conservative reserve: 500 units minimum for polling
+	const quotaReserveForPolling = 500
+	remainingQuota := m.quotaTracker.GetRemainingQuota()
+
+	if remainingQuota < (100 + quotaReserveForPolling) {
+		m.logger.Warn("Insufficient quota for full stream search (reserving quota for active polling)",
 			zap.String("channel_id", channelID),
-			zap.Int("remaining_quota", m.quotaTracker.GetRemainingQuota()),
+			zap.Int("remaining_quota", remainingQuota),
+			zap.Int("needed", 100),
+			zap.Int("reserve_for_polling", quotaReserveForPolling),
 		)
-		return fmt.Errorf("insufficient quota: %d units remaining, need 100", m.quotaTracker.GetRemainingQuota())
+		return fmt.Errorf("insufficient quota: %d units remaining, need 100 + %d reserve", remainingQuota, quotaReserveForPolling)
 	}
 
 	m.logger.Debug("Performing full live stream search",
