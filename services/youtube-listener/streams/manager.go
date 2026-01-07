@@ -103,7 +103,7 @@ func NewManager(
 		stopChan:                  make(chan struct{}),
 		syncLeader:                leader, // Use same coordinator for global sync leadership
 		syncLeaderStreamID:        "global-sync", // Constant stream ID for global sync leadership
-		notificationDebounceDelay: 1 * time.Second, // Debounce rapid notifications
+		notificationDebounceDelay: 30 * time.Second, // Debounce notifications (YouTube API is expensive: 100 units per search)
 	}
 }
 
