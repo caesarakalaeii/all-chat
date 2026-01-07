@@ -116,25 +116,28 @@ func (p *Poller) pollLoop(ctx context.Context) {
 			if err := p.poll(ctx); err != nil {
 				p.handlePollError(err)
 
-				// Stop polling if the stream has ended
+				// Check for stream ended - but don't stop immediately
+				// Stream might come back (restream, temporary interruption)
+				// Instead, apply exponential backoff and let manager handle cleanup
 				if strings.Contains(err.Error(), "liveChatEnded") || strings.Contains(err.Error(), "live chat is no longer live") {
-					p.logger.Info("Stream ended, stopping poller",
+					p.logger.Warn("Stream appears ended, applying backoff (will auto-recover if stream returns)",
 						zap.String("stream_id", p.stream.StreamID),
+						zap.Duration("backoff", p.backoffDuration),
 					)
-					return
+					// Don't return - let backoff handle it
+					// Manager will clean up if stream stays offline
 				}
 
-				// Stop polling if quota exceeded
-				if strings.Contains(err.Error(), "quotaExceeded") {
-					p.logger.Warn("Quota exceeded, stopping poller temporarily",
+				// Check for quota exceeded - apply long backoff but don't stop
+				// Quota resets daily at midnight PT, poller should auto-recover
+				if strings.Contains(err.Error(), "quotaExceeded") || strings.Contains(err.Error(), "insufficient quota") {
+					p.logger.Warn("Quota exceeded, applying maximum backoff (will auto-recover at quota reset)",
 						zap.String("stream_id", p.stream.StreamID),
+						zap.Duration("backoff", p.maxBackoff),
 					)
-					// Wait 1 hour before retrying
-					select {
-					case <-time.After(1 * time.Hour):
-					case <-p.stopChan:
-						return
-					}
+					// Set to max backoff but keep trying
+					p.backoffDuration = p.maxBackoff
+					// Don't return - quota will reset and poller will auto-recover
 				}
 			} else {
 				// Success - reset error backoff
