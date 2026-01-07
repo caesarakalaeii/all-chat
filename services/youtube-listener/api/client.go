@@ -253,13 +253,14 @@ func (c *Client) GetVideoDetails(ctx context.Context, videoID string) (*models.Y
 
 	// Extract basic info
 	stream := &models.YouTubeStream{
-		VideoID:     videoID,
-		ChannelID:   video.Snippet.ChannelId,
-		ChannelName: video.Snippet.ChannelTitle,
-		Title:       video.Snippet.Title,
-		IsLive:      false,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		VideoID:         videoID,
+		ChannelID:       video.Snippet.ChannelId,
+		ChannelName:     video.Snippet.ChannelTitle,
+		Title:           video.Snippet.Title,
+		IsLive:          false,
+		PollingInterval: 3000, // Default 3 seconds, will be updated from API response
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 
 	// Add thumbnail URL if available
