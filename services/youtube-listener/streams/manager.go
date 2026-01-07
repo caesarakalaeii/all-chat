@@ -59,6 +59,12 @@ type Manager struct {
 	// ("global-sync" will never conflict with actual video IDs which are alphanumeric)
 	syncLeader         *sourcemanager.LeadershipCoordinator
 	syncLeaderStreamID string // Constant stream ID for global sync leadership
+
+	// Notification debouncing (prevents thundering herd on rapid notifications)
+	notificationMu            sync.Mutex
+	notificationDebounceTimer *time.Timer
+	pendingNotificationCount  int
+	notificationDebounceDelay time.Duration
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -78,25 +84,26 @@ func NewManager(
 	logger *zap.Logger,
 ) *Manager {
 	return &Manager{
-		repository:            repository,
-		oauthManager:          oauthManager,
-		messageHandler:        messageHandler,
-		dbConn:                dbConn,
-		logger:                logger,
-		leader:                leader,
-		quotaTracker:          quotaTracker,
-		redisClient:           redisClient,
-		activeStreams:         make(map[string]*models.YouTubeStream),
-		pollers:               make(map[string]*Poller),
-		connectedOverlays:     make(map[string]time.Time),
-		channelLastCheck:      make(map[string]time.Time),
-		channelBackoff:        make(map[string]time.Duration),
-		baseDetectionInterval: 30 * time.Second,  // Start checking every 30s
-		maxDetectionInterval:  10 * time.Minute,  // Max 10 minutes between checks
-		syncInterval:          30 * time.Second,
-		stopChan:              make(chan struct{}),
-		syncLeader:            leader, // Use same coordinator for global sync leadership
-		syncLeaderStreamID:    "global-sync", // Constant stream ID for global sync leadership
+		repository:                repository,
+		oauthManager:              oauthManager,
+		messageHandler:            messageHandler,
+		dbConn:                    dbConn,
+		logger:                    logger,
+		leader:                    leader,
+		quotaTracker:              quotaTracker,
+		redisClient:               redisClient,
+		activeStreams:             make(map[string]*models.YouTubeStream),
+		pollers:                   make(map[string]*Poller),
+		connectedOverlays:         make(map[string]time.Time),
+		channelLastCheck:          make(map[string]time.Time),
+		channelBackoff:            make(map[string]time.Duration),
+		baseDetectionInterval:     30 * time.Second,  // Start checking every 30s
+		maxDetectionInterval:      10 * time.Minute,  // Max 10 minutes between checks
+		syncInterval:              30 * time.Second,
+		stopChan:                  make(chan struct{}),
+		syncLeader:                leader, // Use same coordinator for global sync leadership
+		syncLeaderStreamID:        "global-sync", // Constant stream ID for global sync leadership
+		notificationDebounceDelay: 1 * time.Second, // Debounce rapid notifications
 	}
 }
 
@@ -135,6 +142,14 @@ func (m *Manager) Stop() {
 
 	// Signal stop
 	close(m.stopChan)
+
+	// Clear debounce timer
+	m.notificationMu.Lock()
+	if m.notificationDebounceTimer != nil {
+		m.notificationDebounceTimer.Stop()
+		m.notificationDebounceTimer = nil
+	}
+	m.notificationMu.Unlock()
 
 	// Stop all pollers
 	m.mu.Lock()
@@ -263,34 +278,55 @@ func (m *Manager) listenAndWait(ctx context.Context, poolInterface interface{}) 
 			return nil
 		default:
 			// Wait for notification with timeout
-			notification, err := conn.Conn().WaitForNotification(ctx)
+			_, err := conn.Conn().WaitForNotification(ctx)
 			if err != nil {
 				return fmt.Errorf("notification wait failed: %w", err)
 			}
 
-			m.logger.Info("Source change notification received",
-				zap.String("payload", notification.Payload),
-			)
+			// Debounce rapid notifications to prevent log spam and reduce unnecessary syncs
+			m.notificationMu.Lock()
+			m.pendingNotificationCount++
 
-			// Try to acquire global sync leadership before syncing
-			// This prevents multiple replicas from racing to sync on the same notification
-			if m.syncLeader != nil {
-				isLeader, err := m.syncLeader.EnsureLeadership(ctx, m.syncLeaderStreamID, nil)
-				if err != nil {
-					m.logger.Error("Failed to check global sync leadership after notification", zap.Error(err))
-					continue
-				}
-				if !isLeader {
-					m.logger.Debug("Not global sync leader, skipping sync after notification")
-					continue
-				}
-				m.logger.Debug("Global sync leader, performing sync after notification")
+			// If timer already running, it will handle this notification
+			if m.notificationDebounceTimer != nil {
+				m.notificationMu.Unlock()
+				continue
 			}
 
-			// Trigger immediate sync
-			if err := m.syncStreams(ctx); err != nil {
-				m.logger.Error("Failed to sync after notification", zap.Error(err))
-			}
+			// Start new debounce timer
+			m.notificationDebounceTimer = time.AfterFunc(m.notificationDebounceDelay, func() {
+				m.notificationMu.Lock()
+				count := m.pendingNotificationCount
+				m.pendingNotificationCount = 0
+				m.notificationDebounceTimer = nil
+				m.notificationMu.Unlock()
+
+				m.logger.Info("Processing debounced notifications",
+					zap.Int("notification_count", count),
+					zap.Duration("debounce_ms", m.notificationDebounceDelay),
+				)
+
+				// Try to acquire global sync leadership before syncing
+				// This prevents multiple replicas from racing to sync on the same notification
+				if m.syncLeader != nil {
+					isLeader, err := m.syncLeader.EnsureLeadership(ctx, m.syncLeaderStreamID, nil)
+					if err != nil {
+						m.logger.Error("Failed to check global sync leadership after notification", zap.Error(err))
+						return
+					}
+					if !isLeader {
+						m.logger.Debug("Not global sync leader, skipping sync after notification")
+						return
+					}
+					m.logger.Debug("Global sync leader, performing sync after notification")
+				}
+
+				// Trigger sync after debounce
+				if err := m.syncStreams(ctx); err != nil {
+					m.logger.Error("Failed to sync after notification", zap.Error(err))
+				}
+			})
+			m.notificationMu.Unlock()
 		}
 	}
 }
