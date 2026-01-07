@@ -484,16 +484,13 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	}
 
 	if len(liveStreams) == 0 {
-		m.logger.Debug("No live streams found for channel, marking inactive",
+		m.logger.Debug("No live streams found for channel (will retry with backoff)",
 			zap.String("channel_id", channelID),
 		)
-		// Mark source as inactive - no live streams
-		if err := m.repository.SetSourceActive(ctx, channelID, false); err != nil {
-			m.logger.Error("Failed to mark source inactive when no streams found",
-				zap.String("channel_id", channelID),
-				zap.Error(err),
-			)
-		}
+		// Don't deactivate sources when no stream is found
+		// The channel might go live later, and we already have exponential backoff
+		// Sources should only be deactivated on hard errors (OAuth, API failures)
+		// or when explicitly removed by users
 		return nil
 	}
 
@@ -634,13 +631,12 @@ func (m *Manager) cleanupInactivePollers(ctx context.Context, activeChannels map
 			// Reset detection backoff to allow quick re-detection when channel goes live again
 			m.resetDetectionBackoff(stream.ChannelID)
 
-			// Update database status to inactive
-			if err := m.repository.SetSourceActive(ctx, stream.ChannelID, false); err != nil {
-				m.logger.Error("Failed to update source status after stopping poller",
-					zap.String("channel_id", stream.ChannelID),
-					zap.Error(err),
-				)
-			}
+			// Don't deactivate database sources when cleanup runs
+			// Sources should remain active in DB even if temporarily not polling
+			// This allows quick resumption when overlays reconnect
+			m.logger.Debug("Stopped poller for channel (sources remain active in DB)",
+				zap.String("channel_id", stream.ChannelID),
+			)
 		}
 	}
 }
@@ -829,9 +825,11 @@ func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID strin
 				delete(m.activeStreams, streamID)
 				m.releaseLeadership(streamID)
 
-				// Mark source as inactive - overlay disconnected, no longer monitoring
-				if err := m.repository.SetSourceActive(ctx, stream.ChannelID, false); err != nil {
+				// Mark source as inactive for this specific overlay only
+				// Don't deactivate sources for other overlays using the same channel
+				if err := m.repository.SetSourceActiveByOverlay(ctx, overlayID, stream.ChannelID, false); err != nil {
 					m.logger.Error("Failed to mark source inactive after overlay disconnect",
+						zap.String("overlay_id", overlayID),
 						zap.String("channel_id", stream.ChannelID),
 						zap.Error(err),
 					)

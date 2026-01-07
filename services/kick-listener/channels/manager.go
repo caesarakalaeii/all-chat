@@ -302,13 +302,12 @@ func (m *Manager) syncChannels() error {
 			m.releaseLeadership(slug)
 			metrics.ObserveSubscription("unsubscribe")
 
-			// Update database status to inactive
-			if err := m.repo.SetSourceActive(m.ctx, slug, false); err != nil {
-				m.logger.Error("Failed to update source status after unsubscribe",
-					zap.String("channel", slug),
-					zap.Error(err),
-				)
-			}
+			// Don't deactivate database sources when unsubscribing
+			// Sources should remain active in DB even if temporarily not subscribed
+			// This allows multiple overlays to share the same channel
+			m.logger.Debug("Unsubscribed from channel (sources remain active in DB)",
+				zap.String("channel", slug),
+			)
 		}
 	}
 
@@ -517,15 +516,11 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, channelSlug string) 
 	delete(m.subscriptions, channelSlug)
 	delete(m.chatroomIndex, ch.ChatroomID)
 
-	// Update database status to inactive
-	if err := m.repo.SetSourceActive(ctx, channelSlug, false); err != nil {
-		m.logger.Error("Failed to update source status after leadership loss",
-			zap.String("channel", channelSlug),
-			zap.Error(err),
-		)
-	}
+	// Don't deactivate database sources when losing leadership
+	// Another instance will take over subscription
+	// Sources should remain active in DB
 
-	m.logger.Warn("Dropped subscription after leadership loss",
+	m.logger.Warn("Dropped subscription after leadership loss (sources remain active in DB)",
 		zap.String("channel", channelSlug),
 	)
 	metrics.ObserveSubscription("unsubscribe")

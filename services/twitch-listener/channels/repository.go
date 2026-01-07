@@ -121,3 +121,27 @@ func (r *Repository) SetSourceActive(ctx context.Context, channelName string, is
 
 	return nil
 }
+
+// SetSourceActiveByOverlay updates the is_active flag for a specific overlay's Twitch source
+func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, channelName string, isActive bool) error {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = $1, updated_at = NOW()
+		WHERE platform = 'twitch'
+		  AND overlay_id = $2
+		  AND channel_name = $3
+	`
+
+	result, err := r.db.Exec(ctx, query, isActive, overlayID, channelName)
+	if err != nil {
+		return fmt.Errorf("failed to update overlay-specific source status: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		// Not an error - source may have been removed
+		return nil
+	}
+
+	return nil
+}
