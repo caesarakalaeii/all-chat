@@ -2,11 +2,15 @@
  * Heartbeat Monitor
  *
  * Monitors TikTok WebSocket connections for silent failures by tracking
- * the last message received timestamp. If no messages are received within
- * the timeout period, the connection is considered dead and disconnected.
+ * the last message received timestamp combined with the library's internal
+ * connection state.
  *
- * This addresses the issue where WebSocket connections can become silently
- * dead without triggering the 'disconnected' event, causing messages to be lost.
+ * Only forces reconnection when BOTH conditions are true:
+ * 1. Library reports connection is established (isConnected && upgradedToWebsocket)
+ * 2. No messages received within timeout period (indicating silent failure)
+ *
+ * This prevents unnecessary reconnections that trigger TikTok's anti-bot
+ * measures while still catching genuine silent connection failures.
  */
 
 import { Logger } from '../types/logger.js';
@@ -152,12 +156,44 @@ export class HeartbeatMonitor {
     const silenceDuration = now - state.lastMessageTime;
 
     if (silenceDuration > this.HEARTBEAT_TIMEOUT) {
-      this.logger.warn('Heartbeat timeout detected - forcing reconnection', {
+      // Check library's internal connection state before forcing reconnection
+      let libraryState: any;
+      try {
+        // Note: getState() exists but isn't in TypeScript definitions, so we cast to any
+        libraryState = (state.connection as any).getState();
+      } catch (error) {
+        this.logger.warn('Failed to get connection state from library', {
+          username,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        // If we can't get state, assume connection is healthy and skip forced reconnection
+        return;
+      }
+
+      // Only force reconnection if library thinks it's connected but we know it's not receiving data
+      // This prevents unnecessary reconnections during normal disconnections or connection attempts
+      if (!libraryState.isConnected || !libraryState.upgradedToWebsocket) {
+        this.logger.debug('Heartbeat timeout but library reports connection not established - skipping forced reconnection', {
+          username,
+          silence_duration_ms: silenceDuration,
+          library_is_connected: libraryState.isConnected,
+          library_upgraded_to_websocket: libraryState.upgradedToWebsocket
+        });
+        return;
+      }
+
+      // Library thinks connection is healthy, but no messages received = silent failure
+      this.logger.warn('Silent connection failure detected - forcing reconnection', {
         username,
         silence_duration_ms: silenceDuration,
         silence_duration_seconds: Math.round(silenceDuration / 1000),
         last_message_time: new Date(state.lastMessageTime).toISOString(),
-        timeout_threshold_ms: this.HEARTBEAT_TIMEOUT
+        timeout_threshold_ms: this.HEARTBEAT_TIMEOUT,
+        library_state: {
+          is_connected: libraryState.isConnected,
+          upgraded_to_websocket: libraryState.upgradedToWebsocket,
+          room_id: libraryState.roomId
+        }
       });
 
       // Record timeout in metrics
@@ -166,7 +202,7 @@ export class HeartbeatMonitor {
       // Force disconnection to trigger reconnection flow
       try {
         state.connection.disconnect();
-        this.logger.info('Connection disconnected due to heartbeat timeout', { username });
+        this.logger.info('Connection disconnected due to silent failure', { username });
       } catch (error) {
         this.logger.error('Failed to disconnect connection on heartbeat timeout', {
           username,
