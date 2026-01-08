@@ -109,6 +109,11 @@ body {
   display: none !important;
 }
 
+/* Hide platform status indicators (floating icons in top-right) */
+.platform-status-indicators {
+  display: none !important;
+}
+
 /* ============================================================
    USERNAME STYLES - COLORFUL WITH BLACK OUTLINE
    ============================================================ */
