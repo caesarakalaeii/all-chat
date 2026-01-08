@@ -32,7 +32,7 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
       color: '#9146ff',
     },
     message: {
-      text: 'Welcome everyone! PogChamp',
+      text: 'Welcome everyone! 🎉',
       emotes: [],
     },
     timestamp: new Date().toISOString(),
@@ -80,7 +80,7 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
       color: '#00ff00',
     },
     message: {
-      text: 'Love the customization!',
+      text: 'Love the customization! 💜',
       emotes: [],
     },
     timestamp: new Date().toISOString(),
