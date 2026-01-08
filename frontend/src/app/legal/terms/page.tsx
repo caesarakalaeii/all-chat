@@ -60,6 +60,18 @@ export default function TermsOfServicePage() {
           <li>We are not accountable for outages or policy shifts by those platforms</li>
           <li>Platform-specific quotas can impact overlay functionality</li>
         </ul>
+        <p className="font-semibold text-gray-800">
+          YouTube Integration: By using All-Chat to connect to YouTube, you agree to be bound by the{' '}
+          <a
+            href="https://www.youtube.com/t/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-indigo-600 underline"
+          >
+            YouTube Terms of Service
+          </a>
+          .
+        </p>
       </section>
 
       <section className="space-y-4">

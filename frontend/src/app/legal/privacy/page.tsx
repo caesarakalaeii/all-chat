@@ -125,6 +125,18 @@ export default function PrivacyPolicyPage() {
           <li>7TV, BTTV, FFZ for emote metadata</li>
         </ul>
         <p>Every integration remains subject to the platform&apos;s own policies and scopes you approve.</p>
+        <p className="font-semibold text-gray-800">
+          YouTube Integration: Your use of All-Chat&apos;s YouTube integration is also governed by the{' '}
+          <a
+            href="http://www.google.com/policies/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Google Privacy Policy
+          </a>
+          .
+        </p>
         <p className="text-sm text-gray-500">
           We never sell or rent your data, but we may disclose information when required by law or to respond
           to legitimate security incidents.
@@ -159,6 +171,18 @@ export default function PrivacyPolicyPage() {
           <li>Export overlay configuration JSON</li>
           <li>Contact us at <a href="mailto:allchat@caes.ar" className="underline">allchat@caes.ar</a></li>
         </ul>
+        <p className="font-semibold text-gray-800">
+          For YouTube Data: You can revoke All-Chat&apos;s access to your YouTube data via the{' '}
+          <a
+            href="https://myaccount.google.com/connections?filters=3,4&hl=en"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Google security settings page
+          </a>
+          . Disconnecting YouTube from Settings will delete your OAuth tokens. Chat messages are processed in real-time and not stored permanently.
+        </p>
       </section>
 
       <section className="space-y-4">
