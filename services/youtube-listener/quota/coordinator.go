@@ -171,8 +171,15 @@ func (c *Coordinator) CanMakeRequest(
 
 	// Check per-channel quota
 	if channelID != "" {
-		channelUsage := c.perChannelTracker.GetUsage(channelID)
-		channelLimit := c.perChannelTracker.GetLimit(channelID)
+		channelQuota, err := c.perChannelTracker.GetChannelQuota(ctx, channelID)
+		if err != nil {
+			c.logger.Error("Failed to get channel quota", zap.String("channel_id", channelID), zap.Error(err))
+			// Continue with request if we can't check channel quota
+			return RequestDecision{Allowed: true}
+		}
+
+		channelUsage := channelQuota.DailyQuotaUsed
+		channelLimit := channelQuota.DailyQuotaLimit
 
 		if channelUsage+cost > channelLimit {
 			c.logger.Debug("Request denied - channel quota exceeded",
@@ -234,7 +241,9 @@ func (c *Coordinator) RecordSuccess(ctx context.Context, channelID string, cost 
 
 	// Record in per-channel tracker
 	if channelID != "" {
-		c.perChannelTracker.RecordUsage(channelID, cost)
+		if err := c.perChannelTracker.RecordUsage(ctx, channelID, cost); err != nil {
+			c.logger.Warn("Failed to record per-channel usage", zap.String("channel_id", channelID), zap.Error(err))
+		}
 	}
 
 	return nil
@@ -261,10 +270,12 @@ func (c *Coordinator) GetGlobalStateInfo() (QuotaState, float64, time.Time) {
 }
 
 // GetChannelUsage returns the current usage for a specific channel
-func (c *Coordinator) GetChannelUsage(channelID string) (int, int) {
-	usage := c.perChannelTracker.GetUsage(channelID)
-	limit := c.perChannelTracker.GetLimit(channelID)
-	return usage, limit
+func (c *Coordinator) GetChannelUsage(ctx context.Context, channelID string) (int, int, error) {
+	quota, err := c.perChannelTracker.GetChannelQuota(ctx, channelID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get channel quota: %w", err)
+	}
+	return quota.DailyQuotaUsed, quota.DailyQuotaLimit, nil
 }
 
 // ShouldSlowDownPolling returns whether polling should be slowed down
