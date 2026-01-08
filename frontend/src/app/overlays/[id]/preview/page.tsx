@@ -616,8 +616,16 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
 
           {/* Customization Panel (Sidebar) */}
           <div className="lg:col-span-1">
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-              <h2 className="text-lg font-semibold text-white mb-6">Customization</h2>
+            <div className="bg-gray-800 rounded-lg border border-gray-700 h-[800px] overflow-y-auto flex flex-col">
+              <div className="p-6 flex-shrink-0">
+                <h2 className="text-lg font-semibold text-white mb-6">Customization</h2>
+              </div>
+              <div className="px-6 pb-6 flex-1 overflow-y-auto"
+                style={{
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#374151 transparent'
+                }}
+              >
 
               <div className="space-y-6">
                 {/* Font Size */}
@@ -818,6 +826,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                     </div>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
           </div>
