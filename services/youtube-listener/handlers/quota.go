@@ -92,25 +92,45 @@ func (h *QuotaHandler) GetQuotaStatus(c *gin.Context) {
 		PollingMultiplier: pollingMultiplier,
 	}
 
-	// Get per-channel quota status
-	channels := h.perChannelTracker.GetAllChannelUsage()
-	channelStatuses := make([]ChannelQuotaStatus, 0, len(channels))
+	// Get per-channel quota status by querying database directly
+	channelStatuses := make([]ChannelQuotaStatus, 0)
 
-	for channelID, usage := range channels {
-		limit := h.perChannelTracker.GetLimit(channelID)
-		remaining := limit - usage
-		if remaining < 0 {
-			remaining = 0
+	query := `
+		SELECT channel_id, daily_quota_used, daily_quota_limit
+		FROM youtube_channel_quota
+		WHERE daily_quota_used > 0
+		ORDER BY daily_quota_used DESC
+		LIMIT 100
+	`
+
+	rows, err := h.perChannelTracker.GetDB().Query(ctx, query)
+	if err != nil {
+		h.logger.Error("Failed to query channel quotas", zap.Error(err))
+	} else {
+		defer rows.Close()
+
+		for rows.Next() {
+			var channelID string
+			var used, limit int
+			if err := rows.Scan(&channelID, &used, &limit); err != nil {
+				h.logger.Error("Failed to scan channel quota", zap.Error(err))
+				continue
+			}
+
+			remaining := limit - used
+			if remaining < 0 {
+				remaining = 0
+			}
+			percentage := float64(used) / float64(limit) * 100
+
+			channelStatuses = append(channelStatuses, ChannelQuotaStatus{
+				ChannelID:  channelID,
+				Used:       used,
+				Limit:      limit,
+				Remaining:  remaining,
+				Percentage: percentage,
+			})
 		}
-		percentage := float64(usage) / float64(limit) * 100
-
-		channelStatuses = append(channelStatuses, ChannelQuotaStatus{
-			ChannelID:  channelID,
-			Used:       usage,
-			Limit:      limit,
-			Remaining:  remaining,
-			Percentage: percentage,
-		})
 	}
 
 	response := QuotaStatusResponse{
@@ -130,6 +150,7 @@ func (h *QuotaHandler) GetQuotaStatus(c *gin.Context) {
 // GetChannelQuota returns quota status for a specific channel
 // GET /quota/channels/:channel_id
 func (h *QuotaHandler) GetChannelQuota(c *gin.Context) {
+	ctx := c.Request.Context()
 	channelID := c.Param("channel_id")
 
 	if channelID == "" {
@@ -139,8 +160,16 @@ func (h *QuotaHandler) GetChannelQuota(c *gin.Context) {
 		return
 	}
 
-	used := h.perChannelTracker.GetUsage(channelID)
-	limit := h.perChannelTracker.GetLimit(channelID)
+	quota, err := h.perChannelTracker.GetChannelQuota(ctx, channelID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get channel quota",
+		})
+		return
+	}
+
+	used := quota.DailyQuotaUsed
+	limit := quota.DailyQuotaLimit
 	remaining := limit - used
 	if remaining < 0 {
 		remaining = 0

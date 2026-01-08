@@ -79,6 +79,11 @@ func NewPerChannelTracker(
 	}
 }
 
+// GetDB returns the database connection pool for direct queries
+func (t *PerChannelTracker) GetDB() *pgxpool.Pool {
+	return t.db
+}
+
 // CanUseQuota checks if a channel can use the specified quota units
 func (t *PerChannelTracker) CanUseQuota(ctx context.Context, channelID string, units int) (bool, error) {
 	quota, err := t.GetChannelQuota(ctx, channelID)
