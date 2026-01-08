@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -143,8 +142,6 @@ func (h *QuotaHandler) GetQuotaStatus(c *gin.Context) {
 	h.logger.Debug("Quota status retrieved",
 		zap.String("request_from", c.ClientIP()),
 	)
-
-	_ = ctx // Use context to avoid unused variable warning
 }
 
 // GetChannelQuota returns quota status for a specific channel
@@ -208,8 +205,6 @@ type QuotaHistoryResponse struct {
 // GetQuotaHistory returns historical quota usage data
 // GET /quota/history?days=7
 func (h *QuotaHandler) GetQuotaHistory(c *gin.Context) {
-	ctx := c.Request.Context()
-
 	// Get days parameter (default: 7 days)
 	days := 7
 	if daysParam := c.Query("days"); daysParam != "" {
@@ -245,8 +240,6 @@ func (h *QuotaHandler) GetQuotaHistory(c *gin.Context) {
 		zap.Int("days", days),
 		zap.String("request_from", c.ClientIP()),
 	)
-
-	_ = ctx // Use context to avoid unused variable warning
 }
 
 // QuotaPredictionResponse represents quota prediction/forecast
