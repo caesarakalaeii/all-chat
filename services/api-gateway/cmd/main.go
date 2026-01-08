@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/caesar/all-chat/shared/ratelimit"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -92,6 +94,18 @@ func main() {
 	}
 
 	log.Info("Connected to Redis")
+
+	// Initialize rate limiter (configurable via env vars)
+	rateLimitPerMin := getEnvAsIntOrDefault("RATE_LIMIT_PER_MINUTE", 300) // Default: 300 requests/min per IP/user
+	rateLimiter := ratelimit.NewRateLimiter(ratelimit.Config{
+		RequestsPerMinute: rateLimitPerMin,
+		KeyPrefix:         "api_gateway",
+		RedisClient:       redisClient,
+		Logger:            log,
+	})
+	log.Info("Initialized rate limiter",
+		zap.Int("requests_per_minute", rateLimitPerMin),
+	)
 
 	// Initialize metrics (available via /metrics endpoint)
 	gatewayMetrics := metrics.NewGatewayMetrics()
@@ -199,6 +213,23 @@ func main() {
 		}
 		localmiddleware.CORS()(c)
 	}) // TODO: Update to CORSFromEnv() after shared module rebuild
+
+	// Rate limiting middleware - skip for health, metrics, WebSocket, and static files
+	router.Use(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		// Skip rate limiting for:
+		// - Health checks (monitoring)
+		// - Metrics (monitoring)
+		// - WebSocket connections (different connection model)
+		// - Static files (legal pages)
+		if path == "/health" || path == "/metrics" ||
+			strings.HasPrefix(path, "/ws/") ||
+			strings.HasPrefix(path, "/legal/") {
+			c.Next()
+			return
+		}
+		rateLimiter.Middleware()(c)
+	})
 
 	// Health check endpoint (no auth required)
 	router.GET("/health", healthHandler.CheckHealth)
@@ -356,6 +387,16 @@ func main() {
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+// getEnvAsIntOrDefault gets an environment variable as int or returns a default value
+func getEnvAsIntOrDefault(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
 	}
 	return defaultValue
 }
