@@ -35,9 +35,12 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [messageDuration, setMessageDuration] = useState(15);
   const [customCss, setCustomCss] = useState('');
   const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set());
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [forceReconnect, setForceReconnect] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load overlay display configuration (public endpoint)
   useEffect(() => {
@@ -89,13 +92,15 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/overlay/${params.id}`;
 
-    console.log('[OBS Overlay] Connecting to:', wsUrl);
+    console.log('[OBS Overlay] Connecting to:', wsUrl, reconnectAttempts ? `(attempt ${reconnectAttempts + 1})` : '');
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('[OBS Overlay] Connected');
+      // Reset reconnection attempts on successful connection
+      setReconnectAttempts(0);
     };
 
     ws.onmessage = async (event) => {
@@ -124,20 +129,35 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
       console.error('[OBS Overlay] WebSocket error:', error);
     };
 
-    ws.onclose = () => {
-      console.log('[OBS Overlay] Disconnected, reconnecting in 3s...');
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
+    ws.onclose = (event) => {
+      console.log('[OBS Overlay] Disconnected:', event.code, event.reason);
+
+      // Calculate exponential backoff with jitter
+      const baseDelay = 1000; // Start at 1 second
+      const maxDelay = 30000; // Cap at 30 seconds
+      const jitter = Math.random() * 1000; // 0-1s jitter to prevent thundering herd
+      const delay = Math.min(baseDelay * Math.pow(1.5, reconnectAttempts), maxDelay) + jitter;
+
+      console.log(`[OBS Overlay] Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempts + 1})`);
+
+      // Schedule reconnection
+      reconnectTimeoutRef.current = setTimeout(() => {
+        setReconnectAttempts(prev => prev + 1);
+        setForceReconnect(Date.now()); // Trigger reconnection via effect dependency
+      }, delay);
     };
 
     // Cleanup on unmount
     return () => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close();
       }
     };
-  }, [params.id, maxMessages]);
+  }, [params.id, maxMessages, forceReconnect]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
