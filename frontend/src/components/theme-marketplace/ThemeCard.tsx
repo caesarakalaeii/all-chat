@@ -54,7 +54,7 @@ export default function ThemeCard({
                  transition-all duration-200 hover:-translate-y-1 flex flex-col"
     >
       {/* Preview */}
-      <ThemePreview css={theme.css} messages={messages} />
+      <ThemePreview css={theme.css} messages={messages} themeId={theme.id} />
 
       {/* Metadata */}
       <div className="p-4 flex-1 flex flex-col">
