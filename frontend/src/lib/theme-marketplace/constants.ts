@@ -26,7 +26,7 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
         {
           name: 'broadcaster',
           version: '1',
-          icon_url: '/badges/broadcaster.png',
+          icon_url: 'https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1',
         },
       ],
       color: '#9146ff',
@@ -74,7 +74,7 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
         {
           name: 'moderator',
           version: '1',
-          icon_url: '/badges/moderator.png',
+          icon_url: 'https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/1',
         },
       ],
       color: '#00ff00',

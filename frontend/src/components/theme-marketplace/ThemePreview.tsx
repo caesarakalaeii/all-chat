@@ -154,14 +154,17 @@ export default function ThemePreview({ css, messages, themeId }: ThemePreviewPro
                     </span>
 
                     {/* Badges */}
-                    {msg.user.badges.length > 0 && (
+                    {msg.user.badges.length > 0 && msg.user.badges.some(b => b.icon_url && !b.icon_url.startsWith('/')) && (
                       <div className="flex gap-1">
-                        {msg.user.badges.map((badge, idx) => (
+                        {msg.user.badges.filter(b => b.icon_url && !b.icon_url.startsWith('/')).map((badge, idx) => (
                           <img
                             key={idx}
                             src={badge.icon_url}
                             alt={badge.name}
                             className="w-4 h-4"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
                           />
                         ))}
                       </div>
