@@ -1,0 +1,220 @@
+/**
+ * Theme Name: Cyberpunk 2077 Theme
+ * Description: High-tech dystopian cyberpunk aesthetic with glitch effects and neon yellow accents
+ * Tags: cyberpunk, neon, futuristic, yellow
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-01-08
+ */
+
+/* ============================================================
+   CYBERPUNK 2077 THEME for All-Chat Overlay
+   ============================================================
+
+   A dystopian cyberpunk design featuring:
+   - High-contrast yellow/black color scheme
+   - Glitch-style text effects
+   - Angular, tech-inspired shapes
+   - Scan line effects
+   - Digital/grid background patterns
+
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap');
+
+/* ============================================================
+   CORE STYLES
+   ============================================================ */
+
+body {
+  background: transparent !important;
+  font-family: 'Rajdhani', sans-serif !important;
+  -webkit-font-smoothing: antialiased !important;
+}
+
+.min-h-screen {
+  background: transparent !important;
+  padding: 16px !important;
+}
+
+.space-y-3 {
+  gap: 16px !important;
+}
+
+/* ============================================================
+   MESSAGE CONTAINER - CYBERPUNK PANEL
+   ============================================================ */
+
+.space-y-3 > div {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.95) 0%, rgba(20, 20, 0, 0.9) 100%) !important;
+  border: 2px solid #ffed4e !important;
+  border-left: 6px solid #ffed4e !important;
+  border-radius: 0 !important;
+  padding: 1rem !important;
+  box-shadow:
+    0 0 20px rgba(255, 237, 78, 0.3),
+    inset 0 1px 0 rgba(255, 237, 78, 0.2),
+    0 4px 8px rgba(0, 0, 0, 0.8) !important;
+  position: relative !important;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%) !important;
+}
+
+/* Scan line effect */
+.space-y-3 > div::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 237, 78, 0.03) 0px,
+    transparent 1px,
+    transparent 2px,
+    rgba(255, 237, 78, 0.03) 3px
+  ) !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+}
+
+/* Corner accent */
+.space-y-3 > div::after {
+  content: '' !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  width: 12px !important;
+  height: 12px !important;
+  border-right: 2px solid #ffed4e !important;
+  border-bottom: 2px solid #ffed4e !important;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%) !important;
+}
+
+/* ============================================================
+   PLATFORM INDICATOR - CYBER TAG
+   ============================================================ */
+
+.text-xs.font-semibold.uppercase {
+  background: #ffed4e !important;
+  color: #000000 !important;
+  padding: 0.2rem 0.8rem !important;
+  border-radius: 0 !important;
+  letter-spacing: 0.2em !important;
+  font-weight: 700 !important;
+  font-size: 10px !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  box-shadow: 0 0 10px rgba(255, 237, 78, 0.6), inset 0 -2px 0 rgba(0, 0, 0, 0.3) !important;
+  text-shadow: none !important;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%) !important;
+}
+
+/* ============================================================
+   USERNAME - GLITCH STYLE
+   ============================================================ */
+
+.font-semibold.text-sm {
+  font-family: 'Rajdhani', sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  text-shadow:
+    2px 0 0 rgba(255, 0, 255, 0.4),
+    -2px 0 0 rgba(0, 255, 255, 0.4),
+    0 0 10px rgba(255, 237, 78, 0.5) !important;
+  filter: contrast(1.2) !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+/* ============================================================
+   BADGES - CYBER STYLE
+   ============================================================ */
+
+.flex.gap-1 {
+  gap: 6px !important;
+  filter: drop-shadow(0 0 4px rgba(255, 237, 78, 0.6)) !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.flex.gap-1 img {
+  width: 20px !important;
+  height: 20px !important;
+  border: 1px solid #ffed4e !important;
+  border-radius: 0 !important;
+  padding: 2px !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+}
+
+/* ============================================================
+   AVATAR - ANGULAR STYLE
+   ============================================================ */
+
+.flex-shrink-0 img {
+  border: 2px solid #ffed4e !important;
+  border-radius: 0 !important;
+  box-shadow: 0 0 15px rgba(255, 237, 78, 0.4) !important;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)) !important;
+}
+
+/* ============================================================
+   MESSAGE TEXT - DIGITAL READOUT
+   ============================================================ */
+
+.text-white.break-words {
+  font-family: 'Rajdhani', sans-serif !important;
+  font-size: 17px !important;
+  font-weight: 500 !important;
+  color: #e0e0e0 !important;
+  line-height: 1.6 !important;
+  text-shadow: 0 0 5px rgba(255, 237, 78, 0.3) !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.text-white.break-words img {
+  max-height: 28px !important;
+  filter: drop-shadow(0 0 6px rgba(255, 237, 78, 0.3)) !important;
+}
+
+/* ============================================================
+   TIMESTAMP - TECH STYLE
+   ============================================================ */
+
+.text-xs.text-gray-500 {
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 10px !important;
+  color: #ffed4e !important;
+  text-shadow: 0 0 5px rgba(255, 237, 78, 0.4) !important;
+  letter-spacing: 0.1em !important;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes glitchIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+    filter: blur(2px);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+}
+
+.space-y-3 > div {
+  animation: glitchIn 0.3s ease-out !important;
+}
+
+/* ============================================================
+   END OF CYBERPUNK THEME
+   ============================================================ */
