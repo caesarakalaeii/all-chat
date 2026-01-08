@@ -3,6 +3,8 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -25,24 +27,54 @@ type Manager struct {
 	logger      *zap.Logger
 	metrics     *metrics.GatewayMetrics
 	redisClient *redis.Client
+
+	// Grace period tracking for disconnection events
+	gracePeriodTimers map[string]*time.Timer
+	gracePeriodMu     sync.Mutex
+	disconnectGracePeriod time.Duration
 }
 
 // NewManager creates a new WebSocket manager
 func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redis.Client) *Manager {
+	// Get grace period from environment variable, default to 60 seconds
+	gracePeriod := 60 * time.Second
+	if envGrace := os.Getenv("WEBSOCKET_DISCONNECT_GRACE_PERIOD_SECONDS"); envGrace != "" {
+		if seconds, err := strconv.Atoi(envGrace); err == nil && seconds > 0 {
+			gracePeriod = time.Duration(seconds) * time.Second
+		}
+	}
+
+	logger.Info("WebSocket manager initialized",
+		zap.Duration("disconnect_grace_period", gracePeriod),
+	)
+
 	return &Manager{
-		pools:       make(map[string]*Pool),
-		logger:      logger,
-		metrics:     m,
-		redisClient: redisClient,
+		pools:                 make(map[string]*Pool),
+		logger:                logger,
+		metrics:               m,
+		redisClient:           redisClient,
+		gracePeriodTimers:     make(map[string]*time.Timer),
+		disconnectGracePeriod: gracePeriod,
 	}
 }
 
 // AddConnection adds a connection to the appropriate pool
 func (m *Manager) AddConnection(ctx context.Context, conn *Connection) {
+	overlayID := conn.OverlayID()
+
+	// Cancel grace period timer if overlay was in grace period
+	m.gracePeriodMu.Lock()
+	if timer, exists := m.gracePeriodTimers[overlayID]; exists {
+		timer.Stop()
+		delete(m.gracePeriodTimers, overlayID)
+		m.logger.Info("Cancelled disconnect grace period (overlay reconnected)",
+			zap.String("overlay_id", overlayID),
+		)
+	}
+	m.gracePeriodMu.Unlock()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	overlayID := conn.OverlayID()
 
 	// Get or create pool for this overlay
 	pool, exists := m.pools[overlayID]
@@ -130,16 +162,16 @@ func (m *Manager) publishConnectionEvent(ctx context.Context, overlayID, eventTy
 // RemoveConnection removes a connection from its pool
 func (m *Manager) RemoveConnection(conn *Connection) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	overlayID := conn.OverlayID()
 
 	pool, exists := m.pools[overlayID]
 	if !exists {
+		m.mu.Unlock()
 		return
 	}
 
 	pool.Remove(conn)
+	poolSize := pool.Size()
 
 	// Record metrics
 	m.metrics.RecordWebSocketConnection("api-gateway", "overlay", -1)
@@ -149,21 +181,62 @@ func (m *Manager) RemoveConnection(conn *Connection) {
 	m.logger.Info("WebSocket connection removed",
 		zap.String("overlay_id", overlayID),
 		zap.String("user_id", conn.UserID()),
-		zap.Int("pool_size", pool.Size()),
+		zap.Int("pool_size", poolSize),
 	)
 
-	// Remove pool if empty and publish disconnection event
-	if pool.Size() == 0 {
+	// Handle empty pool with grace period
+	if poolSize == 0 {
 		delete(m.pools, overlayID)
 		m.metrics.RecordSubscriptionEvent("api-gateway", "pool_destroyed")
-		m.logger.Info("Removed empty connection pool",
+		m.logger.Info("Connection pool empty, starting grace period",
 			zap.String("overlay_id", overlayID),
+			zap.Duration("grace_period", m.disconnectGracePeriod),
 		)
+		m.mu.Unlock()
 
-		// Publish overlay disconnection event
-		ctx := context.Background()
-		m.publishConnectionEvent(ctx, overlayID, "disconnected")
+		// Start grace period timer
+		m.startDisconnectGracePeriod(overlayID)
+	} else {
+		m.mu.Unlock()
 	}
+}
+
+// startDisconnectGracePeriod starts a grace period timer for an overlay disconnection
+func (m *Manager) startDisconnectGracePeriod(overlayID string) {
+	m.gracePeriodMu.Lock()
+	defer m.gracePeriodMu.Unlock()
+
+	// Cancel existing timer if present
+	if timer, exists := m.gracePeriodTimers[overlayID]; exists {
+		timer.Stop()
+	}
+
+	// Create new timer
+	timer := time.AfterFunc(m.disconnectGracePeriod, func() {
+		m.gracePeriodMu.Lock()
+		delete(m.gracePeriodTimers, overlayID)
+		m.gracePeriodMu.Unlock()
+
+		// Check if still disconnected after grace period
+		m.mu.RLock()
+		_, hasPool := m.pools[overlayID]
+		m.mu.RUnlock()
+
+		if !hasPool {
+			// Still no connections, publish disconnected event
+			ctx := context.Background()
+			m.publishConnectionEvent(ctx, overlayID, "disconnected")
+			m.logger.Info("Grace period expired, overlay still disconnected",
+				zap.String("overlay_id", overlayID),
+			)
+		} else {
+			m.logger.Info("Grace period expired, but overlay reconnected",
+				zap.String("overlay_id", overlayID),
+			)
+		}
+	})
+
+	m.gracePeriodTimers[overlayID] = timer
 }
 
 // BroadcastToOverlay sends a message to all connections in an overlay pool

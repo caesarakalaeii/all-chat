@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -26,12 +28,13 @@ type OverlayConnectionEvent struct {
 
 // Manager manages active YouTube streams and coordinates polling
 type Manager struct {
-	repository     *Repository
-	oauthManager   *oauth.Manager
-	messageHandler MessageHandler
-	logger         *zap.Logger
-	leader         *sourcemanager.LeadershipCoordinator
-	quotaTracker   *quota.Tracker
+	repository       *Repository
+	oauthManager     *oauth.Manager
+	messageHandler   MessageHandler
+	logger           *zap.Logger
+	leader           *sourcemanager.LeadershipCoordinator
+	quotaTracker     *quota.Tracker
+	quotaCoordinator *quota.Coordinator
 
 	mu            sync.RWMutex
 	activeStreams map[string]*models.YouTubeStream // streamID -> stream
@@ -41,6 +44,11 @@ type Manager struct {
 	connMu            sync.RWMutex
 	connectedOverlays map[string]time.Time // overlay_id -> connection_time
 	redisClient       *redis.Client
+
+	// Disconnection debouncing (prevents premature polling shutdown)
+	disconnectDebounceTimers map[string]*time.Timer
+	disconnectDebounceMu     sync.Mutex
+	disconnectDebounceDelay  time.Duration
 
 	// Livestream detection backoff
 	detectionMu         sync.RWMutex
@@ -80,9 +88,25 @@ func NewManager(
 	dbConn DBConnInterface,
 	leader *sourcemanager.LeadershipCoordinator,
 	quotaTracker *quota.Tracker,
+	perChannelTracker *quota.PerChannelTracker,
 	redisClient *redis.Client,
 	logger *zap.Logger,
 ) *Manager {
+	// Get disconnect debounce delay from environment variable, default to 90 seconds
+	disconnectDebounce := 90 * time.Second
+	if envDebounce := os.Getenv("OVERLAY_DISCONNECT_DEBOUNCE_SECONDS"); envDebounce != "" {
+		if seconds, err := strconv.Atoi(envDebounce); err == nil && seconds > 0 {
+			disconnectDebounce = time.Duration(seconds) * time.Second
+		}
+	}
+
+	logger.Info("YouTube stream manager initialized",
+		zap.Duration("disconnect_debounce_delay", disconnectDebounce),
+	)
+
+	// Create quota coordinator
+	quotaCoordinator := quota.NewCoordinator(quotaTracker, perChannelTracker, logger)
+
 	return &Manager{
 		repository:                repository,
 		oauthManager:              oauthManager,
@@ -91,10 +115,13 @@ func NewManager(
 		logger:                    logger,
 		leader:                    leader,
 		quotaTracker:              quotaTracker,
+		quotaCoordinator:          quotaCoordinator,
 		redisClient:               redisClient,
 		activeStreams:             make(map[string]*models.YouTubeStream),
 		pollers:                   make(map[string]*Poller),
 		connectedOverlays:         make(map[string]time.Time),
+		disconnectDebounceTimers:  make(map[string]*time.Timer),
+		disconnectDebounceDelay:   disconnectDebounce,
 		channelLastCheck:          make(map[string]time.Time),
 		channelBackoff:            make(map[string]time.Duration),
 		baseDetectionInterval:     30 * time.Second,  // Start checking every 30s
@@ -459,13 +486,21 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 			zap.String("cached_video_id", cachedVideoID),
 		)
 
-		// Check quota for status check (only 1 unit!)
-		if !m.quotaTracker.CanMakeRequest(1) {
-			m.logger.Warn("Insufficient quota even for lightweight status check",
+		// Check quota for status check (only 1 unit!) - high priority polling
+		decision := m.quotaCoordinator.CanMakeRequest(
+			ctx,
+			channelID,
+			quota.RequestTypePolling,
+			quota.PriorityHigh,
+			1,
+		)
+		if !decision.Allowed {
+			m.logger.Warn("Quota check denied for lightweight status check",
 				zap.String("channel_id", channelID),
-				zap.Int("remaining_quota", m.quotaTracker.GetRemainingQuota()),
+				zap.String("reason", string(decision.Reason)),
+				zap.String("global_state", string(decision.GlobalState)),
 			)
-			return fmt.Errorf("insufficient quota: %d units remaining", m.quotaTracker.GetRemainingQuota())
+			return fmt.Errorf("quota check failed: %s", decision.Reason)
 		}
 
 		// Perform lightweight status check
@@ -516,21 +551,31 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	}
 
 	// Fallback to full search (expensive: 100 units)
-	// Check quota before making expensive API call
-	// IMPORTANT: Reserve quota for active polling (5 units per poll)
-	// Estimate: If we have N active pollers polling every 2-5s, we need ~500 units/hour reserve
-	// Conservative reserve: 500 units minimum for polling
-	const quotaReserveForPolling = 500
-	remainingQuota := m.quotaTracker.GetRemainingQuota()
+	// This is discovery, so use normal priority (can be blocked in degraded/critical states)
+	searchDecision := m.quotaCoordinator.CanMakeRequest(
+		ctx,
+		channelID,
+		quota.RequestTypeSearch,
+		quota.PriorityNormal,
+		quota.QuotaCostSearch,
+	)
 
-	if remainingQuota < (100 + quotaReserveForPolling) {
-		m.logger.Warn("Insufficient quota for full stream search (reserving quota for active polling)",
+	if !searchDecision.Allowed {
+		m.logger.Warn("Quota check denied for full stream search",
 			zap.String("channel_id", channelID),
-			zap.Int("remaining_quota", remainingQuota),
-			zap.Int("needed", 100),
-			zap.Int("reserve_for_polling", quotaReserveForPolling),
+			zap.String("reason", string(searchDecision.Reason)),
+			zap.String("global_state", string(searchDecision.GlobalState)),
 		)
-		return fmt.Errorf("insufficient quota: %d units remaining, need 100 + %d reserve", remainingQuota, quotaReserveForPolling)
+
+		// Apply retry-after delay if provided
+		if searchDecision.RetryAfter != nil {
+			m.logger.Debug("Search blocked, will retry after delay",
+				zap.String("channel_id", channelID),
+				zap.Duration("retry_after", *searchDecision.RetryAfter),
+			)
+		}
+
+		return fmt.Errorf("quota check failed: %s", searchDecision.Reason)
 	}
 
 	m.logger.Debug("Performing full live stream search",
@@ -836,6 +881,17 @@ func (m *Manager) listenForOverlayConnections(ctx context.Context) {
 
 // handleOverlayConnected handles an overlay connection event
 func (m *Manager) handleOverlayConnected(ctx context.Context, overlayID string) {
+	// Cancel debounce timer if overlay was in debounce period
+	m.disconnectDebounceMu.Lock()
+	if timer, exists := m.disconnectDebounceTimers[overlayID]; exists {
+		timer.Stop()
+		delete(m.disconnectDebounceTimers, overlayID)
+		m.logger.Info("Cancelled disconnect debounce (overlay reconnected)",
+			zap.String("overlay_id", overlayID),
+		)
+	}
+	m.disconnectDebounceMu.Unlock()
+
 	m.connMu.Lock()
 	m.connectedOverlays[overlayID] = time.Now()
 	m.connMu.Unlock()
@@ -870,41 +926,76 @@ func (m *Manager) handleOverlayConnected(ctx context.Context, overlayID string) 
 
 // handleOverlayDisconnected handles an overlay disconnection event
 func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID string) {
-	m.connMu.Lock()
-	delete(m.connectedOverlays, overlayID)
-	m.connMu.Unlock()
-
-	m.logger.Info("Overlay disconnected, stopping polling",
+	m.logger.Info("Overlay disconnection event received, starting debounce period",
 		zap.String("overlay_id", overlayID),
+		zap.Duration("debounce_delay", m.disconnectDebounceDelay),
 	)
 
-	// Stop pollers for sources belonging to this overlay
-	m.mu.Lock()
-	for streamID, stream := range m.activeStreams {
-		if stream.OverlayID == overlayID {
-			if poller, exists := m.pollers[streamID]; exists {
-				m.logger.Info("Stopping poller for disconnected overlay",
-					zap.String("stream_id", streamID),
-					zap.String("overlay_id", overlayID),
-				)
-				poller.Stop()
-				delete(m.pollers, streamID)
-				delete(m.activeStreams, streamID)
-				m.releaseLeadership(streamID)
+	m.disconnectDebounceMu.Lock()
+	defer m.disconnectDebounceMu.Unlock()
 
-				// Mark source as inactive for this specific overlay only
-				// Don't deactivate sources for other overlays using the same channel
-				if err := m.repository.SetSourceActiveByOverlay(ctx, overlayID, stream.ChannelID, false); err != nil {
-					m.logger.Error("Failed to mark source inactive after overlay disconnect",
+	// Cancel existing timer if present
+	if timer, exists := m.disconnectDebounceTimers[overlayID]; exists {
+		timer.Stop()
+	}
+
+	// Create debounce timer
+	timer := time.AfterFunc(m.disconnectDebounceDelay, func() {
+		m.disconnectDebounceMu.Lock()
+		delete(m.disconnectDebounceTimers, overlayID)
+		m.disconnectDebounceMu.Unlock()
+
+		// Check if overlay is still disconnected
+		m.connMu.RLock()
+		_, stillConnected := m.connectedOverlays[overlayID]
+		m.connMu.RUnlock()
+
+		if stillConnected {
+			m.logger.Info("Overlay reconnected during debounce period, keeping pollers active",
+				zap.String("overlay_id", overlayID),
+			)
+			return
+		}
+
+		// Actually disconnect after debounce
+		m.connMu.Lock()
+		delete(m.connectedOverlays, overlayID)
+		m.connMu.Unlock()
+
+		m.logger.Info("Debounce period expired, stopping polling for overlay",
+			zap.String("overlay_id", overlayID),
+		)
+
+		// Stop pollers for sources belonging to this overlay
+		m.mu.Lock()
+		for streamID, stream := range m.activeStreams {
+			if stream.OverlayID == overlayID {
+				if poller, exists := m.pollers[streamID]; exists {
+					m.logger.Info("Stopping poller for disconnected overlay",
+						zap.String("stream_id", streamID),
 						zap.String("overlay_id", overlayID),
-						zap.String("channel_id", stream.ChannelID),
-						zap.Error(err),
 					)
+					poller.Stop()
+					delete(m.pollers, streamID)
+					delete(m.activeStreams, streamID)
+					m.releaseLeadership(streamID)
+
+					// Mark source as inactive for this specific overlay only
+					// Don't deactivate sources for other overlays using the same channel
+					if err := m.repository.SetSourceActiveByOverlay(context.Background(), overlayID, stream.ChannelID, false); err != nil {
+						m.logger.Error("Failed to mark source inactive after debounce",
+							zap.String("overlay_id", overlayID),
+							zap.String("channel_id", stream.ChannelID),
+							zap.Error(err),
+						)
+					}
 				}
 			}
 		}
-	}
-	m.mu.Unlock()
+		m.mu.Unlock()
+	})
+
+	m.disconnectDebounceTimers[overlayID] = timer
 }
 
 // IsOverlayConnected checks if an overlay has active WebSocket connections
