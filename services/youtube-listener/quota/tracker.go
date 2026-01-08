@@ -3,6 +3,8 @@ package quota
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -23,7 +25,40 @@ const (
 
 	// QuotaCostSearch is the quota cost for search.list (100 units)
 	QuotaCostSearch = 100
+
+	// Default state thresholds (as percentages)
+	DefaultHealthyThreshold   = 70.0 // 0-70%: HEALTHY
+	DefaultDegradedThreshold  = 85.0 // 70-85%: DEGRADED
+	DefaultCriticalThreshold  = 95.0 // 85-95%: CRITICAL
+	DefaultExhaustedThreshold = 100.0 // 95-100%: EXHAUSTED
+	// 100%+: DEPLETED
 )
+
+// QuotaState represents the current state of quota usage
+type QuotaState string
+
+const (
+	// QuotaStateHealthy - Normal operation (0-70%)
+	QuotaStateHealthy QuotaState = "HEALTHY"
+
+	// QuotaStateDegraded - Reduce low-priority operations (70-85%)
+	QuotaStateDegraded QuotaState = "DEGRADED"
+
+	// QuotaStateCritical - Stop discovery, active polling only (85-95%)
+	QuotaStateCritical QuotaState = "CRITICAL"
+
+	// QuotaStateExhausted - Slow down polling intervals (95-100%)
+	QuotaStateExhausted QuotaState = "EXHAUSTED"
+
+	// QuotaStateDepleted - Hard block all requests (100%+)
+	QuotaStateDepleted QuotaState = "DEPLETED"
+)
+
+// Notifier interface for quota notifications (to avoid circular dependency)
+type Notifier interface {
+	NotifyStateTransition(ctx context.Context, oldState, newState QuotaState, percentage float64, used, limit int) error
+	NotifyThresholdCrossed(ctx context.Context, state QuotaState, threshold float64, percentage float64, used, limit int) error
+}
 
 // Tracker tracks YouTube API quota usage
 type Tracker struct {
@@ -31,10 +66,19 @@ type Tracker struct {
 	logger     *zap.Logger
 	metrics    *metrics.ListenerMetrics
 	dailyLimit int
+	notifier   Notifier
 
 	mu          sync.RWMutex
 	usageToday  int
 	currentDate string
+	currentState QuotaState
+	lastStateTransition time.Time
+
+	// State thresholds (configurable)
+	healthyThreshold   float64
+	degradedThreshold  float64
+	criticalThreshold  float64
+	exhaustedThreshold float64
 
 	stopChan chan struct{}
 }
@@ -45,13 +89,42 @@ func NewTracker(db *pgxpool.Pool, dailyLimit int, logger *zap.Logger, m *metrics
 		dailyLimit = DefaultDailyQuota
 	}
 
+	// Load configurable thresholds from environment variables
+	healthyThreshold := getEnvAsFloat("QUOTA_HEALTHY_THRESHOLD", DefaultHealthyThreshold)
+	degradedThreshold := getEnvAsFloat("QUOTA_DEGRADED_THRESHOLD", DefaultDegradedThreshold)
+	criticalThreshold := getEnvAsFloat("QUOTA_CRITICAL_THRESHOLD", DefaultCriticalThreshold)
+	exhaustedThreshold := getEnvAsFloat("QUOTA_EXHAUSTED_THRESHOLD", DefaultExhaustedThreshold)
+
+	logger.Info("Quota tracker thresholds configured",
+		zap.Float64("healthy", healthyThreshold),
+		zap.Float64("degraded", degradedThreshold),
+		zap.Float64("critical", criticalThreshold),
+		zap.Float64("exhausted", exhaustedThreshold),
+	)
+
 	return &Tracker{
 		db:         db,
 		logger:     logger,
 		metrics:    m,
 		dailyLimit: dailyLimit,
+		currentState: QuotaStateHealthy,
+		lastStateTransition: time.Now(),
+		healthyThreshold:   healthyThreshold,
+		degradedThreshold:  degradedThreshold,
+		criticalThreshold:  criticalThreshold,
+		exhaustedThreshold: exhaustedThreshold,
 		stopChan:   make(chan struct{}),
 	}
+}
+
+// getEnvAsFloat gets an environment variable as float64 or returns default
+func getEnvAsFloat(key string, defaultValue float64) float64 {
+	if value := os.Getenv(key); value != "" {
+		if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+			return floatValue
+		}
+	}
+	return defaultValue
 }
 
 // Start initializes the tracker and loads today's usage
@@ -72,10 +145,17 @@ func (t *Tracker) Start(ctx context.Context) error {
 	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
 	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
 
-	t.logger.Info("Initialized quota metrics",
+	// Calculate initial state based on current usage
+	t.mu.Lock()
+	t.currentState = t.calculateState(percentage)
+	t.lastStateTransition = time.Now()
+	t.mu.Unlock()
+
+	t.logger.Info("Initialized quota metrics and state",
 		zap.Int("usage_today", t.usageToday),
 		zap.Int("remaining", remaining),
 		zap.Float64("percentage", percentage),
+		zap.String("initial_state", string(t.currentState)),
 	)
 
 	// Start background goroutine to check for date rollover periodically
@@ -88,6 +168,14 @@ func (t *Tracker) Start(ctx context.Context) error {
 func (t *Tracker) Stop() {
 	close(t.stopChan)
 	t.logger.Info("Quota tracker stopped")
+}
+
+// SetNotifier sets the notifier for quota events (optional)
+func (t *Tracker) SetNotifier(notifier Notifier) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.notifier = notifier
+	t.logger.Info("Quota notifier attached to tracker")
 }
 
 // periodicDateCheck runs in a background goroutine and checks for date rollover every minute
@@ -137,9 +225,91 @@ func (t *Tracker) checkDateRollover() {
 	t.currentDate = today
 	t.usageToday = 0
 
+	// Reset state to HEALTHY
+	if t.currentState != QuotaStateHealthy {
+		oldState := t.currentState
+		t.currentState = QuotaStateHealthy
+		t.lastStateTransition = time.Now()
+		t.logger.Info("Quota state reset to HEALTHY after date rollover",
+			zap.String("old_state", string(oldState)),
+		)
+	}
+
 	// Immediately update metrics to reflect the reset (prevents stale gauge values)
 	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(t.dailyLimit))
 	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", 0.0)
+}
+
+// calculateState determines the current quota state based on usage percentage
+func (t *Tracker) calculateState(percentage float64) QuotaState {
+	if percentage >= 100.0 {
+		return QuotaStateDepleted
+	} else if percentage >= t.exhaustedThreshold {
+		return QuotaStateExhausted
+	} else if percentage >= t.criticalThreshold {
+		return QuotaStateCritical
+	} else if percentage >= t.degradedThreshold {
+		return QuotaStateDegraded
+	}
+	return QuotaStateHealthy
+}
+
+// updateStateAndNotify updates the quota state and emits transition events if state changed
+// Must be called WITH the lock held
+func (t *Tracker) updateStateAndNotify(percentage float64) {
+	newState := t.calculateState(percentage)
+
+	// Check if state changed
+	if newState != t.currentState {
+		oldState := t.currentState
+		t.currentState = newState
+		t.lastStateTransition = time.Now()
+
+		t.logger.Warn("Quota state transition",
+			zap.String("old_state", string(oldState)),
+			zap.String("new_state", string(newState)),
+			zap.Float64("percentage", percentage),
+			zap.Int("used", t.usageToday),
+			zap.Int("limit", t.dailyLimit),
+		)
+
+		// Record state transition metric
+		t.metrics.RateLimitHits.WithLabelValues("youtube", "youtube-listener", fmt.Sprintf("quota_state_%s", string(newState))).Inc()
+
+		// Emit notification if notifier is configured
+		if t.notifier != nil {
+			ctx := context.Background()
+			if err := t.notifier.NotifyStateTransition(ctx, oldState, newState, percentage, t.usageToday, t.dailyLimit); err != nil {
+				t.logger.Warn("Failed to send quota state transition notification",
+					zap.Error(err),
+				)
+			}
+		}
+
+		// Log actionable warnings based on new state
+		switch newState {
+		case QuotaStateDegraded:
+			t.logger.Warn("Quota degraded - reducing low-priority discovery operations",
+				zap.Float64("percentage", percentage),
+			)
+		case QuotaStateCritical:
+			t.logger.Error("Quota critical - stopping all discovery, active polling only",
+				zap.Float64("percentage", percentage),
+			)
+		case QuotaStateExhausted:
+			t.logger.Error("Quota exhausted - slowing down polling intervals",
+				zap.Float64("percentage", percentage),
+			)
+		case QuotaStateDepleted:
+			t.logger.Error("Quota depleted - blocking all API requests",
+				zap.Float64("percentage", percentage),
+			)
+		case QuotaStateHealthy:
+			t.logger.Info("Quota recovered to healthy state",
+				zap.Float64("percentage", percentage),
+			)
+		}
+	}
 }
 
 // RecordUsage records API quota usage
@@ -172,29 +342,16 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 		return fmt.Errorf("failed to record usage: %w", err)
 	}
 
-	// Check if approaching limit
+	// Calculate percentage and update state
 	percentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
 	remaining := t.dailyLimit - t.usageToday
+
+	// Update state machine and emit transition events
+	t.updateStateAndNotify(percentage)
 
 	// Record quota metrics
 	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
 	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
-
-	if percentage >= 90 {
-		t.logger.Error("Quota usage critical",
-			zap.Int("used", t.usageToday),
-			zap.Int("limit", t.dailyLimit),
-			zap.Float64("percentage", percentage),
-		)
-		t.metrics.RateLimitHits.WithLabelValues("youtube", "youtube-listener", "api_quota_critical").Inc()
-	} else if percentage >= 80 {
-		t.logger.Warn("Quota usage high",
-			zap.Int("used", t.usageToday),
-			zap.Int("limit", t.dailyLimit),
-			zap.Float64("percentage", percentage),
-		)
-		t.metrics.RateLimitHits.WithLabelValues("youtube", "youtube-listener", "api_quota_warning").Inc()
-	}
 
 	t.logger.Debug("Recorded quota usage",
 		zap.Int("units", units),
@@ -237,6 +394,45 @@ func (t *Tracker) GetUsagePercentage() float64 {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return float64(t.usageToday) / float64(t.dailyLimit) * 100
+}
+
+// GetState returns the current quota state
+func (t *Tracker) GetState() QuotaState {
+	t.checkDateRollover()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.currentState
+}
+
+// GetStateInfo returns detailed quota state information
+func (t *Tracker) GetStateInfo() (QuotaState, float64, time.Time) {
+	t.checkDateRollover()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	percentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
+	return t.currentState, percentage, t.lastStateTransition
+}
+
+// ShouldAllowDiscovery checks if discovery operations should be allowed based on state
+func (t *Tracker) ShouldAllowDiscovery() bool {
+	state := t.GetState()
+	return state == QuotaStateHealthy || state == QuotaStateDegraded
+}
+
+// ShouldAllowLowPriorityDiscovery checks if low-priority discovery should be allowed
+func (t *Tracker) ShouldAllowLowPriorityDiscovery() bool {
+	return t.GetState() == QuotaStateHealthy
+}
+
+// ShouldSlowDownPolling checks if polling should be slowed down
+func (t *Tracker) ShouldSlowDownPolling() bool {
+	state := t.GetState()
+	return state == QuotaStateExhausted || state == QuotaStateDepleted
+}
+
+// ShouldBlockAllRequests checks if all API requests should be blocked
+func (t *Tracker) ShouldBlockAllRequests() bool {
+	return t.GetState() == QuotaStateDepleted
 }
 
 // loadTodayUsage loads today's usage from database
