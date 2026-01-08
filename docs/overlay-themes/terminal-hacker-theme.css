@@ -1,0 +1,269 @@
+/**
+ * Theme Name: Terminal Hacker Theme
+ * Description: Classic green terminal aesthetic with monospace fonts and typing effects
+ * Tags: terminal, hacker, matrix, green
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-01-08
+ */
+
+/* ============================================================
+   TERMINAL HACKER THEME for All-Chat Overlay
+   ============================================================
+
+   A classic terminal/hacker design featuring:
+   - Green monochrome terminal look
+   - Monospace font (Courier/Terminal style)
+   - Scanline CRT effects
+   - Command line prompt style
+   - Matrix-inspired aesthetic
+
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600;700&family=VT323&display=swap');
+
+/* ============================================================
+   CORE STYLES
+   ============================================================ */
+
+body {
+  background: transparent !important;
+  font-family: 'Source Code Pro', 'Courier New', monospace !important;
+  -webkit-font-smoothing: antialiased !important;
+}
+
+.min-h-screen {
+  background: transparent !important;
+  padding: 12px !important;
+}
+
+.space-y-3 {
+  gap: 8px !important;
+}
+
+/* ============================================================
+   MESSAGE CONTAINER - TERMINAL WINDOW
+   ============================================================ */
+
+.space-y-3 > div {
+  background: rgba(0, 0, 0, 0.95) !important;
+  border: 1px solid #00ff00 !important;
+  border-left: 3px solid #00ff00 !important;
+  border-radius: 0 !important;
+  padding: 12px !important;
+  box-shadow:
+    0 0 20px rgba(0, 255, 0, 0.2),
+    inset 0 0 100px rgba(0, 255, 0, 0.02) !important;
+  position: relative !important;
+  font-family: 'Source Code Pro', monospace !important;
+}
+
+/* CRT scanline effect */
+.space-y-3 > div::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 255, 0, 0.03) 0px,
+    transparent 1px,
+    transparent 2px,
+    rgba(0, 255, 0, 0.03) 3px
+  ) !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+  opacity: 0.5 !important;
+}
+
+/* Terminal prompt indicator */
+.space-y-3 > div::after {
+  content: '>' !important;
+  position: absolute !important;
+  left: 6px !important;
+  top: 12px !important;
+  color: #00ff00 !important;
+  font-family: 'Source Code Pro', monospace !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.8) !important;
+  z-index: 2 !important;
+}
+
+/* ============================================================
+   PLATFORM INDICATOR - TERMINAL TAG
+   ============================================================ */
+
+.text-xs.font-semibold.uppercase {
+  background: transparent !important;
+  color: #00ff00 !important;
+  padding: 0 0.5rem !important;
+  border: 1px solid #00ff00 !important;
+  border-radius: 0 !important;
+  letter-spacing: 0.1em !important;
+  font-weight: 700 !important;
+  font-size: 10px !important;
+  font-family: 'Source Code Pro', monospace !important;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.8) !important;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.3) !important;
+}
+
+/* ============================================================
+   USERNAME - TERMINAL USER
+   ============================================================ */
+
+.font-semibold.text-sm {
+  font-family: 'Source Code Pro', monospace !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: #00ff00 !important;
+  text-shadow: 0 0 8px rgba(0, 255, 0, 0.8) !important;
+  position: relative !important;
+  z-index: 2 !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* Terminal user@host format */
+.font-semibold.text-sm::before {
+  content: 'user@' !important;
+  opacity: 0.6 !important;
+  font-size: 13px !important;
+}
+
+.font-semibold.text-sm::after {
+  content: ':~$' !important;
+  opacity: 0.8 !important;
+  margin-left: 4px !important;
+}
+
+/* ============================================================
+   BADGES - TERMINAL STYLE
+   ============================================================ */
+
+.flex.gap-1 {
+  gap: 4px !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.flex.gap-1 img {
+  width: 16px !important;
+  height: 16px !important;
+  filter:
+    grayscale(100%)
+    brightness(2)
+    contrast(1.5)
+    drop-shadow(0 0 4px rgba(0, 255, 0, 0.6)) !important;
+  opacity: 0.9 !important;
+  border: 1px solid #00ff00 !important;
+  border-radius: 0 !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  padding: 1px !important;
+}
+
+/* ============================================================
+   AVATAR - TERMINAL AVATAR
+   ============================================================ */
+
+.flex-shrink-0 img {
+  filter:
+    grayscale(100%)
+    brightness(1.5)
+    contrast(1.3) !important;
+  border: 2px solid #00ff00 !important;
+  border-radius: 0 !important;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.5) !important;
+  opacity: 0.9 !important;
+}
+
+/* ============================================================
+   MESSAGE TEXT - TERMINAL OUTPUT
+   ============================================================ */
+
+.text-white.break-words {
+  font-family: 'Source Code Pro', monospace !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  color: #00ff00 !important;
+  line-height: 1.8 !important;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.6) !important;
+  position: relative !important;
+  z-index: 2 !important;
+  letter-spacing: 0.02em !important;
+  padding-left: 16px !important;
+}
+
+.text-white.break-words img {
+  max-height: 24px !important;
+  filter:
+    grayscale(100%)
+    brightness(1.5)
+    contrast(1.2)
+    drop-shadow(0 0 4px rgba(0, 255, 0, 0.5)) !important;
+  opacity: 0.9 !important;
+}
+
+/* ============================================================
+   TIMESTAMP - TERMINAL TIME
+   ============================================================ */
+
+.text-xs.text-gray-500 {
+  font-family: 'Source Code Pro', monospace !important;
+  font-size: 11px !important;
+  color: rgba(0, 255, 0, 0.6) !important;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.4) !important;
+  letter-spacing: 0.05em !important;
+}
+
+.text-xs.text-gray-500::before {
+  content: '[' !important;
+}
+
+.text-xs.text-gray-500::after {
+  content: ']' !important;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes terminalBoot {
+  0% {
+    opacity: 0;
+    transform: scaleY(0);
+    transform-origin: top;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes cursorBlink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+.space-y-3 > div {
+  animation: terminalBoot 0.2s ease-out !important;
+}
+
+/* Blinking cursor effect */
+.text-white.break-words::after {
+  content: '█' !important;
+  animation: cursorBlink 1s step-end infinite !important;
+  margin-left: 2px !important;
+}
+
+/* ============================================================
+   END OF TERMINAL HACKER THEME
+   ============================================================ */

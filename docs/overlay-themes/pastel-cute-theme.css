@@ -1,0 +1,207 @@
+/**
+ * Theme Name: Pastel Kawaii Theme
+ * Description: Soft pastel colors with cute rounded elements and gentle animations
+ * Tags: pastel, cute, kawaii, soft
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-01-08
+ */
+
+/* ============================================================
+   PASTEL KAWAII THEME for All-Chat Overlay
+   ============================================================
+
+   A soft and cute design featuring:
+   - Pastel pink, blue, and purple gradients
+   - Rounded, bubbly shapes
+   - Gentle floating animations
+   - Sparkle and heart effects
+   - Cloud-like soft backgrounds
+
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
+
+/* ============================================================
+   CORE STYLES
+   ============================================================ */
+
+body {
+  background: transparent !important;
+  font-family: 'Nunito', sans-serif !important;
+  -webkit-font-smoothing: antialiased !important;
+}
+
+.min-h-screen {
+  background: transparent !important;
+  padding: 20px !important;
+}
+
+.space-y-3 {
+  gap: 16px !important;
+}
+
+/* ============================================================
+   MESSAGE CONTAINER - SOFT CLOUD
+   ============================================================ */
+
+.space-y-3 > div {
+  background: linear-gradient(135deg, rgba(255, 218, 234, 0.95) 0%, rgba(230, 230, 250, 0.95) 100%) !important;
+  border: 3px solid rgba(255, 182, 193, 0.6) !important;
+  border-radius: 24px !important;
+  padding: 1.25rem !important;
+  box-shadow:
+    0 8px 32px rgba(255, 182, 193, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+  position: relative !important;
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+}
+
+.space-y-3 > div:hover {
+  transform: translateY(-4px) scale(1.02) !important;
+  box-shadow:
+    0 12px 48px rgba(255, 182, 193, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Sparkle decoration */
+.space-y-3 > div::before {
+  content: '✨' !important;
+  position: absolute !important;
+  top: -8px !important;
+  right: 12px !important;
+  font-size: 20px !important;
+  opacity: 0.8 !important;
+  animation: sparkle 2s ease-in-out infinite !important;
+}
+
+/* ============================================================
+   PLATFORM INDICATOR - CUTE PILL
+   ============================================================ */
+
+.text-xs.font-semibold.uppercase {
+  background: linear-gradient(135deg, #ffc0cb 0%, #ffb6c1 100%) !important;
+  color: #ffffff !important;
+  padding: 0.3rem 0.8rem !important;
+  border-radius: 999px !important;
+  letter-spacing: 0.05em !important;
+  font-weight: 700 !important;
+  font-size: 10px !important;
+  box-shadow: 0 4px 12px rgba(255, 182, 193, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+  border: 2px solid rgba(255, 255, 255, 0.6) !important;
+}
+
+/* ============================================================
+   USERNAME - SOFT AND CUTE
+   ============================================================ */
+
+.font-semibold.text-sm {
+  font-family: 'Nunito', sans-serif !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  text-shadow:
+    0 2px 4px rgba(255, 182, 193, 0.3),
+    0 0 20px rgba(255, 255, 255, 0.8) !important;
+  filter: brightness(1.1) saturate(1.2) !important;
+}
+
+/* ============================================================
+   BADGES - ROUNDED AND SOFT
+   ============================================================ */
+
+.flex.gap-1 {
+  gap: 6px !important;
+}
+
+.flex.gap-1 img {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 50% !important;
+  border: 2px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 0 2px 8px rgba(255, 182, 193, 0.4) !important;
+  background: rgba(255, 255, 255, 0.5) !important;
+  padding: 2px !important;
+}
+
+/* ============================================================
+   AVATAR - CUTE STYLE
+   ============================================================ */
+
+.flex-shrink-0 img {
+  border: 3px solid rgba(255, 182, 193, 0.6) !important;
+  border-radius: 50% !important;
+  box-shadow:
+    0 4px 16px rgba(255, 182, 193, 0.4),
+    inset 0 2px 0 rgba(255, 255, 255, 0.3) !important;
+  padding: 2px !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 218, 234, 0.8) 100%) !important;
+}
+
+/* ============================================================
+   MESSAGE TEXT - SOFT AND READABLE
+   ============================================================ */
+
+.text-white.break-words {
+  font-family: 'Nunito', sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: #6b5b8c !important;
+  line-height: 1.6 !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8) !important;
+}
+
+.text-white.break-words img {
+  max-height: 32px !important;
+  filter: drop-shadow(0 2px 4px rgba(255, 182, 193, 0.3)) !important;
+  margin: 0 4px !important;
+}
+
+/* ============================================================
+   TIMESTAMP - GENTLE
+   ============================================================ */
+
+.text-xs.text-gray-500 {
+  font-family: 'Nunito', sans-serif !important;
+  font-size: 11px !important;
+  color: rgba(255, 105, 180, 0.7) !important;
+  font-weight: 600 !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6) !important;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes floatIn {
+  0% {
+    opacity: 0;
+    transform: translateY(30px) scale(0.9);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2) rotate(180deg);
+  }
+}
+
+.space-y-3 > div {
+  animation: floatIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+}
+
+/* ============================================================
+   END OF PASTEL KAWAII THEME
+   ============================================================ */

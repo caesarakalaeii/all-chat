@@ -1,0 +1,188 @@
+/**
+ * Theme Name: Modern Dark Theme
+ * Description: Sleek professional dark theme with subtle gradients and clean typography
+ * Tags: modern, dark, professional, sleek
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-01-08
+ */
+
+/* ============================================================
+   MODERN DARK THEME for All-Chat Overlay
+   ============================================================
+
+   A professional dark design featuring:
+   - Subtle dark gradients
+   - Clean sans-serif typography
+   - Minimal but elegant borders
+   - Smooth animations
+   - Professional color accents
+   - High readability
+
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ============================================================
+   CORE STYLES
+   ============================================================ */
+
+body {
+  background: transparent !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+.min-h-screen {
+  background: transparent !important;
+  padding: 20px !important;
+}
+
+.space-y-3 {
+  gap: 12px !important;
+}
+
+/* ============================================================
+   MESSAGE CONTAINER - SLEEK CARD
+   ============================================================ */
+
+.space-y-3 > div {
+  background: linear-gradient(135deg, rgba(30, 30, 35, 0.95) 0%, rgba(20, 20, 25, 0.95) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-left: 3px solid rgba(99, 102, 241, 0.8) !important;
+  border-radius: 12px !important;
+  padding: 1.25rem !important;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  transition: all 0.2s ease !important;
+}
+
+.space-y-3 > div:hover {
+  border-left-color: rgba(139, 92, 246, 0.9) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(99, 102, 241, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  transform: translateX(4px) !important;
+}
+
+/* ============================================================
+   PLATFORM INDICATOR - MODERN BADGE
+   ============================================================ */
+
+.text-xs.font-semibold.uppercase {
+  background: rgba(99, 102, 241, 0.15) !important;
+  color: #a5b4fc !important;
+  padding: 0.25rem 0.75rem !important;
+  border-radius: 6px !important;
+  letter-spacing: 0.08em !important;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  font-family: 'Inter', sans-serif !important;
+  text-transform: uppercase !important;
+  border: 1px solid rgba(99, 102, 241, 0.25) !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2) !important;
+}
+
+/* ============================================================
+   USERNAME - CLEAN AND BOLD
+   ============================================================ */
+
+.font-semibold.text-sm {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  line-height: 1.4 !important;
+  letter-spacing: -0.01em !important;
+  filter: brightness(1.15) saturate(1.1) !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ============================================================
+   BADGES - MODERN STYLE
+   ============================================================ */
+
+.flex.gap-1 {
+  gap: 6px !important;
+}
+
+.flex.gap-1 img {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  background: rgba(0, 0, 0, 0.3) !important;
+  padding: 2px !important;
+}
+
+/* ============================================================
+   AVATAR - ELEGANT CIRCLE
+   ============================================================ */
+
+.flex-shrink-0 img {
+  border: 2px solid rgba(99, 102, 241, 0.4) !important;
+  border-radius: 50% !important;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(99, 102, 241, 0.2) !important;
+}
+
+/* ============================================================
+   MESSAGE TEXT - CLEAN AND READABLE
+   ============================================================ */
+
+.text-white.break-words {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  color: #e5e7eb !important;
+  line-height: 1.7 !important;
+  letter-spacing: -0.01em !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.text-white.break-words img {
+  max-height: 28px !important;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3)) !important;
+  margin: 0 4px !important;
+  vertical-align: middle !important;
+}
+
+/* ============================================================
+   TIMESTAMP - SUBTLE
+   ============================================================ */
+
+.text-xs.text-gray-500 {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 11px !important;
+  color: rgba(156, 163, 175, 0.7) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes slideInLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.space-y-3 > div {
+  animation: slideInLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* ============================================================
+   END OF MODERN DARK THEME
+   ============================================================ */

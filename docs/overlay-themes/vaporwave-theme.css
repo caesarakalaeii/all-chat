@@ -1,0 +1,267 @@
+/**
+ * Theme Name: Vaporwave Aesthetic Theme
+ * Description: Retro 80s/90s vaporwave with pink and cyan gradients and grid patterns
+ * Tags: vaporwave, retro, aesthetic, 80s
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-01-08
+ */
+
+/* ============================================================
+   VAPORWAVE AESTHETIC THEME for All-Chat Overlay
+   ============================================================
+
+   A retro vaporwave design featuring:
+   - Pink and cyan gradient color schemes
+   - Retro grid patterns
+   - Chrome text effects
+   - Sun/grid horizon aesthetic
+   - VHS/glitch visual effects
+   - 80s/90s nostalgic vibes
+
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@400;700;900&display=swap');
+
+/* ============================================================
+   CORE STYLES
+   ============================================================ */
+
+body {
+  background: transparent !important;
+  font-family: 'Orbitron', sans-serif !important;
+  -webkit-font-smoothing: antialiased !important;
+}
+
+.min-h-screen {
+  background: transparent !important;
+  padding: 20px !important;
+}
+
+.space-y-3 {
+  gap: 20px !important;
+}
+
+/* ============================================================
+   MESSAGE CONTAINER - VAPORWAVE PANEL
+   ============================================================ */
+
+.space-y-3 > div {
+  background:
+    linear-gradient(135deg, rgba(255, 0, 128, 0.3) 0%, rgba(0, 255, 255, 0.3) 100%),
+    linear-gradient(0deg, rgba(128, 0, 255, 0.2) 0%, rgba(255, 0, 255, 0.2) 100%) !important;
+  border: 2px solid transparent !important;
+  border-image: linear-gradient(135deg, #ff0080, #00ffff, #ff00ff) 1 !important;
+  border-radius: 12px !important;
+  padding: 1.5rem !important;
+  box-shadow:
+    0 8px 32px rgba(255, 0, 128, 0.4),
+    0 0 50px rgba(0, 255, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  position: relative !important;
+  backdrop-filter: blur(10px) saturate(180%) !important;
+  overflow: hidden !important;
+}
+
+/* Retro grid overlay */
+.space-y-3 > div::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-image:
+    linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 0, 128, 0.1) 1px, transparent 1px) !important;
+  background-size: 20px 20px !important;
+  pointer-events: none !important;
+  opacity: 0.3 !important;
+}
+
+/* VHS scan line effect */
+.space-y-3 > div::after {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.1) 0px,
+    transparent 2px
+  ) !important;
+  pointer-events: none !important;
+  animation: vhsScan 8s linear infinite !important;
+}
+
+/* ============================================================
+   PLATFORM INDICATOR - CHROME TAG
+   ============================================================ */
+
+.text-xs.font-semibold.uppercase {
+  background: linear-gradient(135deg, #ff0080 0%, #00ffff 50%, #ff00ff 100%) !important;
+  color: #000000 !important;
+  padding: 0.3rem 0.9rem !important;
+  border-radius: 6px !important;
+  letter-spacing: 0.2em !important;
+  font-weight: 900 !important;
+  font-size: 10px !important;
+  font-family: 'Orbitron', sans-serif !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5) !important;
+  box-shadow:
+    0 4px 15px rgba(255, 0, 128, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+/* ============================================================
+   USERNAME - CHROME EFFECT
+   ============================================================ */
+
+.font-semibold.text-sm {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 900 !important;
+  background: linear-gradient(180deg, #ff0080, #00ffff, #ff00ff) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  filter: drop-shadow(0 0 10px rgba(255, 0, 128, 0.8)) drop-shadow(0 0 20px rgba(0, 255, 255, 0.6)) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+/* Secondary glow layer */
+.font-semibold.text-sm::before {
+  content: attr(style) !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  z-index: -1 !important;
+  filter: blur(10px) !important;
+}
+
+/* ============================================================
+   BADGES - RETRO STYLE
+   ============================================================ */
+
+.flex.gap-1 {
+  gap: 6px !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.flex.gap-1 img {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 4px !important;
+  border: 2px solid transparent !important;
+  border-image: linear-gradient(135deg, #ff0080, #00ffff) 1 !important;
+  filter: drop-shadow(0 0 8px rgba(255, 0, 128, 0.6)) !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  padding: 2px !important;
+}
+
+/* ============================================================
+   AVATAR - VAPORWAVE BORDER
+   ============================================================ */
+
+.flex-shrink-0 img {
+  border: 3px solid transparent !important;
+  border-image: linear-gradient(135deg, #ff0080, #00ffff, #ff00ff) 1 !important;
+  border-radius: 8px !important;
+  box-shadow:
+    0 0 20px rgba(255, 0, 128, 0.6),
+    0 0 40px rgba(0, 255, 255, 0.4) !important;
+  filter: saturate(1.3) contrast(1.1) !important;
+}
+
+/* ============================================================
+   MESSAGE TEXT - AESTHETIC TEXT
+   ============================================================ */
+
+.text-white.break-words {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  color: #ffffff !important;
+  line-height: 1.7 !important;
+  text-shadow:
+    0 0 10px rgba(255, 0, 128, 0.5),
+    0 0 20px rgba(0, 255, 255, 0.3) !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.text-white.break-words img {
+  max-height: 32px !important;
+  filter:
+    saturate(1.5)
+    drop-shadow(0 0 10px rgba(255, 0, 128, 0.5))
+    drop-shadow(0 0 20px rgba(0, 255, 255, 0.3)) !important;
+  margin: 0 4px !important;
+}
+
+/* ============================================================
+   TIMESTAMP - RETRO TIME
+   ============================================================ */
+
+.text-xs.text-gray-500 {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 11px !important;
+  background: linear-gradient(90deg, #ff0080, #00ffff) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 10px rgba(255, 0, 128, 0.5) !important;
+  letter-spacing: 0.1em !important;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes vaporwaveSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(40px) rotateX(20deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateX(0deg);
+  }
+}
+
+@keyframes vhsScan {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes chromeShift {
+  0%, 100% {
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    filter: hue-rotate(30deg);
+  }
+}
+
+.space-y-3 > div {
+  animation: vaporwaveSlide 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+}
+
+/* ============================================================
+   END OF VAPORWAVE AESTHETIC THEME
+   ============================================================ */
