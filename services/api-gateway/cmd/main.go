@@ -124,6 +124,11 @@ func main() {
 	// Create WebSocket components
 	wsManager := wsconn.NewManager(log, gatewayMetrics, redisClient)
 
+	// Create WebSocket health checker for state reconciliation
+	healthChecker := wsconn.NewHealthChecker(wsManager, redisClient, log, gatewayMetrics)
+	healthChecker.Start()
+	defer healthChecker.Stop()
+
 	// Create Redis Pub/Sub subscriber with message handler
 	messageHandler := func(overlayID string, message []byte) {
 		// Wrap the unified message in a WebSocket message envelope
