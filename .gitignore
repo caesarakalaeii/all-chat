@@ -92,3 +92,6 @@ test_twitch_chat.py
 DEBUG_CHECKPOINT.md
 CHECKPOINT.md
 .playwright-mcp/
+
+# MCP configuration (may contain secrets)
+.mcp.json
