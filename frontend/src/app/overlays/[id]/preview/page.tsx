@@ -45,6 +45,12 @@ const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
   )
 });
 
+// Dynamically import Theme Marketplace Modal
+const ThemeMarketplaceModal = dynamic(
+  () => import('@/components/theme-marketplace/ThemeMarketplaceModal'),
+  { ssr: false }
+);
+
 type MockMessageFormState = {
   platform: ChatMessage['platform'];
   displayName: string;
@@ -209,6 +215,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [sources, setSources] = useState<ChatSource[]>([]);
+  const [showThemeMarketplace, setShowThemeMarketplace] = useState(false);
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -850,13 +857,23 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setCustomCss(EXAMPLE_CUSTOM_CSS.trim());
-                  setUseCustomCss(true);
-                }}
-                className="bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                onClick={() => setShowThemeMarketplace(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
               >
-                Load Example
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                  />
+                </svg>
+                Browse Themes
               </button>
               <button
                 type="button"
@@ -892,6 +909,17 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
           </p>
         </div>
       </div>
+
+      {/* Theme Marketplace Modal */}
+      <ThemeMarketplaceModal
+        isOpen={showThemeMarketplace}
+        onClose={() => setShowThemeMarketplace(false)}
+        onApplyTheme={(css) => {
+          setCustomCss(css);
+          setUseCustomCss(true);
+          setShowThemeMarketplace(false);
+        }}
+      />
     </div>
   );
 }
