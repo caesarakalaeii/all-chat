@@ -1,0 +1,314 @@
+/**
+ * Theme Name: Neon Glass Theme
+ * Description: Vibrant neon pink glass morphism design with glowing text effects
+ * Tags: neon, glass, modern, glowing
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-01-08
+ */
+
+/* ============================================================
+   NEON GLASS THEME for All-Chat Overlay
+   ============================================================
+
+   A modern glassmorphism design featuring:
+   - Neon pink/purple color scheme
+   - Frosted glass effect with backdrop blur
+   - Glowing text shadows
+   - Smooth animations and transitions
+   - Elevated design with prominent shadows
+
+   HOW TO USE IN OBS:
+   1. Add a Browser Source in OBS
+   2. Set the URL to your overlay: http://your-domain.com/overlay/{overlay-id}
+   3. In the Browser Source properties, find the "Custom CSS" field
+   4. Copy and paste this ENTIRE file into that field
+   5. Click OK and enjoy your neon glass overlay!
+
+   CUSTOMIZATION OPTIONS:
+   - Scroll down to find commented sections for optional tweaks
+   - Adjust colors, blur intensity, glow effects, and more
+
+   ============================================================ */
+
+/* ============================================================
+   GOOGLE FONTS IMPORT
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+/* ============================================================
+   CORE RESET & BODY STYLES
+   ============================================================ */
+
+/* Reset body background and set modern font */
+body {
+  background: transparent !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+/* Main container - transparent and clean */
+.min-h-screen {
+  background: transparent !important;
+  padding: 16px !important;
+}
+
+/* Message list container - standard spacing */
+.space-y-3 {
+  gap: 12px !important;
+}
+
+/* ============================================================
+   MESSAGE CONTAINER - NEON GLASS MORPHISM
+   ============================================================ */
+
+/* Glassmorphism effect with neon accents */
+.space-y-3 > div {
+  background: rgba(74, 29, 150, 0.45) !important;
+  border: 1px solid rgba(236, 72, 153, 0.5) !important;
+  border-radius: 16px !important;
+  padding: 1.25rem !important;
+  backdrop-filter: blur(18px) saturate(180%) !important;
+  box-shadow: 0 25px 45px rgba(0, 0, 0, 0.35) !important;
+  transition: all 0.3s ease !important;
+}
+
+/* Hover effect for extra polish */
+.space-y-3 > div:hover {
+  border-color: rgba(236, 72, 153, 0.8) !important;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45), 0 0 30px rgba(236, 72, 153, 0.3) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* ============================================================
+   PLATFORM INDICATOR - NEON PILL
+   ============================================================ */
+
+/* Neon pink pill style for platform badges */
+.text-xs.font-semibold.uppercase {
+  background: rgba(236, 72, 153, 0.2) !important;
+  color: #f472b6 !important;
+  padding: 0.15rem 0.6rem !important;
+  border-radius: 999px !important;
+  letter-spacing: 0.15em !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  font-size: 10px !important;
+  border: 1px solid rgba(236, 72, 153, 0.4) !important;
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.3) !important;
+}
+
+/* ============================================================
+   USERNAME STYLES - GLOWING
+   ============================================================ */
+
+/* Username with neon glow effect */
+.font-semibold.text-sm {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+  /* Colors are preserved from backend (dynamic per user) */
+  text-shadow: 0 0 15px rgba(236, 72, 153, 0.6) !important;
+  filter: brightness(1.2) !important;
+}
+
+/* ============================================================
+   BADGES - GLOWING
+   ============================================================ */
+
+/* Badge container - clean spacing */
+.flex.gap-1 {
+  gap: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  vertical-align: middle !important;
+}
+
+/* Individual badges - crisp with glow */
+.flex.gap-1 img {
+  width: 18px !important;
+  height: 18px !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+  image-rendering: -webkit-optimize-contrast !important;
+  image-rendering: crisp-edges !important;
+  filter: drop-shadow(0 0 4px rgba(236, 72, 153, 0.5)) !important;
+}
+
+/* ============================================================
+   AVATAR - GLOWING BORDER
+   ============================================================ */
+
+/* Avatar with neon border */
+.flex-shrink-0 img {
+  border: 2px solid rgba(236, 72, 153, 0.6) !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 15px rgba(236, 72, 153, 0.4) !important;
+}
+
+/* ============================================================
+   MESSAGE TEXT - GLOWING
+   ============================================================ */
+
+/* Message text with subtle neon glow */
+.text-white.break-words {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 400 !important;
+  line-height: 1.6 !important;
+  color: #fff1f2 !important;
+  text-shadow: 0 0 12px rgba(236, 72, 153, 0.65) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  letter-spacing: 0.01em !important;
+}
+
+/* Emotes within messages - glowing */
+.text-white.break-words img {
+  display: inline-block !important;
+  vertical-align: middle !important;
+  max-height: 32px !important;
+  margin: 0 4px !important;
+  image-rendering: -webkit-optimize-contrast !important;
+  image-rendering: crisp-edges !important;
+  filter: drop-shadow(0 0 8px rgba(236, 72, 153, 0.4)) !important;
+}
+
+/* ============================================================
+   TIMESTAMP - SUBTLE NEON
+   ============================================================ */
+
+/* Timestamps with neon accent */
+.text-xs.text-gray-500 {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 11px !important;
+  color: rgba(244, 114, 182, 0.7) !important;
+  margin-top: 4px !important;
+  text-shadow: 0 0 8px rgba(236, 72, 153, 0.4) !important;
+  font-weight: 500 !important;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+/* Fade in animation for new messages */
+@keyframes neonFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.space-y-3 > div {
+  animation: neonFadeIn 0.4s ease-out !important;
+}
+
+/* ============================================================
+   OPTIONAL CUSTOMIZATIONS
+   ============================================================
+
+   Uncomment any section below to enable additional customizations.
+   Remove the opening and closing comment markers around the CSS rules.
+
+   ============================================================ */
+
+/* --- CHANGE NEON COLOR TO CYAN ---
+   Switch from pink/purple to cyan/blue neon */
+/*
+.space-y-3 > div {
+  background: rgba(6, 182, 212, 0.3) !important;
+  border-color: rgba(34, 211, 238, 0.5) !important;
+}
+
+.text-xs.font-semibold.uppercase {
+  background: rgba(34, 211, 238, 0.2) !important;
+  color: #22d3ee !important;
+  border-color: rgba(34, 211, 238, 0.4) !important;
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.3) !important;
+}
+
+.text-white.break-words {
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.65) !important;
+}
+*/
+
+/* --- CHANGE NEON COLOR TO GREEN ---
+   Switch to matrix-style green neon */
+/*
+.space-y-3 > div {
+  background: rgba(4, 120, 87, 0.3) !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+}
+
+.text-xs.font-semibold.uppercase {
+  background: rgba(16, 185, 129, 0.2) !important;
+  color: #10b981 !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3) !important;
+}
+
+.text-white.break-words {
+  text-shadow: 0 0 12px rgba(16, 185, 129, 0.65) !important;
+}
+*/
+
+/* --- INCREASE BLUR INTENSITY ---
+   Make the glass effect more pronounced */
+/*
+.space-y-3 > div {
+  backdrop-filter: blur(24px) saturate(200%) !important;
+}
+*/
+
+/* --- REDUCE GLOW INTENSITY ---
+   Tone down the neon glow effects */
+/*
+.text-white.break-words {
+  text-shadow: 0 0 6px rgba(236, 72, 153, 0.3) !important;
+}
+
+.font-semibold.text-sm {
+  text-shadow: 0 0 8px rgba(236, 72, 153, 0.3) !important;
+}
+*/
+
+/* --- HIDE AVATARS ---
+   Remove avatars for cleaner look */
+/*
+.flex-shrink-0 {
+  display: none !important;
+}
+*/
+
+/* --- HIDE PLATFORM INDICATORS ---
+   Remove platform badges */
+/*
+.text-xs.font-semibold.uppercase {
+  display: none !important;
+}
+*/
+
+/* --- COMPACT LAYOUT ---
+   Reduce padding and spacing */
+/*
+.space-y-3 > div {
+  padding: 0.75rem !important;
+  border-radius: 12px !important;
+}
+
+.space-y-3 {
+  gap: 8px !important;
+}
+*/
+
+/* ============================================================
+   END OF NEON GLASS THEME
+   ============================================================ */
