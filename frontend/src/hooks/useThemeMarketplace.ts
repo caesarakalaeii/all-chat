@@ -171,5 +171,6 @@ export function useThemeMarketplace() {
     hasActiveFilters,
     totalCount: themes.length,
     filteredCount: filteredThemes.length,
+    refreshThemes: loadThemes,
   };
 }
