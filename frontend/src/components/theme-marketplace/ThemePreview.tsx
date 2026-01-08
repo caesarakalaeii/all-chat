@@ -126,7 +126,7 @@ export default function ThemePreview({ css, messages, themeId }: ThemePreviewPro
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className="backdrop-blur-sm rounded-lg p-3 shadow-lg bg-gray-900/90"
+              className="rounded-lg p-3 shadow-lg bg-gray-900"
             >
               <div className="flex items-start gap-3">
                 {/* Avatar */}

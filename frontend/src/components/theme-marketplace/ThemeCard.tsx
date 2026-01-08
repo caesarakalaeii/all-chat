@@ -50,7 +50,7 @@ export default function ThemeCard({
   return (
     <div
       className="theme-card bg-gray-900 border border-gray-700 rounded-lg overflow-hidden
-                 hover:border-purple-500/50 hover:shadow-lg hover:shadow-purple-500/20
+                 hover:border-purple-500/50 hover:shadow-lg
                  transition-all duration-200 hover:-translate-y-1 flex flex-col"
     >
       {/* Preview */}
