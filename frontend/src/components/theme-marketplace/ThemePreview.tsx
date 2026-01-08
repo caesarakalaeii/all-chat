@@ -6,12 +6,13 @@
 
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useId } from 'react';
 import type { ChatMessagePreview } from '@/lib/theme-marketplace/types';
 
 interface ThemePreviewProps {
   css: string;
   messages: ChatMessagePreview[];
+  themeId: string;
 }
 
 /**
@@ -85,18 +86,19 @@ function getPlatformColor(platform: string): string {
   }
 }
 
-export default function ThemePreview({ css, messages }: ThemePreviewProps) {
+export default function ThemePreview({ css, messages, themeId }: ThemePreviewProps) {
   const [scopedCss, setScopedCss] = useState('');
+  const uniqueId = `theme-preview-${themeId}`;
 
   // Scope CSS when it changes
   useEffect(() => {
     const scoped = scopeCustomCss(
       css,
-      '.theme-preview-container',
-      '.theme-preview-container .theme-preview-body'
+      `.${uniqueId}`,
+      `.${uniqueId} .theme-preview-body`
     );
     setScopedCss(scoped);
-  }, [css]);
+  }, [css, uniqueId]);
 
   return (
     <div className="theme-preview-wrapper bg-gray-800 border border-gray-700 rounded-t-lg overflow-hidden">
@@ -107,7 +109,7 @@ export default function ThemePreview({ css, messages }: ThemePreviewProps) {
 
       {/* Preview container */}
       <div
-        className="theme-preview-container"
+        className={uniqueId}
         style={{
           height: '180px',
           background: 'black',
