@@ -102,19 +102,24 @@ export default function ThemePreview({ css, messages, themeId }: ThemePreviewPro
 
   return (
     <div className="theme-preview-wrapper bg-gray-800 border border-gray-700 rounded-t-lg overflow-hidden">
-      {/* Scoped styles */}
+      {/* Scoped styles - use data attribute to create unique scope */}
       {scopedCss && (
-        <style dangerouslySetInnerHTML={{ __html: scopedCss }} />
+        <style
+          dangerouslySetInnerHTML={{ __html: scopedCss }}
+          data-theme-id={themeId}
+        />
       )}
 
-      {/* Preview container */}
+      {/* Preview container with unique data attribute */}
       <div
         className={uniqueId}
+        data-theme-preview={themeId}
         style={{
           height: '180px',
           background: 'black',
           overflow: 'hidden',
           position: 'relative',
+          isolation: 'isolate',
         }}
       >
         <div className="theme-preview-body h-full overflow-y-auto p-2 space-y-3">

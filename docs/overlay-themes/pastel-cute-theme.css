@@ -64,7 +64,8 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
 
-/* Sparkle decoration */
+/* Sparkle decoration - Commented to prevent CSS leakage in marketplace */
+/*
 .space-y-3 > div::before {
   content: '✨' !important;
   position: absolute !important;
@@ -74,6 +75,7 @@ body {
   opacity: 0.8 !important;
   animation: sparkle 2s ease-in-out infinite !important;
 }
+*/
 
 /* ============================================================
    PLATFORM INDICATOR - CUTE PILL
