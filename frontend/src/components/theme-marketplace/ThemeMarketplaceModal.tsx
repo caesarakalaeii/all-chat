@@ -11,6 +11,8 @@ import ThemeCard from './ThemeCard';
 import ThemeFilters from './ThemeFilters';
 import { useThemeMarketplace } from '@/hooks/useThemeMarketplace';
 import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { clearCache } from '@/lib/theme-marketplace/cache';
 
 interface ThemeMarketplaceModalProps {
   isOpen: boolean;
@@ -23,6 +25,9 @@ export default function ThemeMarketplaceModal({
   onClose,
   onApplyTheme,
 }: ThemeMarketplaceModalProps) {
+  const { user } = useAuthStore();
+  const isAdmin = user?.is_admin || false;
+
   // Add custom scrollbar styles
   useEffect(() => {
     if (!isOpen) return;
@@ -83,6 +88,7 @@ export default function ThemeMarketplaceModal({
     hasActiveFilters,
     totalCount,
     filteredCount,
+    refreshThemes,
   } = useThemeMarketplace();
 
   // Handle ESC key to close modal
@@ -142,26 +148,57 @@ export default function ThemeMarketplaceModal({
               Browse and apply custom CSS themes for your overlay
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors p-2
-                       hover:bg-gray-700 rounded-lg"
-            aria-label="Close theme marketplace"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          <div className="flex items-center gap-2">
+            {/* Admin Force Refresh Button */}
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  clearCache();
+                  refreshThemes();
+                }}
+                className="text-gray-400 hover:text-purple-400 transition-colors p-2
+                           hover:bg-gray-700 rounded-lg"
+                aria-label="Force refresh themes from GitHub"
+                title="Force refresh themes (Admin)"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
+            )}
+
+            {/* Close Button */}
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors p-2
+                         hover:bg-gray-700 rounded-lg"
+              aria-label="Close theme marketplace"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
