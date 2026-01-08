@@ -153,7 +153,7 @@ export default function ViewerChatPage() {
       const request: SendMessageRequest = {
         streamer_username: streamerUsername,
         message: message.trim(),
-        platform: 'twitch'
+        platform: viewerInfo?.platform || 'twitch' // Use viewer's actual login platform
       };
 
       const response = await viewerApi.sendMessage(request);
