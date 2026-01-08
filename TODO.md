@@ -1,6 +1,6 @@
 # All-Chat TODO Tracker
 
-**Last Updated**: 2025-12-20
+**Last Updated**: 2026-01-08
 
 ## 🔴 High Priority (Security & Critical)
 
@@ -29,17 +29,21 @@
   - References: Chrome Extension Manifest V3 docs, MDN Web Extensions
   - **Temporary Decision (2025-12-21)**: Using wildcard origins for rapid development, relying on JWT auth + rate limiting for security
 
-- [ ] **Implement AES-GCM encryption for OAuth tokens**
-  - Location: Token storage across all services
-  - Current: Basic encryption
-  - Impact: Critical security improvement
-  - Reference: `CLAUDE.md:440`
+- [x] **Implement AES-GCM encryption for OAuth tokens** ✅ COMPLETE
+  - Location: `shared/encryption/encryption.go`, `shared/crypto/crypto.go`
+  - Status: Implemented and in use by auth-service
+  - Migration tool: `services/auth-service/cmd/token-encryption-backfill/main.go`
+  - Migration doc: `docs/migrations/2025-02-auth-token-encryption.md`
+  - Impact: Critical security improvement achieved
+  - Note: Idempotent backfill tool safely migrates existing tokens without invalidation
 
-- [ ] **Implement rate limiting**
-  - Location: API Gateway
-  - Current: No rate limiting
-  - Impact: Prevent abuse, protect resources
-  - Reference: `CLAUDE.md:441`, `CLAUDE.md:456`
+- [x] **Implement rate limiting** ✅ COMPLETE (2026-01-08)
+  - Location: `shared/ratelimit/ratelimit.go`, `services/api-gateway/cmd/main.go`
+  - Status: Implemented with Redis-based distributed rate limiting
+  - Configuration: `RATE_LIMIT_PER_MINUTE` env var (default: 300 req/min per IP/user)
+  - Features: JWT-aware (per-user limits when authenticated, IP-based otherwise)
+  - Excludes: Health checks, metrics, WebSocket connections, static files
+  - Impact: Prevents abuse, protects resources
 
 - [ ] **Configure CORS for production**
   - Location: `services/api-gateway/cmd/main.go:184`
@@ -109,22 +113,23 @@
   - Technology: RabbitMQ or Kafka
   - Impact: Handle channels with 10K+ viewers
 
-- [ ] **Implement API Gateway rate limiting**
-  - Impact: Prevent abuse, protect backend services
-
 ---
 
 ## Summary Statistics
 
-- **Total Tasks**: 20
-- **High Priority**: 4 (Security critical)
+- **Total Tasks**: 18 (2 recently completed ✅)
+- **High Priority**: 2 (Security critical)
 - **Medium Priority**: 8 (Quality & features)
 - **Low Priority**: 8 (Enhancements & scaling)
+- **Completed**: 2 (AES-GCM encryption, Rate limiting)
 
 ## Notes
 
 - Extension (all-chat-extension) has no pending TODOs after recent bug fixes
-- Recent fixes completed:
+- **Security improvements completed (2026-01-08)**:
+  - ✅ AES-GCM encryption implemented for OAuth tokens (with migration tool)
+  - ✅ Rate limiting implemented in API Gateway (Redis-based, 300 req/min default)
+- Previous fixes:
   - ✅ OAuth login bug fixed
   - ✅ Page layout preservation implemented
   - ✅ JWT middleware corrected to support viewer tokens
