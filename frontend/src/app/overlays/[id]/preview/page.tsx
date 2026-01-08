@@ -209,7 +209,6 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [sources, setSources] = useState<ChatSource[]>([]);
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -488,7 +487,8 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
       </div>
 
       <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Top Row: Preview and Customization */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           {/* Preview Area (Main) */}
           <div className="lg:col-span-2">
             <div
@@ -529,72 +529,81 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                     {messages.map((message) => (
                       <div
                         key={message.id}
-                        className="flex gap-3 p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900/80 transition-colors"
+                        className="backdrop-blur-sm rounded-lg p-3 shadow-lg bg-gray-900/90"
                       >
-                        {/* Avatar */}
-                        <Image
-                          src={
-                            message.user.avatar_url ||
-                            `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                              message.user.display_name
-                            )}&background=6b7280&color=fff&size=40`
-                          }
-                          alt={message.user.display_name}
-                          width={40}
-                          height={40}
-                          className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
-                          onError={(e) => {
-                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                              message.user.display_name
-                            )}&background=6b7280&color=fff&size=40`;
-                          }}
-                        />
-
-                        {/* Message Content */}
-                        <div className="flex-1 min-w-0">
-                          {/* User Info */}
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span
-                              className={`${getPlatformColor(message.platform)} text-xs font-bold`}
-                            >
-                              {message.platform.toUpperCase()}
-                            </span>
-                            <span
-                              className="font-semibold text-white"
-                              style={{
-                                color: message.user.color || undefined
-                              }}
-                            >
-                              {message.user.display_name}
-                            </span>
-                            {message.user.badges?.map((badge, index) => (
+                        <div className="flex items-start gap-3">
+                          {/* Avatar */}
+                          <div className="flex-shrink-0">
+                            {message.user.avatar_url ? (
                               <Image
-                                key={`${badge.name}-${index}`}
-                                src={badge.icon_url}
-                                alt={badge.name}
-                                title={`${badge.name} (${badge.version})`}
-                                width={16}
-                                height={16}
-                                className="w-4 h-4 inline-block object-contain"
+                                src={message.user.avatar_url}
+                                alt={message.user.display_name}
+                                width={40}
+                                height={40}
+                                className="w-10 h-10 rounded-full object-cover"
                                 onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
+                                  e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                    message.user.display_name
+                                  )}&background=6b7280&color=fff&size=40`;
                                 }}
                               />
-                            ))}
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-semibold">
+                                {message.user.display_name?.slice(0, 2).toUpperCase() || '?'}
+                              </div>
+                            )}
                           </div>
 
-                          {/* Message Text */}
-                          <p
-                            className="text-gray-200 break-words"
-                            style={{ fontSize: `${fontSize}px` }}
-                          >
-                            {renderMessageContent(message)}
-                          </p>
+                          {/* Message Content */}
+                          <div className="flex-1 min-w-0">
+                            {/* User Info */}
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span
+                                className={`text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}
+                              >
+                                {message.platform}
+                              </span>
+                              <span
+                                className="font-semibold text-sm"
+                                style={{
+                                  color: message.user.color || '#FFFFFF'
+                                }}
+                              >
+                                {message.user.display_name}
+                              </span>
+                              {message.user.badges && message.user.badges.length > 0 && (
+                                <div className="flex gap-1">
+                                  {message.user.badges.map((badge, index) => (
+                                    <Image
+                                      key={`${badge.name}-${index}`}
+                                      src={badge.icon_url}
+                                      alt={badge.name}
+                                      title={`${badge.name} (${badge.version})`}
+                                      width={16}
+                                      height={16}
+                                      className="w-4 h-4 object-contain"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
 
-                          {/* Timestamp */}
-                          <span className="text-xs text-gray-600 mt-1 block">
-                            {new Date(message.timestamp).toLocaleTimeString()}
-                          </span>
+                            {/* Message Text */}
+                            <div
+                              className="text-white break-words"
+                              style={{ fontSize: `${fontSize}px` }}
+                            >
+                              {renderMessageContent(message)}
+                            </div>
+
+                            {/* Timestamp */}
+                            <div className="text-xs text-gray-500 mt-1">
+                              {new Date(message.timestamp).toLocaleTimeString()}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -607,7 +616,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
 
           {/* Customization Panel (Sidebar) */}
           <div className="lg:col-span-1">
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 sticky top-6">
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
               <h2 className="text-lg font-semibold text-white mb-6">Customization</h2>
 
               <div className="space-y-6">
@@ -773,100 +782,12 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                   </div>
                 </div>
 
-                {/* Advanced Settings (Custom CSS Editor) */}
-                <div className="border border-gray-700 rounded-lg bg-gray-900/40">
-                  <button
-                    type="button"
-                    onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
-                    className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-800/40 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold text-white">Advanced</h3>
-                      <span className="text-xs text-gray-500">(Custom CSS Editor)</span>
-                    </div>
-                    <svg
-                      className={`w-5 h-5 text-gray-400 transition-transform ${
-                        isAdvancedOpen ? 'rotate-180' : ''
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </button>
-
-                  {isAdvancedOpen && (
-                    <div className="px-4 pb-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2 text-xs text-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={useCustomCss}
-                            onChange={(e) => setUseCustomCss(e.target.checked)}
-                            className="accent-twitch"
-                          />
-                          Enable Custom CSS
-                        </label>
-                      </div>
-
-                      <MonacoCSSEditor
-                        value={customCss}
-                        onChange={setCustomCss}
-                        height="300px"
-                        placeholder="/* Enter your custom CSS here */"
-                      />
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomCss(EXAMPLE_CUSTOM_CSS.trim());
-                            setUseCustomCss(true);
-                          }}
-                          className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded"
-                        >
-                          Load Example
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomCss('');
-                            setUseCustomCss(false);
-                          }}
-                          className="px-3 py-2 text-xs border border-gray-600 rounded text-gray-200 hover:bg-gray-700"
-                        >
-                          Reset
-                        </button>
-                      </div>
-
-                      <p className="text-[11px] text-gray-500">
-                        Need inspiration? Explore{' '}
-                        <a
-                          href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-twitch hover:underline"
-                        >
-                          theme docs
-                        </a>{' '}
-                        or paste your OBS CSS to preview in real time.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
                 {/* Save Button */}
                 <div className="space-y-3">
                   <button
                     onClick={handleSaveCustomization}
                     disabled={!configLoaded || isSavingConfig}
-                    className="w-full bg-twitch hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors mt-6"
+                    className="w-full bg-twitch hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors"
                   >
                     {isSavingConfig ? 'Saving...' : 'Save Configuration'}
                   </button>
@@ -880,26 +801,86 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                     </p>
                   )}
                 </div>
-              </div>
 
-              {/* Stats */}
-              <div className="mt-8 pt-6 border-t border-gray-700">
-                <h3 className="text-sm font-medium text-gray-400 mb-3">Statistics</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-gray-300">
-                    <span>Messages:</span>
-                    <span className="text-white font-medium">{messages.length}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-300">
-                    <span>Status:</span>
-                    <span className={connected ? 'text-green-400' : 'text-red-400'}>
-                      {connected ? 'Connected' : 'Disconnected'}
-                    </span>
+                {/* Stats */}
+                <div className="mt-6 pt-6 border-t border-gray-700">
+                  <h3 className="text-sm font-medium text-gray-400 mb-3">Statistics</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between text-gray-300">
+                      <span>Messages:</span>
+                      <span className="text-white font-medium">{messages.length}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>Status:</span>
+                      <span className={connected ? 'text-green-400' : 'text-red-400'}>
+                        {connected ? 'Connected' : 'Disconnected'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Bottom Row: Full-Width CSS Editor */}
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-white">Custom CSS Editor</h2>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={useCustomCss}
+                  onChange={(e) => setUseCustomCss(e.target.checked)}
+                  className="accent-twitch"
+                />
+                Enable Custom CSS
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomCss(EXAMPLE_CUSTOM_CSS.trim());
+                  setUseCustomCss(true);
+                }}
+                className="bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              >
+                Load Example
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomCss('');
+                  setUseCustomCss(false);
+                }}
+                className="px-4 py-2 text-sm border border-gray-600 rounded-lg text-gray-200 hover:bg-gray-700 transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <MonacoCSSEditor
+            value={customCss}
+            onChange={setCustomCss}
+            height="400px"
+            placeholder="/* Enter your custom CSS here */"
+          />
+
+          <p className="text-sm text-gray-400 mt-4">
+            Need inspiration? Explore{' '}
+            <a
+              href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
+              target="_blank"
+              rel="noreferrer"
+              className="text-twitch hover:underline"
+            >
+              theme docs
+            </a>{' '}
+            or paste your OBS CSS to preview in real time.
+          </p>
         </div>
       </div>
     </div>
