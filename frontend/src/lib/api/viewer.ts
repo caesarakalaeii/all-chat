@@ -52,8 +52,12 @@ class ViewerApiClient {
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(errorData.error || response.statusText);
+      const errorData = await response.json().catch(() => ({}));
+      // Throw error with response and data attached for smart parsing
+      const error = new Error(errorData.error || errorData.message || response.statusText);
+      (error as any).response = response;
+      (error as any).data = errorData;
+      throw error;
     }
 
     return response;

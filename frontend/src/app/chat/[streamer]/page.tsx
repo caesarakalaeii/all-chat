@@ -23,6 +23,9 @@ import { viewerApi } from '@/lib/api/viewer';
 import { apiClient } from '@/lib/api/client';
 import type { StreamerInfo, SendMessageRequest } from '@/lib/types/viewer';
 import type { ChatMessage } from '@/lib/types/message';
+import { parseApiError, parseFetchError } from '@/lib/errorParser';
+import type { ChatError } from '@/lib/types/errors';
+import ErrorDisplay from '@/components/ErrorDisplay';
 
 export default function ViewerChatPage() {
   const params = useParams();
@@ -34,7 +37,8 @@ export default function ViewerChatPage() {
   const [loadingStreamer, setLoadingStreamer] = useState(true);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ChatError | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
@@ -64,7 +68,7 @@ export default function ViewerChatPage() {
         setStreamerInfo(info);
       } catch (err) {
         console.error('Failed to fetch streamer info:', err);
-        setError('Streamer not found or has no active platforms');
+        setLoadError('Streamer not found or has no active platforms');
       } finally {
         setLoadingStreamer(false);
       }
@@ -166,11 +170,18 @@ export default function ViewerChatPage() {
       }
     } catch (err: any) {
       console.error('Failed to send message:', err);
-      if (err.message.includes('rate limit')) {
-        setError('Rate limit exceeded. Please wait before sending more messages.');
+
+      // Parse the error using our smart error parser
+      let parsedError: ChatError;
+      if (err.response && err.data) {
+        // Error from API with response and data attached
+        parsedError = parseApiError(err.response, err.data);
       } else {
-        setError(err.message || 'Failed to send message. Please try again.');
+        // Network error or other fetch failure
+        parsedError = parseFetchError(err);
       }
+
+      setError(parsedError);
     } finally {
       setSending(false);
     }
@@ -184,11 +195,11 @@ export default function ViewerChatPage() {
     );
   }
 
-  if (error && !streamerInfo) {
+  if (loadError && !streamerInfo) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-red-500 text-xl mb-4">{error}</div>
+          <div className="text-red-500 text-xl mb-4">{loadError}</div>
           <a href="/" className="text-blue-400 hover:text-blue-300">
             Return to Home
           </a>
@@ -322,9 +333,15 @@ export default function ViewerChatPage() {
             <h2 className="text-xl font-semibold text-white mb-4">Send a Message</h2>
 
             {error && (
-              <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-lg mb-4">
-                {error}
-              </div>
+              <ErrorDisplay
+                error={error}
+                onRetry={() => {
+                  // Clear error and allow retry
+                  setError(null);
+                }}
+                onDismiss={() => setError(null)}
+                className="mb-4"
+              />
             )}
 
             {success && (
