@@ -190,13 +190,13 @@ func main() {
 	overlayManagerURL := getEnvOrDefault("OVERLAY_MANAGER_URL", "http://localhost:8082")
 
 	// Create viewer OAuth providers (with chat write scopes)
-	viewerTwitchRedirectURL := frontendURL + "/api/v1/auth/viewer/twitch/callback"
+	viewerTwitchRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/viewer/twitch/callback")
 	viewerTwitchOAuth := oauth.NewViewerTwitchOAuth(twitchClientID, twitchClientSecret, viewerTwitchRedirectURL)
 
-	viewerYouTubeRedirectURL := frontendURL + "/api/v1/auth/viewer/youtube/callback"
+	viewerYouTubeRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/viewer/youtube/callback")
 	viewerYouTubeOAuth := oauth.NewViewerYouTubeOAuth(youtubeClientID, youtubeClientSecret, viewerYouTubeRedirectURL)
 
-	viewerKickRedirectURL := frontendURL + "/api/v1/auth/viewer/kick/callback"
+	viewerKickRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/viewer/kick/callback")
 	viewerKickOAuth := oauth.NewViewerKickOAuth(kickClientID, kickClientSecret, viewerKickRedirectURL)
 
 	// Create viewer repository
