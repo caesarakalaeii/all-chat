@@ -25,6 +25,7 @@ import type { StreamerInfo, SendMessageRequest } from '@/lib/types/viewer';
 import type { ChatMessage } from '@/lib/types/message';
 import { parseApiError, parseFetchError } from '@/lib/errorParser';
 import type { ChatError } from '@/lib/types/errors';
+import { ChatErrorType } from '@/lib/types/errors';
 import ErrorDisplay from '@/components/ErrorDisplay';
 
 export default function ViewerChatPage() {
@@ -142,10 +143,10 @@ export default function ViewerChatPage() {
     } catch (err) {
       console.error('Login failed:', err);
       setError({
-        type: 'NETWORK_ERROR',
+        type: ChatErrorType.NETWORK_ERROR,
         message: 'Failed to initiate login',
         userMessage: 'Failed to initiate login. Please check your connection and try again.',
-        canRetry: true,
+        actionableSteps: ['Check your internet connection', 'Try again in a moment'],
       });
     }
   };
