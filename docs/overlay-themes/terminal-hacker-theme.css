@@ -78,7 +78,8 @@ body {
   opacity: 0.5 !important;
 }
 
-/* Terminal prompt indicator */
+/* Terminal prompt indicator - Commented to prevent CSS leakage in marketplace */
+/*
 .space-y-3 > div::after {
   content: '>' !important;
   position: absolute !important;
@@ -91,6 +92,7 @@ body {
   text-shadow: 0 0 5px rgba(0, 255, 0, 0.8) !important;
   z-index: 2 !important;
 }
+*/
 
 /* ============================================================
    PLATFORM INDICATOR - TERMINAL TAG
@@ -125,7 +127,9 @@ body {
   letter-spacing: 0.02em !important;
 }
 
-/* Terminal user@host format */
+/* Terminal user@host format - Disabled in preview to prevent CSS leakage */
+/* Note: In actual overlay use, these add terminal-style prefixes */
+/*
 .font-semibold.text-sm::before {
   content: 'user@' !important;
   opacity: 0.6 !important;
@@ -137,6 +141,7 @@ body {
   opacity: 0.8 !important;
   margin-left: 4px !important;
 }
+*/
 
 /* ============================================================
    BADGES - TERMINAL STYLE
@@ -217,6 +222,8 @@ body {
   letter-spacing: 0.05em !important;
 }
 
+/* Commented to prevent CSS leakage in marketplace */
+/*
 .text-xs.text-gray-500::before {
   content: '[' !important;
 }
@@ -224,6 +231,7 @@ body {
 .text-xs.text-gray-500::after {
   content: ']' !important;
 }
+*/
 
 /* ============================================================
    ANIMATIONS
@@ -257,12 +265,14 @@ body {
   animation: terminalBoot 0.2s ease-out !important;
 }
 
-/* Blinking cursor effect */
+/* Blinking cursor effect - Commented to prevent CSS leakage in marketplace */
+/*
 .text-white.break-words::after {
   content: '█' !important;
   animation: cursorBlink 1s step-end infinite !important;
   margin-left: 2px !important;
 }
+*/
 
 /* ============================================================
    END OF TERMINAL HACKER THEME
