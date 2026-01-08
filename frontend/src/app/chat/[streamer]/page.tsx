@@ -141,7 +141,12 @@ export default function ViewerChatPage() {
       window.location.href = authUrl;
     } catch (err) {
       console.error('Login failed:', err);
-      setError('Failed to initiate login. Please try again.');
+      setError({
+        type: 'NETWORK_ERROR',
+        message: 'Failed to initiate login',
+        userMessage: 'Failed to initiate login. Please check your connection and try again.',
+        canRetry: true,
+      });
     }
   };
 
