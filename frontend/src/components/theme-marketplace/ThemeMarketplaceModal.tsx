@@ -23,6 +23,51 @@ export default function ThemeMarketplaceModal({
   onClose,
   onApplyTheme,
 }: ThemeMarketplaceModalProps) {
+  // Add custom scrollbar styles
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const style = document.createElement('style');
+    style.id = 'theme-marketplace-scrollbar';
+    style.textContent = `
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 12px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(31, 41, 55, 0.5);
+        border-radius: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(139, 92, 246, 0.6);
+        border-radius: 6px;
+        border: 2px solid rgba(31, 41, 55, 0.5);
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(139, 92, 246, 0.8);
+      }
+      .theme-preview-body::-webkit-scrollbar {
+        width: 6px;
+      }
+      .theme-preview-body::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.3);
+      }
+      .theme-preview-body::-webkit-scrollbar-thumb {
+        background: rgba(107, 114, 128, 0.5);
+        border-radius: 3px;
+      }
+      .theme-preview-body::-webkit-scrollbar-thumb:hover {
+        background: rgba(107, 114, 128, 0.7);
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      const existingStyle = document.getElementById('theme-marketplace-scrollbar');
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+    };
+  }, [isOpen]);
   const {
     themes,
     loading,
@@ -75,14 +120,14 @@ export default function ThemeMarketplaceModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className="bg-gray-800 border border-gray-700 rounded-lg max-w-6xl w-full
-                   max-h-[90vh] flex flex-col shadow-2xl"
+                   max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
@@ -133,7 +178,7 @@ export default function ThemeMarketplaceModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
           {/* Loading State */}
           {loading && (
             <div className="flex items-center justify-center py-12">
