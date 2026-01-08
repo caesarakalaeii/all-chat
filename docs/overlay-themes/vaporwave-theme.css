@@ -138,7 +138,8 @@ body {
   z-index: 2 !important;
 }
 
-/* Secondary glow layer */
+/* Secondary glow layer - Commented to prevent CSS leakage in marketplace */
+/*
 .font-semibold.text-sm::before {
   content: attr(style) !important;
   position: absolute !important;
@@ -147,6 +148,7 @@ body {
   z-index: -1 !important;
   filter: blur(10px) !important;
 }
+*/
 
 /* ============================================================
    BADGES - RETRO STYLE
