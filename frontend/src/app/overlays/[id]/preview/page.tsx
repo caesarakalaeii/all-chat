@@ -306,10 +306,10 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev));
   }, [maxMessages]);
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // Auto-scroll to bottom when new messages arrive (disabled for preview to avoid annoying scroll jumps)
+  // useEffect(() => {
+  //   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // }, [messages]);
 
   const copyOverlayUrl = () => {
     const url = `${window.location.origin}/overlay/${params.id}`;
@@ -493,7 +493,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
           <div className="lg:col-span-2">
             <div
               id="overlay-preview-root"
-              className={`overlay-preview-root bg-black rounded-lg p-4 h-[700px] overflow-hidden relative ${
+              className={`overlay-preview-root bg-black rounded-lg p-4 h-[800px] overflow-hidden relative ${
                 useCustomCss ? 'overlay-preview' : ''
               }`}
             >
