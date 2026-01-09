@@ -508,10 +508,10 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		}
 
 		// Perform lightweight status check
-		isLive, statusErr := apiClient.CheckStreamStatus(ctx, cachedVideoID)
+		statusResult, statusErr := apiClient.CheckStreamStatus(ctx, cachedVideoID)
 		if statusErr == nil {
-			if isLive {
-				m.logger.Info("Cached video is live, using lightweight check (saved 99 quota units)",
+			if statusResult.IsLive && statusResult.LiveChatID != "" {
+				m.logger.Info("Cached video is live, using lightweight check (saved 100 quota units - no GetVideoDetails needed)",
 					zap.String("channel_id", channelID),
 					zap.String("video_id", cachedVideoID),
 				)
