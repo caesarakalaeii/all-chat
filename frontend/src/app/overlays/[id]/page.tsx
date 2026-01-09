@@ -26,17 +26,19 @@ import { BetaWarning } from '@/components/BetaWarning';
 export default function OverlayEditorPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
 
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [sources, setSources] = useState<ChatSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddSource, setShowAddSource] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showTikTokInput, setShowTikTokInput] = useState(false);
+  const [tiktokUsername, setTikTokUsername] = useState('');
   const [newSourcePlatform, setNewSourcePlatform] = useState<string>('twitch');
   const [newSourceChannel, setNewSourceChannel] = useState('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | 'tiktok' | null>(null);
+  const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | null>(null);
 
   // Load overlay and sources
   useEffect(() => {
@@ -98,8 +100,14 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
   }, [searchParams, params.id]);
 
   const handleOAuthAddSource = async (platform: string) => {
-    // Show beta warning for YouTube and TikTok
-    if (platform === 'youtube' || platform === 'tiktok') {
+    // TikTok uses username input (no OAuth)
+    if (platform === 'tiktok') {
+      setShowTikTokInput(true);
+      return;
+    }
+
+    // Show beta warning for YouTube
+    if (platform === 'youtube') {
       setShowBetaWarning(platform);
       return;
     }
@@ -107,7 +115,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     proceedWithOAuthAddSource(platform);
   };
 
-  const proceedWithOAuthAddSource = async (platform: string) => {
+  const proceedWithOAuthAddSource = async (platform: 'youtube' | 'twitch' | 'kick') => {
     try {
       // Get OAuth URL (or short-circuit response) from backend
       const response = await fetch(`/api/v1/auth/${platform}/add-source/${params.id}`, {
@@ -205,6 +213,36 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
       setNotification({
         type: 'error',
         message: 'Failed to add source. Please try again.'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleAddTikTokSource = async () => {
+    if (!tiktokUsername.trim()) return;
+
+    try {
+      const username = tiktokUsername.trim().toLowerCase().replace(/^@/, '');
+
+      await overlaysApi.addSource(params.id, {
+        platform: 'tiktok',
+        channel_id: username
+      });
+      const updatedSources = await overlaysApi.getSources(params.id);
+      setSources(updatedSources);
+      setShowAddSource(false);
+      setShowTikTokInput(false);
+      setTikTokUsername('');
+      setNotification({
+        type: 'success',
+        message: 'TikTok source added successfully!'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } catch (error) {
+      console.error('Failed to add TikTok source:', error);
+      setNotification({
+        type: 'error',
+        message: 'Failed to add TikTok source. Please try again.'
       });
       setTimeout(() => setNotification(null), 5000);
     }
@@ -491,14 +529,43 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
                     {getPlatformIcon('kick')}
                     Login with Kick
                   </button>
-                  <button
-                    onClick={() => handleOAuthAddSource('tiktok')}
-                    className="flex items-center justify-center gap-2 px-4 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors"
-                  >
-                    {getPlatformIcon('tiktok')}
-                    Login with TikTok
-                  </button>
                 </div>
+              </div>
+
+              {/* TikTok Username Input */}
+              <div className="mb-6">
+                <button
+                  onClick={() => setShowTikTokInput(!showTikTokInput)}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors w-full"
+                >
+                  {getPlatformIcon('tiktok')}
+                  Add TikTok by Username
+                  <span className="ml-2 text-xs bg-yellow-500 text-black px-2 py-0.5 rounded-full">BETA</span>
+                </button>
+
+                {showTikTokInput && (
+                  <div className="mt-3 p-4 bg-gray-700/50 rounded-lg border border-gray-600">
+                    <p className="text-xs text-gray-400 mb-3">
+                      Enter TikTok username (no OAuth required - uses unofficial library)
+                    </p>
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        value={tiktokUsername}
+                        onChange={(e) => setTikTokUsername(e.target.value)}
+                        placeholder="TikTok username (e.g., @username or username)"
+                        className="flex-1 px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-cyan-500"
+                        onKeyPress={(e) => e.key === 'Enter' && handleAddTikTokSource()}
+                      />
+                      <button
+                        onClick={handleAddTikTokSource}
+                        className="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Divider */}
@@ -511,12 +578,13 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
                 </div>
               </div>
 
-              {/* Advanced: Manual Entry */}
-              <div>
-                <button
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm mb-3"
-                >
+              {/* Advanced: Manual Entry (Admin Only) */}
+              {user?.is_admin && (
+                <div>
+                  <button
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm mb-3"
+                  >
                   <svg
                     className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
                     fill="none"
@@ -561,7 +629,8 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
                     </div>
                   </div>
                 )}
-              </div>
+                </div>
+              )}
 
               {/* Cancel Button */}
               <div className="mt-4 flex justify-end">
@@ -569,6 +638,8 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
                   onClick={() => {
                     setShowAddSource(false);
                     setShowAdvanced(false);
+                    setShowTikTokInput(false);
+                    setTikTokUsername('');
                     setNewSourceChannel('');
                   }}
                   className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
