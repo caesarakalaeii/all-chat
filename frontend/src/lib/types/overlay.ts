@@ -39,6 +39,7 @@ export interface DisplaySettings {
   show_badges?: boolean;
   show_avatars?: boolean;
   animation?: 'slide' | 'fade' | 'none';
+  disable_message_fade?: boolean;
 }
 
 export interface FilterSettings {
