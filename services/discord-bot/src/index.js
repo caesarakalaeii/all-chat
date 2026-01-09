@@ -41,6 +41,10 @@ const redisClient = createClient({
 redisSubscriber.on('error', (err) => console.error('Redis Subscriber Error:', err));
 redisClient.on('error', (err) => console.error('Redis Client Error:', err));
 
+// Store message IDs for editing instead of spamming
+let statusMessageId = null;
+let alertMessageId = null;
+
 /**
  * Creates a Discord embed for quota status
  */
@@ -248,7 +252,8 @@ async function fetchQuotaStatus() {
 }
 
 /**
- * Posts quota status to Discord channel
+ * Posts or updates quota status to Discord channel
+ * Edits existing message if available, otherwise creates new one
  */
 async function postQuotaStatus() {
   try {
@@ -265,15 +270,34 @@ async function postQuotaStatus() {
     }
 
     const embed = createQuotaEmbed(quotaData);
-    await channel.send({ embeds: [embed] });
-    console.log('Posted quota status to Discord');
+
+    // Try to edit existing message, or create new one if it doesn't exist
+    if (statusMessageId) {
+      try {
+        const message = await channel.messages.fetch(statusMessageId);
+        await message.edit({ embeds: [embed] });
+        console.log('Updated existing quota status message');
+      } catch (error) {
+        // Message was deleted or not found, create a new one
+        console.log('Status message not found, creating new one');
+        const newMessage = await channel.send({ embeds: [embed] });
+        statusMessageId = newMessage.id;
+        console.log('Posted new quota status message');
+      }
+    } else {
+      // First time, create the message
+      const newMessage = await channel.send({ embeds: [embed] });
+      statusMessageId = newMessage.id;
+      console.log('Posted initial quota status message');
+    }
   } catch (error) {
     console.error('Error posting quota status:', error);
   }
 }
 
 /**
- * Posts quota event (alert) to Discord channel
+ * Posts or updates quota event (alert) to Discord channel
+ * Edits existing alert message if available, otherwise creates new one
  */
 async function postQuotaEvent(event) {
   try {
@@ -284,8 +308,26 @@ async function postQuotaEvent(event) {
     }
 
     const embed = createQuotaEventEmbed(event);
-    await channel.send({ embeds: [embed] });
-    console.log(`Posted quota event to Discord: ${event.type}`);
+
+    // Try to edit existing alert message, or create new one if it doesn't exist
+    if (alertMessageId) {
+      try {
+        const message = await channel.messages.fetch(alertMessageId);
+        await message.edit({ embeds: [embed] });
+        console.log(`Updated existing alert message with: ${event.type}`);
+      } catch (error) {
+        // Message was deleted or not found, create a new one
+        console.log('Alert message not found, creating new one');
+        const newMessage = await channel.send({ embeds: [embed] });
+        alertMessageId = newMessage.id;
+        console.log(`Posted new alert message: ${event.type}`);
+      }
+    } else {
+      // First time, create the message
+      const newMessage = await channel.send({ embeds: [embed] });
+      alertMessageId = newMessage.id;
+      console.log(`Posted initial alert message: ${event.type}`);
+    }
   } catch (error) {
     console.error('Error posting quota event:', error);
   }
