@@ -390,19 +390,6 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			}
 		}
 
-		if platform == oauth.PlatformTikTok {
-			username := normalizeTikTokUsername(platformUser.GetUsername())
-			if username == "" {
-				h.logger.Error("TikTok username missing in OAuth profile")
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "TikTok username unavailable"})
-				return
-			}
-			sourceDetails = &OverlaySourceDetails{
-				ChannelID:   username,
-				ChannelName: platformUser.GetDisplayName(),
-			}
-		}
-
 		// Get or create user based on platform and context
 		var user *models.User
 		var jwtToken string
@@ -570,8 +557,6 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 		user, err = h.userRepo.GetByGoogleID(ctx, platformUser.GetID())
 	case oauth.PlatformKick:
 		user, err = h.userRepo.GetByKickID(ctx, platformUser.GetID())
-	case oauth.PlatformTikTok:
-		user, err = h.userRepo.GetByTikTokID(ctx, platformUser.GetID())
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -597,8 +582,6 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			user.GoogleID = &platformID
 		case oauth.PlatformKick:
 			user.KickID = &platformID
-		case oauth.PlatformTikTok:
-			user.TikTokOpenID = &platformID
 		}
 
 		if err := h.userRepo.Create(ctx, user); err != nil {
@@ -650,8 +633,6 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 		user.GoogleID = &platformID
 	case oauth.PlatformKick:
 		user.KickID = &platformID
-	case oauth.PlatformTikTok:
-		user.TikTokOpenID = &platformID
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -675,25 +656,6 @@ type OverlaySourceDetails struct {
 	ChannelName string
 }
 
-func normalizeTikTokUsername(input string) string {
-	username := strings.TrimSpace(strings.TrimSuffix(input, "/"))
-	if username == "" {
-		return ""
-	}
-
-	lower := strings.ToLower(username)
-	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
-		if idx := strings.LastIndex(lower, "/@"); idx != -1 {
-			username = username[idx+2:]
-		} else if idx := strings.LastIndex(lower, "/"); idx != -1 {
-			username = username[idx+1:]
-		}
-	}
-
-	username = strings.TrimPrefix(username, "@")
-	return strings.ToLower(username)
-}
-
 func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 	ctx context.Context,
 	userID string,
@@ -713,12 +675,6 @@ func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 		}
 		if details.ChannelName != "" {
 			channelName = details.ChannelName
-		}
-	}
-
-	if platform == oauth.PlatformTikTok && details == nil {
-		if username := normalizeTikTokUsername(platformUser.GetUsername()); username != "" {
-			channelID = username
 		}
 	}
 

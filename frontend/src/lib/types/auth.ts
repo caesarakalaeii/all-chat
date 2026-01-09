@@ -9,7 +9,6 @@ export interface User {
   id: string;
   twitch_id?: string | null;
   google_id?: string | null;
-  tiktok_open_id?: string | null;
   kick_id?: string | null;
   auth_provider?: string;
   username: string;
