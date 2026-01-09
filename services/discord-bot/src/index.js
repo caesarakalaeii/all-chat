@@ -318,11 +318,7 @@ async function start() {
     await redisSubscriber.subscribe('quota:alerts', handleQuotaAlert);
     console.log('✅ Subscribed to quota:alerts channel');
 
-    // Login to Discord
-    await discordClient.login(DISCORD_TOKEN);
-    console.log('✅ Discord bot logged in');
-
-    // Wait for Discord to be ready
+    // Set up Discord ready event listener BEFORE login to avoid race condition
     discordClient.once('ready', async () => {
       console.log(`✅ Discord bot ready as ${discordClient.user.tag}`);
 
@@ -338,6 +334,10 @@ async function start() {
 
       console.log(`⏰ Scheduled periodic updates every ${STATUS_UPDATE_INTERVAL / 1000 / 60} minutes`);
     });
+
+    // Login to Discord (ready event will fire after successful login)
+    await discordClient.login(DISCORD_TOKEN);
+    console.log('✅ Discord bot logged in');
 
   } catch (error) {
     console.error('Failed to start bot:', error);
