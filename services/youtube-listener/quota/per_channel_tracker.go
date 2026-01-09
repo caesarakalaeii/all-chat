@@ -417,9 +417,34 @@ func (t *PerChannelTracker) ClearCachedVideoID(ctx context.Context, channelID st
 	return nil
 }
 
-// RecordOfflineCheck increments the consecutive offline check counter
+// RecordOfflineCheck clears the cached video ID immediately on first offline detection
+// This is a quota optimization - avoiding redundant expensive searches for ended streams
 func (t *PerChannelTracker) RecordOfflineCheck(ctx context.Context, channelID string) error {
-	_, err := t.db.Exec(ctx, `
+	// Get current cached video
+	quota, err := t.GetChannelQuota(ctx, channelID)
+	if err != nil {
+		return fmt.Errorf("failed to get channel quota: %w", err)
+	}
+
+	// If we have a cached video ID, clear it IMMEDIATELY (don't wait for 3 checks)
+	// This prevents wasting 100 quota units on redundant Search.List calls
+	if quota.CachedVideoID != nil && *quota.CachedVideoID != "" {
+		t.logger.Info("Clearing cached video on first offline check (quota optimization)",
+			zap.String("channel_id", channelID),
+			zap.String("cached_video_id", *quota.CachedVideoID),
+		)
+
+		if err := t.ClearCachedVideoID(ctx, channelID); err != nil {
+			t.logger.Warn("Failed to clear cached video ID",
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+			return err
+		}
+	}
+
+	// Still increment the offline counter for monitoring/metrics
+	_, err = t.db.Exec(ctx, `
 		UPDATE youtube_channel_quota
 		SET consecutive_offline_checks = consecutive_offline_checks + 1
 		WHERE channel_id = $1
@@ -427,17 +452,6 @@ func (t *PerChannelTracker) RecordOfflineCheck(ctx context.Context, channelID st
 
 	if err != nil {
 		return fmt.Errorf("failed to record offline check: %w", err)
-	}
-
-	// Clear cached video ID after 3 consecutive offline checks
-	quota, err := t.GetChannelQuota(ctx, channelID)
-	if err == nil && quota.ConsecutiveOfflineChecks >= 3 && quota.CachedVideoID != nil {
-		if err := t.ClearCachedVideoID(ctx, channelID); err != nil {
-			t.logger.Warn("Failed to clear cached video ID",
-				zap.String("channel_id", channelID),
-				zap.Error(err),
-			)
-		}
 	}
 
 	return nil

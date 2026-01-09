@@ -128,16 +128,13 @@ func (p *Poller) pollLoop(ctx context.Context) {
 					// Manager will clean up if stream stays offline
 				}
 
-				// Check for quota exceeded - apply long backoff but don't stop
-				// Quota resets daily at midnight PT, poller should auto-recover
+				// Check for quota exceeded - STOP ENTIRELY, don't retry
+				// Quota resets daily at midnight PT, periodic sync will restart poller after reset
 				if strings.Contains(err.Error(), "quotaExceeded") || strings.Contains(err.Error(), "insufficient quota") {
-					p.logger.Warn("Quota exceeded, applying maximum backoff (will auto-recover at quota reset)",
+					p.logger.Error("Quota exceeded, stopping poller permanently (will resume after quota reset via periodic sync)",
 						zap.String("stream_id", p.stream.StreamID),
-						zap.Duration("backoff", p.maxBackoff),
 					)
-					// Set to max backoff but keep trying
-					p.backoffDuration = p.maxBackoff
-					// Don't return - quota will reset and poller will auto-recover
+					return  // Exit pollLoop entirely - don't waste quota retrying
 				}
 			} else {
 				// Success - reset error backoff

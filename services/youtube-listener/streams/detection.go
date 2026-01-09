@@ -177,7 +177,7 @@ func (d *LiveStreamDetector) performStatusCheck(
 	}
 
 	// Perform status check using existing CheckStreamStatus method
-	isLive, err := d.client.CheckStreamStatus(ctx, videoID)
+	statusResult, err := d.client.CheckStreamStatus(ctx, videoID)
 
 	// Record quota usage (1 unit)
 	if recordErr := d.quotaTracker.RecordUsage(ctx, channelID, 1); recordErr != nil {
@@ -213,7 +213,7 @@ func (d *LiveStreamDetector) performStatusCheck(
 		)
 	}
 
-	if !isLive {
+	if !statusResult.IsLive {
 		// Stream is offline
 		d.logger.Debug("Status check: stream offline",
 			zap.String("channel_id", channelID),

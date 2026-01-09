@@ -2,14 +2,22 @@ package youtube
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/caesar/all-chat/services/overlay-manager/clients"
+	"go.uber.org/zap"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
+)
+
+var (
+	// ErrQuotaExhausted is returned when YouTube API quota is exhausted
+	ErrQuotaExhausted = errors.New("youtube API quota exhausted")
 )
 
 var (
@@ -22,17 +30,21 @@ var (
 
 // Resolver resolves YouTube URLs/handles to channel IDs
 type Resolver struct {
-	apiKey     string
-	httpClient *http.Client
+	apiKey      string
+	httpClient  *http.Client
+	quotaClient *clients.YouTubeQuotaClient
+	logger      *zap.Logger
 }
 
 // NewResolver creates a new YouTube resolver
-func NewResolver(apiKey string) *Resolver {
+func NewResolver(apiKey string, quotaClient *clients.YouTubeQuotaClient, logger *zap.Logger) *Resolver {
 	return &Resolver{
 		apiKey: apiKey,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+		quotaClient: quotaClient,
+		logger:      logger,
 	}
 }
 
@@ -72,7 +84,23 @@ func (r *Resolver) ResolveToChannelID(ctx context.Context, input string) (string
 }
 
 // resolveHandleToChannelID resolves a YouTube handle to channel ID using Search API
+// Costs 100 quota units (Search.List)
 func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) (string, error) {
+	const quotaCost = 100  // Search.List API cost
+
+	// 1. CHECK QUOTA BEFORE API CALL
+	if r.quotaClient != nil {
+		allowed, err := r.quotaClient.CheckQuota(ctx, quotaCost)
+		if err != nil {
+			// Network error - fail open but log warning
+			r.logger.Warn("Failed to check quota (allowing request)", zap.Error(err))
+		} else if !allowed {
+			// Quota exhausted - deny request
+			return "", ErrQuotaExhausted
+		}
+	}
+
+	// 2. MAKE YOUTUBE API CALL
 	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey), option.WithHTTPClient(r.httpClient))
 	if err != nil {
 		return "", fmt.Errorf("failed to create YouTube service: %w", err)
@@ -85,6 +113,18 @@ func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) 
 		MaxResults(1)
 
 	response, err := call.Do()
+
+	// 3. RECORD USAGE AFTER API CALL (always, even on error - YouTube charges for most errors)
+	if r.quotaClient != nil {
+		if recordErr := r.quotaClient.RecordUsage(ctx, quotaCost); recordErr != nil {
+			r.logger.Warn("Failed to record quota usage",
+				zap.Int("units", quotaCost),
+				zap.Error(recordErr),
+			)
+		}
+	}
+
+	// 4. PROCESS RESPONSE
 	if err != nil {
 		return "", fmt.Errorf("failed to search for channel: %w", err)
 	}
@@ -102,7 +142,21 @@ func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) 
 }
 
 // resolveVideoToChannelID resolves a video ID to its channel ID
+// Costs 1 quota unit (Videos.List)
 func (r *Resolver) resolveVideoToChannelID(ctx context.Context, videoID string) (string, error) {
+	const quotaCost = 1  // Videos.List API cost
+
+	// 1. CHECK QUOTA BEFORE API CALL
+	if r.quotaClient != nil {
+		allowed, err := r.quotaClient.CheckQuota(ctx, quotaCost)
+		if err != nil {
+			r.logger.Warn("Failed to check quota (allowing request)", zap.Error(err))
+		} else if !allowed {
+			return "", ErrQuotaExhausted
+		}
+	}
+
+	// 2. MAKE YOUTUBE API CALL
 	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey), option.WithHTTPClient(r.httpClient))
 	if err != nil {
 		return "", fmt.Errorf("failed to create YouTube service: %w", err)
@@ -111,6 +165,18 @@ func (r *Resolver) resolveVideoToChannelID(ctx context.Context, videoID string) 
 	// Get video details
 	call := service.Videos.List([]string{"snippet"}).Id(videoID)
 	response, err := call.Do()
+
+	// 3. RECORD USAGE AFTER API CALL
+	if r.quotaClient != nil {
+		if recordErr := r.quotaClient.RecordUsage(ctx, quotaCost); recordErr != nil {
+			r.logger.Warn("Failed to record quota usage",
+				zap.Int("units", quotaCost),
+				zap.Error(recordErr),
+			)
+		}
+	}
+
+	// 4. PROCESS RESPONSE
 	if err != nil {
 		return "", fmt.Errorf("failed to get video details: %w", err)
 	}
@@ -128,7 +194,21 @@ func (r *Resolver) resolveVideoToChannelID(ctx context.Context, videoID string) 
 }
 
 // GetChannelInfo gets channel information for display
+// Costs 1 quota unit (Channels.List)
 func (r *Resolver) GetChannelInfo(ctx context.Context, channelID string) (*ChannelInfo, error) {
+	const quotaCost = 1  // Channels.List API cost
+
+	// 1. CHECK QUOTA BEFORE API CALL
+	if r.quotaClient != nil {
+		allowed, err := r.quotaClient.CheckQuota(ctx, quotaCost)
+		if err != nil {
+			r.logger.Warn("Failed to check quota (allowing request)", zap.Error(err))
+		} else if !allowed {
+			return nil, ErrQuotaExhausted
+		}
+	}
+
+	// 2. MAKE YOUTUBE API CALL
 	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey), option.WithHTTPClient(r.httpClient))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create YouTube service: %w", err)
@@ -136,6 +216,18 @@ func (r *Resolver) GetChannelInfo(ctx context.Context, channelID string) (*Chann
 
 	call := service.Channels.List([]string{"snippet", "statistics"}).Id(channelID)
 	response, err := call.Do()
+
+	// 3. RECORD USAGE AFTER API CALL
+	if r.quotaClient != nil {
+		if recordErr := r.quotaClient.RecordUsage(ctx, quotaCost); recordErr != nil {
+			r.logger.Warn("Failed to record quota usage",
+				zap.Int("units", quotaCost),
+				zap.Error(recordErr),
+			)
+		}
+	}
+
+	// 4. PROCESS RESPONSE
 	if err != nil {
 		return nil, fmt.Errorf("failed to get channel info: %w", err)
 	}
@@ -148,7 +240,7 @@ func (r *Resolver) GetChannelInfo(ctx context.Context, channelID string) (*Chann
 	return &ChannelInfo{
 		ChannelID:   channelID,
 		Title:       channel.Snippet.Title,
-		Description: channel.Snippet.Description,
+		Description:  channel.Snippet.Description,
 		CustomURL:   channel.Snippet.CustomUrl,
 		Thumbnail:   channel.Snippet.Thumbnails.Default.Url,
 	}, nil

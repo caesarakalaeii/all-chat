@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -50,6 +51,21 @@ func (h *YouTubeHandler) ResolveChannel(c *gin.Context) {
 	// Resolve to channel ID
 	channelID, err := h.resolver.ResolveToChannelID(c.Request.Context(), req.Input)
 	if err != nil {
+		// Check if quota exhausted
+		if errors.Is(err, youtube.ErrQuotaExhausted) {
+			h.logger.Warn("YouTube API quota exhausted",
+				zap.String("input", req.Input),
+				zap.String("user_ip", c.ClientIP()),
+			)
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error": "YouTube API quota exhausted",
+				"message": "Daily YouTube API quota limit reached. Please try again after midnight PST.",
+				"retry_after": "3600",
+			})
+			return
+		}
+
+		// Other errors
 		h.logger.Warn("Failed to resolve YouTube input",
 			zap.String("input", req.Input),
 			zap.Error(err),
