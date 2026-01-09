@@ -9,6 +9,7 @@ const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = process.env.REDIS_PORT || 6379;
 const YOUTUBE_LISTENER_URL = process.env.YOUTUBE_LISTENER_URL || 'http://localhost:8086';
 const STATUS_UPDATE_INTERVAL = parseInt(process.env.STATUS_UPDATE_INTERVAL || '3600000'); // 1 hour default
+const GRAFANA_PANEL_URL = process.env.GRAFANA_PANEL_URL || null; // Optional Grafana panel embed URL
 
 // Validate required env vars
 if (!DISCORD_TOKEN || !DISCORD_CHANNEL_ID) {
@@ -97,6 +98,16 @@ function createQuotaEmbed(data) {
     )
     .setTimestamp()
     .setFooter({ text: 'All-Chat Quota Monitor' });
+
+  // Add Grafana dashboard link if configured
+  if (GRAFANA_PANEL_URL) {
+    embed.setURL(GRAFANA_PANEL_URL);
+    embed.addFields({
+      name: '📊 Live Dashboard',
+      value: `[View Interactive Grafana Dashboard](${GRAFANA_PANEL_URL})`,
+      inline: false
+    });
+  }
 
   // Add top consuming channels if available
   if (channels && channels.length > 0) {
