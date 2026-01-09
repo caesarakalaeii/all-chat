@@ -208,7 +208,8 @@ func main() {
 	router.GET("/status", healthHandler.Status)
 
 	// Quota handlers
-	quotaHandler := handlers.NewQuotaHandler(coordinator, quotaTracker, perChannelTracker, logger)
+	quotaCoordinator := quota.NewCoordinator(quotaTracker, perChannelQuotaTracker, log)
+	quotaHandler := handlers.NewQuotaHandler(quotaCoordinator, quotaTracker, perChannelQuotaTracker, log)
 	router.GET("/quota/status", quotaHandler.GetQuotaStatus)
 	router.GET("/quota/channels/:channel_id", quotaHandler.GetChannelQuota)
 	router.GET("/quota/history", quotaHandler.GetQuotaHistory)
