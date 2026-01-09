@@ -7,14 +7,13 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Platform represents an OAuth platform (Twitch, YouTube, Kick, TikTok)
+// Platform represents an OAuth platform (Twitch, YouTube, Kick)
 type Platform string
 
 const (
 	PlatformTwitch  Platform = "twitch"
 	PlatformYouTube Platform = "youtube"
 	PlatformKick    Platform = "kick"
-	PlatformTikTok  Platform = "tiktok"
 )
 
 // PlatformUserInfo is a generic user info interface
@@ -75,26 +74,6 @@ func (y *YouTubeUserInfoWrapper) GetUsername() string {
 func (y *YouTubeUserInfoWrapper) GetDisplayName() string     { return y.Name }
 func (y *YouTubeUserInfoWrapper) GetProfileImageURL() string { return y.Picture }
 func (y *YouTubeUserInfoWrapper) GetPlatform() Platform      { return PlatformYouTube }
-
-// TikTokUserInfoWrapper wraps TikTokUserInfo to implement PlatformUserInfo
-type TikTokUserInfoWrapper struct {
-	OpenID      string
-	UnionID     string
-	DisplayName string
-	Username    string
-	AvatarURL   string
-}
-
-func (t *TikTokUserInfoWrapper) GetID() string { return t.OpenID }
-func (t *TikTokUserInfoWrapper) GetUsername() string {
-	if t.Username != "" {
-		return t.Username
-	}
-	return t.DisplayName
-}
-func (t *TikTokUserInfoWrapper) GetDisplayName() string     { return t.DisplayName }
-func (t *TikTokUserInfoWrapper) GetProfileImageURL() string { return t.AvatarURL }
-func (t *TikTokUserInfoWrapper) GetPlatform() Platform      { return PlatformTikTok }
 
 // KickUserInfoWrapper wraps KickUserInfo to implement PlatformUserInfo
 type KickUserInfoWrapper struct {

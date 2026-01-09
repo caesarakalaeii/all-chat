@@ -14,7 +14,6 @@ interface User {
   twitch_id?: string;
   youtube_id?: string;
   kick_id?: string;
-  tiktok_id?: string;
 }
 
 interface UserOverlay {
@@ -197,11 +196,6 @@ export default function UsersPage() {
                               Kick
                             </span>
                           )}
-                          {user.tiktok_id && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-pink-100 text-pink-800">
-                              TikTok
-                            </span>
-                          )}
                         </div>
                       </div>
                       <p className="text-sm text-gray-500">@{user.username}</p>
@@ -267,12 +261,6 @@ export default function UsersPage() {
                         <div className="flex items-center text-sm">
                           <span className="font-medium text-green-600">Kick:</span>
                           <span className="ml-2 text-gray-700 font-mono text-xs">{selectedUser.kick_id}</span>
-                        </div>
-                      )}
-                      {selectedUser.tiktok_id && (
-                        <div className="flex items-center text-sm">
-                          <span className="font-medium text-pink-600">TikTok:</span>
-                          <span className="ml-2 text-gray-700 font-mono text-xs">{selectedUser.tiktok_id}</span>
                         </div>
                       )}
                     </dd>

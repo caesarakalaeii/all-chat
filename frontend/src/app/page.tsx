@@ -24,7 +24,7 @@ import { BetaWarning } from '@/components/BetaWarning';
 export default function LandingPage() {
   const router = useRouter();
   const { user, token } = useAuthStore();
-  const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | 'tiktok' | null>(null);
+  const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | null>(null);
 
   // Redirect to dashboard if already logged in
   useEffect(() => {
@@ -33,9 +33,9 @@ export default function LandingPage() {
     }
   }, [user, token, router]);
 
-  const handleLogin = async (platform: 'twitch' | 'youtube' | 'tiktok' | 'kick') => {
-    // Show beta warning for YouTube and TikTok
-    if (platform === 'youtube' || platform === 'tiktok') {
+  const handleLogin = async (platform: 'twitch' | 'youtube' | 'kick') => {
+    // Show beta warning for YouTube
+    if (platform === 'youtube') {
       setShowBetaWarning(platform);
       return;
     }
@@ -56,7 +56,7 @@ export default function LandingPage() {
     }
   };
 
-  const proceedWithLogin = async (platform: 'youtube' | 'tiktok') => {
+  const proceedWithLogin = async (platform: 'youtube') => {
     setShowBetaWarning(null);
     try {
       const endpoint = `/api/v1/auth/${platform}/login`;
@@ -115,25 +115,6 @@ export default function LandingPage() {
                 <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
               </svg>
               Login with YouTube
-              <span className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full">
-                BETA
-              </span>
-            </button>
-
-            <button
-              onClick={() => handleLogin('tiktok')}
-              className="w-full bg-black hover:bg-gray-900 text-white font-semibold py-4 px-6 rounded-lg text-lg transition-colors flex items-center justify-center gap-2 relative"
-            >
-              {/* TikTok Logo SVG */}
-              <svg
-                className="w-6 h-6"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
-              </svg>
-              Login with TikTok
               <span className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full">
                 BETA
               </span>
