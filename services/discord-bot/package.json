@@ -1,0 +1,19 @@
+{
+  "name": "all-chat-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for monitoring YouTube API quota usage",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": ["discord", "bot", "quota", "monitoring"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "redis": "^4.6.13",
+    "axios": "^1.6.7"
+  }
+}
