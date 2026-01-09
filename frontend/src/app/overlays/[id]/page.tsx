@@ -99,7 +99,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     }
   }, [searchParams, params.id]);
 
-  const handleOAuthAddSource = async (platform: string) => {
+  const handleOAuthAddSource = async (platform: 'twitch' | 'youtube' | 'kick' | 'tiktok') => {
     // TikTok uses username input (no OAuth)
     if (platform === 'tiktok') {
       setShowTikTokInput(true);
