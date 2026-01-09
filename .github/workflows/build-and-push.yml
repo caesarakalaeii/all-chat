@@ -36,6 +36,7 @@ jobs:
       tiktok-listener: ${{ steps.changes.outputs.tiktok-listener }}
       message-processor: ${{ steps.changes.outputs.message-processor }}
       source-manager: ${{ steps.changes.outputs.source-manager }}
+      discord-bot: ${{ steps.changes.outputs.discord-bot }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
     steps:
@@ -76,6 +77,8 @@ jobs:
             source-manager:
               - 'services/source-manager/**'
               - 'shared/**'
+            discord-bot:
+              - 'services/discord-bot/**'
             frontend:
               - 'frontend/**'
             shared:
@@ -123,6 +126,9 @@ jobs:
           - name: source-manager
             changed: ${{ needs.detect-changes.outputs.source-manager }}
             path: services/source-manager
+          - name: discord-bot
+            changed: ${{ needs.detect-changes.outputs.discord-bot }}
+            path: services/discord-bot
           - name: frontend
             changed: ${{ needs.detect-changes.outputs.frontend }}
             path: frontend

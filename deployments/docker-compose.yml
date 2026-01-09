@@ -315,6 +315,28 @@ services:
       - allchat
     restart: unless-stopped
 
+  # Discord Quota Monitor Bot (Phase 5)
+  discord-bot:
+    build:
+      context: ../services/discord-bot
+      dockerfile: Dockerfile
+    container_name: allchat-discord-bot
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      YOUTUBE_LISTENER_URL: http://youtube-listener:8086
+      STATUS_UPDATE_INTERVAL: "3600000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      youtube-listener:
+        condition: service_started
+    networks:
+      - allchat
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     driver: local
