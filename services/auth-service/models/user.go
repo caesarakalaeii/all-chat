@@ -7,9 +7,8 @@ type User struct {
 	ID              string    `json:"id"`
 	TwitchID        *string   `json:"twitch_id,omitempty"`      // Nullable for other platform users
 	GoogleID        *string   `json:"google_id,omitempty"`      // Nullable for non-YouTube users
-	TikTokOpenID    *string   `json:"tiktok_open_id,omitempty"` // Nullable for non-TikTok users
 	KickID          *string   `json:"kick_id,omitempty"`        // Nullable for non-Kick users
-	AuthProvider    string    `json:"auth_provider"`            // "twitch", "youtube", "tiktok", or "kick"
+	AuthProvider    string    `json:"auth_provider"`            // "twitch", "youtube", or "kick"
 	Username        string    `json:"username"`
 	DisplayName     string    `json:"display_name"`
 	ProfileImageURL string    `json:"profile_image_url"`
@@ -45,15 +44,6 @@ type YouTubeUserInfo struct {
 	FamilyName string `json:"family_name"`
 	Picture    string `json:"picture"`
 	Locale     string `json:"locale"`
-}
-
-// TikTokUserInfo represents TikTok user data from OAuth
-type TikTokUserInfo struct {
-	OpenID      string `json:"open_id"`      // User's unique ID for this app
-	UnionID     string `json:"union_id"`     // User's unique ID across all apps
-	Username    string `json:"username"`     // User's TikTok handle (@username)
-	DisplayName string `json:"display_name"` // User's display name
-	AvatarURL   string `json:"avatar_url"`   // User's profile picture URL
 }
 
 // KickUserInfo represents Kick user data from OAuth

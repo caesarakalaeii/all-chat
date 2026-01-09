@@ -218,7 +218,7 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		Platform:     req.Platform,
 		ChannelID:    channelID,
 		ChannelName:  channelName,
-		AuthRequired: req.Platform == "youtube" || req.Platform == "kick" || req.Platform == "tiktok",
+		AuthRequired: req.Platform == "youtube" || req.Platform == "kick",
 		Config:       make(map[string]interface{}),
 		IsActive:     true,
 	}

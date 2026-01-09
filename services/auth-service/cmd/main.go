@@ -72,10 +72,6 @@ func main() {
 	youtubeAPIKey := os.Getenv("YOUTUBE_API_KEY")
 	youtubeRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/youtube/callback")
 
-	tiktokClientKey := os.Getenv("TIKTOK_CLIENT_KEY")
-	tiktokClientSecret := os.Getenv("TIKTOK_CLIENT_SECRET")
-	tiktokRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/tiktok/callback")
-
 	kickClientID := os.Getenv("KICK_CLIENT_ID")
 	kickClientSecret := os.Getenv("KICK_CLIENT_SECRET")
 	kickRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/kick/callback")
@@ -90,10 +86,6 @@ func main() {
 
 	if youtubeClientID == "" || youtubeClientSecret == "" || youtubeAPIKey == "" {
 		log.Warn("YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, and YOUTUBE_API_KEY not set, YouTube OAuth will not be available")
-	}
-
-	if tiktokClientKey == "" || tiktokClientSecret == "" {
-		log.Warn("TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET not set, TikTok OAuth will not be available")
 	}
 
 	if kickClientID == "" || kickClientSecret == "" {
@@ -162,11 +154,6 @@ func main() {
 		youtubeOAuth = oauth.NewYouTubeOAuth(youtubeClientID, youtubeClientSecret, youtubeRedirectURL, youtubeAPIKey)
 	}
 
-	var tiktokOAuth *oauth.TikTokOAuth
-	if tiktokClientKey != "" && tiktokClientSecret != "" {
-		tiktokOAuth = oauth.NewTikTokOAuth(tiktokClientKey, tiktokClientSecret, tiktokRedirectURL)
-	}
-
 	var kickOAuth *oauth.KickOAuth
 	if kickClientID != "" && kickClientSecret != "" {
 		kickOAuth = oauth.NewKickOAuth(kickClientID, kickClientSecret, kickRedirectURL)
@@ -179,9 +166,6 @@ func main() {
 	providers[oauth.PlatformTwitch] = twitchOAuth
 	if youtubeOAuth != nil {
 		providers[oauth.PlatformYouTube] = youtubeOAuth
-	}
-	if tiktokOAuth != nil {
-		providers[oauth.PlatformTikTok] = tiktokOAuth
 	}
 	if kickOAuth != nil {
 		providers[oauth.PlatformKick] = kickOAuth
@@ -253,9 +237,6 @@ func main() {
 	router.GET("/youtube/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformYouTube))
 	router.GET("/youtube/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformYouTube))
 
-	router.GET("/tiktok/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformTikTok))
-	router.GET("/tiktok/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformTikTok))
-
 	router.GET("/kick/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformKick))
 	router.GET("/kick/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformKick))
 
@@ -288,7 +269,6 @@ func main() {
 		protected.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))
 		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
-		protected.GET("/tiktok/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTikTok))
 	}
 
 	// Viewer protected routes (require viewer JWT)

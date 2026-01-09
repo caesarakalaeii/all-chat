@@ -274,8 +274,6 @@ func (h *PlatformAuthHandler) getOrCreateUser(
 		user, err = h.userRepo.GetByGoogleID(ctx, platformUser.GetID())
 	case oauth.PlatformKick:
 		user, err = h.userRepo.GetByKickID(ctx, platformUser.GetID())
-	case oauth.PlatformTikTok:
-		user, err = h.userRepo.GetByTikTokID(ctx, platformUser.GetID())
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -301,8 +299,6 @@ func (h *PlatformAuthHandler) getOrCreateUser(
 			user.GoogleID = &platformID
 		case oauth.PlatformKick:
 			user.KickID = &platformID
-		case oauth.PlatformTikTok:
-			user.TikTokOpenID = &platformID
 		}
 
 		if err := h.userRepo.Create(ctx, user); err != nil {

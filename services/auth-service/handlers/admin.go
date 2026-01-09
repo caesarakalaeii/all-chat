@@ -49,7 +49,6 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		TwitchID        *string `json:"twitch_id"`
 		YouTubeID       *string `json:"youtube_id"`
 		KickID          *string `json:"kick_id"`
-		TikTokID        *string `json:"tiktok_id"`
 	}
 
 	response := make([]UserResponse, len(users))
@@ -64,7 +63,6 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 			TwitchID:        user.TwitchID,
 			YouTubeID:       user.GoogleID,
 			KickID:          user.KickID,
-			TikTokID:        user.TikTokOpenID,
 		}
 	}
 
@@ -97,7 +95,6 @@ func (h *AdminHandler) GetUser(c *gin.Context) {
 		"twitch_id":         user.TwitchID,
 		"youtube_id":        user.GoogleID,
 		"kick_id":           user.KickID,
-		"tiktok_id":         user.TikTokOpenID,
 	}
 
 	h.logger.Info("Fetched user", zap.String("user_id", userID))

@@ -24,10 +24,10 @@ All-Chat is a cloud-native microservices platform for aggregating and displaying
 **Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from Twitch + YouTube + Kick + TikTok simultaneously, or be configured with a single source - providing full flexibility for streamers who multistream or want unified chat displays.
 
 **Platform Status**:
-- ✅ **Twitch**: Fully implemented and tested (IRC-based)
+- ✅ **Twitch**: Fully implemented and tested (IRC-based, username-only)
 - ✅ **YouTube**: Fully implemented (HTTP polling, OAuth per user)
 - ✅ **Kick**: OAuth and Listener implemented (Pusher WebSocket)
-- 🚧 **TikTok**: OAuth implemented, Listener in development
+- ✅ **TikTok**: Username-based (no OAuth), unofficial library
 
 **Current Status**: Phase 4 complete. All 6 core listener services implemented (API Gateway, Twitch Listener, YouTube Listener, Kick Listener, Message Processor, Source Manager). Twitch, YouTube, and Kick integrations ready for production.
 
@@ -319,10 +319,6 @@ YOUTUBE_CLIENT_SECRET=
 # Kick OAuth (required for Kick OAuth support)
 KICK_CLIENT_ID=
 KICK_CLIENT_SECRET=
-
-# TikTok OAuth (required for TikTok OAuth support)
-TIKTOK_CLIENT_KEY=
-TIKTOK_CLIENT_SECRET=
 
 # Frontend (used to build OAuth redirect URIs)
 FRONTEND_URL=http://localhost:3000
