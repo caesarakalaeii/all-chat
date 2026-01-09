@@ -1,0 +1,235 @@
+apiVersion: v1
+data:
+  allchat-alerts.yaml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: allchat-critical
+        folder: All-Chat Alerts
+        interval: 1m
+        rules:
+          - uid: youtube-quota-critical
+            title: YouTube Quota Critical (>95%)
+            condition: B
+            data:
+              - refId: A
+                queryType: instant
+                relativeTimeRange:
+                  from: 60
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: max(listener_quota_usage_percentage{platform="youtube"})
+                  refId: A
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+              - refId: B
+                queryType: ""
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  refId: B
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 95
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      type: query
+                  expression: A
+            noDataState: OK
+            execErrState: OK
+            for: 5m
+            annotations:
+              summary: "YouTube API quota >95%, approaching exhaustion"
+              description: "YouTube quota is at {{ $values.A }}%. Critical threshold exceeded. Only {{ printf \"%.0f\" (sub 10000 (mul (div $values.A 100) 10000)) }} units remaining."
+            labels:
+              severity: critical
+              team: allchat
+              platform: youtube
+
+          - uid: youtube-quota-exhausted
+            title: YouTube Quota Exhausted (100%)
+            condition: B
+            data:
+              - refId: A
+                queryType: instant
+                relativeTimeRange:
+                  from: 60
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: max(listener_quota_usage_percentage{platform="youtube"})
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  refId: B
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 100
+                        type: gte
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      type: query
+                  expression: A
+            noDataState: OK
+            execErrState: OK
+            for: 1m
+            annotations:
+              summary: "YouTube API quota completely exhausted"
+              description: "YouTube API quota at 100%. All API calls will fail until quota reset at midnight PST."
+            labels:
+              severity: critical
+              team: allchat
+              platform: youtube
+
+      - orgId: 1
+        name: allchat-warnings
+        folder: All-Chat Alerts
+        interval: 1m
+        rules:
+          - uid: youtube-quota-high
+            title: YouTube Quota High (>80%)
+            condition: B
+            data:
+              - refId: A
+                queryType: instant
+                relativeTimeRange:
+                  from: 60
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: max(listener_quota_usage_percentage{platform="youtube"})
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  refId: B
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 80
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      type: query
+                  expression: A
+            noDataState: OK
+            execErrState: OK
+            for: 10m
+            annotations:
+              summary: "YouTube quota >80%, approaching limits"
+              description: "YouTube quota at {{ $values.A }}%. Monitor usage and consider throttling."
+            labels:
+              severity: warning
+              team: allchat
+              platform: youtube
+
+          - uid: pod-crashloop
+            title: All-Chat Pod CrashLooping
+            condition: B
+            data:
+              - refId: A
+                queryType: instant
+                relativeTimeRange:
+                  from: 60
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: increase(kube_pod_container_status_restarts_total{namespace="allchat"}[5m])
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  refId: B
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 3
+                        type: gte
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      type: query
+                  expression: A
+            noDataState: OK
+            execErrState: OK
+            for: 1m
+            annotations:
+              summary: "Pod {{ $labels.pod }} CrashLooping"
+              description: "Pod {{ $labels.pod }} has restarted {{ $values.A }} times in 5 minutes."
+            labels:
+              severity: critical
+              team: allchat
+
+          - uid: pod-not-running
+            title: All-Chat Pod Not Running
+            condition: B
+            data:
+              - refId: A
+                queryType: instant
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: kube_pod_status_phase{namespace="allchat", phase!="Running", phase!="Succeeded"}
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  refId: B
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 1
+                        type: gte
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      type: query
+                  expression: A
+            noDataState: OK
+            execErrState: OK
+            for: 3m
+            annotations:
+              summary: "Pod {{ $labels.pod }} not Running"
+              description: "Pod {{ $labels.pod }} is in {{ $labels.phase }} state. Service degraded."
+            labels:
+              severity: critical
+              team: allchat
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"allchat-alerts.yaml":"apiVersion: 1\ngroups:\n  - orgId: 1\n    name: allchat-critical\n    folder: All-Chat Alerts\n    interval: 1m\n    rules:\n      - uid: youtube-quota-critical\n        title: YouTube Quota Critical (\u003e95%)\n        condition: B\n        data:\n          - refId: A\n            queryType: instant\n            relativeTimeRange:\n              from: 60\n              to: 0\n            datasourceUid: prometheus\n            model:\n              expr: max(listener_quota_usage_percentage{platform=\"youtube\"})\n              refId: A\n              intervalMs: 1000\n              maxDataPoints: 43200\n          - refId: B\n            queryType: \"\"\n            relativeTimeRange:\n              from: 0\n              to: 0\n            datasourceUid: __expr__\n            model:\n              type: threshold\n              refId: B\n              conditions:\n                - evaluator:\n                    params:\n                      - 95\n                    type: gt\n                  operator:\n                    type: and\n                  query:\n                    params:\n                      - A\n                  type: query\n              expression: A\n        noDataState: OK\n        execErrState: Alerting\n        for: 5m\n        annotations:\n          summary: \"YouTube API quota \u003e95%, approaching exhaustion\"\n          description: \"YouTube quota is at {{ $values.A }}%. Critical threshold exceeded. Only {{ printf \\\"%.0f\\\" (sub 10000 (mul (div $values.A 100) 10000)) }} units remaining.\"\n        labels:\n          severity: critical\n          team: allchat\n          platform: youtube\n\n      - uid: youtube-quota-exhausted\n        title: YouTube Quota Exhausted (100%)\n        condition: B\n        data:\n          - refId: A\n            queryType: instant\n            relativeTimeRange:\n              from: 60\n              to: 0\n            datasourceUid: prometheus\n            model:\n              expr: max(listener_quota_usage_percentage{platform=\"youtube\"})\n              refId: A\n          - refId: B\n            datasourceUid: __expr__\n            model:\n              type: threshold\n              refId: B\n              conditions:\n                - evaluator:\n                    params:\n                      - 100\n                    type: gte\n                  operator:\n                    type: and\n                  query:\n                    params:\n                      - A\n                  type: query\n              expression: A\n        noDataState: OK\n        execErrState: Alerting\n        for: 1m\n        annotations:\n          summary: \"YouTube API quota completely exhausted\"\n          description: \"YouTube API quota at 100%. All API calls will fail until quota reset at midnight PST.\"\n        labels:\n          severity: critical\n          team: allchat\n          platform: youtube\n\n  - orgId: 1\n    name: allchat-warnings\n    folder: All-Chat Alerts\n    interval: 1m\n    rules:\n      - uid: youtube-quota-high\n        title: YouTube Quota High (\u003e80%)\n        condition: B\n        data:\n          - refId: A\n            queryType: instant\n            relativeTimeRange:\n              from: 60\n              to: 0\n            datasourceUid: prometheus\n            model:\n              expr: max(listener_quota_usage_percentage{platform=\"youtube\"})\n              refId: A\n          - refId: B\n            datasourceUid: __expr__\n            model:\n              type: threshold\n              refId: B\n              conditions:\n                - evaluator:\n                    params:\n                      - 80\n                    type: gt\n                  operator:\n                    type: and\n                  query:\n                    params:\n                      - A\n                  type: query\n              expression: A\n        noDataState: OK\n        execErrState: OK\n        for: 10m\n        annotations:\n          summary: \"YouTube quota \u003e80%, approaching limits\"\n          description: \"YouTube quota at {{ $values.A }}%. Monitor usage and consider throttling.\"\n        labels:\n          severity: warning\n          team: allchat\n          platform: youtube\n\n      - uid: pod-crashloop\n        title: All-Chat Pod CrashLooping\n        condition: B\n        data:\n          - refId: A\n            queryType: instant\n            relativeTimeRange:\n              from: 60\n              to: 0\n            datasourceUid: prometheus\n            model:\n              expr: increase(kube_pod_container_status_restarts_total{namespace=\"allchat\"}[5m])\n              refId: A\n          - refId: B\n            datasourceUid: __expr__\n            model:\n              type: threshold\n              refId: B\n              conditions:\n                - evaluator:\n                    params:\n                      - 3\n                    type: gte\n                  operator:\n                    type: and\n                  query:\n                    params:\n                      - A\n                  type: query\n              expression: A\n        noDataState: OK\n        execErrState: OK\n        for: 1m\n        annotations:\n          summary: \"Pod {{ $labels.pod }} CrashLooping\"\n          description: \"Pod {{ $labels.pod }} has restarted {{ $values.A }} times in 5 minutes.\"\n        labels:\n          severity: critical\n          team: allchat\n\n      - uid: pod-not-running\n        title: All-Chat Pod Not Running\n        condition: B\n        data:\n          - refId: A\n            queryType: instant\n            relativeTimeRange:\n              from: 600\n              to: 0\n            datasourceUid: prometheus\n            model:\n              expr: kube_pod_status_phase{namespace=\"allchat\", phase!=\"Running\", phase!=\"Succeeded\"}\n              refId: A\n          - refId: B\n            datasourceUid: __expr__\n            model:\n              type: threshold\n              refId: B\n              conditions:\n                - evaluator:\n                    params:\n                      - 1\n                    type: gte\n                  operator:\n                    type: and\n                  query:\n                    params:\n                      - A\n                  type: query\n              expression: A\n        noDataState: OK\n        execErrState: OK\n        for: 3m\n        annotations:\n          summary: \"Pod {{ $labels.pod }} not Running\"\n          description: \"Pod {{ $labels.pod }} is in {{ $labels.phase }} state. Service degraded.\"\n        labels:\n          severity: critical\n          team: allchat\n"},"kind":"ConfigMap","metadata":{"annotations":{},"labels":{"grafana_alert":"1"},"name":"grafana-allchat-alerts","namespace":"monitoring"}}
+  creationTimestamp: "2026-01-08T23:34:50Z"
+  labels:
+    grafana_alert: "1"
+  name: grafana-allchat-alerts
+  namespace: monitoring
+  resourceVersion: "9803407"
+  uid: 5c202b0e-e7b7-4fbd-aca4-bc56e34670f6
