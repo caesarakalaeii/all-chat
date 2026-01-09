@@ -207,6 +207,13 @@ func main() {
 	router.GET("/health/ready", healthHandler.ReadinessProbe)
 	router.GET("/status", healthHandler.Status)
 
+	// Quota handlers
+	quotaHandler := handlers.NewQuotaHandler(coordinator, quotaTracker, perChannelTracker, logger)
+	router.GET("/quota/status", quotaHandler.GetQuotaStatus)
+	router.GET("/quota/channels/:channel_id", quotaHandler.GetChannelQuota)
+	router.GET("/quota/history", quotaHandler.GetQuotaHistory)
+	router.GET("/quota/predictions", quotaHandler.GetQuotaPrediction)
+
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
