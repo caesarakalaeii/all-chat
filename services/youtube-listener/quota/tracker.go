@@ -329,28 +329,34 @@ func (t *Tracker) updateStateAndNotify(percentage float64) {
 
 // RecordUsage records API quota usage
 func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
-	// Check for date rollover before acquiring lock
-	t.checkDateRollover()
-
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	// Check for date rollover WHILE HOLDING LOCK (fixes race condition)
+	today := time.Now().In(YouTubePST).Format("2006-01-02")
+	if t.currentDate != today {
+		t.logger.Info("Date rollover detected during RecordUsage",
+			zap.String("old_date", t.currentDate),
+			zap.String("new_date", today),
+			zap.Int("old_usage", t.usageToday),
+		)
+		t.currentDate = today
+		t.usageToday = 0
+
+		// Reset state to healthy on new day
+		if t.currentState != QuotaStateHealthy {
+			t.currentState = QuotaStateHealthy
+			t.lastStateTransition = time.Now()
+			t.logger.Info("Quota state reset to HEALTHY on date rollover")
+		}
+	}
 
 	// Update in-memory counter
 	t.usageToday += units
 
-	// Update database (use currentDate which is guaranteed to be today after checkDateRollover)
-	query := `
-		INSERT INTO youtube_quota_usage (date, units_used, units_limit)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (date)
-		DO UPDATE SET
-			units_used = youtube_quota_usage.units_used + EXCLUDED.units_used,
-			updated_at = NOW()
-	`
-
-	_, err := t.db.Exec(ctx, query, t.currentDate, units, t.dailyLimit)
-	if err != nil {
-		t.logger.Error("Failed to record quota usage",
+	// Update database with retry logic
+	if err := t.recordUsageWithRetry(ctx, units, 3); err != nil {
+		t.logger.Error("Failed to record quota usage after retries",
 			zap.Int("units", units),
 			zap.Error(err),
 		)
@@ -376,6 +382,53 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 	)
 
 	return nil
+}
+
+// recordUsageWithRetry writes quota usage to database with exponential backoff retry
+// This prevents quota loss from transient database connection issues
+func (t *Tracker) recordUsageWithRetry(ctx context.Context, units int, maxRetries int) error {
+	query := `
+		INSERT INTO youtube_quota_usage (date, units_used, units_limit)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (date)
+		DO UPDATE SET
+			units_used = youtube_quota_usage.units_used + EXCLUDED.units_used,
+			updated_at = NOW()
+	`
+
+	backoff := 100 * time.Millisecond
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		_, err := t.db.Exec(ctx, query, t.currentDate, units, t.dailyLimit)
+		if err == nil {
+			if attempt > 1 {
+				t.logger.Info("Quota recorded successfully after retry",
+					zap.Int("attempt", attempt),
+					zap.Int("units", units),
+				)
+			}
+			return nil
+		}
+
+		t.logger.Warn("Failed to record quota usage to database, retrying",
+			zap.Int("attempt", attempt),
+			zap.Int("max_retries", maxRetries),
+			zap.Int("units", units),
+			zap.Error(err),
+		)
+
+		// Don't sleep on last attempt
+		if attempt < maxRetries {
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("context cancelled during retry: %w", ctx.Err())
+			case <-time.After(backoff):
+				backoff *= 2  // Exponential backoff: 100ms, 200ms, 400ms
+			}
+		}
+	}
+
+	return fmt.Errorf("failed to record quota after %d retries", maxRetries)
 }
 
 // GetUsageToday returns today's quota usage
