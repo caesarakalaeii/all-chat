@@ -73,6 +73,12 @@ type Manager struct {
 	notificationDebounceTimer *time.Timer
 	pendingNotificationCount  int
 	notificationDebounceDelay time.Duration
+
+	// Connection sync debouncing (prevents expensive syncs on rapid overlay connections)
+	connectionSyncMu            sync.Mutex
+	connectionSyncDebounceTimer *time.Timer
+	pendingConnectionCount      int
+	connectionSyncDebounceDelay time.Duration
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -126,11 +132,12 @@ func NewManager(
 		channelBackoff:            make(map[string]time.Duration),
 		baseDetectionInterval:     30 * time.Second,  // Start checking every 30s
 		maxDetectionInterval:      10 * time.Minute,  // Max 10 minutes between checks
-		syncInterval:              30 * time.Second,
-		stopChan:                  make(chan struct{}),
-		syncLeader:                leader, // Use same coordinator for global sync leadership
-		syncLeaderStreamID:        "global-sync", // Constant stream ID for global sync leadership
-		notificationDebounceDelay: 30 * time.Second, // Debounce notifications (YouTube API is expensive: 100 units per search)
+		syncInterval:                30 * time.Second,
+		stopChan:                    make(chan struct{}),
+		syncLeader:                  leader, // Use same coordinator for global sync leadership
+		syncLeaderStreamID:          "global-sync", // Constant stream ID for global sync leadership
+		notificationDebounceDelay:   30 * time.Second, // Debounce notifications (YouTube API is expensive: 100 units per search)
+		connectionSyncDebounceDelay: 5 * time.Second,  // Debounce overlay connections (saves 100+ units on rapid connections)
 	}
 }
 
@@ -200,6 +207,58 @@ func (m *Manager) Stop() {
 	}
 
 	m.logger.Info("Stream manager stopped")
+}
+
+// debounceConnectionSync debounces overlay connection events to batch expensive syncs
+// This prevents wasting 100+ quota units when multiple overlays connect rapidly
+func (m *Manager) debounceConnectionSync(ctx context.Context) {
+	m.connectionSyncMu.Lock()
+	defer m.connectionSyncMu.Unlock()
+
+	m.pendingConnectionCount++
+
+	// If timer already exists, just increment count and let it continue
+	if m.connectionSyncDebounceTimer != nil {
+		m.logger.Debug("Overlay connection batched with pending sync",
+			zap.Int("pending_connections", m.pendingConnectionCount),
+		)
+		return
+	}
+
+	// Start new debounce timer
+	m.connectionSyncDebounceTimer = time.AfterFunc(m.connectionSyncDebounceDelay, func() {
+		m.connectionSyncMu.Lock()
+		count := m.pendingConnectionCount
+		m.pendingConnectionCount = 0
+		m.connectionSyncDebounceTimer = nil
+		m.connectionSyncMu.Unlock()
+
+		m.logger.Info("Processing batched overlay connections (quota optimization)",
+			zap.Int("connection_count", count),
+			zap.Duration("debounce_delay", m.connectionSyncDebounceDelay),
+			zap.Int("quota_saved_estimate", (count-1)*100), // Each avoided sync saves ~100 units
+		)
+
+		// Try to acquire global sync leadership
+		// This prevents multiple replicas from racing after connections
+		if m.syncLeader != nil {
+			isLeader, err := m.syncLeader.EnsureLeadership(context.Background(), m.syncLeaderStreamID, nil)
+			if err != nil {
+				m.logger.Error("Failed to check global sync leadership after connections", zap.Error(err))
+				return
+			}
+			if !isLeader {
+				m.logger.Debug("Not global sync leader, skipping connection sync")
+				return
+			}
+			m.logger.Debug("Global sync leader, performing connection sync")
+		}
+
+		// Perform single sync for all batched connections
+		if err := m.syncStreams(context.Background()); err != nil {
+			m.logger.Error("Failed to sync streams after batched connections", zap.Error(err))
+		}
+	})
 }
 
 // periodicSync periodically syncs streams from database
@@ -995,39 +1054,47 @@ func (m *Manager) handleOverlayConnected(ctx context.Context, overlayID string) 
 	m.connectedOverlays[overlayID] = time.Now()
 	m.connMu.Unlock()
 
-	m.logger.Info("Overlay connected, starting polling",
+	m.logger.Info("Overlay connected, queueing sync with debounce",
 		zap.String("overlay_id", overlayID),
+		zap.Duration("debounce_delay", m.connectionSyncDebounceDelay),
 	)
 
-	// Try to acquire global sync leadership before syncing
-	// This prevents multiple replicas from racing to start polling
-	if m.syncLeader != nil {
-		isLeader, err := m.syncLeader.EnsureLeadership(ctx, m.syncLeaderStreamID, nil)
-		if err != nil {
-			m.logger.Error("Failed to check global sync leadership after overlay connection", zap.Error(err))
-			return
-		}
-		if !isLeader {
-			m.logger.Debug("Not global sync leader, skipping sync after overlay connection")
-			return
-		}
-		m.logger.Debug("Global sync leader, performing sync after overlay connection")
-	}
-
-	// Trigger immediate sync to start polling for this overlay's sources
-	if err := m.syncStreams(ctx); err != nil {
-		m.logger.Error("Failed to sync streams after overlay connection",
-			zap.String("overlay_id", overlayID),
-			zap.Error(err),
-		)
-	}
+	// OPTIMIZATION: Debounce rapid overlay connections to batch syncs
+	// Saves 100+ quota units when multiple overlays connect quickly
+	m.debounceConnectionSync(ctx)
 }
 
 // handleOverlayDisconnected handles an overlay disconnection event
 func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID string) {
-	m.logger.Info("Overlay disconnection event received, starting debounce period",
+	// Remove overlay from connected map immediately
+	m.connMu.Lock()
+	delete(m.connectedOverlays, overlayID)
+	hasOtherConnections := len(m.connectedOverlays) > 0
+	m.connMu.Unlock()
+
+	// OPTIMIZATION: If NO other overlays are connected at all, stop pollers immediately
+	// This saves 75-90 quota units per disconnect when you're the only user
+	if !hasOtherConnections {
+		m.logger.Info("Last overlay disconnected, stopping pollers immediately (quota optimization)",
+			zap.String("overlay_id", overlayID),
+		)
+
+		// Immediately sync to stop all pollers (no sources have connected overlays)
+		if err := m.syncStreams(ctx); err != nil {
+			m.logger.Error("Failed to sync streams after last overlay disconnect",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		}
+		return
+	}
+
+	// OTHER OVERLAYS EXIST - Use debounce period to handle potential reconnection
+	// This prevents stopping pollers if user is just refreshing the page
+	m.logger.Info("Overlay disconnection event received, starting debounce period (other overlays connected)",
 		zap.String("overlay_id", overlayID),
 		zap.Duration("debounce_delay", m.disconnectDebounceDelay),
+		zap.Int("other_connected_overlays", len(m.connectedOverlays)),
 	)
 
 	m.disconnectDebounceMu.Lock()
@@ -1044,7 +1111,7 @@ func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID strin
 		delete(m.disconnectDebounceTimers, overlayID)
 		m.disconnectDebounceMu.Unlock()
 
-		// Check if overlay is still disconnected
+		// Check if overlay reconnected during debounce
 		m.connMu.RLock()
 		_, stillConnected := m.connectedOverlays[overlayID]
 		m.connMu.RUnlock()
@@ -1056,42 +1123,17 @@ func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID strin
 			return
 		}
 
-		// Actually disconnect after debounce
-		m.connMu.Lock()
-		delete(m.connectedOverlays, overlayID)
-		m.connMu.Unlock()
-
-		m.logger.Info("Debounce period expired, stopping polling for overlay",
+		m.logger.Info("Debounce period expired, syncing to check if pollers still needed",
 			zap.String("overlay_id", overlayID),
 		)
 
-		// Stop pollers for sources belonging to this overlay
-		m.mu.Lock()
-		for streamID, stream := range m.activeStreams {
-			if stream.OverlayID == overlayID {
-				if poller, exists := m.pollers[streamID]; exists {
-					m.logger.Info("Stopping poller for disconnected overlay",
-						zap.String("stream_id", streamID),
-						zap.String("overlay_id", overlayID),
-					)
-					poller.Stop()
-					delete(m.pollers, streamID)
-					delete(m.activeStreams, streamID)
-					m.releaseLeadership(streamID)
-
-					// Mark source as inactive for this specific overlay only
-					// Don't deactivate sources for other overlays using the same channel
-					if err := m.repository.SetSourceActiveByOverlay(context.Background(), overlayID, stream.ChannelID, false); err != nil {
-						m.logger.Error("Failed to mark source inactive after debounce",
-							zap.String("overlay_id", overlayID),
-							zap.String("channel_id", stream.ChannelID),
-							zap.Error(err),
-						)
-					}
-				}
-			}
+		// Sync will automatically stop pollers that have no connected overlays
+		if err := m.syncStreams(context.Background()); err != nil {
+			m.logger.Error("Failed to sync streams after debounce",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
 		}
-		m.mu.Unlock()
 	})
 
 	m.disconnectDebounceTimers[overlayID] = timer
