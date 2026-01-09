@@ -378,10 +378,15 @@ func main() {
 	log.Info("Shutting down server...")
 
 	// Give outstanding requests 25 seconds to complete
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	// Shutdown WebSocket manager first (cleans up Redis state)
+	if err := wsManager.Shutdown(shutdownCtx); err != nil {
+		log.Error("WebSocket manager shutdown error", zap.Error(err))
+	}
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("Server forced to shutdown", zap.Error(err))
 	}
 

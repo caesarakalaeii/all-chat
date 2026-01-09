@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	github.com/caesar/all-chat/shared v0.0.0-00010101000000-000000000000
+	github.com/caesar/all-chat/shared/ratelimit v0.0.0-00010101000000-000000000000
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gorilla/websocket v1.5.3
@@ -18,7 +19,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
-	github.com/caesar/all-chat/shared/ratelimit v0.0.0-00010101000000-000000000000 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect

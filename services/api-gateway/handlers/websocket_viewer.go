@@ -168,19 +168,28 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 
 	// Set up cleanup callback when connection closes
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error("Panic in viewer WebSocket cleanup",
+					zap.String("overlay_id", overlayID),
+					zap.String("viewer", viewerUsername),
+					zap.Any("panic", r),
+				)
+			}
+			// Always clean up
+			h.wsManager.RemoveConnection(wsConn)
+			h.subscriber.UnsubscribeViewerOnly(context.Background(), overlayID)
+			h.logger.Info("Viewer WebSocket connection closed",
+				zap.String("overlay_id", overlayID),
+				zap.String("streamer", streamerUsername),
+				zap.String("viewer", viewerUsername),
+			)
+		}()
+
 		// Wait for connection to close
 		for !wsConn.IsClosed() {
 			time.Sleep(100 * time.Millisecond)
 		}
-		// Clean up when closed
-		h.wsManager.RemoveConnection(wsConn)
-		// Unsubscribe viewer-only (no disconnection event published)
-		h.subscriber.UnsubscribeViewerOnly(context.Background(), overlayID)
-		h.logger.Info("Viewer WebSocket connection closed",
-			zap.String("overlay_id", overlayID),
-			zap.String("streamer", streamerUsername),
-			zap.String("viewer", viewerUsername),
-		)
 	}()
 
 	// Return immediately - WebSocket continues in background
