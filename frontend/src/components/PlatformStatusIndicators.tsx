@@ -22,8 +22,9 @@ const TwitchIcon = () => (
 );
 
 const YouTubeIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+  <svg viewBox="0 0 24 24" className="w-5 h-5">
+    {/* YouTube official red: #FF0000 - Never modify this color per branding guidelines */}
+    <path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
   </svg>
 );
 
@@ -51,7 +52,7 @@ export default function PlatformStatusIndicators({ activePlatforms }: PlatformSt
       name: 'youtube',
       label: 'YouTube',
       icon: YouTubeIcon,
-      colorClass: 'text-red-500',
+      colorClass: '', // YouTube icon color is fixed to #FF0000 per branding guidelines
     },
     {
       name: 'kick',
@@ -72,13 +73,19 @@ export default function PlatformStatusIndicators({ activePlatforms }: PlatformSt
       {platforms.map((platform) => {
         const isActive = activePlatforms.has(platform.name);
         const Icon = platform.icon;
+        // YouTube branding compliance: Never apply grayscale or color filters to YouTube icons
+        const isYouTube = platform.name === 'youtube';
+        const inactiveClass = isYouTube
+          ? 'opacity-40 bg-gray-800/50'
+          : 'grayscale opacity-40 bg-gray-800/50';
+
         return (
           <div
             key={platform.name}
             className={`platform-indicator platform-indicator-${platform.name} flex items-center justify-center w-8 h-8 rounded-md transition-all duration-300 ${
               isActive
                 ? `${platform.colorClass} bg-white/10`
-                : 'grayscale opacity-40 bg-gray-800/50'
+                : inactiveClass
             }`}
             title={`${platform.label} ${isActive ? '(Active)' : '(Inactive)'}`}
           >
