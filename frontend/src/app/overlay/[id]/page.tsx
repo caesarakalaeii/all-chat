@@ -33,6 +33,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [maxMessages, setMaxMessages] = useState(50);
   const [fontSize, setFontSize] = useState(16);
   const [messageDuration, setMessageDuration] = useState(15);
+  const [disableMessageFade, setDisableMessageFade] = useState(false);
   const [customCss, setCustomCss] = useState('');
   const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set());
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
@@ -62,6 +63,9 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
         }
         if (typeof display.message_duration === 'number') {
           setMessageDuration(display.message_duration);
+        }
+        if (typeof display.disable_message_fade === 'boolean') {
+          setDisableMessageFade(display.disable_message_fade);
         }
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
@@ -164,16 +168,16 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Auto-remove old messages based on duration
+  // Auto-remove old messages based on duration (if fade is enabled)
   useEffect(() => {
-    if (messages.length === 0) return;
+    if (messages.length === 0 || disableMessageFade) return;
 
     const timer = setTimeout(() => {
       setMessages((prev) => prev.slice(1));
     }, messageDuration * 1000);
 
     return () => clearTimeout(timer);
-  }, [messages, messageDuration]);
+  }, [messages, messageDuration, disableMessageFade]);
 
   const getPlatformColor = (platform: string): string => {
     switch (platform) {

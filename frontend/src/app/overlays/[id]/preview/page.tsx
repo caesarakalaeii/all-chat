@@ -208,6 +208,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [maxMessages, setMaxMessages] = useState(50);
   const [fontSize, setFontSize] = useState(16);
   const [messageDuration, setMessageDuration] = useState(15);
+  const [disableMessageFade, setDisableMessageFade] = useState(false);
   const [mockForm, setMockForm] = useState<MockMessageFormState>(DEFAULT_MOCK_FORM);
   const [customCss, setCustomCss] = useState('');
   const [useCustomCss, setUseCustomCss] = useState(false);
@@ -245,6 +246,9 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
         }
         if (typeof display.message_duration === 'number') {
           setMessageDuration(display.message_duration);
+        }
+        if (typeof display.disable_message_fade === 'boolean') {
+          setDisableMessageFade(display.disable_message_fade);
         }
 
         const css = config.custom_css || '';
@@ -441,7 +445,8 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
         display_settings: {
           font_size: fontSize,
           message_duration: messageDuration,
-          max_messages: maxMessages
+          max_messages: maxMessages,
+          disable_message_fade: disableMessageFade
         },
         custom_css: useCustomCss ? customCss : ''
       });
@@ -677,7 +682,24 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                     value={messageDuration}
                     onChange={(e) => setMessageDuration(parseInt(e.target.value))}
                     className="w-full accent-twitch"
+                    disabled={disableMessageFade}
                   />
+                </div>
+
+                {/* Disable Message Fade Toggle */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={disableMessageFade}
+                      onChange={(e) => setDisableMessageFade(e.target.checked)}
+                      className="accent-twitch"
+                    />
+                    Disable Message Fade Out
+                  </label>
+                  <p className="text-xs text-gray-400 mt-1 ml-6">
+                    When enabled, messages will not automatically fade out and will remain visible until max messages is reached
+                  </p>
                 </div>
 
                 {/* Emote Providers */}
