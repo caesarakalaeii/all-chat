@@ -34,6 +34,18 @@ const (
 	// 100%+: DEPLETED
 )
 
+// YouTubePST is the Pacific timezone where YouTube quota resets at midnight
+var YouTubePST *time.Location
+
+func init() {
+	var err error
+	YouTubePST, err = time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		// Fallback to UTC if PST is not available
+		YouTubePST = time.UTC
+	}
+}
+
 // QuotaState represents the current state of quota usage
 type QuotaState string
 
@@ -198,8 +210,10 @@ func (t *Tracker) periodicDateCheck() {
 
 // checkDateRollover checks if the date has changed and resets quota if needed
 // This method must be called WITHOUT holding the lock, as it will acquire a write lock if needed
+// NOTE: Uses Pacific Time (PST/PDT) because YouTube quota resets at midnight PST
 func (t *Tracker) checkDateRollover() {
-	today := time.Now().Format("2006-01-02")
+	// Get current date in PST (YouTube's quota reset timezone)
+	today := time.Now().In(YouTubePST).Format("2006-01-02")
 
 	// Fast path: check with read lock first
 	t.mu.RLock()
@@ -218,9 +232,10 @@ func (t *Tracker) checkDateRollover() {
 		return
 	}
 
-	t.logger.Info("Date rolled over, resetting quota",
+	t.logger.Info("Date rolled over (PST timezone), resetting quota",
 		zap.String("old_date", t.currentDate),
 		zap.String("new_date", today),
+		zap.String("timezone", "America/Los_Angeles"),
 	)
 	t.currentDate = today
 	t.usageToday = 0
@@ -436,8 +451,10 @@ func (t *Tracker) ShouldBlockAllRequests() bool {
 }
 
 // loadTodayUsage loads today's usage from database
+// NOTE: Uses Pacific Time (PST/PDT) because YouTube quota resets at midnight PST
 func (t *Tracker) loadTodayUsage(ctx context.Context) error {
-	today := time.Now().Format("2006-01-02")
+	// Get current date in PST (YouTube's quota reset timezone)
+	today := time.Now().In(YouTubePST).Format("2006-01-02")
 
 	query := `
 		SELECT units_used
@@ -451,8 +468,9 @@ func (t *Tracker) loadTodayUsage(ctx context.Context) error {
 		// If no row found, that's fine (start from 0)
 		if err.Error() == "no rows in result set" {
 			usageToday = 0
-			t.logger.Info("No usage record for today, starting fresh",
+			t.logger.Info("No usage record for today (PST), starting fresh",
 				zap.String("date", today),
+				zap.String("timezone", "America/Los_Angeles"),
 			)
 		} else {
 			return fmt.Errorf("failed to load today's usage: %w", err)
@@ -464,11 +482,12 @@ func (t *Tracker) loadTodayUsage(ctx context.Context) error {
 	t.usageToday = usageToday
 	t.mu.Unlock()
 
-	t.logger.Info("Loaded today's quota usage",
+	t.logger.Info("Loaded today's quota usage (PST timezone)",
 		zap.String("date", today),
 		zap.Int("used", usageToday),
 		zap.Int("limit", t.dailyLimit),
 		zap.Float64("percentage", float64(usageToday)/float64(t.dailyLimit)*100),
+		zap.String("timezone", "America/Los_Angeles"),
 	)
 
 	return nil
