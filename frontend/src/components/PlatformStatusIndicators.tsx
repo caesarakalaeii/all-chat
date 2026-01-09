@@ -14,10 +14,11 @@ interface PlatformStatusIndicatorsProps {
   activePlatforms: Set<string>;
 }
 
-// Platform SVG Icons
+// Platform SVG Icons - Using official brand colors per platform guidelines
 const TwitchIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+  <svg viewBox="0 0 24 24" className="w-5 h-5">
+    {/* Twitch official purple: #9146FF - Per Twitch brand guidelines */}
+    <path fill="#9146FF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
   </svg>
 );
 
@@ -29,14 +30,16 @@ const YouTubeIcon = () => (
 );
 
 const KickIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M6 3v18h4v-7l1.5 1.5L15 19l4.5-4.5L15 10l-3.5 3.5L10 12V3H6zm8 8.5l4.5 4.5-2.5 2.5-4.5-4.5L14 11.5z"/>
+  <svg viewBox="0 0 24 24" className="w-5 h-5">
+    {/* Kick official green: #00E701 - Per Kick brand guidelines */}
+    <path fill="#00E701" d="M6 3v18h4v-7l1.5 1.5L15 19l4.5-4.5L15 10l-3.5 3.5L10 12V3H6zm8 8.5l4.5 4.5-2.5 2.5-4.5-4.5L14 11.5z"/>
   </svg>
 );
 
 const TikTokIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+  <svg viewBox="0 0 24 24" className="w-5 h-5">
+    {/* TikTok official black: #000000 - Primary logo color per TikTok brand guidelines */}
+    <path fill="#000000" d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
   </svg>
 );
 
@@ -46,7 +49,7 @@ export default function PlatformStatusIndicators({ activePlatforms }: PlatformSt
       name: 'twitch',
       label: 'Twitch',
       icon: TwitchIcon,
-      colorClass: 'text-purple-500',
+      colorClass: '', // Twitch icon color is fixed to #9146FF per branding guidelines
     },
     {
       name: 'youtube',
@@ -58,13 +61,13 @@ export default function PlatformStatusIndicators({ activePlatforms }: PlatformSt
       name: 'kick',
       label: 'Kick',
       icon: KickIcon,
-      colorClass: 'text-green-500',
+      colorClass: '', // Kick icon color is fixed to #00E701 per branding guidelines
     },
     {
       name: 'tiktok',
       label: 'TikTok',
       icon: TikTokIcon,
-      colorClass: 'text-cyan-400',
+      colorClass: '', // TikTok icon color is fixed to #000000 per branding guidelines
     },
   ];
 
@@ -73,19 +76,16 @@ export default function PlatformStatusIndicators({ activePlatforms }: PlatformSt
       {platforms.map((platform) => {
         const isActive = activePlatforms.has(platform.name);
         const Icon = platform.icon;
-        // YouTube branding compliance: Never apply grayscale or color filters to YouTube icons
-        const isYouTube = platform.name === 'youtube';
-        const inactiveClass = isYouTube
-          ? 'opacity-40 bg-gray-800/50'
-          : 'grayscale opacity-40 bg-gray-800/50';
+        // Brand compliance: All platform icons use fixed official colors, no filters applied
+        // When inactive, only reduce opacity to maintain brand color integrity
+        const inactiveClass = 'opacity-40 bg-gray-800/50';
+        const activeClass = 'bg-white/10';
 
         return (
           <div
             key={platform.name}
             className={`platform-indicator platform-indicator-${platform.name} flex items-center justify-center w-8 h-8 rounded-md transition-all duration-300 ${
-              isActive
-                ? `${platform.colorClass} bg-white/10`
-                : inactiveClass
+              isActive ? activeClass : inactiveClass
             }`}
             title={`${platform.label} ${isActive ? '(Active)' : '(Inactive)'}`}
           >
