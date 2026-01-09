@@ -144,6 +144,10 @@ func (m *Manager) Start(ctx context.Context) error {
 		// Don't fail startup, just log the error
 	}
 
+	// Start periodic cleanup goroutine
+	m.wg.Add(1)
+	go m.periodicConnectionCleanup(ctx)
+
 	// Skip initial sync to avoid quota usage on pod restarts
 	// The periodic sync and PostgreSQL LISTEN will handle updates
 	m.logger.Info("Skipping initial sync to preserve quota, periodic sync will handle updates")
@@ -803,10 +807,28 @@ func (m *Manager) GetActiveStreams() []*models.YouTubeStream {
 
 // loadExistingConnections loads currently connected overlays from Redis on startup
 func (m *Manager) loadExistingConnections(ctx context.Context) error {
-	// Query Redis SET for connected overlays
-	overlayIDs, err := m.redisClient.SMembers(ctx, "overlay:connected").Result()
-	if err != nil {
-		return fmt.Errorf("failed to query connected overlays: %w", err)
+	// Scan for all overlay:connected:* keys
+	var cursor uint64
+	var overlayIDs []string
+
+	for {
+		keys, nextCursor, err := m.redisClient.Scan(ctx, cursor, "overlay:connected:*", 100).Result()
+		if err != nil {
+			return fmt.Errorf("failed to scan connected overlay keys: %w", err)
+		}
+
+		// Extract overlay IDs from keys (format: overlay:connected:OVERLAY_ID)
+		for _, key := range keys {
+			if len(key) > len("overlay:connected:") {
+				overlayID := key[len("overlay:connected:"):]
+				overlayIDs = append(overlayIDs, overlayID)
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
 	}
 
 	if len(overlayIDs) == 0 {
@@ -828,6 +850,83 @@ func (m *Manager) loadExistingConnections(ctx context.Context) error {
 	)
 
 	return nil
+}
+
+// periodicConnectionCleanup periodically verifies overlay connections are still valid
+// Removes stale connections from memory if their Redis keys have expired
+func (m *Manager) periodicConnectionCleanup(ctx context.Context) {
+	defer m.wg.Done()
+
+	ticker := time.NewTicker(2 * time.Minute) // Check every 2 minutes
+	defer ticker.Stop()
+
+	m.logger.Info("Started periodic connection cleanup",
+		zap.Duration("interval", 2*time.Minute),
+	)
+
+	for {
+		select {
+		case <-ticker.C:
+			m.cleanupStaleConnections(ctx)
+		case <-m.stopChan:
+			m.logger.Info("Stopping periodic connection cleanup")
+			return
+		case <-ctx.Done():
+			m.logger.Info("Context cancelled, stopping periodic connection cleanup")
+			return
+		}
+	}
+}
+
+// cleanupStaleConnections removes connections from memory if their Redis keys have expired
+func (m *Manager) cleanupStaleConnections(ctx context.Context) {
+	m.connMu.RLock()
+	overlayIDs := make([]string, 0, len(m.connectedOverlays))
+	for overlayID := range m.connectedOverlays {
+		overlayIDs = append(overlayIDs, overlayID)
+	}
+	m.connMu.RUnlock()
+
+	if len(overlayIDs) == 0 {
+		return
+	}
+
+	// Check which connections still exist in Redis
+	staleOverlays := make([]string, 0)
+	for _, overlayID := range overlayIDs {
+		key := "overlay:connected:" + overlayID
+		exists, err := m.redisClient.Exists(ctx, key).Result()
+		if err != nil {
+			m.logger.Error("Failed to check connection key existence",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		if exists == 0 {
+			// Key expired or was deleted - connection is stale
+			staleOverlays = append(staleOverlays, overlayID)
+		}
+	}
+
+	if len(staleOverlays) > 0 {
+		// Remove stale connections from memory
+		m.connMu.Lock()
+		for _, overlayID := range staleOverlays {
+			delete(m.connectedOverlays, overlayID)
+		}
+		m.connMu.Unlock()
+
+		m.logger.Warn("Cleaned up stale overlay connections (Redis TTL expired)",
+			zap.Int("count", len(staleOverlays)),
+			zap.Strings("overlay_ids", staleOverlays),
+		)
+	} else {
+		m.logger.Debug("Connection cleanup check completed, all connections valid",
+			zap.Int("checked", len(overlayIDs)),
+		)
+	}
 }
 
 // listenForOverlayConnections subscribes to Redis overlay connection events
