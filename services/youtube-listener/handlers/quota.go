@@ -300,6 +300,49 @@ func (h *QuotaHandler) GetQuotaPrediction(c *gin.Context) {
 	)
 }
 
+// RecordQuotaRequest represents a request to record quota usage from external services
+type RecordQuotaRequest struct {
+	Units int `json:"units" binding:"required,min=1"`
+}
+
+// RecordQuota records quota usage from external services (e.g., overlay-manager)
+// POST /quota/record
+func (h *QuotaHandler) RecordQuota(c *gin.Context) {
+	var req RecordQuotaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request: units required and must be >= 1",
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Record in global tracker
+	if err := h.globalTracker.RecordUsage(ctx, req.Units); err != nil {
+		h.logger.Error("Failed to record quota usage from external service",
+			zap.Int("units", req.Units),
+			zap.String("client_ip", c.ClientIP()),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to record quota usage",
+		})
+		return
+	}
+
+	h.logger.Info("Recorded quota usage from external service",
+		zap.Int("units", req.Units),
+		zap.String("client_ip", c.ClientIP()),
+		zap.String("user_agent", c.Request.UserAgent()),
+	)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"units_recorded": req.Units,
+	})
+}
+
 // parseIntParam safely parses an integer parameter
 func parseIntParam(param string) (int, error) {
 	var result int

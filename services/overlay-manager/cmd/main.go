@@ -128,7 +128,13 @@ func main() {
 
 	// YouTube helper
 	youtubeAPIKey := getEnv("YOUTUBE_API_KEY", "")
-	youtubeResolver := youtube.NewResolver(youtubeAPIKey)
+
+	// Initialize YouTube quota client (connects to youtube-listener for quota tracking)
+	youtubeListenerURL := getEnv("YOUTUBE_LISTENER_URL", "http://youtube-listener:8086")
+	youtubeQuotaClient := clients.NewYouTubeQuotaClient(youtubeListenerURL, log)
+
+	// Initialize resolver with quota tracking
+	youtubeResolver := youtube.NewResolver(youtubeAPIKey, youtubeQuotaClient, log)
 	youtubeHandler := handlers.NewYouTubeHandler(youtubeResolver, log)
 
 	// Setup Gin router

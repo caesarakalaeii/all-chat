@@ -214,6 +214,7 @@ func main() {
 	router.GET("/quota/channels/:channel_id", quotaHandler.GetChannelQuota)
 	router.GET("/quota/history", quotaHandler.GetQuotaHistory)
 	router.GET("/quota/predictions", quotaHandler.GetQuotaPrediction)
+	router.POST("/quota/record", quotaHandler.RecordQuota)  // For external services (overlay-manager)
 
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))

@@ -11,6 +11,15 @@ import (
 	"google.golang.org/api/youtube/v3"
 )
 
+// StreamStatusResult contains stream status and details from a single API call
+// This eliminates the need for a separate GetVideoDetails call (saves 1 quota unit)
+type StreamStatusResult struct {
+	IsLive      bool
+	LiveChatID  string
+	Title       string
+	ChannelName string
+}
+
 // Client wraps the YouTube API client with helper methods
 type Client struct {
 	service      *youtube.Service
@@ -173,16 +182,18 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 	return response, nil
 }
 
-// CheckStreamStatus checks if a stream is still live
-// This is a lightweight check that costs 1 quota unit
-func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (bool, error) {
+// CheckStreamStatus checks if a stream is still live and returns full details
+// This costs 1 quota unit and includes all data needed to start polling
+// Eliminates the need for a separate GetVideoDetails call (saves 1 unit per check)
+func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (*StreamStatusResult, error) {
 	// Check quota BEFORE making the API call
 	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostVideos) {
-		return false, fmt.Errorf("insufficient quota: %d units remaining, need %d", 
+		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d",
 			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostVideos)
 	}
 
-	call := c.service.Videos.List([]string{"liveStreamingDetails"}).Id(videoID)
+	// Request both liveStreamingDetails AND snippet in a single call
+	call := c.service.Videos.List([]string{"liveStreamingDetails", "snippet"}).Id(videoID)
 
 	response, err := call.Do()
 
@@ -198,23 +209,31 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (bool, e
 			zap.String("video_id", videoID),
 			zap.Error(err),
 		)
-		return false, fmt.Errorf("failed to check stream status: %w", err)
+		return nil, fmt.Errorf("failed to check stream status: %w", err)
 	}
 
 	if len(response.Items) == 0 {
-		return false, nil
+		return &StreamStatusResult{IsLive: false}, nil
 	}
 
 	video := response.Items[0]
 	if video.LiveStreamingDetails == nil {
-		return false, nil
+		return &StreamStatusResult{IsLive: false}, nil
 	}
 
 	// Stream is live if it has started and not ended
 	isLive := video.LiveStreamingDetails.ActualStartTime != "" &&
 		video.LiveStreamingDetails.ActualEndTime == ""
 
-	return isLive, nil
+	// Return all needed details in a single struct
+	result := &StreamStatusResult{
+		IsLive:      isLive,
+		LiveChatID:  video.LiveStreamingDetails.ActiveLiveChatId,
+		Title:       video.Snippet.Title,
+		ChannelName: video.Snippet.ChannelTitle,
+	}
+
+	return result, nil
 }
 
 // GetVideoDetails fetches detailed information about a video
