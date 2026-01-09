@@ -170,8 +170,9 @@ func (t *Tracker) Start(ctx context.Context) error {
 		zap.String("initial_state", string(t.currentState)),
 	)
 
-	// Start background goroutine to check for date rollover periodically
+	// Start background goroutines
 	go t.periodicDateCheck()
+	go t.periodicReservationCleanup(ctx)
 
 	return nil
 }
@@ -429,6 +430,209 @@ func (t *Tracker) recordUsageWithRetry(ctx context.Context, units int, maxRetrie
 	}
 
 	return fmt.Errorf("failed to record quota after %d retries", maxRetries)
+}
+
+// getCurrentDate returns the current date in PST timezone
+func (t *Tracker) getCurrentDate() string {
+	return time.Now().In(YouTubePST).Format("2006-01-02")
+}
+
+// ReserveQuota atomically reserves quota BEFORE making a YouTube API call
+// Returns reservation ID on success, error if insufficient quota
+// This is the first step in the reserve-confirm-rollback pattern
+func (t *Tracker) ReserveQuota(ctx context.Context, units int) (string, error) {
+	t.checkDateRollover()
+
+	today := t.getCurrentDate()
+
+	// Atomic reservation in database with row-level locking
+	var canReserve bool
+	err := t.db.QueryRow(ctx,
+		`SELECT reserve_youtube_quota($1, $2, $3)`,
+		today, units, t.dailyLimit,
+	).Scan(&canReserve)
+
+	if err != nil {
+		t.logger.Error("Failed to reserve quota (database error)",
+			zap.Int("units", units),
+			zap.Error(err),
+		)
+		return "", fmt.Errorf("failed to reserve quota: %w", err)
+	}
+
+	if !canReserve {
+		t.logger.Warn("Cannot reserve quota - insufficient available",
+			zap.Int("units", units),
+		)
+		return "", fmt.Errorf("insufficient quota available")
+	}
+
+	// Generate unique reservation ID
+	reservationID := fmt.Sprintf("%s-%d-%d", today, time.Now().UnixNano(), units)
+
+	t.logger.Debug("Reserved quota",
+		zap.String("reservation_id", reservationID),
+		zap.Int("units", units),
+	)
+
+	return reservationID, nil
+}
+
+// ConfirmReservation confirms a reservation after successful YouTube API call
+// Moves units from reserved -> used
+func (t *Tracker) ConfirmReservation(ctx context.Context, reservationID string, units int) error {
+	today := t.getCurrentDate()
+
+	// Confirm in database with retry
+	if err := t.confirmReservationWithRetry(ctx, today, units, 3); err != nil {
+		t.logger.Error("Failed to confirm reservation after retries",
+			zap.String("reservation_id", reservationID),
+			zap.Int("units", units),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	// Update in-memory state
+	t.mu.Lock()
+	t.usageToday += units
+	percentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
+	remaining := t.dailyLimit - t.usageToday
+
+	// Update state machine
+	t.updateStateAndNotify(percentage)
+
+	// Update metrics
+	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
+	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
+	t.mu.Unlock()
+
+	t.logger.Debug("Confirmed reservation",
+		zap.String("reservation_id", reservationID),
+		zap.Int("units", units),
+		zap.Int("total_used", t.usageToday),
+	)
+
+	return nil
+}
+
+// RollbackReservation rolls back a reservation after failed YouTube API call
+// Releases reserved units back to available pool
+func (t *Tracker) RollbackReservation(ctx context.Context, reservationID string, units int) error {
+	today := t.getCurrentDate()
+
+	// Rollback in database with retry
+	if err := t.rollbackReservationWithRetry(ctx, today, units, 3); err != nil {
+		t.logger.Error("Failed to rollback reservation after retries",
+			zap.String("reservation_id", reservationID),
+			zap.Int("units", units),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	t.logger.Info("Rolled back reservation (API call failed before reaching YouTube)",
+		zap.String("reservation_id", reservationID),
+		zap.Int("units", units),
+	)
+
+	return nil
+}
+
+// confirmReservationWithRetry confirms reservation with exponential backoff retry
+func (t *Tracker) confirmReservationWithRetry(ctx context.Context, date string, units int, maxRetries int) error {
+	backoff := 100 * time.Millisecond
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		_, err := t.db.Exec(ctx, `SELECT confirm_youtube_quota($1, $2)`, date, units)
+		if err == nil {
+			if attempt > 1 {
+				t.logger.Info("Confirmed reservation after retry", zap.Int("attempt", attempt))
+			}
+			return nil
+		}
+
+		t.logger.Warn("Failed to confirm reservation, retrying",
+			zap.Int("attempt", attempt),
+			zap.Int("max_retries", maxRetries),
+			zap.Error(err),
+		)
+
+		if attempt < maxRetries {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+				backoff *= 2
+			}
+		}
+	}
+
+	return fmt.Errorf("failed after %d retries", maxRetries)
+}
+
+// rollbackReservationWithRetry rolls back reservation with exponential backoff retry
+func (t *Tracker) rollbackReservationWithRetry(ctx context.Context, date string, units int, maxRetries int) error {
+	backoff := 100 * time.Millisecond
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		_, err := t.db.Exec(ctx, `SELECT rollback_youtube_quota($1, $2)`, date, units)
+		if err == nil {
+			if attempt > 1 {
+				t.logger.Info("Rolled back reservation after retry", zap.Int("attempt", attempt))
+			}
+			return nil
+		}
+
+		t.logger.Warn("Failed to rollback reservation, retrying",
+			zap.Int("attempt", attempt),
+			zap.Int("max_retries", maxRetries),
+			zap.Error(err),
+		)
+
+		if attempt < maxRetries {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+				backoff *= 2
+			}
+		}
+	}
+
+	return fmt.Errorf("failed after %d retries", maxRetries)
+}
+
+// periodicReservationCleanup periodically cleans up stale reservations
+// Recovers quota from crashed processes that didn't confirm or rollback
+func (t *Tracker) periodicReservationCleanup(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	t.logger.Info("Started periodic reservation cleanup",
+		zap.Duration("interval", 1*time.Minute),
+	)
+
+	for {
+		select {
+		case <-ticker.C:
+			var recoveredUnits int
+			err := t.db.QueryRow(ctx, `SELECT cleanup_stale_quota_reservations()`).Scan(&recoveredUnits)
+			if err != nil {
+				t.logger.Warn("Failed to cleanup stale reservations", zap.Error(err))
+			} else if recoveredUnits > 0 {
+				t.logger.Info("Recovered stale reserved quota units",
+					zap.Int("units_recovered", recoveredUnits),
+				)
+			}
+		case <-t.stopChan:
+			t.logger.Info("Stopping periodic reservation cleanup")
+			return
+		case <-ctx.Done():
+			t.logger.Info("Context cancelled, stopping reservation cleanup")
+			return
+		}
+	}
 }
 
 // GetUsageToday returns today's quota usage
