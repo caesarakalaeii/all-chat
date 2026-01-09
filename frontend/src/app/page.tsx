@@ -104,7 +104,7 @@ export default function LandingPage() {
               onClick={() => handleLogin('youtube')}
               className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-4 px-6 rounded-lg text-lg transition-colors flex items-center justify-center gap-2 relative"
             >
-              {/* YouTube Logo - Using official red #FF0000 per branding guidelines */}
+              {/* YouTube Logo - White version for visibility on red background (per branding guidelines) */}
               <svg
                 className="w-6 h-6"
                 viewBox="0 0 24 24"
