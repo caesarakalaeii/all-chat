@@ -8,8 +8,31 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/models"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"go.uber.org/zap"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/youtube/v3"
 )
+
+// isClientError checks if error is a 4xx client error that didn't reach YouTube
+// These errors should NOT be charged quota (e.g., invalid request format)
+func isClientError(err error) bool {
+	if apiErr, ok := err.(*googleapi.Error); ok {
+		return apiErr.Code >= 400 && apiErr.Code < 500
+	}
+	return false
+}
+
+// shouldChargeQuota determines if we should charge quota for this error
+// Returns true for: nil (success), 5xx server errors, network errors
+// Returns false for: 4xx client errors (didn't reach YouTube properly)
+func shouldChargeQuota(err error) bool {
+	if err == nil {
+		return true  // Success - always charge
+	}
+	if isClientError(err) {
+		return false  // 4xx - don't charge
+	}
+	return true  // 5xx, network errors, unknown - charge conservatively
+}
 
 // StreamStatusResult contains stream status and details from a single API call
 // This eliminates the need for a separate GetVideoDetails call (saves 1 quota unit)
@@ -37,36 +60,54 @@ func NewClient(service *youtube.Service, quotaTracker *quota.Tracker, logger *za
 }
 
 // GetLiveStreams fetches active live streams for a channel
+// Costs 100 units for search + 1 unit per video found
+// Uses reserve-confirm-rollback pattern for accurate quota tracking
 func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*models.YouTubeStream, error) {
-	// Check quota BEFORE making expensive search.list call (100 units)
-	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostSearch) {
-		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d for search", 
-			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostSearch)
+	const searchCost = quota.QuotaCostSearch
+
+	// STEP 1: RESERVE quota for search.list (100 units)
+	var searchReservationID string
+	var err error
+	if c.quotaTracker != nil {
+		searchReservationID, err = c.quotaTracker.ReserveQuota(ctx, searchCost)
+		if err != nil {
+			return nil, fmt.Errorf("insufficient quota for search: %w", err)
+		}
 	}
 
+	// STEP 2: Make Search.List API call
 	call := c.service.Search.List([]string{"id", "snippet"}).
 		ChannelId(channelID).
 		EventType("live").
 		Type("video").
 		MaxResults(5)
 
-	response, err := call.Do()
+	response, apiErr := call.Do()
 
-	// Record quota usage for search.list (100 units)
-	if c.quotaTracker != nil {
-		if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostSearch); recordErr != nil {
-			c.logger.Warn("Failed to record search.list quota usage", zap.Error(recordErr))
+	// STEP 3: CONFIRM or ROLLBACK search.list quota
+	if c.quotaTracker != nil && searchReservationID != "" {
+		if shouldChargeQuota(apiErr) {
+			if confirmErr := c.quotaTracker.ConfirmReservation(ctx, searchReservationID, searchCost); confirmErr != nil {
+				c.logger.Warn("Failed to confirm search quota reservation", zap.Error(confirmErr))
+			}
+		} else {
+			if rollbackErr := c.quotaTracker.RollbackReservation(ctx, searchReservationID, searchCost); rollbackErr != nil {
+				c.logger.Warn("Failed to rollback search quota reservation", zap.Error(rollbackErr))
+			}
 		}
 	}
 
-	if err != nil {
+	// STEP 4: Check for search errors
+	if apiErr != nil {
 		c.logger.Error("Failed to fetch live streams",
 			zap.String("channel_id", channelID),
-			zap.Error(err),
+			zap.Bool("charged_quota", shouldChargeQuota(apiErr)),
+			zap.Error(apiErr),
 		)
-		return nil, fmt.Errorf("failed to fetch live streams: %w", err)
+		return nil, fmt.Errorf("failed to fetch live streams: %w", apiErr)
 	}
 
+	// STEP 5: Process each video found (each costs 1 unit)
 	streams := make([]*models.YouTubeStream, 0, len(response.Items))
 
 	for _, item := range response.Items {
@@ -74,32 +115,43 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 			continue
 		}
 
-		// Get live streaming details including liveChatId
 		videoID := item.Id.VideoId
-		
-		// Check quota BEFORE making videos.list call (1 unit)
-		if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostVideos) {
-			c.logger.Warn("Insufficient quota for videos.list call, stopping stream enumeration",
-				zap.String("video_id", videoID),
-				zap.Int("remaining_quota", c.quotaTracker.GetRemainingQuota()),
-			)
-			break
-		}
+		const videoCost = quota.QuotaCostVideos
 
-		videoCall := c.service.Videos.List([]string{"liveStreamingDetails", "snippet"}).Id(videoID)
-		videoResponse, err := videoCall.Do()
-
-		// Record quota usage for videos.list (1 unit)
+		// Reserve quota for videos.list
+		var videoReservationID string
 		if c.quotaTracker != nil {
-			if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostVideos); recordErr != nil {
-				c.logger.Warn("Failed to record videos.list quota usage", zap.Error(recordErr))
+			videoReservationID, err = c.quotaTracker.ReserveQuota(ctx, videoCost)
+			if err != nil {
+				c.logger.Warn("Insufficient quota for videos.list, stopping enumeration",
+					zap.String("video_id", videoID),
+				)
+				break
 			}
 		}
 
-		if err != nil {
+		// Make videos.list call
+		videoCall := c.service.Videos.List([]string{"liveStreamingDetails", "snippet"}).Id(videoID)
+		videoResponse, videoErr := videoCall.Do()
+
+		// Confirm or rollback videos.list quota
+		if c.quotaTracker != nil && videoReservationID != "" {
+			if shouldChargeQuota(videoErr) {
+				if confirmErr := c.quotaTracker.ConfirmReservation(ctx, videoReservationID, videoCost); confirmErr != nil {
+					c.logger.Warn("Failed to confirm video quota reservation", zap.Error(confirmErr))
+				}
+			} else {
+				if rollbackErr := c.quotaTracker.RollbackReservation(ctx, videoReservationID, videoCost); rollbackErr != nil {
+					c.logger.Warn("Failed to rollback video quota reservation", zap.Error(rollbackErr))
+				}
+			}
+		}
+
+		if videoErr != nil {
 			c.logger.Warn("Failed to get video details",
 				zap.String("video_id", videoID),
-				zap.Error(err),
+				zap.Bool("charged_quota", shouldChargeQuota(videoErr)),
+				zap.Error(videoErr),
 			)
 			continue
 		}
@@ -142,13 +194,21 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 
 // GetChatMessages fetches messages from a live chat
 // This costs 5 quota units per call
+// Uses reserve-confirm-rollback pattern for accurate quota tracking
 func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken string) (*youtube.LiveChatMessageListResponse, error) {
-	// Check quota BEFORE making the API call
-	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostLiveChatMessages) {
-		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d", 
-			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostLiveChatMessages)
+	const cost = quota.QuotaCostLiveChatMessages
+
+	// STEP 1: RESERVE quota BEFORE making API call
+	var reservationID string
+	var err error
+	if c.quotaTracker != nil {
+		reservationID, err = c.quotaTracker.ReserveQuota(ctx, cost)
+		if err != nil {
+			return nil, fmt.Errorf("insufficient quota: %w", err)
+		}
 	}
 
+	// STEP 2: Make YouTube API call
 	call := c.service.LiveChatMessages.List(liveChatID, []string{"id", "snippet", "authorDetails"}).
 		MaxResults(200)
 
@@ -156,21 +216,31 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 		call = call.PageToken(pageToken)
 	}
 
-	response, err := call.Do()
+	response, apiErr := call.Do()
 
-	// Record quota usage AFTER the API call (whether success or failure)
-	if c.quotaTracker != nil {
-		if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostLiveChatMessages); recordErr != nil {
-			c.logger.Warn("Failed to record liveChatMessages.list quota usage", zap.Error(recordErr))
+	// STEP 3: CONFIRM or ROLLBACK based on result
+	if c.quotaTracker != nil && reservationID != "" {
+		if shouldChargeQuota(apiErr) {
+			// API succeeded or failed with server error - confirm quota usage
+			if confirmErr := c.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
+				c.logger.Warn("Failed to confirm quota reservation", zap.Error(confirmErr))
+			}
+		} else {
+			// Client error (4xx) - rollback quota
+			if rollbackErr := c.quotaTracker.RollbackReservation(ctx, reservationID, cost); rollbackErr != nil {
+				c.logger.Warn("Failed to rollback quota reservation", zap.Error(rollbackErr))
+			}
 		}
 	}
 
-	if err != nil {
+	// STEP 4: Process response
+	if apiErr != nil {
 		c.logger.Error("Failed to fetch chat messages",
 			zap.String("live_chat_id", liveChatID),
-			zap.Error(err),
+			zap.Bool("charged_quota", shouldChargeQuota(apiErr)),
+			zap.Error(apiErr),
 		)
-		return nil, fmt.Errorf("failed to fetch chat messages: %w", err)
+		return nil, fmt.Errorf("failed to fetch chat messages: %w", apiErr)
 	}
 
 	c.logger.Debug("Fetched chat messages",
@@ -185,31 +255,46 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 // CheckStreamStatus checks if a stream is still live and returns full details
 // This costs 1 quota unit and includes all data needed to start polling
 // Eliminates the need for a separate GetVideoDetails call (saves 1 unit per check)
+// Uses reserve-confirm-rollback pattern for accurate quota tracking
 func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (*StreamStatusResult, error) {
-	// Check quota BEFORE making the API call
-	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostVideos) {
-		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d",
-			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostVideos)
-	}
+	const cost = quota.QuotaCostVideos
 
-	// Request both liveStreamingDetails AND snippet in a single call
-	call := c.service.Videos.List([]string{"liveStreamingDetails", "snippet"}).Id(videoID)
-
-	response, err := call.Do()
-
-	// Record quota usage for videos.list (1 unit)
+	// STEP 1: RESERVE quota BEFORE making API call
+	var reservationID string
+	var err error
 	if c.quotaTracker != nil {
-		if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostVideos); recordErr != nil {
-			c.logger.Warn("Failed to record videos.list quota usage", zap.Error(recordErr))
+		reservationID, err = c.quotaTracker.ReserveQuota(ctx, cost)
+		if err != nil {
+			return nil, fmt.Errorf("insufficient quota: %w", err)
 		}
 	}
 
-	if err != nil {
+	// STEP 2: Make YouTube API call
+	// Request both liveStreamingDetails AND snippet in a single call
+	call := c.service.Videos.List([]string{"liveStreamingDetails", "snippet"}).Id(videoID)
+	response, apiErr := call.Do()
+
+	// STEP 3: CONFIRM or ROLLBACK based on result
+	if c.quotaTracker != nil && reservationID != "" {
+		if shouldChargeQuota(apiErr) {
+			if confirmErr := c.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
+				c.logger.Warn("Failed to confirm quota reservation", zap.Error(confirmErr))
+			}
+		} else {
+			if rollbackErr := c.quotaTracker.RollbackReservation(ctx, reservationID, cost); rollbackErr != nil {
+				c.logger.Warn("Failed to rollback quota reservation", zap.Error(rollbackErr))
+			}
+		}
+	}
+
+	// STEP 4: Process response
+	if apiErr != nil {
 		c.logger.Error("Failed to check stream status",
 			zap.String("video_id", videoID),
-			zap.Error(err),
+			zap.Bool("charged_quota", shouldChargeQuota(apiErr)),
+			zap.Error(apiErr),
 		)
-		return nil, fmt.Errorf("failed to check stream status: %w", err)
+		return nil, fmt.Errorf("failed to check stream status: %w", apiErr)
 	}
 
 	if len(response.Items) == 0 {
