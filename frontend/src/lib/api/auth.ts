@@ -12,7 +12,7 @@ export const authApi = {
   /**
    * Get the OAuth login URL for a supported platform
    */
-  async getLoginUrl(platform: 'twitch' | 'youtube' | 'tiktok' | 'kick' = 'twitch'): Promise<string> {
+  async getLoginUrl(platform: 'twitch' | 'youtube' | 'kick' = 'twitch'): Promise<string> {
     const response = await apiClient.get<LoginResponse>(`/api/v1/auth/${platform}/login`);
     return response.auth_url;
   },
