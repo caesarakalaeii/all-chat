@@ -206,9 +206,13 @@ function createQuotaEventEmbed(event) {
  * Creates a progress bar visualization
  */
 function createProgressBar(percentage) {
-  const filled = Math.floor(percentage / 5);
+  // Clamp percentage to 0-100 for display purposes
+  const clampedPercentage = Math.max(0, Math.min(100, percentage));
+  const filled = Math.floor(clampedPercentage / 5);
   const empty = 20 - filled;
   const bar = '█'.repeat(filled) + '░'.repeat(empty);
+
+  // Show actual percentage (may be > 100%) in text
   return `[${bar}] ${percentage.toFixed(1)}%`;
 }
 
