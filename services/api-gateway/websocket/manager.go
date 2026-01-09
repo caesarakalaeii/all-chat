@@ -32,6 +32,12 @@ type Manager struct {
 	gracePeriodTimers map[string]*time.Timer
 	gracePeriodMu     sync.Mutex
 	disconnectGracePeriod time.Duration
+
+	// Heartbeat tracking for connection TTL
+	heartbeatInterval time.Duration
+	connectionTTL     time.Duration
+	stopHeartbeat     chan struct{}
+	heartbeatWg       sync.WaitGroup
 }
 
 // NewManager creates a new WebSocket manager
@@ -44,18 +50,33 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		}
 	}
 
+	// Connection TTL: 5 minutes (auto-expire if heartbeat stops)
+	connectionTTL := 5 * time.Minute
+	// Heartbeat interval: 2 minutes (refresh TTL before expiration)
+	heartbeatInterval := 2 * time.Minute
+
 	logger.Info("WebSocket manager initialized",
 		zap.Duration("disconnect_grace_period", gracePeriod),
+		zap.Duration("connection_ttl", connectionTTL),
+		zap.Duration("heartbeat_interval", heartbeatInterval),
 	)
 
-	return &Manager{
+	mgr := &Manager{
 		pools:                 make(map[string]*Pool),
 		logger:                logger,
 		metrics:               m,
 		redisClient:           redisClient,
 		gracePeriodTimers:     make(map[string]*time.Timer),
 		disconnectGracePeriod: gracePeriod,
+		heartbeatInterval:     heartbeatInterval,
+		connectionTTL:         connectionTTL,
+		stopHeartbeat:         make(chan struct{}),
 	}
+
+	// Start heartbeat goroutine to refresh connection TTLs
+	mgr.startHeartbeat()
+
+	return mgr
 }
 
 // AddConnection adds a connection to the appropriate pool
@@ -127,23 +148,27 @@ func (m *Manager) publishConnectionEvent(ctx context.Context, overlayID, eventTy
 		return
 	}
 
-	// Update Redis SET to track connected overlays
+	// Update Redis with TTL-based tracking
+	key := "overlay:connected:" + overlayID
 	if eventType == "connected" {
-		if err := m.redisClient.SAdd(ctx, "overlay:connected", overlayID).Err(); err != nil {
-			m.logger.Error("Failed to add overlay to connected set",
+		// Set connection key with TTL (will auto-expire if heartbeat stops)
+		if err := m.redisClient.SetEx(ctx, key, "1", m.connectionTTL).Err(); err != nil {
+			m.logger.Error("Failed to set overlay connection with TTL",
 				zap.String("overlay_id", overlayID),
 				zap.Error(err),
 			)
 		}
 	} else if eventType == "disconnected" {
-		if err := m.redisClient.SRem(ctx, "overlay:connected", overlayID).Err(); err != nil {
-			m.logger.Error("Failed to remove overlay from connected set",
+		// Immediately delete connection key
+		if err := m.redisClient.Del(ctx, key).Err(); err != nil {
+			m.logger.Error("Failed to delete overlay connection key",
 				zap.String("overlay_id", overlayID),
 				zap.Error(err),
 			)
 		}
 	}
 
+	// Publish event to subscribers
 	if err := m.redisClient.Publish(ctx, "overlay:connections", payload).Err(); err != nil {
 		m.logger.Error("Failed to publish overlay connection event",
 			zap.String("overlay_id", overlayID),
@@ -293,4 +318,89 @@ func (m *Manager) HasPool(overlayID string) bool {
 
 	_, exists := m.pools[overlayID]
 	return exists
+}
+
+// startHeartbeat starts a background goroutine to refresh connection TTLs
+func (m *Manager) startHeartbeat() {
+	m.heartbeatWg.Add(1)
+	go func() {
+		defer m.heartbeatWg.Done()
+
+		ticker := time.NewTicker(m.heartbeatInterval)
+		defer ticker.Stop()
+
+		m.logger.Info("Connection heartbeat started",
+			zap.Duration("interval", m.heartbeatInterval),
+		)
+
+		for {
+			select {
+			case <-ticker.C:
+				m.refreshConnectionTTLs()
+			case <-m.stopHeartbeat:
+				m.logger.Info("Connection heartbeat stopped")
+				return
+			}
+		}
+	}()
+}
+
+// refreshConnectionTTLs refreshes TTL for all active overlay connections
+func (m *Manager) refreshConnectionTTLs() {
+	ctx := context.Background()
+
+	m.mu.RLock()
+	overlayIDs := make([]string, 0, len(m.pools))
+	for overlayID := range m.pools {
+		overlayIDs = append(overlayIDs, overlayID)
+	}
+	m.mu.RUnlock()
+
+	if len(overlayIDs) == 0 {
+		return
+	}
+
+	// Refresh TTL for each connected overlay
+	refreshed := 0
+	for _, overlayID := range overlayIDs {
+		key := "overlay:connected:" + overlayID
+		if err := m.redisClient.Expire(ctx, key, m.connectionTTL).Err(); err != nil {
+			m.logger.Error("Failed to refresh connection TTL",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		} else {
+			refreshed++
+		}
+	}
+
+	m.logger.Debug("Refreshed connection TTLs",
+		zap.Int("count", refreshed),
+		zap.Int("total_overlays", len(overlayIDs)),
+	)
+}
+
+// Shutdown gracefully stops the WebSocket manager
+func (m *Manager) Shutdown(ctx context.Context) error {
+	m.logger.Info("Shutting down WebSocket manager")
+
+	// Stop heartbeat
+	close(m.stopHeartbeat)
+	m.heartbeatWg.Wait()
+
+	// Close all connections and clear Redis state
+	m.mu.Lock()
+	overlayIDs := make([]string, 0, len(m.pools))
+	for overlayID := range m.pools {
+		overlayIDs = append(overlayIDs, overlayID)
+	}
+	m.mu.Unlock()
+
+	// Remove all connection keys from Redis
+	for _, overlayID := range overlayIDs {
+		m.publishConnectionEvent(ctx, overlayID, "disconnected")
+	}
+
+	m.logger.Info("WebSocket manager shutdown complete")
+	return nil
 }

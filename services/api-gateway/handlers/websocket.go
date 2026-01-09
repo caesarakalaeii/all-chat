@@ -179,17 +179,27 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	// Set up cleanup callback when connection closes
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error("Panic in WebSocket cleanup",
+					zap.String("overlay_id", overlayID),
+					zap.String("user_id", userID),
+					zap.Any("panic", r),
+				)
+			}
+			// Always clean up
+			h.wsManager.RemoveConnection(wsConn)
+			h.subscriber.Unsubscribe(context.Background(), overlayID)
+			h.logger.Info("WebSocket connection closed",
+				zap.String("overlay_id", overlayID),
+				zap.String("user_id", userID),
+			)
+		}()
+
 		// Wait for connection to close
 		for !wsConn.IsClosed() {
 			time.Sleep(100 * time.Millisecond)
 		}
-		// Clean up when closed
-		h.wsManager.RemoveConnection(wsConn)
-		h.subscriber.Unsubscribe(context.Background(), overlayID)
-		h.logger.Info("WebSocket connection closed",
-			zap.String("overlay_id", overlayID),
-			zap.String("user_id", userID),
-		)
 	}()
 
 	// Return immediately - don't block the HTTP handler
