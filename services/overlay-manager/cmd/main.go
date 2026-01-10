@@ -202,6 +202,7 @@ func main() {
 	admin.Use(middleware.AdminOnly())
 	{
 		admin.GET("/overlays", adminHandler.ListOverlays)
+		admin.GET("/overlays/:id/sources", adminHandler.GetOverlaySources)
 		admin.GET("/sources", adminHandler.ListAllSources)
 	}
 
