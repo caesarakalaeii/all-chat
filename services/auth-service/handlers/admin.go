@@ -53,10 +53,20 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		TwitchID        *string `json:"twitch_id"`
 		YouTubeID       *string `json:"youtube_id"`
 		KickID          *string `json:"kick_id"`
+		IsBanned        bool    `json:"is_banned"`
+		BannedAt        *string `json:"banned_at,omitempty"`
+		BannedReason    *string `json:"banned_reason,omitempty"`
+		BannedBy        *string `json:"banned_by,omitempty"`
 	}
 
 	response := make([]UserResponse, len(users))
 	for i, user := range users {
+		var bannedAt *string
+		if user.BannedAt != nil {
+			formatted := user.BannedAt.Format("2006-01-02T15:04:05Z07:00")
+			bannedAt = &formatted
+		}
+
 		response[i] = UserResponse{
 			ID:              user.ID,
 			Username:        user.Username,
@@ -67,6 +77,10 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 			TwitchID:        user.TwitchID,
 			YouTubeID:       user.GoogleID,
 			KickID:          user.KickID,
+			IsBanned:        user.IsBanned,
+			BannedAt:        bannedAt,
+			BannedReason:    user.BannedReason,
+			BannedBy:        user.BannedBy,
 		}
 	}
 
