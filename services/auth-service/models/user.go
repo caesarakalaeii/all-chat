@@ -11,13 +11,17 @@ type User struct {
 	AuthProvider    string    `json:"auth_provider"`            // "twitch", "youtube", or "kick"
 	Username        string    `json:"username"`
 	DisplayName     string    `json:"display_name"`
-	ProfileImageURL string    `json:"profile_image_url"`
-	IsAdmin         bool      `json:"is_admin"`                 // Admin role for access control
-	AccessToken     string    `json:"-"`                        // Never expose in JSON
-	RefreshToken    string    `json:"-"`                        // Never expose in JSON
-	TokenExpiresAt  time.Time `json:"-"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ProfileImageURL string     `json:"profile_image_url"`
+	IsAdmin         bool       `json:"is_admin"`                  // Admin role for access control
+	IsBanned        bool       `json:"is_banned"`                 // Ban status
+	BannedAt        *time.Time `json:"banned_at,omitempty"`       // When user was banned
+	BannedReason    *string    `json:"banned_reason,omitempty"`   // Reason for ban
+	BannedBy        *string    `json:"banned_by,omitempty"`       // Admin who banned (user ID)
+	AccessToken     string     `json:"-"`                         // Never expose in JSON
+	RefreshToken    string     `json:"-"`                         // Never expose in JSON
+	TokenExpiresAt  time.Time  `json:"-"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // TokenResponse represents JWT token response

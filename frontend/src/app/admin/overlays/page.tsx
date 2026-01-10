@@ -28,6 +28,7 @@ export default function OverlaysPage() {
   const [loading, setLoading] = useState(true);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Fetch all overlays
   useEffect(() => {
@@ -108,6 +109,17 @@ export default function OverlaysPage() {
     }
   };
 
+  // Filter overlays by search term
+  const filteredOverlays = overlays.filter((o) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      o.name.toLowerCase().includes(term) ||
+      o.id.toLowerCase().includes(term) ||
+      o.user_id.toLowerCase().includes(term)
+    );
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -141,9 +153,20 @@ export default function OverlaysPage() {
               <h3 className="text-lg leading-6 font-medium text-gray-900">
                 All Overlays ({overlays.length})
               </h3>
+
+              {/* Search Input */}
+              <div className="mt-4">
+                <input
+                  type="text"
+                  placeholder="Search by overlay name, ID, or user ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
             <ul className="divide-y divide-gray-200">
-              {overlays.map((overlay) => (
+              {filteredOverlays.map((overlay) => (
                 <li
                   key={overlay.id}
                   className={`px-4 py-4 hover:bg-gray-50 cursor-pointer transition-colors ${

@@ -1,6 +1,52 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+
+interface AdminStats {
+  total_users: number;
+  banned_users: number;
+  active_overlays: number;
+  total_sources: { [platform: string]: number };
+}
 
 export default function AdminDashboard() {
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const token = localStorage.getItem('jwt_token');
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch('/api/v1/admin/stats', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setStats(data);
+        }
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchStats();
+  }, []);
+
+  const totalSources = stats?.total_sources
+    ? Object.values(stats.total_sources).reduce((a, b) => a + b, 0)
+    : 0;
+
   return (
     <div className="px-4 py-6 sm:px-0">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Admin Dashboard</h1>
@@ -106,11 +152,61 @@ export default function AdminDashboard() {
       {/* Quick Stats */}
       <div className="mt-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Stats</h2>
-        <div className="bg-white shadow rounded-lg p-6">
-          <p className="text-gray-600">
-            Statistics and monitoring data will be displayed here.
-          </p>
-        </div>
+        {loading ? (
+          <div className="bg-white shadow rounded-lg p-6">
+            <p className="text-gray-600">Loading statistics...</p>
+          </div>
+        ) : stats ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Total Users */}
+            <div className="p-6 rounded-lg border bg-blue-50 border-blue-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Users</p>
+                  <p className="text-3xl font-bold mt-1">{stats.total_users}</p>
+                </div>
+                <div className="text-4xl">👥</div>
+              </div>
+            </div>
+
+            {/* Banned Users */}
+            <div className="p-6 rounded-lg border bg-red-50 border-red-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Banned Users</p>
+                  <p className="text-3xl font-bold mt-1">{stats.banned_users}</p>
+                </div>
+                <div className="text-4xl">🚫</div>
+              </div>
+            </div>
+
+            {/* Active Overlays */}
+            <div className="p-6 rounded-lg border bg-green-50 border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Active Overlays</p>
+                  <p className="text-3xl font-bold mt-1">{stats.active_overlays}</p>
+                </div>
+                <div className="text-4xl">📺</div>
+              </div>
+            </div>
+
+            {/* Total Sources */}
+            <div className="p-6 rounded-lg border bg-purple-50 border-purple-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Sources</p>
+                  <p className="text-3xl font-bold mt-1">{totalSources}</p>
+                </div>
+                <div className="text-4xl">📡</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white shadow rounded-lg p-6">
+            <p className="text-gray-600">Failed to load statistics.</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -132,6 +132,22 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 		return
 	}
 
+	// Check if platform ID is banned
+	platformBanned, err := h.userRepo.IsPlatformIDBanned(c.Request.Context(), "twitch", twitchUser.ID)
+	if err != nil {
+		h.logger.Error("Failed to check platform ban", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Authentication failed"})
+		return
+	}
+	if platformBanned {
+		h.logger.Warn("Banned platform ID attempted login",
+			zap.String("platform", "twitch"),
+			zap.String("platform_id", twitchUser.ID))
+		frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
+		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", frontendURL))
+		return
+	}
+
 	// Check if user exists
 	user, err := h.userRepo.GetByTwitchID(c.Request.Context(), twitchUser.ID)
 	if err != nil {
@@ -154,6 +170,16 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 			return
 		}
 	} else {
+		// Check if existing user is banned
+		if user.IsBanned {
+			h.logger.Warn("Banned user attempted login",
+				zap.String("user_id", user.ID),
+				zap.String("username", user.Username))
+			frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
+			c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", frontendURL))
+			return
+		}
+
 		// Update existing user
 		user.Username = twitchUser.Login
 		user.DisplayName = twitchUser.DisplayName
@@ -226,6 +252,22 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
+	// Check if platform ID is banned
+	platformBanned, err := h.userRepo.IsPlatformIDBanned(c.Request.Context(), "youtube", youtubeUser.ID)
+	if err != nil {
+		h.logger.Error("Failed to check platform ban", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Authentication failed"})
+		return
+	}
+	if platformBanned {
+		h.logger.Warn("Banned platform ID attempted login",
+			zap.String("platform", "youtube"),
+			zap.String("platform_id", youtubeUser.ID))
+		frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
+		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", frontendURL))
+		return
+	}
+
 	// Check if user exists by Google ID
 	user, err := h.userRepo.GetByGoogleID(c.Request.Context(), youtubeUser.ID)
 	if err != nil {
@@ -254,6 +296,16 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 			zap.String("google_id", googleID),
 		)
 	} else {
+		// Check if existing user is banned
+		if user.IsBanned {
+			h.logger.Warn("Banned user attempted login",
+				zap.String("user_id", user.ID),
+				zap.String("username", user.Username))
+			frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
+			c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", frontendURL))
+			return
+		}
+
 		// Update existing user
 		user.DisplayName = youtubeUser.Name
 		user.ProfileImageURL = youtubeUser.Picture

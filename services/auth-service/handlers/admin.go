@@ -1,25 +1,29 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
 // AdminHandler handles admin-specific endpoints
 type AdminHandler struct {
 	repo      *repository.UserRepository
+	db        *pgxpool.Pool
 	logger    *zap.Logger
 	jwtSecret string
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(repo *repository.UserRepository, logger *zap.Logger, jwtSecret string) *AdminHandler {
+func NewAdminHandler(repo *repository.UserRepository, db *pgxpool.Pool, logger *zap.Logger, jwtSecret string) *AdminHandler {
 	return &AdminHandler{
 		repo:      repo,
+		db:        db,
 		logger:    logger,
 		jwtSecret: jwtSecret,
 	}
@@ -162,10 +166,183 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 		zap.String("target_username", targetUser.Username))
 
 	c.JSON(http.StatusOK, gin.H{
-		"token":       token,
-		"user_id":     targetUser.ID,
-		"username":    targetUser.Username,
-		"expires_in":  7200, // 2 hours in seconds
+		"token":         token,
+		"user_id":       targetUser.ID,
+		"username":      targetUser.Username,
+		"expires_in":    7200, // 2 hours in seconds
 		"impersonating": true,
 	})
+}
+
+// BanUser bans a user account (admin only)
+// POST /api/v1/admin/users/:id/ban
+func (h *AdminHandler) BanUser(c *gin.Context) {
+	adminID := c.GetString("user_id") // from JWT
+	userID := c.Param("id")
+
+	var req struct {
+		Reason string `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "reason is required"})
+		return
+	}
+
+	// Get user to ban their platform IDs too
+	user, err := h.repo.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	// Don't allow banning yourself
+	if userID == adminID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot ban yourself"})
+		return
+	}
+
+	// Don't allow banning other admins
+	if user.IsAdmin {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot ban another admin"})
+		return
+	}
+
+	// Ban user account (transaction handles overlays/sources)
+	if err := h.repo.BanUser(c.Request.Context(), userID, adminID, req.Reason); err != nil {
+		h.logger.Error("Failed to ban user", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to ban user"})
+		return
+	}
+
+	// Also ban all platform IDs for this user
+	if user.TwitchID != nil {
+		h.repo.BanPlatformID(c.Request.Context(), "twitch", *user.TwitchID, adminID, "Auto-ban: "+req.Reason)
+	}
+	if user.GoogleID != nil {
+		h.repo.BanPlatformID(c.Request.Context(), "youtube", *user.GoogleID, adminID, "Auto-ban: "+req.Reason)
+	}
+	if user.KickID != nil {
+		h.repo.BanPlatformID(c.Request.Context(), "kick", *user.KickID, adminID, "Auto-ban: "+req.Reason)
+	}
+
+	h.logger.Info("User banned",
+		zap.String("user_id", userID),
+		zap.String("username", user.Username),
+		zap.String("admin_id", adminID),
+		zap.String("reason", req.Reason))
+
+	c.JSON(http.StatusOK, gin.H{"message": "user banned successfully"})
+}
+
+// UnbanUser removes ban from user account (admin only)
+// POST /api/v1/admin/users/:id/unban
+func (h *AdminHandler) UnbanUser(c *gin.Context) {
+	adminID := c.GetString("user_id")
+	userID := c.Param("id")
+
+	// Get user for logging
+	user, err := h.repo.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	if err := h.repo.UnbanUser(c.Request.Context(), userID); err != nil {
+		h.logger.Error("Failed to unban user", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unban user"})
+		return
+	}
+
+	h.logger.Info("User unbanned",
+		zap.String("user_id", userID),
+		zap.String("username", user.Username),
+		zap.String("admin_id", adminID))
+
+	c.JSON(http.StatusOK, gin.H{"message": "user unbanned successfully"})
+}
+
+// ListBannedUsers returns all banned users (admin only)
+// GET /api/v1/admin/users/banned
+func (h *AdminHandler) ListBannedUsers(c *gin.Context) {
+	limit := 50
+	offset := 0
+
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := parseInt(l); err == nil {
+			limit = parsed
+		}
+	}
+	if o := c.Query("offset"); o != "" {
+		if parsed, err := parseInt(o); err == nil {
+			offset = parsed
+		}
+	}
+
+	users, err := h.repo.GetBannedUsers(c.Request.Context(), limit, offset)
+	if err != nil {
+		h.logger.Error("Failed to fetch banned users", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch banned users"})
+		return
+	}
+
+	h.logger.Info("Listed banned users", zap.Int("count", len(users)))
+	c.JSON(http.StatusOK, gin.H{"banned_users": users})
+}
+
+// GetDashboardStats returns aggregated statistics for admin dashboard
+// GET /api/v1/admin/stats
+func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
+	type AdminStats struct {
+		TotalUsers     int            `json:"total_users"`
+		BannedUsers    int            `json:"banned_users"`
+		ActiveOverlays int            `json:"active_overlays"`
+		TotalSources   map[string]int `json:"total_sources"`
+	}
+
+	var stats AdminStats
+	stats.TotalSources = make(map[string]int)
+
+	// Total users
+	err := h.db.QueryRow(c.Request.Context(), "SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
+	if err != nil {
+		h.logger.Error("Failed to count users", zap.Error(err))
+	}
+
+	// Banned users
+	err = h.db.QueryRow(c.Request.Context(), "SELECT COUNT(*) FROM users WHERE is_banned = true").Scan(&stats.BannedUsers)
+	if err != nil {
+		h.logger.Error("Failed to count banned users", zap.Error(err))
+	}
+
+	// Active overlays
+	err = h.db.QueryRow(c.Request.Context(), "SELECT COUNT(*) FROM overlays WHERE is_active = true").Scan(&stats.ActiveOverlays)
+	if err != nil {
+		h.logger.Error("Failed to count active overlays", zap.Error(err))
+	}
+
+	// Sources by platform
+	rows, err := h.db.Query(c.Request.Context(), `
+		SELECT platform, COUNT(*)
+		FROM overlay_chat_sources
+		GROUP BY platform
+	`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var platform string
+			var count int
+			if err := rows.Scan(&platform, &count); err == nil {
+				stats.TotalSources[platform] = count
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, stats)
+}
+
+// Helper function to parse integers safely
+func parseInt(s string) (int, error) {
+	var i int
+	_, err := fmt.Sscanf(s, "%d", &i)
+	return i, err
 }
