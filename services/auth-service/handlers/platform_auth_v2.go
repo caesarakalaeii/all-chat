@@ -353,6 +353,25 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			return
 		}
 
+		// Check if platform ID is banned (prevent multi-account abuse)
+		platformBanned, err := h.userRepo.IsPlatformIDBanned(c.Request.Context(), string(platform), platformUser.GetID())
+		if err != nil {
+			h.logger.Error("Failed to check platform ban",
+				zap.String("platform", string(platform)),
+				zap.Error(err),
+			)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Authentication failed"})
+			return
+		}
+		if platformBanned {
+			h.logger.Warn("Banned platform ID attempted login",
+				zap.String("platform", string(platform)),
+				zap.String("platform_id", platformUser.GetID()),
+			)
+			c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+			return
+		}
+
 		var youtubeChannel *oauth.YouTubeChannelInfo
 		var sourceDetails *OverlaySourceDetails
 
@@ -594,6 +613,11 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			zap.String("username", user.Username),
 		)
 	} else {
+		// Check if existing user is banned
+		if user.IsBanned {
+			return nil, fmt.Errorf("user account is banned")
+		}
+
 		// Update existing user
 		user.DisplayName = platformUser.GetDisplayName()
 		user.ProfileImageURL = platformUser.GetProfileImageURL()
@@ -621,6 +645,11 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 	user, err := h.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Check if user is banned
+	if user.IsBanned {
+		return nil, fmt.Errorf("user account is banned")
 	}
 
 	// Update the user with the new platform ID and tokens
