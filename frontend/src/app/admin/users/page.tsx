@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
+import { BanModal } from '@/components/admin/BanModal';
 
 interface User {
   id: string;
@@ -14,6 +16,10 @@ interface User {
   twitch_id?: string;
   youtube_id?: string;
   kick_id?: string;
+  is_banned: boolean;
+  banned_at?: string;
+  banned_reason?: string;
+  banned_by?: string;
 }
 
 interface UserOverlay {
@@ -30,6 +36,10 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [impersonating, setImpersonating] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filter, setFilter] = useState<'all' | 'active' | 'banned'>('all');
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [userToBan, setUserToBan] = useState<User | null>(null);
 
   // Fetch all users from the database
   useEffect(() => {
@@ -93,6 +103,22 @@ export default function UsersPage() {
     fetchUserOverlays();
   }, [selectedUser]);
 
+  // Refetch users helper
+  const refetchUsers = async () => {
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const response = await fetch('/api/v1/admin/users', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+      }
+    } catch (err) {
+      console.error('Failed to refetch users:', err);
+    }
+  };
+
   // Handle impersonation
   const handleImpersonate = async (userId: string) => {
     if (!confirm('Are you sure you want to impersonate this user? This will replace your current session.')) {
@@ -131,6 +157,87 @@ export default function UsersPage() {
     }
   };
 
+  // Handle ban user
+  const handleBanUser = async (reason: string) => {
+    if (!userToBan) return;
+
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const response = await fetch(`/api/v1/admin/users/${userToBan.id}/ban`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to ban user');
+      }
+
+      toast.success(`${userToBan.username} banned successfully`);
+      await refetchUsers();
+
+      // Clear selected user if it was the banned one
+      if (selectedUser?.id === userToBan.id) {
+        setSelectedUser(null);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to ban user');
+      throw err;
+    }
+  };
+
+  // Handle unban user
+  const handleUnbanUser = async (userId: string, username: string) => {
+    if (!confirm(`Are you sure you want to unban ${username}?`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const response = await fetch(`/api/v1/admin/users/${userId}/unban`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to unban user');
+      }
+
+      toast.success(`${username} unbanned successfully`);
+      await refetchUsers();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to unban user');
+    }
+  };
+
+  // Filter and search users
+  const displayUsers = users.filter((u) => {
+    // Filter by ban status
+    if (filter === 'banned' && !u.is_banned) return false;
+    if (filter === 'active' && u.is_banned) return false;
+
+    // Search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      return (
+        u.username.toLowerCase().includes(term) ||
+        u.display_name.toLowerCase().includes(term) ||
+        u.twitch_id?.toLowerCase().includes(term) ||
+        u.youtube_id?.toLowerCase().includes(term) ||
+        u.kick_id?.toLowerCase().includes(term)
+      );
+    }
+
+    return true;
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -146,6 +253,9 @@ export default function UsersPage() {
       </div>
     );
   }
+
+  const bannedCount = users.filter((u) => u.is_banned).length;
+  const activeCount = users.filter((u) => !u.is_banned).length;
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -164,9 +274,54 @@ export default function UsersPage() {
               <h3 className="text-lg leading-6 font-medium text-gray-900">
                 All Users ({users.length})
               </h3>
+
+              {/* Search Input */}
+              <div className="mt-4">
+                <input
+                  type="text"
+                  placeholder="Search by username, display name, or platform ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="mt-4 flex space-x-4 border-b border-gray-200">
+                <button
+                  onClick={() => setFilter('all')}
+                  className={`pb-2 px-1 text-sm font-medium border-b-2 ${
+                    filter === 'all'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                  }`}
+                >
+                  All ({users.length})
+                </button>
+                <button
+                  onClick={() => setFilter('active')}
+                  className={`pb-2 px-1 text-sm font-medium border-b-2 ${
+                    filter === 'active'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                  }`}
+                >
+                  Active ({activeCount})
+                </button>
+                <button
+                  onClick={() => setFilter('banned')}
+                  className={`pb-2 px-1 text-sm font-medium border-b-2 ${
+                    filter === 'banned'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                  }`}
+                >
+                  Banned ({bannedCount})
+                </button>
+              </div>
             </div>
             <ul className="divide-y divide-gray-200">
-              {users.map((user) => (
+              {displayUsers.map((user) => (
                 <li
                   key={user.id}
                   className={`px-4 py-4 hover:bg-gray-50 cursor-pointer transition-colors ${
@@ -181,6 +336,11 @@ export default function UsersPage() {
                           {user.display_name}
                         </p>
                         <div className="ml-2 flex space-x-1">
+                          {user.is_banned && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                              BANNED
+                            </span>
+                          )}
                           {user.twitch_id && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
                               Twitch
@@ -283,7 +443,39 @@ export default function UsersPage() {
                   </p>
                 </div>
 
-                <div className="mt-6">
+                {/* Ban/Unban Section */}
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  {selectedUser.is_banned ? (
+                    <>
+                      <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                        <p className="text-sm font-medium text-red-800">
+                          Banned: {selectedUser.banned_reason}
+                        </p>
+                        <p className="text-xs text-red-600 mt-1">
+                          {selectedUser.banned_at && `Banned on ${new Date(selectedUser.banned_at).toLocaleString()}`}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleUnbanUser(selectedUser.id, selectedUser.username)}
+                        className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-md transition-colors"
+                      >
+                        Unban User
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setUserToBan(selectedUser);
+                        setShowBanModal(true);
+                      }}
+                      className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-md transition-colors"
+                    >
+                      Ban User
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-gray-200">
                   <h4 className="text-sm font-medium text-gray-500 mb-2">
                     Overlays ({userOverlays.length})
                   </h4>
@@ -321,6 +513,17 @@ export default function UsersPage() {
           )}
         </div>
       </div>
+
+      {/* Ban Modal */}
+      <BanModal
+        isOpen={showBanModal}
+        onClose={() => {
+          setShowBanModal(false);
+          setUserToBan(null);
+        }}
+        onConfirm={handleBanUser}
+        username={userToBan?.username || ''}
+      />
     </div>
   );
 }
