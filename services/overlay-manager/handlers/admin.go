@@ -116,3 +116,21 @@ func (h *AdminHandler) ListAllSources(c *gin.Context) {
 	h.logger.Info("Listed all sources", zap.Int("count", len(response)))
 	c.JSON(http.StatusOK, response)
 }
+
+// GetOverlaySources returns all sources for a specific overlay (admin only)
+// GET /api/v1/admin/overlays/:id/sources
+func (h *AdminHandler) GetOverlaySources(c *gin.Context) {
+	overlayID := c.Param("id")
+
+	sources, err := h.sourceRepo.ListByOverlayID(c.Request.Context(), overlayID)
+	if err != nil {
+		h.logger.Error("Failed to fetch overlay sources", zap.String("overlay_id", overlayID), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch sources",
+		})
+		return
+	}
+
+	h.logger.Info("Listed overlay sources", zap.String("overlay_id", overlayID), zap.Int("count", len(sources)))
+	c.JSON(http.StatusOK, sources)
+}

@@ -75,7 +75,7 @@ export default function OverlaysPage() {
       setSourcesLoading(true);
       try {
         const token = localStorage.getItem('jwt_token');
-        const response = await fetch(`/api/v1/overlays/${selectedOverlay.id}/sources`, {
+        const response = await fetch(`/api/v1/admin/overlays/${selectedOverlay.id}/sources`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
