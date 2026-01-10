@@ -342,6 +342,14 @@ func main() {
 		protectedAPI.GET("/admin/users/:id", proxyHandler.ForwardRequest)       // -> auth-service
 		protectedAPI.POST("/admin/users/:id/impersonate", proxyHandler.ForwardRequest) // -> auth-service
 
+		// Admin user ban management
+		protectedAPI.POST("/admin/users/:id/ban", proxyHandler.ForwardRequest)   // -> auth-service
+		protectedAPI.POST("/admin/users/:id/unban", proxyHandler.ForwardRequest) // -> auth-service
+		protectedAPI.GET("/admin/users/banned", proxyHandler.ForwardRequest)     // -> auth-service
+
+		// Admin stats
+		protectedAPI.GET("/admin/stats", proxyHandler.ForwardRequest)           // -> auth-service
+
 		// Admin viewer management routes
 		protectedAPI.GET("/admin/viewers", proxyHandler.ForwardRequest)         // -> auth-service
 		protectedAPI.POST("/admin/viewers/:session_id/ban", proxyHandler.ForwardRequest)   // -> auth-service
