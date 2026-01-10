@@ -261,41 +261,52 @@ async function fetchQuotaStatus() {
  */
 async function postQuotaStatus() {
   try {
+    console.log(`Fetching Discord channel: ${DISCORD_CHANNEL_ID}`);
     const channel = await discordClient.channels.fetch(DISCORD_CHANNEL_ID);
     if (!channel) {
       console.error('Discord channel not found');
       return;
     }
+    console.log(`Channel found: ${channel.name} (type: ${channel.type})`);
 
     const quotaData = await fetchQuotaStatus();
     if (!quotaData) {
       console.error('Failed to fetch quota data');
       return;
     }
+    console.log(`Quota data fetched: ${quotaData.global.used}/${quotaData.global.limit} (${quotaData.global.percentage.toFixed(2)}%)`);
 
     const embed = createQuotaEmbed(quotaData);
 
     // Try to edit existing message, or create new one if it doesn't exist
     if (statusMessageId) {
+      console.log(`Attempting to edit existing message ID: ${statusMessageId}`);
       try {
         const message = await channel.messages.fetch(statusMessageId);
         await message.edit({ embeds: [embed] });
-        console.log('Updated existing quota status message');
+        console.log(`✅ Updated existing quota status message (ID: ${statusMessageId})`);
       } catch (error) {
         // Message was deleted or not found, create a new one
+        console.error('Failed to edit existing message:', error.message, error.code);
         console.log('Status message not found, creating new one');
-        const newMessage = await channel.send({ embeds: [embed] });
-        statusMessageId = newMessage.id;
-        console.log('Posted new quota status message');
+        try {
+          const newMessage = await channel.send({ embeds: [embed] });
+          statusMessageId = newMessage.id;
+          console.log('Posted new quota status message');
+        } catch (sendError) {
+          console.error('Failed to send new message:', sendError.message, sendError.code, sendError.stack);
+          throw sendError; // Re-throw to be caught by outer catch
+        }
       }
     } else {
       // First time, create the message
       const newMessage = await channel.send({ embeds: [embed] });
       statusMessageId = newMessage.id;
-      console.log('Posted initial quota status message');
+      console.log(`Posted initial quota status message (ID: ${statusMessageId})`);
     }
   } catch (error) {
-    console.error('Error posting quota status:', error);
+    console.error('❌ Error posting quota status:', error.message, error.code);
+    console.error('Full error:', error);
   }
 }
 
