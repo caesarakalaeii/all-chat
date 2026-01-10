@@ -85,6 +85,7 @@ type Tracker struct {
 	currentDate string
 	currentState QuotaState
 	lastStateTransition time.Time
+	lastNotifiedThreshold float64 // Last 5% threshold that triggered a notification
 
 	// State thresholds (configurable)
 	healthyThreshold   float64
@@ -121,6 +122,7 @@ func NewTracker(db *pgxpool.Pool, dailyLimit int, logger *zap.Logger, m *metrics
 		dailyLimit: dailyLimit,
 		currentState: QuotaStateHealthy,
 		lastStateTransition: time.Now(),
+		lastNotifiedThreshold: 0.0,
 		healthyThreshold:   healthyThreshold,
 		degradedThreshold:  degradedThreshold,
 		criticalThreshold:  criticalThreshold,
@@ -161,6 +163,9 @@ func (t *Tracker) Start(ctx context.Context) error {
 	t.mu.Lock()
 	t.currentState = t.calculateState(percentage)
 	t.lastStateTransition = time.Now()
+	// Set lastNotifiedThreshold to the highest 5% threshold already crossed
+	// This prevents re-notifying on restart for thresholds we've already passed
+	t.lastNotifiedThreshold = (float64(int(percentage/5.0)) * 5.0)
 	t.mu.Unlock()
 
 	t.logger.Info("Initialized quota metrics and state",
@@ -168,6 +173,7 @@ func (t *Tracker) Start(ctx context.Context) error {
 		zap.Int("remaining", remaining),
 		zap.Float64("percentage", percentage),
 		zap.String("initial_state", string(t.currentState)),
+		zap.Float64("last_notified_threshold", t.lastNotifiedThreshold),
 	)
 
 	// Start background goroutines
@@ -240,6 +246,7 @@ func (t *Tracker) checkDateRollover() {
 	)
 	t.currentDate = today
 	t.usageToday = 0
+	t.lastNotifiedThreshold = 0.0 // Reset threshold notifications for new day
 
 	// Reset state to HEALTHY
 	if t.currentState != QuotaStateHealthy {
@@ -274,6 +281,30 @@ func (t *Tracker) calculateState(percentage float64) QuotaState {
 // Must be called WITH the lock held
 func (t *Tracker) updateStateAndNotify(percentage float64) {
 	newState := t.calculateState(percentage)
+
+	// Check for 5% threshold crossings (75%, 80%, 85%, 90%, 95%, 100%, etc.)
+	// Only notify for thresholds >= 75% to avoid spam
+	currentThreshold := float64(int(percentage/5.0)) * 5.0
+	if currentThreshold >= 75.0 && currentThreshold > t.lastNotifiedThreshold {
+		t.lastNotifiedThreshold = currentThreshold
+
+		t.logger.Info("Crossed 5% quota threshold",
+			zap.Float64("threshold", currentThreshold),
+			zap.Float64("percentage", percentage),
+			zap.Int("used", t.usageToday),
+		)
+
+		// Emit threshold crossed notification
+		if t.notifier != nil {
+			ctx := context.Background()
+			if err := t.notifier.NotifyThresholdCrossed(ctx, newState, currentThreshold, percentage, t.usageToday, t.dailyLimit); err != nil {
+				t.logger.Warn("Failed to send threshold crossed notification",
+					zap.Float64("threshold", currentThreshold),
+					zap.Error(err),
+				)
+			}
+		}
+	}
 
 	// Check if state changed
 	if newState != t.currentState {
@@ -343,6 +374,7 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 		)
 		t.currentDate = today
 		t.usageToday = 0
+		t.lastNotifiedThreshold = 0.0 // Reset threshold notifications for new day
 
 		// Reset state to healthy on new day
 		if t.currentState != QuotaStateHealthy {
