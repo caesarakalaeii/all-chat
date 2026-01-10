@@ -95,6 +95,9 @@ func main() {
 
 	log.Info("Connected to Redis")
 
+	// Migrate legacy connection tracking (one-time cleanup)
+	migrateLegacyConnectionTracking(ctx, redisClient, log)
+
 	// Initialize rate limiter (configurable via env vars)
 	rateLimitPerMin := getEnvAsIntOrDefault("RATE_LIMIT_PER_MINUTE", 300) // Default: 300 requests/min per IP/user
 	rateLimiter := ratelimit.NewRateLimiter(ratelimit.Config{
@@ -409,4 +412,38 @@ func getEnvAsIntOrDefault(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// migrateLegacyConnectionTracking removes the old Redis SET used for connection tracking
+// The system now uses individual TTL keys (overlay:connected:{id}) exclusively
+func migrateLegacyConnectionTracking(ctx context.Context, redisClient *redis.Client, log *zap.Logger) {
+	legacyKey := "overlay:connected"
+
+	// Check if legacy SET exists
+	exists, err := redisClient.Exists(ctx, legacyKey).Result()
+	if err != nil {
+		log.Error("Failed to check legacy connection SET", zap.Error(err))
+		return
+	}
+
+	if exists == 0 {
+		log.Debug("No legacy connection SET found, migration not needed")
+		return
+	}
+
+	// Get member count for logging
+	count, err := redisClient.SCard(ctx, legacyKey).Result()
+	if err != nil {
+		log.Warn("Failed to get legacy SET member count", zap.Error(err))
+	}
+
+	// Delete the SET
+	if err := redisClient.Del(ctx, legacyKey).Err(); err != nil {
+		log.Error("Failed to delete legacy connection SET", zap.Error(err))
+		return
+	}
+
+	log.Info("Removed legacy connection SET (health checker now uses TTL keys)",
+		zap.Int64("members_removed", count),
+	)
 }

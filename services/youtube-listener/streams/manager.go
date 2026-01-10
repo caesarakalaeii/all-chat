@@ -50,10 +50,8 @@ type Manager struct {
 	disconnectDebounceMu     sync.Mutex
 	disconnectDebounceDelay  time.Duration
 
-	// Livestream detection backoff
-	detectionMu         sync.RWMutex
-	channelLastCheck    map[string]time.Time // channelID -> last check time
-	channelBackoff      map[string]time.Duration // channelID -> current backoff duration
+	// Livestream detection backoff (persistent via Redis)
+	backoffStore          *BackoffStore
 	baseDetectionInterval time.Duration
 	maxDetectionInterval  time.Duration
 
@@ -113,6 +111,9 @@ func NewManager(
 	// Create quota coordinator
 	quotaCoordinator := quota.NewCoordinator(quotaTracker, perChannelTracker, logger)
 
+	// Create backoff store for persistent backoff state
+	backoffStore := NewBackoffStore(redisClient, logger)
+
 	return &Manager{
 		repository:                repository,
 		oauthManager:              oauthManager,
@@ -128,8 +129,7 @@ func NewManager(
 		connectedOverlays:         make(map[string]time.Time),
 		disconnectDebounceTimers:  make(map[string]*time.Timer),
 		disconnectDebounceDelay:   disconnectDebounce,
-		channelLastCheck:          make(map[string]time.Time),
-		channelBackoff:            make(map[string]time.Duration),
+		backoffStore:              backoffStore,
 		baseDetectionInterval:     30 * time.Second,  // Start checking every 30s
 		maxDetectionInterval:      10 * time.Minute,  // Max 10 minutes between checks
 		syncInterval:                30 * time.Second,
@@ -1150,27 +1150,47 @@ func (m *Manager) IsOverlayConnected(overlayID string) bool {
 
 // shouldSkipDetection checks if we should skip livestream detection for a channel due to backoff
 func (m *Manager) shouldSkipDetection(channelID string) bool {
-	m.detectionMu.RLock()
-	defer m.detectionMu.RUnlock()
+	ctx := context.Background()
 
-	lastCheck, exists := m.channelLastCheck[channelID]
-	if !exists {
-		return false // First check, don't skip
+	// PRIORITY 1: Check negative cache (cheapest check, most aggressive)
+	isNegativeCached, err := m.backoffStore.IsNegativeCached(ctx, channelID)
+	if err != nil {
+		m.logger.Warn("Failed to check negative cache, continuing",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+	} else if isNegativeCached {
+		m.logger.Debug("Skipping detection due to negative cache",
+			zap.String("channel_id", channelID),
+		)
+		return true  // Channel recently checked and offline
 	}
 
-	backoff := m.channelBackoff[channelID]
-	if backoff == 0 {
-		backoff = m.baseDetectionInterval
+	// PRIORITY 2: Check persistent backoff state from Redis
+	backoffState, err := m.backoffStore.LoadBackoffState(ctx, channelID)
+	if err != nil {
+		m.logger.Warn("Failed to load backoff state, allowing check",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		return false  // On error, allow check (fail open)
 	}
 
-	timeSinceLastCheck := time.Since(lastCheck)
-	shouldSkip := timeSinceLastCheck < backoff
+	if backoffState == nil {
+		return false  // No backoff state exists, allow check
+	}
+
+	// Calculate time since last check
+	timeSinceLastCheck := time.Since(backoffState.LastCheckTime)
+	shouldSkip := timeSinceLastCheck < backoffState.CurrentInterval
 
 	if shouldSkip {
-		m.logger.Debug("Skipping livestream detection due to backoff",
+		m.logger.Debug("Skipping detection due to backoff interval",
 			zap.String("channel_id", channelID),
-			zap.Duration("backoff", backoff),
+			zap.Duration("current_interval", backoffState.CurrentInterval),
 			zap.Duration("time_since_last_check", timeSinceLastCheck),
+			zap.Int("failure_count", backoffState.FailureCount),
+			zap.Int("consecutive_offline", backoffState.ConsecutiveOffline),
 		)
 	}
 
@@ -1179,16 +1199,29 @@ func (m *Manager) shouldSkipDetection(channelID string) bool {
 
 // updateDetectionBackoff updates backoff after successful livestream detection
 func (m *Manager) updateDetectionBackoff(channelID string) {
-	m.detectionMu.Lock()
-	defer m.detectionMu.Unlock()
+	ctx := context.Background()
 
-	m.channelLastCheck[channelID] = time.Now()
+	// Load or create backoff state
+	backoffState, err := m.backoffStore.LoadBackoffState(ctx, channelID)
+	if err != nil {
+		m.logger.Error("Failed to load backoff state", zap.String("channel_id", channelID), zap.Error(err))
+		return
+	}
+	if backoffState == nil {
+		backoffState = &BackoffState{
+			LastCheckTime:   time.Now(),
+			CurrentInterval: m.baseDetectionInterval,
+			FailureCount:    0,
+		}
+	}
+
+	// Update last check time
+	backoffState.LastCheckTime = time.Now()
 
 	// Check if we found a stream (have active poller)
 	m.mu.RLock()
 	hasActivePoller := false
 	for streamID := range m.pollers {
-		// Check if this poller is for this channel
 		if stream, ok := m.activeStreams[streamID]; ok && stream.ChannelID == channelID {
 			hasActivePoller = true
 			break
@@ -1197,71 +1230,113 @@ func (m *Manager) updateDetectionBackoff(channelID string) {
 	m.mu.RUnlock()
 
 	if hasActivePoller {
-		// Stream found - set to max backoff since we're now polling chat messages
-		// No need to keep checking for stream existence while actively polling
-		m.channelBackoff[channelID] = m.maxDetectionInterval
+		// Stream found - set to max backoff (no need to check while polling)
+		backoffState.CurrentInterval = m.maxDetectionInterval
+		backoffState.FailureCount = 0
+		backoffState.ConsecutiveOffline = 0
+		backoffState.LastSeenLive = time.Now()
 
-		m.logger.Info("Set livestream detection to max backoff (stream active, polling chat)",
+		// Clear negative cache
+		if err := m.backoffStore.ClearBackoff(ctx, channelID); err != nil {
+			m.logger.Warn("Failed to clear negative cache", zap.String("channel_id", channelID), zap.Error(err))
+		}
+
+		m.logger.Info("Stream detected, set max backoff",
 			zap.String("channel_id", channelID),
-			zap.Duration("backoff", m.maxDetectionInterval),
+			zap.Duration("backoff", backoffState.CurrentInterval),
 		)
 	} else {
-		// No stream found - INCREASE backoff exponentially to conserve quota
-		// This prevents burning quota checking for streams that aren't live
-		currentBackoff := m.channelBackoff[channelID]
-		if currentBackoff == 0 {
-			currentBackoff = m.baseDetectionInterval
+		// No stream found - increase backoff exponentially
+		backoffState.FailureCount++
+		backoffState.ConsecutiveOffline++
+
+		currentInterval := backoffState.CurrentInterval
+		if currentInterval == 0 {
+			currentInterval = m.baseDetectionInterval
 		}
 		// Double the backoff (exponential), up to max
-		newBackoff := currentBackoff * 2
-		if newBackoff > m.maxDetectionInterval {
-			newBackoff = m.maxDetectionInterval
+		newInterval := currentInterval * 2
+		if newInterval > m.maxDetectionInterval {
+			newInterval = m.maxDetectionInterval
 		}
-		m.channelBackoff[channelID] = newBackoff
+		backoffState.CurrentInterval = newInterval
 
-		m.logger.Info("Increased livestream detection backoff (no stream found)",
+		// Set negative cache (tiered TTL based on consecutive offline)
+		if err := m.backoffStore.SetNegativeCache(ctx, channelID, backoffState.ConsecutiveOffline); err != nil {
+			m.logger.Warn("Failed to set negative cache", zap.String("channel_id", channelID), zap.Error(err))
+		}
+
+		m.logger.Info("No stream found, increased backoff",
 			zap.String("channel_id", channelID),
-			zap.Duration("previous_backoff", currentBackoff),
-			zap.Duration("new_backoff", newBackoff),
+			zap.Duration("previous_backoff", currentInterval),
+			zap.Duration("new_backoff", newInterval),
+			zap.Int("consecutive_offline", backoffState.ConsecutiveOffline),
 		)
+	}
+
+	// Save updated state to Redis
+	if err := m.backoffStore.SaveBackoffState(ctx, channelID, backoffState); err != nil {
+		m.logger.Error("Failed to save backoff state", zap.String("channel_id", channelID), zap.Error(err))
 	}
 }
 
 // increaseDetectionBackoff increases backoff after detection error
 func (m *Manager) increaseDetectionBackoff(channelID string) {
-	m.detectionMu.Lock()
-	defer m.detectionMu.Unlock()
+	ctx := context.Background()
 
-	m.channelLastCheck[channelID] = time.Now()
-
-	currentBackoff := m.channelBackoff[channelID]
-	if currentBackoff == 0 {
-		currentBackoff = m.baseDetectionInterval
+	// Load existing state
+	backoffState, err := m.backoffStore.LoadBackoffState(ctx, channelID)
+	if err != nil {
+		m.logger.Error("Failed to load backoff state", zap.String("channel_id", channelID), zap.Error(err))
+		return
 	}
+	if backoffState == nil {
+		backoffState = &BackoffState{
+			LastCheckTime:   time.Now(),
+			CurrentInterval: m.baseDetectionInterval,
+		}
+	}
+
+	// Update state
+	backoffState.LastCheckTime = time.Now()
+	backoffState.FailureCount++
+	backoffState.ConsecutiveOffline++
 
 	// Double the backoff on error
-	newBackoff := currentBackoff * 2
-	if newBackoff > m.maxDetectionInterval {
-		newBackoff = m.maxDetectionInterval
+	currentInterval := backoffState.CurrentInterval
+	if currentInterval == 0 {
+		currentInterval = m.baseDetectionInterval
 	}
-	m.channelBackoff[channelID] = newBackoff
+	newInterval := currentInterval * 2
+	if newInterval > m.maxDetectionInterval {
+		newInterval = m.maxDetectionInterval
+	}
+	backoffState.CurrentInterval = newInterval
 
-	m.logger.Warn("Increased livestream detection backoff due to error",
+	// Save to Redis
+	if err := m.backoffStore.SaveBackoffState(ctx, channelID, backoffState); err != nil {
+		m.logger.Error("Failed to save backoff state", zap.String("channel_id", channelID), zap.Error(err))
+	}
+
+	m.logger.Warn("Increased detection backoff due to error",
 		zap.String("channel_id", channelID),
-		zap.Duration("new_backoff", newBackoff),
+		zap.Duration("new_backoff", newInterval),
+		zap.Int("consecutive_offline", backoffState.ConsecutiveOffline),
 	)
 }
 
 // resetDetectionBackoff resets backoff to base interval when a poller stops
 // This allows quick re-detection if the channel goes live again shortly after
 func (m *Manager) resetDetectionBackoff(channelID string) {
-	m.detectionMu.Lock()
-	defer m.detectionMu.Unlock()
+	ctx := context.Background()
 
-	m.channelBackoff[channelID] = m.baseDetectionInterval
-	m.channelLastCheck[channelID] = time.Now()
+	// Clear all backoff state (backoff + negative cache)
+	if err := m.backoffStore.ClearBackoff(ctx, channelID); err != nil {
+		m.logger.Error("Failed to clear backoff state", zap.String("channel_id", channelID), zap.Error(err))
+		return
+	}
 
-	m.logger.Info("Reset livestream detection backoff (stream ended)",
+	m.logger.Info("Reset detection backoff (stream ended)",
 		zap.String("channel_id", channelID),
 		zap.Duration("backoff", m.baseDetectionInterval),
 	)

@@ -88,21 +88,6 @@ func (hc *HealthChecker) runHealthCheckLoop() {
 func (hc *HealthChecker) performHealthCheck(ctx context.Context) {
 	hc.logger.Debug("Starting WebSocket health check")
 
-	// Get overlays from Redis
-	redisOverlays, err := hc.redisClient.SMembers(ctx, "overlay:connected").Result()
-	if err != nil {
-		hc.logger.Error("Failed to get connected overlays from Redis",
-			zap.Error(err),
-		)
-		return
-	}
-
-	// Convert Redis overlays to set for faster lookup
-	redisSet := make(map[string]bool)
-	for _, overlayID := range redisOverlays {
-		redisSet[overlayID] = true
-	}
-
 	// Get overlays from local WebSocket manager
 	hc.manager.mu.RLock()
 	localOverlays := make([]string, 0, len(hc.manager.pools))
@@ -111,31 +96,44 @@ func (hc *HealthChecker) performHealthCheck(ctx context.Context) {
 	}
 	hc.manager.mu.RUnlock()
 
-	// Convert local overlays to set
-	localSet := make(map[string]bool)
-	for _, overlayID := range localOverlays {
-		localSet[overlayID] = true
+	// Check which overlays exist in Redis using pipelined EXISTS checks
+	// This uses the same TTL-based keys that the manager uses (overlay:connected:{id})
+	redisOverlays := make(map[string]bool)
+
+	if len(localOverlays) > 0 {
+		pipe := hc.redisClient.Pipeline()
+		cmds := make(map[string]*redis.IntCmd)
+
+		for _, overlayID := range localOverlays {
+			key := "overlay:connected:" + overlayID
+			cmds[overlayID] = pipe.Exists(ctx, key)
+		}
+
+		_, err := pipe.Exec(ctx)
+		if err != nil && err != redis.Nil {
+			hc.logger.Error("Failed to check overlay connection keys in Redis",
+				zap.Error(err),
+			)
+			return
+		}
+
+		for overlayID, cmd := range cmds {
+			exists, _ := cmd.Result()
+			if exists > 0 {
+				redisOverlays[overlayID] = true
+			}
+		}
 	}
 
-	// Find inconsistencies
+	// Find overlays in local but not in Redis (legitimate recovery scenario)
 	missingInRedis := []string{}
-	staleInRedis := []string{}
-
-	// Check for overlays in local but not in Redis
-	for overlayID := range localSet {
-		if !redisSet[overlayID] {
+	for _, overlayID := range localOverlays {
+		if !redisOverlays[overlayID] {
 			missingInRedis = append(missingInRedis, overlayID)
 		}
 	}
 
-	// Check for overlays in Redis but not in local
-	for overlayID := range redisSet {
-		if !localSet[overlayID] {
-			staleInRedis = append(staleInRedis, overlayID)
-		}
-	}
-
-	// Fix inconsistencies
+	// Fix inconsistencies (recovery only - TTL handles stale key cleanup automatically)
 	if len(missingInRedis) > 0 {
 		hc.logger.Warn("Found overlays with active connections but missing from Redis",
 			zap.Int("count", len(missingInRedis)),
@@ -143,16 +141,17 @@ func (hc *HealthChecker) performHealthCheck(ctx context.Context) {
 		)
 
 		for _, overlayID := range missingInRedis {
-			// Add to Redis
-			if err := hc.redisClient.SAdd(ctx, "overlay:connected", overlayID).Err(); err != nil {
-				hc.logger.Error("Failed to add overlay to Redis connected set",
+			// Set TTL key to match what manager uses
+			key := "overlay:connected:" + overlayID
+			if err := hc.redisClient.SetEx(ctx, key, "1", hc.manager.connectionTTL).Err(); err != nil {
+				hc.logger.Error("Failed to set overlay connection key with TTL",
 					zap.String("overlay_id", overlayID),
 					zap.Error(err),
 				)
 				continue
 			}
 
-			// Publish connected event
+			// Publish connected event (legitimate recovery)
 			hc.manager.publishConnectionEvent(ctx, overlayID, "connected")
 			hc.metrics.RecordSubscriptionEvent("api-gateway", "health_check_recovered")
 
@@ -162,46 +161,8 @@ func (hc *HealthChecker) performHealthCheck(ctx context.Context) {
 		}
 	}
 
-	if len(staleInRedis) > 0 {
-		hc.logger.Warn("Found stale overlays in Redis with no active connections",
-			zap.Int("count", len(staleInRedis)),
-			zap.Strings("overlay_ids", staleInRedis),
-		)
-
-		for _, overlayID := range staleInRedis {
-			// Check if overlay is in grace period (don't remove if it is)
-			hc.manager.gracePeriodMu.Lock()
-			_, inGracePeriod := hc.manager.gracePeriodTimers[overlayID]
-			hc.manager.gracePeriodMu.Unlock()
-
-			if inGracePeriod {
-				hc.logger.Debug("Overlay is in grace period, skipping removal",
-					zap.String("overlay_id", overlayID),
-				)
-				continue
-			}
-
-			// Remove from Redis
-			if err := hc.redisClient.SRem(ctx, "overlay:connected", overlayID).Err(); err != nil {
-				hc.logger.Error("Failed to remove stale overlay from Redis",
-					zap.String("overlay_id", overlayID),
-					zap.Error(err),
-				)
-				continue
-			}
-
-			// Publish disconnected event
-			hc.manager.publishConnectionEvent(ctx, overlayID, "disconnected")
-			hc.metrics.RecordSubscriptionEvent("api-gateway", "health_check_cleaned")
-
-			hc.logger.Info("Removed stale overlay from Redis",
-				zap.String("overlay_id", overlayID),
-			)
-		}
-	}
-
 	// Log summary
-	if len(missingInRedis) == 0 && len(staleInRedis) == 0 {
+	if len(missingInRedis) == 0 {
 		hc.logger.Debug("WebSocket health check completed - no inconsistencies found",
 			zap.Int("local_overlays", len(localOverlays)),
 			zap.Int("redis_overlays", len(redisOverlays)),
@@ -211,7 +172,6 @@ func (hc *HealthChecker) performHealthCheck(ctx context.Context) {
 			zap.Int("local_overlays", len(localOverlays)),
 			zap.Int("redis_overlays", len(redisOverlays)),
 			zap.Int("recovered", len(missingInRedis)),
-			zap.Int("cleaned", len(staleInRedis)),
 		)
 	}
 }
