@@ -112,7 +112,8 @@ WHERE google_id = $1
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
+           is_admin, is_banned, banned_at, banned_reason, banned_by,
+           access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE id = $1
 `
@@ -132,7 +133,8 @@ WHERE id = $1
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
+           is_admin, is_banned, banned_at, banned_reason, banned_by,
+           access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE username = $1
 `
