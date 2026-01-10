@@ -37,7 +37,9 @@ func (r *Repository) GetActiveSources(ctx context.Context, platform string) ([]*
 			ocs.updated_at
 		FROM overlay_chat_sources ocs
 		JOIN overlays o ON ocs.overlay_id = o.id
+		JOIN users u ON o.user_id = u.id
 		WHERE o.is_active = true
+		  AND u.is_banned = false
 		  AND ocs.platform = $1
 		ORDER BY ocs.created_at
 	`
@@ -99,7 +101,9 @@ func (r *Repository) GetAllActiveSources(ctx context.Context) ([]*models.ActiveS
 			ocs.updated_at
 		FROM overlay_chat_sources ocs
 		JOIN overlays o ON ocs.overlay_id = o.id
+		JOIN users u ON o.user_id = u.id
 		WHERE o.is_active = true
+		  AND u.is_banned = false
 		ORDER BY ocs.platform, ocs.created_at
 	`
 

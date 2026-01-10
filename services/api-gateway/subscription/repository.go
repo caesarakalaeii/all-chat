@@ -61,6 +61,7 @@ func (r *Repository) GetPublicOverlayByUsername(ctx context.Context, username st
 		WHERE u.username = $1
 		  AND o.is_active = true
 		  AND o.is_public_for_viewers = true
+		  AND u.is_banned = false
 		LIMIT 1
 	`
 
