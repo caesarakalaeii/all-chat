@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/youtube-listener/metrics"
 	"go.uber.org/zap"
 )
 
@@ -25,6 +26,7 @@ const (
 type CircuitBreaker struct {
 	channelID string
 	logger    *zap.Logger
+	metrics   *metrics.YouTubeMetrics
 
 	mu                  sync.RWMutex
 	state               CircuitState
@@ -43,10 +45,11 @@ type CircuitBreaker struct {
 }
 
 // NewCircuitBreaker creates a new circuit breaker for a channel
-func NewCircuitBreaker(channelID string, logger *zap.Logger) *CircuitBreaker {
-	return &CircuitBreaker{
+func NewCircuitBreaker(channelID string, logger *zap.Logger, ytMetrics *metrics.YouTubeMetrics) *CircuitBreaker {
+	cb := &CircuitBreaker{
 		channelID:           channelID,
 		logger:              logger,
+		metrics:             ytMetrics,
 		state:               CircuitClosed,
 		failureThreshold:    3,  // Open after 3 consecutive failures (300 units wasted)
 		successThreshold:    2,  // Need 2 successes to fully close
@@ -54,6 +57,14 @@ func NewCircuitBreaker(channelID string, logger *zap.Logger) *CircuitBreaker {
 		halfOpenMaxAttempts: 3,
 		lastStateChange:     time.Now(),
 	}
+
+	// Initialize metrics
+	if ytMetrics != nil {
+		ytMetrics.CircuitBreakerState.WithLabelValues(channelID).Set(0) // CLOSED = 0
+		ytMetrics.CircuitBreakerFailures.WithLabelValues(channelID).Set(0)
+	}
+
+	return cb
 }
 
 // CanAttemptDiscovery checks if expensive channel discovery should be attempted
@@ -117,6 +128,13 @@ func (cb *CircuitBreaker) RecordSuccess() {
 				zap.String("old_state", string(oldState)),
 				zap.String("new_state", string(cb.state)),
 			)
+
+			// Update metrics
+			if cb.metrics != nil {
+				cb.metrics.CircuitBreakerTransitions.WithLabelValues(cb.channelID, string(oldState), string(cb.state)).Inc()
+				cb.metrics.CircuitBreakerState.WithLabelValues(cb.channelID).Set(0) // CLOSED
+				cb.metrics.CircuitBreakerFailures.WithLabelValues(cb.channelID).Set(0)
+			}
 		}
 
 	case CircuitOpen:
@@ -130,6 +148,12 @@ func (cb *CircuitBreaker) RecordSuccess() {
 			zap.String("channel_id", cb.channelID),
 			zap.String("old_state", string(oldState)),
 		)
+
+		// Update metrics
+		if cb.metrics != nil {
+			cb.metrics.CircuitBreakerTransitions.WithLabelValues(cb.channelID, string(oldState), string(cb.state)).Inc()
+			cb.metrics.CircuitBreakerState.WithLabelValues(cb.channelID).Set(1) // HALF_OPEN
+		}
 	}
 }
 
@@ -146,6 +170,11 @@ func (cb *CircuitBreaker) RecordFailure() {
 
 	oldState := cb.state
 
+	// Update failure metrics
+	if cb.metrics != nil {
+		cb.metrics.CircuitBreakerFailures.WithLabelValues(cb.channelID).Set(float64(cb.consecutiveFailures))
+	}
+
 	switch cb.state {
 	case CircuitClosed:
 		// Check if we should open the circuit
@@ -153,13 +182,22 @@ func (cb *CircuitBreaker) RecordFailure() {
 			cb.state = CircuitOpen
 			cb.lastStateChange = time.Now()
 
+			quotaSaved := cb.failureCount * 100 // 100 units per Search.List
+
 			cb.logger.Warn("Circuit breaker opened - channel appears offline",
 				zap.String("channel_id", cb.channelID),
 				zap.Int("consecutive_failures", cb.consecutiveFailures),
 				zap.Int("total_failures", cb.failureCount),
 				zap.Duration("block_duration", cb.openDuration),
-				zap.Int("quota_saved_so_far", cb.failureCount*100), // 100 units per Search.List
+				zap.Int("quota_saved_so_far", quotaSaved),
 			)
+
+			// Update metrics - state transition and quota saved
+			if cb.metrics != nil {
+				cb.metrics.CircuitBreakerTransitions.WithLabelValues(cb.channelID, string(oldState), string(cb.state)).Inc()
+				cb.metrics.CircuitBreakerState.WithLabelValues(cb.channelID).Set(2) // OPEN
+				cb.metrics.CircuitBreakerQuotaSaved.WithLabelValues(cb.channelID).Add(float64(quotaSaved))
+			}
 		}
 
 	case CircuitHalfOpen:
@@ -172,6 +210,12 @@ func (cb *CircuitBreaker) RecordFailure() {
 			zap.String("old_state", string(oldState)),
 			zap.Duration("block_duration", cb.openDuration),
 		)
+
+		// Update metrics
+		if cb.metrics != nil {
+			cb.metrics.CircuitBreakerTransitions.WithLabelValues(cb.channelID, string(oldState), string(cb.state)).Inc()
+			cb.metrics.CircuitBreakerState.WithLabelValues(cb.channelID).Set(2) // OPEN
+		}
 
 	case CircuitOpen:
 		// Already open, just log if this is unexpected
