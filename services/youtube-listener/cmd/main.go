@@ -128,9 +128,9 @@ func main() {
 
 	// Start daily quota reset scheduler
 	go func() {
-		// Calculate time until next midnight UTC
-		now := time.Now().UTC()
-		nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+		// Calculate time until next midnight PST (YouTube's quota reset timezone)
+		now := time.Now().In(quota.YouTubePST)
+		nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, quota.YouTubePST)
 		durationUntilMidnight := nextMidnight.Sub(now)
 
 		log.Info("Daily quota reset scheduler started",
