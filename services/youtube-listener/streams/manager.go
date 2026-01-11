@@ -787,6 +787,11 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 	// Create and start poller
 	poller := NewPoller(stream, apiClient, m.logger)
 	poller.SetMessageHandler(m.messageHandler)
+
+	// Set connection checker for connection-aware polling
+	// This prevents wasting quota (5 units per poll) when overlay disconnects
+	poller.SetConnectionChecker(m, stream.OverlayID)
+
 	if err := poller.Start(ctx); err != nil {
 		if m.leader != nil {
 			m.leader.Release(stream.StreamID)
@@ -1167,12 +1172,13 @@ func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID strin
 }
 
 // IsOverlayConnected checks if an overlay has active WebSocket connections
-func (m *Manager) IsOverlayConnected(overlayID string) bool {
+// Implements ConnectionChecker interface for connection-aware polling
+func (m *Manager) IsOverlayConnected(ctx context.Context, overlayID string) (bool, error) {
 	m.connMu.RLock()
 	defer m.connMu.RUnlock()
 
 	_, connected := m.connectedOverlays[overlayID]
-	return connected
+	return connected, nil
 }
 
 // shouldSkipDetection checks if we should skip livestream detection for a channel due to backoff

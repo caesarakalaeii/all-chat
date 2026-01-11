@@ -17,6 +17,11 @@ type MessageHandler interface {
 	HandleMessages(ctx context.Context, messages []*models.RawChatMessage) error
 }
 
+// ConnectionChecker defines the interface for checking if an overlay is still connected
+type ConnectionChecker interface {
+	IsOverlayConnected(ctx context.Context, overlayID string) (bool, error)
+}
+
 // Poller polls a YouTube live stream for chat messages
 type Poller struct {
 	stream         *models.YouTubeStream
@@ -24,6 +29,10 @@ type Poller struct {
 	parser         *api.Parser
 	messageHandler MessageHandler
 	logger         *zap.Logger
+
+	// Connection-aware polling (prevents quota waste when overlay disconnected)
+	connectionChecker ConnectionChecker
+	overlayID         string
 
 	mu               sync.RWMutex
 	stopChan         chan struct{}
@@ -58,6 +67,12 @@ func (p *Poller) SetMessageHandler(handler MessageHandler) {
 	p.messageHandler = handler
 }
 
+// SetConnectionChecker sets the connection checker for overlay connection verification
+func (p *Poller) SetConnectionChecker(checker ConnectionChecker, overlayID string) {
+	p.connectionChecker = checker
+	p.overlayID = overlayID
+}
+
 // Start begins polling the stream
 func (p *Poller) Start(ctx context.Context) error {
 	p.logger.Info("Starting poller",
@@ -81,6 +96,33 @@ func (p *Poller) Stop() {
 	p.wg.Wait()
 }
 
+// shouldPoll checks if polling should proceed (connection check + quota check)
+func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
+	// CONNECTION CHECK: Verify overlay is still connected
+	// This prevents wasting 5 units per poll when overlay is disconnected
+	if p.connectionChecker != nil && p.overlayID != "" {
+		connected, err := p.connectionChecker.IsOverlayConnected(ctx, p.overlayID)
+		if err != nil {
+			p.logger.Warn("Connection check failed, assuming disconnected",
+				zap.String("overlay_id", p.overlayID),
+				zap.String("stream_id", p.stream.StreamID),
+				zap.Error(err),
+			)
+			return false, fmt.Errorf("connection check failed: %w", err)
+		}
+
+		if !connected {
+			p.logger.Info("Overlay disconnected, stopping poller to save quota",
+				zap.String("overlay_id", p.overlayID),
+				zap.String("stream_id", p.stream.StreamID),
+			)
+			return false, fmt.Errorf("overlay disconnected")
+		}
+	}
+
+	return true, nil
+}
+
 // pollLoop continuously polls for new messages with exponential backoff only on errors
 func (p *Poller) pollLoop(ctx context.Context) {
 	defer p.wg.Done()
@@ -90,6 +132,14 @@ func (p *Poller) pollLoop(ctx context.Context) {
 	defer ticker.Stop()
 
 	// Initial poll
+	if shouldPoll, err := p.shouldPoll(ctx); !shouldPoll {
+		p.logger.Info("Overlay not connected, skipping initial poll",
+			zap.String("stream_id", p.stream.StreamID),
+			zap.Error(err),
+		)
+		return
+	}
+
 	if err := p.poll(ctx); err != nil {
 		p.handlePollError(err)
 	} else {
@@ -99,6 +149,15 @@ func (p *Poller) pollLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
+			// CONNECTION-AWARE: Check if overlay still connected before polling
+			if shouldPoll, err := p.shouldPoll(ctx); !shouldPoll {
+				p.logger.Info("Overlay disconnected during polling, stopping poller immediately",
+					zap.String("stream_id", p.stream.StreamID),
+					zap.Error(err),
+				)
+				return  // Exit immediately (saves 5 units × remaining polls)
+			}
+
 			// Apply exponential backoff only if we have consecutive errors
 			if p.backoffDuration > 0 {
 				p.logger.Warn("Applying error backoff before next poll",
