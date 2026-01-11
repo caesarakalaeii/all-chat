@@ -349,3 +349,199 @@ func parseIntParam(param string) (int, error) {
 	_, err := fmt.Sscanf(param, "%d", &result)
 	return result, err
 }
+
+// =============== CROSS-SERVICE QUOTA COORDINATION API ===============
+
+// CheckQuotaRequest represents a request to check if quota is available
+type CheckQuotaRequest struct {
+	Units         int    `json:"units" binding:"required,min=1"`
+	Service       string `json:"service" binding:"required"`        // "auth-service", "overlay-manager"
+	Operation     string `json:"operation" binding:"required"`      // "search.list", "liveBroadcasts.list", etc.
+	AllowCritical bool   `json:"allow_critical"`                    // Bypass emergency shutoff for OAuth
+}
+
+// CheckQuotaResponse represents the quota check response
+type CheckQuotaResponse struct {
+	Allowed   bool   `json:"allowed"`
+	Remaining int    `json:"remaining"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// CheckQuota checks if quota is available for an operation WITHOUT reserving it
+// POST /api/v1/quota/check
+func (h *QuotaHandler) CheckQuota(c *gin.Context) {
+	var req CheckQuotaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Check if emergency threshold would be breached
+	percentage := h.globalTracker.GetUsagePercentage()
+	emergencyThreshold := 90.0 // TODO: Get from tracker
+
+	if percentage >= emergencyThreshold && !req.AllowCritical {
+		c.JSON(http.StatusOK, CheckQuotaResponse{
+			Allowed:   false,
+			Remaining: h.globalTracker.GetRemainingQuota(),
+			Reason:    fmt.Sprintf("emergency shutoff at %.1f%%", percentage),
+		})
+		return
+	}
+
+	// Check if sufficient quota remaining
+	remaining := h.globalTracker.GetRemainingQuota()
+	allowed := remaining >= req.Units
+
+	response := CheckQuotaResponse{
+		Allowed:   allowed,
+		Remaining: remaining,
+	}
+
+	if !allowed {
+		response.Reason = "insufficient quota"
+	}
+
+	c.JSON(http.StatusOK, response)
+
+	h.logger.Debug("Quota check from external service",
+		zap.String("service", req.Service),
+		zap.String("operation", req.Operation),
+		zap.Int("units", req.Units),
+		zap.Bool("allowed", allowed),
+	)
+}
+
+// ReserveQuotaRequest represents a request to reserve quota
+type ReserveQuotaRequest struct {
+	Units         int    `json:"units" binding:"required,min=1"`
+	Service       string `json:"service" binding:"required"`
+	Operation     string `json:"operation" binding:"required"`
+	AllowCritical bool   `json:"allow_critical"` // Bypass emergency shutoff
+}
+
+// ReserveQuotaResponse represents the reservation response
+type ReserveQuotaResponse struct {
+	Success       bool   `json:"success"`
+	ReservationID string `json:"reservation_id,omitempty"`
+	Remaining     int    `json:"remaining"`
+	Reason        string `json:"reason,omitempty"`
+}
+
+// ReserveQuota reserves quota for an external service before making a YouTube API call
+// POST /api/v1/quota/reserve
+func (h *QuotaHandler) ReserveQuota(c *gin.Context) {
+	var req ReserveQuotaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Reserve quota with priority support
+	reservationID, err := h.globalTracker.ReserveQuotaWithPriority(ctx, req.Units, req.AllowCritical)
+	if err != nil {
+		h.logger.Warn("External service quota reservation failed",
+			zap.String("service", req.Service),
+			zap.String("operation", req.Operation),
+			zap.Int("units", req.Units),
+			zap.Bool("allow_critical", req.AllowCritical),
+			zap.Error(err),
+		)
+
+		c.JSON(http.StatusOK, ReserveQuotaResponse{
+			Success:   false,
+			Remaining: h.globalTracker.GetRemainingQuota(),
+			Reason:    err.Error(),
+		})
+		return
+	}
+
+	h.logger.Info("Reserved quota for external service",
+		zap.String("service", req.Service),
+		zap.String("operation", req.Operation),
+		zap.Int("units", req.Units),
+		zap.String("reservation_id", reservationID),
+	)
+
+	c.JSON(http.StatusOK, ReserveQuotaResponse{
+		Success:       true,
+		ReservationID: reservationID,
+		Remaining:     h.globalTracker.GetRemainingQuota(),
+	})
+}
+
+// ConfirmQuotaRequest represents a request to confirm a quota reservation
+type ConfirmQuotaRequest struct {
+	ReservationID string `json:"reservation_id" binding:"required"`
+	Units         int    `json:"units" binding:"required,min=1"`
+	Service       string `json:"service" binding:"required"`
+	Success       bool   `json:"success"` // True = confirm, False = rollback
+}
+
+// ConfirmQuota confirms or rolls back a quota reservation
+// POST /api/v1/quota/confirm
+func (h *QuotaHandler) ConfirmQuota(c *gin.Context) {
+	var req ConfirmQuotaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	var err error
+	if req.Success {
+		err = h.globalTracker.ConfirmReservation(ctx, req.ReservationID, req.Units)
+		if err != nil {
+			h.logger.Error("Failed to confirm quota reservation",
+				zap.String("service", req.Service),
+				zap.String("reservation_id", req.ReservationID),
+				zap.Error(err),
+			)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "failed to confirm reservation",
+			})
+			return
+		}
+
+		h.logger.Info("Confirmed quota reservation from external service",
+			zap.String("service", req.Service),
+			zap.Int("units", req.Units),
+			zap.String("reservation_id", req.ReservationID),
+		)
+	} else {
+		err = h.globalTracker.RollbackReservation(ctx, req.ReservationID, req.Units)
+		if err != nil {
+			h.logger.Error("Failed to rollback quota reservation",
+				zap.String("service", req.Service),
+				zap.String("reservation_id", req.ReservationID),
+				zap.Error(err),
+			)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "failed to rollback reservation",
+			})
+			return
+		}
+
+		h.logger.Info("Rolled back quota reservation from external service",
+			zap.String("service", req.Service),
+			zap.Int("units", req.Units),
+			zap.String("reservation_id", req.ReservationID),
+		)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+	})
+}

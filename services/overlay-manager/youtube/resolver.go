@@ -88,16 +88,35 @@ func (r *Resolver) ResolveToChannelID(ctx context.Context, input string) (string
 func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) (string, error) {
 	const quotaCost = 100  // Search.List API cost
 
-	// 1. CHECK QUOTA BEFORE API CALL
+	var reservationID string
+	var response *youtube.SearchListResponse
+
+	// 1. RESERVE QUOTA BEFORE API CALL (new reserve-confirm pattern)
 	if r.quotaClient != nil {
-		allowed, err := r.quotaClient.CheckQuota(ctx, quotaCost)
+		var err error
+		reservationID, err = r.quotaClient.ReserveQuota(ctx, quotaCost, "search.list", false)
 		if err != nil {
-			// Network error - fail open but log warning
-			r.logger.Warn("Failed to check quota (allowing request)", zap.Error(err))
-		} else if !allowed {
-			// Quota exhausted - deny request
+			r.logger.Warn("Failed to reserve quota for handle resolution",
+				zap.String("handle", handle),
+				zap.Int("units", quotaCost),
+				zap.Error(err),
+			)
 			return "", ErrQuotaExhausted
 		}
+
+		// Ensure we confirm or rollback on return
+		defer func() {
+			// Determine if we should charge (rollback on 4xx client errors only)
+			shouldCharge := response != nil || !isClientError(err)
+
+			if confirmErr := r.quotaClient.ConfirmQuota(ctx, reservationID, quotaCost, shouldCharge); confirmErr != nil {
+				r.logger.Warn("Failed to confirm/rollback quota reservation",
+					zap.String("reservation_id", reservationID),
+					zap.Bool("should_charge", shouldCharge),
+					zap.Error(confirmErr),
+				)
+			}
+		}()
 	}
 
 	// 2. MAKE YOUTUBE API CALL
@@ -112,19 +131,9 @@ func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) 
 		Type("channel").
 		MaxResults(1)
 
-	response, err := call.Do()
+	response, err = call.Do()
 
-	// 3. RECORD USAGE AFTER API CALL (always, even on error - YouTube charges for most errors)
-	if r.quotaClient != nil {
-		if recordErr := r.quotaClient.RecordUsage(ctx, quotaCost); recordErr != nil {
-			r.logger.Warn("Failed to record quota usage",
-				zap.Int("units", quotaCost),
-				zap.Error(recordErr),
-			)
-		}
-	}
-
-	// 4. PROCESS RESPONSE
+	// 3. PROCESS RESPONSE
 	if err != nil {
 		return "", fmt.Errorf("failed to search for channel: %w", err)
 	}
@@ -139,6 +148,17 @@ func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) 
 	}
 
 	return channelID, nil
+}
+
+// isClientError checks if an error is a 4xx client error (quota shouldn't be charged)
+func isClientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for 4xx status codes in error message
+	// This is a simplified check - could be more robust
+	errStr := err.Error()
+	return strings.Contains(errStr, "400") || strings.Contains(errStr, "404") || strings.Contains(errStr, "403")
 }
 
 // resolveVideoToChannelID resolves a video ID to its channel ID

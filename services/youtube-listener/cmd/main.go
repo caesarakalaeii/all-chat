@@ -214,7 +214,15 @@ func main() {
 	router.GET("/quota/channels/:channel_id", quotaHandler.GetChannelQuota)
 	router.GET("/quota/history", quotaHandler.GetQuotaHistory)
 	router.GET("/quota/predictions", quotaHandler.GetQuotaPrediction)
-	router.POST("/quota/record", quotaHandler.RecordQuota)  // For external services (overlay-manager)
+	router.POST("/quota/record", quotaHandler.RecordQuota)  // Legacy endpoint for external services
+
+	// Cross-service quota coordination API
+	v1 := router.Group("/api/v1")
+	{
+		v1.POST("/quota/check", quotaHandler.CheckQuota)       // Check if quota available
+		v1.POST("/quota/reserve", quotaHandler.ReserveQuota)   // Reserve before API call
+		v1.POST("/quota/confirm", quotaHandler.ConfirmQuota)   // Confirm or rollback after call
+	}
 
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
