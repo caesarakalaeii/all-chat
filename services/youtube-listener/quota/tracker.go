@@ -506,8 +506,12 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 		}
 	}
 
+	// Capture units before for audit log
+	unitsBefore := t.usageToday
+
 	// Update in-memory counter
 	t.usageToday += units
+	unitsAfter := t.usageToday
 
 	// Update database with retry logic
 	if err := t.recordUsageWithRetry(ctx, units, 3); err != nil {
@@ -528,6 +532,19 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 	// Record quota metrics
 	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
 	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
+
+	// AUDIT LOG: Record direct usage (legacy /quota/record endpoint)
+	success := true
+	go t.logAuditEntry(context.Background(), AuditEntry{
+		Date:           t.currentDate,
+		OperationType:  "record",
+		ServiceName:    "external",  // Called by overlay-manager or auth-service
+		Endpoint:       "unknown",
+		UnitsDelta:     units,
+		UnitsBefore:    unitsBefore,
+		UnitsAfter:     unitsAfter,
+		APISuccess:     &success,
+	})
 
 	t.logger.Debug("Recorded quota usage",
 		zap.Int("units", units),
@@ -665,6 +682,22 @@ func (t *Tracker) ReserveQuotaWithPriority(ctx context.Context, units int, allow
 	// Generate unique reservation ID
 	reservationID := fmt.Sprintf("%s-%d-%d", today, time.Now().UnixNano(), units)
 
+	// AUDIT LOG: Record reservation
+	t.mu.RLock()
+	unitsBefore := t.usageToday
+	t.mu.RUnlock()
+
+	go t.logAuditEntry(context.Background(), AuditEntry{
+		Date:           today,
+		OperationType:  "reserve",
+		ServiceName:    "youtube-listener",
+		Endpoint:       "internal",
+		UnitsDelta:     units,
+		UnitsBefore:    unitsBefore,
+		UnitsAfter:     unitsBefore, // Not changed yet (reserved, not confirmed)
+		ReservationID:  &reservationID,
+	})
+
 	t.logger.Debug("Reserved quota",
 		zap.String("reservation_id", reservationID),
 		zap.Int("units", units),
@@ -690,7 +723,9 @@ func (t *Tracker) ConfirmReservation(ctx context.Context, reservationID string, 
 
 	// Update in-memory state
 	t.mu.Lock()
+	unitsBefore := t.usageToday
 	t.usageToday += units
+	unitsAfter := t.usageToday
 	percentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
 	remaining := t.dailyLimit - t.usageToday
 
@@ -701,6 +736,20 @@ func (t *Tracker) ConfirmReservation(ctx context.Context, reservationID string, 
 	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
 	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
 	t.mu.Unlock()
+
+	// AUDIT LOG: Record confirmation
+	success := true
+	go t.logAuditEntry(context.Background(), AuditEntry{
+		Date:           today,
+		OperationType:  "confirm",
+		ServiceName:    "youtube-listener",
+		Endpoint:       "internal",
+		UnitsDelta:     units,
+		UnitsBefore:    unitsBefore,
+		UnitsAfter:     unitsAfter,
+		APISuccess:     &success,
+		ReservationID:  &reservationID,
+	})
 
 	t.logger.Debug("Confirmed reservation",
 		zap.String("reservation_id", reservationID),
@@ -725,6 +774,26 @@ func (t *Tracker) RollbackReservation(ctx context.Context, reservationID string,
 		)
 		return err
 	}
+
+	// AUDIT LOG: Record rollback (4xx client error - quota not charged)
+	t.mu.RLock()
+	currentUsage := t.usageToday
+	t.mu.RUnlock()
+
+	failure := false
+	errorType := "4xx_client_error"
+	go t.logAuditEntry(context.Background(), AuditEntry{
+		Date:           today,
+		OperationType:  "rollback",
+		ServiceName:    "youtube-listener",
+		Endpoint:       "internal",
+		UnitsDelta:     -units, // Negative for rollback
+		UnitsBefore:    currentUsage,
+		UnitsAfter:     currentUsage, // Unchanged (reserved quota released)
+		APISuccess:     &failure,
+		ErrorType:      &errorType,
+		ReservationID:  &reservationID,
+	})
 
 	t.logger.Info("Rolled back reservation (API call failed before reaching YouTube)",
 		zap.String("reservation_id", reservationID),
@@ -943,4 +1012,62 @@ func (t *Tracker) loadTodayUsage(ctx context.Context) error {
 	)
 
 	return nil
+}
+
+// =============== AUDIT LOGGING ===============
+
+// AuditEntry represents an audit log entry
+type AuditEntry struct {
+	Date           string
+	OperationType  string  // 'reserve', 'confirm', 'rollback', 'record'
+	ServiceName    string
+	Endpoint       string
+	UnitsDelta     int
+	UnitsBefore    int
+	UnitsAfter     int
+	APISuccess     *bool
+	ErrorType      *string
+	ErrorMessage   *string
+	ChannelID      *string
+	OverlayID      *string
+	ReservationID  *string
+}
+
+// logAuditEntry writes an entry to the YouTube quota audit log
+// Non-blocking - failures are logged but don't affect the operation
+func (t *Tracker) logAuditEntry(ctx context.Context, entry AuditEntry) {
+	query := `
+		INSERT INTO youtube_quota_audit_log (
+			date, operation_type, service_name, endpoint,
+			units_delta, units_before, units_after,
+			api_success, error_type, error_message,
+			channel_id, overlay_id, reservation_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`
+
+	_, err := t.db.Exec(ctx, query,
+		entry.Date,
+		entry.OperationType,
+		entry.ServiceName,
+		entry.Endpoint,
+		entry.UnitsDelta,
+		entry.UnitsBefore,
+		entry.UnitsAfter,
+		entry.APISuccess,
+		entry.ErrorType,
+		entry.ErrorMessage,
+		entry.ChannelID,
+		entry.OverlayID,
+		entry.ReservationID,
+	)
+
+	if err != nil {
+		// Don't fail the operation if audit logging fails
+		// Just log the error
+		t.logger.Warn("Failed to write audit log entry",
+			zap.String("operation", entry.OperationType),
+			zap.Int("units", entry.UnitsDelta),
+			zap.Error(err),
+		)
+	}
 }
