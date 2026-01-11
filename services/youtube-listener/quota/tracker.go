@@ -92,6 +92,7 @@ type Tracker struct {
 	degradedThreshold  float64
 	criticalThreshold  float64
 	exhaustedThreshold float64
+	emergencyThreshold float64 // Emergency shutoff threshold (default 90%)
 
 	stopChan chan struct{}
 }
@@ -107,12 +108,14 @@ func NewTracker(db *pgxpool.Pool, dailyLimit int, logger *zap.Logger, m *metrics
 	degradedThreshold := getEnvAsFloat("QUOTA_DEGRADED_THRESHOLD", DefaultDegradedThreshold)
 	criticalThreshold := getEnvAsFloat("QUOTA_CRITICAL_THRESHOLD", DefaultCriticalThreshold)
 	exhaustedThreshold := getEnvAsFloat("QUOTA_EXHAUSTED_THRESHOLD", DefaultExhaustedThreshold)
+	emergencyThreshold := getEnvAsFloat("EMERGENCY_QUOTA_THRESHOLD", 90.0) // Default 90%
 
 	logger.Info("Quota tracker thresholds configured",
 		zap.Float64("healthy", healthyThreshold),
 		zap.Float64("degraded", degradedThreshold),
 		zap.Float64("critical", criticalThreshold),
 		zap.Float64("exhausted", exhaustedThreshold),
+		zap.Float64("emergency", emergencyThreshold),
 	)
 
 	return &Tracker{
@@ -127,6 +130,7 @@ func NewTracker(db *pgxpool.Pool, dailyLimit int, logger *zap.Logger, m *metrics
 		degradedThreshold:  degradedThreshold,
 		criticalThreshold:  criticalThreshold,
 		exhaustedThreshold: exhaustedThreshold,
+		emergencyThreshold: emergencyThreshold,
 		stopChan:   make(chan struct{}),
 	}
 }
@@ -591,9 +595,50 @@ func (t *Tracker) getCurrentDate() string {
 // Returns reservation ID on success, error if insufficient quota
 // This is the first step in the reserve-confirm-rollback pattern
 func (t *Tracker) ReserveQuota(ctx context.Context, units int) (string, error) {
+	return t.ReserveQuotaWithPriority(ctx, units, false)
+}
+
+// ReserveQuotaWithPriority atomically reserves quota with emergency shutoff check
+// allowCritical bypasses the emergency threshold for critical operations (OAuth, login)
+func (t *Tracker) ReserveQuotaWithPriority(ctx context.Context, units int, allowCritical bool) (string, error) {
 	t.checkDateRollover()
 
 	today := t.getCurrentDate()
+
+	// EMERGENCY SHUTOFF: Check if we're at or above emergency threshold
+	// This is a hard block for all non-critical operations (default 90%)
+	t.mu.RLock()
+	currentPercentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
+	t.mu.RUnlock()
+
+	if currentPercentage >= t.emergencyThreshold && !allowCritical {
+		t.logger.Error("EMERGENCY SHUTOFF: Quota at or above emergency threshold",
+			zap.Float64("current_percentage", currentPercentage),
+			zap.Float64("emergency_threshold", t.emergencyThreshold),
+			zap.Int("units_requested", units),
+			zap.Int("units_used", t.usageToday),
+			zap.Int("daily_limit", t.dailyLimit),
+			zap.Bool("allow_critical", allowCritical),
+		)
+
+		if t.notifier != nil {
+			// Notify about emergency shutoff
+			ctx := context.Background()
+			if err := t.notifier.NotifyThresholdCrossed(ctx, QuotaStateDepleted, t.emergencyThreshold, currentPercentage, t.usageToday, t.dailyLimit); err != nil {
+				t.logger.Warn("Failed to send emergency shutoff notification", zap.Error(err))
+			}
+		}
+
+		return "", fmt.Errorf("emergency shutoff: quota at %.1f%% (threshold: %.1f%%)", currentPercentage, t.emergencyThreshold)
+	}
+
+	if allowCritical && currentPercentage >= t.emergencyThreshold {
+		t.logger.Warn("Critical operation allowed despite emergency threshold",
+			zap.Float64("current_percentage", currentPercentage),
+			zap.Float64("emergency_threshold", t.emergencyThreshold),
+			zap.Int("units", units),
+		)
+	}
 
 	// Atomic reservation in database with row-level locking
 	var canReserve bool
