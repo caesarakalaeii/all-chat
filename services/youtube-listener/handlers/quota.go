@@ -71,10 +71,10 @@ func (h *QuotaHandler) GetQuotaStatus(c *gin.Context) {
 	remaining := h.globalTracker.GetRemainingQuota()
 	limit := used + remaining
 
-	// Calculate reset time (midnight UTC)
-	now := time.Now().UTC()
+	// Calculate reset time (midnight PST - YouTube's quota reset timezone)
+	now := time.Now().In(quota.YouTubePST)
 	tomorrow := now.AddDate(0, 0, 1)
-	midnight := time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), 0, 0, 0, 0, time.UTC)
+	midnight := time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), 0, 0, 0, 0, quota.YouTubePST)
 	resetsAt := midnight.Format(time.RFC3339)
 
 	// Get polling multiplier
