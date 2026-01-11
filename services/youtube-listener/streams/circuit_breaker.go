@@ -1,0 +1,238 @@
+package streams
+
+import (
+	"sync"
+	"time"
+
+	"go.uber.org/zap"
+)
+
+// CircuitState represents the state of a circuit breaker
+type CircuitState string
+
+const (
+	// CircuitClosed - Normal operation, allow requests
+	CircuitClosed CircuitState = "CLOSED"
+
+	// CircuitHalfOpen - Testing if service recovered, allow limited requests
+	CircuitHalfOpen CircuitState = "HALF_OPEN"
+
+	// CircuitOpen - Service unavailable, block expensive requests
+	CircuitOpen CircuitState = "OPEN"
+)
+
+// CircuitBreaker prevents repeated expensive API calls for offline channels
+type CircuitBreaker struct {
+	channelID string
+	logger    *zap.Logger
+
+	mu                  sync.RWMutex
+	state               CircuitState
+	failureCount        int
+	consecutiveFailures int
+	successCount        int
+	lastFailureTime     time.Time
+	lastCheckTime       time.Time
+	lastStateChange     time.Time
+
+	// Configuration
+	failureThreshold    int           // Open circuit after N consecutive failures (default: 3)
+	successThreshold    int           // Close circuit after N consecutive successes in half-open (default: 2)
+	openDuration        time.Duration // How long to keep circuit open (default: 30 minutes)
+	halfOpenMaxAttempts int           // Max attempts in half-open state (default: 3)
+}
+
+// NewCircuitBreaker creates a new circuit breaker for a channel
+func NewCircuitBreaker(channelID string, logger *zap.Logger) *CircuitBreaker {
+	return &CircuitBreaker{
+		channelID:           channelID,
+		logger:              logger,
+		state:               CircuitClosed,
+		failureThreshold:    3,  // Open after 3 consecutive failures (300 units wasted)
+		successThreshold:    2,  // Need 2 successes to fully close
+		openDuration:        30 * time.Minute,
+		halfOpenMaxAttempts: 3,
+		lastStateChange:     time.Now(),
+	}
+}
+
+// CanAttemptDiscovery checks if expensive channel discovery should be attempted
+func (cb *CircuitBreaker) CanAttemptDiscovery() (bool, string) {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	switch cb.state {
+	case CircuitClosed:
+		// Normal operation - allow all requests
+		return true, "circuit closed"
+
+	case CircuitOpen:
+		// Check if enough time has passed to transition to half-open
+		timeSinceFailure := time.Since(cb.lastFailureTime)
+		if timeSinceFailure >= cb.openDuration {
+			// Transition to half-open (done in RecordFailure/Success with write lock)
+			return true, "circuit transitioning to half-open"
+		}
+
+		// Still in open state - block expensive discovery
+		remainingTime := cb.openDuration - timeSinceFailure
+		return false, string("circuit open, retry in " + remainingTime.Round(time.Second).String())
+
+	case CircuitHalfOpen:
+		// In half-open state - allow limited attempts to test if service recovered
+		return true, "circuit half-open, testing recovery"
+
+	default:
+		return false, "unknown circuit state"
+	}
+}
+
+// RecordSuccess records a successful channel discovery
+func (cb *CircuitBreaker) RecordSuccess() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.lastCheckTime = time.Now()
+	cb.consecutiveFailures = 0 // Reset consecutive failures
+
+	oldState := cb.state
+
+	switch cb.state {
+	case CircuitClosed:
+		// Already closed, nothing to do
+		cb.successCount++
+
+	case CircuitHalfOpen:
+		// In half-open, increment success count
+		cb.successCount++
+		if cb.successCount >= cb.successThreshold {
+			// Enough successes - close the circuit
+			cb.state = CircuitClosed
+			cb.successCount = 0
+			cb.failureCount = 0
+			cb.lastStateChange = time.Now()
+
+			cb.logger.Info("Circuit breaker closed after successful recovery",
+				zap.String("channel_id", cb.channelID),
+				zap.String("old_state", string(oldState)),
+				zap.String("new_state", string(cb.state)),
+			)
+		}
+
+	case CircuitOpen:
+		// Shouldn't happen (CanAttemptDiscovery should transition to half-open)
+		// but handle it gracefully
+		cb.state = CircuitHalfOpen
+		cb.successCount = 1
+		cb.lastStateChange = time.Now()
+
+		cb.logger.Info("Circuit breaker transitioned to half-open on success",
+			zap.String("channel_id", cb.channelID),
+			zap.String("old_state", string(oldState)),
+		)
+	}
+}
+
+// RecordFailure records a failed channel discovery (no stream found)
+func (cb *CircuitBreaker) RecordFailure() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.lastCheckTime = time.Now()
+	cb.lastFailureTime = time.Now()
+	cb.consecutiveFailures++
+	cb.failureCount++
+	cb.successCount = 0 // Reset success count
+
+	oldState := cb.state
+
+	switch cb.state {
+	case CircuitClosed:
+		// Check if we should open the circuit
+		if cb.consecutiveFailures >= cb.failureThreshold {
+			cb.state = CircuitOpen
+			cb.lastStateChange = time.Now()
+
+			cb.logger.Warn("Circuit breaker opened - channel appears offline",
+				zap.String("channel_id", cb.channelID),
+				zap.Int("consecutive_failures", cb.consecutiveFailures),
+				zap.Int("total_failures", cb.failureCount),
+				zap.Duration("block_duration", cb.openDuration),
+				zap.Int("quota_saved_so_far", cb.failureCount*100), // 100 units per Search.List
+			)
+		}
+
+	case CircuitHalfOpen:
+		// Failed in half-open - go back to open
+		cb.state = CircuitOpen
+		cb.lastStateChange = time.Now()
+
+		cb.logger.Warn("Circuit breaker reopened - channel still offline",
+			zap.String("channel_id", cb.channelID),
+			zap.String("old_state", string(oldState)),
+			zap.Duration("block_duration", cb.openDuration),
+		)
+
+	case CircuitOpen:
+		// Already open, just log if this is unexpected
+		// (shouldn't happen if CanAttemptDiscovery is used correctly)
+		cb.logger.Debug("Failure recorded while circuit already open",
+			zap.String("channel_id", cb.channelID),
+		)
+	}
+}
+
+// GetState returns the current circuit state and failure stats
+func (cb *CircuitBreaker) GetState() (state CircuitState, failures int, lastFailure time.Time) {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+	return cb.state, cb.consecutiveFailures, cb.lastFailureTime
+}
+
+// GetStats returns detailed circuit breaker statistics
+func (cb *CircuitBreaker) GetStats() map[string]interface{} {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	stats := map[string]interface{}{
+		"channel_id":           cb.channelID,
+		"state":                string(cb.state),
+		"consecutive_failures": cb.consecutiveFailures,
+		"total_failures":       cb.failureCount,
+		"success_count":        cb.successCount,
+		"last_check":           cb.lastCheckTime.Format(time.RFC3339),
+		"last_state_change":    cb.lastStateChange.Format(time.RFC3339),
+		"quota_saved":          cb.failureCount * 100, // 100 units per blocked Search.List
+	}
+
+	if cb.state == CircuitOpen {
+		remainingTime := cb.openDuration - time.Since(cb.lastFailureTime)
+		if remainingTime > 0 {
+			stats["retry_in_seconds"] = int(remainingTime.Seconds())
+		} else {
+			stats["retry_in_seconds"] = 0
+		}
+	}
+
+	return stats
+}
+
+// Reset manually resets the circuit breaker to closed state
+// This should only be used for manual intervention (e.g., admin command)
+func (cb *CircuitBreaker) Reset() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	oldState := cb.state
+	cb.state = CircuitClosed
+	cb.consecutiveFailures = 0
+	cb.successCount = 0
+	cb.lastStateChange = time.Now()
+
+	if oldState != CircuitClosed {
+		cb.logger.Info("Circuit breaker manually reset",
+			zap.String("channel_id", cb.channelID),
+			zap.String("old_state", string(oldState)),
+		)
+	}
+}
