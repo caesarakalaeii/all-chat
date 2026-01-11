@@ -159,3 +159,133 @@ func (c *YouTubeQuotaClient) GetQuotaStatus(ctx context.Context) (*QuotaStatus, 
 
 	return &response.Global, nil
 }
+
+// =============== NEW RESERVE-CONFIRM PATTERN FOR ZERO DRIFT ===============
+
+// ReserveQuotaRequest represents a quota reservation request
+type ReserveQuotaRequest struct {
+	Units         int    `json:"units"`
+	Service       string `json:"service"`
+	Operation     string `json:"operation"`
+	AllowCritical bool   `json:"allow_critical"`
+}
+
+// ReserveQuotaResponse represents the reservation response
+type ReserveQuotaResponse struct {
+	Success       bool   `json:"success"`
+	ReservationID string `json:"reservation_id,omitempty"`
+	Remaining     int    `json:"remaining"`
+	Reason        string `json:"reason,omitempty"`
+}
+
+// ReserveQuota reserves quota BEFORE making a YouTube API call
+// Returns reservation ID on success
+func (c *YouTubeQuotaClient) ReserveQuota(ctx context.Context, units int, operation string, allowCritical bool) (string, error) {
+	payload := ReserveQuotaRequest{
+		Units:         units,
+		Service:       "overlay-manager",
+		Operation:     operation,
+		AllowCritical: allowCritical,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/v1/quota/reserve", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.logger.Warn("Failed to reserve quota - youtube-listener unavailable",
+			zap.Int("units", units),
+			zap.Error(err),
+		)
+		return "", fmt.Errorf("failed to reserve: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var response ReserveQuotaResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !response.Success {
+		c.logger.Warn("Quota reservation denied",
+			zap.Int("units", units),
+			zap.String("operation", operation),
+			zap.String("reason", response.Reason),
+		)
+		return "", fmt.Errorf("reservation denied: %s", response.Reason)
+	}
+
+	c.logger.Debug("Reserved quota successfully",
+		zap.Int("units", units),
+		zap.String("operation", operation),
+		zap.String("reservation_id", response.ReservationID),
+	)
+
+	return response.ReservationID, nil
+}
+
+// ConfirmQuotaRequest represents a quota confirmation request
+type ConfirmQuotaRequest struct {
+	ReservationID string `json:"reservation_id"`
+	Units         int    `json:"units"`
+	Service       string `json:"service"`
+	Success       bool   `json:"success"`
+}
+
+// ConfirmQuota confirms a successful API call or rolls back on 4xx error
+func (c *YouTubeQuotaClient) ConfirmQuota(ctx context.Context, reservationID string, units int, success bool) error {
+	payload := ConfirmQuotaRequest{
+		ReservationID: reservationID,
+		Units:         units,
+		Service:       "overlay-manager",
+		Success:       success,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/v1/quota/confirm", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.logger.Error("Failed to confirm/rollback quota",
+			zap.String("reservation_id", reservationID),
+			zap.Bool("success", success),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to confirm: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("confirm API returned status %d", resp.StatusCode)
+	}
+
+	action := "rolled back"
+	if success {
+		action = "confirmed"
+	}
+
+	c.logger.Debug("Quota reservation "+action,
+		zap.String("reservation_id", reservationID),
+		zap.Int("units", units),
+	)
+
+	return nil
+}
