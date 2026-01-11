@@ -179,6 +179,7 @@ func (t *Tracker) Start(ctx context.Context) error {
 	// Start background goroutines
 	go t.periodicDateCheck()
 	go t.periodicReservationCleanup(ctx)
+	go t.periodicDatabaseSync(ctx)
 
 	return nil
 }
@@ -215,6 +216,95 @@ func (t *Tracker) periodicDateCheck() {
 	}
 }
 
+// periodicDatabaseSync runs in a background goroutine and syncs in-memory cache with database every 5 minutes
+// This is CRITICAL to prevent drift when multiple pods or external services make API calls
+func (t *Tracker) periodicDatabaseSync(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	t.logger.Info("Started periodic database sync (every 5 minutes)")
+
+	for {
+		select {
+		case <-ticker.C:
+			t.syncWithDatabase(ctx)
+		case <-t.stopChan:
+			t.logger.Info("Periodic database sync stopped")
+			return
+		}
+	}
+}
+
+// syncWithDatabase reloads today's usage from database and updates in-memory cache
+// This prevents drift when multiple pods or external services make API calls
+func (t *Tracker) syncWithDatabase(ctx context.Context) {
+	// Get current date in PST
+	today := time.Now().In(YouTubePST).Format("2006-01-02")
+
+	query := `
+		SELECT units_used
+		FROM youtube_quota_usage
+		WHERE date = $1
+	`
+
+	var dbUsage int
+	err := t.db.QueryRow(ctx, query, today).Scan(&dbUsage)
+	if err != nil {
+		// If no row found, usage is 0
+		if err.Error() == "no rows in result set" {
+			dbUsage = 0
+		} else {
+			t.logger.Error("Failed to sync with database",
+				zap.Error(err),
+				zap.String("date", today),
+			)
+			return
+		}
+	}
+
+	// Compare with in-memory cache
+	t.mu.Lock()
+	memoryUsage := t.usageToday
+	drift := dbUsage - memoryUsage
+
+	// Only update if there's a drift > 5 units (to avoid log spam from tiny differences)
+	if abs(drift) > 5 {
+		t.logger.Warn("Quota drift detected, syncing with database",
+			zap.Int("memory_usage", memoryUsage),
+			zap.Int("database_usage", dbUsage),
+			zap.Int("drift", drift),
+			zap.String("date", today),
+		)
+
+		// Update in-memory cache to match database
+		t.usageToday = dbUsage
+		percentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
+
+		// Update state based on new usage
+		t.updateStateAndNotify(percentage)
+
+		// Update metrics
+		remaining := t.dailyLimit - t.usageToday
+		t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
+		t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
+
+		t.logger.Info("In-memory cache synced with database",
+			zap.Int("new_usage", t.usageToday),
+			zap.Float64("percentage", percentage),
+			zap.String("state", string(t.currentState)),
+		)
+	}
+	t.mu.Unlock()
+}
+
+// abs returns the absolute value of an integer
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 // checkDateRollover checks if the date has changed and resets quota if needed
 // This method must be called WITHOUT holding the lock, as it will acquire a write lock if needed
 // NOTE: Uses Pacific Time (PST/PDT) because YouTube quota resets at midnight PST
@@ -230,37 +320,65 @@ func (t *Tracker) checkDateRollover() {
 	}
 	t.mu.RUnlock()
 
-	// Slow path: date changed, acquire write lock and reset
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	// Double-check after acquiring write lock (another goroutine might have reset already)
-	if t.currentDate == today {
-		return
-	}
-
-	t.logger.Info("Date rolled over (PST timezone), resetting quota",
+	// Slow path: date changed, reload from database
+	t.logger.Info("Date rolled over (PST timezone), reloading quota from database",
 		zap.String("old_date", t.currentDate),
 		zap.String("new_date", today),
 		zap.String("timezone", "America/Los_Angeles"),
 	)
-	t.currentDate = today
-	t.usageToday = 0
-	t.lastNotifiedThreshold = 0.0 // Reset threshold notifications for new day
 
-	// Reset state to HEALTHY
-	if t.currentState != QuotaStateHealthy {
+	// CRITICAL FIX: Load today's usage from database instead of just resetting to 0
+	// This handles cases where:
+	// 1. Another pod made API calls between midnight and now
+	// 2. Database has pre-existing data for today
+	// 3. This pod crashed/restarted and missed the rollover
+	ctx := context.Background()
+	if err := t.loadTodayUsage(ctx); err != nil {
+		t.logger.Error("Failed to reload today's usage after date rollover",
+			zap.Error(err),
+			zap.String("date", today),
+		)
+		// Fallback: reset to 0 if database load fails
+		t.mu.Lock()
+		t.currentDate = today
+		t.usageToday = 0
+		t.lastNotifiedThreshold = 0.0
+		t.mu.Unlock()
+		return
+	}
+
+	// Update state based on loaded usage
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	percentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
+	t.lastNotifiedThreshold = (float64(int(percentage/5.0)) * 5.0)
+
+	// Calculate new state based on current usage
+	newState := t.calculateState(percentage)
+	if t.currentState != newState {
 		oldState := t.currentState
-		t.currentState = QuotaStateHealthy
+		t.currentState = newState
 		t.lastStateTransition = time.Now()
-		t.logger.Info("Quota state reset to HEALTHY after date rollover",
+		t.logger.Info("Quota state updated after date rollover",
 			zap.String("old_state", string(oldState)),
+			zap.String("new_state", string(newState)),
+			zap.Int("usage_today", t.usageToday),
+			zap.Float64("percentage", percentage),
 		)
 	}
 
-	// Immediately update metrics to reflect the reset (prevents stale gauge values)
-	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(t.dailyLimit))
-	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", 0.0)
+	// Update metrics with loaded values
+	remaining := t.dailyLimit - t.usageToday
+	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
+	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
+
+	t.logger.Info("Date rollover complete",
+		zap.Int("usage_today", t.usageToday),
+		zap.Int("remaining", remaining),
+		zap.Float64("percentage", percentage),
+		zap.String("state", string(t.currentState)),
+	)
 }
 
 // calculateState determines the current quota state based on usage percentage
