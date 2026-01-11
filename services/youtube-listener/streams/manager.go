@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener/api"
+	"github.com/caesar/all-chat/services/youtube-listener/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener/models"
 	"github.com/caesar/all-chat/services/youtube-listener/oauth"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
@@ -35,6 +36,7 @@ type Manager struct {
 	leader           *sourcemanager.LeadershipCoordinator
 	quotaTracker     *quota.Tracker
 	quotaCoordinator *quota.Coordinator
+	ytMetrics        *metrics.YouTubeMetrics
 
 	mu            sync.RWMutex
 	activeStreams map[string]*models.YouTubeStream // streamID -> stream
@@ -98,6 +100,7 @@ func NewManager(
 	quotaTracker *quota.Tracker,
 	perChannelTracker *quota.PerChannelTracker,
 	redisClient *redis.Client,
+	ytMetrics *metrics.YouTubeMetrics,
 	logger *zap.Logger,
 ) *Manager {
 	// Get disconnect debounce delay from environment variable, default to 90 seconds
@@ -128,6 +131,7 @@ func NewManager(
 		quotaTracker:              quotaTracker,
 		quotaCoordinator:          quotaCoordinator,
 		redisClient:               redisClient,
+		ytMetrics:                 ytMetrics,
 		activeStreams:             make(map[string]*models.YouTubeStream),
 		pollers:                   make(map[string]*Poller),
 		connectedOverlays:         make(map[string]time.Time),
@@ -785,7 +789,7 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 	)
 
 	// Create and start poller
-	poller := NewPoller(stream, apiClient, m.logger)
+	poller := NewPoller(stream, apiClient, m.ytMetrics, m.logger)
 	poller.SetMessageHandler(m.messageHandler)
 
 	// Set connection checker for connection-aware polling
@@ -1397,7 +1401,7 @@ func (m *Manager) getOrCreateCircuitBreaker(channelID string) *CircuitBreaker {
 	}
 
 	// Create new circuit breaker
-	cb = NewCircuitBreaker(channelID, m.logger)
+	cb = NewCircuitBreaker(channelID, m.logger, m.ytMetrics)
 	m.circuitBreakers[channelID] = cb
 
 	m.logger.Info("Created circuit breaker for channel",
@@ -1405,4 +1409,58 @@ func (m *Manager) getOrCreateCircuitBreaker(channelID string) *CircuitBreaker {
 	)
 
 	return cb
+}
+
+// GetAllCircuitBreakers returns statistics for all circuit breakers
+// Implements CircuitBreakerGetter interface for quota handler
+func (m *Manager) GetAllCircuitBreakers() map[string]map[string]interface{} {
+	m.circuitBreakersMu.RLock()
+	defer m.circuitBreakersMu.RUnlock()
+
+	result := make(map[string]map[string]interface{}, len(m.circuitBreakers))
+
+	for channelID, cb := range m.circuitBreakers {
+		result[channelID] = cb.GetStats()
+	}
+
+	return result
+}
+
+// ResetCircuitBreaker manually resets a circuit breaker for a specific channel
+// Implements CircuitBreakerResetter interface for admin endpoints
+func (m *Manager) ResetCircuitBreaker(channelID string) error {
+	m.circuitBreakersMu.RLock()
+	cb, exists := m.circuitBreakers[channelID]
+	m.circuitBreakersMu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("no circuit breaker found for channel: %s", channelID)
+	}
+
+	cb.Reset()
+
+	m.logger.Warn("Circuit breaker manually reset by admin",
+		zap.String("channel_id", channelID),
+	)
+
+	return nil
+}
+
+// ResetAllCircuitBreakers manually resets all circuit breakers
+// Implements CircuitBreakerResetter interface for admin endpoints
+func (m *Manager) ResetAllCircuitBreakers() {
+	m.circuitBreakersMu.RLock()
+	breakers := make([]*CircuitBreaker, 0, len(m.circuitBreakers))
+	for _, cb := range m.circuitBreakers {
+		breakers = append(breakers, cb)
+	}
+	m.circuitBreakersMu.RUnlock()
+
+	for _, cb := range breakers {
+		cb.Reset()
+	}
+
+	m.logger.Warn("All circuit breakers manually reset by admin",
+		zap.Int("count", len(breakers)),
+	)
 }

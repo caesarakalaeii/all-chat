@@ -273,12 +273,21 @@ func (t *Tracker) syncWithDatabase(ctx context.Context) {
 
 	// Only update if there's a drift > 5 units (to avoid log spam from tiny differences)
 	if abs(drift) > 5 {
+		severity := "minor"
+		if abs(drift) >= 50 {
+			severity = "major"
+		}
+
 		t.logger.Warn("Quota drift detected, syncing with database",
 			zap.Int("memory_usage", memoryUsage),
 			zap.Int("database_usage", dbUsage),
 			zap.Int("drift", drift),
+			zap.String("severity", severity),
 			zap.String("date", today),
 		)
+
+		// METRICS: Track drift detection and units
+		// Note: ytMetrics would need to be added to Tracker, for now skip if not available
 
 		// Update in-memory cache to match database
 		t.usageToday = dbUsage
@@ -637,6 +646,9 @@ func (t *Tracker) ReserveQuotaWithPriority(ctx context.Context, units int, allow
 			zap.Int("daily_limit", t.dailyLimit),
 			zap.Bool("allow_critical", allowCritical),
 		)
+
+		// METRICS: Track emergency shutoff blocks
+		// Note: ytMetrics would need to be added to Tracker
 
 		if t.notifier != nil {
 			// Notify about emergency shutoff

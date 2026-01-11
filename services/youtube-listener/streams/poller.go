@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener/api"
+	"github.com/caesar/all-chat/services/youtube-listener/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener/models"
 	"go.uber.org/zap"
 )
@@ -29,6 +30,7 @@ type Poller struct {
 	parser         *api.Parser
 	messageHandler MessageHandler
 	logger         *zap.Logger
+	ytMetrics      *metrics.YouTubeMetrics
 
 	// Connection-aware polling (prevents quota waste when overlay disconnected)
 	connectionChecker ConnectionChecker
@@ -48,6 +50,7 @@ type Poller struct {
 func NewPoller(
 	stream *models.YouTubeStream,
 	apiClient *api.Client,
+	ytMetrics *metrics.YouTubeMetrics,
 	logger *zap.Logger,
 ) *Poller {
 	return &Poller{
@@ -55,6 +58,7 @@ func NewPoller(
 		apiClient:         apiClient,
 		parser:            api.NewParser(),
 		logger:            logger,
+		ytMetrics:         ytMetrics,
 		stopChan:          make(chan struct{}),
 		maxBackoff:        5 * time.Minute, // Maximum backoff of 5 minutes (only for errors)
 		backoffDuration:   0,               // Start with no backoff
@@ -102,6 +106,18 @@ func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 	// This prevents wasting 5 units per poll when overlay is disconnected
 	if p.connectionChecker != nil && p.overlayID != "" {
 		connected, err := p.connectionChecker.IsOverlayConnected(ctx, p.overlayID)
+
+		// METRICS: Track connection check result
+		if p.ytMetrics != nil {
+			if err != nil {
+				p.ytMetrics.PollerConnectionChecks.WithLabelValues("error").Inc()
+			} else if connected {
+				p.ytMetrics.PollerConnectionChecks.WithLabelValues("connected").Inc()
+			} else {
+				p.ytMetrics.PollerConnectionChecks.WithLabelValues("disconnected").Inc()
+			}
+		}
+
 		if err != nil {
 			p.logger.Warn("Connection check failed, assuming disconnected",
 				zap.String("overlay_id", p.overlayID),
@@ -112,9 +128,16 @@ func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 		}
 
 		if !connected {
+			// METRICS: Track poller stopped by disconnect and quota saved
+			if p.ytMetrics != nil {
+				p.ytMetrics.PollerStoppedByDisconnect.WithLabelValues(p.stream.ChannelID).Inc()
+				p.ytMetrics.PollerQuotaSaved.WithLabelValues(p.stream.ChannelID).Add(5) // Saved 5 units
+			}
+
 			p.logger.Info("Overlay disconnected, stopping poller to save quota",
 				zap.String("overlay_id", p.overlayID),
 				zap.String("stream_id", p.stream.StreamID),
+				zap.String("channel_id", p.stream.ChannelID),
 			)
 			return false, fmt.Errorf("overlay disconnected")
 		}
