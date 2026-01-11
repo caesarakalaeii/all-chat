@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener/handlers"
+	ytmetrics "github.com/caesar/all-chat/services/youtube-listener/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener/oauth"
 	"github.com/caesar/all-chat/services/youtube-listener/publisher"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
@@ -181,10 +182,13 @@ func main() {
 		leaderCoord = sourcemanager.NewLeadershipCoordinator("youtube", smClient, 5*time.Second, log)
 	}
 
+	// Initialize YouTube-specific metrics
+	ytMetrics := ytmetrics.NewYouTubeMetrics()
+
 	// Initialize stream manager
 	streamRepo := streams.NewRepository(db, log)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, leaderCoord, quotaTracker, perChannelQuotaTracker, redisClient, log)
+	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, leaderCoord, quotaTracker, perChannelQuotaTracker, redisClient, ytMetrics, log)
 
 	// Start stream manager
 	if err := streamManager.Start(ctx); err != nil {
@@ -210,10 +214,16 @@ func main() {
 	// Quota handlers
 	quotaCoordinator := quota.NewCoordinator(quotaTracker, perChannelQuotaTracker, log)
 	quotaHandler := handlers.NewQuotaHandler(quotaCoordinator, quotaTracker, perChannelQuotaTracker, log)
+
+	// Wire up circuit breaker interfaces for visibility and admin control
+	quotaHandler.SetCircuitBreakerGetter(streamManager)
+	quotaHandler.SetCircuitBreakerResetter(streamManager)
+
 	router.GET("/quota/status", quotaHandler.GetQuotaStatus)
 	router.GET("/quota/channels/:channel_id", quotaHandler.GetChannelQuota)
 	router.GET("/quota/history", quotaHandler.GetQuotaHistory)
 	router.GET("/quota/predictions", quotaHandler.GetQuotaPrediction)
+	router.GET("/quota/circuit-breakers", quotaHandler.GetCircuitBreakers)  // Circuit breaker visibility
 	router.POST("/quota/record", quotaHandler.RecordQuota)  // Legacy endpoint for external services
 
 	// Cross-service quota coordination API
@@ -222,6 +232,13 @@ func main() {
 		v1.POST("/quota/check", quotaHandler.CheckQuota)       // Check if quota available
 		v1.POST("/quota/reserve", quotaHandler.ReserveQuota)   // Reserve before API call
 		v1.POST("/quota/confirm", quotaHandler.ConfirmQuota)   // Confirm or rollback after call
+	}
+
+	// Admin endpoints for manual intervention
+	admin := router.Group("/admin")
+	{
+		admin.POST("/circuit-breakers/:channel_id/reset", quotaHandler.ResetCircuitBreaker)
+		admin.POST("/circuit-breakers/reset-all", quotaHandler.ResetAllCircuitBreakers)
 	}
 
 	// Prometheus metrics endpoint

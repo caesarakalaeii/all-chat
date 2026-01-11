@@ -12,10 +12,12 @@ import (
 
 // QuotaHandler handles quota-related admin API requests
 type QuotaHandler struct {
-	coordinator       *quota.Coordinator
-	globalTracker     *quota.Tracker
-	perChannelTracker *quota.PerChannelTracker
-	logger            *zap.Logger
+	coordinator           *quota.Coordinator
+	globalTracker         *quota.Tracker
+	perChannelTracker     *quota.PerChannelTracker
+	logger                *zap.Logger
+	circuitBreakerGetter  CircuitBreakerGetter
+	circuitBreakerResetter CircuitBreakerResetter
 }
 
 // NewQuotaHandler creates a new quota handler
@@ -348,6 +350,117 @@ func parseIntParam(param string) (int, error) {
 	var result int
 	_, err := fmt.Sscanf(param, "%d", &result)
 	return result, err
+}
+
+// =============== CIRCUIT BREAKER VISIBILITY ===============
+
+// CircuitBreakerGetter defines interface for getting circuit breakers
+type CircuitBreakerGetter interface {
+	GetAllCircuitBreakers() map[string]map[string]interface{}
+}
+
+// SetCircuitBreakerGetter sets the circuit breaker getter
+func (h *QuotaHandler) SetCircuitBreakerGetter(getter CircuitBreakerGetter) {
+	h.circuitBreakerGetter = getter
+}
+
+// GetCircuitBreakers returns the status of all circuit breakers
+// GET /quota/circuit-breakers
+func (h *QuotaHandler) GetCircuitBreakers(c *gin.Context) {
+	if h.circuitBreakerGetter == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "circuit breaker getter not configured",
+		})
+		return
+	}
+
+	breakers := h.circuitBreakerGetter.GetAllCircuitBreakers()
+
+	c.JSON(http.StatusOK, gin.H{
+		"circuit_breakers": breakers,
+		"count":            len(breakers),
+	})
+
+	h.logger.Debug("Circuit breakers status retrieved",
+		zap.String("request_from", c.ClientIP()),
+		zap.Int("breaker_count", len(breakers)),
+	)
+}
+
+// =============== ADMIN OVERRIDE ENDPOINTS ===============
+
+// CircuitBreakerResetter defines interface for resetting circuit breakers
+type CircuitBreakerResetter interface {
+	ResetCircuitBreaker(channelID string) error
+	ResetAllCircuitBreakers()
+}
+
+// SetCircuitBreakerResetter sets the circuit breaker resetter
+func (h *QuotaHandler) SetCircuitBreakerResetter(resetter CircuitBreakerResetter) {
+	h.circuitBreakerResetter = resetter
+}
+
+// ResetCircuitBreaker manually resets a circuit breaker for a channel
+// POST /admin/circuit-breakers/:channel_id/reset
+func (h *QuotaHandler) ResetCircuitBreaker(c *gin.Context) {
+	if h.circuitBreakerResetter == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "circuit breaker resetter not configured",
+		})
+		return
+	}
+
+	channelID := c.Param("channel_id")
+	if channelID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "channel_id is required",
+		})
+		return
+	}
+
+	if err := h.circuitBreakerResetter.ResetCircuitBreaker(channelID); err != nil {
+		h.logger.Error("Failed to reset circuit breaker",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to reset circuit breaker",
+		})
+		return
+	}
+
+	h.logger.Warn("Manually reset circuit breaker",
+		zap.String("channel_id", channelID),
+		zap.String("admin_ip", c.ClientIP()),
+	)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"channel_id": channelID,
+		"message":    "circuit breaker reset successfully",
+	})
+}
+
+// ResetAllCircuitBreakers manually resets all circuit breakers
+// POST /admin/circuit-breakers/reset-all
+func (h *QuotaHandler) ResetAllCircuitBreakers(c *gin.Context) {
+	if h.circuitBreakerResetter == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "circuit breaker resetter not configured",
+		})
+		return
+	}
+
+	h.circuitBreakerResetter.ResetAllCircuitBreakers()
+
+	h.logger.Warn("Manually reset all circuit breakers",
+		zap.String("admin_ip", c.ClientIP()),
+	)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "all circuit breakers reset successfully",
+	})
 }
 
 // =============== CROSS-SERVICE QUOTA COORDINATION API ===============
