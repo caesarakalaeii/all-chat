@@ -55,6 +55,10 @@ type Manager struct {
 	baseDetectionInterval time.Duration
 	maxDetectionInterval  time.Duration
 
+	// Circuit breakers for offline channel detection (prevents quota waste)
+	circuitBreakersMu sync.RWMutex
+	circuitBreakers   map[string]*CircuitBreaker // channelID -> circuit breaker
+
 	syncInterval time.Duration
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
@@ -130,6 +134,7 @@ func NewManager(
 		disconnectDebounceTimers:  make(map[string]*time.Timer),
 		disconnectDebounceDelay:   disconnectDebounce,
 		backoffStore:              backoffStore,
+		circuitBreakers:           make(map[string]*CircuitBreaker), // Circuit breakers for offline channels
 		baseDetectionInterval:     30 * time.Second,  // Start checking every 30s
 		maxDetectionInterval:      10 * time.Minute,  // Max 10 minutes between checks
 		syncInterval:                30 * time.Second,
@@ -613,6 +618,19 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		}
 	}
 
+	// CIRCUIT BREAKER: Check if we should attempt expensive channel discovery
+	// This prevents wasting quota (100 units per search) on channels that are offline
+	circuitBreaker := m.getOrCreateCircuitBreaker(channelID)
+	canAttempt, reason := circuitBreaker.CanAttemptDiscovery()
+
+	if !canAttempt {
+		m.logger.Debug("Circuit breaker blocking expensive discovery",
+			zap.String("channel_id", channelID),
+			zap.String("reason", reason),
+		)
+		return fmt.Errorf("circuit breaker open: %s", reason)
+	}
+
 	// Fallback to full search (expensive: 100 units)
 	// This is discovery, so use normal priority (can be blocked in degraded/critical states)
 	searchDecision := m.quotaCoordinator.CanMakeRequest(
@@ -659,8 +677,14 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	}
 
 	if len(liveStreams) == 0 {
-		m.logger.Debug("No live streams found for channel (will retry with backoff)",
+		// CIRCUIT BREAKER: Record failure (no stream found)
+		circuitBreaker.RecordFailure()
+
+		state, failures, _ := circuitBreaker.GetState()
+		m.logger.Debug("No live streams found for channel (circuit breaker tracking)",
 			zap.String("channel_id", channelID),
+			zap.String("circuit_state", string(state)),
+			zap.Int("consecutive_failures", failures),
 		)
 		// Don't deactivate sources when no stream is found
 		// The channel might go live later, and we already have exponential backoff
@@ -668,6 +692,9 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		// or when explicitly removed by users
 		return nil
 	}
+
+	// CIRCUIT BREAKER: Record success (stream found!)
+	circuitBreaker.RecordSuccess()
 
 	// Cache the first live stream's video ID for future lightweight checks
 	if len(liveStreams) > 0 {
@@ -1340,4 +1367,36 @@ func (m *Manager) resetDetectionBackoff(channelID string) {
 		zap.String("channel_id", channelID),
 		zap.Duration("backoff", m.baseDetectionInterval),
 	)
+}
+
+// getOrCreateCircuitBreaker returns the circuit breaker for a channel, creating if needed
+func (m *Manager) getOrCreateCircuitBreaker(channelID string) *CircuitBreaker {
+	// Fast path: read lock
+	m.circuitBreakersMu.RLock()
+	cb, exists := m.circuitBreakers[channelID]
+	m.circuitBreakersMu.RUnlock()
+
+	if exists {
+		return cb
+	}
+
+	// Slow path: write lock
+	m.circuitBreakersMu.Lock()
+	defer m.circuitBreakersMu.Unlock()
+
+	// Double-check after acquiring write lock
+	cb, exists = m.circuitBreakers[channelID]
+	if exists {
+		return cb
+	}
+
+	// Create new circuit breaker
+	cb = NewCircuitBreaker(channelID, m.logger)
+	m.circuitBreakers[channelID] = cb
+
+	m.logger.Info("Created circuit breaker for channel",
+		zap.String("channel_id", channelID),
+	)
+
+	return cb
 }
