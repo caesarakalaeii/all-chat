@@ -8,7 +8,7 @@ const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = process.env.REDIS_PORT || 6379;
 const YOUTUBE_LISTENER_URL = process.env.YOUTUBE_LISTENER_URL || 'http://localhost:8086';
-const STATUS_UPDATE_INTERVAL = parseInt(process.env.STATUS_UPDATE_INTERVAL || '3600000'); // 1 hour default
+const STATUS_UPDATE_INTERVAL = parseInt(process.env.STATUS_UPDATE_INTERVAL || '600000'); // 10 minutes default
 const GRAFANA_PANEL_URL = process.env.GRAFANA_PANEL_URL || null; // Optional Grafana panel embed URL
 
 // Validate required env vars
