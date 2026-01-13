@@ -20,9 +20,9 @@ type MessageHandler interface {
 	HandleMessages(ctx context.Context, messages []*models.RawChatMessage) error
 }
 
-// ConnectionChecker defines the interface for checking if an overlay is still connected
+// ConnectionChecker defines the interface for checking if a channel still has connected overlays
 type ConnectionChecker interface {
-	IsOverlayConnected(ctx context.Context, overlayID string) (bool, error)
+	IsChannelConnected(ctx context.Context, channelID string) (bool, error)
 }
 
 // Poller polls a YouTube live stream for chat messages
@@ -38,10 +38,13 @@ type Poller struct {
 	// Connection-aware polling (prevents quota waste when overlay disconnected)
 	connectionChecker ConnectionChecker
 	overlayID         string
+	channelID         string
 
 	mu               sync.RWMutex
 	stopChan         chan struct{}
 	wg               sync.WaitGroup
+	lastStreamRequest time.Time
+	lastStreamRequest time.Time
 
 	// Exponential backoff state (only for errors)
 	consecutiveErrors int
@@ -77,9 +80,10 @@ func (p *Poller) SetMessageHandler(handler MessageHandler) {
 }
 
 // SetConnectionChecker sets the connection checker for overlay connection verification
-func (p *Poller) SetConnectionChecker(checker ConnectionChecker, overlayID string) {
+func (p *Poller) SetConnectionChecker(checker ConnectionChecker, channelID, overlayID string) {
 	p.connectionChecker = checker
 	p.overlayID = overlayID
+	p.channelID = channelID
 }
 
 // Start begins polling the stream
@@ -109,8 +113,8 @@ func (p *Poller) Stop() {
 func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 	// CONNECTION CHECK: Verify overlay is still connected
 	// This prevents wasting 5 units per poll when overlay is disconnected
-	if p.connectionChecker != nil && p.overlayID != "" {
-		connected, err := p.connectionChecker.IsOverlayConnected(ctx, p.overlayID)
+	if p.connectionChecker != nil && p.channelID != "" {
+		connected, err := p.connectionChecker.IsChannelConnected(ctx, p.channelID)
 
 		// METRICS: Track connection check result
 		if p.ytMetrics != nil {
@@ -125,7 +129,7 @@ func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 
 		if err != nil {
 			p.logger.Warn("Connection check failed, assuming disconnected",
-				zap.String("overlay_id", p.overlayID),
+				zap.String("channel_id", p.channelID),
 				zap.String("stream_id", p.stream.StreamID),
 				zap.Error(err),
 			)
@@ -140,7 +144,7 @@ func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 			}
 
 			p.logger.Info("Overlay disconnected, stopping poller to save quota",
-				zap.String("overlay_id", p.overlayID),
+				zap.String("channel_id", p.channelID),
 				zap.String("stream_id", p.stream.StreamID),
 				zap.String("channel_id", p.stream.ChannelID),
 			)
@@ -234,20 +238,44 @@ func (p *Poller) pollLoop(ctx context.Context) {
 				)
 				return
 			}
-		} else {
-			// Success - reset error backoff
-			p.resetBackoff()
-		}
+	} else {
+		// Success - reset error backoff
+		p.resetBackoff()
+	}
 
-		if err != nil && p.ytMetrics != nil {
-			p.ytMetrics.StreamReconnects.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
-		}
+	p.sleepToRespectInterval()
+
+	if err != nil && p.ytMetrics != nil {
+		p.ytMetrics.StreamReconnects.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
+	}
 
 		select {
 		case <-p.stopChan:
 			return
 		default:
 		}
+	}
+}
+
+func (p *Poller) sleepToRespectInterval() {
+	p.mu.RLock()
+	interval := time.Duration(p.stream.PollingInterval) * time.Millisecond
+	lastRequest := p.lastStreamRequest
+	p.mu.RUnlock()
+
+	if interval <= 0 || lastRequest.IsZero() {
+		return
+	}
+
+	elapsed := time.Since(lastRequest)
+	if elapsed >= interval {
+		return
+	}
+
+	wait := interval - elapsed
+	select {
+	case <-time.After(wait):
+	case <-p.stopChan:
 	}
 }
 
@@ -311,6 +339,10 @@ func (p *Poller) poll(ctx context.Context) error {
 			pageToken = storedToken
 		}
 	}
+
+	p.mu.Lock()
+	p.lastStreamRequest = time.Now()
+	p.mu.Unlock()
 
 	// Fetch messages from API
 	response, err := p.apiClient.GetChatMessages(ctx, liveChatID, pageToken, &quota.AuditContext{
@@ -389,10 +421,10 @@ func (p *Poller) monitorConnection(ctx context.Context, cancel context.CancelFun
 			cancel()
 			return
 		case <-ticker.C:
-			if p.connectionChecker == nil || p.overlayID == "" {
+			if p.connectionChecker == nil || p.channelID == "" {
 				continue
 			}
-			connected, err := p.connectionChecker.IsOverlayConnected(ctx, p.overlayID)
+			connected, err := p.connectionChecker.IsChannelConnected(ctx, p.channelID)
 			if err != nil || !connected {
 				select {
 				case disconnected <- struct{}{}:
