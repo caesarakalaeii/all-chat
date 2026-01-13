@@ -179,6 +179,41 @@ func (r *Repository) SetSourceActive(ctx context.Context, channelID string, isAc
 	return nil
 }
 
+// TouchSourceActive ensures active YouTube sources have a fresh updated_at timestamp.
+// This keeps the admin dashboard in sync with actual polling state.
+func (r *Repository) TouchSourceActive(ctx context.Context, channelID string) error {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = true, updated_at = NOW()
+		WHERE platform = 'youtube'
+		  AND channel_id = $1
+	`
+
+	result, err := r.db.Exec(ctx, query, channelID)
+	if err != nil {
+		r.logger.Error("Failed to touch source status",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to touch source status: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		r.logger.Debug("No sources touched (may have been removed)",
+			zap.String("channel_id", channelID),
+		)
+		return nil
+	}
+
+	r.logger.Debug("Touched source status",
+		zap.String("channel_id", channelID),
+		zap.Int64("rows_affected", rowsAffected),
+	)
+
+	return nil
+}
+
 // SetSourceActiveByOverlay updates the is_active flag for a specific overlay's YouTube source
 // OPTIMIZATION: Only updates if the status actually changed to prevent notification spam
 func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, channelID string, isActive bool) error {
