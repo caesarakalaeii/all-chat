@@ -156,7 +156,7 @@ GET /status
 
 - `search.list` (find live streams): **100 units**
 - `videos.list` (get stream details): **1 unit**
-- `liveChatMessages.list` (fetch messages): **5 units** per request
+- `liveChatMessages.streamList` (fetch messages): **5 units** per request
 
 ## Quota Tracking System
 

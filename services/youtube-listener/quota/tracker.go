@@ -17,7 +17,7 @@ const (
 	// DefaultDailyQuota is the default YouTube API quota (10,000 units/day)
 	DefaultDailyQuota = 10000
 
-	// QuotaCostLiveChatMessages is the quota cost for liveChatMessages.list (5 units)
+	// QuotaCostLiveChatMessages is the quota cost for liveChatMessages.streamList (5 units)
 	QuotaCostLiveChatMessages = 5
 
 	// QuotaCostVideos is the quota cost for videos.list (1 unit)

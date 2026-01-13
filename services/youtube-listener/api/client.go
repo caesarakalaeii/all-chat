@@ -218,9 +218,9 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string, audit *qu
 	return streams, nil
 }
 
-// GetChatMessages fetches messages from a live chat
-// This costs 5 quota units per call
-// Uses reserve-confirm-rollback pattern for accurate quota tracking
+// GetChatMessages fetches messages from a live chat using streamList.
+// This costs 5 quota units per call.
+// Uses reserve-confirm-rollback pattern for accurate quota tracking.
 func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken string, audit *quota.AuditContext) (*youtube.LiveChatMessageListResponse, error) {
 	const cost = quota.QuotaCostLiveChatMessages
 
@@ -234,15 +234,17 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 		}
 	}
 
-	// STEP 2: Make YouTube API call
-	call := c.service.LiveChatMessages.List(liveChatID, []string{"id", "snippet", "authorDetails"}).
-		MaxResults(200)
+	// STEP 2: Make YouTube API call (streamList)
+	call := youtube.NewYoutubeService(c.service).V3.LiveChat.Messages.Stream().
+		LiveChatId(liveChatID).
+		Part("id", "snippet", "authorDetails").
+		MaxResults(2000)
 
 	if pageToken != "" {
 		call = call.PageToken(pageToken)
 	}
 
-	response, apiErr := call.Do()
+	response, apiErr := call.Context(ctx).Do()
 
 	// STEP 3: CONFIRM or ROLLBACK based on result
 	chargedUnits := 0
@@ -261,7 +263,7 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 			}
 		}
 	}
-	c.logAPICall(ctx, "LiveChatMessages.List", chargedUnits, audit)
+	c.logAPICall(ctx, "LiveChatMessages.StreamList", chargedUnits, audit)
 
 	// STEP 4: Process response
 	if apiErr != nil {

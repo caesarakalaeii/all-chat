@@ -147,13 +147,9 @@ func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// pollLoop continuously polls for new messages with exponential backoff only on errors
+// pollLoop continuously streams for new messages with exponential backoff only on errors
 func (p *Poller) pollLoop(ctx context.Context) {
 	defer p.wg.Done()
-
-	interval := time.Duration(p.stream.PollingInterval) * time.Millisecond
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
 
 	// Initial poll
 	if shouldPoll, err := p.shouldPoll(ctx); !shouldPoll {
@@ -164,82 +160,70 @@ func (p *Poller) pollLoop(ctx context.Context) {
 		return
 	}
 
-	if err := p.poll(ctx); err != nil {
-		p.handlePollError(err)
-	} else {
-		p.resetBackoff()
-	}
-
 	for {
-		select {
-		case <-ticker.C:
-			// CONNECTION-AWARE: Check if overlay still connected before polling
-			if shouldPoll, err := p.shouldPoll(ctx); !shouldPoll {
-				p.logger.Info("Overlay disconnected during polling, stopping poller immediately",
-					zap.String("stream_id", p.stream.StreamID),
-					zap.Error(err),
-				)
-				return  // Exit immediately (saves 5 units × remaining polls)
-			}
+		// CONNECTION-AWARE: Check if overlay still connected before streaming
+		if shouldPoll, err := p.shouldPoll(ctx); !shouldPoll {
+			p.logger.Info("Overlay disconnected during polling, stopping poller immediately",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.Error(err),
+			)
+			return
+		}
 
-			// Apply exponential backoff only if we have consecutive errors
-			if p.backoffDuration > 0 {
-				p.logger.Warn("Applying error backoff before next poll",
+		// Apply exponential backoff only if we have consecutive errors
+		if p.backoffDuration > 0 {
+			p.logger.Warn("Applying error backoff before next stream request",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.Duration("backoff", p.backoffDuration),
+				zap.Int("consecutive_errors", p.consecutiveErrors),
+			)
+			select {
+			case <-time.After(p.backoffDuration):
+			case <-p.stopChan:
+				return
+			}
+		}
+
+		pollCtx, cancel := context.WithCancel(ctx)
+		monitorDone := make(chan struct{})
+		go p.monitorConnection(pollCtx, cancel, monitorDone)
+
+		err := p.poll(pollCtx)
+		cancel()
+		<-monitorDone
+
+		if err != nil {
+			p.handlePollError(err)
+
+			// Check for stream ended - but don't stop immediately
+			// Stream might come back (restream, temporary interruption)
+			// Instead, apply exponential backoff and let manager handle cleanup
+			if strings.Contains(err.Error(), "liveChatEnded") || strings.Contains(err.Error(), "live chat is no longer live") {
+				p.logger.Warn("Stream appears ended, applying backoff (will auto-recover if stream returns)",
 					zap.String("stream_id", p.stream.StreamID),
 					zap.Duration("backoff", p.backoffDuration),
-					zap.Int("consecutive_errors", p.consecutiveErrors),
 				)
-				select {
-				case <-time.After(p.backoffDuration):
-				case <-p.stopChan:
-					return
-				}
+				// Don't return - let backoff handle it
+				// Manager will clean up if stream stays offline
 			}
 
-			if err := p.poll(ctx); err != nil {
-				p.handlePollError(err)
-
-				// Check for stream ended - but don't stop immediately
-				// Stream might come back (restream, temporary interruption)
-				// Instead, apply exponential backoff and let manager handle cleanup
-				if strings.Contains(err.Error(), "liveChatEnded") || strings.Contains(err.Error(), "live chat is no longer live") {
-					p.logger.Warn("Stream appears ended, applying backoff (will auto-recover if stream returns)",
-						zap.String("stream_id", p.stream.StreamID),
-						zap.Duration("backoff", p.backoffDuration),
-					)
-					// Don't return - let backoff handle it
-					// Manager will clean up if stream stays offline
-				}
-
-				// Check for quota exceeded - STOP ENTIRELY, don't retry
-				// Quota resets daily at midnight PT, periodic sync will restart poller after reset
-				if strings.Contains(err.Error(), "quotaExceeded") || strings.Contains(err.Error(), "insufficient quota") {
-					p.logger.Error("Quota exceeded, stopping poller permanently (will resume after quota reset via periodic sync)",
-						zap.String("stream_id", p.stream.StreamID),
-					)
-					return  // Exit pollLoop entirely - don't waste quota retrying
-				}
-			} else {
-				// Success - reset error backoff
-				p.resetBackoff()
-			}
-
-			// Update ticker interval if it changed (YouTube API tells us optimal interval)
-			p.mu.RLock()
-			newInterval := time.Duration(p.stream.PollingInterval) * time.Millisecond
-			p.mu.RUnlock()
-
-			if newInterval != interval {
-				interval = newInterval
-				ticker.Reset(interval)
-				p.logger.Debug("Updated polling interval",
+			// Check for quota exceeded - STOP ENTIRELY, don't retry
+			// Quota resets daily at midnight PT, periodic sync will restart poller after reset
+			if strings.Contains(err.Error(), "quotaExceeded") || strings.Contains(err.Error(), "insufficient quota") {
+				p.logger.Error("Quota exceeded, stopping poller permanently (will resume after quota reset via periodic sync)",
 					zap.String("stream_id", p.stream.StreamID),
-					zap.Duration("interval", interval),
 				)
+				return
 			}
+		} else {
+			// Success - reset error backoff
+			p.resetBackoff()
+		}
 
+		select {
 		case <-p.stopChan:
 			return
+		default:
 		}
 	}
 }
@@ -298,6 +282,9 @@ func (p *Poller) poll(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get chat messages: %w", err)
 	}
+	if response.OfflineAt != "" {
+		return fmt.Errorf("liveChatEnded")
+	}
 
 	// Parse messages
 	messages, err := p.parser.ParseBatch(response.Items, p.stream.ChannelID, p.stream.StreamID)
@@ -336,6 +323,32 @@ func (p *Poller) poll(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (p *Poller) monitorConnection(ctx context.Context, cancel context.CancelFunc, done chan<- struct{}) {
+	defer close(done)
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-p.stopChan:
+			cancel()
+			return
+		case <-ticker.C:
+			if p.connectionChecker == nil || p.overlayID == "" {
+				continue
+			}
+			connected, err := p.connectionChecker.IsOverlayConnected(ctx, p.overlayID)
+			if err != nil || !connected {
+				cancel()
+				return
+			}
+		}
+	}
 }
 
 // GetStream returns the current stream state (thread-safe copy)
