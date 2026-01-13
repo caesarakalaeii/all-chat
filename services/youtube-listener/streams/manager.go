@@ -502,7 +502,7 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 
 		if hasActivePoller {
 			// Reset backoff since we have an active stream
-			m.resetDetectionBackoff(channelID)
+			m.resetDetectionBackoff(channelID, "active_poller")
 			continue
 		}
 
@@ -869,7 +869,7 @@ func (m *Manager) cleanupInactivePollers(ctx context.Context, activeChannels map
 			m.releaseLeadership(streamID)
 
 			// Reset detection backoff to allow quick re-detection when channel goes live again
-			m.resetDetectionBackoff(stream.ChannelID)
+			m.resetDetectionBackoff(stream.ChannelID, "inactive_channel")
 
 			// Don't deactivate database sources when cleanup runs
 			// Sources should remain active in DB even if temporarily not polling
@@ -1431,7 +1431,7 @@ func (m *Manager) increaseDetectionBackoff(channelID string) {
 
 // resetDetectionBackoff resets backoff to base interval when a poller stops
 // This allows quick re-detection if the channel goes live again shortly after
-func (m *Manager) resetDetectionBackoff(channelID string) {
+func (m *Manager) resetDetectionBackoff(channelID, reason string) {
 	ctx := context.Background()
 
 	// Clear all backoff state (backoff + negative cache)
@@ -1440,10 +1440,16 @@ func (m *Manager) resetDetectionBackoff(channelID string) {
 		return
 	}
 
-	m.logger.Info("Reset detection backoff (stream ended)",
+	fields := []zap.Field{
 		zap.String("channel_id", channelID),
 		zap.Duration("backoff", m.baseDetectionInterval),
-	)
+		zap.String("reason", reason),
+	}
+	if reason == "active_poller" {
+		m.logger.Debug("Reset detection backoff", fields...)
+		return
+	}
+	m.logger.Info("Reset detection backoff", fields...)
 }
 
 // getOrCreateCircuitBreaker returns the circuit breaker for a channel, creating if needed
