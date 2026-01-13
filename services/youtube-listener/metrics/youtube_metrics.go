@@ -23,6 +23,11 @@ type YouTubeMetrics struct {
 	PollerConnectionChecks  *prometheus.CounterVec // Connection checks before polls
 	PollerStoppedByDisconnect *prometheus.CounterVec // Pollers stopped due to disconnect
 	PollerQuotaSaved        *prometheus.CounterVec // Units saved by not polling
+	StreamConnectionsActive  *prometheus.GaugeVec   // Active streamList connections
+	StreamConnectionsStarted *prometheus.CounterVec // StreamList connections started
+	StreamConnectionsEnded   *prometheus.CounterVec // StreamList connections ended
+	StreamReconnects         *prometheus.CounterVec // StreamList reconnect attempts
+	StreamErrors             *prometheus.CounterVec // StreamList errors
 
 	// Emergency Shutoff
 	EmergencyShutoffTriggers *prometheus.CounterVec // Emergency shutoff activations
@@ -108,6 +113,41 @@ func NewYouTubeMetrics() *YouTubeMetrics {
 				Help: "Quota units saved by stopping polls when overlay disconnected",
 			},
 			[]string{"channel_id"},
+		),
+		StreamConnectionsActive: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "youtube_streamlist_connections_active",
+				Help: "Active liveChatMessages.streamList connections",
+			},
+			[]string{"channel_id", "stream_id"},
+		),
+		StreamConnectionsStarted: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_streamlist_connections_started_total",
+				Help: "StreamList connections started",
+			},
+			[]string{"channel_id", "stream_id"},
+		),
+		StreamConnectionsEnded: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_streamlist_connections_ended_total",
+				Help: "StreamList connections ended",
+			},
+			[]string{"channel_id", "stream_id", "reason"},
+		),
+		StreamReconnects: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_streamlist_reconnects_total",
+				Help: "StreamList reconnect attempts",
+			},
+			[]string{"channel_id", "stream_id"},
+		),
+		StreamErrors: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_streamlist_errors_total",
+				Help: "StreamList errors",
+			},
+			[]string{"channel_id", "stream_id", "error_type"},
 		),
 		EmergencyShutoffTriggers: promauto.NewCounterVec(
 			prometheus.CounterOpts{
