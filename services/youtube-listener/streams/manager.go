@@ -54,6 +54,7 @@ type Manager struct {
 
 	// Livestream detection backoff (persistent via Redis)
 	backoffStore          *BackoffStore
+	tokenStore            *TokenStore
 	baseDetectionInterval time.Duration
 	maxDetectionInterval  time.Duration
 
@@ -120,6 +121,7 @@ func NewManager(
 
 	// Create backoff store for persistent backoff state
 	backoffStore := NewBackoffStore(redisClient, logger)
+	tokenStore := NewTokenStore(redisClient, logger)
 
 	return &Manager{
 		repository:                repository,
@@ -138,6 +140,7 @@ func NewManager(
 		disconnectDebounceTimers:  make(map[string]*time.Timer),
 		disconnectDebounceDelay:   disconnectDebounce,
 		backoffStore:              backoffStore,
+		tokenStore:                tokenStore,
 		circuitBreakers:           make(map[string]*CircuitBreaker), // Circuit breakers for offline channels
 		baseDetectionInterval:     1 * time.Minute,   // Start checking every 1m
 		maxDetectionInterval:      10 * time.Minute,  // Max 10 minutes between checks
@@ -804,7 +807,7 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 	)
 
 	// Create and start poller
-	poller := NewPoller(stream, apiClient, m.ytMetrics, m.logger)
+	poller := NewPoller(stream, apiClient, m.ytMetrics, m.logger, m.tokenStore)
 	poller.SetMessageHandler(m.messageHandler)
 
 	// Set connection checker for connection-aware polling
