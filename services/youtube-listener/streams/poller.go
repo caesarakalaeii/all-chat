@@ -2,6 +2,7 @@ package streams
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -186,11 +187,26 @@ func (p *Poller) pollLoop(ctx context.Context) {
 
 		pollCtx, cancel := context.WithCancel(ctx)
 		monitorDone := make(chan struct{})
-		go p.monitorConnection(pollCtx, cancel, monitorDone)
+		disconnectCh := make(chan struct{}, 1)
+		go p.monitorConnection(pollCtx, cancel, disconnectCh, monitorDone)
+
+		if p.ytMetrics != nil {
+			p.ytMetrics.StreamConnectionsStarted.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
+			p.ytMetrics.StreamConnectionsActive.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
+		}
 
 		err := p.poll(pollCtx)
 		cancel()
 		<-monitorDone
+
+		if p.ytMetrics != nil {
+			p.ytMetrics.StreamConnectionsActive.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Dec()
+			reason := streamEndReason(err, disconnectCh, p.stopChan)
+			p.ytMetrics.StreamConnectionsEnded.WithLabelValues(p.stream.ChannelID, p.stream.StreamID, reason).Inc()
+			if err != nil {
+				p.ytMetrics.StreamErrors.WithLabelValues(p.stream.ChannelID, p.stream.StreamID, classifyStreamError(err)).Inc()
+			}
+		}
 
 		if err != nil {
 			p.handlePollError(err)
@@ -218,6 +234,10 @@ func (p *Poller) pollLoop(ctx context.Context) {
 		} else {
 			// Success - reset error backoff
 			p.resetBackoff()
+		}
+
+		if err != nil && p.ytMetrics != nil {
+			p.ytMetrics.StreamReconnects.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
 		}
 
 		select {
@@ -325,7 +345,7 @@ func (p *Poller) poll(ctx context.Context) error {
 	return nil
 }
 
-func (p *Poller) monitorConnection(ctx context.Context, cancel context.CancelFunc, done chan<- struct{}) {
+func (p *Poller) monitorConnection(ctx context.Context, cancel context.CancelFunc, disconnected chan<- struct{}, done chan<- struct{}) {
 	defer close(done)
 
 	ticker := time.NewTicker(30 * time.Second)
@@ -344,11 +364,80 @@ func (p *Poller) monitorConnection(ctx context.Context, cancel context.CancelFun
 			}
 			connected, err := p.connectionChecker.IsOverlayConnected(ctx, p.overlayID)
 			if err != nil || !connected {
+				select {
+				case disconnected <- struct{}{}:
+				default:
+				}
 				cancel()
 				return
 			}
 		}
 	}
+}
+
+func streamEndReason(err error, disconnected <-chan struct{}, stop <-chan struct{}) string {
+	if err == nil {
+		return "completed"
+	}
+
+	select {
+	case <-disconnected:
+		return "overlay_disconnected"
+	default:
+	}
+
+	select {
+	case <-stop:
+		return "stopped"
+	default:
+	}
+
+	if strings.Contains(err.Error(), "liveChatEnded") || strings.Contains(err.Error(), "live chat is no longer live") {
+		return "live_chat_ended"
+	}
+	if strings.Contains(err.Error(), "quotaExceeded") || strings.Contains(err.Error(), "insufficient quota") {
+		return "quota_exceeded"
+	}
+	if strings.Contains(err.Error(), "rateLimitExceeded") {
+		return "rate_limit"
+	}
+	if strings.Contains(err.Error(), "liveChatDisabled") {
+		return "live_chat_disabled"
+	}
+	if strings.Contains(err.Error(), "liveChatNotFound") || strings.Contains(err.Error(), "notFound") {
+		return "not_found"
+	}
+	if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
+		return "canceled"
+	}
+
+	return "error"
+}
+
+func classifyStreamError(err error) string {
+	if err == nil {
+		return "none"
+	}
+	if strings.Contains(err.Error(), "liveChatEnded") || strings.Contains(err.Error(), "live chat is no longer live") {
+		return "live_chat_ended"
+	}
+	if strings.Contains(err.Error(), "quotaExceeded") || strings.Contains(err.Error(), "insufficient quota") {
+		return "quota_exceeded"
+	}
+	if strings.Contains(err.Error(), "rateLimitExceeded") {
+		return "rate_limit"
+	}
+	if strings.Contains(err.Error(), "liveChatDisabled") {
+		return "live_chat_disabled"
+	}
+	if strings.Contains(err.Error(), "liveChatNotFound") || strings.Contains(err.Error(), "notFound") {
+		return "not_found"
+	}
+	if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
+		return "canceled"
+	}
+
+	return "error"
 }
 
 // GetStream returns the current stream state (thread-safe copy)
