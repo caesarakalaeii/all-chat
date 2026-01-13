@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"go.uber.org/zap"
@@ -110,10 +111,10 @@ func (m *Manager) GetToken(ctx context.Context, userID, channelID string) (*oaut
 }
 
 // CreateYouTubeService creates an authenticated YouTube API service
-func (m *Manager) CreateYouTubeService(ctx context.Context, userID, channelID string) (*youtube.Service, error) {
+func (m *Manager) CreateYouTubeService(ctx context.Context, userID, channelID string) (*youtube.Service, *http.Client, error) {
 	token, err := m.GetToken(ctx, userID, channelID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get token: %w", err)
+		return nil, nil, fmt.Errorf("failed to get token: %w", err)
 	}
 
 	client := m.config.Client(ctx, token)
@@ -124,10 +125,10 @@ func (m *Manager) CreateYouTubeService(ctx context.Context, userID, channelID st
 			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to create YouTube service: %w", err)
+		return nil, nil, fmt.Errorf("failed to create YouTube service: %w", err)
 	}
 
-	return service, nil
+	return service, client, nil
 }
 
 // SaveToken saves an OAuth token to the store
