@@ -40,10 +40,9 @@ type Poller struct {
 	overlayID         string
 	channelID         string
 
-	mu               sync.RWMutex
-	stopChan         chan struct{}
-	wg               sync.WaitGroup
-	lastStreamRequest time.Time
+	mu                sync.RWMutex
+	stopChan          chan struct{}
+	wg                sync.WaitGroup
 	lastStreamRequest time.Time
 
 	// Exponential backoff state (only for errors)
