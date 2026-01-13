@@ -28,6 +28,7 @@ type YouTubeMetrics struct {
 	StreamConnectionsEnded   *prometheus.CounterVec // StreamList connections ended
 	StreamReconnects         *prometheus.CounterVec // StreamList reconnect attempts
 	StreamErrors             *prometheus.CounterVec // StreamList errors
+	StreamIntervalSleeps     *prometheus.CounterVec // StreamList interval guard sleeps
 
 	// Emergency Shutoff
 	EmergencyShutoffTriggers *prometheus.CounterVec // Emergency shutoff activations
@@ -148,6 +149,13 @@ func NewYouTubeMetrics() *YouTubeMetrics {
 				Help: "StreamList errors",
 			},
 			[]string{"channel_id", "stream_id", "error_type"},
+		),
+		StreamIntervalSleeps: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_streamlist_interval_sleeps_total",
+				Help: "Number of times streamList respected pollingIntervalMillis",
+			},
+			[]string{"channel_id", "stream_id"},
 		),
 		EmergencyShutoffTriggers: promauto.NewCounterVec(
 			prometheus.CounterOpts{

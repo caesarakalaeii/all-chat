@@ -273,6 +273,9 @@ func (p *Poller) sleepToRespectInterval() {
 	}
 
 	wait := interval - elapsed
+	if p.ytMetrics != nil {
+		p.ytMetrics.StreamIntervalSleeps.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
+	}
 	select {
 	case <-time.After(wait):
 	case <-p.stopChan:
