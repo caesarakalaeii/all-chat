@@ -542,19 +542,6 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 	t.metrics.SetQuotaRemaining("youtube", "youtube-listener", "daily", fmt.Sprintf("%d", t.dailyLimit), float64(remaining))
 	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
 
-	// AUDIT LOG: Record direct usage (legacy /quota/record endpoint)
-	success := true
-	go t.logAuditEntry(context.Background(), AuditEntry{
-		Date:           t.currentDate,
-		OperationType:  "record",
-		ServiceName:    "external",  // Called by overlay-manager or auth-service
-		Endpoint:       "unknown",
-		UnitsDelta:     units,
-		UnitsBefore:    unitsBefore,
-		UnitsAfter:     unitsAfter,
-		APISuccess:     &success,
-	})
-
 	t.logger.Debug("Recorded quota usage",
 		zap.Int("units", units),
 		zap.Int("total_used", t.usageToday),
@@ -694,22 +681,6 @@ func (t *Tracker) ReserveQuotaWithPriority(ctx context.Context, units int, allow
 	// Generate unique reservation ID
 	reservationID := fmt.Sprintf("%s-%d-%d", today, time.Now().UnixNano(), units)
 
-	// AUDIT LOG: Record reservation
-	t.mu.RLock()
-	unitsBefore := t.usageToday
-	t.mu.RUnlock()
-
-	go t.logAuditEntry(context.Background(), AuditEntry{
-		Date:           today,
-		OperationType:  "reserve",
-		ServiceName:    "youtube-listener",
-		Endpoint:       "internal",
-		UnitsDelta:     units,
-		UnitsBefore:    unitsBefore,
-		UnitsAfter:     unitsBefore, // Not changed yet (reserved, not confirmed)
-		ReservationID:  &reservationID,
-	})
-
 	t.logger.Debug("Reserved quota",
 		zap.String("reservation_id", reservationID),
 		zap.Int("units", units),
@@ -749,20 +720,6 @@ func (t *Tracker) ConfirmReservation(ctx context.Context, reservationID string, 
 	t.metrics.SetQuotaUsagePercent("youtube", "youtube-listener", "daily", percentage)
 	t.mu.Unlock()
 
-	// AUDIT LOG: Record confirmation
-	success := true
-	go t.logAuditEntry(context.Background(), AuditEntry{
-		Date:           today,
-		OperationType:  "confirm",
-		ServiceName:    "youtube-listener",
-		Endpoint:       "internal",
-		UnitsDelta:     units,
-		UnitsBefore:    unitsBefore,
-		UnitsAfter:     unitsAfter,
-		APISuccess:     &success,
-		ReservationID:  &reservationID,
-	})
-
 	t.logger.Debug("Confirmed reservation",
 		zap.String("reservation_id", reservationID),
 		zap.Int("units", units),
@@ -786,26 +743,6 @@ func (t *Tracker) RollbackReservation(ctx context.Context, reservationID string,
 		)
 		return err
 	}
-
-	// AUDIT LOG: Record rollback (4xx client error - quota not charged)
-	t.mu.RLock()
-	currentUsage := t.usageToday
-	t.mu.RUnlock()
-
-	failure := false
-	errorType := "4xx_client_error"
-	go t.logAuditEntry(context.Background(), AuditEntry{
-		Date:           today,
-		OperationType:  "rollback",
-		ServiceName:    "youtube-listener",
-		Endpoint:       "internal",
-		UnitsDelta:     -units, // Negative for rollback
-		UnitsBefore:    currentUsage,
-		UnitsAfter:     currentUsage, // Unchanged (reserved quota released)
-		APISuccess:     &failure,
-		ErrorType:      &errorType,
-		ReservationID:  &reservationID,
-	})
 
 	t.logger.Info("Rolled back reservation (API call failed before reaching YouTube)",
 		zap.String("reservation_id", reservationID),
@@ -1028,21 +965,64 @@ func (t *Tracker) loadTodayUsage(ctx context.Context) error {
 
 // =============== AUDIT LOGGING ===============
 
-// AuditEntry represents an audit log entry
+// AuditEntry represents a minimal audit log entry for YouTube API calls.
 type AuditEntry struct {
-	Date           string
-	OperationType  string  // 'reserve', 'confirm', 'rollback', 'record'
-	ServiceName    string
-	Endpoint       string
-	UnitsDelta     int
-	UnitsBefore    int
-	UnitsAfter     int
-	APISuccess     *bool
-	ErrorType      *string
-	ErrorMessage   *string
-	ChannelID      *string
-	OverlayID      *string
-	ReservationID  *string
+	Date          string
+	OperationType string // 'api_call'
+	ServiceName   string
+	Endpoint      string
+	UnitsDelta    int
+	UnitsBefore   int
+	UnitsAfter    int
+	ChannelID     *string
+	VideoID       *string
+	OverlayID     *string
+}
+
+// AuditContext captures optional identifiers for audit logging.
+type AuditContext struct {
+	ChannelID string
+	VideoID   string
+	OverlayID string
+}
+
+// LogAPICall writes a minimal audit entry for a YouTube API call.
+// Non-blocking - failures are logged but don't affect the operation.
+func (t *Tracker) LogAPICall(ctx context.Context, endpoint string, units int, audit *AuditContext) {
+	date := time.Now().In(YouTubePST).Format("2006-01-02")
+	usageAfter := t.GetUsageToday()
+	usageBefore := usageAfter - units
+	if usageBefore < 0 {
+		usageBefore = 0
+	}
+
+	var channelID *string
+	var videoID *string
+	var overlayID *string
+	if audit != nil {
+		if audit.ChannelID != "" {
+			channelID = &audit.ChannelID
+		}
+		if audit.VideoID != "" {
+			videoID = &audit.VideoID
+		}
+		if audit.OverlayID != "" {
+			overlayID = &audit.OverlayID
+		}
+	}
+
+	go t.logAuditEntry(context.Background(), AuditEntry{
+		Date:          date,
+		OperationType: "api_call",
+		ServiceName:   "youtube-listener",
+		Endpoint:      endpoint,
+		UnitsDelta:    units,
+		UnitsBefore:   usageBefore,
+		UnitsAfter:    usageAfter,
+		ChannelID:     channelID,
+		VideoID:       videoID,
+		OverlayID:     overlayID,
+	})
 }
 
 // logAuditEntry writes an entry to the YouTube quota audit log
@@ -1052,9 +1032,8 @@ func (t *Tracker) logAuditEntry(ctx context.Context, entry AuditEntry) {
 		INSERT INTO youtube_quota_audit_log (
 			date, operation_type, service_name, endpoint,
 			units_delta, units_before, units_after,
-			api_success, error_type, error_message,
-			channel_id, overlay_id, reservation_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			channel_id, video_id, overlay_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	_, err := t.db.Exec(ctx, query,
@@ -1065,12 +1044,9 @@ func (t *Tracker) logAuditEntry(ctx context.Context, entry AuditEntry) {
 		entry.UnitsDelta,
 		entry.UnitsBefore,
 		entry.UnitsAfter,
-		entry.APISuccess,
-		entry.ErrorType,
-		entry.ErrorMessage,
 		entry.ChannelID,
+		entry.VideoID,
 		entry.OverlayID,
-		entry.ReservationID,
 	)
 
 	if err != nil {

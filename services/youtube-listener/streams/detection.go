@@ -177,7 +177,10 @@ func (d *LiveStreamDetector) performStatusCheck(
 	}
 
 	// Perform status check using existing CheckStreamStatus method
-	statusResult, err := d.client.CheckStreamStatus(ctx, videoID)
+	statusResult, err := d.client.CheckStreamStatus(ctx, videoID, &quota.AuditContext{
+		ChannelID: channelID,
+		VideoID:   videoID,
+	})
 
 	// Record quota usage (1 unit)
 	if recordErr := d.quotaTracker.RecordUsage(ctx, channelID, 1); recordErr != nil {
@@ -232,7 +235,10 @@ func (d *LiveStreamDetector) performStatusCheck(
 	}
 
 	// Stream is live! Fetch additional details (costs 1 more unit)
-	streamDetails, err := d.client.GetVideoDetails(ctx, videoID)
+	streamDetails, err := d.client.GetVideoDetails(ctx, videoID, &quota.AuditContext{
+		ChannelID: channelID,
+		VideoID:   videoID,
+	})
 	if err != nil {
 		d.logger.Warn("Failed to fetch stream details, continuing with minimal info",
 			zap.String("channel_id", channelID),
@@ -295,7 +301,9 @@ func (d *LiveStreamDetector) performFullDetection(
 	}
 
 	// Perform full detection using search.list API
-	streams, err := d.client.GetLiveStreams(ctx, channelID)
+	streams, err := d.client.GetLiveStreams(ctx, channelID, &quota.AuditContext{
+		ChannelID: channelID,
+	})
 
 	// Record quota usage (100 units for search.list)
 	if recordErr := d.quotaTracker.RecordUsage(ctx, channelID, 100); recordErr != nil {

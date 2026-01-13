@@ -59,11 +59,24 @@ func NewClient(service *youtube.Service, quotaTracker *quota.Tracker, logger *za
 	}
 }
 
+func (c *Client) logAPICall(ctx context.Context, endpoint string, units int, audit *quota.AuditContext) {
+	if c.quotaTracker == nil {
+		return
+	}
+
+	c.quotaTracker.LogAPICall(ctx, endpoint, units, audit)
+}
+
 // GetLiveStreams fetches active live streams for a channel
 // Costs 100 units for search + 1 unit per video found
 // Uses reserve-confirm-rollback pattern for accurate quota tracking
-func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*models.YouTubeStream, error) {
+func (c *Client) GetLiveStreams(ctx context.Context, channelID string, audit *quota.AuditContext) ([]*models.YouTubeStream, error) {
 	const searchCost = quota.QuotaCostSearch
+	if audit == nil {
+		audit = &quota.AuditContext{ChannelID: channelID}
+	} else if audit.ChannelID == "" {
+		audit.ChannelID = channelID
+	}
 
 	// STEP 1: RESERVE quota for search.list (100 units)
 	var searchReservationID string
@@ -85,10 +98,13 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 	response, apiErr := call.Do()
 
 	// STEP 3: CONFIRM or ROLLBACK search.list quota
+	chargedUnits := 0
 	if c.quotaTracker != nil && searchReservationID != "" {
 		if shouldChargeQuota(apiErr) {
 			if confirmErr := c.quotaTracker.ConfirmReservation(ctx, searchReservationID, searchCost); confirmErr != nil {
 				c.logger.Warn("Failed to confirm search quota reservation", zap.Error(confirmErr))
+			} else {
+				chargedUnits = searchCost
 			}
 		} else {
 			if rollbackErr := c.quotaTracker.RollbackReservation(ctx, searchReservationID, searchCost); rollbackErr != nil {
@@ -96,6 +112,7 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 			}
 		}
 	}
+	c.logAPICall(ctx, "Search.List", chargedUnits, audit)
 
 	// STEP 4: Check for search errors
 	if apiErr != nil {
@@ -135,10 +152,18 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 		videoResponse, videoErr := videoCall.Do()
 
 		// Confirm or rollback videos.list quota
+		videoAudit := &quota.AuditContext{
+			ChannelID: channelID,
+			VideoID:   videoID,
+			OverlayID: audit.OverlayID,
+		}
+		videoChargedUnits := 0
 		if c.quotaTracker != nil && videoReservationID != "" {
 			if shouldChargeQuota(videoErr) {
 				if confirmErr := c.quotaTracker.ConfirmReservation(ctx, videoReservationID, videoCost); confirmErr != nil {
 					c.logger.Warn("Failed to confirm video quota reservation", zap.Error(confirmErr))
+				} else {
+					videoChargedUnits = videoCost
 				}
 			} else {
 				if rollbackErr := c.quotaTracker.RollbackReservation(ctx, videoReservationID, videoCost); rollbackErr != nil {
@@ -146,6 +171,7 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 				}
 			}
 		}
+		c.logAPICall(ctx, "Videos.List", videoChargedUnits, videoAudit)
 
 		if videoErr != nil {
 			c.logger.Warn("Failed to get video details",
@@ -195,7 +221,7 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string) ([]*model
 // GetChatMessages fetches messages from a live chat
 // This costs 5 quota units per call
 // Uses reserve-confirm-rollback pattern for accurate quota tracking
-func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken string) (*youtube.LiveChatMessageListResponse, error) {
+func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken string, audit *quota.AuditContext) (*youtube.LiveChatMessageListResponse, error) {
 	const cost = quota.QuotaCostLiveChatMessages
 
 	// STEP 1: RESERVE quota BEFORE making API call
@@ -219,11 +245,14 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 	response, apiErr := call.Do()
 
 	// STEP 3: CONFIRM or ROLLBACK based on result
+	chargedUnits := 0
 	if c.quotaTracker != nil && reservationID != "" {
 		if shouldChargeQuota(apiErr) {
 			// API succeeded or failed with server error - confirm quota usage
 			if confirmErr := c.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
 				c.logger.Warn("Failed to confirm quota reservation", zap.Error(confirmErr))
+			} else {
+				chargedUnits = cost
 			}
 		} else {
 			// Client error (4xx) - rollback quota
@@ -232,6 +261,7 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 			}
 		}
 	}
+	c.logAPICall(ctx, "LiveChatMessages.List", chargedUnits, audit)
 
 	// STEP 4: Process response
 	if apiErr != nil {
@@ -256,8 +286,13 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 // This costs 1 quota unit and includes all data needed to start polling
 // Eliminates the need for a separate GetVideoDetails call (saves 1 unit per check)
 // Uses reserve-confirm-rollback pattern for accurate quota tracking
-func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (*StreamStatusResult, error) {
+func (c *Client) CheckStreamStatus(ctx context.Context, videoID string, audit *quota.AuditContext) (*StreamStatusResult, error) {
 	const cost = quota.QuotaCostVideos
+	if audit == nil {
+		audit = &quota.AuditContext{VideoID: videoID}
+	} else if audit.VideoID == "" {
+		audit.VideoID = videoID
+	}
 
 	// STEP 1: RESERVE quota BEFORE making API call
 	var reservationID string
@@ -275,10 +310,13 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (*Stream
 	response, apiErr := call.Do()
 
 	// STEP 3: CONFIRM or ROLLBACK based on result
+	chargedUnits := 0
 	if c.quotaTracker != nil && reservationID != "" {
 		if shouldChargeQuota(apiErr) {
 			if confirmErr := c.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
 				c.logger.Warn("Failed to confirm quota reservation", zap.Error(confirmErr))
+			} else {
+				chargedUnits = cost
 			}
 		} else {
 			if rollbackErr := c.quotaTracker.RollbackReservation(ctx, reservationID, cost); rollbackErr != nil {
@@ -286,6 +324,7 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (*Stream
 			}
 		}
 	}
+	c.logAPICall(ctx, "Videos.List", chargedUnits, audit)
 
 	// STEP 4: Process response
 	if apiErr != nil {
@@ -323,23 +362,32 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string) (*Stream
 
 // GetVideoDetails fetches detailed information about a video
 // This costs 1 quota unit and is used after status check confirms stream is live
-func (c *Client) GetVideoDetails(ctx context.Context, videoID string) (*models.YouTubeStream, error) {
+func (c *Client) GetVideoDetails(ctx context.Context, videoID string, audit *quota.AuditContext) (*models.YouTubeStream, error) {
 	// Check quota BEFORE making the API call
 	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostVideos) {
 		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d", 
 			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostVideos)
+	}
+	if audit == nil {
+		audit = &quota.AuditContext{VideoID: videoID}
+	} else if audit.VideoID == "" {
+		audit.VideoID = videoID
 	}
 
 	call := c.service.Videos.List([]string{"snippet", "liveStreamingDetails"}).Id(videoID)
 
 	response, err := call.Do()
 
+	chargedUnits := 0
 	// Record quota usage for videos.list (1 unit)
 	if c.quotaTracker != nil {
 		if recordErr := c.quotaTracker.RecordUsage(ctx, quota.QuotaCostVideos); recordErr != nil {
 			c.logger.Warn("Failed to record videos.list quota usage", zap.Error(recordErr))
+		} else {
+			chargedUnits = quota.QuotaCostVideos
 		}
 	}
+	c.logAPICall(ctx, "Videos.List", chargedUnits, audit)
 
 	if err != nil {
 		c.logger.Error("Failed to get video details",

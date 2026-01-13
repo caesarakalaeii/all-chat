@@ -549,6 +549,10 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 
 	// Create API client
 	apiClient := api.NewClient(service, m.quotaTracker, m.logger)
+	overlayID := ""
+	if len(sources) > 0 {
+		overlayID = sources[0].OverlayID
+	}
 
 	// Try lightweight status check first if we have a cached video ID
 	cachedVideoID, err := m.repository.GetCachedVideoID(ctx, channelID)
@@ -576,7 +580,11 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		}
 
 		// Perform lightweight status check
-		statusResult, statusErr := apiClient.CheckStreamStatus(ctx, cachedVideoID)
+		statusResult, statusErr := apiClient.CheckStreamStatus(ctx, cachedVideoID, &quota.AuditContext{
+			ChannelID: channelID,
+			VideoID:   cachedVideoID,
+			OverlayID: overlayID,
+		})
 		if statusErr == nil {
 			if statusResult.IsLive && statusResult.LiveChatID != "" {
 				m.logger.Info("Cached video is live, using lightweight check (saved 100 quota units - no GetVideoDetails needed)",
@@ -585,7 +593,11 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 				)
 
 				// Get full video details to start polling
-				stream, detailsErr := apiClient.GetVideoDetails(ctx, cachedVideoID)
+				stream, detailsErr := apiClient.GetVideoDetails(ctx, cachedVideoID, &quota.AuditContext{
+					ChannelID: channelID,
+					VideoID:   cachedVideoID,
+					OverlayID: overlayID,
+				})
 				if detailsErr == nil && stream.IsLive && stream.LiveChatID != "" {
 					// Set the overlay ID from sources
 					if len(sources) > 0 {
@@ -668,7 +680,10 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	)
 
 	// Get live streams for channel
-	liveStreams, err := apiClient.GetLiveStreams(ctx, channelID)
+	liveStreams, err := apiClient.GetLiveStreams(ctx, channelID, &quota.AuditContext{
+		ChannelID: channelID,
+		OverlayID: overlayID,
+	})
 	if err != nil {
 		// Mark source as inactive - API call failed
 		if setErr := m.repository.SetSourceActive(ctx, channelID, false); setErr != nil {
