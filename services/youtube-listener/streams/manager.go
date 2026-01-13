@@ -501,6 +501,12 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		m.mu.RUnlock()
 
 		if hasActivePoller {
+			if err := m.repository.TouchSourceActive(ctx, channelID); err != nil {
+				m.logger.Warn("Failed to refresh source status for active poller",
+					zap.String("channel_id", channelID),
+					zap.Error(err),
+				)
+			}
 			// Reset backoff since we have an active stream
 			m.resetDetectionBackoff(channelID, "active_poller")
 			continue
