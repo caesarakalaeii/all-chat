@@ -139,7 +139,7 @@ func NewManager(
 		disconnectDebounceDelay:   disconnectDebounce,
 		backoffStore:              backoffStore,
 		circuitBreakers:           make(map[string]*CircuitBreaker), // Circuit breakers for offline channels
-		baseDetectionInterval:     30 * time.Second,  // Start checking every 30s
+		baseDetectionInterval:     1 * time.Minute,   // Start checking every 1m
 		maxDetectionInterval:      10 * time.Minute,  // Max 10 minutes between checks
 		syncInterval:                30 * time.Second,
 		stopChan:                    make(chan struct{}),
@@ -493,7 +493,7 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		}
 
 		// Check if we should skip this channel due to backoff
-		if m.shouldSkipDetection(channelID) {
+		if m.shouldSkipDetection(channelID, channelSourceList) {
 			continue
 		}
 
@@ -1201,7 +1201,7 @@ func (m *Manager) IsOverlayConnected(ctx context.Context, overlayID string) (boo
 }
 
 // shouldSkipDetection checks if we should skip livestream detection for a channel due to backoff
-func (m *Manager) shouldSkipDetection(channelID string) bool {
+func (m *Manager) shouldSkipDetection(channelID string, sources []*models.StreamSource) bool {
 	ctx := context.Background()
 
 	// PRIORITY 1: Check negative cache (cheapest check, most aggressive)
@@ -1229,7 +1229,17 @@ func (m *Manager) shouldSkipDetection(channelID string) bool {
 	}
 
 	if backoffState == nil {
-		return false  // No backoff state exists, allow check
+		firstConnected := m.earliestConnectedTime(sources)
+		if !firstConnected.IsZero() && time.Since(firstConnected) < 5*time.Minute {
+			m.logger.Debug("Skipping detection for newly connected overlay (initial delay)",
+				zap.String("channel_id", channelID),
+				zap.Duration("time_since_connected", time.Since(firstConnected)),
+				zap.Duration("initial_delay", 5*time.Minute),
+			)
+			return true
+		}
+
+		return false // No backoff state exists, allow check
 	}
 
 	// Calculate time since last check
@@ -1247,6 +1257,24 @@ func (m *Manager) shouldSkipDetection(channelID string) bool {
 	}
 
 	return shouldSkip
+}
+
+func (m *Manager) earliestConnectedTime(sources []*models.StreamSource) time.Time {
+	m.connMu.RLock()
+	defer m.connMu.RUnlock()
+
+	var earliest time.Time
+	for _, source := range sources {
+		connectedAt, ok := m.connectedOverlays[source.OverlayID]
+		if !ok {
+			continue
+		}
+		if earliest.IsZero() || connectedAt.Before(earliest) {
+			earliest = connectedAt
+		}
+	}
+
+	return earliest
 }
 
 // updateDetectionBackoff updates backoff after successful livestream detection
@@ -1306,10 +1334,15 @@ func (m *Manager) updateDetectionBackoff(channelID string) {
 		if currentInterval == 0 {
 			currentInterval = m.baseDetectionInterval
 		}
-		// Double the backoff (exponential), up to max
-		newInterval := currentInterval * 2
-		if newInterval > m.maxDetectionInterval {
-			newInterval = m.maxDetectionInterval
+		var newInterval time.Duration
+		if backoffState.FailureCount == 1 {
+			newInterval = m.baseDetectionInterval
+		} else {
+			// Double the backoff (exponential), up to max
+			newInterval = currentInterval * 2
+			if newInterval > m.maxDetectionInterval {
+				newInterval = m.maxDetectionInterval
+			}
 		}
 		backoffState.CurrentInterval = newInterval
 
@@ -1359,9 +1392,14 @@ func (m *Manager) increaseDetectionBackoff(channelID string) {
 	if currentInterval == 0 {
 		currentInterval = m.baseDetectionInterval
 	}
-	newInterval := currentInterval * 2
-	if newInterval > m.maxDetectionInterval {
-		newInterval = m.maxDetectionInterval
+	var newInterval time.Duration
+	if backoffState.FailureCount == 1 {
+		newInterval = m.baseDetectionInterval
+	} else {
+		newInterval = currentInterval * 2
+		if newInterval > m.maxDetectionInterval {
+			newInterval = m.maxDetectionInterval
+		}
 	}
 	backoffState.CurrentInterval = newInterval
 
