@@ -45,6 +45,7 @@ type Manager struct {
 	// Overlay connection tracking
 	connMu            sync.RWMutex
 	connectedOverlays map[string]time.Time // overlay_id -> connection_time
+	channelConnectedOverlays map[string]map[string]struct{} // channel_id -> overlay_ids
 	redisClient       *redis.Client
 
 	// Disconnection debouncing (prevents premature polling shutdown)
@@ -137,6 +138,7 @@ func NewManager(
 		activeStreams:             make(map[string]*models.YouTubeStream),
 		pollers:                   make(map[string]*Poller),
 		connectedOverlays:         make(map[string]time.Time),
+		channelConnectedOverlays:  make(map[string]map[string]struct{}),
 		disconnectDebounceTimers:  make(map[string]*time.Timer),
 		disconnectDebounceDelay:   disconnectDebounce,
 		backoffStore:              backoffStore,
@@ -461,9 +463,18 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 
 	// Group connected sources by channel ID
 	channelSources := make(map[string][]*models.StreamSource)
+	channelConnectedOverlays := make(map[string]map[string]struct{})
 	for _, source := range connectedSources {
 		channelSources[source.ChannelID] = append(channelSources[source.ChannelID], source)
+		if _, exists := channelConnectedOverlays[source.ChannelID]; !exists {
+			channelConnectedOverlays[source.ChannelID] = make(map[string]struct{})
+		}
+		channelConnectedOverlays[source.ChannelID][source.OverlayID] = struct{}{}
 	}
+
+	m.connMu.Lock()
+	m.channelConnectedOverlays = channelConnectedOverlays
+	m.connMu.Unlock()
 
 	m.logger.Info("Found active YouTube channels with connected overlays",
 		zap.Int("channel_count", len(channelSources)),
@@ -812,7 +823,7 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 
 	// Set connection checker for connection-aware polling
 	// This prevents wasting quota (5 units per poll) when overlay disconnects
-	poller.SetConnectionChecker(m, stream.OverlayID)
+	poller.SetConnectionChecker(m, stream.ChannelID, stream.OverlayID)
 
 	if err := poller.Start(ctx); err != nil {
 		if m.leader != nil {
@@ -1193,14 +1204,14 @@ func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID strin
 	m.disconnectDebounceTimers[overlayID] = timer
 }
 
-// IsOverlayConnected checks if an overlay has active WebSocket connections
-// Implements ConnectionChecker interface for connection-aware polling
-func (m *Manager) IsOverlayConnected(ctx context.Context, overlayID string) (bool, error) {
+// IsChannelConnected checks if any overlay is connected for a channel.
+// Implements ConnectionChecker interface for connection-aware polling.
+func (m *Manager) IsChannelConnected(ctx context.Context, channelID string) (bool, error) {
 	m.connMu.RLock()
 	defer m.connMu.RUnlock()
 
-	_, connected := m.connectedOverlays[overlayID]
-	return connected, nil
+	overlays := m.channelConnectedOverlays[channelID]
+	return len(overlays) > 0, nil
 }
 
 // shouldSkipDetection checks if we should skip livestream detection for a channel due to backoff
