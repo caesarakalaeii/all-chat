@@ -33,6 +33,7 @@ type Poller struct {
 	messageHandler MessageHandler
 	logger         *zap.Logger
 	ytMetrics      *metrics.YouTubeMetrics
+	tokenStore     *TokenStore
 
 	// Connection-aware polling (prevents quota waste when overlay disconnected)
 	connectionChecker ConnectionChecker
@@ -54,6 +55,7 @@ func NewPoller(
 	apiClient *api.Client,
 	ytMetrics *metrics.YouTubeMetrics,
 	logger *zap.Logger,
+	tokenStore *TokenStore,
 ) *Poller {
 	return &Poller{
 		stream:            stream,
@@ -61,6 +63,7 @@ func NewPoller(
 		parser:            api.NewParser(),
 		logger:            logger,
 		ytMetrics:         ytMetrics,
+		tokenStore:        tokenStore,
 		stopChan:          make(chan struct{}),
 		maxBackoff:        5 * time.Minute, // Maximum backoff of 5 minutes (only for errors)
 		backoffDuration:   0,               // Start with no backoff
@@ -263,6 +266,12 @@ func (p *Poller) handlePollError(err error) {
 	backoffSeconds := 1 << uint(p.consecutiveErrors) // 2^n
 	p.backoffDuration = time.Duration(backoffSeconds) * time.Second
 
+	if strings.Contains(err.Error(), "rateLimitExceeded") || strings.Contains(err.Error(), "resourceExhausted") {
+		if p.backoffDuration < time.Minute {
+			p.backoffDuration = time.Minute
+		}
+	}
+
 	if p.backoffDuration > p.maxBackoff {
 		p.backoffDuration = p.maxBackoff
 	}
@@ -292,6 +301,16 @@ func (p *Poller) poll(ctx context.Context) error {
 	liveChatID := p.stream.LiveChatID
 	pageToken := p.stream.NextPageToken
 	p.mu.RUnlock()
+	if pageToken == "" && p.tokenStore != nil {
+		if storedToken, tokenErr := p.tokenStore.Get(ctx, liveChatID); tokenErr != nil {
+			p.logger.Warn("Failed to load streamList page token",
+				zap.String("live_chat_id", liveChatID),
+				zap.Error(tokenErr),
+			)
+		} else if storedToken != "" {
+			pageToken = storedToken
+		}
+	}
 
 	// Fetch messages from API
 	response, err := p.apiClient.GetChatMessages(ctx, liveChatID, pageToken, &quota.AuditContext{
@@ -303,6 +322,9 @@ func (p *Poller) poll(ctx context.Context) error {
 		return fmt.Errorf("failed to get chat messages: %w", err)
 	}
 	if response.OfflineAt != "" {
+		if p.tokenStore != nil {
+			p.tokenStore.Clear(ctx, liveChatID)
+		}
 		return fmt.Errorf("liveChatEnded")
 	}
 
@@ -323,6 +345,14 @@ func (p *Poller) poll(ctx context.Context) error {
 	p.stream.LastPolledAt = time.Now()
 	p.stream.UpdatedAt = time.Now()
 	p.mu.Unlock()
+	if p.tokenStore != nil {
+		if tokenErr := p.tokenStore.Set(ctx, liveChatID, p.stream.NextPageToken); tokenErr != nil {
+			p.logger.Warn("Failed to persist streamList page token",
+				zap.String("live_chat_id", liveChatID),
+				zap.Error(tokenErr),
+			)
+		}
+	}
 
 	// Handle messages if we have any
 	if len(messages) > 0 {
