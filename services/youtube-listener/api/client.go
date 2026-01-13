@@ -1,8 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener/models"
@@ -26,12 +32,12 @@ func isClientError(err error) bool {
 // Returns false for: 4xx client errors (didn't reach YouTube properly)
 func shouldChargeQuota(err error) bool {
 	if err == nil {
-		return true  // Success - always charge
+		return true // Success - always charge
 	}
 	if isClientError(err) {
-		return false  // 4xx - don't charge
+		return false // 4xx - don't charge
 	}
-	return true  // 5xx, network errors, unknown - charge conservatively
+	return true // 5xx, network errors, unknown - charge conservatively
 }
 
 // StreamStatusResult contains stream status and details from a single API call
@@ -46,14 +52,27 @@ type StreamStatusResult struct {
 // Client wraps the YouTube API client with helper methods
 type Client struct {
 	service      *youtube.Service
+	httpClient   *http.Client
+	basePath     string
+	userAgent    string
 	quotaTracker *quota.Tracker
 	logger       *zap.Logger
 }
 
 // NewClient creates a new YouTube API client wrapper
-func NewClient(service *youtube.Service, quotaTracker *quota.Tracker, logger *zap.Logger) *Client {
+func NewClient(service *youtube.Service, httpClient *http.Client, quotaTracker *quota.Tracker, logger *zap.Logger) *Client {
+	basePath := ""
+	userAgent := ""
+	if service != nil {
+		basePath = service.BasePath
+		userAgent = service.UserAgent
+	}
+
 	return &Client{
 		service:      service,
+		httpClient:   httpClient,
+		basePath:     basePath,
+		userAgent:    userAgent,
 		quotaTracker: quotaTracker,
 		logger:       logger,
 	}
@@ -235,16 +254,7 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 	}
 
 	// STEP 2: Make YouTube API call (streamList)
-	call := youtube.NewYoutubeService(c.service).V3.LiveChat.Messages.Stream().
-		LiveChatId(liveChatID).
-		Part("id", "snippet", "authorDetails").
-		MaxResults(2000)
-
-	if pageToken != "" {
-		call = call.PageToken(pageToken)
-	}
-
-	response, apiErr := call.Context(ctx).Do()
+	response, apiErr := c.getChatMessagesStream(ctx, liveChatID, pageToken)
 
 	// STEP 3: CONFIRM or ROLLBACK based on result
 	chargedUnits := 0
@@ -282,6 +292,140 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 	)
 
 	return response, nil
+}
+
+func (c *Client) getChatMessagesStream(ctx context.Context, liveChatID, pageToken string) (*youtube.LiveChatMessageListResponse, error) {
+	if c.httpClient == nil {
+		return nil, fmt.Errorf("http client is required for live chat stream")
+	}
+	if c.basePath == "" {
+		return nil, fmt.Errorf("youtube base path is missing")
+	}
+
+	params := url.Values{}
+	params.Add("part", "id")
+	params.Add("part", "snippet")
+	params.Add("part", "authorDetails")
+	params.Set("liveChatId", liveChatID)
+	params.Set("maxResults", "2000")
+	params.Set("prettyPrint", "false")
+	params.Set("alt", "json")
+	if pageToken != "" {
+		params.Set("pageToken", pageToken)
+	}
+
+	endpoint := googleapi.ResolveRelative(c.basePath, "youtube/v3/liveChat/messages/stream")
+	reqURL := endpoint + "?" + params.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	userAgent := googleapi.UserAgent
+	if c.userAgent != "" {
+		userAgent = userAgent + " " + c.userAgent
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := googleapi.CheckResponseWithBody(resp, body); err != nil {
+		return nil, err
+	}
+
+	decoded, err := decodeLiveChatStreamResponse(body)
+	if err != nil {
+		return nil, err
+	}
+	decoded.ServerResponse = googleapi.ServerResponse{
+		Header:         resp.Header,
+		HTTPStatusCode: resp.StatusCode,
+	}
+	return decoded, nil
+}
+
+func decodeLiveChatStreamResponse(body []byte) (*youtube.LiveChatMessageListResponse, error) {
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		return nil, fmt.Errorf("empty live chat stream response")
+	}
+
+	var single youtube.LiveChatMessageListResponse
+	if err := json.Unmarshal(body, &single); err == nil {
+		return &single, nil
+	}
+
+	var batch []youtube.LiveChatMessageListResponse
+	if err := json.Unmarshal(body, &batch); err == nil {
+		return mergeLiveChatResponses(batch), nil
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	for {
+		var item youtube.LiveChatMessageListResponse
+		if err := decoder.Decode(&item); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, err
+		}
+		batch = append(batch, item)
+	}
+	if len(batch) > 0 {
+		return mergeLiveChatResponses(batch), nil
+	}
+
+	return nil, fmt.Errorf("unrecognized live chat stream response format")
+}
+
+func mergeLiveChatResponses(responses []youtube.LiveChatMessageListResponse) *youtube.LiveChatMessageListResponse {
+	merged := &youtube.LiveChatMessageListResponse{}
+	for _, response := range responses {
+		if response.ActivePollItem != nil {
+			merged.ActivePollItem = response.ActivePollItem
+		}
+		if response.Etag != "" {
+			merged.Etag = response.Etag
+		}
+		if response.EventId != "" {
+			merged.EventId = response.EventId
+		}
+		if response.Kind != "" {
+			merged.Kind = response.Kind
+		}
+		if response.NextPageToken != "" {
+			merged.NextPageToken = response.NextPageToken
+		}
+		if response.OfflineAt != "" {
+			merged.OfflineAt = response.OfflineAt
+		}
+		if response.PageInfo != nil {
+			merged.PageInfo = response.PageInfo
+		}
+		if response.PollingIntervalMillis != 0 {
+			merged.PollingIntervalMillis = response.PollingIntervalMillis
+		}
+		if response.TokenPagination != nil {
+			merged.TokenPagination = response.TokenPagination
+		}
+		if response.VisitorId != "" {
+			merged.VisitorId = response.VisitorId
+		}
+		if len(response.Items) > 0 {
+			merged.Items = append(merged.Items, response.Items...)
+		}
+	}
+	return merged
 }
 
 // CheckStreamStatus checks if a stream is still live and returns full details
@@ -367,7 +511,7 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string, audit *q
 func (c *Client) GetVideoDetails(ctx context.Context, videoID string, audit *quota.AuditContext) (*models.YouTubeStream, error) {
 	// Check quota BEFORE making the API call
 	if c.quotaTracker != nil && !c.quotaTracker.CanMakeRequest(quota.QuotaCostVideos) {
-		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d", 
+		return nil, fmt.Errorf("insufficient quota: %d units remaining, need %d",
 			c.quotaTracker.GetRemainingQuota(), quota.QuotaCostVideos)
 	}
 	if audit == nil {

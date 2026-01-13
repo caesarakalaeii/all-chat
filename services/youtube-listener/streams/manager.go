@@ -22,7 +22,7 @@ import (
 
 // OverlayConnectionEvent represents an overlay connection event from API Gateway
 type OverlayConnectionEvent struct {
-	Type      string    `json:"type"`       // "connected" or "disconnected"
+	Type      string    `json:"type"` // "connected" or "disconnected"
 	OverlayID string    `json:"overlay_id"`
 	Timestamp time.Time `json:"timestamp"`
 }
@@ -43,10 +43,10 @@ type Manager struct {
 	pollers       map[string]*Poller               // streamID -> poller
 
 	// Overlay connection tracking
-	connMu            sync.RWMutex
-	connectedOverlays map[string]time.Time // overlay_id -> connection_time
+	connMu                   sync.RWMutex
+	connectedOverlays        map[string]time.Time           // overlay_id -> connection_time
 	channelConnectedOverlays map[string]map[string]struct{} // channel_id -> overlay_ids
-	redisClient       *redis.Client
+	redisClient              *redis.Client
 
 	// Disconnection debouncing (prevents premature polling shutdown)
 	disconnectDebounceTimers map[string]*time.Timer
@@ -125,31 +125,31 @@ func NewManager(
 	tokenStore := NewTokenStore(redisClient, logger)
 
 	return &Manager{
-		repository:                repository,
-		oauthManager:              oauthManager,
-		messageHandler:            messageHandler,
-		dbConn:                    dbConn,
-		logger:                    logger,
-		leader:                    leader,
-		quotaTracker:              quotaTracker,
-		quotaCoordinator:          quotaCoordinator,
-		redisClient:               redisClient,
-		ytMetrics:                 ytMetrics,
-		activeStreams:             make(map[string]*models.YouTubeStream),
-		pollers:                   make(map[string]*Poller),
-		connectedOverlays:         make(map[string]time.Time),
-		channelConnectedOverlays:  make(map[string]map[string]struct{}),
-		disconnectDebounceTimers:  make(map[string]*time.Timer),
-		disconnectDebounceDelay:   disconnectDebounce,
-		backoffStore:              backoffStore,
-		tokenStore:                tokenStore,
-		circuitBreakers:           make(map[string]*CircuitBreaker), // Circuit breakers for offline channels
-		baseDetectionInterval:     1 * time.Minute,   // Start checking every 1m
-		maxDetectionInterval:      10 * time.Minute,  // Max 10 minutes between checks
+		repository:                  repository,
+		oauthManager:                oauthManager,
+		messageHandler:              messageHandler,
+		dbConn:                      dbConn,
+		logger:                      logger,
+		leader:                      leader,
+		quotaTracker:                quotaTracker,
+		quotaCoordinator:            quotaCoordinator,
+		redisClient:                 redisClient,
+		ytMetrics:                   ytMetrics,
+		activeStreams:               make(map[string]*models.YouTubeStream),
+		pollers:                     make(map[string]*Poller),
+		connectedOverlays:           make(map[string]time.Time),
+		channelConnectedOverlays:    make(map[string]map[string]struct{}),
+		disconnectDebounceTimers:    make(map[string]*time.Timer),
+		disconnectDebounceDelay:     disconnectDebounce,
+		backoffStore:                backoffStore,
+		tokenStore:                  tokenStore,
+		circuitBreakers:             make(map[string]*CircuitBreaker), // Circuit breakers for offline channels
+		baseDetectionInterval:       1 * time.Minute,                  // Start checking every 1m
+		maxDetectionInterval:        10 * time.Minute,                 // Max 10 minutes between checks
 		syncInterval:                30 * time.Second,
 		stopChan:                    make(chan struct{}),
-		syncLeader:                  leader, // Use same coordinator for global sync leadership
-		syncLeaderStreamID:          "global-sync", // Constant stream ID for global sync leadership
+		syncLeader:                  leader,           // Use same coordinator for global sync leadership
+		syncLeaderStreamID:          "global-sync",    // Constant stream ID for global sync leadership
 		notificationDebounceDelay:   30 * time.Second, // Debounce notifications (YouTube API is expensive: 100 units per search)
 		connectionSyncDebounceDelay: 5 * time.Second,  // Debounce overlay connections (saves 100+ units on rapid connections)
 	}
@@ -549,7 +549,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	}
 
 	// Create YouTube service with OAuth
-	service, err := m.oauthManager.CreateYouTubeService(ctx, userID, channelID)
+	service, httpClient, err := m.oauthManager.CreateYouTubeService(ctx, userID, channelID)
 	if err != nil {
 		// Mark source as inactive - OAuth failed
 		if setErr := m.repository.SetSourceActive(ctx, channelID, false); setErr != nil {
@@ -562,7 +562,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	}
 
 	// Create API client
-	apiClient := api.NewClient(service, m.quotaTracker, m.logger)
+	apiClient := api.NewClient(service, httpClient, m.quotaTracker, m.logger)
 	overlayID := ""
 	if len(sources) > 0 {
 		overlayID = sources[0].OverlayID
@@ -1229,7 +1229,7 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 		m.logger.Debug("Skipping detection due to negative cache",
 			zap.String("channel_id", channelID),
 		)
-		return true  // Channel recently checked and offline
+		return true // Channel recently checked and offline
 	}
 
 	// PRIORITY 2: Check persistent backoff state from Redis
@@ -1239,7 +1239,7 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
-		return false  // On error, allow check (fail open)
+		return false // On error, allow check (fail open)
 	}
 
 	if backoffState == nil {
