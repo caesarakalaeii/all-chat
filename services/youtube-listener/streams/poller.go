@@ -10,6 +10,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/api"
 	"github.com/caesar/all-chat/services/youtube-listener/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener/models"
+	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"go.uber.org/zap"
 )
 
@@ -289,7 +290,11 @@ func (p *Poller) poll(ctx context.Context) error {
 	p.mu.RUnlock()
 
 	// Fetch messages from API
-	response, err := p.apiClient.GetChatMessages(ctx, liveChatID, pageToken)
+	response, err := p.apiClient.GetChatMessages(ctx, liveChatID, pageToken, &quota.AuditContext{
+		ChannelID: p.stream.ChannelID,
+		VideoID:   p.stream.StreamID,
+		OverlayID: p.overlayID,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to get chat messages: %w", err)
 	}
