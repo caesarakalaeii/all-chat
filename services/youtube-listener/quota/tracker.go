@@ -515,12 +515,8 @@ func (t *Tracker) RecordUsage(ctx context.Context, units int) error {
 		}
 	}
 
-	// Capture units before for audit log
-	unitsBefore := t.usageToday
-
 	// Update in-memory counter
 	t.usageToday += units
-	unitsAfter := t.usageToday
 
 	// Update database with retry logic
 	if err := t.recordUsageWithRetry(ctx, units, 3); err != nil {
@@ -706,9 +702,7 @@ func (t *Tracker) ConfirmReservation(ctx context.Context, reservationID string, 
 
 	// Update in-memory state
 	t.mu.Lock()
-	unitsBefore := t.usageToday
 	t.usageToday += units
-	unitsAfter := t.usageToday
 	percentage := float64(t.usageToday) / float64(t.dailyLimit) * 100
 	remaining := t.dailyLimit - t.usageToday
 
