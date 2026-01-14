@@ -13,6 +13,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/models"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"go.uber.org/zap"
+	"google.golang.org/api/youtube/v3"
 )
 
 // MessageHandler defines the interface for handling parsed messages
@@ -347,63 +348,66 @@ func (p *Poller) poll(ctx context.Context) error {
 	p.mu.Unlock()
 
 	// Fetch messages from API
-	response, err := p.apiClient.GetChatMessages(ctx, liveChatID, pageToken, &quota.AuditContext{
+	err := p.apiClient.StreamChatMessages(ctx, liveChatID, pageToken, &quota.AuditContext{
 		ChannelID: p.stream.ChannelID,
 		VideoID:   p.stream.StreamID,
 		OverlayID: p.overlayID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to get chat messages: %w", err)
-	}
-	if response.OfflineAt != "" {
-		if p.tokenStore != nil {
-			p.tokenStore.Clear(ctx, liveChatID)
+	}, func(response *youtube.LiveChatMessageListResponse) error {
+		if response.OfflineAt != "" {
+			if p.tokenStore != nil {
+				p.tokenStore.Clear(ctx, liveChatID)
+			}
+			return fmt.Errorf("liveChatEnded")
 		}
-		return fmt.Errorf("liveChatEnded")
-	}
 
-	// Parse messages
-	messages, err := p.parser.ParseBatch(response.Items, p.stream.ChannelID, p.stream.StreamID)
-	if err != nil {
-		p.logger.Error("Failed to parse messages",
-			zap.String("stream_id", p.stream.StreamID),
-			zap.Error(err),
-		)
-		return fmt.Errorf("failed to parse messages: %w", err)
-	}
-
-	// Update stream state
-	p.mu.Lock()
-	p.stream.NextPageToken = p.parser.ExtractNextPageToken(response)
-	p.stream.PollingInterval = p.parser.ExtractPollingInterval(response)
-	p.stream.LastPolledAt = time.Now()
-	p.stream.UpdatedAt = time.Now()
-	p.mu.Unlock()
-	if p.tokenStore != nil {
-		if tokenErr := p.tokenStore.Set(ctx, liveChatID, p.stream.NextPageToken); tokenErr != nil {
-			p.logger.Warn("Failed to persist streamList page token",
-				zap.String("live_chat_id", liveChatID),
-				zap.Error(tokenErr),
+		// Parse messages
+		messages, err := p.parser.ParseBatch(response.Items, p.stream.ChannelID, p.stream.StreamID)
+		if err != nil {
+			p.logger.Error("Failed to parse messages",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.Error(err),
 			)
+			return fmt.Errorf("failed to parse messages: %w", err)
 		}
-	}
 
-	// Handle messages if we have any
-	if len(messages) > 0 {
-		p.logger.Debug("Received messages",
-			zap.String("stream_id", p.stream.StreamID),
-			zap.Int("count", len(messages)),
-		)
-
-		if p.messageHandler != nil {
-			if err := p.messageHandler.HandleMessages(ctx, messages); err != nil {
-				p.logger.Error("Failed to handle messages",
-					zap.String("stream_id", p.stream.StreamID),
-					zap.Error(err),
+		// Update stream state
+		p.mu.Lock()
+		p.stream.NextPageToken = p.parser.ExtractNextPageToken(response)
+		p.stream.PollingInterval = p.parser.ExtractPollingInterval(response)
+		p.stream.LastPolledAt = time.Now()
+		p.stream.UpdatedAt = time.Now()
+		p.mu.Unlock()
+		if p.tokenStore != nil {
+			if tokenErr := p.tokenStore.Set(ctx, liveChatID, p.stream.NextPageToken); tokenErr != nil {
+				p.logger.Warn("Failed to persist streamList page token",
+					zap.String("live_chat_id", liveChatID),
+					zap.Error(tokenErr),
 				)
-				return fmt.Errorf("failed to handle messages: %w", err)
 			}
 		}
+
+		// Handle messages if we have any
+		if len(messages) > 0 {
+			p.logger.Debug("Received messages",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.Int("count", len(messages)),
+			)
+
+			if p.messageHandler != nil {
+				if err := p.messageHandler.HandleMessages(ctx, messages); err != nil {
+					p.logger.Error("Failed to handle messages",
+						zap.String("stream_id", p.stream.StreamID),
+						zap.Error(err),
+					)
+					return fmt.Errorf("failed to handle messages: %w", err)
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to stream chat messages: %w", err)
 	}
 
 	return nil

@@ -920,6 +920,14 @@ func (t *Tracker) loadTodayUsage(ctx context.Context) error {
 	// Get current date in PST (YouTube's quota reset timezone)
 	today := time.Now().In(YouTubePST).Format("2006-01-02")
 
+	if t.db == nil {
+		t.mu.Lock()
+		t.currentDate = today
+		t.usageToday = 0
+		t.mu.Unlock()
+		return nil
+	}
+
 	query := `
 		SELECT units_used
 		FROM youtube_quota_usage
