@@ -115,6 +115,30 @@ func TestParseChatMessage_SuperSticker(t *testing.T) {
 	assert.Equal(t, "2", rawMsg.Tags["super_sticker_tier"])
 }
 
+func TestParseChatMessage_StripsAtPrefix(t *testing.T) {
+	parser := NewParser()
+
+	msg := &youtube.LiveChatMessage{
+		Snippet: &youtube.LiveChatMessageSnippet{
+			Type:        "textMessageEvent",
+			PublishedAt: "2025-11-13T10:00:00Z",
+			TextMessageDetails: &youtube.LiveChatTextMessageDetails{
+				MessageText: "Hello",
+			},
+		},
+		AuthorDetails: &youtube.LiveChatMessageAuthorDetails{
+			ChannelId:   "UCzzzzzz",
+			DisplayName: "@HandleName",
+		},
+	}
+
+	rawMsg, err := parser.ParseChatMessage(msg, "UCxxxxxx", "stream123")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "HandleName", rawMsg.Username)
+	assert.Equal(t, "HandleName", rawMsg.Tags["display_name"])
+}
+
 func TestParseChatMessage_InvalidMessage_NoSnippet(t *testing.T) {
 	parser := NewParser()
 
