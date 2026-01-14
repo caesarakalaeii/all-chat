@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener/models"
@@ -44,7 +45,8 @@ func (p *Parser) ParseChatMessage(msg *youtube.LiveChatMessage, channelID, strea
 	tags := make(map[string]string)
 	tags["channel_id"] = msg.AuthorDetails.ChannelId
 	tags["channel_url"] = msg.AuthorDetails.ChannelUrl
-	tags["display_name"] = msg.AuthorDetails.DisplayName
+	displayName := strings.TrimPrefix(msg.AuthorDetails.DisplayName, "@")
+	tags["display_name"] = displayName
 
 	if msg.AuthorDetails.ProfileImageUrl != "" {
 		tags["profile_image"] = msg.AuthorDetails.ProfileImageUrl
@@ -82,7 +84,7 @@ func (p *Parser) ParseChatMessage(msg *youtube.LiveChatMessage, channelID, strea
 		ChannelID: channelID,
 		StreamID:  streamID,
 		UserID:    msg.AuthorDetails.ChannelId,
-		Username:  msg.AuthorDetails.DisplayName,
+		Username:  displayName,
 		Text:      text,
 		Timestamp: timestamp,
 		Tags:      tags,
