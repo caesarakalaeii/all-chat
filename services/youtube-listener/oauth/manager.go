@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -117,7 +118,27 @@ func (m *Manager) CreateYouTubeService(ctx context.Context, userID, channelID st
 		return nil, nil, fmt.Errorf("failed to get token: %w", err)
 	}
 
-	client := m.config.Client(ctx, token)
+	tokenSource := m.config.TokenSource(ctx, token)
+	baseTransport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       0,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		DisableCompression:    true,
+	}
+	client := &http.Client{
+		Transport: &oauth2.Transport{
+			Source: tokenSource,
+			Base:   baseTransport,
+		},
+	}
 
 	service, err := youtube.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
