@@ -297,23 +297,43 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 // StreamChatMessages opens a server-streaming connection and invokes handler per response.
 // This costs 5 quota units per connection.
 // Uses reserve-confirm-rollback pattern for accurate quota tracking.
-func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken string, audit *quota.AuditContext, handler func(*youtube.LiveChatMessageListResponse) error) error {
+func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken string, audit *quota.AuditContext, handler func(*youtube.LiveChatMessageListResponse) error) (err error) {
 	const cost = quota.QuotaCostLiveChatMessages
+	start := time.Now()
+	endReason := ""
+	defer func() {
+		if endReason == "" {
+			if err == nil {
+				endReason = "completed"
+			} else if errors.Is(err, context.Canceled) {
+				endReason = "canceled"
+			} else {
+				endReason = "error"
+			}
+		}
+		c.logger.Info("Chat stream closed",
+			zap.String("live_chat_id", liveChatID),
+			zap.String("reason", endReason),
+			zap.Duration("duration", time.Since(start)),
+		)
+	}()
 
 	// STEP 1: RESERVE quota BEFORE making API call
 	var reservationID string
-	var err error
 	if c.quotaTracker != nil {
 		reservationID, err = c.quotaTracker.ReserveQuota(ctx, cost)
 		if err != nil {
+			endReason = "insufficient_quota"
 			return fmt.Errorf("insufficient quota: %w", err)
 		}
 	}
 
 	if c.httpClient == nil {
+		endReason = "missing_http_client"
 		return fmt.Errorf("http client is required for live chat stream")
 	}
 	if c.basePath == "" {
+		endReason = "missing_base_path"
 		return fmt.Errorf("youtube base path is missing")
 	}
 
@@ -338,6 +358,7 @@ func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken s
 				c.logger.Warn("Failed to rollback quota reservation", zap.Error(rollbackErr))
 			}
 		}
+		endReason = "request_error"
 		return err
 	}
 
@@ -365,6 +386,7 @@ func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken s
 			}
 		}
 		c.logAPICall(ctx, "LiveChatMessages.StreamList", chargedUnits, audit)
+		endReason = "http_error"
 		return fmt.Errorf("failed to fetch chat messages: %w", apiErr)
 	}
 	defer resp.Body.Close()
@@ -392,6 +414,7 @@ func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken s
 			}
 		}
 		c.logAPICall(ctx, "LiveChatMessages.StreamList", chargedUnits, audit)
+		endReason = "http_status_error"
 		return fmt.Errorf("failed to fetch chat messages: %w", apiErr)
 	}
 
@@ -405,18 +428,28 @@ func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken s
 	}
 	c.logAPICall(ctx, "LiveChatMessages.StreamList", chargedUnits, audit)
 
+	c.logger.Info("Chat stream started",
+		zap.String("live_chat_id", liveChatID),
+		zap.String("transfer_encoding", resp.Header.Get("Transfer-Encoding")),
+		zap.String("content_type", resp.Header.Get("Content-Type")),
+		zap.String("content_length", resp.Header.Get("Content-Length")),
+	)
+
 	decoder := json.NewDecoder(resp.Body)
 	for {
 		var raw json.RawMessage
 		if err := decoder.Decode(&raw); err != nil {
 			if errors.Is(err, io.EOF) {
+				endReason = "eof"
 				return nil
 			}
+			endReason = "decode_error"
 			return err
 		}
 
 		response, err := decodeLiveChatStreamResponse(raw)
 		if err != nil {
+			endReason = "decode_error"
 			return err
 		}
 		response.ServerResponse = googleapi.ServerResponse{
@@ -426,6 +459,7 @@ func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken s
 
 		if handler != nil {
 			if err := handler(response); err != nil {
+				endReason = "handler_error"
 				return err
 			}
 		}
