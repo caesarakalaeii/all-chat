@@ -294,6 +294,144 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 	return response, nil
 }
 
+// StreamChatMessages opens a server-streaming connection and invokes handler per response.
+// This costs 5 quota units per connection.
+// Uses reserve-confirm-rollback pattern for accurate quota tracking.
+func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken string, audit *quota.AuditContext, handler func(*youtube.LiveChatMessageListResponse) error) error {
+	const cost = quota.QuotaCostLiveChatMessages
+
+	// STEP 1: RESERVE quota BEFORE making API call
+	var reservationID string
+	var err error
+	if c.quotaTracker != nil {
+		reservationID, err = c.quotaTracker.ReserveQuota(ctx, cost)
+		if err != nil {
+			return fmt.Errorf("insufficient quota: %w", err)
+		}
+	}
+
+	if c.httpClient == nil {
+		return fmt.Errorf("http client is required for live chat stream")
+	}
+	if c.basePath == "" {
+		return fmt.Errorf("youtube base path is missing")
+	}
+
+	params := url.Values{}
+	params.Add("part", "id")
+	params.Add("part", "snippet")
+	params.Add("part", "authorDetails")
+	params.Set("liveChatId", liveChatID)
+	params.Set("maxResults", "2000")
+	params.Set("prettyPrint", "false")
+	params.Set("alt", "json")
+	if pageToken != "" {
+		params.Set("pageToken", pageToken)
+	}
+
+	endpoint := googleapi.ResolveRelative(c.basePath, "youtube/v3/liveChat/messages/stream")
+	reqURL := endpoint + "?" + params.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		if c.quotaTracker != nil && reservationID != "" {
+			if rollbackErr := c.quotaTracker.RollbackReservation(ctx, reservationID, cost); rollbackErr != nil {
+				c.logger.Warn("Failed to rollback quota reservation", zap.Error(rollbackErr))
+			}
+		}
+		return err
+	}
+
+	userAgent := googleapi.UserAgent
+	if c.userAgent != "" {
+		userAgent = userAgent + " " + c.userAgent
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/json")
+
+	resp, apiErr := c.httpClient.Do(req)
+	if apiErr != nil {
+		chargedUnits := 0
+		if c.quotaTracker != nil && reservationID != "" {
+			if shouldChargeQuota(apiErr) {
+				if confirmErr := c.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
+					c.logger.Warn("Failed to confirm quota reservation", zap.Error(confirmErr))
+				} else {
+					chargedUnits = cost
+				}
+			} else {
+				if rollbackErr := c.quotaTracker.RollbackReservation(ctx, reservationID, cost); rollbackErr != nil {
+					c.logger.Warn("Failed to rollback quota reservation", zap.Error(rollbackErr))
+				}
+			}
+		}
+		c.logAPICall(ctx, "LiveChatMessages.StreamList", chargedUnits, audit)
+		return fmt.Errorf("failed to fetch chat messages: %w", apiErr)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr == nil {
+			apiErr = googleapi.CheckResponseWithBody(resp, body)
+		} else {
+			apiErr = readErr
+		}
+
+		chargedUnits := 0
+		if c.quotaTracker != nil && reservationID != "" {
+			if shouldChargeQuota(apiErr) {
+				if confirmErr := c.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
+					c.logger.Warn("Failed to confirm quota reservation", zap.Error(confirmErr))
+				} else {
+					chargedUnits = cost
+				}
+			} else {
+				if rollbackErr := c.quotaTracker.RollbackReservation(ctx, reservationID, cost); rollbackErr != nil {
+					c.logger.Warn("Failed to rollback quota reservation", zap.Error(rollbackErr))
+				}
+			}
+		}
+		c.logAPICall(ctx, "LiveChatMessages.StreamList", chargedUnits, audit)
+		return fmt.Errorf("failed to fetch chat messages: %w", apiErr)
+	}
+
+	chargedUnits := 0
+	if c.quotaTracker != nil && reservationID != "" {
+		if confirmErr := c.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
+			c.logger.Warn("Failed to confirm quota reservation", zap.Error(confirmErr))
+		} else {
+			chargedUnits = cost
+		}
+	}
+	c.logAPICall(ctx, "LiveChatMessages.StreamList", chargedUnits, audit)
+
+	decoder := json.NewDecoder(resp.Body)
+	for {
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+
+		response, err := decodeLiveChatStreamResponse(raw)
+		if err != nil {
+			return err
+		}
+		response.ServerResponse = googleapi.ServerResponse{
+			Header:         resp.Header,
+			HTTPStatusCode: resp.StatusCode,
+		}
+
+		if handler != nil {
+			if err := handler(response); err != nil {
+				return err
+			}
+		}
+	}
+}
+
 func (c *Client) getChatMessagesStream(ctx context.Context, liveChatID, pageToken string) (*youtube.LiveChatMessageListResponse, error) {
 	if c.httpClient == nil {
 		return nil, fmt.Errorf("http client is required for live chat stream")
