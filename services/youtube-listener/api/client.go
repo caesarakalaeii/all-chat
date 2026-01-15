@@ -57,6 +57,7 @@ type Client struct {
 	userAgent    string
 	quotaTracker *quota.Tracker
 	logger       *zap.Logger
+	grpcClient   *GRPCStreamClient
 }
 
 // NewClient creates a new YouTube API client wrapper
@@ -76,6 +77,11 @@ func NewClient(service *youtube.Service, httpClient *http.Client, quotaTracker *
 		quotaTracker: quotaTracker,
 		logger:       logger,
 	}
+}
+
+// SetGRPCClient sets the gRPC client for streaming
+func (c *Client) SetGRPCClient(grpcClient *GRPCStreamClient) {
+	c.grpcClient = grpcClient
 }
 
 func (c *Client) logAPICall(ctx context.Context, endpoint string, units int, audit *quota.AuditContext) {
@@ -297,7 +303,23 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 // StreamChatMessages opens a server-streaming connection and invokes handler per response.
 // This costs 5 quota units per connection.
 // Uses reserve-confirm-rollback pattern for accurate quota tracking.
+// If gRPC client is available, uses true gRPC streaming. Otherwise falls back to HTTP.
 func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken string, audit *quota.AuditContext, handler func(*youtube.LiveChatMessageListResponse) error) (err error) {
+	// Use gRPC streaming if available (preferred method)
+	if c.grpcClient != nil {
+		return c.grpcClient.StreamChatMessagesGRPC(ctx, liveChatID, pageToken, audit, handler)
+	}
+
+	// Fallback to HTTP streaming (legacy)
+	c.logger.Warn("Using HTTP fallback for streaming - gRPC client not available",
+		zap.String("live_chat_id", liveChatID),
+	)
+	return c.streamChatMessagesHTTP(ctx, liveChatID, pageToken, audit, handler)
+}
+
+// streamChatMessagesHTTP is the legacy HTTP-based implementation
+// This is kept as a fallback but gRPC is the preferred method
+func (c *Client) streamChatMessagesHTTP(ctx context.Context, liveChatID, pageToken string, audit *quota.AuditContext, handler func(*youtube.LiveChatMessageListResponse) error) (err error) {
 	const cost = quota.QuotaCostLiveChatMessages
 	start := time.Now()
 	endReason := ""
