@@ -48,6 +48,11 @@ func NewGRPCStreamClient(ctx context.Context, tokenSource credentials.PerRPCCred
 			Timeout:             10 * time.Second, // Wait 10 seconds for ping ack before considering connection dead
 			PermitWithoutStream: true,             // Allow pings even when no active RPCs
 		}),
+		// EXPERIMENT: Try different options to keep stream alive longer
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(10*1024*1024), // 10MB max message size
+			grpc.MaxCallSendMsgSize(10*1024*1024), // 10MB max message size
+		),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC connection: %w", err)
@@ -120,9 +125,10 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 
 	// Build the request
 	req := &proto.LiveChatMessageListRequest{
-		LiveChatId:  &liveChatID,
-		Part:        []string{"id", "snippet", "authorDetails"},
-		MaxResults:  protobuf.Uint32(2000),
+		LiveChatId: &liveChatID,
+		Part:       []string{"id", "snippet", "authorDetails"},
+		// EXPERIMENT: Removed MaxResults since proto says "Not used in the streaming RPC"
+		// Maybe setting it causes YouTube to treat this as a batch request?
 	}
 	if pageToken != "" {
 		req.PageToken = &pageToken
@@ -200,6 +206,16 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 			endReason = "conversion_error"
 			return fmt.Errorf("failed to convert proto response: %w", err)
 		}
+
+		// DEBUG: Log each response details to understand stream closure pattern
+		g.logger.Debug("Received gRPC response",
+			zap.String("live_chat_id", liveChatID),
+			zap.Int("response_num", responsesReceived),
+			zap.Int("messages_count", len(ytResponse.Items)),
+			zap.String("next_page_token", ytResponse.NextPageToken),
+			zap.Bool("has_next_token", ytResponse.NextPageToken != ""),
+			zap.String("offline_at", ytResponse.OfflineAt),
+		)
 
 		// Check if stream went offline
 		if ytResponse.OfflineAt != "" {
