@@ -209,6 +209,12 @@ func (p *Poller) pollLoop(ctx context.Context) {
 		cancel()
 		<-monitorDone
 
+		// FIX: Clear NextPageToken after stream closes to ensure we always start fresh
+		// The pageToken should only be used WITHIN a streaming session, not across reconnections
+		p.mu.Lock()
+		p.stream.NextPageToken = ""
+		p.mu.Unlock()
+
 		// FIX: Calculate stream connection duration
 		connectionDuration := time.Since(streamStartTime)
 
