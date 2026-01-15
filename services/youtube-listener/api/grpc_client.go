@@ -12,6 +12,7 @@ import (
 	"google.golang.org/api/youtube/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	protobuf "google.golang.org/protobuf/proto"
 )
@@ -36,11 +37,17 @@ func NewGRPCStreamClient(ctx context.Context, tokenSource credentials.PerRPCCred
 	// Create TLS credentials for secure connection
 	tlsCreds := credentials.NewTLS(nil)
 
-	// Establish gRPC connection to YouTube API
+	// Establish gRPC connection to YouTube API with keepalive settings
+	// These prevent the server from closing the connection due to inactivity
 	conn, err := grpc.NewClient(
 		youtubeGRPCEndpoint,
 		grpc.WithTransportCredentials(tlsCreds),
 		grpc.WithPerRPCCredentials(tokenSource),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                20 * time.Second, // Send keepalive ping every 20 seconds
+			Timeout:             10 * time.Second, // Wait 10 seconds for ping ack before considering connection dead
+			PermitWithoutStream: true,             // Allow pings even when no active RPCs
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC connection: %w", err)
