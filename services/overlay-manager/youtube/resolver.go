@@ -166,6 +166,13 @@ func isClientError(err error) bool {
 func (r *Resolver) resolveVideoToChannelID(ctx context.Context, videoID string) (string, error) {
 	const quotaCost = 1  // Videos.List API cost
 
+	// DEBUG: Log API key status
+	r.logger.Info("Resolving video to channel ID",
+		zap.String("video_id", videoID),
+		zap.Bool("has_api_key", r.apiKey != ""),
+		zap.Int("api_key_length", len(r.apiKey)),
+	)
+
 	// 1. CHECK QUOTA BEFORE API CALL
 	if r.quotaClient != nil {
 		allowed, err := r.quotaClient.CheckQuota(ctx, quotaCost)
