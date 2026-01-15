@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	grpcoauth "google.golang.org/grpc/credentials/oauth"
 )
 
 // OverlayConnectionEvent represents an overlay connection event from API Gateway
@@ -569,6 +570,32 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 
 	// Create API client
 	apiClient := api.NewClient(service, httpClient, m.quotaTracker, m.logger)
+
+	// Create gRPC streaming client for true server-side streaming
+	// Get token source for gRPC authentication
+	oauth2TokenSource, err := m.oauthManager.CreateTokenSource(ctx, userID, channelID)
+	if err != nil {
+		m.logger.Warn("Failed to create token source for gRPC, will use HTTP fallback",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+	} else {
+		// Wrap oauth2.TokenSource in gRPC credentials
+		grpcTokenSource := grpcoauth.TokenSource{TokenSource: oauth2TokenSource}
+		grpcClient, err := api.NewGRPCStreamClient(ctx, grpcTokenSource, m.quotaTracker, m.logger)
+		if err != nil {
+			m.logger.Warn("Failed to create gRPC streaming client, will fallback to HTTP",
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+		} else {
+			apiClient.SetGRPCClient(grpcClient)
+			m.logger.Info("gRPC streaming enabled for channel",
+				zap.String("channel_id", channelID),
+			)
+		}
+	}
+
 	overlayID := ""
 	if len(sources) > 0 {
 		overlayID = sources[0].OverlayID
