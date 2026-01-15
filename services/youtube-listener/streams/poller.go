@@ -433,29 +433,11 @@ func (p *Poller) poll(ctx context.Context) error {
 			}
 		}
 
-		// FIX: Respect pollingIntervalMillis between stream responses
-		// YouTube API requires sleeping between responses to avoid connection termination
-		if pollingInterval > 0 {
-			sleepDuration := time.Duration(pollingInterval) * time.Millisecond
-			p.logger.Debug("Sleeping between stream responses",
-				zap.String("stream_id", p.stream.StreamID),
-				zap.Duration("interval", sleepDuration),
-			)
-
-			// Increment metrics counter for interval sleeps
-			if p.ytMetrics != nil {
-				p.ytMetrics.StreamIntervalSleeps.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
-			}
-
-			// Sleep with context cancellation support
-			select {
-			case <-time.After(sleepDuration):
-				// Sleep completed normally
-			case <-ctx.Done():
-				// Context cancelled during sleep
-				return ctx.Err()
-			}
-		}
+		// NOTE: For gRPC streaming, DO NOT sleep between responses!
+		// The pollingIntervalMillis is only for REST API polling mode.
+		// Sleeping inside the handler blocks the gRPC receive loop, causing YouTube's
+		// server to close the connection due to inactivity (~15s timeout).
+		// The gRPC stream should continuously call Recv() to maintain the connection.
 
 		return nil
 	})
