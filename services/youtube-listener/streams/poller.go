@@ -269,11 +269,11 @@ func (p *Poller) pollLoop(ctx context.Context) {
 			p.resetBackoff()
 		}
 
-	p.sleepToRespectInterval()
+		p.sleepToRespectInterval()
 
-	if err != nil && p.ytMetrics != nil {
-		p.ytMetrics.StreamReconnects.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
-	}
+		if err != nil && p.ytMetrics != nil {
+			p.ytMetrics.StreamReconnects.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
+		}
 
 		select {
 		case <-p.stopChan:
