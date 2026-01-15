@@ -120,7 +120,8 @@ func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) 
 	}
 
 	// 2. MAKE YOUTUBE API CALL
-	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey), option.WithHTTPClient(r.httpClient))
+	// FIX: Don't pass httpClient with API key - it interferes with authentication
+	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey))
 	if err != nil {
 		return "", fmt.Errorf("failed to create YouTube service: %w", err)
 	}
@@ -184,7 +185,8 @@ func (r *Resolver) resolveVideoToChannelID(ctx context.Context, videoID string) 
 	}
 
 	// 2. MAKE YOUTUBE API CALL
-	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey), option.WithHTTPClient(r.httpClient))
+	// FIX: Don't pass httpClient with API key - it interferes with authentication
+	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey))
 	if err != nil {
 		return "", fmt.Errorf("failed to create YouTube service: %w", err)
 	}
@@ -236,7 +238,8 @@ func (r *Resolver) GetChannelInfo(ctx context.Context, channelID string) (*Chann
 	}
 
 	// 2. MAKE YOUTUBE API CALL
-	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey), option.WithHTTPClient(r.httpClient))
+	// FIX: Don't pass httpClient with API key - it interferes with authentication
+	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create YouTube service: %w", err)
 	}
