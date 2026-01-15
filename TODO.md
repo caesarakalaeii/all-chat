@@ -1,6 +1,6 @@
 # All-Chat TODO Tracker
 
-**Last Updated**: 2026-01-08
+**Last Updated**: 2026-01-15
 
 ## 🔴 High Priority (Security & Critical)
 
@@ -54,10 +54,10 @@
 ## 🟡 Medium Priority (Features & Quality)
 
 ### Authentication & Authorization
-- [ ] **Add display_name field to users table**
-  - Location: `services/auth-service/handlers/streamer_info.go:106`
-  - Current: Using username as display name
-  - Impact: Better user experience
+- [x] **Add display_name field to users table** ✅ COMPLETE
+  - Location: `migrations/001_initial_schema.sql:10`
+  - Status: Field exists in users table since initial schema
+  - Impact: Already providing better user experience
 
 - [ ] **Remove Twitch OAuth workaround**
   - Location: `services/auth-service/handlers/platform_auth_v2.go:140`
@@ -67,39 +67,53 @@
 
 ### Testing & Observability
 - [ ] **Complete YouTube Listener integration tests**
+  - Status: Partial - unit tests exist (oauth/manager_test.go, api/parser_test.go, quota/tracker_test.go)
   - Impact: Ensure reliability for YouTube platform
 
 - [ ] **Add comprehensive unit/integration tests**
-  - Scope: All services
+  - Status: Partial - 40+ test files exist across services
+  - Scope: All services (coverage varies by service)
   - Impact: Code quality, prevent regressions
 
 - [ ] **Add Prometheus metrics endpoints**
-  - Scope: All services (currently only some have metrics)
+  - Status: Partial - kick-listener has full implementation (`services/kick-listener/metrics/metrics.go`)
+  - Scope: All services (currently only kick-listener has metrics)
   - Impact: Better monitoring and debugging
 
-- [ ] **Implement distributed tracing with OpenTelemetry**
-  - Scope: Cross-service request tracking
+- [x] **Implement distributed tracing with OpenTelemetry** ✅ COMPLETE (2026-01-15)
+  - Location: `shared/tracing/tracing.go`, `services/api-gateway/cmd/main.go`
+  - Status: Implemented with OTEL_ENABLED environment variable
+  - Features: Optional enablement via env var, integrated in API Gateway
   - Impact: Debugging, performance optimization
 
 ## 🟢 Low Priority (New Features & Enhancements)
 
 ### Platform Support
-- [ ] **Add Kick platform listener**
-  - Phase: 2
-  - Impact: Platform expansion
+- [x] **Add Kick platform listener** ✅ COMPLETE
+  - Location: `services/kick-listener/`
+  - Status: Fully implemented with Pusher WebSocket Protocol 7
+  - Features: Dynamic channel subscription, real-time message reception, auto-reconnection
+  - Impact: Platform expansion achieved
 
-- [ ] **Add TikTok platform listener**
-  - Phase: 2
-  - Impact: Platform expansion
+- [x] **Add TikTok platform listener** ✅ COMPLETE (Beta)
+  - Location: `services/tiktok-listener/`
+  - Status: Beta implementation using unofficial TikTok-Live-Connector library (Node.js)
+  - Features: Real-time chat capture, message deduplication, dynamic stream management
+  - Note: Uses unofficial library, should be replaced when official API available
+  - Impact: Platform expansion achieved (beta status)
 
 ### Frontend & UI
-- [ ] **Build React + Next.js frontend**
-  - Purpose: Overlay display and configuration
-  - Impact: Better user experience for streamers
+- [x] **Build React + Next.js frontend** ✅ COMPLETE
+  - Location: `frontend/` (Next.js 14+ App Router)
+  - Status: Fully implemented with TypeScript and Tailwind CSS
+  - Features: Overlay display, admin dashboard, auth pages, settings, legal pages
+  - Impact: Better user experience for streamers achieved
 
-- [ ] **Add overlay management API**
-  - Features: CRUD operations for overlays
-  - Impact: Self-service overlay configuration
+- [x] **Add overlay management API** ✅ COMPLETE
+  - Location: `services/overlay-manager/handlers/`
+  - Status: Fully implemented with CRUD operations
+  - Features: Overlay config (config.go), source management (sources.go), mock chat (mock_message.go), YouTube helpers (youtube.go)
+  - Impact: Self-service overlay configuration achieved
 
 ### Scalability
 - [ ] **Separate databases per service**
@@ -117,20 +131,26 @@
 
 ## Summary Statistics
 
-- **Total Tasks**: 18 (2 recently completed ✅)
+- **Total Tasks**: 18
 - **High Priority**: 2 (Security critical)
-- **Medium Priority**: 8 (Quality & features)
-- **Low Priority**: 8 (Enhancements & scaling)
-- **Completed**: 2 (AES-GCM encryption, Rate limiting)
+- **Medium Priority**: 4 (Quality improvements)
+- **Low Priority**: 3 (Scaling enhancements)
+- **Completed**: 9 (AES-GCM encryption, Rate limiting, OpenTelemetry tracing, Kick listener, TikTok listener, Frontend, Overlay API, display_name field)
+- **Partially Complete**: 3 (YouTube tests, Unit tests, Prometheus metrics)
 
 ## Notes
 
 - Extension (all-chat-extension) has no pending TODOs after recent bug fixes
-- **Security improvements completed (2026-01-08)**:
-  - ✅ AES-GCM encryption implemented for OAuth tokens (with migration tool)
-  - ✅ Rate limiting implemented in API Gateway (Redis-based, 300 req/min default)
+- **Major completions (2026-01-15)**:
+  - ✅ All 4 platform listeners implemented (Twitch, YouTube, Kick, TikTok)
+  - ✅ Frontend fully built with React + Next.js
+  - ✅ Overlay management API complete
+  - ✅ OpenTelemetry distributed tracing implemented
+  - ✅ AES-GCM encryption for OAuth tokens (2026-01-08)
+  - ✅ Rate limiting in API Gateway (2026-01-08)
 - Previous fixes:
   - ✅ OAuth login bug fixed
   - ✅ Page layout preservation implemented
   - ✅ JWT middleware corrected to support viewer tokens
   - ✅ Error handling improved
+  - ✅ display_name field exists in users table (initial schema)
