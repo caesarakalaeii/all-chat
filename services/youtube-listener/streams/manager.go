@@ -633,7 +633,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 				LiveChatID:    streamState.LiveChatID,
 				IsLive:        true,
 				OverlayID:     overlayID, // Use current overlay ID from sources
-				NextPageToken: streamState.NextPageToken,
+				NextPageToken: "",        // FIX: Always start WITHOUT pageToken for optimal gRPC streaming
 				CreatedAt:     time.Now(),
 				UpdatedAt:     time.Now(),
 			}
