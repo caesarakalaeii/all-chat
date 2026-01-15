@@ -358,16 +358,19 @@ func (p *Poller) poll(ctx context.Context) error {
 	liveChatID := p.stream.LiveChatID
 	pageToken := p.stream.NextPageToken
 	p.mu.RUnlock()
-	if pageToken == "" && p.tokenStore != nil {
-		if storedToken, tokenErr := p.tokenStore.Get(ctx, liveChatID); tokenErr != nil {
-			p.logger.Warn("Failed to load streamList page token",
-				zap.String("live_chat_id", liveChatID),
-				zap.Error(tokenErr),
-			)
-		} else if storedToken != "" {
-			pageToken = storedToken
-		}
-	}
+
+	// FIX: Do NOT load cached pageToken on every connection!
+	// The pageToken should only be used WITHIN a streaming session to track progress.
+	// Loading a cached token causes YouTube to send "catch-up" messages and close
+	// the stream after ~10 seconds, resulting in excessive quota consumption.
+	//
+	// IMPORTANT: pageToken is automatically updated from each response (line 404)
+	// and persisted to Redis (line 410). On pod restart, streams are detected
+	// fresh without cached tokens, which is the correct behavior.
+	//
+	// Removed: Loading cached pageToken from TokenStore
+	// This was causing the 10-second disconnect issue described in
+	// YOUTUBE_GRPC_STREAMING_CHECKPOINT.md
 
 	p.mu.Lock()
 	p.lastStreamRequest = time.Now()
@@ -380,9 +383,6 @@ func (p *Poller) poll(ctx context.Context) error {
 		OverlayID: p.overlayID,
 	}, func(response *youtube.LiveChatMessageListResponse) error {
 		if response.OfflineAt != "" {
-			if p.tokenStore != nil {
-				p.tokenStore.Clear(ctx, liveChatID)
-			}
 			return fmt.Errorf("liveChatEnded")
 		}
 
@@ -406,14 +406,11 @@ func (p *Poller) poll(ctx context.Context) error {
 		p.stream.LastPolledAt = time.Now()
 		p.stream.UpdatedAt = time.Now()
 		p.mu.Unlock()
-		if p.tokenStore != nil {
-			if tokenErr := p.tokenStore.Set(ctx, liveChatID, p.stream.NextPageToken); tokenErr != nil {
-				p.logger.Warn("Failed to persist streamList page token",
-					zap.String("live_chat_id", liveChatID),
-					zap.Error(tokenErr),
-				)
-			}
-		}
+
+		// FIX: Removed pageToken persistence to Redis.
+		// We no longer cache pageTokens across connections since this was causing
+		// the 10-second disconnect issue. The token is tracked in-memory during
+		// the streaming session, which is the correct approach for gRPC streaming.
 
 		// Handle messages if we have any
 		if len(messages) > 0 {
