@@ -123,11 +123,13 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 	}
 
 	// Build the request
+	// CRITICAL: Match Python demo EXACTLY - uses max_results=20, NOT 2000!
+	// Maybe high maxResults causes YouTube to batch-send and close?
+	maxResults := uint32(20) // Matching official Python demo
 	req := &proto.LiveChatMessageListRequest{
 		LiveChatId: &liveChatID,
-		Part:       []string{"id", "snippet", "authorDetails"},
-		// EXPERIMENT: Removed MaxResults since proto says "Not used in the streaming RPC"
-		// Maybe setting it causes YouTube to treat this as a batch request?
+		Part:       []string{"snippet"}, // Python demo only requests "snippet"!
+		MaxResults: &maxResults,
 	}
 	if pageToken != "" {
 		req.PageToken = &pageToken
