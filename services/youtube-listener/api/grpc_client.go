@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
-	protobuf "google.golang.org/protobuf/proto"
 )
 
 const (
