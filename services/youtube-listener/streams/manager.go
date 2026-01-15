@@ -1390,6 +1390,24 @@ func (m *Manager) IsChannelConnected(ctx context.Context, channelID string) (boo
 func (m *Manager) shouldSkipDetection(channelID string, sources []*models.StreamSource) bool {
 	ctx := context.Background()
 
+	// PRIORITY 0: Check Redis stream state (instant resumption bypass)
+	// If we have cached stream state, skip all backoff/delay checks
+	if m.streamStateStore != nil {
+		streamState, err := m.streamStateStore.LoadStreamState(ctx, channelID)
+		if err != nil {
+			m.logger.Warn("Failed to load stream state for skip check",
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+		} else if streamState != nil && streamState.IsLive {
+			m.logger.Debug("Stream state exists, allowing immediate detection (bypass all delays)",
+				zap.String("channel_id", channelID),
+				zap.String("stream_id", streamState.StreamID),
+			)
+			return false // Don't skip - we have active stream state
+		}
+	}
+
 	// PRIORITY 1: Check negative cache (cheapest check, most aggressive)
 	isNegativeCached, err := m.backoffStore.IsNegativeCached(ctx, channelID)
 	if err != nil {
