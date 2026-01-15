@@ -57,6 +57,7 @@ type Manager struct {
 	// Livestream detection backoff (persistent via Redis)
 	backoffStore          *BackoffStore
 	tokenStore            *TokenStore
+	streamStateStore      *StreamStateStore
 	baseDetectionInterval time.Duration
 	maxDetectionInterval  time.Duration
 
@@ -124,6 +125,7 @@ func NewManager(
 	// Create backoff store for persistent backoff state
 	backoffStore := NewBackoffStore(redisClient, logger)
 	tokenStore := NewTokenStore(redisClient, logger)
+	streamStateStore := NewStreamStateStore(redisClient, logger)
 
 	return &Manager{
 		repository:                  repository,
@@ -144,6 +146,7 @@ func NewManager(
 		disconnectDebounceDelay:     disconnectDebounce,
 		backoffStore:                backoffStore,
 		tokenStore:                  tokenStore,
+		streamStateStore:            streamStateStore,
 		circuitBreakers:             make(map[string]*CircuitBreaker), // Circuit breakers for offline channels
 		baseDetectionInterval:       1 * time.Minute,                  // Start checking every 1m
 		maxDetectionInterval:        10 * time.Minute,                 // Max 10 minutes between checks
@@ -169,6 +172,10 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Start periodic cleanup goroutine
 	m.wg.Add(1)
 	go m.periodicConnectionCleanup(ctx)
+
+	// Start periodic stream state refresh
+	m.wg.Add(1)
+	go m.periodicStreamStateRefresh(ctx)
 
 	// Skip initial sync to avoid quota usage on pod restarts
 	// The periodic sync and PostgreSQL LISTEN will handle updates
@@ -601,6 +608,53 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		overlayID = sources[0].OverlayID
 	}
 
+	// FAST PATH: Check Redis for existing stream state from other pods
+	// This allows instant resumption after pod restarts without waiting for detection interval
+	if m.streamStateStore != nil {
+		streamState, stateErr := m.streamStateStore.LoadStreamState(ctx, channelID)
+		if stateErr != nil {
+			m.logger.Warn("Failed to load stream state from Redis",
+				zap.String("channel_id", channelID),
+				zap.Error(stateErr),
+			)
+		} else if streamState != nil && streamState.IsLive {
+			m.logger.Info("Found active stream state in Redis, resuming immediately (no quota wasted!)",
+				zap.String("channel_id", channelID),
+				zap.String("stream_id", streamState.StreamID),
+				zap.String("live_chat_id", streamState.LiveChatID),
+				zap.Duration("state_age", time.Since(streamState.LastUpdated)),
+			)
+
+			// Reconstruct stream object from state
+			stream := &models.YouTubeStream{
+				StreamID:      streamState.StreamID,
+				ChannelID:     streamState.ChannelID,
+				ChannelName:   streamState.ChannelName,
+				LiveChatID:    streamState.LiveChatID,
+				IsLive:        true,
+				OverlayID:     overlayID, // Use current overlay ID from sources
+				NextPageToken: streamState.NextPageToken,
+				CreatedAt:     time.Now(),
+				UpdatedAt:     time.Now(),
+			}
+
+			// Start poller immediately
+			if err := m.startPoller(ctx, stream, apiClient); err != nil {
+				m.logger.Error("Failed to start poller from stream state",
+					zap.String("stream_id", streamState.StreamID),
+					zap.Error(err),
+				)
+				// Fall through to normal detection
+			} else {
+				m.logger.Info("Successfully resumed stream from Redis state",
+					zap.String("channel_id", channelID),
+					zap.String("stream_id", streamState.StreamID),
+				)
+				return nil
+			}
+		}
+	}
+
 	// Try lightweight status check first if we have a cached video ID
 	cachedVideoID, err := m.repository.GetCachedVideoID(ctx, channelID)
 	if err == nil && cachedVideoID != "" {
@@ -868,6 +922,23 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 	m.activeStreams[stream.StreamID] = stream
 	m.pollers[stream.StreamID] = poller
 
+	// Save stream state to Redis for instant resumption by other pods
+	if m.streamStateStore != nil {
+		if err := m.streamStateStore.SaveStreamState(ctx, stream); err != nil {
+			m.logger.Warn("Failed to save stream state to Redis",
+				zap.String("channel_id", stream.ChannelID),
+				zap.String("stream_id", stream.StreamID),
+				zap.Error(err),
+			)
+			// Don't fail - this is just an optimization
+		} else {
+			m.logger.Debug("Saved stream state to Redis for fast resumption",
+				zap.String("channel_id", stream.ChannelID),
+				zap.String("stream_id", stream.StreamID),
+			)
+		}
+	}
+
 	// Update database status to active
 	if err := m.repository.SetSourceActive(ctx, stream.ChannelID, true); err != nil {
 		m.logger.Error("Failed to update source status after starting poller",
@@ -900,6 +971,16 @@ func (m *Manager) cleanupInactivePollers(ctx context.Context, activeChannels map
 			delete(m.pollers, streamID)
 			delete(m.activeStreams, streamID)
 			m.releaseLeadership(streamID)
+
+			// Clear stream state from Redis
+			if m.streamStateStore != nil {
+				if err := m.streamStateStore.ClearStreamState(ctx, stream.ChannelID); err != nil {
+					m.logger.Warn("Failed to clear stream state from Redis",
+						zap.String("channel_id", stream.ChannelID),
+						zap.Error(err),
+					)
+				}
+			}
 
 			// Reset detection backoff to allow quick re-detection when channel goes live again
 			m.resetDetectionBackoff(stream.ChannelID, "inactive_channel")
@@ -1084,6 +1165,64 @@ func (m *Manager) cleanupStaleConnections(ctx context.Context) {
 			zap.Int("checked", len(overlayIDs)),
 		)
 	}
+}
+
+// periodicStreamStateRefresh periodically refreshes stream state TTL in Redis
+// This keeps stream state available for pod restarts
+func (m *Manager) periodicStreamStateRefresh(ctx context.Context) {
+	defer m.wg.Done()
+
+	ticker := time.NewTicker(5 * time.Minute) // Refresh every 5 minutes
+	defer ticker.Stop()
+
+	m.logger.Info("Started periodic stream state refresh",
+		zap.Duration("interval", 5*time.Minute),
+	)
+
+	for {
+		select {
+		case <-ticker.C:
+			m.refreshActiveStreamStates(ctx)
+		case <-m.stopChan:
+			m.logger.Info("Stopping periodic stream state refresh")
+			return
+		case <-ctx.Done():
+			m.logger.Info("Context cancelled, stopping periodic stream state refresh")
+			return
+		}
+	}
+}
+
+// refreshActiveStreamStates updates stream state in Redis for all active streams
+func (m *Manager) refreshActiveStreamStates(ctx context.Context) {
+	if m.streamStateStore == nil {
+		return
+	}
+
+	m.mu.RLock()
+	streams := make([]*models.YouTubeStream, 0, len(m.activeStreams))
+	for _, stream := range m.activeStreams {
+		streams = append(streams, stream)
+	}
+	m.mu.RUnlock()
+
+	if len(streams) == 0 {
+		return
+	}
+
+	for _, stream := range streams {
+		if err := m.streamStateStore.SaveStreamState(ctx, stream); err != nil {
+			m.logger.Warn("Failed to refresh stream state in Redis",
+				zap.String("channel_id", stream.ChannelID),
+				zap.String("stream_id", stream.StreamID),
+				zap.Error(err),
+			)
+		}
+	}
+
+	m.logger.Debug("Refreshed stream states in Redis",
+		zap.Int("count", len(streams)),
+	)
 }
 
 // listenForOverlayConnections subscribes to Redis overlay connection events
