@@ -202,9 +202,15 @@ func (p *Poller) pollLoop(ctx context.Context) {
 			p.ytMetrics.StreamConnectionsActive.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
 		}
 
+		// FIX: Track stream connection duration to detect rapid disconnections
+		streamStartTime := time.Now()
+
 		err := p.poll(pollCtx)
 		cancel()
 		<-monitorDone
+
+		// FIX: Calculate stream connection duration
+		connectionDuration := time.Since(streamStartTime)
 
 		if p.ytMetrics != nil {
 			p.ytMetrics.StreamConnectionsActive.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Dec()
@@ -238,16 +244,36 @@ func (p *Poller) pollLoop(ctx context.Context) {
 				)
 				return
 			}
-	} else {
-		// Success - reset error backoff
-		p.resetBackoff()
-	}
 
-	p.sleepToRespectInterval()
+			// FIX: Apply minimum reconnection delay if stream ended very quickly
+			// This indicates a connection issue rather than normal stream behavior
+			const minConnectionDuration = 10 * time.Second
+			const minReconnectDelay = 2 * time.Second
 
-	if err != nil && p.ytMetrics != nil {
-		p.ytMetrics.StreamReconnects.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
-	}
+			if connectionDuration < minConnectionDuration {
+				p.logger.Warn("Stream connection ended quickly, applying minimum reconnection delay",
+					zap.String("stream_id", p.stream.StreamID),
+					zap.Duration("connection_duration", connectionDuration),
+					zap.Duration("min_reconnect_delay", minReconnectDelay),
+				)
+
+				select {
+				case <-time.After(minReconnectDelay):
+					// Delay completed
+				case <-p.stopChan:
+					return
+				}
+			}
+		} else {
+			// Success - reset error backoff
+			p.resetBackoff()
+		}
+
+		p.sleepToRespectInterval()
+
+		if err != nil && p.ytMetrics != nil {
+			p.ytMetrics.StreamReconnects.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
+		}
 
 		select {
 		case <-p.stopChan:
@@ -370,10 +396,13 @@ func (p *Poller) poll(ctx context.Context) error {
 			return fmt.Errorf("failed to parse messages: %w", err)
 		}
 
+		// Extract polling interval for sleep (must be done before mutex lock)
+		pollingInterval := p.parser.ExtractPollingInterval(response)
+
 		// Update stream state
 		p.mu.Lock()
 		p.stream.NextPageToken = p.parser.ExtractNextPageToken(response)
-		p.stream.PollingInterval = p.parser.ExtractPollingInterval(response)
+		p.stream.PollingInterval = pollingInterval
 		p.stream.LastPolledAt = time.Now()
 		p.stream.UpdatedAt = time.Now()
 		p.mu.Unlock()
@@ -401,6 +430,30 @@ func (p *Poller) poll(ctx context.Context) error {
 					)
 					return fmt.Errorf("failed to handle messages: %w", err)
 				}
+			}
+		}
+
+		// FIX: Respect pollingIntervalMillis between stream responses
+		// YouTube API requires sleeping between responses to avoid connection termination
+		if pollingInterval > 0 {
+			sleepDuration := time.Duration(pollingInterval) * time.Millisecond
+			p.logger.Debug("Sleeping between stream responses",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.Duration("interval", sleepDuration),
+			)
+
+			// Increment metrics counter for interval sleeps
+			if p.ytMetrics != nil {
+				p.ytMetrics.StreamIntervalSleeps.WithLabelValues(p.stream.ChannelID, p.stream.StreamID).Inc()
+			}
+
+			// Sleep with context cancellation support
+			select {
+			case <-time.After(sleepDuration):
+				// Sleep completed normally
+			case <-ctx.Done():
+				// Context cancelled during sleep
+				return ctx.Err()
 			}
 		}
 

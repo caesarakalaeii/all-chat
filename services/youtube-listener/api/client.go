@@ -301,6 +301,8 @@ func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken s
 	const cost = quota.QuotaCostLiveChatMessages
 	start := time.Now()
 	endReason := ""
+	responseCount := 0 // FIX: Track number of responses received
+
 	defer func() {
 		if endReason == "" {
 			if err == nil {
@@ -311,10 +313,13 @@ func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken s
 				endReason = "error"
 			}
 		}
+		// FIX: Enhanced logging with response count and duration
 		c.logger.Info("Chat stream closed",
 			zap.String("live_chat_id", liveChatID),
 			zap.String("reason", endReason),
 			zap.Duration("duration", time.Since(start)),
+			zap.Int("responses_received", responseCount),
+			zap.Bool("used_page_token", pageToken != ""),
 		)
 	}()
 
@@ -433,6 +438,7 @@ func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken s
 		zap.String("transfer_encoding", resp.Header.Get("Transfer-Encoding")),
 		zap.String("content_type", resp.Header.Get("Content-Type")),
 		zap.String("content_length", resp.Header.Get("Content-Length")),
+		zap.Bool("resuming_with_token", pageToken != ""), // FIX: Log whether resuming
 	)
 
 	decoder := json.NewDecoder(resp.Body)
@@ -440,12 +446,21 @@ func (c *Client) StreamChatMessages(ctx context.Context, liveChatID, pageToken s
 		var raw json.RawMessage
 		if err := decoder.Decode(&raw); err != nil {
 			if errors.Is(err, io.EOF) {
+				// FIX: Enhanced EOF logging
+				c.logger.Info("Stream ended with EOF",
+					zap.String("live_chat_id", liveChatID),
+					zap.Int("responses_received", responseCount),
+					zap.Duration("stream_duration", time.Since(start)),
+				)
 				endReason = "eof"
 				return nil
 			}
 			endReason = "decode_error"
 			return err
 		}
+
+		// FIX: Increment response counter
+		responseCount++
 
 		response, err := decodeLiveChatStreamResponse(raw)
 		if err != nil {
