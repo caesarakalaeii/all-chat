@@ -111,6 +111,17 @@ func (m *Manager) GetToken(ctx context.Context, userID, channelID string) (*oaut
 	return token, nil
 }
 
+// CreateTokenSource creates an OAuth2 token source for a user
+func (m *Manager) CreateTokenSource(ctx context.Context, userID, channelID string) (oauth2.TokenSource, error) {
+	// Get encrypted token from database using GetToken method
+	token, err := m.GetToken(ctx, userID, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get token: %w", err)
+	}
+
+	return m.config.TokenSource(ctx, token), nil
+}
+
 // CreateYouTubeService creates an authenticated YouTube API service
 func (m *Manager) CreateYouTubeService(ctx context.Context, userID, channelID string) (*youtube.Service, *http.Client, error) {
 	token, err := m.GetToken(ctx, userID, channelID)
