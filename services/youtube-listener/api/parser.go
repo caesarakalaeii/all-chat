@@ -96,14 +96,21 @@ func (p *Parser) ParseChatMessage(msg *youtube.LiveChatMessage, channelID, strea
 // ParseBatch parses multiple chat messages
 func (p *Parser) ParseBatch(messages []*youtube.LiveChatMessage, channelID, streamID string) ([]*models.RawChatMessage, error) {
 	result := make([]*models.RawChatMessage, 0, len(messages))
+	var skippedCount int
 
 	for _, msg := range messages {
 		rawMsg, err := p.ParseChatMessage(msg, channelID, streamID)
 		if err != nil {
 			// Log error but continue processing other messages
+			skippedCount++
 			continue
 		}
 		result = append(result, rawMsg)
+	}
+
+	// CRITICAL: Return error if ALL messages were skipped (indicates missing required parts like authorDetails)
+	if len(messages) > 0 && len(result) == 0 {
+		return result, fmt.Errorf("all %d messages failed to parse (skipped: %d) - likely missing required 'authorDetails' part in API request", len(messages), skippedCount)
 	}
 
 	return result, nil
