@@ -30,6 +30,15 @@ import (
 )
 
 func main() {
+	// Enable gRPC debug logging if requested
+	if os.Getenv("GRPC_GO_LOG_VERBOSITY_LEVEL") != "" {
+		os.Setenv("GRPC_GO_LOG_SEVERITY_LEVEL", "info")
+	}
+	if os.Getenv("GRPC_TRACE") != "" {
+		// GRPC_TRACE=all enables all gRPC tracing
+		// Useful values: http, api, channel, connectivity
+	}
+
 	// Initialize logger
 	logLevel := getEnvOrDefault("LOG_LEVEL", "info")
 	log := logger.NewLogger("youtube-listener", logLevel)
@@ -37,6 +46,8 @@ func main() {
 
 	log.Info("Starting YouTube Listener",
 		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
+		zap.String("grpc_log_level", os.Getenv("GRPC_GO_LOG_VERBOSITY_LEVEL")),
+		zap.String("grpc_trace", os.Getenv("GRPC_TRACE")),
 	)
 
 	ctx := context.Background()
