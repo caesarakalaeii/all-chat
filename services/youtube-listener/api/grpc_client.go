@@ -232,7 +232,56 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 		zap.String("state", initialConnState.String()),
 	)
 
+	// DEBUG: Track receive loop timing to detect blocking
+	var lastRecvTime time.Time
+	var recvLoopIterations int
+
+	// DEBUG: Periodic context health check
+	contextCheckTicker := time.NewTicker(3 * time.Second)
+	defer contextCheckTicker.Stop()
+
+	// Start a goroutine to periodically check context health
+	contextHealthDone := make(chan struct{})
+	defer close(contextHealthDone)
+	go func() {
+		for {
+			select {
+			case <-contextHealthDone:
+				return
+			case <-contextCheckTicker.C:
+				select {
+				case <-ctx.Done():
+					g.logger.Error("Context is DONE during streaming - this will kill the stream",
+						zap.String("live_chat_id", liveChatID),
+						zap.Int("responses_received", responsesReceived),
+						zap.Duration("stream_duration", time.Since(start)),
+						zap.Error(ctx.Err()),
+					)
+				default:
+					g.logger.Debug("Context health check: OK",
+						zap.String("live_chat_id", liveChatID),
+						zap.Int("responses_received", responsesReceived),
+					)
+				}
+			}
+		}
+	}()
+
 	for {
+		recvLoopIterations++
+
+		// DEBUG: Check if we're stuck in the receive loop (no progress)
+		if !lastRecvTime.IsZero() {
+			timeSinceLastRecv := time.Since(lastRecvTime)
+			if timeSinceLastRecv > 5*time.Second {
+				g.logger.Warn("Long delay between Recv() calls - possible handler blocking",
+					zap.Int("iteration", recvLoopIterations),
+					zap.Duration("time_since_last_recv", timeSinceLastRecv),
+					zap.String("live_chat_id", liveChatID),
+				)
+			}
+		}
+
 		// Periodically check connection state (every 5 responses)
 		if responsesReceived > 0 && responsesReceived%5 == 0 {
 			currentState := g.conn.GetState()
@@ -246,9 +295,24 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 			}
 		}
 
+		// DEBUG: Mark when we start the Recv() call
 		recvStart := time.Now()
+		g.logger.Debug("About to call stream.Recv()",
+			zap.Int("iteration", recvLoopIterations),
+			zap.Int("responses_received", responsesReceived),
+			zap.Duration("time_since_stream_start", time.Since(start)),
+		)
+
 		protoResp, err := stream.Recv()
 		recvDuration := time.Since(recvStart)
+		lastRecvTime = time.Now()
+
+		g.logger.Debug("stream.Recv() returned",
+			zap.Int("iteration", recvLoopIterations),
+			zap.Duration("recv_duration", recvDuration),
+			zap.Bool("is_error", err != nil),
+			zap.Bool("is_eof", err == io.EOF),
+		)
 
 		if err != nil {
 			if err == io.EOF {
@@ -265,6 +329,7 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 					zap.String("live_chat_id", liveChatID),
 					zap.Int("total_responses", responsesReceived),
 					zap.Int("total_messages", totalMessagesReceived),
+					zap.Int("loop_iterations", recvLoopIterations),
 					zap.Duration("stream_duration", time.Since(start)),
 					zap.Duration("time_since_last_response", time.Since(lastResponseTime)),
 					zap.String("last_page_token", lastPageToken),
@@ -275,6 +340,14 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 					zap.String("initial_state", initialConnState.String()),
 				)
 
+				// Log all trailer metadata keys and values for debugging
+				for key, values := range trailer {
+					g.logger.Debug("Trailer metadata detail",
+						zap.String("key", key),
+						zap.Strings("values", values),
+					)
+				}
+
 				// Check if there's an error in the trailer
 				if grpc_status_code := trailer.Get("grpc-status"); len(grpc_status_code) > 0 {
 					g.logger.Warn("gRPC trailer contains status",
@@ -284,6 +357,21 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 				if grpc_message := trailer.Get("grpc-message"); len(grpc_message) > 0 {
 					g.logger.Warn("gRPC trailer contains message",
 						zap.Strings("grpc-message", grpc_message),
+					)
+				}
+
+				// Check for specific error indicators
+				if grpc_status := trailer.Get("grpc-status"); len(grpc_status) > 0 && grpc_status[0] != "0" {
+					g.logger.Error("gRPC stream closed with non-zero status (indicates error)",
+						zap.Strings("grpc-status", grpc_status),
+						zap.Duration("stream_duration", time.Since(start)),
+					)
+				} else {
+					// Status 0 or no status = clean close
+					g.logger.Info("gRPC stream closed cleanly (EOF with status 0)",
+						zap.Duration("stream_duration", time.Since(start)),
+						zap.Int("responses_received", responsesReceived),
+						zap.String("live_chat_id", liveChatID),
 					)
 				}
 
@@ -373,9 +461,30 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 
 		// Invoke handler for this response
 		if handler != nil {
+			handlerStart := time.Now()
+			g.logger.Debug("Invoking handler",
+				zap.Int("response_num", responsesReceived),
+				zap.Int("messages_count", messageCount),
+			)
+
 			if err := handler(ytResponse); err != nil {
 				endReason = "handler_error"
 				return fmt.Errorf("handler error: %w", err)
+			}
+
+			handlerDuration := time.Since(handlerStart)
+			g.logger.Debug("Handler completed",
+				zap.Int("response_num", responsesReceived),
+				zap.Duration("handler_duration", handlerDuration),
+			)
+
+			// CRITICAL: If handler takes >1s, it's blocking the receive loop
+			if handlerDuration > time.Second {
+				g.logger.Warn("Handler is blocking receive loop - this will cause stream disconnects",
+					zap.Int("response_num", responsesReceived),
+					zap.Duration("handler_duration", handlerDuration),
+					zap.String("live_chat_id", liveChatID),
+				)
 			}
 		}
 
@@ -383,6 +492,10 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 		select {
 		case <-ctx.Done():
 			endReason = "context_cancelled"
+			g.logger.Info("Context cancelled during stream",
+				zap.Int("responses_received", responsesReceived),
+				zap.Duration("stream_duration", time.Since(start)),
+			)
 			return ctx.Err()
 		default:
 		}
