@@ -68,39 +68,39 @@ func (n *YouTubeNormalizer) extractUserInfo(raw *models.RawChatMessage) models.U
 func (n *YouTubeNormalizer) extractBadges(tags map[string]string) []models.Badge {
 	badges := make([]models.Badge, 0)
 
-	// Owner (channel owner/broadcaster)
+	// Owner (channel owner/broadcaster) - Crown icon
 	if tags["is_owner"] == "true" {
 		badges = append(badges, models.Badge{
 			Name:    "owner",
 			Version: "1",
-			IconURL: "https://www.youtube.com/s/desktop/d743f786/img/favicon_96x96.png", // YouTube icon as placeholder
+			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23FFD700'%3E%3Cpath d='M8 2l1.5 3h3.5l-2.8 2 1 3.2-3.2-2.2-3.2 2.2 1-3.2-2.8-2h3.5z'/%3E%3Cpath d='M2 13h12v2H2z' fill='%23FFA500'/%3E%3C/svg%3E",
 		})
 	}
 
-	// Sponsor (channel member)
+	// Sponsor (channel member) - Star icon
 	if tags["is_sponsor"] == "true" {
 		badges = append(badges, models.Badge{
 			Name:    "member",
 			Version: "1",
-			IconURL: "https://www.youtube.com/s/desktop/d743f786/img/favicon_96x96.png",
+			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2300FF00'%3E%3Cpath d='M8 1l2 5h5l-4 3.5 1.5 5.5-4.5-3.5-4.5 3.5 1.5-5.5-4-3.5h5z'/%3E%3C/svg%3E",
 		})
 	}
 
-	// Moderator
+	// Moderator - Shield with wrench icon
 	if tags["is_moderator"] == "true" {
 		badges = append(badges, models.Badge{
 			Name:    "moderator",
 			Version: "1",
-			IconURL: "https://www.youtube.com/s/desktop/d743f786/img/favicon_96x96.png",
+			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%235E84F1'%3E%3Cpath d='M8 1L3 3v4c0 3.5 2 6 5 8 3-2 5-4.5 5-8V3z'/%3E%3Cpath d='M6 6h1v4H6zm3 0h1v4H9z' fill='white'/%3E%3C/svg%3E",
 		})
 	}
 
-	// Verified
+	// Verified - Checkmark icon
 	if tags["is_verified"] == "true" {
 		badges = append(badges, models.Badge{
 			Name:    "verified",
 			Version: "1",
-			IconURL: "https://www.youtube.com/s/desktop/d743f786/img/favicon_96x96.png",
+			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2300A6ED'%3E%3Ccircle cx='8' cy='8' r='7'/%3E%3Cpath d='M6 8l2 2 4-4' stroke='white' stroke-width='2' fill='none'/%3E%3C/svg%3E",
 		})
 	}
 
