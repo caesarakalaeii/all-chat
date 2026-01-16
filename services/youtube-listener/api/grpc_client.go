@@ -57,8 +57,12 @@ func NewGRPCStreamClient(ctx context.Context, tokenSource credentials.PerRPCCred
 		),
 		// Allow unlimited keepalive pings without data (equivalent to Python's max_pings_without_data: 0)
 		// This prevents the HTTP/2 layer from blocking pings during quiet chat periods
-		grpc.WithInitialWindowSize(1 << 20),     // 1MB initial window
-		grpc.WithInitialConnWindowSize(1 << 20), // 1MB initial connection window
+		//
+		// CRITICAL: Use 4MB window for high-volume streams (e.g., Ludwig's chat with 75+ msgs/batch)
+		// Prevents flow control stalling when message processing (Redis publish) blocks receive loop
+		// If receive buffer fills (no WINDOW_UPDATE sent), YouTube kills connection after ~10s
+		grpc.WithInitialWindowSize(4 << 20),     // 4MB initial window (high-volume streams)
+		grpc.WithInitialConnWindowSize(4 << 20), // 4MB initial connection window
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC connection: %w", err)
