@@ -142,13 +142,13 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 	}
 
 	// Build the request
-	// EXPERIMENT: Try WITHOUT maxResults parameter
-	// Hypothesis: YouTube may keep stream open longer if we don't limit batch size
-	// If stream still closes at 10s, this disproves maxResults as the cause
+	// CRITICAL: Must request BOTH "snippet" AND "authorDetails"
+	// Parser requires both fields (parser.go:24) - returns error if either is nil
+	// If we only request "snippet", ALL messages are silently rejected → overlay shows nothing!
 	req := &proto.LiveChatMessageListRequest{
 		LiveChatId: &liveChatID,
-		Part:       []string{"snippet"}, // Python demo only requests "snippet"!
-		// MaxResults: nil,  // Omit maxResults - let YouTube decide batch size
+		Part:       []string{"snippet", "authorDetails"}, // BOTH required for parser
+		// MaxResults: nil,  // Omit - let YouTube decide batch size
 	}
 	if pageToken != "" {
 		req.PageToken = &pageToken
