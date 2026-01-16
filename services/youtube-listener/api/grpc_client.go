@@ -38,20 +38,27 @@ func NewGRPCStreamClient(ctx context.Context, tokenSource credentials.PerRPCCred
 
 	// Establish gRPC connection to YouTube API with keepalive settings
 	// These prevent the server from closing the connection due to inactivity
+	// Based on research: YouTube Live Chat has "quiet periods" where no messages arrive.
+	// Google's GFE closes idle connections after ~10 seconds. Solution: aggressive keepalive pings.
+	// Reference: https://github.com/grpc/grpc/blob/master/doc/keepalive.md
 	conn, err := grpc.NewClient(
 		youtubeGRPCEndpoint,
 		grpc.WithTransportCredentials(tlsCreds),
 		grpc.WithPerRPCCredentials(tokenSource),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                20 * time.Second, // Send keepalive ping every 20 seconds
-			Timeout:             10 * time.Second, // Wait 10 seconds for ping ack before considering connection dead
-			PermitWithoutStream: true,             // Allow pings even when no active RPCs
+			Time:                5 * time.Second,  // Send ping every 5s to prevent 10s idle timeout
+			Timeout:             2 * time.Second,  // Wait 2s for ping ack (matching Python recommendation)
+			PermitWithoutStream: true,             // Allow pings even when no active RPCs (critical for idle periods)
 		}),
 		// EXPERIMENT: Try different options to keep stream alive longer
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(10*1024*1024), // 10MB max message size
 			grpc.MaxCallSendMsgSize(10*1024*1024), // 10MB max message size
 		),
+		// Allow unlimited keepalive pings without data (equivalent to Python's max_pings_without_data: 0)
+		// This prevents the HTTP/2 layer from blocking pings during quiet chat periods
+		grpc.WithInitialWindowSize(1 << 20),     // 1MB initial window
+		grpc.WithInitialConnWindowSize(1 << 20), // 1MB initial connection window
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC connection: %w", err)
