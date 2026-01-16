@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -41,6 +42,13 @@ func NewGRPCStreamClient(ctx context.Context, tokenSource credentials.PerRPCCred
 	// Based on research: YouTube Live Chat has "quiet periods" where no messages arrive.
 	// Google's GFE closes idle connections after ~10 seconds. Solution: aggressive keepalive pings.
 	// Reference: https://github.com/grpc/grpc/blob/master/doc/keepalive.md
+	logger.Info("Configuring gRPC connection with debug settings",
+		zap.String("endpoint", youtubeGRPCEndpoint),
+		zap.Duration("keepalive_time", 5*time.Second),
+		zap.Duration("keepalive_timeout", 2*time.Second),
+		zap.Int("initial_window_size", 4<<20),
+	)
+
 	conn, err := grpc.NewClient(
 		youtubeGRPCEndpoint,
 		grpc.WithTransportCredentials(tlsCreds),
@@ -153,8 +161,20 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 	streamCtx := metadata.NewOutgoingContext(ctx, md)
 
 	// Start the gRPC stream
+	g.logger.Info("Starting gRPC StreamList call",
+		zap.String("live_chat_id", liveChatID),
+		zap.Bool("has_page_token", pageToken != ""),
+		zap.Int("page_token_length", len(pageToken)),
+	)
+
 	stream, err := g.stub.StreamList(streamCtx, req)
 	if err != nil {
+		g.logger.Error("Failed to start gRPC stream",
+			zap.String("live_chat_id", liveChatID),
+			zap.Error(err),
+			zap.String("grpc_code", status.Code(err).String()),
+		)
+
 		if g.quotaTracker != nil && reservationID != "" {
 			// Check if we should charge quota for this error
 			if shouldChargeQuota(err) {
@@ -169,6 +189,17 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 		}
 		endReason = "stream_start_error"
 		return fmt.Errorf("failed to start gRPC stream: %w", err)
+	}
+
+	// Get stream metadata/headers for debugging
+	streamHeader, err := stream.Header()
+	if err != nil {
+		g.logger.Warn("Could not get stream header", zap.Error(err))
+	} else {
+		g.logger.Info("gRPC stream established successfully",
+			zap.String("live_chat_id", liveChatID),
+			zap.Any("stream_headers", streamHeader),
+		)
 	}
 
 	// STEP 2: CONFIRM quota - we successfully started the stream
@@ -189,26 +220,99 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 	)
 
 	// STEP 3: Receive streaming responses
+	var lastResponseTime time.Time
+	var lastPageToken string
+	var consecutiveEmptyResponses int
+	var totalMessagesReceived int
+
+	// Track connection state periodically
+	lastConnStateCheck := time.Now()
+	initialConnState := g.conn.GetState()
+	g.logger.Info("Initial connection state at stream start",
+		zap.String("state", initialConnState.String()),
+	)
+
 	for {
+		// Periodically check connection state (every 5 responses)
+		if responsesReceived > 0 && responsesReceived%5 == 0 {
+			currentState := g.conn.GetState()
+			if time.Since(lastConnStateCheck) > 3*time.Second {
+				g.logger.Debug("Connection state check",
+					zap.Int("response_num", responsesReceived),
+					zap.String("state", currentState.String()),
+					zap.Duration("time_in_state", time.Since(lastConnStateCheck)),
+				)
+				lastConnStateCheck = time.Now()
+			}
+		}
+
+		recvStart := time.Now()
 		protoResp, err := stream.Recv()
+		recvDuration := time.Since(recvStart)
+
 		if err != nil {
 			if err == io.EOF {
 				endReason = "eof"
-				g.logger.Info("gRPC stream ended normally",
+
+				// Get trailer metadata which may contain server-side close reason
+				trailer := stream.Trailer()
+
+				// Check underlying connection state
+				connState := g.conn.GetState()
+
+				// CRITICAL DEBUGGING: Log detailed EOF context
+				g.logger.Warn("gRPC stream EOF received - investigating cause",
 					zap.String("live_chat_id", liveChatID),
 					zap.Int("total_responses", responsesReceived),
+					zap.Int("total_messages", totalMessagesReceived),
 					zap.Duration("stream_duration", time.Since(start)),
+					zap.Duration("time_since_last_response", time.Since(lastResponseTime)),
+					zap.String("last_page_token", lastPageToken),
+					zap.Int("consecutive_empty_responses", consecutiveEmptyResponses),
+					zap.Duration("recv_duration", recvDuration),
+					zap.Any("trailer_metadata", trailer),
+					zap.String("connection_state", connState.String()),
+					zap.String("initial_state", initialConnState.String()),
 				)
+
+				// Check if there's an error in the trailer
+				if grpc_status_code := trailer.Get("grpc-status"); len(grpc_status_code) > 0 {
+					g.logger.Warn("gRPC trailer contains status",
+						zap.Strings("grpc-status", grpc_status_code),
+					)
+				}
+				if grpc_message := trailer.Get("grpc-message"); len(grpc_message) > 0 {
+					g.logger.Warn("gRPC trailer contains message",
+						zap.Strings("grpc-message", grpc_message),
+					)
+				}
+
 				return nil
 			}
 			endReason = "recv_error"
-			g.logger.Error("gRPC stream error",
-				zap.String("live_chat_id", liveChatID),
-				zap.Int("responses_before_error", responsesReceived),
-				zap.Error(err),
-			)
+
+			// Log full error details including gRPC status
+			st, ok := status.FromError(err)
+			if ok {
+				g.logger.Error("gRPC stream error with status",
+					zap.String("live_chat_id", liveChatID),
+					zap.Int("responses_before_error", responsesReceived),
+					zap.String("grpc_code", st.Code().String()),
+					zap.String("grpc_message", st.Message()),
+					zap.Any("grpc_details", st.Details()),
+					zap.Error(err),
+				)
+			} else {
+				g.logger.Error("gRPC stream error",
+					zap.String("live_chat_id", liveChatID),
+					zap.Int("responses_before_error", responsesReceived),
+					zap.Error(err),
+				)
+			}
 			return fmt.Errorf("gRPC stream error: %w", err)
 		}
+
+		lastResponseTime = time.Now()
 
 		responsesReceived++
 
@@ -219,14 +323,41 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 			return fmt.Errorf("failed to convert proto response: %w", err)
 		}
 
+		// Track empty responses (might signal stream end)
+		messageCount := len(ytResponse.Items)
+		totalMessagesReceived += messageCount
+
+		if messageCount == 0 {
+			consecutiveEmptyResponses++
+		} else {
+			consecutiveEmptyResponses = 0
+		}
+
+		// Track token changes
+		tokenChanged := ytResponse.NextPageToken != lastPageToken
+		lastPageToken = ytResponse.NextPageToken
+
+		// Calculate response timing
+		timeSinceLastResp := time.Duration(0)
+		if !lastResponseTime.IsZero() {
+			timeSinceLastResp = time.Since(lastResponseTime)
+		}
+
 		// DEBUG: Log each response details to understand stream closure pattern
 		g.logger.Debug("Received gRPC response",
 			zap.String("live_chat_id", liveChatID),
 			zap.Int("response_num", responsesReceived),
-			zap.Int("messages_count", len(ytResponse.Items)),
+			zap.Int("messages_count", messageCount),
+			zap.Int("total_messages", totalMessagesReceived),
 			zap.String("next_page_token", ytResponse.NextPageToken),
 			zap.Bool("has_next_token", ytResponse.NextPageToken != ""),
+			zap.Bool("token_changed", tokenChanged),
+			zap.Int("consecutive_empty", consecutiveEmptyResponses),
 			zap.String("offline_at", ytResponse.OfflineAt),
+			zap.Int64("polling_interval_ms", ytResponse.PollingIntervalMillis),
+			zap.Duration("time_since_start", time.Since(start)),
+			zap.Duration("time_since_last_response", timeSinceLastResp),
+			zap.Duration("recv_call_duration", recvDuration),
 		)
 
 		// Check if stream went offline
