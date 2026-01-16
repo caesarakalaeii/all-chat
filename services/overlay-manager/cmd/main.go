@@ -121,7 +121,7 @@ func main() {
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo)
-	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo)
+	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log)
 	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)

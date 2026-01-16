@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 )
 
 // SourceRepository defines the interface for source persistence
@@ -21,14 +24,88 @@ type SourceRepository interface {
 type SourcesHandler struct {
 	sourceRepo  SourceRepository
 	overlayRepo OverlayRepository
+	db          *pgxpool.Pool
+	logger      *zap.Logger
 }
 
 // NewSourcesHandler creates a new sources handler
-func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository) *SourcesHandler {
+func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger) *SourcesHandler {
 	return &SourcesHandler{
 		sourceRepo:  sourceRepo,
 		overlayRepo: overlayRepo,
+		db:          db,
+		logger:      logger,
 	}
+}
+
+// copyYouTubeTokenForChannel copies the admin's YouTube OAuth token to a new channel
+// This allows admins to add YouTube channels manually (by link) without OAuth flow
+func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
+	// Step 1: Find any existing YouTube token for this admin
+	// We'll copy the first token found (admins typically have one YouTube account)
+	var existingToken struct {
+		AccessToken        string
+		RefreshToken       string
+		TokenType          string
+		Expiry             string
+		EncryptionVersion  int
+	}
+
+	query := `
+		SELECT access_token, refresh_token, token_type, expiry, encryption_version
+		FROM youtube_oauth_tokens
+		WHERE user_id = $1
+		LIMIT 1
+	`
+
+	err := h.db.QueryRow(ctx, query, adminUserID).Scan(
+		&existingToken.AccessToken,
+		&existingToken.RefreshToken,
+		&existingToken.TokenType,
+		&existingToken.Expiry,
+		&existingToken.EncryptionVersion,
+	)
+
+	if err != nil {
+		return fmt.Errorf("admin has no YouTube OAuth token: %w", err)
+	}
+
+	// Step 2: Copy token to new channel_id (insert or update)
+	insertQuery := `
+		INSERT INTO youtube_oauth_tokens (
+			user_id, channel_id, access_token, refresh_token,
+			token_type, expiry, encryption_version, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6::timestamp, $7, NOW(), NOW())
+		ON CONFLICT (user_id, channel_id)
+		DO UPDATE SET
+			access_token = EXCLUDED.access_token,
+			refresh_token = EXCLUDED.refresh_token,
+			token_type = EXCLUDED.token_type,
+			expiry = EXCLUDED.expiry,
+			encryption_version = EXCLUDED.encryption_version,
+			updated_at = NOW()
+	`
+
+	_, err = h.db.Exec(ctx, insertQuery,
+		adminUserID,
+		newChannelID,
+		existingToken.AccessToken,
+		existingToken.RefreshToken,
+		existingToken.TokenType,
+		existingToken.Expiry,
+		existingToken.EncryptionVersion,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to copy YouTube token: %w", err)
+	}
+
+	h.logger.Info("Copied YouTube OAuth token for new channel",
+		zap.String("admin_user_id", adminUserID),
+		zap.String("new_channel_id", newChannelID),
+	)
+
+	return nil
 }
 
 // HandleListSources handles GET /:id/sources
@@ -128,6 +205,26 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	if err := h.sourceRepo.Create(c.Request.Context(), source); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create source"})
 		return
+	}
+
+	// CRITICAL: For YouTube sources added manually, copy admin's OAuth token
+	// This allows admins to add YouTube channels by link without OAuth flow
+	// The admin's token will be used to poll the new channel
+	if req.Platform == "youtube" && h.db != nil {
+		if err := h.copyYouTubeTokenForChannel(c.Request.Context(), userID.(string), channelID); err != nil {
+			// Log error but don't fail the request - source was created successfully
+			// Admin will need to authenticate via OAuth if token copy fails
+			h.logger.Warn("Failed to copy YouTube token for new channel",
+				zap.String("user_id", userID.(string)),
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+		} else {
+			h.logger.Info("Successfully copied YouTube token for manual channel addition",
+				zap.String("user_id", userID.(string)),
+				zap.String("channel_id", channelID),
+			)
+		}
 	}
 
 	c.JSON(http.StatusCreated, source)
