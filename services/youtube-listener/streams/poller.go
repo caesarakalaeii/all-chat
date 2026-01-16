@@ -215,6 +215,18 @@ func (p *Poller) pollLoop(ctx context.Context) {
 		// By keeping the token, we resume where we left off (like a real client).
 		// The token is already being updated in poll() handler (line 410).
 
+		// CRITICAL DEBUG: Verify token is preserved after stream closes
+		p.mu.RLock()
+		tokenAfterPoll := p.stream.NextPageToken
+		p.mu.RUnlock()
+
+		p.logger.Debug("After poll completed, token state",
+			zap.String("stream_id", p.stream.StreamID),
+			zap.Bool("has_token", tokenAfterPoll != ""),
+			zap.Int("token_length", len(tokenAfterPoll)),
+			zap.String("token_prefix", truncateString(tokenAfterPoll, 20)),
+		)
+
 		// FIX: Calculate stream connection duration
 		connectionDuration := time.Since(streamStartTime)
 
@@ -365,6 +377,14 @@ func (p *Poller) poll(ctx context.Context) error {
 	pageToken := p.stream.NextPageToken  // Use token to RESUME stream
 	p.mu.RUnlock()
 
+	// CRITICAL DEBUG: Log the actual token value we're using
+	p.logger.Debug("Starting poll with token",
+		zap.String("stream_id", p.stream.StreamID),
+		zap.Bool("has_token", pageToken != ""),
+		zap.Int("token_length", len(pageToken)),
+		zap.String("token_prefix", truncateString(pageToken, 20)),
+	)
+
 	// CRITICAL UNDERSTANDING: pageToken is for RESUMING across reconnections
 	//
 	// How YouTube StreamList Works:
@@ -405,9 +425,20 @@ func (p *Poller) poll(ctx context.Context) error {
 		// Extract polling interval for sleep (must be done before mutex lock)
 		pollingInterval := p.parser.ExtractPollingInterval(response)
 
+		// Extract token from response
+		newToken := p.parser.ExtractNextPageToken(response)
+
+		// CRITICAL DEBUG: Log token extraction
+		p.logger.Debug("Updating stream token from response",
+			zap.String("stream_id", p.stream.StreamID),
+			zap.String("response_token", truncateString(newToken, 20)),
+			zap.Int("token_length", len(newToken)),
+			zap.Bool("token_changed", newToken != p.stream.NextPageToken),
+		)
+
 		// Update stream state
 		p.mu.Lock()
-		p.stream.NextPageToken = p.parser.ExtractNextPageToken(response)
+		p.stream.NextPageToken = newToken
 		p.stream.PollingInterval = pollingInterval
 		p.stream.LastPolledAt = time.Now()
 		p.stream.UpdatedAt = time.Now()
@@ -565,4 +596,12 @@ func (p *Poller) GetStream() *models.YouTubeStream {
 	// Return a copy
 	streamCopy := *p.stream
 	return &streamCopy
+}
+
+// truncateString returns first n characters of string (for logging)
+func truncateString(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
