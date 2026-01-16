@@ -408,12 +408,29 @@ func (p *Poller) poll(ctx context.Context) error {
 		VideoID:   p.stream.StreamID,
 		OverlayID: p.overlayID,
 	}, func(response *youtube.LiveChatMessageListResponse) error {
+		handlerEntryTime := time.Now()
+
+		p.logger.Debug("Handler invoked with response",
+			zap.String("stream_id", p.stream.StreamID),
+			zap.Int("items_count", len(response.Items)),
+			zap.Bool("has_offline_at", response.OfflineAt != ""),
+		)
+
 		if response.OfflineAt != "" {
 			return fmt.Errorf("liveChatEnded")
 		}
 
 		// Parse messages
+		parseStart := time.Now()
 		messages, err := p.parser.ParseBatch(response.Items, p.stream.ChannelID, p.stream.StreamID)
+		parseDuration := time.Since(parseStart)
+
+		p.logger.Debug("Message parsing completed",
+			zap.String("stream_id", p.stream.StreamID),
+			zap.Duration("parse_duration", parseDuration),
+			zap.Int("parsed_count", len(messages)),
+		)
+
 		if err != nil {
 			p.logger.Error("Failed to parse messages",
 				zap.String("stream_id", p.stream.StreamID),
@@ -423,10 +440,12 @@ func (p *Poller) poll(ctx context.Context) error {
 		}
 
 		// Extract polling interval for sleep (must be done before mutex lock)
+		extractStart := time.Now()
 		pollingInterval := p.parser.ExtractPollingInterval(response)
 
 		// Extract token from response
 		newToken := p.parser.ExtractNextPageToken(response)
+		extractDuration := time.Since(extractStart)
 
 		// CRITICAL DEBUG: Log token extraction
 		p.logger.Debug("Updating stream token from response",
@@ -434,15 +453,18 @@ func (p *Poller) poll(ctx context.Context) error {
 			zap.String("response_token", truncateString(newToken, 20)),
 			zap.Int("token_length", len(newToken)),
 			zap.Bool("token_changed", newToken != p.stream.NextPageToken),
+			zap.Duration("extract_duration", extractDuration),
 		)
 
 		// Update stream state
+		mutexStart := time.Now()
 		p.mu.Lock()
 		p.stream.NextPageToken = newToken
 		p.stream.PollingInterval = pollingInterval
 		p.stream.LastPolledAt = time.Now()
 		p.stream.UpdatedAt = time.Now()
 		p.mu.Unlock()
+		mutexDuration := time.Since(mutexStart)
 
 		// FIX: Removed pageToken persistence to Redis.
 		// We no longer cache pageTokens across connections since this was causing
@@ -467,6 +489,7 @@ func (p *Poller) poll(ctx context.Context) error {
 				messagesCopy := make([]*models.RawChatMessage, len(messages))
 				copy(messagesCopy, messages)
 				go func() {
+					publishStart := time.Now()
 					if err := p.messageHandler.HandleMessages(context.Background(), messagesCopy); err != nil {
 						p.logger.Error("Failed to handle messages",
 							zap.String("stream_id", p.stream.StreamID),
@@ -474,8 +497,34 @@ func (p *Poller) poll(ctx context.Context) error {
 						)
 						// Don't return error - we don't want to kill the stream if publishing fails
 					}
+					publishDuration := time.Since(publishStart)
+					p.logger.Debug("Message publishing completed (async)",
+						zap.String("stream_id", p.stream.StreamID),
+						zap.Duration("publish_duration", publishDuration),
+						zap.Int("messages_count", len(messagesCopy)),
+					)
 				}()
 			}
+		}
+
+		// Calculate total handler time (synchronous portion only)
+		totalHandlerTime := time.Since(handlerEntryTime)
+		p.logger.Debug("Handler returning (sync work completed)",
+			zap.String("stream_id", p.stream.StreamID),
+			zap.Duration("total_handler_time", totalHandlerTime),
+			zap.Duration("parse_time", parseDuration),
+			zap.Duration("extract_time", extractDuration),
+			zap.Duration("mutex_time", mutexDuration),
+			zap.Int("messages_count", len(messages)),
+		)
+
+		// CRITICAL WARNING: If total handler time >500ms, we're at risk of blocking
+		if totalHandlerTime > 500*time.Millisecond {
+			p.logger.Warn("Handler sync work is SLOW - may block gRPC receive loop",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.Duration("total_handler_time", totalHandlerTime),
+				zap.Int("items_processed", len(response.Items)),
+			)
 		}
 
 		// NOTE: For gRPC streaming, DO NOT sleep between responses!
