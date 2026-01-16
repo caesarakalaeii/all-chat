@@ -209,11 +209,11 @@ func (p *Poller) pollLoop(ctx context.Context) {
 		cancel()
 		<-monitorDone
 
-		// FIX: Clear NextPageToken after stream closes to ensure we always start fresh
-		// The pageToken should only be used WITHIN a streaming session, not across reconnections
-		p.mu.Lock()
-		p.stream.NextPageToken = ""
-		p.mu.Unlock()
+		// CRITICAL: DO NOT CLEAR NextPageToken! We need it to RESUME the stream.
+		// The 10-second disconnect happens because we re-fetch the same 83 messages
+		// every time. YouTube sees this as scraper behavior and disconnects.
+		// By keeping the token, we resume where we left off (like a real client).
+		// The token is already being updated in poll() handler (line 410).
 
 		// FIX: Calculate stream connection duration
 		connectionDuration := time.Since(streamStartTime)
@@ -362,21 +362,21 @@ func (p *Poller) resetBackoff() {
 func (p *Poller) poll(ctx context.Context) error {
 	p.mu.RLock()
 	liveChatID := p.stream.LiveChatID
-	pageToken := p.stream.NextPageToken
+	pageToken := p.stream.NextPageToken  // Use token to RESUME stream
 	p.mu.RUnlock()
 
-	// FIX: Do NOT load cached pageToken on every connection!
-	// The pageToken should only be used WITHIN a streaming session to track progress.
-	// Loading a cached token causes YouTube to send "catch-up" messages and close
-	// the stream after ~10 seconds, resulting in excessive quota consumption.
+	// CRITICAL UNDERSTANDING: pageToken is for RESUMING across reconnections
 	//
-	// IMPORTANT: pageToken is automatically updated from each response (line 404)
-	// and persisted to Redis (line 410). On pod restart, streams are detected
-	// fresh without cached tokens, which is the correct behavior.
+	// How YouTube StreamList Works:
+	// 1. First connection (no token): YouTube sends ~80 messages (history buffer)
+	// 2. After 10s: YouTube closes stream with EOF (signals "caught up, reconnect")
+	// 3. Reconnect WITH token: YouTube resumes from last position (only NEW messages)
+	// 4. Without token: YouTube re-sends same 80 messages → sees as scraper → 10s timeout
 	//
-	// Removed: Loading cached pageToken from TokenStore
-	// This was causing the 10-second disconnect issue described in
-	// YOUTUBE_GRPC_STREAMING_CHECKPOINT.md
+	// The 10-second disconnect was caused by CLEARING the token (see line 212 comment)
+	// which caused us to re-fetch the same history every 10 seconds.
+	//
+	// Token is updated on line 410 from each response's nextPageToken field.
 
 	p.mu.Lock()
 	p.lastStreamRequest = time.Now()
