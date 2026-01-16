@@ -426,13 +426,24 @@ func (p *Poller) poll(ctx context.Context) error {
 			)
 
 			if p.messageHandler != nil {
-				if err := p.messageHandler.HandleMessages(ctx, messages); err != nil {
-					p.logger.Error("Failed to handle messages",
-						zap.String("stream_id", p.stream.StreamID),
-						zap.Error(err),
-					)
-					return fmt.Errorf("failed to handle messages: %w", err)
-				}
+				// CRITICAL: Process messages asynchronously to prevent blocking gRPC receive loop
+				// If HandleMessages() blocks (Redis publish ~50-130ms for 75 messages), the gRPC
+				// loop can't send WINDOW_UPDATE frames to YouTube. After ~10 seconds of stalling,
+				// YouTube's flow control watchdog kills the connection.
+				//
+				// By spawning a goroutine, the gRPC loop continues immediately, keeps sending
+				// WINDOW_UPDATE frames, and maintains the connection for hours.
+				messagesCopy := make([]*models.RawChatMessage, len(messages))
+				copy(messagesCopy, messages)
+				go func() {
+					if err := p.messageHandler.HandleMessages(context.Background(), messagesCopy); err != nil {
+						p.logger.Error("Failed to handle messages",
+							zap.String("stream_id", p.stream.StreamID),
+							zap.Error(err),
+						)
+						// Don't return error - we don't want to kill the stream if publishing fails
+					}
+				}()
 			}
 		}
 
