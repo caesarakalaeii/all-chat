@@ -6,17 +6,29 @@
 
 ---
 
-## Root Cause Identified
+## Root Causes Identified
 
-Based on external research and our observations, the 10-second disconnects are caused by:
+Based on external research and code analysis, the 10-second disconnects have **TWO root causes**:
 
-### Google Frontend (GFE) Idle Timeout
+### 1. Google Frontend (GFE) Idle Timeout (Low-Activity Streams)
 
 **The Problem:**
 - YouTube Live Chat has "quiet periods" where no messages arrive
 - During these quiet periods, no data flows on the gRPC stream
 - Google's GFE (frontend) closes idle connections after ~10 seconds
 - Our keepalive was set to 20 seconds → ping never fired before timeout
+
+### 2. Flow Control Stalling (High-Activity Streams)
+
+**The Problem:**
+- High-activity streams (e.g., Ludwig: 75 msgs/batch) overwhelm the receive buffer
+- `HandleMessages()` was called **synchronously** inside the gRPC receive loop
+- Message processing blocks for ~50-130ms per batch:
+  - JSON marshaling: ~20-50ms
+  - Redis pipeline publish: ~30-80ms
+- While blocked, gRPC can't send `WINDOW_UPDATE` frames to YouTube
+- YouTube's send buffer fills up, waits for acknowledgment
+- After ~10 seconds of stalling, YouTube's watchdog kills the connection
 
 **Evidence from Ludwig's Stream:**
 ```json
@@ -28,28 +40,55 @@ Response 7 had **0 messages** and a **duplicate token** - this was a "quiet peri
 
 ---
 
-## The Fix: Aggressive Keepalive Pings
+## The Fix: Two-Pronged Approach
 
-### Configuration Changes
+### Fix 1: Aggressive Keepalive Pings (Idle Timeout)
 
-Based on research from production implementations, we need:
+Based on research from production implementations:
 
 | Setting | Old Value | New Value | Purpose |
 |---------|-----------|-----------|---------|
 | `Time` | 20s | 5s | Send ping every 5s (before 10s timeout) |
 | `Timeout` | 10s | 2s | Faster ping ack detection |
 | `PermitWithoutStream` | ✅ true | ✅ true | Allow pings during idle periods |
-| HTTP/2 Window | ❌ default | ✅ 1MB | Allow unlimited pings without data |
+
+### Fix 2: Async Message Processing + Larger Flow Control Window (Stalling)
+
+| Setting | Old Value | New Value | Purpose |
+|---------|-----------|-----------|---------|
+| HTTP/2 Window | ❌ 1MB | ✅ 4MB | Handle high-volume bursts (75+ msgs/batch) |
+| Message Processing | ❌ Synchronous | ✅ Async (goroutine) | Keep gRPC loop responsive |
+| Message Copy | ❌ Direct pass | ✅ Deep copy | Prevent race conditions |
 
 ### Go Code:
+
+**gRPC Client (grpc_client.go):**
 ```go
+// Fix 1: Aggressive keepalive
 grpc.WithKeepaliveParams(keepalive.ClientParameters{
     Time:                5 * time.Second,  // Send ping every 5s to prevent 10s idle timeout
     Timeout:             2 * time.Second,  // Wait 2s for ping ack
     PermitWithoutStream: true,             // Allow pings even when no active RPCs
 }),
-grpc.WithInitialWindowSize(1 << 20),       // 1MB initial window (allow unlimited pings)
-grpc.WithInitialConnWindowSize(1 << 20),   // 1MB initial connection window
+
+// Fix 2: Large flow control window for high-volume streams
+grpc.WithInitialWindowSize(4 << 20),       // 4MB initial window (was 1MB)
+grpc.WithInitialConnWindowSize(4 << 20),   // 4MB initial connection window
+```
+
+**Message Handler (poller.go):**
+```go
+// Fix 2: Async message processing
+if p.messageHandler != nil {
+    messagesCopy := make([]*models.RawChatMessage, len(messages))
+    copy(messagesCopy, messages)
+    go func() {
+        if err := p.messageHandler.HandleMessages(context.Background(), messagesCopy); err != nil {
+            p.logger.Error("Failed to handle messages", zap.Error(err))
+            // Don't kill stream on publish failure
+        }
+    }()
+}
 ```
 
 ### Python Equivalent (from research):
