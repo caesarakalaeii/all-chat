@@ -47,12 +47,13 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 		AccessToken        string
 		RefreshToken       string
 		TokenType          string
-		Expiry             string
+		Expiry             string // Store as string to avoid timestamp parsing issues
 		EncryptionVersion  int
 	}
 
 	query := `
-		SELECT access_token, refresh_token, token_type, expiry, encryption_version
+		SELECT access_token, refresh_token, token_type,
+		       expiry::text, encryption_version
 		FROM youtube_oauth_tokens
 		WHERE user_id = $1
 		LIMIT 1
