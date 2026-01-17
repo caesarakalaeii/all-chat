@@ -30,9 +30,9 @@ const YouTubeIcon = () => (
 );
 
 const KickIcon = () => (
-  <svg viewBox="0 0 24 24" className="w-5 h-5">
-    {/* Kick official green: #00E701 - Per Kick brand guidelines */}
-    <path fill="#00E701" d="M6 3v18h4v-7l1.5 1.5L15 19l4.5-4.5L15 10l-3.5 3.5L10 12V3H6zm8 8.5l4.5 4.5-2.5 2.5-4.5-4.5L14 11.5z"/>
+  <svg viewBox="0 0 24 24" className="w-5 h-5" style={{ imageRendering: 'pixelated' }}>
+    {/* Kick - Simple green K */}
+    <text x="12" y="18" fontSize="20" fontWeight="bold" fill="#00E701" textAnchor="middle" fontFamily="monospace">K</text>
   </svg>
 );
 

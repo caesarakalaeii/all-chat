@@ -219,8 +219,8 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
         );
       case 'kick':
         return (
-          <svg viewBox="0 0 24 24" className={iconClass}>
-            <path fill="#00E701" d="M6 3v18h4v-7l1.5 1.5L15 19l4.5-4.5L15 10l-3.5 3.5L10 12V3H6zm8 8.5l4.5 4.5-2.5 2.5-4.5-4.5L14 11.5z"/>
+          <svg viewBox="0 0 24 24" className={iconClass} style={{ imageRendering: 'pixelated' }}>
+            <text x="12" y="18" fontSize="20" fontWeight="bold" fill="#00E701" textAnchor="middle" fontFamily="monospace">K</text>
           </svg>
         );
       case 'tiktok':
