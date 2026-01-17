@@ -87,10 +87,29 @@ body {
   min-width: 0 !important;
 }
 
-/* Header container - inline with username and badges */
+/* Header container - inline-flex to keep badges and platform icon horizontal */
 .flex.items-center.gap-2 {
-  display: inline !important;
+  display: inline-flex !important;
+  align-items: center !important;
   gap: 4px !important;
+  flex-wrap: nowrap !important;
+}
+
+/* Platform badge (icon) - inline with proper sizing */
+.platform-badge.platform-badge-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-right: 4px !important;
+  vertical-align: middle !important;
+}
+
+/* Badge container - inline flex to keep badges horizontal */
+.flex.gap-1 {
+  display: inline-flex !important;
+  gap: 4px !important;
+  margin-right: 4px !important;
+  vertical-align: middle !important;
+  align-items: center !important;
 }
 
 /* ============================================================
@@ -166,14 +185,8 @@ body {
    BADGES - CLEAN & SIMPLE
    ============================================================ */
 
-/* Badge container - minimal spacing, inline with username */
-.flex.gap-1 {
-  gap: 4px !important;
-  display: inline !important;
-  margin-bottom: 0 !important;
-  margin-right: 4px !important;
-  vertical-align: middle !important;
-}
+/* Note: Badge container styles are defined above in the header section
+   to ensure proper inline-flex layout with platform icons */
 
 /* Individual badges - clean display */
 .flex.gap-1 img {
