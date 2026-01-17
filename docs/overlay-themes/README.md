@@ -6,13 +6,9 @@ Custom CSS themes for your All-Chat overlays in OBS. These themes allow you to c
 
 ## 📚 Looking for the Complete CSS Reference?
 
-**For developers and advanced customization**, see the **[CSS Customization Guide](../CSS_CUSTOMIZATION.md)** which includes:
-- Complete DOM structure reference
-- All CSS classes and selectors
-- Platform-specific styling
-- Advanced techniques (web fonts, animations, pseudo-elements)
-- Troubleshooting guide
-- Example themes with detailed explanations
+**For developers and advanced customization**, see these guides:
+- **[CSS Customization Guide](../CSS_CUSTOMIZATION.md)** - Complete DOM structure, CSS classes, and advanced techniques
+- **[Platform Badge Customization](../PLATFORM_BADGE_CUSTOMIZATION.md)** - Platform badge position and style options
 
 **This page** focuses on quick theme application and basic customization.
 
@@ -102,13 +98,16 @@ Based on the current overlay implementation (`frontend/src/app/overlay/[id]/page
 - `.rounded-full` - Circular shape
 
 #### Username & Platform
-- `.text-xs.font-semibold.uppercase` - Platform label (TWITCH, YOUTUBE)
+- `.platform-badge` - Platform badge wrapper (both text and icon variants)
+- `.platform-badge-text` - Platform text label (TWITCH, YOUTUBE, etc.)
+- `.platform-badge-icon` - Platform icon (SVG logo)
 - `.font-semibold.text-sm` - Username
 - Color classes:
   - `.text-purple-400` - Twitch
   - `.text-red-400` - YouTube
   - `.text-green-400` - Kick
   - `.text-gray-400` - Other
+- **Note**: Platform badge position and style can be configured via Display Settings (before/after username, text/icon)
 
 #### Badges
 - `.flex.gap-1` - Badge container
@@ -145,9 +144,17 @@ body {
   /* Your avatar styles */
 }
 
-/* Platform badge */
-.text-xs.font-semibold.uppercase {
-  /* Your platform badge styles */
+/* Platform badge (text or icon) */
+.platform-badge {
+  /* Styles for both text and icon variants */
+}
+
+.platform-badge-text {
+  /* Text badge styles (TWITCH, YOUTUBE) */
+}
+
+.platform-badge-icon svg {
+  /* Icon badge styles (platform logos) */
 }
 
 /* Username */
