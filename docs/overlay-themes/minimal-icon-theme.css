@@ -1,0 +1,122 @@
+/**
+ * Theme Name: Minimal Icon Badge Theme
+ * Description: Clean minimal theme showcasing icon-based platform badges
+ * Tags: minimal, clean, modern, icons
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-01-17
+ *
+ * REQUIRED DISPLAY SETTINGS:
+ * Go to: All-Chat Dashboard → Overlay → Preview → Platform Badge
+ * - Platform Badge Position: "Before username" ✓
+ * - Platform Badge Style: "Icon (logo)" ✓
+ *
+ * This theme demonstrates the new [ICON] [BADGES] USERNAME layout
+ */
+
+/* ============================================
+   MESSAGE CONTAINER
+   ============================================ */
+
+.space-y-3 > div {
+  background: rgba(0, 0, 0, 0.85) !important;
+  border-left: 3px solid #9146FF !important;
+  border-radius: 8px !important;
+  padding: 12px 16px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ============================================
+   PLATFORM BADGE ICONS
+   ============================================ */
+
+/* Icon container - add subtle background */
+.platform-badge-icon {
+  background: rgba(255, 255, 255, 0.1) !important;
+  padding: 4px !important;
+  border-radius: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Make icons slightly larger and add glow */
+.platform-badge-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3)) !important;
+}
+
+/* ============================================
+   USERNAME
+   ============================================ */
+
+.font-semibold.text-sm {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* ============================================
+   USER BADGES
+   ============================================ */
+
+.flex.gap-1 img {
+  width: 18px !important;
+  height: 18px !important;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5)) !important;
+}
+
+/* ============================================
+   MESSAGE TEXT
+   ============================================ */
+
+.text-white.break-words {
+  color: #f0f0f0 !important;
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+  margin-top: 4px !important;
+}
+
+/* ============================================
+   EMOTES
+   ============================================ */
+
+.text-white.break-words img {
+  height: 1.6em !important;
+  margin: 0 2px !important;
+}
+
+/* ============================================
+   TIMESTAMP
+   ============================================ */
+
+.text-xs.text-gray-500 {
+  color: #888 !important;
+  font-size: 11px !important;
+}
+
+/* ============================================
+   OPTIONAL: CUSTOMIZATIONS
+   ============================================ */
+
+/* Uncomment to hide timestamps */
+/*
+.text-xs.text-gray-500 {
+  display: none !important;
+}
+*/
+
+/* Uncomment to hide avatars */
+/*
+.flex-shrink-0 {
+  display: none !important;
+}
+*/
+
+/* Uncomment to make icons even larger */
+/*
+.platform-badge-icon svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+*/
