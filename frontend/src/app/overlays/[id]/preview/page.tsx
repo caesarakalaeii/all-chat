@@ -219,6 +219,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [showThemeMarketplace, setShowThemeMarketplace] = useState(false);
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text');
+  const [showPlatformBadge, setShowPlatformBadge] = useState(true);
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -257,6 +258,9 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
         }
         if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
           setPlatformBadgeStyle(display.platform_badge_style);
+        }
+        if (typeof display.show_platform_badge === 'boolean') {
+          setShowPlatformBadge(display.show_platform_badge);
         }
 
         const css = config.custom_css || '';
@@ -490,7 +494,8 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
           max_messages: maxMessages,
           disable_message_fade: disableMessageFade,
           platform_badge_position: platformBadgePosition,
-          platform_badge_style: platformBadgeStyle
+          platform_badge_style: platformBadgeStyle,
+          show_platform_badge: showPlatformBadge
         },
         custom_css: useCustomCss ? customCss : ''
       });
@@ -616,7 +621,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                             {/* User Info */}
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
                               {/* Platform badge before username */}
-                              {platformBadgePosition === 'before' && (
+                              {showPlatformBadge && platformBadgePosition === 'before' && (
                                 platformBadgeStyle === 'icon' ? (
                                   <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
                                     <PlatformIcon platform={message.platform} />
@@ -659,7 +664,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                               </span>
 
                               {/* Platform badge after username */}
-                              {platformBadgePosition === 'after' && (
+                              {showPlatformBadge && platformBadgePosition === 'after' && (
                                 platformBadgeStyle === 'icon' ? (
                                   <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
                                     <PlatformIcon platform={message.platform} />
@@ -798,6 +803,17 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                   </label>
                   <div className="space-y-3">
                     <div>
+                      <label className="flex items-center gap-2 text-sm text-gray-300 mb-3">
+                        <input
+                          type="checkbox"
+                          checked={showPlatformBadge}
+                          onChange={(e) => setShowPlatformBadge(e.target.checked)}
+                          className="accent-twitch"
+                        />
+                        Show Platform Badge
+                      </label>
+                    </div>
+                    <div className={!showPlatformBadge ? 'opacity-50 pointer-events-none' : ''}>
                       <label className="block text-xs text-gray-400 mb-2">Position</label>
                       <div className="flex gap-3">
                         <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
@@ -808,6 +824,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                             checked={platformBadgePosition === 'before'}
                             onChange={(e) => setPlatformBadgePosition(e.target.value as 'before')}
                             className="accent-twitch"
+                            disabled={!showPlatformBadge}
                           />
                           Before username
                         </label>
@@ -819,12 +836,13 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                             checked={platformBadgePosition === 'after'}
                             onChange={(e) => setPlatformBadgePosition(e.target.value as 'after')}
                             className="accent-twitch"
+                            disabled={!showPlatformBadge}
                           />
                           After username
                         </label>
                       </div>
                     </div>
-                    <div>
+                    <div className={!showPlatformBadge ? 'opacity-50 pointer-events-none' : ''}>
                       <label className="block text-xs text-gray-400 mb-2">Style</label>
                       <div className="flex gap-3">
                         <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
@@ -835,6 +853,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                             checked={platformBadgeStyle === 'text'}
                             onChange={(e) => setPlatformBadgeStyle(e.target.value as 'text')}
                             className="accent-twitch"
+                            disabled={!showPlatformBadge}
                           />
                           Text (TWITCH)
                         </label>
@@ -846,6 +865,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                             checked={platformBadgeStyle === 'icon'}
                             onChange={(e) => setPlatformBadgeStyle(e.target.value as 'icon')}
                             className="accent-twitch"
+                            disabled={!showPlatformBadge}
                           />
                           Icon (logo)
                         </label>
