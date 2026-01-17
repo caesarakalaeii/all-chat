@@ -38,6 +38,8 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set());
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [forceReconnect, setForceReconnect] = useState(0);
+  const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
+  const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text');
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -66,6 +68,12 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
         }
         if (typeof display.disable_message_fade === 'boolean') {
           setDisableMessageFade(display.disable_message_fade);
+        }
+        if (display.platform_badge_position === 'before' || display.platform_badge_position === 'after') {
+          setPlatformBadgePosition(display.platform_badge_position);
+        }
+        if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
+          setPlatformBadgeStyle(display.platform_badge_style);
         }
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
@@ -192,6 +200,40 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
     }
   };
 
+  // Platform icon components
+  const PlatformIcon = ({ platform }: { platform: string }) => {
+    const iconClass = "inline-block w-4 h-4";
+
+    switch (platform) {
+      case 'twitch':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <path fill="#9146FF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+          </svg>
+        );
+      case 'youtube':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          </svg>
+        );
+      case 'kick':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <path fill="#00E701" d="M6 3v18h4v-7l1.5 1.5L15 19l4.5-4.5L15 10l-3.5 3.5L10 12V3H6zm8 8.5l4.5 4.5-2.5 2.5-4.5-4.5L14 11.5z"/>
+          </svg>
+        );
+      case 'tiktok':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <path fill="#000000" d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+          </svg>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="min-h-screen w-full p-4 bg-transparent">
       {/* Hide scrollbars and ensure transparent background */}
@@ -250,26 +292,21 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
               <div className="flex-1 min-w-0">
                 {/* Username and Platform */}
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className={`text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
-                    {message.platform}
-                  </span>
-                  
-                  {/* Shared Chat Indicator */}
-                  {isSharedChat && (
-                    <span className="text-xs font-semibold uppercase px-1.5 py-0.5 rounded bg-purple-600/80 text-purple-100 border border-purple-400/50">
-                      Shared Chat
-                    </span>
+                  {/* Platform badge - render based on position and style settings */}
+                  {platformBadgePosition === 'before' && (
+                    platformBadgeStyle === 'icon' ? (
+                      <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
+                        <PlatformIcon platform={message.platform} />
+                      </span>
+                    ) : (
+                      <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                        {message.platform}
+                      </span>
+                    )
                   )}
-                  
-                  <span
-                    className="font-semibold text-sm"
-                    style={{ color: message.user?.color || '#FFFFFF' }}
-                  >
-                    {message.user?.display_name || message.user?.username}
-                  </span>
 
-                  {/* Regular Badges */}
-                  {message.user?.badges && message.user.badges.length > 0 && (
+                  {/* Regular Badges (before username when position is 'before') */}
+                  {platformBadgePosition === 'before' && message.user?.badges && message.user.badges.length > 0 && (
                     <div className="flex gap-1">
                       {message.user.badges.map((badge, idx) => (
                         <Image
@@ -284,7 +321,52 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
                       ))}
                     </div>
                   )}
-                  
+
+                  {/* Username */}
+                  <span
+                    className="font-semibold text-sm"
+                    style={{ color: message.user?.color || '#FFFFFF' }}
+                  >
+                    {message.user?.display_name || message.user?.username}
+                  </span>
+
+                  {/* Platform badge after username (original position) */}
+                  {platformBadgePosition === 'after' && (
+                    platformBadgeStyle === 'icon' ? (
+                      <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
+                        <PlatformIcon platform={message.platform} />
+                      </span>
+                    ) : (
+                      <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                        {message.platform}
+                      </span>
+                    )
+                  )}
+
+                  {/* Shared Chat Indicator */}
+                  {isSharedChat && (
+                    <span className="text-xs font-semibold uppercase px-1.5 py-0.5 rounded bg-purple-600/80 text-purple-100 border border-purple-400/50">
+                      Shared Chat
+                    </span>
+                  )}
+
+                  {/* Regular Badges (after username when position is 'after') */}
+                  {platformBadgePosition === 'after' && message.user?.badges && message.user.badges.length > 0 && (
+                    <div className="flex gap-1">
+                      {message.user.badges.map((badge, idx) => (
+                        <Image
+                          key={idx}
+                          src={badge.icon_url}
+                          alt={badge.name}
+                          width={16}
+                          height={16}
+                          className="w-4 h-4 object-contain"
+                          title={`${badge.name} (receiving channel)`}
+                        />
+                      ))}
+                    </div>
+                  )}
+
                   {/* Source Channel Badges (for shared chat) */}
                   {isSharedChat && message.user?.source_badges && message.user.source_badges.length > 0 && (
                     <>
