@@ -40,6 +40,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [forceReconnect, setForceReconnect] = useState(0);
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text');
+  const [showPlatformBadge, setShowPlatformBadge] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -74,6 +75,9 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
         }
         if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
           setPlatformBadgeStyle(display.platform_badge_style);
+        }
+        if (typeof display.show_platform_badge === 'boolean') {
+          setShowPlatformBadge(display.show_platform_badge);
         }
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
@@ -293,7 +297,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
                 {/* Username and Platform */}
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   {/* Platform badge - render based on position and style settings */}
-                  {platformBadgePosition === 'before' && (
+                  {showPlatformBadge && platformBadgePosition === 'before' && (
                     platformBadgeStyle === 'icon' ? (
                       <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
                         <PlatformIcon platform={message.platform} />
@@ -331,7 +335,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
                   </span>
 
                   {/* Platform badge after username (original position) */}
-                  {platformBadgePosition === 'after' && (
+                  {showPlatformBadge && platformBadgePosition === 'after' && (
                     platformBadgeStyle === 'icon' ? (
                       <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
                         <PlatformIcon platform={message.platform} />
