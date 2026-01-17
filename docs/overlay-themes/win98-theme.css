@@ -3,8 +3,14 @@
  * Description: Nostalgic Windows 98 styling with 3D borders and inset containers
  * Tags: retro, nostalgic, 90s, classic
  * Author: All-Chat Team
- * Version: 1.0.0
- * Updated: 2026-01-08
+ * Version: 1.1.0
+ * Updated: 2026-01-17
+ *
+ * DISPLAY SETTINGS RECOMMENDATION:
+ * - Platform Badge Style: "text" (for authentic Win98 status bar look)
+ * - Platform Badge Position: "before" (traditional layout)
+ *
+ * Configure via All-Chat Dashboard → Overlay → Preview → Platform Badge settings
  */
 
 /**
@@ -108,7 +114,7 @@ body {
    ============================================ */
 
 /* Platform badge - Win98 status bar style */
-.text-xs.font-semibold.uppercase {
+.platform-badge-text {
   background: #000080 !important;
   color: #ffffff !important;
   padding: 1px 4px !important;
@@ -119,6 +125,21 @@ body {
   font-weight: bold !important;
   text-transform: uppercase !important;
   margin-right: 4px !important;
+}
+
+/* Platform badge icons - Win98 style with inset border */
+.platform-badge-icon {
+  background: #c0c0c0 !important;
+  padding: 2px !important;
+  border: 1px solid;
+  border-color: #808080 #ffffff #ffffff #808080 !important;
+  margin-right: 4px !important;
+}
+
+.platform-badge-icon svg {
+  width: 14px !important;
+  height: 14px !important;
+  image-rendering: pixelated !important;
 }
 
 /* Platform-specific colors for badge background */
@@ -221,9 +242,25 @@ body {
 */
 
 /* --- HIDE PLATFORM BADGES ---
-   Uncomment this section to hide the platform labels (TWITCH, YOUTUBE, etc.) */
+   Uncomment this section to hide platform badges entirely */
 /*
-.text-xs.font-semibold.uppercase {
+.platform-badge {
+  display: none !important;
+}
+*/
+
+/* --- HIDE PLATFORM TEXT BADGES (Keep Icons) ---
+   Use this to hide text badges but show icons when icon mode is enabled */
+/*
+.platform-badge-text {
+  display: none !important;
+}
+*/
+
+/* --- HIDE PLATFORM ICON BADGES (Keep Text) ---
+   Use this to hide icon badges but show text when text mode is enabled */
+/*
+.platform-badge-icon {
   display: none !important;
 }
 */
