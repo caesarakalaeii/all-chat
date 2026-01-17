@@ -327,8 +327,8 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
         );
       case 'kick':
         return (
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 16.97L12 12.053l-5.894 4.917V7.03L12 11.947l5.894-4.917v9.94z"/>
+          <svg className="w-5 h-5" viewBox="0 0 24 24" style={{ imageRendering: 'pixelated' }}>
+            <text x="12" y="18" fontSize="20" fontWeight="bold" fill="#00E701" textAnchor="middle" fontFamily="monospace">K</text>
           </svg>
         );
       case 'tiktok':
