@@ -24,13 +24,19 @@ export default function ImpersonationBanner() {
   }, []);
 
   const handleExitImpersonation = () => {
-    // Clear impersonation flags and force re-login
+    // Restore the original admin token
+    const adminToken = localStorage.getItem('admin_token');
+    if (adminToken) {
+      localStorage.setItem('jwt_token', adminToken);
+      localStorage.removeItem('admin_token');
+    }
+
+    // Clear impersonation flags
     localStorage.removeItem('impersonating');
     localStorage.removeItem('impersonated_user');
-    localStorage.removeItem('jwt_token');
 
-    // Redirect to home (will trigger login)
-    router.push('/');
+    // Redirect to admin panel
+    router.push('/admin/users');
     router.refresh();
   };
 
