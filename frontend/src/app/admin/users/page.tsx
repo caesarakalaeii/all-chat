@@ -142,6 +142,9 @@ export default function UsersPage() {
 
       const data = await response.json();
 
+      // Save the original admin token before overwriting it
+      localStorage.setItem('admin_token', token || '');
+
       // Store the impersonation token
       localStorage.setItem('jwt_token', data.token);
       localStorage.setItem('impersonating', 'true');
