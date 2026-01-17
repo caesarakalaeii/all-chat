@@ -217,6 +217,8 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [sources, setSources] = useState<ChatSource[]>([]);
   const [showThemeMarketplace, setShowThemeMarketplace] = useState(false);
+  const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
+  const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text');
 
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -249,6 +251,12 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
         }
         if (typeof display.disable_message_fade === 'boolean') {
           setDisableMessageFade(display.disable_message_fade);
+        }
+        if (display.platform_badge_position === 'before' || display.platform_badge_position === 'after') {
+          setPlatformBadgePosition(display.platform_badge_position);
+        }
+        if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
+          setPlatformBadgeStyle(display.platform_badge_style);
         }
 
         const css = config.custom_css || '';
@@ -338,6 +346,40 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
         return 'text-green-400';
       default:
         return 'text-gray-400';
+    }
+  };
+
+  // Platform icon components
+  const PlatformIcon = ({ platform }: { platform: string }) => {
+    const iconClass = "inline-block w-4 h-4";
+
+    switch (platform) {
+      case 'twitch':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <path fill="#9146FF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+          </svg>
+        );
+      case 'youtube':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          </svg>
+        );
+      case 'kick':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <path fill="#00E701" d="M6 3v18h4v-7l1.5 1.5L15 19l4.5-4.5L15 10l-3.5 3.5L10 12V3H6zm8 8.5l4.5 4.5-2.5 2.5-4.5-4.5L14 11.5z"/>
+          </svg>
+        );
+      case 'tiktok':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <path fill="#000000" d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+          </svg>
+        );
+      default:
+        return null;
     }
   };
 
@@ -446,7 +488,9 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
           font_size: fontSize,
           message_duration: messageDuration,
           max_messages: maxMessages,
-          disable_message_fade: disableMessageFade
+          disable_message_fade: disableMessageFade,
+          platform_badge_position: platformBadgePosition,
+          platform_badge_style: platformBadgeStyle
         },
         custom_css: useCustomCss ? customCss : ''
       });
@@ -571,11 +615,40 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                           <div className="flex-1 min-w-0">
                             {/* User Info */}
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span
-                                className={`text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}
-                              >
-                                {message.platform}
-                              </span>
+                              {/* Platform badge before username */}
+                              {platformBadgePosition === 'before' && (
+                                platformBadgeStyle === 'icon' ? (
+                                  <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
+                                    <PlatformIcon platform={message.platform} />
+                                  </span>
+                                ) : (
+                                  <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                                    {message.platform}
+                                  </span>
+                                )
+                              )}
+
+                              {/* Badges before username when position is 'before' */}
+                              {platformBadgePosition === 'before' && message.user.badges && message.user.badges.length > 0 && (
+                                <div className="flex gap-1">
+                                  {message.user.badges.map((badge, index) => (
+                                    <Image
+                                      key={`${badge.name}-${index}`}
+                                      src={badge.icon_url}
+                                      alt={badge.name}
+                                      title={`${badge.name} (${badge.version})`}
+                                      width={16}
+                                      height={16}
+                                      className="w-4 h-4 object-contain"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Username */}
                               <span
                                 className="font-semibold text-sm"
                                 style={{
@@ -584,7 +657,22 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                               >
                                 {message.user.display_name}
                               </span>
-                              {message.user.badges && message.user.badges.length > 0 && (
+
+                              {/* Platform badge after username */}
+                              {platformBadgePosition === 'after' && (
+                                platformBadgeStyle === 'icon' ? (
+                                  <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
+                                    <PlatformIcon platform={message.platform} />
+                                  </span>
+                                ) : (
+                                  <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                                    {message.platform}
+                                  </span>
+                                )
+                              )}
+
+                              {/* Badges after username when position is 'after' */}
+                              {platformBadgePosition === 'after' && message.user.badges && message.user.badges.length > 0 && (
                                 <div className="flex gap-1">
                                   {message.user.badges.map((badge, index) => (
                                     <Image
@@ -701,6 +789,69 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                   <p className="text-xs text-gray-400 mt-1 ml-6">
                     When enabled, messages will not automatically fade out and will remain visible until max messages is reached
                   </p>
+                </div>
+
+                {/* Platform Badge Settings */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                    Platform Badge
+                  </label>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-2">Position</label>
+                      <div className="flex gap-3">
+                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="platformBadgePosition"
+                            value="before"
+                            checked={platformBadgePosition === 'before'}
+                            onChange={(e) => setPlatformBadgePosition(e.target.value as 'before')}
+                            className="accent-twitch"
+                          />
+                          Before username
+                        </label>
+                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="platformBadgePosition"
+                            value="after"
+                            checked={platformBadgePosition === 'after'}
+                            onChange={(e) => setPlatformBadgePosition(e.target.value as 'after')}
+                            className="accent-twitch"
+                          />
+                          After username
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-2">Style</label>
+                      <div className="flex gap-3">
+                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="platformBadgeStyle"
+                            value="text"
+                            checked={platformBadgeStyle === 'text'}
+                            onChange={(e) => setPlatformBadgeStyle(e.target.value as 'text')}
+                            className="accent-twitch"
+                          />
+                          Text (TWITCH)
+                        </label>
+                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="platformBadgeStyle"
+                            value="icon"
+                            checked={platformBadgeStyle === 'icon'}
+                            onChange={(e) => setPlatformBadgeStyle(e.target.value as 'icon')}
+                            className="accent-twitch"
+                          />
+                          Icon (logo)
+                        </label>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Emote Providers */}
