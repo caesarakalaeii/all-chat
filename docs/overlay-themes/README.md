@@ -38,6 +38,28 @@ Custom CSS themes for your All-Chat overlays in OBS. These themes allow you to c
 
 ## Available Themes
 
+### Minimal Icon Theme (`minimal-icon-theme.css`) ⭐ NEW
+
+Clean, modern theme showcasing the new **[ICON] [BADGES] USERNAME** layout!
+
+**Features:**
+- Platform logos as compact icons (Twitch, YouTube, Kick, TikTok)
+- Icon badges appear before username
+- Clean dark background with accent border
+- Subtle icon backgrounds and glow effects
+- Perfect for streamers who want a minimal, uncluttered look
+
+**Required Settings:**
+- Platform Badge Position: **"Before username"**
+- Platform Badge Style: **"Icon (logo)"**
+
+**Preview:**
+```
+[🎮] [💎] [⚔️] Username
+     Hello from Twitch chat!
+     12:34:56 PM
+```
+
 ### Windows 98 Theme (`win98-theme.css`)
 
 Transform your chat into a nostalgic Windows 98 experience!
