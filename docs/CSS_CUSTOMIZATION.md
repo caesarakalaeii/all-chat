@@ -186,8 +186,10 @@ Every chat message follows this structure:
 | **Avatar container** | `.flex-shrink-0` | Flexbox, no shrinking | Contains avatar image or initials |
 | **Avatar image** | `.w-10.h-10.rounded-full` | 40x40px, circular | User avatar |
 | **Avatar fallback** | `.w-10.h-10.rounded-full.bg-gray-700` | Circular div with initials | Shown when no avatar |
-| **Platform badge** | `.text-xs.font-semibold.uppercase` | 12px, bold, uppercase | "TWITCH", "YOUTUBE", etc. |
-| **Platform colors** | `.text-purple-400` (Twitch)<br>`.text-red-400` (YouTube)<br>`.text-green-400` (Kick)<br>`.text-gray-400` (TikTok) | Platform-specific accent colors | Used for platform badge |
+| **Platform badge** | `.platform-badge` | Wraps both text and icon variants | Parent element for platform indicator |
+| **Platform badge (text)** | `.platform-badge-text` | 12px, bold, uppercase | Text labels: "TWITCH", "YOUTUBE", etc. |
+| **Platform badge (icon)** | `.platform-badge-icon` | 16x16px SVG icon | Platform logos when icon mode enabled |
+| **Platform colors** | `.text-purple-400` (Twitch)<br>`.text-red-400` (YouTube)<br>`.text-green-400` (Kick)<br>`.text-gray-400` (TikTok) | Platform-specific accent colors | Used for text platform badges |
 | **Username** | `.font-semibold.text-sm` | Bold, 14px | User's display name |
 | **Badge container** | `.flex.gap-1` | Horizontal flex, 4px gap | Contains badge images |
 | **Badge images** | `.flex.gap-1 img` | 16x16px | Subscriber, moderator, etc. badges |
@@ -341,9 +343,50 @@ Every chat message follows this structure:
 .text-xs.text-gray-500 {
   display: none !important;
 }
+
+/* Hide platform badges entirely */
+.platform-badge {
+  display: none !important;
+}
 ```
 
-### 7. Modify Animations
+### 7. Customize Platform Badges
+
+```css
+/* Style platform text badges */
+.platform-badge-text {
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Style platform icon badges */
+.platform-badge-icon svg {
+  width: 20px !important;
+  height: 20px !important;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3)) !important;
+}
+
+/* Add background to platform icons */
+.platform-badge-icon {
+  background: rgba(0, 0, 0, 0.5) !important;
+  padding: 4px !important;
+  border-radius: 4px !important;
+}
+
+/* Hide only text platform badges (keep icons) */
+.platform-badge-text {
+  display: none !important;
+}
+
+/* Hide only icon platform badges (keep text) */
+.platform-badge-icon {
+  display: none !important;
+}
+```
+
+### 8. Modify Animations
 
 ```css
 /* Faster animation */
@@ -368,7 +411,7 @@ Every chat message follows this structure:
 }
 ```
 
-### 8. Change Avatar Style
+### 9. Change Avatar Style
 
 ```css
 /* Square avatars */
@@ -473,6 +516,8 @@ These settings are configured via the All-Chat dashboard **Display Settings** pa
 | **Show Badges** | true/false | true | Display user badges (sub, mod, etc.) |
 | **Show Avatars** | true/false | true | Display user avatars |
 | **Animation** | slide/fade/none | slide | Message entrance animation |
+| **Platform Badge Position** | before/after | before | Show platform badge before or after username |
+| **Platform Badge Style** | text/icon | text | Display platform as text label or icon |
 
 ### Override Display Settings with CSS
 

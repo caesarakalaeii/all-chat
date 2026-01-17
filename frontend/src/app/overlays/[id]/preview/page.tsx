@@ -465,6 +465,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     <div className="min-h-screen bg-gray-900">
       {useCustomCss && scopedPreviewCss && (
         <style
+          key={scopedPreviewCss}
           id="overlay-preview-custom-css"
           dangerouslySetInnerHTML={{ __html: scopedPreviewCss }}
         />
