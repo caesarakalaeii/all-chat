@@ -506,7 +506,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
               {/* OAuth Buttons */}
               <div className="mb-6">
                 <p className="text-sm text-gray-400 mb-3">
-                  Login with your streaming platform to automatically add your channel:
+                  Connect your streaming platform to automatically add your channel:
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -514,21 +514,21 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
                     className="flex items-center justify-center gap-2 px-4 py-3 bg-twitch hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
                   >
                     {getPlatformIcon('twitch')}
-                    Login with Twitch
+                    Add Twitch
                   </button>
                   <button
                     onClick={() => handleOAuthAddSource('youtube')}
                     className="flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
                   >
                     {getPlatformIcon('youtube')}
-                    Login with YouTube
+                    Add YouTube
                   </button>
                   <button
                     onClick={() => handleOAuthAddSource('kick')}
                     className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
                   >
                     {getPlatformIcon('kick')}
-                    Login with Kick
+                    Add Kick
                   </button>
                 </div>
               </div>
