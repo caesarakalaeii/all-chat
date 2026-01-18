@@ -40,6 +40,7 @@ export interface DisplaySettings {
   show_avatars?: boolean;
   animation?: 'slide' | 'fade' | 'none';
   disable_message_fade?: boolean;
+  show_platform_badge?: boolean;
   platform_badge_position?: 'before' | 'after';
   platform_badge_style?: 'text' | 'icon';
 }
