@@ -329,6 +329,21 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev));
   }, [maxMessages]);
 
+  // Automatically send sample messages on initial load
+  useEffect(() => {
+    if (!token || !configLoaded) {
+      return;
+    }
+
+    // Send sample messages after a short delay to ensure WebSocket is connected
+    const timer = setTimeout(() => {
+      void handleAddSampleTranscript();
+    }, 1500);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configLoaded, token]);
+
   // Auto-scroll to bottom when new messages arrive (disabled for preview to avoid annoying scroll jumps)
   // useEffect(() => {
   //   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
