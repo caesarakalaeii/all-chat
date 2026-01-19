@@ -38,14 +38,14 @@ func NewGRPCStreamClient(ctx context.Context, tokenSource credentials.PerRPCCred
 	tlsCreds := credentials.NewTLS(nil)
 
 	// Establish gRPC connection to YouTube API with keepalive settings
-	// These prevent the server from closing the connection due to inactivity
-	// Based on research: YouTube Live Chat has "quiet periods" where no messages arrive.
-	// Google's GFE closes idle connections after ~10 seconds. Solution: aggressive keepalive pings.
+	// FIX: Relaxed keepalive from 5s to 30s. Aggressive 5s pings were triggering
+	// YouTube's GFE anti-abuse or load shedding, causing consistent 10s disconnects.
+	// 30s is a standard keepalive interval for public gRPC services.
 	// Reference: https://github.com/grpc/grpc/blob/master/doc/keepalive.md
-	logger.Info("Configuring gRPC connection with debug settings",
+	logger.Info("Configuring gRPC connection with relaxed keepalive",
 		zap.String("endpoint", youtubeGRPCEndpoint),
-		zap.Duration("keepalive_time", 5*time.Second),
-		zap.Duration("keepalive_timeout", 2*time.Second),
+		zap.Duration("keepalive_time", 30*time.Second),
+		zap.Duration("keepalive_timeout", 10*time.Second),
 		zap.Int("initial_window_size", 4<<20),
 	)
 
@@ -54,8 +54,8 @@ func NewGRPCStreamClient(ctx context.Context, tokenSource credentials.PerRPCCred
 		grpc.WithTransportCredentials(tlsCreds),
 		grpc.WithPerRPCCredentials(tokenSource),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                5 * time.Second,  // Send ping every 5s to prevent 10s idle timeout
-			Timeout:             2 * time.Second,  // Wait 2s for ping ack (matching Python recommendation)
+			Time:                30 * time.Second, // Relaxed from 5s: prevents GFE anti-abuse triggering
+			Timeout:             10 * time.Second, // Increased from 2s to 10s for better tolerance
 			PermitWithoutStream: true,             // Allow pings even when no active RPCs (critical for idle periods)
 		}),
 		// EXPERIMENT: Try different options to keep stream alive longer
