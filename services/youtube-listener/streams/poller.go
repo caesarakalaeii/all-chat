@@ -159,6 +159,19 @@ func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 func (p *Poller) pollLoop(ctx context.Context) {
 	defer p.wg.Done()
 
+	// CRITICAL FIX: Initialize local page token that Manager cannot overwrite
+	// This prevents race condition where Manager's periodic sync overwrites p.stream
+	// with stale database token, causing YouTube to reject reconnections
+	p.mu.RLock()
+	activePageToken := p.stream.NextPageToken
+	p.mu.RUnlock()
+
+	p.logger.Info("Poller starting with local token state",
+		zap.String("stream_id", p.stream.StreamID),
+		zap.Bool("has_initial_token", activePageToken != ""),
+		zap.String("token_prefix", truncateString(activePageToken, 20)),
+	)
+
 	// Initial poll
 	if shouldPoll, err := p.shouldPoll(ctx); !shouldPoll {
 		p.logger.Info("Overlay not connected, skipping initial poll",
@@ -205,26 +218,36 @@ func (p *Poller) pollLoop(ctx context.Context) {
 		// FIX: Track stream connection duration to detect rapid disconnections
 		streamStartTime := time.Now()
 
-		err := p.poll(pollCtx)
+		// CRITICAL FIX: Pass local token IN and capture returned token OUT
+		// This prevents Manager's periodic sync from corrupting our token state
+		nextToken, err := p.poll(pollCtx, activePageToken)
 		cancel()
 		<-monitorDone
 
-		// CRITICAL: DO NOT CLEAR NextPageToken! We need it to RESUME the stream.
-		// The 10-second disconnect happens because we re-fetch the same 83 messages
-		// every time. YouTube sees this as scraper behavior and disconnects.
-		// By keeping the token, we resume where we left off (like a real client).
-		// The token is already being updated in poll() handler (line 410).
+		// CRITICAL FIX: Update local token immediately (immune to Manager sync)
+		if nextToken != "" {
+			p.logger.Info("Preserving token for next connection",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.String("token_prefix", truncateString(nextToken, 20)),
+				zap.Bool("token_changed", nextToken != activePageToken),
+			)
+			activePageToken = nextToken
+		} else if err == nil {
+			// Poll succeeded but returned empty token - keep old token to retry
+			p.logger.Warn("Poll returned empty token, keeping previous token for retry",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.String("token_prefix", truncateString(activePageToken, 20)),
+			)
+		}
+		// If poll failed AND returned empty token, we still keep activePageToken
+		// to attempt recovery on next iteration
 
-		// CRITICAL DEBUG: Verify token is preserved after stream closes
-		p.mu.RLock()
-		tokenAfterPoll := p.stream.NextPageToken
-		p.mu.RUnlock()
-
-		p.logger.Debug("After poll completed, token state",
+		// CRITICAL DEBUG: Verify local token state is preserved
+		p.logger.Debug("After poll completed, local token state",
 			zap.String("stream_id", p.stream.StreamID),
-			zap.Bool("has_token", tokenAfterPoll != ""),
-			zap.Int("token_length", len(tokenAfterPoll)),
-			zap.String("token_prefix", truncateString(tokenAfterPoll, 20)),
+			zap.Bool("has_local_token", activePageToken != ""),
+			zap.Int("local_token_length", len(activePageToken)),
+			zap.String("local_token_prefix", truncateString(activePageToken, 20)),
 		)
 
 		// FIX: Calculate stream connection duration
@@ -371,14 +394,19 @@ func (p *Poller) resetBackoff() {
 }
 
 // poll fetches and processes new messages
-func (p *Poller) poll(ctx context.Context) error {
+// CRITICAL: Accepts pageToken as parameter and returns the latest token received
+// This prevents race conditions with Manager's periodic sync overwriting p.stream
+func (p *Poller) poll(ctx context.Context, pageToken string) (string, error) {
+	// Read liveChatID from shared state (this doesn't change during stream lifecycle)
 	p.mu.RLock()
 	liveChatID := p.stream.LiveChatID
-	pageToken := p.stream.NextPageToken  // Use token to RESUME stream
 	p.mu.RUnlock()
 
+	// Track the latest token we receive (starts with input token)
+	latestToken := pageToken
+
 	// CRITICAL DEBUG: Log the actual token value we're using
-	p.logger.Debug("Starting poll with token",
+	p.logger.Debug("Starting poll with local token parameter",
 		zap.String("stream_id", p.stream.StreamID),
 		zap.Bool("has_token", pageToken != ""),
 		zap.Int("token_length", len(pageToken)),
@@ -447,16 +475,22 @@ func (p *Poller) poll(ctx context.Context) error {
 		newToken := p.parser.ExtractNextPageToken(response)
 		extractDuration := time.Since(extractStart)
 
+		// CRITICAL FIX: Update local latestToken (return value for pollLoop)
+		if newToken != "" {
+			latestToken = newToken
+		}
+
 		// CRITICAL DEBUG: Log token extraction
-		p.logger.Debug("Updating stream token from response",
+		p.logger.Debug("Updating local and shared token from response",
 			zap.String("stream_id", p.stream.StreamID),
 			zap.String("response_token", truncateString(newToken, 20)),
 			zap.Int("token_length", len(newToken)),
 			zap.Bool("token_changed", newToken != p.stream.NextPageToken),
+			zap.String("latest_local_token", truncateString(latestToken, 20)),
 			zap.Duration("extract_duration", extractDuration),
 		)
 
-		// Update stream state
+		// Update stream state (for UI/logging/status, but NOT used for next poll)
 		mutexStart := time.Now()
 		p.mu.Lock()
 		p.stream.NextPageToken = newToken
@@ -536,10 +570,10 @@ func (p *Poller) poll(ctx context.Context) error {
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to stream chat messages: %w", err)
+		return latestToken, fmt.Errorf("failed to stream chat messages: %w", err)
 	}
 
-	return nil
+	return latestToken, nil
 }
 
 func (p *Poller) monitorConnection(ctx context.Context, cancel context.CancelFunc, disconnected chan<- struct{}, done chan<- struct{}) {
