@@ -23,6 +23,15 @@ COPY frontend/ .
 # Set environment variable for standalone build
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# Build argument for cache busting
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ENV NEXT_PUBLIC_BUILD_DATE=$BUILD_DATE
+ENV NEXT_PUBLIC_GIT_COMMIT=$GIT_COMMIT
+
+# Clean Next.js cache before build to prevent stale Server Actions
+RUN rm -rf .next
+
 # Build Next.js application
 RUN npm run build
 
