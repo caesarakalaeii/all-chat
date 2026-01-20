@@ -6,6 +6,14 @@ const nextConfig = {
   // Strict mode for better development
   reactStrictMode: true,
 
+  // Generate unique build ID to prevent Server Action mismatches
+  generateBuildId: async () => {
+    // Use git commit hash if available, otherwise use timestamp
+    return process.env.NEXT_PUBLIC_GIT_COMMIT ||
+           process.env.NEXT_PUBLIC_BUILD_DATE ||
+           `build-${Date.now()}`;
+  },
+
   // Image optimization
   images: {
     unoptimized: true,

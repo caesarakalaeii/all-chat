@@ -175,6 +175,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            GIT_COMMIT=${{ github.sha }}
 
       - name: Output image details
         if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true'
