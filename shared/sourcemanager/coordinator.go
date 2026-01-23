@@ -166,15 +166,30 @@ func (c *LeadershipCoordinator) heartbeat(entry *leaseEntry) {
 		case <-ticker.C:
 			ok, err := c.client.RenewLeadership(context.Background(), c.platform, entry.streamID)
 			if err != nil {
+				// CRITICAL FIX: Treat renewal errors as leadership loss to prevent duplicate polling
+				// When renewal fails, the Redis key will expire and another pod will acquire leadership
+				// If we continue polling without successful renewal, we get duplicate polling!
 				c.observe("renew_error")
 				if c.logger != nil {
-					c.logger.Error("Failed to renew leadership",
+					c.logger.Error("Failed to renew leadership, treating as leadership loss",
 						zap.String("platform", c.platform),
 						zap.String("stream_id", entry.streamID),
 						zap.Error(err),
 					)
 				}
-				continue
+
+				// Clean up lease and trigger callback (same as leadership loss)
+				c.mu.Lock()
+				if current, ok := c.leases[entry.streamID]; ok && current == entry {
+					delete(c.leases, entry.streamID)
+					c.setActiveGaugeLocked()
+				}
+				c.mu.Unlock()
+
+				if entry.lostCallback != nil {
+					go entry.lostCallback()
+				}
+				return
 			}
 			if !ok {
 				c.observe("lost")
