@@ -100,7 +100,7 @@ func main() {
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, log)
-	channelManager := channels.NewManager(db, log)
+	channelManager := channels.NewManager(db, log, subscriptionMgr)
 
 	// Create EventSub client
 	eventSubClient := eventsub.NewClient(log)
