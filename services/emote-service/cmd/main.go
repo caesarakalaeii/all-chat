@@ -80,8 +80,12 @@ func main() {
 		"ffz":    clients.NewFFZClient(log),
 	}
 
+	// Initialize cheermote client
+	cheermoteClient := clients.NewTwitchCheermoteClient(twitchClient, log)
+
 	// Initialize handlers
 	emoteHandler := handlers.NewEmoteHandler(emoteClients, emoteCache, log)
+	cheermoteHandler := handlers.NewCheermoteHandler(cheermoteClient, redisClient, log)
 	healthHandler := handlers.NewHealthHandler(redisClient, log)
 
 	// Set up Gin router
@@ -97,6 +101,9 @@ func main() {
 	// Register routes
 	emoteHandler.RegisterRoutes(router)
 	healthHandler.RegisterRoutes(router)
+
+	// Cheermote routes
+	router.GET("/emotes/cheermotes/:channel_id", cheermoteHandler.GetCheermotes)
 
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))

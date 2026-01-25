@@ -2,6 +2,7 @@ package irc
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -111,6 +112,11 @@ func (p *Parser) ParsePrivateMessage(msg twitch.PrivateMessage) (*models.RawChat
 	}
 	if msg.Time.Unix() > 0 {
 		tags["tmi-sent-ts"] = fmt.Sprintf("%d", msg.Time.UnixMilli())
+	}
+
+	// Extract bits (for cheermote messages)
+	if msg.Bits > 0 {
+		tags["bits"] = strconv.Itoa(msg.Bits)
 	}
 
 	// Create RawChatMessage
