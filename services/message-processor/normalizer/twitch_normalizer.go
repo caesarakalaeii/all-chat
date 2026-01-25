@@ -214,8 +214,14 @@ func (n *TwitchNormalizer) extractMetadata(raw *models.RawChatMessage) map[strin
 		metadata["twitch_sent_ts"] = tmiSentTs
 	}
 
-	// Bits (not usually in regular messages, but just in case)
-	metadata["bits"] = 0
+	// Extract bits from tags (for cheermote messages)
+	bits := 0
+	if bitsStr, ok := tags["bits"]; ok && bitsStr != "" {
+		if val, err := strconv.Atoi(bitsStr); err == nil {
+			bits = val
+		}
+	}
+	metadata["bits"] = bits
 
 	// Super chat (YouTube only, always 0 for Twitch)
 	metadata["super_chat_amount"] = 0
