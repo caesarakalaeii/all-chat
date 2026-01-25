@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -36,6 +37,13 @@ const (
 	// ChannelSyncInterval is how often to sync active channels from database
 	ChannelSyncInterval = 30 * time.Second
 )
+
+// leaderState holds the shared leadership state with thread-safe access
+type leaderState struct {
+	sync.RWMutex
+	isLeader          bool
+	eventSubSessionID string
+}
 
 func main() {
 	// Initialize logger
@@ -97,14 +105,17 @@ func main() {
 	// Create EventSub client
 	eventSubClient := eventsub.NewClient(log)
 
-	// Leader election state
-	isLeader := false
-	var eventSubSessionID string
+	// Leader election state (use struct with mutex for thread-safe access from HTTP handlers)
+	state := &leaderState{}
 
 	// Set up notification handler (processes channel point redemptions)
 	eventSubClient.SetOnNotification(func(event eventsub.Event, subscription *eventsub.Subscription) {
 		// Only process if we're the leader
-		if !isLeader {
+		state.RLock()
+		isLdr := state.isLeader
+		state.RUnlock()
+
+		if !isLdr {
 			log.Debug("Received notification but not leader, ignoring")
 			return
 		}
@@ -114,15 +125,21 @@ func main() {
 
 	// Set up welcome handler (session established, ready to create subscriptions)
 	eventSubClient.SetOnWelcome(func(sessionID string) {
-		eventSubSessionID = sessionID
+		state.Lock()
+		state.eventSubSessionID = sessionID
+		state.Unlock()
 		subscriptionMgr.SetSessionID(sessionID)
 
 		log.Info("EventSub session established",
 			zap.String("session_id", sessionID),
 		)
 
-		// Subscribe to all active channels
-		if isLeader {
+		// Subscribe to all active channels (check leadership status)
+		state.RLock()
+		isLdr := state.isLeader
+		state.RUnlock()
+
+		if isLdr {
 			activeChannels := channelManager.GetActiveChannels()
 			for broadcasterID := range activeChannels {
 				if _, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID); err != nil {
@@ -153,7 +170,12 @@ func main() {
 
 	// Set up channel manager callback (creates/deletes subscriptions)
 	channelManager.SetSubscriptionCallback(func(broadcasterID string, action string) error {
-		if !isLeader || eventSubSessionID == "" {
+		state.RLock()
+		isLdr := state.isLeader
+		sessionID := state.eventSubSessionID
+		state.RUnlock()
+
+		if !isLdr || sessionID == "" {
 			// Only leader creates subscriptions, and only after session is established
 			return nil
 		}
@@ -182,30 +204,37 @@ func main() {
 				return
 			case <-ticker.C:
 				// Try to acquire/renew leadership
-				wasLeader := isLeader
+				state.RLock()
+				wasLeader := state.isLeader
+				state.RUnlock()
+
 				acquired, err := tryAcquireLeadership(ctx, redisClient, instanceID)
 				if err != nil {
 					log.Error("Leader election failed", zap.Error(err))
 					continue
 				}
 
-				isLeader = acquired
+				state.Lock()
+				state.isLeader = acquired
+				state.Unlock()
 
-				if !wasLeader && isLeader {
+				if !wasLeader && acquired {
 					// Became leader
 					log.Info("Acquired leadership", zap.String("instance_id", instanceID))
 
 					// Connect to EventSub WebSocket
 					if err := eventSubClient.Connect(ctx); err != nil {
 						log.Error("Failed to connect to EventSub", zap.Error(err))
-						isLeader = false
+						state.Lock()
+						state.isLeader = false
+						state.Unlock()
 						continue
 					}
 
 					// Start channel manager
 					channelManager.Start(ctx, ChannelSyncInterval)
 
-				} else if wasLeader && !isLeader {
+				} else if wasLeader && !acquired {
 					// Lost leadership
 					log.Warn("Lost leadership", zap.String("instance_id", instanceID))
 
@@ -220,7 +249,7 @@ func main() {
 	}()
 
 	// Start HTTP server for health checks
-	startHTTPServer(log, getEnv("PORT", "8090"), isLeader, eventSubClient)
+	startHTTPServer(log, getEnv("PORT", "8090"), state, eventSubClient)
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
@@ -230,7 +259,11 @@ func main() {
 	log.Info("Shutting down...")
 
 	// Release leadership
-	if isLeader {
+	state.RLock()
+	isLdr := state.isLeader
+	state.RUnlock()
+
+	if isLdr {
 		releaseLeadership(context.Background(), redisClient, instanceID)
 		eventSubClient.Disconnect()
 		channelManager.Stop()
@@ -353,7 +386,7 @@ func handleChannelPointsRedemption(
 }
 
 // startHTTPServer starts the HTTP server for health checks
-func startHTTPServer(log *zap.Logger, port string, isLeader bool, client *eventsub.Client) {
+func startHTTPServer(log *zap.Logger, port string, state *leaderState, client *eventsub.Client) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -365,13 +398,17 @@ func startHTTPServer(log *zap.Logger, port string, isLeader bool, client *events
 
 	// Readiness probe
 	router.GET("/health/ready", func(c *gin.Context) {
-		ready := isLeader && client.IsConnected()
+		state.RLock()
+		isLdr := state.isLeader
+		state.RUnlock()
+
+		ready := isLdr && client.IsConnected()
 		if ready {
-			c.JSON(http.StatusOK, gin.H{"status": "ready", "is_leader": isLeader})
+			c.JSON(http.StatusOK, gin.H{"status": "ready", "is_leader": isLdr})
 		} else {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status":    "not ready",
-				"is_leader": isLeader,
+				"is_leader": isLdr,
 				"connected": client.IsConnected(),
 			})
 		}
@@ -379,8 +416,12 @@ func startHTTPServer(log *zap.Logger, port string, isLeader bool, client *events
 
 	// Status endpoint
 	router.GET("/status", func(c *gin.Context) {
+		state.RLock()
+		isLdr := state.isLeader
+		state.RUnlock()
+
 		c.JSON(http.StatusOK, gin.H{
-			"is_leader":  isLeader,
+			"is_leader":  isLdr,
 			"connected":  client.IsConnected(),
 			"session_id": client.GetSessionID(),
 		})
