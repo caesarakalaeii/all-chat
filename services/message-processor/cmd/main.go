@@ -478,6 +478,33 @@ func main() {
 		normalizeMockRequest(&req)
 		msg := buildMockMessage(&req)
 
+		// Check if event is enabled for this overlay (if this is an event message)
+		if msg.Event != nil && msg.Event.Type != "" {
+			enabled, filterErr := eventFilter.IsEventEnabled(ctx, req.OverlayID, msg.Platform, msg.Event.Type)
+			if filterErr != nil {
+				log.Warn("Failed to check event filter for mock message, allowing event",
+					zap.String("overlay_id", req.OverlayID),
+					zap.String("event_type", msg.Event.Type),
+					zap.Error(filterErr),
+				)
+				// Fail open - allow event if filter check fails
+				enabled = true
+			}
+
+			if !enabled {
+				log.Debug("Event type disabled for overlay, skipping mock event",
+					zap.String("overlay_id", req.OverlayID),
+					zap.String("platform", msg.Platform),
+					zap.String("event_type", msg.Event.Type),
+				)
+				c.JSON(http.StatusOK, gin.H{
+					"status":  "filtered",
+					"message": "event type disabled for this overlay",
+				})
+				return
+			}
+		}
+
 		if err := emoteEnricher.Enrich(ctx, msg); err != nil {
 			log.Warn("Failed to enrich mock message", zap.Error(err))
 		}
