@@ -134,6 +134,10 @@ func main() {
 	emoteCacheStore := cache.NewEmoteCache(redisClient, log, 0)
 	emoteEnricher := enricher.NewEnricher(emoteClient, emoteCacheStore, log)
 
+	// Initialize cheermote enricher (Twitch bits visual emotes)
+	cheermoteClient := enricher.NewHTTPCheermoteClient(emoteServiceURL, log)
+	cheermoteEnricher := enricher.NewCheermoteEnricher(cheermoteClient, redisClient, log)
+
 	// Initialize 7TV event manager for real-time emote updates
 	seventvManager := seventv.NewManager(emoteCacheStore, log)
 	if err := seventvManager.Start(ctx); err != nil {
@@ -356,6 +360,19 @@ func main() {
 					processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "enriched", "success")
 				}
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "emote_enrichment").Observe(time.Since(startEmote).Seconds())
+
+				// Enrich with cheermotes (Twitch only)
+				if unified.Platform == "twitch" {
+					startCheer := time.Now()
+					if err := cheermoteEnricher.Enrich(ctx, unified); err != nil {
+						log.Warn("Failed to enrich cheermotes",
+							zap.String("message_id", rawMsg.MessageID),
+							zap.Error(err),
+						)
+						// Continue even if cheermote enrichment fails
+					}
+					processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "cheermote_enrichment").Observe(time.Since(startCheer).Seconds())
+				}
 			}
 
 			// Publish to overlay channel
@@ -463,6 +480,13 @@ func main() {
 
 		if err := emoteEnricher.Enrich(ctx, msg); err != nil {
 			log.Warn("Failed to enrich mock message", zap.Error(err))
+		}
+
+		// Enrich cheermotes for Twitch mock messages
+		if msg.Platform == "twitch" {
+			if err := cheermoteEnricher.Enrich(ctx, msg); err != nil {
+				log.Warn("Failed to enrich mock message cheermotes", zap.Error(err))
+			}
 		}
 
 		if err := pubsubPublisher.Publish(ctx, req.OverlayID, msg); err != nil {
