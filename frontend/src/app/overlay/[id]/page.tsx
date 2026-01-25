@@ -369,8 +369,8 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
         {messages.map((message, index) => {
           const isSharedChat = message.metadata?.is_shared_chat === true;
           const isEvent = message.event != null;
-          const eventTierClass = isEvent ? `event-tier-${message.event.tier}` : '';
-          const eventTypeClass = isEvent ? `event-type-${message.event.type}` : '';
+          const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : '';
+          const eventTypeClass = isEvent ? `event-type-${message.event?.type}` : '';
 
           return (
           <div
