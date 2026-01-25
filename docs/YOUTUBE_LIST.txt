@@ -1,0 +1,113 @@
+From the official docs at https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list
+
+LiveChatMessages: list
+Note: To poll for live chat messages, use the liveChatMessages.streamList method. The streamList method pushes new messages to the client as they become available, which reduces the need for constant polling and helps to avoid exceeding your quota.
+Lists live chat messages for a specific chat.
+
+When you make your first request to retrieve chat messages, the API returns some or all of the chat history, depending on the length of that history. Messages in the response are ordered from oldest to newest.
+
+    The nextPageToken in the response provides a token that, in your next request, will identify the next set of results that your API client should retrieve.
+    The pollingIntervalMillis property indicates how long your API client should wait before requesting additional results.
+
+When you request additional results, you set the pageToken parameter to the nextPageToken value and the API server returns additional chat messages, if available. Again, within that result set, messages are ordered from oldest to newest.
+Common use cases
+Request
+HTTP request
+
+GET https://www.googleapis.com/youtube/v3/liveChat/messages
+
+Parameters
+
+The following table lists the parameters that this query supports. All of the parameters listed are query parameters.
+Parameters
+Required parameters
+liveChatId 	string
+The liveChatId parameter specifies the ID of the chat whose messages will be returned. The live chat ID associated with a broadcast is returned in the liveBroadcast resource's snippet.liveChatId property.
+part 	string
+The part parameter specifies the liveChatMessage resource parts that the API response will include. Supported values are id, snippet, and authorDetails.
+Optional parameters
+hl 	string
+The hl parameter instructs the API to retrieve a localized currency display string for a specific application language that the YouTube website supports. For example, in English, currency would be displayed as $1.50, but in French, it would be displayed as 1,50$.
+
+The parameter value must be a language code included in the list returned by the i18nLanguages.list method.
+maxResults 	unsigned integer
+
+The maxResults parameter specifies the maximum number of messages that should be returned in the result set. Acceptable values are 200 to 2000, inclusive. The default value is 500.
+
+The initial request made without a continuation token will only contain the most recent messages. This may be smaller than maxResults, if it is provided.
+
+The API doesn't retrieve messages that are older than those returned by initial the request made without a continuation token.
+pageToken 	string
+The pageToken parameter identifies a specific page in the result set that should be returned. In an API response, the nextPageToken property identify other pages that could be retrieved.
+profileImageSize 	unsigned integer
+The profileImageSize parameter specifies the size of the user profile pictures that should be returned in the result set. The images are square. The default value is 88, meaning pictures will be 88px by 88px. Acceptable values are in the range 16 to 720, inclusive.
+Request body
+
+Don't provide a request body when calling this method.
+Response
+
+If successful, this method returns a response body with the following structure:
+
+{
+  "kind": "youtube#liveChatMessageListResponse",
+  "etag": etag
+
+,
+  "nextPageToken": string
+
+,
+  "pollingIntervalMillis": unsigned integer
+
+,
+  "offlineAt": datetime
+
+,
+  "pageInfo": {
+    "totalResults": integer
+
+,
+    "resultsPerPage": integer
+
+
+  },
+  "items": [
+    liveChatMessage Resource
+  ],
+  "activePollItem": liveChatMessage Resource
+}
+
+Properties
+
+The following table defines the properties that appear in this resource:
+Properties
+kind 	string
+Identifies the API resource's type. The value will be youtube#liveChatMessageListResponse.
+etag 	etag
+The Etag of this resource.
+nextPageToken 	string
+The token that can be used as the value of the pageToken parameter to retrieve the next page in the result set.
+pollingIntervalMillis 	unsigned integer
+The amount of time, in milliseconds, that the client should wait before polling again for new live chat messages.
+offlineAt 	datetime
+The date and time when the underlying livestream went offline. This property is only present if the stream is already offline. The value is specified in ISO 8601 (YYYY-MM-DDThh:mm:ss.sZ) format.
+pageInfo 	object
+The pageInfo object encapsulates paging information for the result set.
+pageInfo.totalResults 	integer
+The total number of results in the result set.
+pageInfo.resultsPerPage 	integer
+The number of results included in the API response.
+items[] 	list
+A list of messages. Each item in the list is a liveChatMessage resource.
+activePollItem 	object
+The poll data in the message. Each poll is a liveChatMessage resource with the type pollEvent, which represents an active poll. There can only be one poll per chat.
+Errors
+
+The following table identifies error messages that the API could return in response to a call to this method. See the error message documentation for more detail.
+Error type 	Error detail 	Description
+forbidden (403) 	forbidden 	You don't have the permissions required to retrieve messages for the specified live chat.
+forbidden (403) 	liveChatDisabled 	Live chat is not enabled for the specified broadcast.
+forbidden (403) 	liveChatEnded 	The specified live chat is no longer live.
+notFound (404) 	liveChatNotFound 	The live chat that you are trying to retrieve cannot be found. Check the value of the request's liveChatId parameter to ensure that it is correct.
+rateLimitExceeded 	rateLimitExceeded 	The request was sent too quickly after the previous request. This error occurs when API requests to retrieve messages are being sent more frequently than YouTube's refresh rates, which unnecessarily wastes bandwidth.
+Try it!
+Use the APIs Explorer to call this API and see the API request and response.

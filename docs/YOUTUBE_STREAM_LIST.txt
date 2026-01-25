@@ -1,0 +1,117 @@
+From the official YouTube docs at https://developers.google.com/youtube/v3/live/docs/liveChatMessages/streamList
+
+LiveChatMessages: streamList
+Spark icon
+Page Summary
+This method establishes a server-streaming connection that lets you to receive live chat messages for a specific chat with low latency. This is the most efficient way to consume live chat messages, as it pushes new messages to your client as soon as they are available, rather than requiring you to poll for updates.
+
+When you first connect, the API sends a series of messages containing recent chat history. As new messages are posted, the server will continue to send them through the open connection.
+
+Messages in each server response are ordered from oldest to newest. Each response also includes a nextPageToken. If your client disconnects, you can use this token to resume the stream. To do so, provide the last nextPageToken you received as the value for the pageToken parameter in your new connection request. The API will then resume sending messages from the point where you left off.
+Demo
+
+For a Python demo of this endpoint, see the Streaming Live Chat guide.
+Request
+Parameters
+
+The following table lists the parameters that this query supports. All of the parameters listed are query parameters.
+Parameters
+Required parameters
+liveChatId 	string
+The liveChatId parameter specifies the ID of the chat whose messages will be returned. The live chat ID associated with a broadcast is returned in the liveBroadcast resource's snippet.liveChatId property.
+part 	string
+The part parameter specifies the liveChatMessage resource parts that the API response will include. Supported values are id, snippet, and authorDetails.
+Optional parameters
+hl 	string
+The hl parameter instructs the API to retrieve a localized currency display string for a specific application language that the YouTube website supports. For example, in English, currency would be displayed as $1.50, but in French, it would be displayed as 1,50$.
+
+The parameter value must be a language code included in the list returned by the i18nLanguages.list method.
+maxResults 	unsigned integer
+
+The maxResults parameter specifies the maximum number of messages that should be returned in the result set. Acceptable values are 200 to 2000, inclusive. The default value is 500.
+
+The initial request made without a continuation token will only contain the most recent events. This may be smaller than maxResults, if it is provided.
+
+The API doesn't retrieve events that are older than those returned by initial the request made without a continuation token.
+pageToken 	string
+The pageToken parameter identifies a specific page in the result set that should be returned. In an API response, the nextPageToken property identify other pages that could be retrieved.
+profileImageSize 	unsigned integer
+The profileImageSize parameter specifies the size of the user profile pictures that should be returned in the result set. The images are square. The default value is 88, meaning pictures will be 88px by 88px. Acceptable values are in the range 16 to 720, inclusive.
+Request body
+
+Don't provide a request body when calling this method.
+Response
+
+If successful, this method returns a response body with the following structure:
+
+{
+  "kind": "youtube#liveChatMessageListResponse",
+  "etag": etag
+
+,
+  "nextPageToken": string
+
+,
+  "pollingIntervalMillis": unsigned integer
+
+,
+  "offlineAt": datetime
+
+,
+  "pageInfo": {
+    "totalResults": integer
+
+,
+    "resultsPerPage": integer
+
+
+  },
+  "items": [
+    liveChatMessage Resource
+  ],
+  "activePollItem": liveChatMessage Resource
+}
+
+Properties
+
+The following table defines the properties that appear in this resource:
+Properties
+kind 	string
+Identifies the API resource's type. The value will be youtube#liveChatMessageListResponse.
+etag 	etag
+The Etag of this resource.
+nextPageToken 	string
+The token that can be used as the value of the pageToken parameter to retrieve the next page in the result set.
+offlineAt 	datetime
+The date and time when the underlying livestream went offline. This property is only present if the stream is already offline. The value is specified in ISO 8601 (YYYY-MM-DDThh:mm:ss.sZ) format.
+pageInfo 	object
+The pageInfo object encapsulates paging information for the result set.
+pageInfo.totalResults 	integer
+The total number of results in the result set.
+pageInfo.resultsPerPage 	integer
+The number of results included in the API response.
+items[] 	list
+A list of messages. Each item in the list is a liveChatMessage resource.
+activePollItem 	object
+The poll data in the message. Each poll is a liveChatMessage resource with the type pollEvent, which represents an active poll. There can only be one poll per chat.
+Errors
+
+The following table identifies error messages that the API could return in response to a call to this method. See the error message documentation for more detail.
+When using gRPC to connect:
+gRPC Error Code 	Error detail 	Description
+PERMISSION_DENIED (7) 	The caller does not have permission 	You don't have the permissions required to retrieve messages for the specified live chat.
+INVALID_ARGUMENT (3) 	Request contains an invalid argument 	Fail to parse the provided params. Make sure the liveChatId and other parameters are in the correct format.
+FAILED_PRECONDITION (9)* 	Precondition check failed 	LIVE_CHAT_DISABLED. The specified live chat is disabled.
+FAILED_PRECONDITION (9)* 	Precondition check failed 	LIVE_CHAT_ENDED. You can't retrieve messages for the ended live chat.
+NOT_FOUND (5) 	Requested entity was not found 	The live chat that you are trying to retrieve cannot be found. Check the value of the request's liveChatId parameter to ensure that it is correct.
+RESOURCE_EXHAUSTED (8) 	Resource has been exhausted (e.g. check quota) 	The request was sent too quickly after the previous request. This error occurs when API requests to retrieve messages are being sent more frequently than YouTube's refresh rates, which unnecessarily wastes bandwidth.
+
+* Due to a gRPC limitation, it is not possible to distinguish based on the error code between a LIVE_CHAT_DISABLED case and a LIVE_CHAT_ENDED case. YouTube is actively working on a solution to address this issue.
+When using web traffic to connect:
+Error Type 	Error detail 	Description
+HttpStatus.FORBIDDEN (403) 	forbidden 	You don't have the permissions required to retrieve messages for the specified live chat.
+HttpStatus.BAD_REQUEST (400) 	Reason for invalid request, e.g. pageTokenInvalid 	Fail to parse the provided params. Make sure the liveChatId and other parameters are in the correct format.
+HttpStatus.FORBIDDEN (403) 	liveChatDisabled 	LIVE_CHAT_DISABLED. The specified live chat is disabled.
+HttpStatus.FORBIDDEN (403) 	liveChatEnded 	LIVE_CHAT_ENDED. You can't retrieve messages for the ended live chat.
+HttpStatus.NOT_FOUND (404) 	liveChatNotFound 	The live chat that you are trying to retrieve cannot be found. Check the value of the request's liveChatId parameter to ensure that it is correct.
+HttpStatus.FORBIDDEN (403) 	rateLimitExceeded 	The request was sent too quickly after the previous request. This error occurs when API requests to retrieve messages are being sent more frequently than YouTube's refresh rates, which unnecessarily wastes bandwidth.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/caesar/all-chat/services/message-processor/classifier"
 	"github.com/caesar/all-chat/services/message-processor/models"
 )
 
@@ -122,4 +123,122 @@ func (n *TikTokNormalizer) extractMetadata(raw *models.RawChatMessage) map[strin
 	metadata["raw_tags"] = tags
 
 	return metadata
+}
+
+// NormalizeEvent converts a RawChatMessage with event data to UnifiedChatMessage with EventInfo
+func (n *TikTokNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID string) (*models.UnifiedChatMessage, error) {
+	if raw.Platform != "tiktok" {
+		return nil, fmt.Errorf("unsupported platform: %s", raw.Platform)
+	}
+
+	if raw.EventType == "" {
+		return nil, fmt.Errorf("missing event type")
+	}
+
+	// Extract user info
+	userInfo := n.extractUserInfo(raw)
+
+	// Build EventValue from EventData
+	var eventValue *models.EventValue
+
+	switch raw.EventType {
+	case "gift":
+		giftName := "gift"
+		if n, ok := raw.EventData["gift_name"].(string); ok {
+			giftName = n
+		}
+		diamondCount := 0
+		if d, ok := raw.EventData["diamond_count"].(int); ok {
+			diamondCount = d
+		} else if d, ok := raw.EventData["diamond_count"].(float64); ok {
+			diamondCount = int(d)
+		}
+
+		eventValue = &models.EventValue{
+			Amount:      float64(diamondCount),
+			Currency:    "diamonds",
+			DisplayText: fmt.Sprintf("%s (%d diamonds)", giftName, diamondCount),
+		}
+
+	case "like_aggregate":
+		likeCount := 0
+		if l, ok := raw.EventData["like_count"].(int); ok {
+			likeCount = l
+		} else if l, ok := raw.EventData["like_count"].(float64); ok {
+			likeCount = int(l)
+		}
+
+		eventValue = &models.EventValue{
+			Amount:      float64(likeCount),
+			Currency:    "likes",
+			DisplayText: fmt.Sprintf("%d like%s", likeCount, pluralize(likeCount)),
+		}
+
+	case "follow":
+		eventValue = &models.EventValue{
+			Amount:      1,
+			Currency:    "follow",
+			DisplayText: "New follower",
+		}
+
+	case "share":
+		eventValue = &models.EventValue{
+			Amount:      1,
+			Currency:    "share",
+			DisplayText: "Shared stream",
+		}
+	}
+
+	// Classify event tier and duration
+	tier, duration := classifier.ClassifyEvent("tiktok", raw.EventType, eventValue)
+
+	// Extract aggregation info (for like updates)
+	aggregationID := ""
+	isUpdate := false
+	if raw.EventType == "like_aggregate" {
+		if id, ok := raw.EventData["aggregation_id"].(string); ok {
+			aggregationID = id
+		}
+		if upd, ok := raw.EventData["is_update"].(bool); ok {
+			isUpdate = upd
+		}
+	}
+
+	// Create EventInfo
+	eventInfo := &models.EventInfo{
+		Type:          raw.EventType,
+		Tier:          tier,
+		Value:         eventValue,
+		Duration:      duration,
+		AggregationID: aggregationID,
+		IsUpdate:      isUpdate, // CRITICAL: True for TikTok like updates
+		Metadata:      raw.EventData,
+	}
+
+	// Create unified message
+	unified := &models.UnifiedChatMessage{
+		ID:          raw.MessageID,
+		OverlayID:   overlayID,
+		Platform:    "tiktok",
+		ChannelID:   raw.ChannelID,
+		ChannelName: raw.ChannelID,
+		User:        userInfo,
+		Message: models.MessageInfo{
+			Text:   raw.Text,
+			Emotes: []models.Emote{}, // Events don't have emotes
+		},
+		Timestamp: raw.Timestamp,
+		Metadata:  n.extractMetadata(raw),
+		Event:     eventInfo, // Add event info
+	}
+
+	return unified, nil
+}
+
+// pluralize returns "s" if count != 1, otherwise ""
+func pluralize(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }

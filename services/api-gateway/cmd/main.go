@@ -133,10 +133,18 @@ func main() {
 	defer healthChecker.Stop()
 
 	// Create Redis Pub/Sub subscriber with message handler
-	messageHandler := func(overlayID string, message []byte) {
+	messageHandler := func(overlayID string, channel string, message []byte) {
+		// Determine message type based on channel
+		// Main channel: overlay:{id} -> regular messages/events
+		// Update channel: overlay:{id}:updates -> TikTok like aggregate updates
+		msgType := models.WSMessageTypeChatMessage
+		if len(channel) > 8 && channel[len(channel)-8:] == ":updates" {
+			msgType = models.WSMessageTypeMessageUpdate
+		}
+
 		// Wrap the unified message in a WebSocket message envelope
 		wsMsg := models.WSMessage{
-			Type:      models.WSMessageTypeChatMessage,
+			Type:      msgType,
 			Data:      json.RawMessage(message), // Use RawMessage to avoid re-parsing
 			Timestamp: time.Now().UTC(),
 		}

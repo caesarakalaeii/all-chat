@@ -1,0 +1,360 @@
+/**
+ * Theme Name: Minimal Clean Theme (Fixed Platform & Badges)
+ * Description: Inline layout with platform icon and badges before username
+ * Tags: minimal, clean, inline, simple
+ * Author: All-Chat Team
+ * Version: 1.1.0
+ * Updated: 2026-01-17
+ */
+
+/* ============================================================
+   MINIMAL THEME for All-Chat Overlay (FIXED VERSION)
+   ============================================================
+
+   A clean, minimal design featuring:
+   - Inline layout: "[icon] [badges] username: message" on same line
+   - Platform icon before username
+   - User badges inline with platform icon
+   - Colorful usernames with black outline
+   - White Roboto font with black outline for messages
+   - No message container backgrounds
+   - No avatars
+   - No timestamps
+   - Focus on content with minimal visual clutter
+
+   FIX: Platform icons and badges now display inline horizontally
+
+   HOW TO USE IN OBS:
+   1. Add a Browser Source in OBS
+   2. Set the URL to your overlay: http://your-domain.com/overlay/{overlay-id}
+   3. In the Browser Source properties, find the "Custom CSS" field
+   4. Copy and paste this ENTIRE file into that field
+   5. Click OK and enjoy your minimal overlay!
+
+   IMPORTANT: Make sure to set Platform Badge Style to "Icon" in the overlay settings!
+
+   ============================================================ */
+
+/* ============================================================
+   GOOGLE FONTS IMPORT
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+/* ============================================================
+   CORE RESET & BODY STYLES
+   ============================================================ */
+
+/* Reset body background and ensure clean rendering */
+body {
+  background: transparent !important;
+  font-family: 'Roboto', Arial, sans-serif !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+/* Main container - transparent and minimal */
+.min-h-screen {
+  background: transparent !important;
+  padding: 16px !important;
+}
+
+/* Message list container - reduced spacing for minimal look */
+.space-y-3 {
+  gap: 8px !important;
+}
+
+/* ============================================================
+   MESSAGE CONTAINER - TRANSPARENT & MINIMAL
+   ============================================================ */
+
+/* Remove all container backgrounds and borders */
+.space-y-3 > div {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  display: block !important;
+}
+
+/* Content container - block layout to allow text wrapping */
+.flex-1.min-w-0 {
+  display: block !important;
+  width: 100% !important;
+  flex: none !important;
+  min-width: 0 !important;
+}
+
+/* ============================================================
+   PLATFORM ICON & BADGES - INLINE HORIZONTAL LAYOUT (FIXED)
+   ============================================================ */
+
+/* Header container - FLEX layout to keep everything inline horizontally */
+.flex.items-center.gap-2 {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  flex-wrap: nowrap !important;
+}
+
+/* Platform badge (icon) - inline with proper sizing */
+.platform-badge.platform-badge-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-right: 4px !important;
+  vertical-align: middle !important;
+}
+
+/* Badge container - inline flex to keep badges horizontal */
+.flex.gap-1 {
+  display: inline-flex !important;
+  gap: 4px !important;
+  margin-right: 4px !important;
+  vertical-align: middle !important;
+  align-items: center !important;
+}
+
+/* Individual badges - proper sizing */
+.flex.gap-1 img {
+  width: 18px !important;
+  height: 18px !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+  image-rendering: -webkit-optimize-contrast !important;
+  image-rendering: crisp-edges !important;
+}
+
+/* ============================================================
+   HIDE AVATAR
+   ============================================================ */
+
+/* Hide avatar container completely */
+.flex-shrink-0 {
+  display: none !important;
+}
+
+/* ============================================================
+   HIDE TEXT PLATFORM INDICATOR
+   ============================================================ */
+
+/* Hide text platform badges (TWITCH, YOUTUBE, KICK, TIKTOK) */
+.platform-badge.platform-badge-text {
+  display: none !important;
+}
+
+/* Hide platform-specific text color classes */
+.text-purple-400:not(.flex.gap-1 img),
+.text-red-400:not(.flex.gap-1 img),
+.text-green-400:not(.flex.gap-1 img),
+.text-gray-400:not(.flex.gap-1 img) {
+  display: none !important;
+}
+
+/* ============================================================
+   USERNAME STYLES - COLORFUL WITH BLACK OUTLINE
+   ============================================================ */
+
+/* Username with thick black outline for maximum readability */
+.font-semibold.text-sm {
+  font-family: 'Roboto', Arial, sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.4 !important;
+  display: inline !important;
+  margin-bottom: 0 !important;
+  margin-right: 0 !important;
+  /* Multiple text-shadow layers create thick black outline */
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+    -2px -2px 0 #000,
+     2px -2px 0 #000,
+    -2px  2px 0 #000,
+     2px  2px 0 #000,
+    -1px  0   0 #000,
+     1px  0   0 #000,
+     0   -1px 0 #000,
+     0    1px 0 #000 !important;
+  /* Colors are preserved from backend (dynamic per user) */
+  /* The outline ensures readability on any background */
+}
+
+/* Add colon after username */
+.font-semibold.text-sm::after {
+  content: ": " !important;
+  color: inherit !important;
+  text-shadow: inherit !important;
+}
+
+/* ============================================================
+   MESSAGE TEXT - WHITE ROBOTO WITH BLACK OUTLINE
+   ============================================================ */
+
+/* Message text with white color and black outline */
+.text-white.break-words {
+  font-family: 'Roboto', Arial, sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  color: #ffffff !important;
+  display: inline !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  white-space: pre-wrap !important;
+  /* Multiple text-shadow layers for black outline */
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+    -2px -2px 0 #000,
+     2px -2px 0 #000,
+    -2px  2px 0 #000,
+     2px  2px 0 #000,
+    -1px  0   0 #000,
+     1px  0   0 #000,
+     0   -1px 0 #000,
+     0    1px 0 #000 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+/* Emotes within messages - clean inline display */
+.text-white.break-words img {
+  display: inline-block !important;
+  vertical-align: middle !important;
+  max-height: 28px !important;
+  margin: 0 2px !important;
+  image-rendering: -webkit-optimize-contrast !important;
+  image-rendering: crisp-edges !important;
+}
+
+/* ============================================================
+   TIMESTAMP - HIDDEN
+   ============================================================ */
+
+/* Hide timestamps for ultra-minimal look */
+.text-xs.text-gray-500.mt-1 {
+  display: none !important;
+}
+
+.text-xs.text-gray-500 {
+  display: none !important;
+}
+
+/* ============================================================
+   OPTIONAL CUSTOMIZATIONS
+   ============================================================
+
+   Uncomment any section below to enable additional customizations.
+   Remove the opening and closing comment markers around the CSS rules.
+
+   ============================================================ */
+
+/* --- SHOW TIMESTAMPS ---
+   Display timestamps if you want to see message times */
+/*
+.text-xs.text-gray-500 {
+  display: block !important;
+  font-family: 'Roboto', Arial, sans-serif !important;
+  font-size: 11px !important;
+  color: #999999 !important;
+  margin-top: 2px !important;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000 !important;
+}
+*/
+
+/* --- ADJUST MESSAGE SPACING ---
+   Increase or decrease space between messages */
+/*
+.space-y-3 {
+  gap: 12px !important;
+}
+*/
+
+/* --- THICKER TEXT OUTLINE ---
+   Make outlines more prominent for high-contrast backgrounds */
+/*
+.font-semibold.text-sm,
+.text-white.break-words {
+  text-shadow:
+    -2px -2px 0 #000,
+     2px -2px 0 #000,
+    -2px  2px 0 #000,
+     2px  2px 0 #000,
+    -3px -3px 0 #000,
+     3px -3px 0 #000,
+    -3px  3px 0 #000,
+     3px  3px 0 #000,
+    -2px  0   0 #000,
+     2px  0   0 #000,
+     0   -2px 0 #000,
+     0    2px 0 #000 !important;
+}
+*/
+
+/* --- LARGER TEXT SIZE ---
+   Increase font sizes for better visibility */
+/*
+.font-semibold.text-sm {
+  font-size: 20px !important;
+}
+
+.text-white.break-words {
+  font-size: 18px !important;
+}
+*/
+
+/* --- HIDE BADGES ---
+   Remove all user badges for even more minimal look */
+/*
+.flex.gap-1 {
+  display: none !important;
+}
+*/
+
+/* --- HIDE PLATFORM ICON ---
+   Remove platform icons for even more minimal look */
+/*
+.platform-badge.platform-badge-icon {
+  display: none !important;
+}
+*/
+
+/* --- COMPACT LAYOUT ---
+   Reduce all spacing for maximum message density */
+/*
+.space-y-3 {
+  gap: 4px !important;
+}
+
+.font-semibold.text-sm {
+  font-size: 16px !important;
+  margin-bottom: 0 !important;
+}
+
+.text-white.break-words {
+  font-size: 14px !important;
+  line-height: 1.3 !important;
+}
+
+.flex.gap-1 {
+  margin-right: 2px !important;
+}
+
+.platform-badge.platform-badge-icon {
+  margin-right: 2px !important;
+}
+*/
+
+/* ============================================================
+   END OF MINIMAL THEME (FIXED)
+   ============================================================ */

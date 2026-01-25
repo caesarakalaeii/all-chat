@@ -14,6 +14,7 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/consumer"
 	"github.com/caesar/all-chat/services/message-processor/dedup"
 	"github.com/caesar/all-chat/services/message-processor/enricher"
+	"github.com/caesar/all-chat/services/message-processor/filter"
 	"github.com/caesar/all-chat/services/message-processor/models"
 	"github.com/caesar/all-chat/services/message-processor/normalizer"
 	"github.com/caesar/all-chat/services/message-processor/publisher"
@@ -158,6 +159,9 @@ func main() {
 	// Create deduplicator to prevent duplicate message publishing
 	deduplicator := dedup.NewDeduplicator(redisClient, log)
 
+	// Create event filter to check if event types are enabled per overlay
+	eventFilter := filter.NewEventFilter(db, log)
+
 	// Define message handler
 	messageHandler := func(ctx context.Context, rawMsg *models.RawChatMessage) error {
 		// Filter out old messages based on timestamp
@@ -239,56 +243,120 @@ func main() {
 
 		// Process message for each overlay
 		for _, overlay := range overlays {
-			// Normalize message using platform-specific normalizer
-			startNormalize := time.Now()
-			unified, err := platformNormalizer.Normalize(rawMsg, overlay.OverlayID)
-			if err != nil {
-				log.Warn("Failed to normalize message",
-					zap.String("message_id", rawMsg.MessageID),
-					zap.String("platform", rawMsg.Platform),
-					zap.Error(err),
-				)
-				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized", "failed")
-				continue
-			}
-			processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized", "success")
-			processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "normalization").Observe(time.Since(startNormalize).Seconds())
+			var unified *models.UnifiedChatMessage
+			var err error
+			isEvent := rawMsg.EventType != "" && rawMsg.EventType != "chat"
 
-			// Enrich with avatars (Twitch only, cached in Redis)
-			startAvatar := time.Now()
-			if err := avatarEnricher.Enrich(ctx, unified); err != nil {
-				log.Warn("Failed to enrich avatar",
-					zap.String("message_id", rawMsg.MessageID),
-					zap.Error(err),
-				)
-				// Continue even if enrichment fails
-			}
-			processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "avatar_enrichment").Observe(time.Since(startAvatar).Seconds())
+			if isEvent {
+				// EVENT PATH: Check if event type is enabled for this overlay
+				enabled, filterErr := eventFilter.IsEventEnabled(ctx, overlay.OverlayID, rawMsg.Platform, rawMsg.EventType)
+				if filterErr != nil {
+					log.Warn("Failed to check event filter, allowing event",
+						zap.String("overlay_id", overlay.OverlayID),
+						zap.String("event_type", rawMsg.EventType),
+						zap.Error(filterErr),
+					)
+					// Fail open - allow event if filter check fails
+					enabled = true
+				}
 
-			// Enrich with badge icons (Twitch only, cached in Redis)
-			startBadge := time.Now()
-			if err := badgeEnricher.Enrich(ctx, unified); err != nil {
-				log.Warn("Failed to enrich badges",
-					zap.String("message_id", rawMsg.MessageID),
-					zap.Error(err),
-				)
-				// Continue even if enrichment fails
-			}
-			processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "badge_enrichment").Observe(time.Since(startBadge).Seconds())
+				if !enabled {
+					log.Debug("Event type disabled for overlay, skipping",
+						zap.String("overlay_id", overlay.OverlayID),
+						zap.String("platform", rawMsg.Platform),
+						zap.String("event_type", rawMsg.EventType),
+					)
+					processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "filtered_event", "skipped")
+					continue
+				}
 
-			// Enrich with emotes
-			startEmote := time.Now()
-			if err := emoteEnricher.Enrich(ctx, unified); err != nil {
-				log.Warn("Failed to enrich message",
-					zap.String("message_id", rawMsg.MessageID),
-					zap.Error(err),
-				)
-				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "enriched", "failed")
-				// Continue even if enrichment fails
+				// Normalize event using platform-specific event normalizer
+				startNormalize := time.Now()
+
+				// Type assert to get NormalizeEvent method
+				switch platformNormalizer.(type) {
+				case *normalizer.TwitchNormalizer:
+					unified, err = platformNormalizer.(*normalizer.TwitchNormalizer).NormalizeEvent(rawMsg, overlay.OverlayID)
+				case *normalizer.YouTubeNormalizer:
+					unified, err = platformNormalizer.(*normalizer.YouTubeNormalizer).NormalizeEvent(rawMsg, overlay.OverlayID)
+				case *normalizer.TikTokNormalizer:
+					unified, err = platformNormalizer.(*normalizer.TikTokNormalizer).NormalizeEvent(rawMsg, overlay.OverlayID)
+				default:
+					log.Warn("Platform normalizer does not support events, skipping",
+						zap.String("platform", rawMsg.Platform),
+						zap.String("event_type", rawMsg.EventType),
+					)
+					continue
+				}
+
+				if err != nil {
+					log.Warn("Failed to normalize event",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.String("platform", rawMsg.Platform),
+						zap.String("event_type", rawMsg.EventType),
+						zap.Error(err),
+					)
+					processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized_event", "failed")
+					continue
+				}
+				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized_event", "success")
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "event_normalization").Observe(time.Since(startNormalize).Seconds())
+
+				// Events don't get emote/avatar/badge enrichment
+
 			} else {
-				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "enriched", "success")
+				// CHAT PATH (existing logic)
+				// Normalize message using platform-specific normalizer
+				startNormalize := time.Now()
+				unified, err = platformNormalizer.Normalize(rawMsg, overlay.OverlayID)
+				if err != nil {
+					log.Warn("Failed to normalize message",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.String("platform", rawMsg.Platform),
+						zap.Error(err),
+					)
+					processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized", "failed")
+					continue
+				}
+				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized", "success")
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "normalization").Observe(time.Since(startNormalize).Seconds())
+
+				// Enrich with avatars (Twitch only, cached in Redis)
+				startAvatar := time.Now()
+				if err := avatarEnricher.Enrich(ctx, unified); err != nil {
+					log.Warn("Failed to enrich avatar",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.Error(err),
+					)
+					// Continue even if enrichment fails
+				}
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "avatar_enrichment").Observe(time.Since(startAvatar).Seconds())
+
+				// Enrich with badge icons (Twitch only, cached in Redis)
+				startBadge := time.Now()
+				if err := badgeEnricher.Enrich(ctx, unified); err != nil {
+					log.Warn("Failed to enrich badges",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.Error(err),
+					)
+					// Continue even if enrichment fails
+				}
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "badge_enrichment").Observe(time.Since(startBadge).Seconds())
+
+				// Enrich with emotes
+				startEmote := time.Now()
+				if err := emoteEnricher.Enrich(ctx, unified); err != nil {
+					log.Warn("Failed to enrich message",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.Error(err),
+					)
+					processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "enriched", "failed")
+					// Continue even if enrichment fails
+				} else {
+					processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "enriched", "success")
+				}
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "emote_enrichment").Observe(time.Since(startEmote).Seconds())
 			}
-			processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "emote_enrichment").Observe(time.Since(startEmote).Seconds())
 
 			// Publish to overlay channel
 			startPublish := time.Now()
