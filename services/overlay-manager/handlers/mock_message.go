@@ -33,6 +33,7 @@ type mockMessageRequest struct {
 	AvatarURL   string                 `json:"avatar_url"`
 	Color       string                 `json:"color"`
 	Badges      []clients.MockBadge    `json:"badges"`
+	Event       *clients.MockEventInfo `json:"event"`
 	Metadata    map[string]interface{} `json:"metadata"`
 }
 
@@ -88,6 +89,7 @@ func (h *MockMessageHandler) HandleSendMockMessage(c *gin.Context) {
 		AvatarURL:   req.AvatarURL,
 		Color:       req.Color,
 		Badges:      req.Badges,
+		Event:       req.Event,
 		Text:        req.Text,
 		Metadata:    req.Metadata,
 	}
