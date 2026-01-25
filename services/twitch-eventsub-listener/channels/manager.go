@@ -20,10 +20,16 @@ type Channel struct {
 // SubscriptionCallback is called when channels are added/removed
 type SubscriptionCallback func(broadcasterID string, action string) error
 
+// UserIDResolver resolves Twitch usernames to user IDs
+type UserIDResolver interface {
+	GetUserIDByLogin(ctx context.Context, login string) (string, error)
+}
+
 // Manager tracks active Twitch channels and manages subscriptions
 type Manager struct {
 	db       *pgxpool.Pool
 	logger   *zap.Logger
+	resolver UserIDResolver
 	callback SubscriptionCallback
 
 	mu       sync.RWMutex
@@ -34,10 +40,11 @@ type Manager struct {
 }
 
 // NewManager creates a new channel manager
-func NewManager(db *pgxpool.Pool, logger *zap.Logger) *Manager {
+func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver) *Manager {
 	return &Manager{
 		db:       db,
 		logger:   logger,
+		resolver: resolver,
 		channels: make(map[string]*Channel),
 		stopChan: make(chan struct{}),
 	}
@@ -120,19 +127,26 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			continue
 		}
 
-		// Note: channelID is the channel name (lowercase), not broadcaster_id
-		// We need to resolve broadcaster_id from Twitch API or store it in database
-		// For now, use channel name as broadcaster_id (will need API call to resolve)
+		// channelID from database is the Twitch username (login)
+		// We need to resolve it to broadcaster_user_id via Twitch API
+		broadcasterID, err := m.resolver.GetUserIDByLogin(ctx, channelID)
+		if err != nil {
+			m.logger.Warn("Failed to resolve username to user ID",
+				zap.String("username", channelID),
+				zap.Error(err),
+			)
+			continue
+		}
 
-		if _, exists := activeChannels[channelID]; !exists {
-			activeChannels[channelID] = &Channel{
-				BroadcasterID:   channelID, // TODO: Resolve to actual broadcaster_id
+		if _, exists := activeChannels[broadcasterID]; !exists {
+			activeChannels[broadcasterID] = &Channel{
+				BroadcasterID:   broadcasterID,
 				BroadcasterName: channelID,
 				OverlayIDs:      []string{},
 			}
 		}
 
-		activeChannels[channelID].OverlayIDs = append(activeChannels[channelID].OverlayIDs, overlayID)
+		activeChannels[broadcasterID].OverlayIDs = append(activeChannels[broadcasterID].OverlayIDs, overlayID)
 	}
 
 	if err := rows.Err(); err != nil {

@@ -263,3 +263,50 @@ func (sm *SubscriptionManager) GetActiveSubscriptions() []string {
 	}
 	return broadcasters
 }
+
+// GetUserIDByLogin resolves a Twitch username (login) to a user ID
+func (sm *SubscriptionManager) GetUserIDByLogin(ctx context.Context, login string) (string, error) {
+	// Get access token
+	token, err := sm.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
+
+	// Call Twitch Helix API to get user by login
+	url := fmt.Sprintf("https://api.twitch.tv/helix/users?login=%s", login)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Client-Id", sm.clientID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to get user: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result struct {
+		Data []struct {
+			ID    string `json:"id"`
+			Login string `json:"login"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if len(result.Data) == 0 {
+		return "", fmt.Errorf("user not found: %s", login)
+	}
+
+	return result.Data[0].ID, nil
+}
