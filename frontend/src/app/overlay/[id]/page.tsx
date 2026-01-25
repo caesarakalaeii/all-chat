@@ -467,6 +467,11 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
                     width={40}
                     height={40}
                     className="w-10 h-10 rounded-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                        message.user.display_name || message.user.username
+                      )}&background=6b7280&color=fff&size=40`;
+                    }}
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-semibold">
