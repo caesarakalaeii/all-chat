@@ -122,6 +122,76 @@ body {
 }
 
 /* ============================================================
+   EVENTS - DISPLAY AS NORMAL MESSAGES
+   ============================================================ */
+
+/* Remove all event-specific styling to make them look like regular chat */
+.event-message {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  transform: none !important;
+  animation: none !important;
+  min-height: auto !important;
+  border-radius: 0 !important;
+}
+
+/* Hide event icons, titles, and metadata - show only the message text */
+.event-icon {
+  display: none !important;
+}
+
+.event-title {
+  display: none !important;
+}
+
+.event-user {
+  display: none !important;
+}
+
+.event-value {
+  display: none !important;
+}
+
+.event-metadata {
+  display: none !important;
+}
+
+/* Make event message text display inline like regular messages */
+.event-message-text {
+  display: inline !important;
+  color: #ffffff !important;
+  font-family: 'Roboto', Arial, sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+    -2px -2px 0 #000,
+     2px -2px 0 #000,
+    -2px  2px 0 #000,
+     2px  2px 0 #000,
+    -1px  0   0 #000,
+     1px  0   0 #000,
+     0   -1px 0 #000,
+     0    1px 0 #000 !important;
+  margin-left: 0 !important;
+}
+
+/* Event content container - make it inline */
+.event-content {
+  display: inline !important;
+}
+
+.event-content > div {
+  display: inline !important;
+}
+
+/* ============================================================
    HIDE PLATFORM INDICATOR
    ============================================================ */
 
