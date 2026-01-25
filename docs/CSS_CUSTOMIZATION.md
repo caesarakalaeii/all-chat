@@ -886,21 +886,77 @@ Events are controlled via the **Event Settings** page at `/overlays/{id}/events`
 
 ### Event Message Structure
 
-Events appear as special message cards with tier-based styling:
+Events appear as large, prominent notification cards (not regular chat messages):
 
 ```html
-<div class="event-message event-tier-high event-type-subscription">
-  <!-- Event icon/emoji -->
-  <div class="event-icon">🎉</div>
+<div class="event-message event-tier-high event-type-subscription"
+     data-platform="twitch"
+     data-event-type="subscription">
+  <div class="flex items-start gap-3">
+    <!-- Avatar (same as chat) -->
+    <div class="flex-shrink-0">
+      <img src="avatar.png" class="w-10 h-10 rounded-full" />
+    </div>
 
-  <!-- Event details -->
-  <div class="event-details">
-    <div class="event-title">New Subscriber!</div>
-    <div class="event-user">Username just subscribed</div>
-    <div class="event-metadata">Tier 1 • 3 month streak</div>
+    <!-- Event content (completely different from chat) -->
+    <div class="flex-1 min-w-0">
+      <div class="event-content">
+        <!-- Main event display -->
+        <div class="flex items-center gap-3 mb-1">
+          <!-- Large event icon (4xl size, animated) -->
+          <span class="text-4xl event-icon leading-none">⭐</span>
+
+          <!-- Event title and user -->
+          <div class="flex-1">
+            <div class="text-lg font-bold event-title text-white">
+              New Subscriber!
+            </div>
+            <div class="text-sm font-semibold event-user" style="color: #9146FF">
+              Username
+            </div>
+          </div>
+
+          <!-- Value (for donations, Super Chats) -->
+          <div class="text-2xl font-bold event-value text-yellow-300">
+            $50.00
+          </div>
+        </div>
+
+        <!-- Optional message text -->
+        <div class="text-sm event-message-text text-gray-200 ml-14">
+          Love the stream! Keep it up!
+        </div>
+
+        <!-- Metadata (months, viewers, etc.) -->
+        <div class="text-xs event-metadata text-gray-400 mt-1 ml-14">
+          3 months • 2 month streak
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 ```
+
+**Key Visual Differences from Chat:**
+- Events are **5% larger** (transform: scale(1.05))
+- **Minimum 100px height** (vs ~60px for chat)
+- **Dramatic bounce-in animation** (0.6s spring effect)
+- **Large icons** (4xl = 2.25rem vs 2xl = 1.5rem)
+- **Bold, uppercase titles** with letter-spacing
+- **Prominent value display** (for donations/Super Chats)
+- **Tier-based glow effects** (especially high-tier)
+
+### Event Content Classes
+
+| Class | Purpose | Example |
+|-------|---------|---------|
+| `.event-content` | Wrapper for event display | Container for title, user, value |
+| `.event-icon` | Large animated emoji/icon | 4xl size, pulsing animation |
+| `.event-title` | Event type title | "New Subscriber!", "Super Chat!" |
+| `.event-user` | Username who triggered event | Colored username |
+| `.event-value` | Monetary value | "$50.00" in large yellow text |
+| `.event-message-text` | Optional message from user | Smaller text below title |
+| `.event-metadata` | Additional context | Months, streak, viewer count |
 
 ### Event CSS Classes
 
@@ -931,44 +987,100 @@ Events are automatically assigned tiers based on their value/importance:
 
 #### High-Value Events (Tier High)
 - Subscriptions and resubscriptions
-- Large donations ($10+)
+- Large donations ($50+)
 - Big raids (1000+ viewers)
-- High-value Super Chats
-- Large gift bombs
+- High-value Super Chats ($50+)
+- Large gift bombs (5+ gifts)
 
 **Default Style:**
 ```css
 .event-tier-high {
-  border: 2px solid gold;
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.1));
+  background: linear-gradient(135deg,
+    rgba(255, 215, 0, 0.25) 0%,
+    rgba(255, 140, 0, 0.15) 100%) !important;
+  border: 3px solid #FFD700 !important;
+  box-shadow:
+    0 0 30px rgba(255, 215, 0, 0.5),
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  min-height: 100px !important;
+  padding: 1.5rem !important;
+  transform: scale(1.05);
+  animation: event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55),
+             high-tier-glow 2s ease-in-out infinite !important;
+}
+
+/* Pulsing glow animation */
+@keyframes high-tier-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 30px rgba(255, 215, 0, 0.5),
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 0 50px rgba(255, 215, 0, 0.8),
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
 }
 ```
 
 #### Medium-Value Events (Tier Medium)
 - Follows
 - Member milestones
-- Small gifts
-- Medium Super Chats
+- Small gifts (1-4 gifts)
+- Medium Super Chats ($10-$49)
+- Medium bits (100-999)
 
 **Default Style:**
 ```css
 .event-tier-medium {
-  border: 2px solid #9146FF;
-  box-shadow: 0 0 10px rgba(145, 70, 255, 0.3);
+  background: linear-gradient(135deg,
+    rgba(147, 51, 234, 0.2) 0%,
+    rgba(79, 70, 229, 0.15) 100%) !important;
+  border: 3px solid #9333EA !important;
+  box-shadow:
+    0 0 25px rgba(147, 51, 234, 0.4),
+    0 6px 24px rgba(0, 0, 0, 0.3) !important;
+  min-height: 100px !important;
+  padding: 1.5rem !important;
+  transform: scale(1.05);
 }
 ```
 
 #### Low-Value Events (Tier Low)
 - Likes (aggregated)
 - Shares
-- Small bits
+- Small bits (<100)
 
 **Default Style:**
 ```css
 .event-tier-low {
-  border: 1px solid #4A90E2;
-  opacity: 0.9;
+  background: rgba(59, 130, 246, 0.15) !important;
+  border: 2px solid #3B82F6 !important;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3) !important;
+  min-height: 100px !important;
+  padding: 1.5rem !important;
+  transform: scale(1.05);
+}
+```
+
+**Entrance Animation (All Events):**
+```css
+@keyframes event-bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(50px);
+  }
+  50% {
+    transform: scale(1.1) translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.05) translateY(0);
+  }
 }
 ```
 
@@ -1051,51 +1163,180 @@ Events are automatically assigned tiers based on their value/importance:
 }
 ```
 
-#### 5. Animated Event Effects
+#### 5. Event Animation Customization
 
+Events have built-in dramatic animations. You can customize or disable them:
+
+**Disable All Event Animations:**
 ```css
-/* Pulsing glow for high-value events */
-@keyframes pulse-gold {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(255, 215, 0, 0.8);
-  }
+.event-message {
+  animation: none !important;
+  transform: scale(1) !important;
 }
 
-.event-tier-high {
-  animation: pulse-gold 2s infinite !important;
+.event-icon {
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
 }
+```
 
-/* Slide-in animation for raids */
-@keyframes raid-sweep {
+**Disable Only Entrance Animation (Keep Icon Animation):**
+```css
+.event-message {
+  animation: none !important;
+}
+```
+
+**Custom Entrance Animations:**
+```css
+/* Slide in from right instead of bounce */
+@keyframes slide-in-right {
   0% {
-    transform: translateX(-100%);
     opacity: 0;
+    transform: translateX(100%) scale(1.05);
   }
   100% {
-    transform: translateX(0);
+    opacity: 1;
+    transform: translateX(0) scale(1.05);
+  }
+}
+
+.event-message {
+  animation: slide-in-right 0.5s ease-out !important;
+}
+
+/* Fade in only (subtle) */
+.event-message {
+  animation: fade-in 0.4s ease-out !important;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Explosion effect for gift bombs */
+@keyframes explode {
+  0% {
+    transform: scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.2) rotate(180deg);
+  }
+  100% {
+    transform: scale(1.05) rotate(360deg);
     opacity: 1;
   }
 }
 
-.event-type-raid {
-  animation: raid-sweep 500ms ease-out !important;
+.event-type-gift_subscription,
+.event-type-mystery_gift {
+  animation: explode 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+}
+```
+
+**Customize Icon Animations:**
+```css
+/* Default icon pulse with rotation */
+.event-icon {
+  animation: event-icon-pulse 1.5s ease-in-out infinite !important;
 }
 
-/* Heartbeat animation for likes */
-@keyframes heartbeat {
+@keyframes event-icon-pulse {
   0%, 100% {
-    transform: scale(1);
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.3));
   }
   50% {
-    transform: scale(1.05);
+    transform: scale(1.15) rotate(-5deg);
+    filter: drop-shadow(0 4px 16px rgba(255, 255, 255, 0.6));
   }
 }
 
-.event-type-like_aggregate {
-  animation: heartbeat 1s infinite !important;
+/* Faster icon animation */
+.event-icon {
+  animation-duration: 0.8s !important;
+}
+
+/* Slower, subtle icon animation */
+.event-icon {
+  animation-duration: 3s !important;
+}
+
+/* Spin animation for icons */
+@keyframes icon-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.event-icon {
+  animation: icon-spin 2s linear infinite !important;
+}
+```
+
+**High-Tier Glow Effect:**
+```css
+/* Default pulsing glow for high-tier events */
+@keyframes high-tier-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 30px rgba(255, 215, 0, 0.5),
+      0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow:
+      0 0 50px rgba(255, 215, 0, 0.8),
+      0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Faster pulsing */
+.event-tier-high {
+  animation-duration: 1s !important; /* Faster pulse */
+}
+
+/* Disable high-tier glow */
+.event-tier-high {
+  animation: event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.5) !important;
+}
+```
+
+**Raid Sweep Effect:**
+```css
+/* Raids have a special sweep animation overlay */
+.event-type-raid::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 69, 0, 0) 0%,
+    rgba(255, 69, 0, 0.2) 50%,
+    rgba(255, 69, 0, 0) 100%
+  );
+  animation: raid-sweep 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes raid-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Disable raid sweep */
+.event-type-raid::before {
+  display: none !important;
+}
+
+/* Faster raid sweep */
+.event-type-raid::before {
+  animation-duration: 1s !important;
 }
 ```
 
@@ -1125,44 +1366,326 @@ YouTube Super Chats have different colors based on their value. You can customiz
 #### 7. Larger/Smaller Event Messages
 
 ```css
-/* Make events larger than chat */
+/* Make events MUCH larger than chat (double size) */
 .event-message {
-  transform: scale(1.1) !important;
-  margin: 12px 0 !important;
+  transform: scale(1.5) !important;
+  margin: 20px 0 !important;
+  min-height: 150px !important;
+}
+
+/* Make events same size as chat (remove prominence) */
+.event-message {
+  transform: scale(1) !important;
+  min-height: auto !important;
+  padding: 0.75rem !important;
 }
 
 /* Make events smaller and subtle */
 .event-message {
-  transform: scale(0.9) !important;
-  opacity: 0.8 !important;
+  transform: scale(0.85) !important;
+  opacity: 0.7 !important;
+}
+
+/* Compact event layout (smaller icon, tighter spacing) */
+.event-message .event-icon {
+  font-size: 2rem !important; /* Smaller icon */
+}
+
+.event-message .event-title {
+  font-size: 1rem !important; /* Smaller title */
+}
+
+.event-message {
+  min-height: 60px !important;
+  padding: 0.75rem !important;
 }
 ```
 
 #### 8. Event Icon Customization
 
+Events use large animated emoji icons (4xl size by default):
+
 ```css
-/* Larger event icons */
+/* Even larger event icons */
 .event-icon {
-  font-size: 2em !important;
+  font-size: 4rem !important; /* Make icons HUGE */
 }
 
-/* Animated event icons */
+/* Disable icon animation */
 .event-icon {
-  animation: bounce 1s infinite !important;
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
 }
 
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
+/* Custom icon animation */
+@keyframes custom-icon-spin {
+  0% {
+    transform: rotate(0deg);
   }
-  50% {
-    transform: translateY(-10px);
+  100% {
+    transform: rotate(360deg);
   }
+}
+
+.event-icon {
+  animation: custom-icon-spin 2s linear infinite !important;
+}
+
+/* Change icon color/glow */
+.event-icon {
+  filter: drop-shadow(0 0 20px rgba(255, 0, 0, 0.8)) !important;
 }
 
 /* Hide event icons */
 .event-icon {
   display: none !important;
+}
+
+/* Platform-specific icon styling */
+.event-type-subscription .event-icon {
+  filter: drop-shadow(0 0 15px rgba(145, 70, 255, 1)) !important;
+}
+
+.event-type-super_chat .event-icon {
+  filter: drop-shadow(0 0 20px rgba(255, 215, 0, 1)) !important;
+}
+
+.event-type-raid .event-icon {
+  animation: raid-icon-shake 0.5s infinite !important;
+}
+
+@keyframes raid-icon-shake {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+```
+
+#### 9. Event Title and Text Customization
+
+```css
+/* Customize event titles */
+.event-title {
+  font-size: 1.5rem !important;
+  color: #FFD700 !important;
+  text-transform: none !important; /* Remove uppercase */
+  letter-spacing: normal !important;
+  font-family: 'Comic Sans MS', cursive !important;
+}
+
+/* Rainbow gradient event titles */
+.event-title {
+  background: linear-gradient(90deg,
+    #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* Customize event username display */
+.event-user {
+  font-size: 1rem !important;
+  font-weight: normal !important;
+}
+
+/* Style event message text */
+.event-message-text {
+  font-style: italic !important;
+  color: #FFD700 !important;
+}
+
+/* Style event metadata */
+.event-metadata {
+  color: #9146FF !important;
+  font-weight: bold !important;
+}
+
+/* Hide event message text */
+.event-message-text {
+  display: none !important;
+}
+
+/* Hide event metadata */
+.event-metadata {
+  display: none !important;
+}
+```
+
+#### 10. Event Value Styling (Super Chats, Donations)
+
+```css
+/* Make value amounts even larger */
+.event-value {
+  font-size: 3rem !important;
+  color: #FFD700 !important;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 1) !important;
+}
+
+/* Animated rainbow value */
+.event-value {
+  animation: rainbow-shift 3s linear infinite !important;
+}
+
+@keyframes rainbow-shift {
+  0% { color: #ff0000; }
+  16% { color: #ff7f00; }
+  33% { color: #ffff00; }
+  50% { color: #00ff00; }
+  66% { color: #0000ff; }
+  83% { color: #4b0082; }
+  100% { color: #ff0000; }
+}
+
+/* Hide value amounts */
+.event-value {
+  display: none !important;
+}
+```
+
+### Advanced: Complete Event Redesigns
+
+#### Making Events Look Like Stream Alerts
+
+```css
+/* Full-width alert bar style (like StreamElements/StreamLabs) */
+.event-message {
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-top: 5px solid #FFD700 !important;
+  border-bottom: 5px solid #FFD700 !important;
+  transform: scale(1) !important;
+  width: 100% !important;
+  background: rgba(0, 0, 0, 0.95) !important;
+  padding: 2rem !important;
+}
+
+.event-icon {
+  font-size: 5rem !important;
+}
+
+.event-title {
+  font-size: 2rem !important;
+  color: #FFD700 !important;
+}
+
+.event-value {
+  font-size: 4rem !important;
+}
+```
+
+#### Minimal Event Style (Subtle)
+
+```css
+/* Barely noticeable events that blend with chat */
+.event-message {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+  transform: scale(1) !important;
+  min-height: auto !important;
+  padding: 0.75rem !important;
+  animation: fade-in 0.3s ease-out !important;
+}
+
+.event-icon {
+  font-size: 1.5rem !important;
+  animation: none !important;
+  filter: none !important;
+}
+
+.event-title {
+  font-size: 0.875rem !important;
+  text-transform: none !important;
+  font-weight: 600 !important;
+  color: #9CA3AF !important;
+}
+
+.event-tier-high,
+.event-tier-medium,
+.event-tier-low {
+  animation: none !important;
+  box-shadow: none !important;
+}
+```
+
+#### Only Show Events (Hide Chat)
+
+```css
+/* Hide all regular chat messages */
+.chat-message {
+  display: none !important;
+}
+
+/* Make events full-width when chat is hidden */
+.event-message {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+```
+
+#### Make Events Float/Overlay on Screen
+
+```css
+/* Fixed position events (overlaid on screen, not in flow) */
+.event-tier-high {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) scale(1.3) !important;
+  z-index: 9999 !important;
+  width: 80% !important;
+  max-width: 800px !important;
+}
+
+/* Bottom banner style events */
+.event-tier-high {
+  position: fixed !important;
+  bottom: 100px !important;
+  left: 0 !important;
+  right: 0 !important;
+  transform: none !important;
+  border-radius: 0 !important;
+  border-top: 5px solid #FFD700 !important;
+}
+```
+
+#### Platform-Specific Complete Overrides
+
+```css
+/* YouTube Super Chats - match official YouTube styling */
+.event-type-super_chat {
+  background: #1565C0 !important; /* YouTube blue */
+  border: none !important;
+  border-left: 8px solid #0D47A1 !important;
+  box-shadow: none !important;
+}
+
+.event-type-super_chat.event-tier-high {
+  background: #E62117 !important; /* YouTube red for high tier */
+  border-left-color: #B71C1C !important;
+}
+
+.event-type-super_chat .event-icon {
+  display: none !important; /* Hide icon */
+}
+
+.event-type-super_chat .event-title {
+  color: white !important;
+  background: none !important;
+}
+
+/* Twitch subs - match Twitch notification style */
+.event-type-subscription,
+.event-type-gift_subscription {
+  background: linear-gradient(135deg, #9146FF 0%, #772CE8 100%) !important;
+  border: none !important;
+  color: white !important;
+  box-shadow: 0 8px 32px rgba(145, 70, 255, 0.5) !important;
+}
+
+.event-type-subscription .event-title,
+.event-type-subscription .event-user,
+.event-type-subscription .event-message-text {
+  color: white !important;
 }
 ```
 
@@ -1281,7 +1804,78 @@ Events are displayed with priority based on their tier:
 
 ## Example Themes
 
-### Theme 1: Minimal Dark
+### Theme 1: Event Showcase (Events-Only Mode)
+
+Perfect for streamers who want to prominently display events while keeping chat minimal or hidden:
+
+```css
+/* Hide regular chat, show only events */
+.space-y-3 > div:not(.event-message) {
+  display: none !important;
+}
+
+/* Make events MASSIVE and centered */
+.event-message {
+  min-height: 180px !important;
+  padding: 2.5rem !important;
+  transform: scale(1.2) !important;
+  border-radius: 24px !important;
+  margin: 1rem 0 !important;
+}
+
+/* Huge icons */
+.event-icon {
+  font-size: 6rem !important;
+  filter: drop-shadow(0 4px 24px rgba(255, 255, 255, 0.8)) !important;
+}
+
+/* Large titles */
+.event-title {
+  font-size: 2.5rem !important;
+  letter-spacing: 0.1em !important;
+}
+
+/* Prominent values */
+.event-value {
+  font-size: 4rem !important;
+  animation: value-pulse 1s infinite !important;
+}
+
+@keyframes value-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* Different colors for each tier */
+.event-tier-high {
+  background: linear-gradient(135deg, #FF0080 0%, #FF8C00 50%, #FFD700 100%) !important;
+  border: 5px solid #FFD700 !important;
+  box-shadow: 0 0 60px rgba(255, 215, 0, 1),
+              0 0 100px rgba(255, 140, 0, 0.5) !important;
+}
+
+.event-tier-medium {
+  background: linear-gradient(135deg, #9146FF 0%, #C77DFF 100%) !important;
+  border: 4px solid #C77DFF !important;
+  box-shadow: 0 0 40px rgba(145, 70, 255, 0.8) !important;
+}
+
+.event-tier-low {
+  background: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%) !important;
+  border: 3px solid #60A5FA !important;
+}
+
+/* Make all text white for readability on colored backgrounds */
+.event-message .event-title,
+.event-message .event-user,
+.event-message .event-message-text,
+.event-message .event-metadata {
+  color: white !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8) !important;
+}
+```
+
+### Theme 2: Minimal Dark
 
 ```css
 /* Clean, minimal design with focus on readability */
