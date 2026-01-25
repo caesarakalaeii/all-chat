@@ -98,13 +98,17 @@ func (m *Manager) Stop() {
 
 // SyncChannels queries the database for active Twitch channels and creates/removes subscriptions
 func (m *Manager) SyncChannels(ctx context.Context) error {
-	// Query active Twitch sources
+	// Query active Twitch sources and join with users table to get OAuth tokens
+	// We need the broadcaster's OAuth token for EventSub subscriptions
 	query := `
 		SELECT DISTINCT
 			ocs.channel_id,
-			ocs.overlay_id
+			ocs.overlay_id,
+			u.access_token,
+			u.token_expires_at
 		FROM overlay_chat_sources ocs
 		JOIN overlays o ON ocs.overlay_id = o.id
+		LEFT JOIN users u ON LOWER(u.username) = LOWER(ocs.channel_id) AND u.auth_provider = 'twitch'
 		WHERE ocs.platform = 'twitch'
 		  AND ocs.is_active = true
 		  AND o.is_active = true
@@ -122,7 +126,10 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 
 	for rows.Next() {
 		var channelID, overlayID string
-		if err := rows.Scan(&channelID, &overlayID); err != nil {
+		var accessToken *string
+		var tokenExpiresAt *time.Time
+		
+		if err := rows.Scan(&channelID, &overlayID, &accessToken, &tokenExpiresAt); err != nil {
 			m.logger.Warn("Failed to scan row", zap.Error(err))
 			continue
 		}
@@ -134,6 +141,25 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			m.logger.Warn("Failed to resolve username to user ID",
 				zap.String("username", channelID),
 				zap.Error(err),
+			)
+			continue
+		}
+
+		// Skip channels without OAuth tokens - we can't subscribe to EventSub without them
+		if accessToken == nil || *accessToken == "" {
+			m.logger.Debug("Skipping channel without OAuth token",
+				zap.String("broadcaster_id", broadcasterID),
+				zap.String("username", channelID),
+			)
+			continue
+		}
+
+		// Check if token is expired
+		if tokenExpiresAt != nil && time.Now().After(*tokenExpiresAt) {
+			m.logger.Warn("Skipping channel with expired OAuth token",
+				zap.String("broadcaster_id", broadcasterID),
+				zap.String("username", channelID),
+				zap.Time("expired_at", *tokenExpiresAt),
 			)
 			continue
 		}
