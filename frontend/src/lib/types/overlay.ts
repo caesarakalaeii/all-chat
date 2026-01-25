@@ -95,5 +95,6 @@ export interface MockMessagePayload {
     version: string;
     icon_url: string;
   }>;
+  event?: import('./message').EventInfo;
   metadata?: Record<string, unknown>;
 }
