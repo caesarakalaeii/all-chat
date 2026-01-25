@@ -16,8 +16,9 @@
 7. [Display Settings](#display-settings)
 8. [Platform Status Indicators](#platform-status-indicators)
 9. [Advanced Techniques](#advanced-techniques)
-10. [Example Themes](#example-themes)
-11. [Troubleshooting](#troubleshooting)
+10. [Event Display Styling](#event-display-styling)
+11. [Example Themes](#example-themes)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -869,6 +870,415 @@ To hide specific platforms while keeping others visible:
 
 ---
 
+## Event Display Styling
+
+All-Chat supports displaying platform events (subscriptions, donations, raids, channel points, Super Chats, gifts, follows, likes) alongside chat messages. These events have special CSS classes for customization.
+
+### What Are Events?
+
+Events are special messages that appear in your overlay when viewers:
+- **Twitch**: Subscribe, gift subs, raid, cheer bits, redeem channel points
+- **YouTube**: Send Super Chats, buy memberships, celebrate milestones
+- **TikTok**: Send gifts, follow, like, share
+- **Kick**: Subscribe, send gifts/donations (coming soon)
+
+Events are controlled via the **Event Settings** page at `/overlays/{id}/events`.
+
+### Event Message Structure
+
+Events appear as special message cards with tier-based styling:
+
+```html
+<div class="event-message event-tier-high event-type-subscription">
+  <!-- Event icon/emoji -->
+  <div class="event-icon">🎉</div>
+
+  <!-- Event details -->
+  <div class="event-details">
+    <div class="event-title">New Subscriber!</div>
+    <div class="event-user">Username just subscribed</div>
+    <div class="event-metadata">Tier 1 • 3 month streak</div>
+  </div>
+</div>
+```
+
+### Event CSS Classes
+
+| Class | Purpose | Applied To |
+|-------|---------|-----------|
+| `.event-message` | Base container for all events | All event messages |
+| `.event-tier-high` | High-value events (30-60s display) | Subs, large donations, big raids |
+| `.event-tier-medium` | Medium-value events (15-20s display) | Follows, milestones, small gifts |
+| `.event-tier-low` | Low-value events (5-10s display) | Likes, shares, small bits |
+| `.event-type-subscription` | Twitch subscription events | Subs and resubs |
+| `.event-type-gift_subscription` | Twitch gift sub events | Gift subs and mystery gifts |
+| `.event-type-raid` | Twitch raid events | Incoming raids |
+| `.event-type-bits` | Twitch bits events | Bit cheers |
+| `.event-type-channel_points` | Twitch channel points | Point redemptions |
+| `.event-type-super_chat` | YouTube Super Chat | Paid messages |
+| `.event-type-super_sticker` | YouTube Super Stickers | Paid stickers |
+| `.event-type-member` | YouTube memberships | New members |
+| `.event-type-member_milestone` | YouTube milestones | Anniversary celebrations |
+| `.event-type-member_gift` | YouTube member gifts | Gifted memberships |
+| `.event-type-gift` | TikTok/Kick gifts | Virtual gifts |
+| `.event-type-follow` | TikTok follows | New followers |
+| `.event-type-like_aggregate` | TikTok like aggregation | Aggregated likes |
+| `.event-type-share` | TikTok shares | Stream shares |
+
+### Event Tier Styling
+
+Events are automatically assigned tiers based on their value/importance:
+
+#### High-Value Events (Tier High)
+- Subscriptions and resubscriptions
+- Large donations ($10+)
+- Big raids (1000+ viewers)
+- High-value Super Chats
+- Large gift bombs
+
+**Default Style:**
+```css
+.event-tier-high {
+  border: 2px solid gold;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.1));
+}
+```
+
+#### Medium-Value Events (Tier Medium)
+- Follows
+- Member milestones
+- Small gifts
+- Medium Super Chats
+
+**Default Style:**
+```css
+.event-tier-medium {
+  border: 2px solid #9146FF;
+  box-shadow: 0 0 10px rgba(145, 70, 255, 0.3);
+}
+```
+
+#### Low-Value Events (Tier Low)
+- Likes (aggregated)
+- Shares
+- Small bits
+
+**Default Style:**
+```css
+.event-tier-low {
+  border: 1px solid #4A90E2;
+  opacity: 0.9;
+}
+```
+
+### Common Event Customizations
+
+#### 1. Hide All Events
+
+```css
+/* Hide all event messages (show only chat) */
+.event-message {
+  display: none !important;
+}
+```
+
+#### 2. Hide Specific Event Types
+
+```css
+/* Hide subscription events */
+.event-type-subscription {
+  display: none !important;
+}
+
+/* Hide TikTok likes */
+.event-type-like_aggregate {
+  display: none !important;
+}
+
+/* Hide all low-tier events */
+.event-tier-low {
+  display: none !important;
+}
+```
+
+#### 3. Customize Event Backgrounds by Tier
+
+```css
+/* Gold gradient for high-value events */
+.event-tier-high {
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%) !important;
+  color: #000 !important;
+}
+
+/* Purple theme for medium events */
+.event-tier-medium {
+  background: rgba(145, 70, 255, 0.2) !important;
+  border-left: 5px solid #9146FF !important;
+}
+
+/* Subtle style for low events */
+.event-tier-low {
+  background: rgba(255, 255, 255, 0.05) !important;
+  opacity: 0.7 !important;
+}
+```
+
+#### 4. Platform-Specific Event Styling
+
+```css
+/* Style all Twitch events (subscriptions, raids, etc.) */
+.event-message[class*="event-type-subscription"],
+.event-message[class*="event-type-raid"],
+.event-message[class*="event-type-bits"] {
+  border-left: 5px solid #9146FF !important;
+  background: rgba(145, 70, 255, 0.1) !important;
+}
+
+/* Style YouTube events (Super Chats, memberships) */
+.event-message[class*="event-type-super_chat"],
+.event-message[class*="event-type-member"] {
+  border-left: 5px solid #FF0000 !important;
+  background: rgba(255, 0, 0, 0.1) !important;
+}
+
+/* Style TikTok events (gifts, follows, likes) */
+.event-message[class*="event-type-gift"],
+.event-message[class*="event-type-follow"],
+.event-message[class*="event-type-like_aggregate"] {
+  border-left: 5px solid #00F2EA !important;
+  background: rgba(0, 242, 234, 0.1) !important;
+}
+```
+
+#### 5. Animated Event Effects
+
+```css
+/* Pulsing glow for high-value events */
+@keyframes pulse-gold {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.8);
+  }
+}
+
+.event-tier-high {
+  animation: pulse-gold 2s infinite !important;
+}
+
+/* Slide-in animation for raids */
+@keyframes raid-sweep {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.event-type-raid {
+  animation: raid-sweep 500ms ease-out !important;
+}
+
+/* Heartbeat animation for likes */
+@keyframes heartbeat {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.event-type-like_aggregate {
+  animation: heartbeat 1s infinite !important;
+}
+```
+
+#### 6. Super Chat Value-Based Styling
+
+YouTube Super Chats have different colors based on their value. You can customize these:
+
+```css
+/* High-value Super Chats ($50+) - Red */
+.event-type-super_chat.event-tier-high {
+  background: linear-gradient(90deg, #E62117 0%, #FF6B6B 100%) !important;
+  color: white !important;
+  font-weight: bold !important;
+}
+
+/* Medium Super Chats ($10-$49) - Magenta */
+.event-type-super_chat.event-tier-medium {
+  background: linear-gradient(90deg, #E91E63 0%, #F48FB1 100%) !important;
+}
+
+/* Low Super Chats ($1-$9) - Blue */
+.event-type-super_chat.event-tier-low {
+  background: linear-gradient(90deg, #1565C0 0%, #64B5F6 100%) !important;
+}
+```
+
+#### 7. Larger/Smaller Event Messages
+
+```css
+/* Make events larger than chat */
+.event-message {
+  transform: scale(1.1) !important;
+  margin: 12px 0 !important;
+}
+
+/* Make events smaller and subtle */
+.event-message {
+  transform: scale(0.9) !important;
+  opacity: 0.8 !important;
+}
+```
+
+#### 8. Event Icon Customization
+
+```css
+/* Larger event icons */
+.event-icon {
+  font-size: 2em !important;
+}
+
+/* Animated event icons */
+.event-icon {
+  animation: bounce 1s infinite !important;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Hide event icons */
+.event-icon {
+  display: none !important;
+}
+```
+
+### Event Display Settings
+
+Events can be configured per-overlay at `/overlays/{id}/events`:
+
+**Configurable Options:**
+- Enable/disable specific event types (18 toggles)
+- TikTok like aggregation window (10-60 seconds)
+- Event display duration multiplier (0.1-5.0x)
+
+**Platform-Specific Controls:**
+- **Twitch**: Subs, resubs, gift subs, bits, raids, channel points
+- **YouTube**: Super Chats, Super Stickers, members, milestones, gifts
+- **TikTok**: Gifts, follows, likes, shares
+- **Kick**: Coming soon
+
+### Advanced: Event Priority and Stacking
+
+Events are displayed with priority based on their tier:
+
+```css
+/* Z-index layering for overlapping events */
+.event-tier-high {
+  z-index: 100 !important;
+}
+
+.event-tier-medium {
+  z-index: 50 !important;
+}
+
+.event-tier-low {
+  z-index: 10 !important;
+}
+
+/* Prevent event stacking (show one at a time) */
+.event-message + .event-message {
+  margin-top: 8px !important;
+}
+```
+
+### Example: Complete Event Theme
+
+```css
+/* Neon Event Theme - Bright, attention-grabbing events */
+
+/* Base event styling */
+.event-message {
+  background: rgba(0, 0, 0, 0.95) !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+  border: 2px solid transparent !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* High-value events - Gold neon */
+.event-tier-high {
+  border-color: #FFD700 !important;
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.6),
+              0 4px 20px rgba(0, 0, 0, 0.5) !important;
+  animation: neon-pulse 2s infinite !important;
+}
+
+/* Medium-value events - Purple neon */
+.event-tier-medium {
+  border-color: #9146FF !important;
+  box-shadow: 0 0 20px rgba(145, 70, 255, 0.5),
+              0 4px 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Low-value events - Cyan neon */
+.event-tier-low {
+  border-color: #00FFFF !important;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.4),
+              0 4px 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Pulse animation */
+@keyframes neon-pulse {
+  0%, 100% {
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.6),
+                0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 50px rgba(255, 215, 0, 0.9),
+                0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Subscription events - Extra special */
+.event-type-subscription {
+  background: linear-gradient(135deg,
+    rgba(255, 215, 0, 0.1),
+    rgba(255, 165, 0, 0.1)) !important;
+}
+
+/* Raid events - Sweep animation */
+.event-type-raid {
+  animation: raid-sweep 600ms ease-out, neon-pulse 2s infinite !important;
+}
+
+@keyframes raid-sweep {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+```
+
+---
+
 ## Example Themes
 
 ### Theme 1: Minimal Dark
@@ -1146,4 +1556,4 @@ If you encounter issues not covered in this guide:
 
 **Happy customizing! 🎨**
 
-*Last updated: 2025-11-20*
+*Last updated: 2025-01-25*
