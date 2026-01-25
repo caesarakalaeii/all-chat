@@ -5,98 +5,169 @@
  * Provides tier-based visual differentiation and event-type specific styling.
  */
 
-/* Base event message styling */
+/* Base event message styling - make events MUCH larger and more prominent */
 .event-message {
   position: relative;
   overflow: hidden;
+  padding: 1.5rem !important;
+  min-height: 100px !important;
+  border-radius: 16px !important;
+  transform: scale(1.05);
+  transition: all 0.3s ease-in-out;
+}
+
+/* Entrance animation for events */
+.event-message {
+  animation: event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+}
+
+@keyframes event-bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(50px);
+  }
+  50% {
+    transform: scale(1.1) translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.05) translateY(0);
+  }
 }
 
 /* Event tier styling - visual importance hierarchy */
 .event-tier-high {
-  background: rgba(255, 215, 0, 0.15) !important;
-  border: 2px solid #FFD700 !important;
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.3) !important;
+  background: linear-gradient(135deg,
+    rgba(255, 215, 0, 0.25) 0%,
+    rgba(255, 140, 0, 0.15) 100%) !important;
+  border: 3px solid #FFD700 !important;
+  box-shadow:
+    0 0 30px rgba(255, 215, 0, 0.5),
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Pulsing glow for high-tier events */
+.event-tier-high {
+  animation: event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55),
+             high-tier-glow 2s ease-in-out infinite !important;
+}
+
+@keyframes high-tier-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 30px rgba(255, 215, 0, 0.5),
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 0 50px rgba(255, 215, 0, 0.8),
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
 }
 
 .event-tier-medium {
-  background: rgba(147, 51, 234, 0.15) !important;
-  border: 2px solid #9333EA !important;
-  box-shadow: 0 0 15px rgba(147, 51, 234, 0.2) !important;
+  background: linear-gradient(135deg,
+    rgba(147, 51, 234, 0.2) 0%,
+    rgba(79, 70, 229, 0.15) 100%) !important;
+  border: 3px solid #9333EA !important;
+  box-shadow:
+    0 0 25px rgba(147, 51, 234, 0.4),
+    0 6px 24px rgba(0, 0, 0, 0.3) !important;
 }
 
 .event-tier-low {
   background: rgba(59, 130, 246, 0.15) !important;
   border: 2px solid #3B82F6 !important;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Event title styling */
+.event-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* Event value (Super Chat amount, etc.) */
+.event-value {
+  text-shadow: 0 2px 12px rgba(255, 215, 0, 0.8);
+  font-weight: 800;
 }
 
 /* Platform-specific event colors */
 .event-message[class*="subscription"],
 .event-message[class*="gift_subscription"] {
-  border-left: 4px solid #9146FF !important; /* Twitch purple */
+  border-left: 8px solid #9146FF !important; /* Thicker Twitch purple */
 }
 
 .event-message[class*="super_chat"],
 .event-message[class*="super_sticker"] {
-  border-left: 4px solid #FFD700 !important; /* Gold */
+  border-left: 8px solid #FFD700 !important; /* Gold */
   background: linear-gradient(
     135deg,
-    rgba(255, 215, 0, 0.1),
-    rgba(255, 0, 0, 0.05)
+    rgba(255, 215, 0, 0.2),
+    rgba(255, 0, 0, 0.1)
   ) !important;
 }
 
 .event-message[class*="raid"] {
-  border-left: 4px solid #FF4500 !important; /* Orangered */
+  border-left: 8px solid #FF4500 !important; /* Orangered */
   background: linear-gradient(
     135deg,
-    rgba(255, 69, 0, 0.15),
-    rgba(138, 43, 226, 0.1)
+    rgba(255, 69, 0, 0.25),
+    rgba(138, 43, 226, 0.15)
   ) !important;
 }
 
 .event-message[class*="bits"] {
-  border-left: 4px solid #9146FF !important; /* Twitch purple */
+  border-left: 8px solid #9146FF !important; /* Twitch purple */
   background: linear-gradient(
     135deg,
-    rgba(145, 70, 255, 0.1),
-    rgba(0, 200, 255, 0.05)
+    rgba(145, 70, 255, 0.2),
+    rgba(0, 200, 255, 0.1)
   ) !important;
 }
 
 .event-message[class*="channel_points"] {
-  border-left: 4px solid #00C8FF !important; /* Channel points blue */
+  border-left: 8px solid #00C8FF !important; /* Channel points blue */
 }
 
 .event-message[class*="gift"] {
-  border-left: 4px solid #FF69B4 !important; /* Hot pink for gifts */
+  border-left: 8px solid #FF69B4 !important; /* Hot pink for gifts */
 }
 
 .event-message[class*="follow"] {
-  border-left: 4px solid #1DA1F2 !important; /* Twitter blue */
+  border-left: 8px solid #1DA1F2 !important; /* Twitter blue */
 }
 
 .event-message[class*="like_aggregate"] {
-  border-left: 4px solid #FE2C55 !important; /* TikTok pink */
+  border-left: 8px solid #FE2C55 !important; /* TikTok pink */
 }
 
 .event-message[class*="member"] {
-  border-left: 4px solid #00FF00 !important; /* Green for memberships */
+  border-left: 8px solid #00FF00 !important; /* Green for memberships */
 }
 
-/* Event icon animations */
+/* Event icon animations - more dramatic */
 .event-icon {
   display: inline-block;
+  filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.3));
   animation: event-icon-pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes event-icon-pulse {
   0%, 100% {
-    transform: scale(1);
-    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.3));
   }
   50% {
-    transform: scale(1.1);
-    opacity: 0.9;
+    transform: scale(1.15) rotate(-5deg);
+    filter: drop-shadow(0 4px 16px rgba(255, 255, 255, 0.6));
   }
 }
 
