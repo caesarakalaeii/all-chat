@@ -126,6 +126,240 @@ const SAMPLE_MOCK_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overla
   }
 ];
 
+const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overlay_id'>> = [
+  // High-tier Twitch subscription
+  {
+    platform: 'twitch',
+    channel_id: 'sample-twitch',
+    channel_name: 'Sample Twitch',
+    user: {
+      id: 'event-user-1',
+      username: 'generousviewer',
+      display_name: 'GenerousViewer',
+      avatar_url: 'https://i.pravatar.cc/100?img=45',
+      badges: [],
+      color: '#ff6b6b'
+    },
+    message: {
+      text: 'Love the stream! Keep it up!',
+      emotes: []
+    },
+    event: {
+      type: 'subscription',
+      tier: 'high',
+      duration: 30,
+      is_update: false,
+      metadata: {
+        sub_tier: '1000',
+        months: 1,
+        streak: 1
+      }
+    },
+    metadata: { mock: true, event: true }
+  },
+  // High-tier YouTube Super Chat
+  {
+    platform: 'youtube',
+    channel_id: 'sample-youtube',
+    channel_name: 'Sample YouTube',
+    user: {
+      id: 'event-user-2',
+      username: 'superfan',
+      display_name: 'SuperFan',
+      avatar_url: 'https://i.pravatar.cc/100?img=67',
+      badges: [],
+      color: '#e91e63'
+    },
+    message: {
+      text: 'Amazing content! Thanks for all you do!',
+      emotes: []
+    },
+    event: {
+      type: 'super_chat',
+      tier: 'high',
+      value: {
+        amount: 50,
+        currency: 'USD',
+        display_text: '$50.00'
+      },
+      duration: 60,
+      is_update: false,
+      metadata: {}
+    },
+    metadata: { mock: true, event: true }
+  },
+  // High-tier Twitch raid
+  {
+    platform: 'twitch',
+    channel_id: 'sample-twitch',
+    channel_name: 'Sample Twitch',
+    user: {
+      id: 'event-user-3',
+      username: 'bigstreamer',
+      display_name: 'BigStreamer',
+      avatar_url: 'https://i.pravatar.cc/100?img=23',
+      badges: [],
+      color: '#9146ff'
+    },
+    message: {
+      text: 'is raiding with 2,500 viewers!',
+      emotes: []
+    },
+    event: {
+      type: 'raid',
+      tier: 'high',
+      duration: 40,
+      is_update: false,
+      metadata: {
+        viewer_count: 2500
+      }
+    },
+    metadata: { mock: true, event: true }
+  },
+  // Medium-tier gift subscription
+  {
+    platform: 'twitch',
+    channel_id: 'sample-twitch',
+    channel_name: 'Sample Twitch',
+    user: {
+      id: 'event-user-4',
+      username: 'kindperson',
+      display_name: 'KindPerson',
+      avatar_url: 'https://i.pravatar.cc/100?img=89',
+      badges: [],
+      color: '#f59e0b'
+    },
+    message: {
+      text: 'gifted 5 subs to the community!',
+      emotes: []
+    },
+    event: {
+      type: 'gift_subscription',
+      tier: 'medium',
+      duration: 20,
+      is_update: false,
+      metadata: {
+        gift_count: 5,
+        sub_tier: '1000'
+      }
+    },
+    metadata: { mock: true, event: true }
+  },
+  // Medium-tier TikTok gift
+  {
+    platform: 'tiktok',
+    channel_id: 'sample-tiktok',
+    channel_name: 'Sample TikTok',
+    user: {
+      id: 'event-user-5',
+      username: 'tiktokfan',
+      display_name: 'TikTokFan',
+      avatar_url: 'https://i.pravatar.cc/100?img=34',
+      badges: [],
+      color: '#00f2ea'
+    },
+    message: {
+      text: 'sent a Rose (1 diamonds)',
+      emotes: []
+    },
+    event: {
+      type: 'gift',
+      tier: 'medium',
+      duration: 15,
+      is_update: false,
+      metadata: {
+        gift_name: 'Rose',
+        diamonds: 1,
+        gift_count: 1
+      }
+    },
+    metadata: { mock: true, event: true }
+  },
+  // Low-tier TikTok likes (aggregated)
+  {
+    platform: 'tiktok',
+    channel_id: 'sample-tiktok',
+    channel_name: 'Sample TikTok',
+    user: {
+      id: 'event-user-6',
+      username: 'liker123',
+      display_name: 'Liker123',
+      avatar_url: 'https://i.pravatar.cc/100?img=78',
+      badges: [],
+      color: '#10b981'
+    },
+    message: {
+      text: 'sent 47 likes',
+      emotes: []
+    },
+    event: {
+      type: 'like_aggregate',
+      tier: 'low',
+      duration: 10,
+      is_update: false,
+      aggregation_id: 'sample-agg-1',
+      metadata: {
+        like_count: 47
+      }
+    },
+    metadata: { mock: true, event: true }
+  },
+  // Low-tier TikTok follow
+  {
+    platform: 'tiktok',
+    channel_id: 'sample-tiktok',
+    channel_name: 'Sample TikTok',
+    user: {
+      id: 'event-user-7',
+      username: 'newfollower',
+      display_name: 'NewFollower',
+      avatar_url: 'https://i.pravatar.cc/100?img=91',
+      badges: [],
+      color: '#8b5cf6'
+    },
+    message: {
+      text: 'followed',
+      emotes: []
+    },
+    event: {
+      type: 'follow',
+      tier: 'low',
+      duration: 10,
+      is_update: false,
+      metadata: {}
+    },
+    metadata: { mock: true, event: true }
+  },
+  // Medium-tier bits
+  {
+    platform: 'twitch',
+    channel_id: 'sample-twitch',
+    channel_name: 'Sample Twitch',
+    user: {
+      id: 'event-user-8',
+      username: 'cheerleader',
+      display_name: 'CheerLeader',
+      avatar_url: 'https://i.pravatar.cc/100?img=55',
+      badges: [],
+      color: '#06b6d4'
+    },
+    message: {
+      text: 'Cheer100 Love the vibes!',
+      emotes: []
+    },
+    event: {
+      type: 'bits',
+      tier: 'medium',
+      duration: 15,
+      is_update: false,
+      metadata: {
+        bits: 100
+      }
+    },
+    metadata: { mock: true, event: true }
+  }
+];
+
 const EXAMPLE_CUSTOM_CSS = `/* Example neon glass theme */
 body {
   background: transparent !important;
@@ -488,6 +722,40 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
       } catch (error) {
         console.error('[Preview] Failed to send sample message:', error);
         alert('Failed to send sample messages. Check console for details.');
+        break;
+      }
+    }
+  };
+
+  const handleAddSampleEvents = async () => {
+    for (const [index, sample] of SAMPLE_EVENT_MESSAGES.entries()) {
+      const target = resolveMockTarget(sample.platform);
+
+      try {
+        await overlaysApi.sendMockMessage(params.id, {
+          platform: target.platform,
+          channel_id: target.channel_id,
+          channel_name: target.channel_name,
+          text: sample.message.text,
+          username: sample.user.username,
+          display_name: sample.user.display_name,
+          avatar_url: sample.user.avatar_url,
+          color: sample.user.color,
+          badges: sample.user.badges,
+          event: sample.event,
+          metadata: {
+            ...(sample.metadata || {}),
+            mock: true,
+            preset: true,
+            order: index
+          }
+        });
+
+        // Add delay between events so they don't all arrive at once
+        await new Promise(resolve => setTimeout(resolve, 800));
+      } catch (error) {
+        console.error('[Preview] Failed to send sample event:', error);
+        alert('Failed to send sample events. Check console for details.');
         break;
       }
     }
@@ -986,22 +1254,31 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                         placeholder="Type something fun..."
                       />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2">
                       <button
                         type="button"
                         onClick={() => void handleAddMockMessage()}
-                        className="flex-1 bg-twitch hover:bg-purple-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-60"
+                        className="w-full bg-twitch hover:bg-purple-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-60"
                         disabled={!mockForm.message.trim()}
                       >
                         Inject Message
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleAddSampleTranscript()}
-                        className="px-3 py-2 text-xs border border-gray-600 rounded-lg text-gray-200 hover:bg-gray-700"
-                      >
-                        Sample Set
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleAddSampleTranscript()}
+                          className="flex-1 px-3 py-2 text-xs border border-gray-600 rounded-lg text-gray-200 hover:bg-gray-700"
+                        >
+                          💬 Sample Chat
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleAddSampleEvents()}
+                          className="flex-1 px-3 py-2 text-xs border border-yellow-600 rounded-lg text-yellow-200 hover:bg-yellow-900/30"
+                        >
+                          ⭐ Sample Events
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
