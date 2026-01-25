@@ -13,6 +13,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import '@/styles/events.css';
 import CookieBanner from '@/components/CookieBanner';
 import ImpersonationBanner from '@/components/ImpersonationBanner';
 
