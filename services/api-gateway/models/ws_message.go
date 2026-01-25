@@ -9,8 +9,11 @@ import (
 type WSMessageType string
 
 const (
-	// WSMessageTypeChatMessage is a chat message from a platform
+	// WSMessageTypeChatMessage is a chat message or event from a platform
 	WSMessageTypeChatMessage WSMessageType = "chat_message"
+
+	// WSMessageTypeMessageUpdate is an update to an existing message (TikTok like aggregates)
+	WSMessageTypeMessageUpdate WSMessageType = "message_update"
 
 	// WSMessageTypePing is a ping from server to client
 	WSMessageTypePing WSMessageType = "ping"

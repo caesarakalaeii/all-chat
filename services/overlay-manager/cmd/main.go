@@ -117,6 +117,11 @@ func main() {
 		log.Fatal("Failed to create source repository", zap.Error(err))
 	}
 
+	eventSettingsRepo, err := repository.NewEventSettingsRepository(connString)
+	if err != nil {
+		log.Fatal("Failed to create event settings repository", zap.Error(err))
+	}
+
 	// Initialize handlers
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
@@ -125,6 +130,7 @@ func main() {
 	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)
+	eventSettingsHandler := handlers.NewEventSettingsHandler(eventSettingsRepo, overlayRepo)
 
 	// YouTube helper
 	youtubeAPIKey := getEnv("YOUTUBE_API_KEY", "")
@@ -165,6 +171,7 @@ func main() {
 
 	// Public config for OBS/browser sources
 	router.GET("/public/:id/config", configHandler.HandleGetPublicConfig)
+	router.GET("/public/:id/event-settings", eventSettingsHandler.HandleGetPublicEventSettings)
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
@@ -184,6 +191,8 @@ func main() {
 
 		protected.GET("/:id/config", configHandler.HandleGetConfig)
 		protected.PUT("/:id/config", configHandler.HandleUpdateConfig)
+		protected.GET("/:id/event-settings", eventSettingsHandler.HandleGetEventSettings)
+		protected.PUT("/:id/event-settings", eventSettingsHandler.HandleUpdateEventSettings)
 		protected.POST("/:id/mock-messages", mockHandler.HandleSendMockMessage)
 
 		// YouTube helper routes

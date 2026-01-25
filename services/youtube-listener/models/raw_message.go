@@ -17,6 +17,10 @@ type RawChatMessage struct {
 	Text      string            `json:"text"`       // Message text
 	Timestamp time.Time         `json:"timestamp"`  // UTC timestamp (from publishedAt)
 	Tags      map[string]string `json:"tags"`       // YouTube-specific metadata
+
+	// Event support (backwards compatible - omitted for regular chat messages)
+	EventType string                 `json:"event_type,omitempty"` // "super_chat", "member_milestone", etc.
+	EventData map[string]interface{} `json:"event_data,omitempty"` // Event-specific payload
 }
 
 // ToJSON converts the message to JSON bytes

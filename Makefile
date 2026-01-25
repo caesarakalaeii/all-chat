@@ -26,6 +26,7 @@ help:
 	@echo "  make build-emote         - Build emote-service"
 	@echo "  make build-gateway       - Build api-gateway"
 	@echo "  make build-twitch        - Build twitch-listener"
+	@echo "  make build-twitch-eventsub - Build twitch-eventsub-listener"
 	@echo "  make build-youtube       - Build youtube-listener"
 	@echo "  make build-tiktok        - Build tiktok-listener (Node.js)"
 	@echo "  make build-processor     - Build message-processor"
@@ -40,6 +41,7 @@ deps:
 	cd services/emote-service && go mod download
 	cd services/api-gateway && go mod download
 	cd services/twitch-listener && go mod download
+	cd services/twitch-eventsub-listener && go mod download
 	cd services/youtube-listener && go mod download
 	cd services/tiktok-listener && npm install
 	cd services/message-processor && go mod download
@@ -53,6 +55,7 @@ build:
 	@$(MAKE) build-emote
 	@$(MAKE) build-gateway
 	@$(MAKE) build-twitch
+	@$(MAKE) build-twitch-eventsub
 	@$(MAKE) build-youtube
 	@$(MAKE) build-tiktok
 	@$(MAKE) build-processor
@@ -77,6 +80,10 @@ build-gateway:
 build-twitch:
 	@echo "Building twitch-listener..."
 	cd services/twitch-listener && go build -o ../../bin/twitch-listener ./cmd
+
+build-twitch-eventsub:
+	@echo "Building twitch-eventsub-listener..."
+	cd services/twitch-eventsub-listener && go build -o ../../bin/twitch-eventsub-listener ./cmd
 
 build-youtube:
 	@echo "Building youtube-listener..."
