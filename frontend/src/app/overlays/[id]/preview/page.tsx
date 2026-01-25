@@ -34,6 +34,7 @@ import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
 import dynamic from 'next/dynamic';
+import '@/styles/events.css';
 
 // Dynamically import Monaco Editor to avoid SSR issues
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
@@ -589,6 +590,122 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     alert('Overlay URL copied to clipboard!\n\nAdd this as a Browser Source in OBS.');
   };
 
+  // Helper function to render event-specific content
+  const renderEventContent = (message: ChatMessage): React.ReactNode => {
+    const event = message.event!;
+
+    // Event icon based on type
+    const getEventIcon = () => {
+      switch (event.type) {
+        case 'subscription':
+        case 'resubscription':
+        case 'gift_subscription':
+        case 'kick_subscription':
+        case 'new_sponsor':
+          return '⭐';
+        case 'bits':
+          return '💎';
+        case 'raid':
+          return '🚀';
+        case 'channel_points':
+          return '🎁';
+        case 'super_chat':
+          return '💰';
+        case 'super_sticker':
+          return '🎨';
+        case 'gift':
+          return '🎁';
+        case 'follow':
+          return '❤️';
+        case 'like_aggregate':
+          return '👍';
+        case 'share':
+          return '🔗';
+        case 'member_milestone':
+          return '🎂';
+        case 'membership_gift':
+          return '🎁';
+        default:
+          return '✨';
+      }
+    };
+
+    // Event title based on type
+    const getEventTitle = () => {
+      switch (event.type) {
+        case 'subscription':
+          return 'New Subscriber!';
+        case 'resubscription':
+          return 'Resubscribed!';
+        case 'gift_subscription':
+          return 'Gift Subscription!';
+        case 'mystery_gift':
+          return 'Mystery Gift Bomb!';
+        case 'bits':
+          return 'Bits Cheered!';
+        case 'raid':
+          return 'Raid Incoming!';
+        case 'channel_points':
+          return 'Channel Points Redeemed!';
+        case 'super_chat':
+          return 'Super Chat!';
+        case 'super_sticker':
+          return 'Super Sticker!';
+        case 'new_sponsor':
+          return 'New Member!';
+        case 'member_milestone':
+          return 'Member Milestone!';
+        case 'membership_gift':
+          return 'Membership Gift!';
+        case 'gift':
+          return 'Gift Received!';
+        case 'follow':
+          return 'New Follower!';
+        case 'like_aggregate':
+          return 'Likes!';
+        case 'share':
+          return 'Stream Shared!';
+        default:
+          return 'Event!';
+      }
+    };
+
+    return (
+      <div className="event-content">
+        <div className="flex items-center gap-3 mb-1">
+          <span className="text-4xl event-icon leading-none">{getEventIcon()}</span>
+          <div className="flex-1">
+            <div className="text-lg font-bold event-title text-white">{getEventTitle()}</div>
+            <div className="text-sm font-semibold event-user" style={{ color: message.user?.color || '#FFFFFF' }}>
+              {message.user?.display_name || message.user?.username}
+            </div>
+          </div>
+          {event.value && (
+            <div className="text-2xl font-bold event-value text-yellow-300">
+              {event.value.display_text}
+            </div>
+          )}
+        </div>
+        {message.message.text && (
+          <div className="text-sm event-message-text text-gray-200 ml-14">
+            {message.message.text}
+          </div>
+        )}
+        {event.metadata && Object.keys(event.metadata).length > 0 && (
+          <div className="text-xs event-metadata text-gray-400 mt-1 ml-14">
+            {(event.metadata as any).viewer_count && `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
+            {(event.metadata as any).months && `${(event.metadata as any).months} months`}
+            {(event.metadata as any).streak && ` • ${(event.metadata as any).streak} month streak`}
+            {(event.metadata as any).gift_count && `${(event.metadata as any).gift_count} gifts`}
+            {(event.metadata as any).bits && `${(event.metadata as any).bits} bits`}
+            {(event.metadata as any).like_count && `${(event.metadata as any).like_count} likes`}
+            {(event.metadata as any).diamonds && `${(event.metadata as any).diamonds} diamonds`}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const getPlatformColor = (platform: string): string => {
     switch (platform) {
       case 'twitch':
@@ -871,10 +988,19 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                   </div>
                 ) : (
                   <>
-                    {messages.map((message) => (
+                    {messages.map((message) => {
+                      const isEvent = message.event != null;
+                      const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : '';
+                      const eventTypeClass = isEvent ? `event-type-${message.event?.type}` : '';
+
+                      return (
                       <div
                         key={message.id}
-                        className="backdrop-blur-sm rounded-lg p-3 shadow-lg bg-gray-900/90"
+                        data-platform={message.platform}
+                        data-event-type={isEvent ? message.event?.type : undefined}
+                        className={`backdrop-blur-sm rounded-lg p-3 shadow-lg ${
+                          isEvent ? `event-message ${eventTierClass} ${eventTypeClass}` : 'bg-gray-900/90'
+                        }`}
                       >
                         <div className="flex items-start gap-3">
                           {/* Avatar */}
@@ -980,12 +1106,12 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                               )}
                             </div>
 
-                            {/* Message Text */}
+                            {/* Message Text or Event Content */}
                             <div
                               className="text-white break-words"
                               style={{ fontSize: `${fontSize}px` }}
                             >
-                              {renderMessageContent(message)}
+                              {message.event ? renderEventContent(message) : renderMessageContent(message)}
                             </div>
 
                             {/* Timestamp */}
@@ -995,7 +1121,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                           </div>
                         </div>
                       </div>
-                    ))}
+                    )})}
                     <div ref={messagesEndRef} />
                   </>
                 )}
