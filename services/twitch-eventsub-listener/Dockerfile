@@ -1,34 +1,42 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25.4-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /build
+
+# Copy shared module first
+COPY shared /build/shared
+
+# Copy service files
+COPY services/twitch-eventsub-listener /build/services/twitch-eventsub-listener
+
+WORKDIR /build/services/twitch-eventsub-listener
+
+# Download dependencies
+RUN go mod download
+
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o twitch-eventsub-listener ./cmd
+
+# Final stage
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS
+RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
-# Copy go mod files
-COPY go.mod go.sum* ./
-COPY shared/ ./shared/
-
-# Copy service files
-COPY services/twitch-eventsub-listener/ ./services/twitch-eventsub-listener/
-
-# Download dependencies
-WORKDIR /app/services/twitch-eventsub-listener
-RUN go mod download
-
-# Build the service
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/bin/twitch-eventsub-listener ./cmd
-
-# Runtime stage
-FROM alpine:latest
-
-RUN apk --no-cache add ca-certificates tzdata
-
-WORKDIR /root/
-
 # Copy binary from builder
-COPY --from=builder /app/bin/twitch-eventsub-listener .
+COPY --from=builder /build/services/twitch-eventsub-listener/twitch-eventsub-listener .
 
 # Expose port
 EXPOSE 8090
 
-# Run the service
+# Set environment variables
+ENV PORT=8090
+ENV LOG_LEVEL=info
+
+# Run the application
 CMD ["./twitch-eventsub-listener"]
