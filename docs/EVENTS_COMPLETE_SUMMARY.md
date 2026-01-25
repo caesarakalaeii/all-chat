@@ -315,6 +315,21 @@ GET /public/{id}/event-settings
 - Save/cancel actions
 - Info tooltips
 
+### Authentication Requirements
+
+**Important:** The Event Settings page requires JWT authentication.
+
+The frontend must include the `Authorization: Bearer <token>` header when making API requests to:
+- `GET /api/v1/overlays/{id}/event-settings` - Load settings
+- `PUT /api/v1/overlays/{id}/event-settings` - Save settings
+
+**Bug Fix (2025-01-25):**
+- Fixed 401 Unauthorized error on Event Settings page
+- The page was missing JWT token in Authorization headers
+- Now properly uses `useAuthStore()` to include authentication
+- Aligns with other authenticated pages (overlays, admin, etc.)
+- Commit: `9c29bd0` - "Fix event settings 401 error by adding JWT authentication"
+
 ### CSS Classes
 
 ```css
