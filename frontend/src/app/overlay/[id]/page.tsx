@@ -376,7 +376,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
           <div
             key={`${message.id}-${index}`}
             data-platform={message.platform}
-            data-event-type={isEvent ? message.event.type : undefined}
+            data-event-type={isEvent ? message.event?.type : undefined}
             className={`backdrop-blur-sm rounded-lg p-3 shadow-lg animate-in slide-in-from-bottom-2 duration-300 ${
               isSharedChat
                 ? 'bg-purple-900/40 border-2 border-purple-500/50'
