@@ -568,6 +568,7 @@ type mockMessageRequest struct {
 	AvatarURL   string                 `json:"avatar_url"`
 	Color       string                 `json:"color"`
 	Badges      []models.Badge         `json:"badges"`
+	Event       *models.EventInfo      `json:"event"`
 	Text        string                 `json:"text" binding:"required"`
 	Metadata    map[string]interface{} `json:"metadata"`
 }
@@ -638,6 +639,7 @@ func buildMockMessage(req *mockMessageRequest) *models.UnifiedChatMessage {
 		Message: models.MessageInfo{
 			Text: req.Text,
 		},
+		Event:     req.Event,
 		Timestamp: time.Now().UTC(),
 		Metadata:  metadata,
 	}
