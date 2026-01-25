@@ -22,11 +22,12 @@
 
 import Image from 'next/image';
 import { useEffect, useState, useRef } from 'react';
-import type { ChatMessage } from '@/lib/types/message';
+import type { ChatMessage, EventTier } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
+import '@/styles/events.css';
 
 export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -125,7 +126,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
 
         console.log('[OBS Overlay] Received message:', envelope);
 
-        // Only process chat messages, ignore connected/ping/pong/error
+        // Handle chat messages and events
         if (envelope.type === 'chat_message' && envelope.data) {
           let message: ChatMessage = envelope.data;
           message = await resolveTwitchBadgeIcons(message);
@@ -134,6 +135,38 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
           setMessages((prev) => {
             const newMessages = [...prev, message];
             return newMessages.slice(-maxMessages);
+          });
+        }
+
+        // Handle message updates (TikTok like aggregates)
+        if (envelope.type === 'message_update' && envelope.data) {
+          let updatedMessage: ChatMessage = envelope.data;
+          updatedMessage = await resolveTwitchBadgeIcons(updatedMessage);
+          updatedMessage = sortMessageBadges(updatedMessage);
+
+          setMessages((prev) => {
+            // Find existing message by aggregation_id
+            const aggregationId = updatedMessage.event?.aggregation_id;
+            if (!aggregationId) {
+              // No aggregation ID, treat as new message
+              const newMessages = [...prev, updatedMessage];
+              return newMessages.slice(-maxMessages);
+            }
+
+            const index = prev.findIndex(
+              (m) => m.event?.aggregation_id === aggregationId
+            );
+
+            if (index === -1) {
+              // Original message already faded away, treat as new
+              const newMessages = [...prev, updatedMessage];
+              return newMessages.slice(-maxMessages);
+            }
+
+            // Update existing message in place
+            const updated = [...prev];
+            updated[index] = updatedMessage;
+            return updated;
           });
         }
       } catch (error) {
@@ -181,15 +214,86 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   }, [messages]);
 
   // Auto-remove old messages based on duration (if fade is enabled)
+  // Events have tier-based durations, chat uses configured duration
   useEffect(() => {
     if (messages.length === 0 || disableMessageFade) return;
 
+    const firstMessage = messages[0];
+
+    // Determine display duration
+    let duration = messageDuration; // Default from settings
+
+    if (firstMessage.event) {
+      // Event: use event-specific duration or tier-based default
+      duration = firstMessage.event.duration || getTierDuration(firstMessage.event.tier);
+    }
+
     const timer = setTimeout(() => {
       setMessages((prev) => prev.slice(1));
-    }, messageDuration * 1000);
+    }, duration * 1000);
 
     return () => clearTimeout(timer);
   }, [messages, messageDuration, disableMessageFade]);
+
+  // Helper function to get default duration based on event tier
+  const getTierDuration = (tier: EventTier): number => {
+    switch (tier) {
+      case 'high':
+        return 30;
+      case 'medium':
+        return 15;
+      case 'low':
+        return 8;
+      default:
+        return 15;
+    }
+  };
+
+  // Helper function to render event-specific content
+  const renderEventContent = (message: ChatMessage): React.ReactNode => {
+    const event = message.event!;
+
+    // Event icon based on type
+    const getEventIcon = () => {
+      switch (event.type) {
+        case 'subscription':
+        case 'resubscription':
+        case 'gift_subscription':
+        case 'kick_subscription':
+        case 'new_sponsor':
+          return '⭐';
+        case 'bits':
+          return '💎';
+        case 'raid':
+          return '🚀';
+        case 'channel_points':
+          return '🎁';
+        case 'super_chat':
+          return '💰';
+        case 'super_sticker':
+          return '🎨';
+        case 'gift':
+          return '🎁';
+        case 'follow':
+          return '❤️';
+        case 'like_aggregate':
+          return '👍';
+        case 'share':
+          return '🔗';
+        default:
+          return '✨';
+      }
+    };
+
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-2xl event-icon">{getEventIcon()}</span>
+        <span className="font-semibold">
+          {event.value?.display_text || message.message.text}
+        </span>
+      </div>
+    );
+  };
 
   const getPlatformColor = (platform: string): string => {
     switch (platform) {
@@ -264,15 +368,20 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
       <div className="space-y-3">
         {messages.map((message, index) => {
           const isSharedChat = message.metadata?.is_shared_chat === true;
-          
+          const isEvent = message.event != null;
+          const eventTierClass = isEvent ? `event-tier-${message.event.tier}` : '';
+          const eventTypeClass = isEvent ? `event-type-${message.event.type}` : '';
+
           return (
           <div
             key={`${message.id}-${index}`}
+            data-platform={message.platform}
+            data-event-type={isEvent ? message.event.type : undefined}
             className={`backdrop-blur-sm rounded-lg p-3 shadow-lg animate-in slide-in-from-bottom-2 duration-300 ${
-              isSharedChat 
-                ? 'bg-purple-900/40 border-2 border-purple-500/50' 
+              isSharedChat
+                ? 'bg-purple-900/40 border-2 border-purple-500/50'
                 : 'bg-gray-900/90'
-            }`}
+            } ${isEvent ? `event-message ${eventTierClass} ${eventTypeClass}` : 'chat-message'}`}
           >
             <div className="flex items-start gap-3">
               {/* Avatar */}
@@ -392,9 +501,9 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
                   )}
                 </div>
 
-                {/* Message Text with Emotes */}
+                {/* Message Text with Emotes (or Event Content) */}
                 <div className="text-white break-words" style={{ fontSize: `${fontSize}px` }}>
-                  {renderMessageContent(message)}
+                  {message.event ? renderEventContent(message) : renderMessageContent(message)}
                 </div>
 
                 {/* Timestamp */}

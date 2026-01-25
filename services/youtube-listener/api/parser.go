@@ -31,14 +31,88 @@ func (p *Parser) ParseChatMessage(msg *youtube.LiveChatMessage, channelID, strea
 		return nil, fmt.Errorf("failed to parse timestamp: %w", err)
 	}
 
-	// Extract message text
+	// Determine event type and extract message text and event data
+	eventType := ""
+	eventData := make(map[string]interface{})
 	text := ""
+
 	if msg.Snippet.TextMessageDetails != nil {
+		// Regular chat message (default, no event type)
 		text = msg.Snippet.TextMessageDetails.MessageText
+
 	} else if msg.Snippet.SuperChatDetails != nil {
+		// Super Chat event
+		eventType = "super_chat"
 		text = msg.Snippet.SuperChatDetails.UserComment
+		eventData["amount_micros"] = msg.Snippet.SuperChatDetails.AmountMicros
+		eventData["currency"] = msg.Snippet.SuperChatDetails.Currency
+		eventData["amount_display"] = msg.Snippet.SuperChatDetails.AmountDisplayString
+		eventData["tier"] = msg.Snippet.SuperChatDetails.Tier
+
 	} else if msg.Snippet.SuperStickerDetails != nil {
+		// Super Sticker event
+		eventType = "super_sticker"
 		text = msg.Snippet.SuperStickerDetails.SuperStickerMetadata.AltText
+		eventData["amount_micros"] = msg.Snippet.SuperStickerDetails.AmountMicros
+		eventData["currency"] = msg.Snippet.SuperStickerDetails.Currency
+		eventData["amount_display"] = msg.Snippet.SuperStickerDetails.AmountDisplayString
+		eventData["tier"] = msg.Snippet.SuperStickerDetails.Tier
+
+	} else if msg.Snippet.NewSponsorDetails != nil {
+		// New membership/sponsor event
+		eventType = "new_sponsor"
+		text = "Became a member"
+		eventData["is_upgrade"] = msg.Snippet.NewSponsorDetails.IsUpgrade
+		if msg.Snippet.NewSponsorDetails.MemberLevelName != "" {
+			eventData["member_level_name"] = msg.Snippet.NewSponsorDetails.MemberLevelName
+		}
+
+	} else if msg.Snippet.MemberMilestoneChatDetails != nil {
+		// Member milestone (anniversary) event
+		eventType = "member_milestone"
+		text = msg.Snippet.MemberMilestoneChatDetails.UserComment
+		eventData["member_months"] = msg.Snippet.MemberMilestoneChatDetails.MemberMonth
+		if msg.Snippet.MemberMilestoneChatDetails.MemberLevelName != "" {
+			eventData["member_level_name"] = msg.Snippet.MemberMilestoneChatDetails.MemberLevelName
+		}
+
+	} else if msg.Snippet.MembershipGiftingDetails != nil {
+		// Membership gifting event
+		eventType = "membership_gift"
+		giftCount := int(msg.Snippet.MembershipGiftingDetails.GiftMembershipsCount)
+		text = fmt.Sprintf("Gifted %d memberships", giftCount)
+		eventData["gift_count"] = giftCount
+		if msg.Snippet.MembershipGiftingDetails.GiftMembershipsLevelName != "" {
+			eventData["member_level_name"] = msg.Snippet.MembershipGiftingDetails.GiftMembershipsLevelName
+		}
+
+	} else if msg.Snippet.GiftMembershipReceivedDetails != nil {
+		// Received gift membership event
+		eventType = "gift_received"
+		text = "Received a gift membership"
+		eventData["gifter_channel_id"] = msg.Snippet.GiftMembershipReceivedDetails.GifterChannelId
+		if msg.Snippet.GiftMembershipReceivedDetails.MemberLevelName != "" {
+			eventData["member_level_name"] = msg.Snippet.GiftMembershipReceivedDetails.MemberLevelName
+		}
+
+	} else if msg.Snippet.MessageDeletedDetails != nil {
+		// Message deleted (moderation) event
+		eventType = "message_deleted"
+		text = "Message deleted"
+		eventData["deleted_message_id"] = msg.Snippet.MessageDeletedDetails.DeletedMessageId
+
+	} else if msg.Snippet.UserBannedDetails != nil {
+		// User banned (moderation) event
+		eventType = "user_banned"
+		text = "User banned"
+		if msg.Snippet.UserBannedDetails.BannedUserDetails != nil {
+			eventData["banned_user_id"] = msg.Snippet.UserBannedDetails.BannedUserDetails.ChannelId
+			eventData["banned_user_name"] = msg.Snippet.UserBannedDetails.BannedUserDetails.DisplayName
+		}
+		eventData["ban_type"] = msg.Snippet.UserBannedDetails.BanType
+		if msg.Snippet.UserBannedDetails.BanDurationSeconds > 0 {
+			eventData["ban_duration_seconds"] = msg.Snippet.UserBannedDetails.BanDurationSeconds
+		}
 	}
 
 	// Build tags map with YouTube-specific metadata
@@ -77,7 +151,7 @@ func (p *Parser) ParseChatMessage(msg *youtube.LiveChatMessage, channelID, strea
 	tags["super_chat"] = strconv.FormatInt(superChatAmount, 10)
 	tags["super_sticker"] = strconv.FormatInt(superStickerAmount, 10)
 
-	// Create RawChatMessage
+	// Create RawChatMessage with event fields
 	rawMsg := &models.RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "youtube",
@@ -88,6 +162,8 @@ func (p *Parser) ParseChatMessage(msg *youtube.LiveChatMessage, channelID, strea
 		Text:      text,
 		Timestamp: timestamp,
 		Tags:      tags,
+		EventType: eventType,   // Empty for regular chat, populated for events
+		EventData: eventData,   // Empty for regular chat, populated for events
 	}
 
 	return rawMsg, nil

@@ -116,6 +116,20 @@ interface RawChatMessage {
   text: string;
   timestamp: string; // ISO 8601
   tags: Record<string, string>;
+  event_type?: string; // "gift", "follow", "like_aggregate", "share", etc.
+  event_data?: Record<string, any>; // Event-specific payload
+}
+
+// Like aggregation window for tracking likes over 30-second periods
+interface LikeAggregation {
+  aggregation_id: string;
+  username: string; // Channel username
+  overlay_id: string;
+  user_id: string;
+  user_nickname: string;
+  like_count: number;
+  window_start: Date;
+  last_published: Date;
 }
 
 // Active stream tracking
@@ -148,6 +162,12 @@ class TikTokListenerService {
 
   // Message deduplication
   private messageDeduplicator: MessageDeduplicator;
+
+  // Like aggregation tracking
+  private likeAggregations: Map<string, LikeAggregation> = new Map();
+  private likeAggregationTimer?: NodeJS.Timeout;
+  private readonly LIKE_AGGREGATION_WINDOW_MS = 30000; // 30 seconds
+  private readonly LIKE_PUBLISH_INTERVAL_MS = 5000; // Publish updates every 5 seconds
 
   // Notification debouncing
   private notificationDebounceTimer?: NodeJS.Timeout;
@@ -232,6 +252,9 @@ class TikTokListenerService {
       // Start message deduplicator cleanup
       this.messageDeduplicator.start();
       logger.info('Message deduplicator started');
+
+      // Start like aggregation publisher
+      this.startLikeAggregationPublisher();
 
       // Test database connection
       await this.db.query('SELECT NOW()');
@@ -507,6 +530,22 @@ class TikTokListenerService {
         this.handleChatMessage(username, overlayId, data);
       });
 
+      connection.on(WebcastEvent.GIFT, (data) => {
+        this.handleGift(username, overlayId, data);
+      });
+
+      connection.on(WebcastEvent.LIKE, (data) => {
+        this.handleLike(username, overlayId, data);
+      });
+
+      connection.on(WebcastEvent.FOLLOW, (data) => {
+        this.handleFollow(username, overlayId, data);
+      });
+
+      connection.on(WebcastEvent.SOCIAL, (data) => {
+        this.handleShare(username, overlayId, data);
+      });
+
       // Cast to EventEmitter for lifecycle events not in ClientEventMap
       const emitter = connection as unknown as EventEmitter;
 
@@ -720,6 +759,232 @@ class TikTokListenerService {
     }
   }
 
+  private async handleGift(username: string, overlayId: string, data: any): Promise<void> {
+    try {
+      this.heartbeatMonitor.recordMessage(username);
+
+      const msgId = data.common?.msgId || randomUUID();
+      const createTime = data.common?.createTime;
+      const timestamp = createTime ? new Date(parseInt(createTime)).toISOString() : new Date().toISOString();
+
+      const rawMessage: RawChatMessage = {
+        message_id: msgId,
+        platform: 'tiktok',
+        channel_id: username,
+        user_id: data.user?.uniqueId || 'unknown',
+        username: data.user?.nickname || 'Anonymous',
+        text: `Sent ${data.gift?.name || 'a gift'}`,
+        timestamp: timestamp,
+        tags: {
+          overlay_id: overlayId,
+          user_unique_id: data.user?.uniqueId || '',
+          profile_picture_url: data.user?.profilePictureUrl || ''
+        },
+        event_type: 'gift',
+        event_data: {
+          gift_id: data.gift?.giftId,
+          gift_name: data.gift?.name,
+          gift_type: data.giftType, // 1 = normal, 2 = special
+          gift_count: data.repeatCount || 1,
+          diamond_count: (data.gift?.diamondCount || 0) * (data.repeatCount || 1)
+        }
+      };
+
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) });
+      logger.debug('Published TikTok gift event', { username, overlay_id: overlayId, gift: data.gift?.name });
+    } catch (error) {
+      logger.error('Failed to handle gift event', { username, error });
+    }
+  }
+
+  private async handleLike(username: string, overlayId: string, data: any): Promise<void> {
+    try {
+      this.heartbeatMonitor.recordMessage(username);
+
+      const userId = data.user?.uniqueId || 'unknown';
+      const userNickname = data.user?.nickname || 'Anonymous';
+      const likeCount = data.likeCount || 1;
+      const aggregationKey = `${username}:${userId}`;
+
+      let aggregation = this.likeAggregations.get(aggregationKey);
+
+      if (!aggregation) {
+        // Start new 30-second aggregation window
+        const aggregationId = randomUUID();
+        const windowStart = new Date();
+
+        aggregation = {
+          aggregation_id: aggregationId,
+          username,
+          overlay_id: overlayId,
+          user_id: userId,
+          user_nickname: userNickname,
+          like_count: likeCount,
+          window_start: windowStart,
+          last_published: new Date(0) // Never published yet
+        };
+
+        this.likeAggregations.set(aggregationKey, aggregation);
+
+        logger.debug('Started like aggregation window', {
+          username,
+          user: userNickname,
+          aggregation_id: aggregationId
+        });
+      } else {
+        // Update existing window
+        aggregation.like_count += likeCount;
+      }
+    } catch (error) {
+      logger.error('Failed to handle like event', { username, error });
+    }
+  }
+
+  private async handleFollow(username: string, overlayId: string, data: any): Promise<void> {
+    try {
+      this.heartbeatMonitor.recordMessage(username);
+
+      const msgId = data.common?.msgId || randomUUID();
+      const createTime = data.common?.createTime;
+      const timestamp = createTime ? new Date(parseInt(createTime)).toISOString() : new Date().toISOString();
+
+      const rawMessage: RawChatMessage = {
+        message_id: msgId,
+        platform: 'tiktok',
+        channel_id: username,
+        user_id: data.user?.uniqueId || 'unknown',
+        username: data.user?.nickname || 'Anonymous',
+        text: 'Followed',
+        timestamp: timestamp,
+        tags: {
+          overlay_id: overlayId,
+          user_unique_id: data.user?.uniqueId || '',
+          profile_picture_url: data.user?.profilePictureUrl || ''
+        },
+        event_type: 'follow',
+        event_data: {}
+      };
+
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) });
+      logger.debug('Published TikTok follow event', { username, overlay_id: overlayId });
+    } catch (error) {
+      logger.error('Failed to handle follow event', { username, error });
+    }
+  }
+
+  private async handleShare(username: string, overlayId: string, data: any): Promise<void> {
+    try {
+      this.heartbeatMonitor.recordMessage(username);
+
+      const msgId = data.common?.msgId || randomUUID();
+      const createTime = data.common?.createTime;
+      const timestamp = createTime ? new Date(parseInt(createTime)).toISOString() : new Date().toISOString();
+
+      const rawMessage: RawChatMessage = {
+        message_id: msgId,
+        platform: 'tiktok',
+        channel_id: username,
+        user_id: data.user?.uniqueId || 'unknown',
+        username: data.user?.nickname || 'Anonymous',
+        text: 'Shared the stream',
+        timestamp: timestamp,
+        tags: {
+          overlay_id: overlayId,
+          user_unique_id: data.user?.uniqueId || '',
+          profile_picture_url: data.user?.profilePictureUrl || ''
+        },
+        event_type: 'share',
+        event_data: {}
+      };
+
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) });
+      logger.debug('Published TikTok share event', { username, overlay_id: overlayId });
+    } catch (error) {
+      logger.error('Failed to handle share event', { username, error });
+    }
+  }
+
+  private startLikeAggregationPublisher(): void {
+    this.likeAggregationTimer = setInterval(async () => {
+      const now = new Date();
+      const expiredKeys: string[] = [];
+
+      for (const [key, agg] of this.likeAggregations.entries()) {
+        const windowAge = now.getTime() - agg.window_start.getTime();
+        const timeSinceLastPublish = now.getTime() - agg.last_published.getTime();
+
+        // Publish if:
+        // 1. Window is closed (30s elapsed), OR
+        // 2. 5 seconds since last publish AND likes accumulated
+        const shouldPublish =
+          windowAge >= this.LIKE_AGGREGATION_WINDOW_MS || // 30s window closed
+          (timeSinceLastPublish >= this.LIKE_PUBLISH_INTERVAL_MS && agg.like_count > 0); // 5s update interval
+
+        if (shouldPublish) {
+          const isWindowClosed = windowAge >= this.LIKE_AGGREGATION_WINDOW_MS;
+          const isUpdate = agg.last_published.getTime() > 0; // true if not first publish
+
+          const rawMessage: RawChatMessage = {
+            message_id: agg.aggregation_id, // Keep same ID for updates
+            platform: 'tiktok',
+            channel_id: agg.username,
+            user_id: agg.user_id,
+            username: agg.user_nickname,
+            text: `Sent ${agg.like_count} like${agg.like_count !== 1 ? 's' : ''}`,
+            timestamp: agg.window_start.toISOString(),
+            tags: {
+              overlay_id: agg.overlay_id
+            },
+            event_type: 'like_aggregate',
+            event_data: {
+              aggregation_id: agg.aggregation_id,
+              like_count: agg.like_count,
+              window_start: agg.window_start.toISOString(),
+              window_end: isWindowClosed ? now.toISOString() : null,
+              is_update: isUpdate
+            }
+          };
+
+          try {
+            await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) });
+
+            logger.debug('Published like aggregation', {
+              username: agg.username,
+              user: agg.user_nickname,
+              like_count: agg.like_count,
+              is_update: isUpdate,
+              window_closed: isWindowClosed
+            });
+
+            agg.last_published = now;
+
+            // Remove from map if window closed
+            if (isWindowClosed) {
+              expiredKeys.push(key);
+            }
+          } catch (error) {
+            logger.error('Failed to publish like aggregation', { error });
+          }
+        }
+      }
+
+      // Cleanup expired windows
+      for (const key of expiredKeys) {
+        this.likeAggregations.delete(key);
+      }
+    }, this.LIKE_PUBLISH_INTERVAL_MS); // Run every 5 seconds
+
+    logger.info('Like aggregation publisher started');
+  }
+
+  private stopLikeAggregationPublisher(): void {
+    if (this.likeAggregationTimer) {
+      clearInterval(this.likeAggregationTimer);
+      this.likeAggregationTimer = undefined;
+      logger.info('Like aggregation publisher stopped');
+    }
+  }
+
   async stop(): Promise<void> {
     this.isShuttingDown = true;
     logger.info('Shutting down TikTok Listener Service...');
@@ -746,6 +1011,9 @@ class TikTokListenerService {
     // Stop message deduplicator cleanup
     this.messageDeduplicator.stop();
     logger.info('Message deduplicator stopped');
+
+    // Stop like aggregation publisher
+    this.stopLikeAggregationPublisher();
 
     // Disconnect all streams
     for (const [username, _] of this.activeStreams.entries()) {

@@ -10,7 +10,8 @@ import (
 )
 
 // MessageHandler is called when a message is received from Redis Pub/Sub
-type MessageHandler func(overlayID string, message []byte)
+// channel parameter allows distinguishing between main and update channels
+type MessageHandler func(overlayID string, channel string, message []byte)
 
 // Subscriber manages Redis Pub/Sub subscriptions for overlays
 type Subscriber struct {
@@ -54,20 +55,24 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 		return nil
 	}
 
-	// Subscribe to Redis channel
-	channel := fmt.Sprintf("overlay:%s", overlayID)
-	pubsub := s.client.Subscribe(ctx, channel)
+	// Subscribe to both main and update channels
+	// Main channel: regular chat messages and events
+	// Update channel: TikTok like aggregate updates
+	mainChannel := fmt.Sprintf("overlay:%s", overlayID)
+	updateChannel := fmt.Sprintf("overlay:%s:updates", overlayID)
+	pubsub := s.client.Subscribe(ctx, mainChannel, updateChannel)
 
 	// Verify subscription
 	if _, err := pubsub.Receive(ctx); err != nil {
-		return fmt.Errorf("failed to subscribe to channel: %w", err)
+		return fmt.Errorf("failed to subscribe to channels: %w", err)
 	}
 
 	s.subscriptions[overlayID] = pubsub
 
-	s.logger.Info("Subscribed to overlay channel",
+	s.logger.Info("Subscribed to overlay channels",
 		zap.String("overlay_id", overlayID),
-		zap.String("channel", channel),
+		zap.String("main_channel", mainChannel),
+		zap.String("update_channel", updateChannel),
 	)
 
 	// Start listening for messages
@@ -141,8 +146,8 @@ func (s *Subscriber) listen(ctx context.Context, overlayID string, pubsub *redis
 				return
 			}
 
-			// Call handler with message
-			s.handler(overlayID, []byte(msg.Payload))
+			// Call handler with message and channel name
+			s.handler(overlayID, msg.Channel, []byte(msg.Payload))
 		}
 	}
 }

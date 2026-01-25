@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/caesar/all-chat/services/message-processor/classifier"
 	"github.com/caesar/all-chat/services/message-processor/models"
 )
 
@@ -220,4 +221,168 @@ func (n *TwitchNormalizer) extractMetadata(raw *models.RawChatMessage) map[strin
 	metadata["super_chat_amount"] = 0
 
 	return metadata
+}
+
+// NormalizeEvent converts a RawChatMessage with event data to UnifiedChatMessage with EventInfo
+func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID string) (*models.UnifiedChatMessage, error) {
+	if raw.Platform != "twitch" {
+		return nil, fmt.Errorf("unsupported platform: %s", raw.Platform)
+	}
+
+	if raw.EventType == "" {
+		return nil, fmt.Errorf("missing event type")
+	}
+
+	// Extract user info
+	userInfo := n.extractUserInfo(raw)
+
+	// Build EventValue from EventData
+	var eventValue *models.EventValue
+
+	switch raw.EventType {
+	case "subscription", "resubscription":
+		// Extract tier and months
+		tier := "1000" // Default to Tier 1
+		if t, ok := raw.EventData["tier"].(string); ok {
+			tier = t
+		}
+		months := 0
+		if m, ok := raw.EventData["months"].(int); ok {
+			months = m
+		} else if m, ok := raw.EventData["months"].(float64); ok {
+			months = int(m)
+		}
+
+		tierName := getTierName(tier)
+		eventValue = &models.EventValue{
+			Amount:      float64(months),
+			Currency:    "months",
+			DisplayText: fmt.Sprintf("%s - %d months", tierName, months),
+		}
+
+	case "gift_subscription":
+		tier := "1000"
+		if t, ok := raw.EventData["tier"].(string); ok {
+			tier = t
+		}
+		recipient := "someone"
+		if r, ok := raw.EventData["recipient_name"].(string); ok {
+			recipient = r
+		}
+
+		tierName := getTierName(tier)
+		eventValue = &models.EventValue{
+			Amount:      1,
+			Currency:    "gift",
+			DisplayText: fmt.Sprintf("Gifted %s sub to %s", tierName, recipient),
+		}
+
+	case "mystery_gift":
+		giftCount := 0
+		if g, ok := raw.EventData["gift_count"].(int); ok {
+			giftCount = g
+		} else if g, ok := raw.EventData["gift_count"].(float64); ok {
+			giftCount = int(g)
+		}
+
+		eventValue = &models.EventValue{
+			Amount:      float64(giftCount),
+			Currency:    "gifts",
+			DisplayText: fmt.Sprintf("%d gift subs", giftCount),
+		}
+
+	case "raid":
+		viewerCount := 0
+		if v, ok := raw.EventData["viewer_count"].(int); ok {
+			viewerCount = v
+		} else if v, ok := raw.EventData["viewer_count"].(float64); ok {
+			viewerCount = int(v)
+		}
+
+		eventValue = &models.EventValue{
+			Amount:      float64(viewerCount),
+			Currency:    "viewers",
+			DisplayText: fmt.Sprintf("%d viewers", viewerCount),
+		}
+
+	case "bits":
+		badgeTier := 0
+		if b, ok := raw.EventData["badge_tier"].(int); ok {
+			badgeTier = b
+		} else if b, ok := raw.EventData["badge_tier"].(float64); ok {
+			badgeTier = int(b)
+		}
+
+		eventValue = &models.EventValue{
+			Amount:      float64(badgeTier),
+			Currency:    "bits",
+			DisplayText: fmt.Sprintf("%d bits", badgeTier),
+		}
+
+	case "channel_points":
+		cost := 0
+		if c, ok := raw.EventData["reward_cost"].(int); ok {
+			cost = c
+		} else if c, ok := raw.EventData["reward_cost"].(float64); ok {
+			cost = int(c)
+		}
+		title := "Reward"
+		if t, ok := raw.EventData["reward_title"].(string); ok {
+			title = t
+		}
+
+		eventValue = &models.EventValue{
+			Amount:      float64(cost),
+			Currency:    "points",
+			DisplayText: fmt.Sprintf("%s (%d points)", title, cost),
+		}
+	}
+
+	// Classify event tier and duration
+	tier, duration := classifier.ClassifyEvent("twitch", raw.EventType, eventValue)
+
+	// Create EventInfo
+	eventInfo := &models.EventInfo{
+		Type:     raw.EventType,
+		Tier:     tier,
+		Value:    eventValue,
+		Duration: duration,
+		IsUpdate: false, // Twitch events don't have updates
+		Metadata: raw.EventData,
+	}
+
+	// Create unified message
+	unified := &models.UnifiedChatMessage{
+		ID:          raw.MessageID,
+		OverlayID:   overlayID,
+		Platform:    "twitch",
+		ChannelID:   raw.ChannelID,
+		ChannelName: raw.ChannelID,
+		User:        userInfo,
+		Message: models.MessageInfo{
+			Text:   raw.Text, // System message from Twitch
+			Emotes: []models.Emote{}, // Events don't have emotes
+		},
+		Timestamp: raw.Timestamp,
+		Metadata:  n.extractMetadata(raw),
+		Event:     eventInfo, // Add event info
+	}
+
+	return unified, nil
+}
+
+// getTierName converts Twitch subscription tier to human-readable name
+func getTierName(tier string) string {
+	switch tier {
+	case "1000":
+		return "Tier 1"
+	case "2000":
+		return "Tier 2"
+	case "3000":
+		return "Tier 3"
+	case "Prime":
+		return "Prime"
+	default:
+		return tier
+	}
 }

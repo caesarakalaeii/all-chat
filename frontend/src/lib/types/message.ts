@@ -5,6 +5,37 @@
  * Used for WebSocket messages and chat rendering.
  */
 
+export type MessageType = 'chat' | 'event';
+
+export type EventType =
+  // Twitch
+  | 'subscription' | 'resubscription' | 'gift_subscription' | 'mystery_gift'
+  | 'bits' | 'raid' | 'channel_points' | 'ritual'
+  // YouTube
+  | 'super_chat' | 'super_sticker' | 'new_sponsor'
+  | 'member_milestone' | 'membership_gift' | 'gift_received'
+  | 'message_deleted' | 'user_banned'
+  // Kick
+  | 'kick_subscription' | 'kick_gift_subscription' | 'kick_donation'
+  // TikTok
+  | 'gift' | 'follow' | 'like_aggregate' | 'share';
+
+export type EventTier = 'low' | 'medium' | 'high';
+
+export interface EventInfo {
+  type: EventType;
+  tier: EventTier;
+  value?: {
+    amount: number;
+    currency: string;
+    display_text: string;
+  };
+  duration: number; // Display duration in seconds
+  aggregation_id?: string; // For TikTok like updates
+  is_update: boolean; // True for TikTok like aggregate updates
+  metadata: Record<string, unknown>;
+}
+
 export interface ChatMessage {
   id: string;
   overlay_id: string;
@@ -15,6 +46,7 @@ export interface ChatMessage {
   message: MessageInfo;
   timestamp: string;
   metadata: Record<string, unknown>;
+  event?: EventInfo; // Present for events, absent for regular chat
 }
 
 export interface UserInfo {
@@ -47,7 +79,7 @@ export interface Emote {
 }
 
 export interface WebSocketMessage {
-  type: 'chat_message' | 'ping' | 'pong' | 'error';
+  type: 'chat_message' | 'message_update' | 'ping' | 'pong' | 'error';
   data?: ChatMessage;
   timestamp?: string;
   error?: string;

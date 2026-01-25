@@ -24,6 +24,8 @@ resources:
   # Phase 3 - Twitch Real-Time
   - twitch-listener/deployment.yaml
   - twitch-listener/hpa.yaml
+  - twitch-eventsub-listener/deployment.yaml
+  - twitch-eventsub-listener/hpa.yaml
   - message-processor/deployment.yaml
   - message-processor/hpa.yaml
 
@@ -50,6 +52,9 @@ images:
     newTag: main
   - name: allchat-twitch-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-twitch-listener
+    newTag: main
+  - name: allchat-twitch-eventsub-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-twitch-eventsub-listener
     newTag: main
   - name: allchat-youtube-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-youtube-listener

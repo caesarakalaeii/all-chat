@@ -53,6 +53,9 @@ func NewConnectionManager(
 	// Set up message handler
 	client.OnPrivateMessage(cm.handlePrivateMessage)
 
+	// Set up event handlers
+	client.OnUserNoticeMessage(cm.handleUserNotice)
+
 	// Set up connection handlers
 	client.OnConnect(cm.handleConnect)
 
@@ -183,6 +186,55 @@ func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage)
 		zap.String("channel", rawMsg.ChannelID),
 		zap.String("username", rawMsg.Username),
 		zap.String("text", rawMsg.Text),
+	)
+}
+
+// handleUserNotice processes incoming USERNOTICE events from Twitch (subs, raids, bits, etc.)
+func (cm *ConnectionManager) handleUserNotice(message twitch.UserNoticeMessage) {
+	start := time.Now()
+
+	// Record event received
+	cm.metrics.RecordMessage("twitch", "twitch-listener", message.Channel, "event")
+
+	// Parse USERNOTICE into RawChatMessage with event fields
+	rawMsg, err := cm.parser.ParseUserNotice(message)
+	if err != nil {
+		cm.logger.Warn("Failed to parse USERNOTICE",
+			zap.String("channel", message.Channel),
+			zap.String("msg-id", message.MsgID),
+			zap.String("user", message.User.Name),
+			zap.Error(err),
+		)
+		cm.metrics.RecordError("twitch", "twitch-listener", "parsing", "warning")
+		return
+	}
+
+	// Publish to Redis Streams (same flow as chat messages)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := cm.publisher.Publish(ctx, rawMsg); err != nil {
+		cm.logger.Error("Failed to publish event",
+			zap.String("message_id", rawMsg.MessageID),
+			zap.String("channel", rawMsg.ChannelID),
+			zap.String("event_type", rawMsg.EventType),
+			zap.Error(err),
+		)
+		cm.metrics.RecordPublish("twitch", "twitch-listener", "failed")
+		cm.metrics.RecordError("twitch", "twitch-listener", "internal", "error")
+		return
+	}
+
+	// Record successful publish and latency
+	cm.metrics.RecordPublish("twitch", "twitch-listener", "success")
+	cm.metrics.MessageLatency.WithLabelValues("twitch", "twitch-listener").Observe(time.Since(start).Seconds())
+
+	cm.logger.Info("Published Twitch event",
+		zap.String("message_id", rawMsg.MessageID),
+		zap.String("channel", rawMsg.ChannelID),
+		zap.String("event_type", rawMsg.EventType),
+		zap.String("msg-id", message.MsgID),
+		zap.String("username", rawMsg.Username),
 	)
 }
 

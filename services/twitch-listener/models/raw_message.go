@@ -22,6 +22,10 @@ type RawChatMessage struct {
 	Text      string            `json:"text"`       // Raw message text
 	Timestamp time.Time         `json:"timestamp"`  // UTC timestamp
 	Tags      map[string]string `json:"tags"`       // IRC tags (badges, color, emotes, etc.)
+
+	// Event support (backwards compatible - omitted for regular chat messages)
+	EventType string                 `json:"event_type,omitempty"` // "subscription", "raid", "bits", etc.
+	EventData map[string]interface{} `json:"event_data,omitempty"` // Event-specific payload
 }
 
 // ToJSON converts the message to JSON bytes

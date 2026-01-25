@@ -18,6 +18,10 @@ type RawChatMessage struct {
 	Timestamp   time.Time         `json:"timestamp"`
 	Tags        map[string]string `json:"tags"`
 	RawMessage  json.RawMessage   `json:"raw_message,omitempty"`
+
+	// Event support (backwards compatible - omitted for chat messages)
+	EventType   string                 `json:"event_type,omitempty"`   // "subscription", "raid", "gift", "like_aggregate", etc.
+	EventData   map[string]interface{} `json:"event_data,omitempty"`   // Platform-specific event payload
 }
 
 // UnifiedChatMessage represents the normalized, enriched message published to Pub/Sub
@@ -31,6 +35,9 @@ type UnifiedChatMessage struct {
 	Message     MessageInfo            `json:"message"`
 	Timestamp   time.Time              `json:"timestamp"`
 	Metadata    map[string]interface{} `json:"metadata"`
+
+	// Event support (nil for chat messages)
+	Event       *EventInfo             `json:"event,omitempty"`
 }
 
 // UserInfo contains information about the message author
@@ -64,6 +71,24 @@ type Emote struct {
 	Provider  string  `json:"provider"`
 	URL       string  `json:"url"`
 	Positions [][]int `json:"positions"` // [[start, end], [start, end]]
+}
+
+// EventInfo contains information about platform events (subscriptions, donations, etc.)
+type EventInfo struct {
+	Type           string                 `json:"type"`                       // "subscription", "bits", "follow", "raid", etc.
+	Tier           string                 `json:"tier"`                       // "high", "medium", "low"
+	Value          *EventValue            `json:"value,omitempty"`            // Monetary/count value
+	Duration       int                    `json:"duration"`                   // Display duration in seconds
+	AggregationID  string                 `json:"aggregation_id,omitempty"`   // For TikTok like aggregation
+	IsUpdate       bool                   `json:"is_update"`                  // True if updating existing message
+	Metadata       map[string]interface{} `json:"metadata,omitempty"`         // Event-specific metadata
+}
+
+// EventValue represents the value/amount associated with an event
+type EventValue struct {
+	Amount      float64 `json:"amount"`        // Numeric value (100 bits, 5 gifts, 50 likes)
+	Currency    string  `json:"currency"`      // "bits", "USD", "likes", "gifts", "viewers"
+	DisplayText string  `json:"display_text"`  // Human-readable string ("100 bits", "$4.99", "50 likes")
 }
 
 // ToJSON converts UnifiedChatMessage to JSON bytes

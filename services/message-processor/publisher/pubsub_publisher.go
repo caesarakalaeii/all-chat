@@ -31,12 +31,21 @@ func (p *PubSubPublisher) Publish(ctx context.Context, overlayID string, msg *mo
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	// Publish to overlay channel
+	// Determine channel based on whether this is an update (TikTok like aggregates)
 	channel := fmt.Sprintf("overlay:%s", overlayID)
+	isUpdate := msg.Event != nil && msg.Event.IsUpdate
+
+	if isUpdate {
+		// For TikTok like aggregates: publish updates to special channel
+		// Frontend will update existing message instead of creating new one
+		channel = fmt.Sprintf("overlay:%s:updates", overlayID)
+	}
+
 	if err := p.client.Publish(ctx, channel, string(jsonBytes)).Err(); err != nil {
 		p.logger.Error("Failed to publish to Pub/Sub",
 			zap.String("channel", channel),
 			zap.String("message_id", msg.ID),
+			zap.Bool("is_update", isUpdate),
 			zap.Error(err),
 		)
 		return fmt.Errorf("failed to publish to Redis Pub/Sub: %w", err)
@@ -46,6 +55,7 @@ func (p *PubSubPublisher) Publish(ctx context.Context, overlayID string, msg *mo
 		zap.String("channel", channel),
 		zap.String("message_id", msg.ID),
 		zap.String("platform", msg.Platform),
+		zap.Bool("is_update", isUpdate),
 	)
 
 	return nil

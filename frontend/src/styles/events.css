@@ -1,0 +1,186 @@
+/**
+ * Event Message Styling
+ *
+ * CSS classes for platform events (subscriptions, donations, raids, follows, etc.)
+ * Provides tier-based visual differentiation and event-type specific styling.
+ */
+
+/* Base event message styling */
+.event-message {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Event tier styling - visual importance hierarchy */
+.event-tier-high {
+  background: rgba(255, 215, 0, 0.15) !important;
+  border: 2px solid #FFD700 !important;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.3) !important;
+}
+
+.event-tier-medium {
+  background: rgba(147, 51, 234, 0.15) !important;
+  border: 2px solid #9333EA !important;
+  box-shadow: 0 0 15px rgba(147, 51, 234, 0.2) !important;
+}
+
+.event-tier-low {
+  background: rgba(59, 130, 246, 0.15) !important;
+  border: 2px solid #3B82F6 !important;
+}
+
+/* Platform-specific event colors */
+.event-message[class*="subscription"],
+.event-message[class*="gift_subscription"] {
+  border-left: 4px solid #9146FF !important; /* Twitch purple */
+}
+
+.event-message[class*="super_chat"],
+.event-message[class*="super_sticker"] {
+  border-left: 4px solid #FFD700 !important; /* Gold */
+  background: linear-gradient(
+    135deg,
+    rgba(255, 215, 0, 0.1),
+    rgba(255, 0, 0, 0.05)
+  ) !important;
+}
+
+.event-message[class*="raid"] {
+  border-left: 4px solid #FF4500 !important; /* Orangered */
+  background: linear-gradient(
+    135deg,
+    rgba(255, 69, 0, 0.15),
+    rgba(138, 43, 226, 0.1)
+  ) !important;
+}
+
+.event-message[class*="bits"] {
+  border-left: 4px solid #9146FF !important; /* Twitch purple */
+  background: linear-gradient(
+    135deg,
+    rgba(145, 70, 255, 0.1),
+    rgba(0, 200, 255, 0.05)
+  ) !important;
+}
+
+.event-message[class*="channel_points"] {
+  border-left: 4px solid #00C8FF !important; /* Channel points blue */
+}
+
+.event-message[class*="gift"] {
+  border-left: 4px solid #FF69B4 !important; /* Hot pink for gifts */
+}
+
+.event-message[class*="follow"] {
+  border-left: 4px solid #1DA1F2 !important; /* Twitter blue */
+}
+
+.event-message[class*="like_aggregate"] {
+  border-left: 4px solid #FE2C55 !important; /* TikTok pink */
+}
+
+.event-message[class*="member"] {
+  border-left: 4px solid #00FF00 !important; /* Green for memberships */
+}
+
+/* Event icon animations */
+.event-icon {
+  display: inline-block;
+  animation: event-icon-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes event-icon-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
+}
+
+/* TikTok like counter animation */
+.event-type-like_aggregate .event-icon {
+  animation: heartbeat 0.6s ease-in-out infinite;
+}
+
+@keyframes heartbeat {
+  0%, 100% {
+    transform: scale(1);
+  }
+  25%, 75% {
+    transform: scale(1.2);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* Raid event special effect */
+.event-type-raid::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 69, 0, 0) 0%,
+    rgba(255, 69, 0, 0.2) 50%,
+    rgba(255, 69, 0, 0) 100%
+  );
+  animation: raid-sweep 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes raid-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Super Chat tier colors (based on YouTube's official tiers) */
+.event-type-super_chat.event-tier-high {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 0, 0, 0.2),
+    rgba(255, 215, 0, 0.15)
+  ) !important;
+  border-color: #FFD700 !important;
+}
+
+/* Subscription gift bomb animation */
+.event-type-mystery_gift {
+  animation: gift-explosion 0.8s ease-out;
+}
+
+@keyframes gift-explosion {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 10px rgba(147, 51, 234, 0.5);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(147, 51, 234, 0.8);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
+  }
+}
+
+/* Customization helpers */
+.event-message .event-content {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Support for custom CSS overrides */
+.event-message[data-platform="twitch"] {}
+.event-message[data-platform="youtube"] {}
+.event-message[data-platform="kick"] {}
+.event-message[data-platform="tiktok"] {}
