@@ -20,6 +20,24 @@ type MockBadge struct {
 	IconURL string `json:"icon_url"`
 }
 
+// MockEventInfo contains event metadata for subscriptions, donations, raids, etc.
+type MockEventInfo struct {
+	Type          string                 `json:"type"`
+	Tier          string                 `json:"tier"`
+	Duration      int                    `json:"duration,omitempty"`
+	IsUpdate      bool                   `json:"is_update,omitempty"`
+	AggregationID string                 `json:"aggregation_id,omitempty"`
+	Value         *MockEventValue        `json:"value,omitempty"`
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// MockEventValue represents monetary or numeric value associated with an event
+type MockEventValue struct {
+	Amount      float64 `json:"amount"`
+	Currency    string  `json:"currency"`
+	DisplayText string  `json:"display_text"`
+}
+
 // MockMessagePayload is forwarded to the message processor's mock endpoint.
 type MockMessagePayload struct {
 	OverlayID   string                 `json:"overlay_id"`
@@ -32,6 +50,7 @@ type MockMessagePayload struct {
 	AvatarURL   string                 `json:"avatar_url,omitempty"`
 	Color       string                 `json:"color,omitempty"`
 	Badges      []MockBadge            `json:"badges,omitempty"`
+	Event       *MockEventInfo         `json:"event,omitempty"`
 	Text        string                 `json:"text"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
