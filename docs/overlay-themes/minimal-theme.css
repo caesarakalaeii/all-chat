@@ -138,7 +138,7 @@ body {
   border-radius: 0 !important;
 }
 
-/* Hide event icons, titles, and metadata - show only the message text */
+/* Hide event icons, titles, values, and metadata - show only the message text */
 .event-icon {
   display: none !important;
 }
@@ -156,6 +156,11 @@ body {
 }
 
 .event-metadata {
+  display: none !important;
+}
+
+/* Hide the entire event header container to prevent duplicate usernames */
+.event-content > div:first-child {
   display: none !important;
 }
 
