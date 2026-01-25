@@ -402,9 +402,15 @@ func startHTTPServer(log *zap.Logger, port string, state *leaderState, client *e
 		isLdr := state.isLeader
 		state.RUnlock()
 
-		ready := isLdr && client.IsConnected()
-		if ready {
-			c.JSON(http.StatusOK, gin.H{"status": "ready", "is_leader": isLdr})
+		// Only the leader should be ready
+		// WebSocket connection status is not required for readiness
+		// as it may be temporarily down or unused
+		if isLdr {
+			c.JSON(http.StatusOK, gin.H{
+				"status":    "ready",
+				"is_leader": isLdr,
+				"connected": client.IsConnected(),
+			})
 		} else {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status":    "not ready",
