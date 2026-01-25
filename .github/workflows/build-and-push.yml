@@ -31,6 +31,7 @@ jobs:
       emote-service: ${{ steps.changes.outputs.emote-service }}
       api-gateway: ${{ steps.changes.outputs.api-gateway }}
       twitch-listener: ${{ steps.changes.outputs.twitch-listener }}
+      twitch-eventsub-listener: ${{ steps.changes.outputs.twitch-eventsub-listener }}
       youtube-listener: ${{ steps.changes.outputs.youtube-listener }}
       kick-listener: ${{ steps.changes.outputs.kick-listener }}
       tiktok-listener: ${{ steps.changes.outputs.tiktok-listener }}
@@ -62,6 +63,9 @@ jobs:
               - 'shared/**'
             twitch-listener:
               - 'services/twitch-listener/**'
+              - 'shared/**'
+            twitch-eventsub-listener:
+              - 'services/twitch-eventsub-listener/**'
               - 'shared/**'
             youtube-listener:
               - 'services/youtube-listener/**'
@@ -111,6 +115,9 @@ jobs:
           - name: twitch-listener
             changed: ${{ needs.detect-changes.outputs.twitch-listener }}
             path: services/twitch-listener
+          - name: twitch-eventsub-listener
+            changed: ${{ needs.detect-changes.outputs.twitch-eventsub-listener }}
+            path: services/twitch-eventsub-listener
           - name: youtube-listener
             changed: ${{ needs.detect-changes.outputs.youtube-listener }}
             path: services/youtube-listener
