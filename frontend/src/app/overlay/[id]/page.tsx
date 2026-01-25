@@ -447,11 +447,15 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
             key={`${message.id}-${index}`}
             data-platform={message.platform}
             data-event-type={isEvent ? message.event?.type : undefined}
-            className={`backdrop-blur-sm rounded-lg p-3 shadow-lg animate-in slide-in-from-bottom-2 duration-300 ${
-              isSharedChat
-                ? 'bg-purple-900/40 border-2 border-purple-500/50'
-                : 'bg-gray-900/90'
-            } ${isEvent ? `event-message ${eventTierClass} ${eventTypeClass}` : 'chat-message'}`}
+            className={
+              isEvent
+                ? `event-message ${eventTierClass} ${eventTypeClass}`
+                : `backdrop-blur-sm rounded-lg p-3 shadow-lg animate-in slide-in-from-bottom-2 duration-300 chat-message ${
+                    isSharedChat
+                      ? 'bg-purple-900/40 border-2 border-purple-500/50'
+                      : 'bg-gray-900/90'
+                  }`
+            }
           >
             <div className="flex items-start gap-3">
               {/* Avatar */}

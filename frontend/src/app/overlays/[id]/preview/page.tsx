@@ -998,9 +998,11 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
                         key={message.id}
                         data-platform={message.platform}
                         data-event-type={isEvent ? message.event?.type : undefined}
-                        className={`backdrop-blur-sm rounded-lg p-3 shadow-lg ${
-                          isEvent ? `event-message ${eventTierClass} ${eventTypeClass}` : 'bg-gray-900/90'
-                        }`}
+                        className={
+                          isEvent
+                            ? `event-message ${eventTierClass} ${eventTypeClass}`
+                            : 'backdrop-blur-sm rounded-lg p-3 shadow-lg bg-gray-900/90'
+                        }
                       >
                         <div className="flex items-start gap-3">
                           {/* Avatar */}
