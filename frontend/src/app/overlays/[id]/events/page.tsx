@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuthStore } from '@/lib/stores/auth-store';
 
 interface EventSettings {
   id: string;
@@ -34,6 +35,7 @@ interface EventSettings {
 }
 
 export default function EventSettingsPage({ params }: { params: { id: string } }) {
+  const { token } = useAuthStore();
   const [settings, setSettings] = useState<EventSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,10 +45,17 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
 
   // Load event settings
   useEffect(() => {
+    if (!token) {
+      router.push('/');
+      return;
+    }
+
     const loadSettings = async () => {
       try {
         const res = await fetch(`/api/v1/overlays/${params.id}/event-settings`, {
-          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         });
 
         if (!res.ok) {
@@ -63,10 +72,10 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
     };
 
     loadSettings();
-  }, [params.id]);
+  }, [params.id, token, router]);
 
   const handleSave = async () => {
-    if (!settings) return;
+    if (!settings || !token) return;
 
     setSaving(true);
     setError(null);
@@ -74,8 +83,10 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
     try {
       const res = await fetch(`/api/v1/overlays/${params.id}/event-settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(settings),
       });
 
