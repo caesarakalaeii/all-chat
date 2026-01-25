@@ -4,6 +4,8 @@
 
 The Twitch EventSub Listener connects to Twitch's EventSub WebSocket API to receive real-time events that are not available via IRC, primarily **channel point redemptions**.
 
+**Version:** 1.0.0
+
 **Why a separate service?**
 - EventSub uses WebSocket (different from IRC)
 - Requires app access tokens (not user OAuth)
