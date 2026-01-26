@@ -103,7 +103,7 @@ func (sm *SubscriptionManager) getAccessToken(ctx context.Context) (string, erro
 }
 
 // SubscribeChannelPoints creates a subscription for channel point redemptions
-// Uses the broadcaster's user OAuth token (required by Twitch for channel points)
+// Uses the broadcaster's user OAuth token (required by Twitch EventSub for channel points)
 func (sm *SubscriptionManager) SubscribeChannelPoints(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
 	sm.mu.RLock()
 	sessionID := sm.sessionID
