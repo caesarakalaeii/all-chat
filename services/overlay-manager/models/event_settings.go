@@ -3,6 +3,7 @@ package models
 import "time"
 
 // EventSettings represents the event display configuration for an overlay
+// Includes platform events and system events like token warnings
 type EventSettings struct {
 	ID        string    `json:"id" db:"id"`
 	OverlayID string    `json:"overlay_id" db:"overlay_id"`
