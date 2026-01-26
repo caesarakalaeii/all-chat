@@ -103,7 +103,8 @@ func (sm *SubscriptionManager) getAccessToken(ctx context.Context) (string, erro
 }
 
 // SubscribeChannelPoints creates a subscription for channel point redemptions
-func (sm *SubscriptionManager) SubscribeChannelPoints(ctx context.Context, broadcasterID string) (string, error) {
+// Uses the broadcaster's user OAuth token (required by Twitch for channel points)
+func (sm *SubscriptionManager) SubscribeChannelPoints(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
 	sm.mu.RLock()
 	sessionID := sm.sessionID
 	sm.mu.RUnlock()
@@ -123,12 +124,6 @@ func (sm *SubscriptionManager) SubscribeChannelPoints(ctx context.Context, broad
 		return subID, nil
 	}
 	sm.mu.RUnlock()
-
-	// Get access token
-	token, err := sm.getAccessToken(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %w", err)
-	}
 
 	// Create subscription request
 	reqBody := map[string]interface{}{
@@ -154,7 +149,7 @@ func (sm *SubscriptionManager) SubscribeChannelPoints(ctx context.Context, broad
 	}
 
 	req.Header.Set("Client-Id", sm.clientID)
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+userAccessToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)

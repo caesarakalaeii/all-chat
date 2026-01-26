@@ -141,8 +141,8 @@ func main() {
 
 		if isLdr {
 			activeChannels := channelManager.GetActiveChannels()
-			for broadcasterID := range activeChannels {
-				if _, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID); err != nil {
+			for broadcasterID, channel := range activeChannels {
+				if _, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID, channel.AccessToken); err != nil {
 					log.Error("Failed to create subscription",
 						zap.String("broadcaster_id", broadcasterID),
 						zap.Error(err),
@@ -169,7 +169,7 @@ func main() {
 	})
 
 	// Set up channel manager callback (creates/deletes subscriptions)
-	channelManager.SetSubscriptionCallback(func(broadcasterID string, action string) error {
+	channelManager.SetSubscriptionCallback(func(broadcasterID string, accessToken string, action string) error {
 		state.RLock()
 		isLdr := state.isLeader
 		sessionID := state.eventSubSessionID
@@ -181,7 +181,7 @@ func main() {
 		}
 
 		if action == "subscribe" {
-			_, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID)
+			_, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID, accessToken)
 			return err
 		} else if action == "unsubscribe" {
 			return subscriptionMgr.Unsubscribe(ctx, broadcasterID)
