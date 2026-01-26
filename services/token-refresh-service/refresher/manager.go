@@ -16,7 +16,7 @@ import (
 	oauth2Lib "golang.org/x/oauth2"
 )
 
-// Manager handles periodic token refresh
+// Manager handles periodic OAuth token refresh for all platforms
 type Manager struct {
 	repo      *repository.TokenRepository
 	providers map[oauth.Platform]oauth.OAuthProvider
