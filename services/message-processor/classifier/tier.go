@@ -20,6 +20,8 @@ func ClassifyEvent(platform, eventType string, value *models.EventValue) (tier s
 		return classifyKickEvent(eventType, value)
 	case "tiktok":
 		return classifyTikTokEvent(eventType, value)
+	case "system":
+		return classifySystemEvent(eventType, value)
 	default:
 		return tier, duration
 	}
@@ -191,6 +193,17 @@ func classifyTikTokEvent(eventType string, value *models.EventValue) (tier strin
 	case "share":
 		// Shares are medium value
 		return "medium", 15
+
+	default:
+		return "medium", 15
+	}
+}
+
+func classifySystemEvent(eventType string, value *models.EventValue) (tier string, duration int) {
+	switch eventType {
+	case "token_expiration_warning":
+		// Token warnings are critical - high priority, long duration
+		return "high", 60
 
 	default:
 		return "medium", 15

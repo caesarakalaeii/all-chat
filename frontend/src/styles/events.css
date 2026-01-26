@@ -245,6 +245,51 @@
   }
 }
 
+/* Token expiration warning styling */
+.event-type-token_expiration_warning {
+  background: linear-gradient(
+    135deg,
+    rgba(239, 68, 68, 0.25) 0%,
+    rgba(220, 38, 38, 0.15) 100%
+  ) !important;
+  border: 3px solid #EF4444 !important;
+  border-left: 8px solid #DC2626 !important;
+  box-shadow:
+    0 0 30px rgba(239, 68, 68, 0.5),
+    0 8px 32px rgba(0, 0, 0, 0.4) !important;
+  animation: warning-pulse 2s ease-in-out infinite;
+}
+
+@keyframes warning-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 30px rgba(239, 68, 68, 0.5),
+      0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow:
+      0 0 50px rgba(239, 68, 68, 0.8),
+      0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+}
+
+.event-type-token_expiration_warning .event-icon {
+  animation: warning-shake 0.5s ease-in-out infinite;
+}
+
+@keyframes warning-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+.event-type-token_expiration_warning .event-warning-message {
+  padding: 0.5rem;
+  background: rgba(220, 38, 38, 0.2);
+  border-radius: 0.375rem;
+  margin-top: 0.5rem;
+}
+
 /* Customization helpers */
 .event-message .event-content {
   transition: all 0.3s ease-in-out;
@@ -255,3 +300,4 @@
 .event-message[data-platform="youtube"] {}
 .event-message[data-platform="kick"] {}
 .event-message[data-platform="tiktok"] {}
+.event-message[data-platform="system"] {}

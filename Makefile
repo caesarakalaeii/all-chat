@@ -31,6 +31,7 @@ help:
 	@echo "  make build-tiktok        - Build tiktok-listener (Node.js)"
 	@echo "  make build-processor     - Build message-processor"
 	@echo "  make build-source-manager - Build source-manager"
+	@echo "  make build-token-refresh - Build token-refresh-service"
 
 # Download dependencies
 deps:
@@ -46,6 +47,7 @@ deps:
 	cd services/tiktok-listener && npm install
 	cd services/message-processor && go mod download
 	cd services/source-manager && go mod download
+	cd services/token-refresh-service && go mod download
 
 # Build all services
 build:
@@ -60,6 +62,7 @@ build:
 	@$(MAKE) build-tiktok
 	@$(MAKE) build-processor
 	@$(MAKE) build-source-manager
+	@$(MAKE) build-token-refresh
 
 build-auth:
 	@echo "Building auth-service..."
@@ -100,6 +103,10 @@ build-processor:
 build-source-manager:
 	@echo "Building source-manager..."
 	cd services/source-manager && go build -o ../../bin/source-manager ./cmd
+
+build-token-refresh:
+	@echo "Building token-refresh-service..."
+	cd services/token-refresh-service && go build -o ../../bin/token-refresh-service ./cmd
 
 # Run tests
 test:
