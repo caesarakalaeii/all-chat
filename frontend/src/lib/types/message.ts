@@ -18,7 +18,9 @@ export type EventType =
   // Kick
   | 'kick_subscription' | 'kick_gift_subscription' | 'kick_donation'
   // TikTok
-  | 'gift' | 'follow' | 'like_aggregate' | 'share';
+  | 'gift' | 'follow' | 'like_aggregate' | 'share'
+  // System
+  | 'token_expiration_warning';
 
 export type EventTier = 'low' | 'medium' | 'high';
 
@@ -39,7 +41,7 @@ export interface EventInfo {
 export interface ChatMessage {
   id: string;
   overlay_id: string;
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok';
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'system';
   channel_id: string;
   channel_name: string;
   user: UserInfo;
