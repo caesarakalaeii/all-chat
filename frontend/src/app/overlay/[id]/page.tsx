@@ -361,7 +361,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
               {event.metadata?.failure_reason === 'expired'
                 ? 'OAuth token has expired'
                 : 'Failed to refresh OAuth token'}
-              {event.metadata?.username && ` for ${event.metadata.username}`}
+              {event.metadata?.username ? ` for ${String(event.metadata.username)}` : ''}
             </div>
             <div className="text-xs text-orange-300">
               {'→ Please reconnect your account in Settings → Connections'}
