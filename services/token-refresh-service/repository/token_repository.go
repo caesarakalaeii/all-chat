@@ -188,13 +188,13 @@ func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWi
 // GetExpiringYouTubeTokens returns YouTube channel tokens expiring within the specified duration
 func (r *TokenRepository) GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
 	query := `
-		SELECT user_id, channel_id, access_token, refresh_token, token_expires_at
+		SELECT user_id, channel_id, access_token, refresh_token, expiry
 		FROM youtube_oauth_tokens
-		WHERE token_expires_at < $1
-		  AND token_expires_at > NOW()
+		WHERE expiry < $1
+		  AND expiry > NOW()
 		  AND refresh_token IS NOT NULL
 		  AND refresh_token != ''
-		ORDER BY token_expires_at ASC
+		ORDER BY expiry ASC
 		LIMIT 100
 	`
 
@@ -337,7 +337,7 @@ func (r *TokenRepository) UpdateYouTubeTokens(ctx context.Context, userID, chann
 		UPDATE youtube_oauth_tokens
 		SET access_token = $3,
 		    refresh_token = $4,
-		    token_expires_at = $5,
+		    expiry = $5,
 		    updated_at = $6
 		WHERE user_id = $1 AND channel_id = $2
 	`
