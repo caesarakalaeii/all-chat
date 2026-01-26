@@ -364,7 +364,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
               {event.metadata?.username && ` for ${event.metadata.username}`}
             </div>
             <div className="text-xs text-orange-300">
-              → Please reconnect your account in Settings → Connections
+              {'→ Please reconnect your account in Settings → Connections'}
             </div>
           </div>
         )}
