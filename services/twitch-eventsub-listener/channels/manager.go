@@ -14,11 +14,13 @@ import (
 type Channel struct {
 	BroadcasterID   string
 	BroadcasterName string
+	AccessToken     string   // User OAuth token for EventSub subscriptions
 	OverlayIDs      []string // Overlays using this channel
 }
 
 // SubscriptionCallback is called when channels are added/removed
-type SubscriptionCallback func(broadcasterID string, action string) error
+// Receives broadcaster ID, access token, and action (subscribe/unsubscribe)
+type SubscriptionCallback func(broadcasterID string, accessToken string, action string) error
 
 // UserIDResolver resolves Twitch usernames to user IDs
 type UserIDResolver interface {
@@ -168,6 +170,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			activeChannels[broadcasterID] = &Channel{
 				BroadcasterID:   broadcasterID,
 				BroadcasterName: channelID,
+				AccessToken:     *accessToken, // Store user OAuth token for EventSub subscriptions
 				OverlayIDs:      []string{},
 			}
 		}
@@ -197,7 +200,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			)
 
 			if m.callback != nil {
-				if err := m.callback(broadcasterID, "subscribe"); err != nil {
+				if err := m.callback(broadcasterID, channel.AccessToken, "subscribe"); err != nil {
 					m.logger.Error("Failed to subscribe to channel",
 						zap.String("broadcaster_id", broadcasterID),
 						zap.Error(err),
@@ -219,7 +222,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			)
 
 			if m.callback != nil {
-				if err := m.callback(broadcasterID, "unsubscribe"); err != nil {
+				if err := m.callback(broadcasterID, "", "unsubscribe"); err != nil {
 					m.logger.Error("Failed to unsubscribe from channel",
 						zap.String("broadcaster_id", broadcasterID),
 						zap.Error(err),
