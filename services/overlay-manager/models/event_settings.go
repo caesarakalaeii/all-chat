@@ -34,6 +34,9 @@ type EventSettings struct {
 	EnableTikTokFollows bool `json:"enable_tiktok_follows" db:"enable_tiktok_follows"`
 	EnableTikTokShares  bool `json:"enable_tiktok_shares" db:"enable_tiktok_shares"`
 
+	// System Events
+	EnableTokenWarnings bool `json:"enable_token_warnings" db:"enable_token_warnings"`
+
 	// Aggregation Settings
 	TikTokLikeAggregationWindowSeconds int     `json:"tiktok_like_aggregation_window_seconds" db:"tiktok_like_aggregation_window_seconds"`
 	EventDisplayDurationMultiplier     float64 `json:"event_display_duration_multiplier" db:"event_display_duration_multiplier"`

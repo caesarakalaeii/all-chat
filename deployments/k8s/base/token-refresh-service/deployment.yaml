@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: token-refresh-service
+  namespace: allchat
+  labels:
+    app: token-refresh-service
+    component: maintenance
+spec:
+  replicas: 1  # Single replica to prevent duplicate refreshes
+  selector:
+    matchLabels:
+      app: token-refresh-service
+  template:
+    metadata:
+      labels:
+        app: token-refresh-service
+        component: maintenance
+    spec:
+      containers:
+      - name: token-refresh-service
+        image: localhost:5000/allchat-token-refresh-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8090
+          name: http
+        env:
+        - name: PORT
+          value: "8090"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: LOG_LEVEL
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_PORT
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_NAME
+        - name: DATABASE_USER
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: DATABASE_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_PORT
+        - name: TWITCH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: TWITCH_CLIENT_ID
+        - name: TWITCH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: TWITCH_CLIENT_SECRET
+        - name: YOUTUBE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: YOUTUBE_CLIENT_ID
+        - name: YOUTUBE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: YOUTUBE_CLIENT_SECRET
+        - name: KICK_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: KICK_CLIENT_ID
+        - name: KICK_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: KICK_CLIENT_SECRET
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: ENCRYPTION_KEY
+        - name: FRONTEND_URL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: FRONTEND_URL
+        - name: TOKEN_REFRESH_INTERVAL
+          value: "5m"
+        - name: TOKEN_REFRESH_BUFFER
+          value: "10m"
+        - name: TOKEN_REFRESH_BATCH_SIZE
+          value: "100"
+        - name: TOKEN_REFRESH_RETRY_ATTEMPTS
+          value: "3"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8090
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8090
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: token-refresh-service
+  namespace: allchat
+  labels:
+    app: token-refresh-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8090
+    targetPort: 8090
+    protocol: TCP
+    name: http
+  selector:
+    app: token-refresh-service

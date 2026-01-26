@@ -284,6 +284,8 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
           return '🎂';
         case 'membership_gift':
           return '🎁';
+        case 'token_expiration_warning':
+          return '⚠️';
         default:
           return '✨';
       }
@@ -324,6 +326,9 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
           return 'Likes!';
         case 'share':
           return 'Stream Shared!';
+        case 'token_expiration_warning':
+          const platform = (event.metadata?.platform as string) || 'Platform';
+          return `${platform.charAt(0).toUpperCase() + platform.slice(1)} Authentication Error`;
         default:
           return 'Event!';
       }
@@ -348,6 +353,19 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
         {message.message.text && (
           <div className="text-sm event-message-text text-gray-200 ml-14">
             {message.message.text}
+          </div>
+        )}
+        {event.type === 'token_expiration_warning' && (
+          <div className="text-sm event-warning-message text-orange-200 ml-14 mt-2 space-y-1">
+            <div className="font-semibold">
+              {event.metadata?.failure_reason === 'expired'
+                ? 'OAuth token has expired'
+                : 'Failed to refresh OAuth token'}
+              {event.metadata?.username && ` for ${event.metadata.username}`}
+            </div>
+            <div className="text-xs text-orange-300">
+              → Please reconnect your account in Settings → Connections
+            </div>
           </div>
         )}
         {event.metadata && Object.keys(event.metadata).length > 0 && (

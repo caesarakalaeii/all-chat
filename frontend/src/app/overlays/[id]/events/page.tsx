@@ -29,6 +29,8 @@ interface EventSettings {
   enable_tiktok_gifts: boolean;
   enable_tiktok_follows: boolean;
   enable_tiktok_shares: boolean;
+  // System
+  enable_token_warnings: boolean;
   // Settings
   tiktok_like_aggregation_window_seconds: number;
   event_display_duration_multiplier: number;
@@ -319,6 +321,17 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
                 value={settings.enable_tiktok_shares}
                 onChange={(v) => updateSetting('enable_tiktok_shares', v)}
               />
+
+              {/* System Events */}
+              <div className="pt-4 mt-4 border-t border-gray-700">
+                <h3 className="font-medium text-white mb-4">System Events</h3>
+                <EventToggle
+                  label="Token Warnings"
+                  description="Display OAuth authentication errors on overlay (requires token-refresh-service)"
+                  value={settings.enable_token_warnings}
+                  onChange={(v) => updateSetting('enable_token_warnings', v)}
+                />
+              </div>
 
               {/* Advanced Settings */}
               <div className="pt-4 mt-4 border-t border-gray-700">
