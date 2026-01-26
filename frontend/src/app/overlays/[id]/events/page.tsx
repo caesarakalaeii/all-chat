@@ -1,3 +1,4 @@
+// Event Settings Page - Configure overlay event display preferences
 'use client';
 
 import { useEffect, useState } from 'react';
