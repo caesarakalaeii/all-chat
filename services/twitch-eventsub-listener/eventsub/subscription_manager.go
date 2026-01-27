@@ -194,6 +194,12 @@ func (sm *SubscriptionManager) Subscribe(ctx context.Context, subscriptionType s
 	}
 	sm.mu.RUnlock()
 
+	// Get app access token (required for webhook subscriptions)
+	token, err := sm.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
+
 	// Build condition based on subscription type
 	condition := map[string]string{
 		"broadcaster_user_id": broadcasterID,
@@ -227,7 +233,7 @@ func (sm *SubscriptionManager) Subscribe(ctx context.Context, subscriptionType s
 	}
 
 	req.Header.Set("Client-Id", sm.clientID)
-	req.Header.Set("Authorization", "Bearer "+userAccessToken)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
