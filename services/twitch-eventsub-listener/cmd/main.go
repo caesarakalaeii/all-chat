@@ -15,8 +15,8 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/models"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
-	"github.com/caesar/all-chat/shared/crypto"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -98,13 +98,18 @@ func main() {
 
 	log.Info("Connected to Redis")
 
-	// Load encryption key for token decryption
+	// Load encryption key for token decryption (must match auth-service encryption)
 	encryptionKey := os.Getenv("ENCRYPTION_KEY")
 	if encryptionKey == "" {
 		log.Fatal("ENCRYPTION_KEY is required for decrypting user OAuth tokens")
 	}
 
-	tokenCipher, err := crypto.NewAESGCMCipher(encryptionKey)
+	parsedKey, err := encryption.ParseKey(encryptionKey)
+	if err != nil {
+		log.Fatal("Failed to parse ENCRYPTION_KEY", zap.Error(err))
+	}
+
+	tokenCipher, err := encryption.NewAESEncryptor(parsedKey)
 	if err != nil {
 		log.Fatal("Failed to initialize token cipher", zap.Error(err))
 	}
