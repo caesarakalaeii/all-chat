@@ -247,6 +247,19 @@ func main() {
 			}
 		}()
 
+		// Track user for 7TV real-time user emote updates (fire-and-forget)
+		if rawMsg.UserID != "" {
+			go func() {
+				if err := seventvManager.TrackUser(context.Background(), rawMsg.Platform, rawMsg.UserID); err != nil {
+					log.Debug("Failed to track user for 7TV updates",
+						zap.String("platform", rawMsg.Platform),
+						zap.String("user_id", rawMsg.UserID),
+						zap.Error(err),
+					)
+				}
+			}()
+		}
+
 		// Process message for each overlay
 		for _, overlay := range overlays {
 			var unified *models.UnifiedChatMessage

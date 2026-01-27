@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"sync"
@@ -18,6 +19,12 @@ import (
 type EmoteClient interface {
 	FetchEmotes(ctx context.Context, channel string) ([]models.Emote, error)
 	Provider() string
+}
+
+// CombinedEmoteClient is an optional interface for clients that support user emotes
+type CombinedEmoteClient interface {
+	EmoteClient
+	FetchCombinedEmotes(ctx context.Context, channel, platform, userID string) ([]models.Emote, error)
 }
 
 // EmoteCache interface for caching emotes
@@ -47,8 +54,9 @@ func NewEmoteHandler(clients map[string]EmoteClient, cache EmoteCache, logger *z
 	}
 }
 
-// GetChannelEmotes handles GET /emotes/channel/:channel
+// GetChannelEmotes handles GET /emotes/channel/:channel?user_id=123&platform=twitch
 // Returns aggregated emotes from all providers
+// If user_id and platform are provided, includes user-specific emotes from 7TV
 func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 	channel := c.Param("channel")
 	if channel == "" {
@@ -60,8 +68,13 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 		return
 	}
 
+	userID := c.Query("user_id")
+	platform := c.Query("platform")
+
 	h.logger.Info("Fetching emotes for channel",
-		zap.String("channel", channel))
+		zap.String("channel", channel),
+		zap.String("user_id", userID),
+		zap.String("platform", platform))
 
 	ctx := c.Request.Context()
 	type providerResult struct {
@@ -84,7 +97,7 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 			}
 			defer cancel()
 
-			emotes, err := h.fetchWithCache(providerCtx, client, provider, channel)
+			emotes, err := h.fetchWithCacheAndUser(providerCtx, client, provider, channel, platform, userID)
 			select {
 			case results <- providerResult{emotes: emotes, err: err, provider: provider}:
 			case <-ctx.Done():
@@ -116,6 +129,7 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 
 	h.logger.Info("Fetched emotes for channel",
 		zap.String("channel", channel),
+		zap.String("user_id", userID),
 		zap.Int("total_count", len(allEmotes)))
 
 	c.JSON(http.StatusOK, response)
@@ -203,6 +217,62 @@ func (h *EmoteHandler) fetchWithCache(ctx context.Context, client EmoteClient, p
 		h.logger.Warn("Failed to set cache",
 			zap.String("provider", provider),
 			zap.String("channel", channel),
+			zap.Error(err))
+	}
+
+	return emotes, nil
+}
+
+// fetchWithCacheAndUser fetches emotes with optional user context
+// For providers that support user emotes (7TV), fetches combined channel + user emotes
+func (h *EmoteHandler) fetchWithCacheAndUser(ctx context.Context, client EmoteClient, provider, channel, platform, userID string) ([]models.Emote, error) {
+	// Check if this client supports combined emotes
+	combinedClient, supportsCombined := client.(CombinedEmoteClient)
+
+	// If no user ID provided or client doesn't support combined emotes, use regular fetch
+	if userID == "" || !supportsCombined {
+		return h.fetchWithCache(ctx, client, provider, channel)
+	}
+
+	// Build cache key that includes user ID for combined emotes
+	cacheKey := fmt.Sprintf("%s:%s", channel, userID)
+
+	// Try cache first
+	emotes, err := h.cache.Get(ctx, provider, cacheKey)
+	if err == nil {
+		h.logger.Debug("Cache hit (with user)",
+			zap.String("provider", provider),
+			zap.String("channel", channel),
+			zap.String("user_id", userID),
+			zap.Int("count", len(emotes)))
+		return emotes, nil
+	}
+
+	// Cache miss - fetch from API
+	if !errors.Is(err, cache.ErrCacheMiss) {
+		h.logger.Warn("Cache error, fetching from API",
+			zap.String("provider", provider),
+			zap.String("channel", channel),
+			zap.String("user_id", userID),
+			zap.Error(err))
+	}
+
+	h.logger.Debug("Cache miss, fetching combined emotes from API",
+		zap.String("provider", provider),
+		zap.String("channel", channel),
+		zap.String("user_id", userID))
+
+	emotes, err = combinedClient.FetchCombinedEmotes(ctx, channel, platform, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Store in cache (best effort - don't fail if cache set fails)
+	if err := h.cache.Set(ctx, provider, cacheKey, emotes); err != nil {
+		h.logger.Warn("Failed to set cache",
+			zap.String("provider", provider),
+			zap.String("channel", channel),
+			zap.String("user_id", userID),
 			zap.Error(err))
 	}
 

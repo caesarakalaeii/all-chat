@@ -18,6 +18,7 @@ import (
 // EmoteServiceClient is an interface for calling the Emote Service
 type EmoteServiceClient interface {
 	GetEmotesForChannel(ctx context.Context, channel string) ([]EmoteServiceEmote, error)
+	GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID string) ([]EmoteServiceEmote, error)
 }
 
 // EmoteServiceEmote represents an emote from the Emote Service
@@ -82,6 +83,52 @@ func (c *HTTPEmoteClient) GetEmotesForChannel(ctx context.Context, channel strin
 	return emoteResp.Emotes, nil
 }
 
+// GetEmotesForChannelWithUser fetches emotes for a channel including user-specific emotes
+func (c *HTTPEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID string) ([]EmoteServiceEmote, error) {
+	escapedChannel := url.PathEscape(channel)
+	endpoint, err := url.JoinPath(c.baseURL, "emotes", "channel", escapedChannel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build emote service url: %w", err)
+	}
+
+	// Parse URL and add query parameters
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse url: %w", err)
+	}
+
+	query := parsedURL.Query()
+	if userID != "" {
+		query.Set("user_id", userID)
+	}
+	if platform != "" {
+		query.Set("platform", platform)
+	}
+	parsedURL.RawQuery = query.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call emote service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("emote service returned status %d", resp.StatusCode)
+	}
+
+	var emoteResp EmoteServiceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&emoteResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return emoteResp.Emotes, nil
+}
+
 // Enricher enriches messages with third-party emotes
 type Enricher struct {
 	client EmoteServiceClient
@@ -119,12 +166,13 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 			}
 		}
 	}
-	// Fetch emotes for the channel
-	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier)
+	// Fetch emotes for the channel (with user context if available)
+	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID)
 	if err != nil {
 		// Don't fail the message if emote enrichment fails
 		e.logger.Warn("Failed to fetch emotes, skipping enrichment",
 			zap.String("channel", msg.ChannelID),
+			zap.String("user_id", msg.User.ID),
 			zap.Error(err),
 		)
 		return nil
@@ -166,8 +214,25 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	return nil
 }
 
-func (e *Enricher) fetchEmotes(ctx context.Context, channel string) ([]cache.CachedEmote, error) {
-	if e.cache != nil {
+func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID string) ([]cache.CachedEmote, error) {
+	// If user ID is provided, use user-specific cache
+	if userID != "" && e.cache != nil {
+		if cached, err := e.cache.GetWithUser(ctx, channel, userID); err == nil {
+			e.logger.Debug("Emote cache hit (with user)",
+				zap.String("channel", channel),
+				zap.String("user_id", userID),
+				zap.Int("count", len(cached)),
+			)
+			return cached, nil
+		} else if !errors.Is(err, cache.ErrCacheMiss) {
+			e.logger.Warn("Emote cache error",
+				zap.String("channel", channel),
+				zap.String("user_id", userID),
+				zap.Error(err),
+			)
+		}
+	} else if e.cache != nil {
+		// No user ID, use regular cache
 		if cached, err := e.cache.Get(ctx, channel); err == nil {
 			e.logger.Debug("Emote cache hit",
 				zap.String("channel", channel),
@@ -182,23 +247,49 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel string) ([]cache.Cac
 		}
 	}
 
-	thirdPartyEmotes, err := e.client.GetEmotesForChannel(ctx, channel)
+	// Fetch from emote service
+	var thirdPartyEmotes []EmoteServiceEmote
+	var err error
+
+	if userID != "" {
+		thirdPartyEmotes, err = e.client.GetEmotesForChannelWithUser(ctx, channel, platform, userID)
+	} else {
+		thirdPartyEmotes, err = e.client.GetEmotesForChannel(ctx, channel)
+	}
+
 	if err != nil {
 		return nil, err
 	}
 	converted := convertToCached(thirdPartyEmotes)
 
+	// Store in cache
 	if e.cache != nil {
-		if err := e.cache.Set(ctx, channel, converted); err != nil {
-			e.logger.Warn("Failed to populate emote cache",
-				zap.String("channel", channel),
-				zap.Error(err),
-			)
+		if userID != "" {
+			if err := e.cache.SetWithUser(ctx, channel, userID, converted); err != nil {
+				e.logger.Warn("Failed to populate emote cache",
+					zap.String("channel", channel),
+					zap.String("user_id", userID),
+					zap.Error(err),
+				)
+			} else {
+				e.logger.Debug("Emote cache populated (with user)",
+					zap.String("channel", channel),
+					zap.String("user_id", userID),
+					zap.Int("count", len(converted)),
+				)
+			}
 		} else {
-			e.logger.Debug("Emote cache populated",
-				zap.String("channel", channel),
-				zap.Int("count", len(converted)),
-			)
+			if err := e.cache.Set(ctx, channel, converted); err != nil {
+				e.logger.Warn("Failed to populate emote cache",
+					zap.String("channel", channel),
+					zap.Error(err),
+				)
+			} else {
+				e.logger.Debug("Emote cache populated",
+					zap.String("channel", channel),
+					zap.Int("count", len(converted)),
+				)
+			}
 		}
 	}
 

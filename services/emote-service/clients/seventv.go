@@ -173,6 +173,114 @@ func (c *SevenTVClient) fetchChannelEmotes(ctx context.Context, channel string) 
 	return c.parseEmoteSet(apiResp.EmoteSet, channel), nil
 }
 
+// FetchUserEmotes fetches a user's personal emote set from 7TV
+func (c *SevenTVClient) FetchUserEmotes(ctx context.Context, platform, userID string) ([]models.Emote, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	if strings.TrimSpace(platform) == "" {
+		return nil, fmt.Errorf("platform cannot be empty")
+	}
+
+	urlPath := fmt.Sprintf("%s/v3/users/%s/%s", c.baseURL, platform, userID)
+
+	c.logger.Debug("Fetching user 7TV emotes",
+		zap.String("platform", platform),
+		zap.String("user_id", userID),
+		zap.String("url", urlPath))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", urlPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "All-Chat/1.0")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user emotes: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// User doesn't have 7TV account or emote set - return empty list
+		c.logger.Debug("User not found on 7TV or has no emote set",
+			zap.String("platform", platform),
+			zap.String("user_id", userID))
+		return []models.Emote{}, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch user emotes: status code %d", resp.StatusCode)
+	}
+
+	var apiResp sevenTVUserResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Use a special marker for user emotes (will be used for cache key)
+	return c.parseEmoteSet(apiResp.EmoteSet, fmt.Sprintf("user:%s:%s", platform, userID)), nil
+}
+
+// FetchCombinedEmotes fetches channel + user emotes and merges them
+// User emotes take precedence over channel/global emotes with the same code
+func (c *SevenTVClient) FetchCombinedEmotes(ctx context.Context, channel, platform, userID string) ([]models.Emote, error) {
+	if strings.TrimSpace(channel) == "" {
+		return nil, fmt.Errorf("channel cannot be empty")
+	}
+
+	// Fetch channel emotes (includes global + channel)
+	channelEmotes, err := c.FetchEmotes(ctx, channel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch channel emotes: %w", err)
+	}
+
+	// If no user ID provided, just return channel emotes
+	if strings.TrimSpace(userID) == "" {
+		return channelEmotes, nil
+	}
+
+	// Fetch user emotes
+	userEmotes, err := c.FetchUserEmotes(ctx, platform, userID)
+	if err != nil {
+		// Log warning but don't fail - channel emotes are still valid
+		c.logger.Warn("Failed to fetch user emotes, returning channel emotes only",
+			zap.String("platform", platform),
+			zap.String("user_id", userID),
+			zap.Error(err))
+		return channelEmotes, nil
+	}
+
+	// Merge emotes with user emotes taking precedence
+	emoteMap := make(map[string]models.Emote)
+
+	// Add channel emotes first (global + channel)
+	for _, emote := range channelEmotes {
+		emoteMap[emote.Code] = emote
+	}
+
+	// Add user emotes (overwrites channel/global if same code exists)
+	for _, emote := range userEmotes {
+		emoteMap[emote.Code] = emote
+	}
+
+	// Convert map back to slice
+	allEmotes := make([]models.Emote, 0, len(emoteMap))
+	for _, emote := range emoteMap {
+		allEmotes = append(allEmotes, emote)
+	}
+
+	c.logger.Debug("Fetched combined 7TV emotes",
+		zap.String("channel", channel),
+		zap.String("user_id", userID),
+		zap.Int("channel_emotes", len(channelEmotes)),
+		zap.Int("user_emotes", len(userEmotes)),
+		zap.Int("total", len(allEmotes)))
+
+	return allEmotes, nil
+}
+
 // fetchEmoteSet fetches a specific emote set (e.g., global)
 func (c *SevenTVClient) fetchEmoteSet(ctx context.Context, setType, channel string) ([]models.Emote, error) {
 	var urlPath string

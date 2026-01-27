@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,10 @@ type Manager struct {
 	// Map of channel ID -> emote set ID
 	channelEmoteSets map[string]string
 	mu               sync.RWMutex
+
+	// Map of user ID -> emote set ID (for user personal emotes)
+	userEmoteSets map[string]string
+	userMu        sync.RWMutex
 }
 
 // NewManager creates a new 7TV event manager
@@ -47,6 +52,7 @@ func NewManager(cacheStore cache.Store, logger *zap.Logger) *Manager {
 		logger:           logger,
 		httpClient:       &http.Client{Timeout: 10 * time.Second},
 		channelEmoteSets: make(map[string]string),
+		userEmoteSets:    make(map[string]string),
 	}
 
 	// Create client with event handler
@@ -141,6 +147,81 @@ func (m *Manager) UntrackChannel(ctx context.Context, channelID string) error {
 	return nil
 }
 
+// TrackUser subscribes to emote set updates for a user's personal emotes
+func (m *Manager) TrackUser(ctx context.Context, platform, userID string) error {
+	// Currently only support Twitch
+	if platform != "twitch" {
+		return nil
+	}
+
+	if strings.TrimSpace(userID) == "" {
+		return nil
+	}
+
+	m.userMu.RLock()
+	emoteSetID, exists := m.userEmoteSets[userID]
+	m.userMu.RUnlock()
+
+	if !exists {
+		// Fetch emote set ID from 7TV API
+		user, err := m.fetch7TVUser(ctx, platform, userID)
+		if err != nil {
+			// If user doesn't have 7TV, silently skip
+			m.logger.Debug("User not found on 7TV or no emote set",
+				zap.String("platform", platform),
+				zap.String("user_id", userID),
+				zap.Error(err),
+			)
+			return nil
+		}
+
+		emoteSetID = user.EmoteSet.ID
+		if emoteSetID == "" {
+			m.logger.Debug("User has no emote set on 7TV",
+				zap.String("user_id", userID),
+			)
+			return nil
+		}
+
+		m.userMu.Lock()
+		m.userEmoteSets[userID] = emoteSetID
+		m.userMu.Unlock()
+
+		m.logger.Info("Mapped user to 7TV emote set",
+			zap.String("user_id", userID),
+			zap.String("emote_set_id", emoteSetID),
+		)
+	}
+
+	// Subscribe to emote set updates
+	if err := m.client.Subscribe(ctx, emoteSetID); err != nil {
+		return fmt.Errorf("failed to subscribe to user emote set: %w", err)
+	}
+
+	return nil
+}
+
+// UntrackUser unsubscribes from emote set updates for a user
+func (m *Manager) UntrackUser(ctx context.Context, userID string) error {
+	m.userMu.RLock()
+	emoteSetID, exists := m.userEmoteSets[userID]
+	m.userMu.RUnlock()
+
+	if !exists {
+		return nil
+	}
+
+	if err := m.client.Unsubscribe(ctx, emoteSetID); err != nil {
+		return fmt.Errorf("failed to unsubscribe from user emote set: %w", err)
+	}
+
+	m.userMu.Lock()
+	delete(m.userEmoteSets, userID)
+	m.userMu.Unlock()
+
+	return nil
+}
+
 // fetch7TVUser fetches a user's 7TV information
 func (m *Manager) fetch7TVUser(ctx context.Context, platform, channelID string) (*UserResponse, error) {
 	url := fmt.Sprintf("%s/users/%s/%s", apiBaseURL, platform, channelID)
@@ -191,6 +272,16 @@ func (m *Manager) handleEmoteSetUpdate(ctx context.Context, update *EmoteSetUpda
 	}
 	m.mu.RUnlock()
 
+	// Find all users using this emote set
+	m.userMu.RLock()
+	usersToInvalidate := make([]string, 0)
+	for userID, emoteSetID := range m.userEmoteSets {
+		if emoteSetID == update.ID {
+			usersToInvalidate = append(usersToInvalidate, userID)
+		}
+	}
+	m.userMu.RUnlock()
+
 	// Invalidate cache for all affected channels
 	for _, channelID := range channelsToInvalidate {
 		if err := m.cache.Delete(ctx, channelID); err != nil {
@@ -201,6 +292,24 @@ func (m *Manager) handleEmoteSetUpdate(ctx context.Context, update *EmoteSetUpda
 		} else {
 			m.logger.Info("Invalidated emote cache for channel",
 				zap.String("channel_id", channelID),
+				zap.String("emote_set_id", update.ID),
+			)
+		}
+	}
+
+	// Invalidate cache for all affected users
+	// Use pattern matching to delete all cache entries for this user (across all channels)
+	for _, userID := range usersToInvalidate {
+		pattern := fmt.Sprintf("mp:emotes:v2:*:%s", userID)
+		if err := m.cache.DeletePattern(ctx, pattern); err != nil {
+			m.logger.Error("Failed to invalidate user emote cache",
+				zap.String("user_id", userID),
+				zap.String("pattern", pattern),
+				zap.Error(err),
+			)
+		} else {
+			m.logger.Info("Invalidated emote cache for user",
+				zap.String("user_id", userID),
 				zap.String("emote_set_id", update.ID),
 			)
 		}
