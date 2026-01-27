@@ -146,49 +146,106 @@ func main() {
 		}
 
 		if action == "subscribe" {
-			// Subscribe to all event types for this broadcaster
-			var errs []error
+			// Subscribe to all supported EventSub event types
+			var successCount, failCount int
 
+			// Channel points - uses app access token
 			if _, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID, accessToken); err != nil {
-				log.Error("Failed to subscribe to channel points", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
-				errs = append(errs, err)
+				if strings.Contains(err.Error(), "subscription already exists") {
+					log.Info("Channel points subscription already exists", zap.String("broadcaster_id", broadcasterID))
+					successCount++
+				} else {
+					log.Warn("Failed to subscribe to channel points", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				log.Info("Subscribed to channel points", zap.String("broadcaster_id", broadcasterID))
+				successCount++
 			}
 
+			// Subscriptions - uses user access token
 			if _, err := subscriptionMgr.SubscribeToSubscriptions(ctx, broadcasterID, accessToken); err != nil {
-				log.Error("Failed to subscribe to subscriptions", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
-				errs = append(errs, err)
+				if strings.Contains(err.Error(), "subscription already exists") {
+					successCount++
+				} else {
+					log.Warn("Failed to subscribe to subscriptions", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				successCount++
 			}
 
+			// Gifts - uses user access token
 			if _, err := subscriptionMgr.SubscribeToGifts(ctx, broadcasterID, accessToken); err != nil {
-				log.Error("Failed to subscribe to gifts", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
-				errs = append(errs, err)
+				if strings.Contains(err.Error(), "subscription already exists") {
+					successCount++
+				} else {
+					log.Warn("Failed to subscribe to gifts", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				successCount++
 			}
 
+			// Resubscriptions - uses user access token
 			if _, err := subscriptionMgr.SubscribeToResubscriptions(ctx, broadcasterID, accessToken); err != nil {
-				log.Error("Failed to subscribe to resubs", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
-				errs = append(errs, err)
+				if strings.Contains(err.Error(), "subscription already exists") {
+					successCount++
+				} else {
+					log.Warn("Failed to subscribe to resubs", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				successCount++
 			}
 
+			// Raids - uses app access token with special condition
 			if _, err := subscriptionMgr.SubscribeToRaids(ctx, broadcasterID, accessToken); err != nil {
-				log.Error("Failed to subscribe to raids", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
-				errs = append(errs, err)
+				if strings.Contains(err.Error(), "subscription already exists") {
+					successCount++
+				} else {
+					log.Warn("Failed to subscribe to raids", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				successCount++
 			}
 
+			// Cheers - uses user access token
 			if _, err := subscriptionMgr.SubscribeToCheers(ctx, broadcasterID, accessToken); err != nil {
-				log.Error("Failed to subscribe to cheers", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
-				errs = append(errs, err)
+				if strings.Contains(err.Error(), "subscription already exists") {
+					successCount++
+				} else {
+					log.Warn("Failed to subscribe to cheers", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				successCount++
 			}
 
+			// Follows - uses user access token with special condition
 			if _, err := subscriptionMgr.SubscribeToFollows(ctx, broadcasterID, accessToken); err != nil {
-				log.Error("Failed to subscribe to follows", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
-				errs = append(errs, err)
+				if strings.Contains(err.Error(), "subscription already exists") {
+					successCount++
+				} else {
+					log.Warn("Failed to subscribe to follows", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				successCount++
 			}
 
-			// Return first error if any
-			if len(errs) > 0 {
-				return errs[0]
+			log.Info("EventSub subscription sync complete",
+				zap.String("broadcaster_id", broadcasterID),
+				zap.Int("success", successCount),
+				zap.Int("failed", failCount),
+			)
+
+			// Don't return error if at least one subscription succeeded
+			if successCount > 0 {
+				return nil
 			}
-			return nil
+			return fmt.Errorf("all subscriptions failed for broadcaster %s", broadcasterID)
 
 		} else if action == "unsubscribe" {
 			return subscriptionMgr.Unsubscribe(ctx, broadcasterID)
