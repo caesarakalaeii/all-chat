@@ -151,6 +151,54 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			}
 
 			if user.TwitchID != nil && *user.TwitchID != "" && user.AuthProvider == string(oauth.PlatformTwitch) {
+				// Check if token is expired and refresh if needed
+				if time.Now().After(user.TokenExpiresAt) {
+					h.logger.Info("Token expired, refreshing before adding source",
+						zap.String("user_id", user.ID),
+						zap.Time("expired_at", user.TokenExpiresAt),
+					)
+
+					// Refresh the token
+					twitchProvider, ok := provider.(*oauth.TwitchOAuth)
+					if !ok {
+						h.logger.Error("Failed to get Twitch provider")
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+						return
+					}
+
+					newToken, err := twitchProvider.RefreshToken(c.Request.Context(), user.RefreshToken)
+					if err != nil {
+						h.logger.Error("Failed to refresh expired token",
+							zap.String("user_id", user.ID),
+							zap.Error(err),
+						)
+						// Token refresh failed - force OAuth flow instead of short-circuit
+						c.JSON(http.StatusUnauthorized, gin.H{
+							"error":         "OAuth token expired and refresh failed",
+							"requires_auth": true,
+						})
+						return
+					}
+
+					// Update user with new token
+					user.AccessToken = newToken.AccessToken
+					user.RefreshToken = newToken.RefreshToken
+					user.TokenExpiresAt = newToken.Expiry
+
+					if err := h.userRepo.UpdateTokens(c.Request.Context(), user.ID, newToken.AccessToken, newToken.RefreshToken, newToken.Expiry); err != nil {
+						h.logger.Error("Failed to save refreshed token",
+							zap.String("user_id", user.ID),
+							zap.Error(err),
+						)
+						// Continue anyway - we have the token in memory
+					}
+
+					h.logger.Info("Successfully refreshed expired token",
+						zap.String("user_id", user.ID),
+						zap.Time("new_expiry", newToken.Expiry),
+					)
+				}
+
 				authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
 				jwtToken := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer"))
 				if jwtToken == "" {
