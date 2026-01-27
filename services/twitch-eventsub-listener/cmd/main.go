@@ -15,6 +15,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/models"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
+	"github.com/caesar/all-chat/shared/crypto"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/gin-gonic/gin"
@@ -97,10 +98,21 @@ func main() {
 
 	log.Info("Connected to Redis")
 
+	// Load encryption key for token decryption
+	encryptionKey := os.Getenv("ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		log.Fatal("ENCRYPTION_KEY is required for decrypting user OAuth tokens")
+	}
+
+	tokenCipher, err := crypto.NewAESGCMCipher(encryptionKey)
+	if err != nil {
+		log.Fatal("Failed to initialize token cipher", zap.Error(err))
+	}
+
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, log)
-	channelManager := channels.NewManager(db, log, subscriptionMgr)
+	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher)
 
 	// Create EventSub client
 	eventSubClient := eventsub.NewClient(log)
