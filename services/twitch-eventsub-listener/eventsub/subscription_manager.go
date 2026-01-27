@@ -159,11 +159,8 @@ func (sm *SubscriptionManager) SubscribeToFollows(ctx context.Context, broadcast
 	}
 	sm.mu.RUnlock()
 
-	// Get app access token
-	token, err := sm.getAccessToken(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %w", err)
-	}
+	// Use user OAuth token (follows require moderator:read:followers scope)
+	token := userAccessToken
 
 	// Follow subscription needs both broadcaster_user_id and moderator_user_id
 	condition := map[string]string{
@@ -224,7 +221,7 @@ func (sm *SubscriptionManager) Unsubscribe(ctx context.Context, broadcasterID st
 	return nil
 }
 
-// Subscribe creates an EventSub subscription with webhook transport
+// Subscribe creates an EventSub subscription with webhook transport using user OAuth token
 func (sm *SubscriptionManager) Subscribe(ctx context.Context, subscriptionType string, broadcasterID string, userAccessToken string, version string) (string, error) {
 	// Check if already subscribed
 	cacheKey := broadcasterID + ":" + subscriptionType
@@ -235,11 +232,9 @@ func (sm *SubscriptionManager) Subscribe(ctx context.Context, subscriptionType s
 	}
 	sm.mu.RUnlock()
 
-	// Get app access token (required for webhook subscriptions)
-	token, err := sm.getAccessToken(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %w", err)
-	}
+	// Use the user's OAuth token (required for most EventSub events)
+	// Events like subs, gifts, resubs, cheers, follows need user authorization
+	token := userAccessToken
 
 	// Build condition based on subscription type
 	condition := map[string]string{
