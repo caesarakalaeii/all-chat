@@ -108,3 +108,75 @@ type SubscriptionGiftEvent struct {
 	CumulativeTotal      int    `json:"cumulative_total"` // Total gifts by this user
 	IsAnonymous          bool   `json:"is_anonymous"`
 }
+
+// ResubscriptionEvent represents a resubscription message event
+// subscription type: channel.subscription.message
+type ResubscriptionEvent struct {
+	UserID               string             `json:"user_id"`
+	UserLogin            string             `json:"user_login"`
+	UserName             string             `json:"user_name"`
+	BroadcasterUserID    string             `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string             `json:"broadcaster_user_login"`
+	BroadcasterUserName  string             `json:"broadcaster_user_name"`
+	Tier                 string             `json:"tier"`
+	Message              ResubscriptionMessage `json:"message"`
+	CumulativeMonths     int                `json:"cumulative_months"`
+	StreakMonths         int                `json:"streak_months"`
+	DurationMonths       int                `json:"duration_months"`
+}
+
+// ResubscriptionMessage contains the resub message
+type ResubscriptionMessage struct {
+	Text   string        `json:"text"`
+	Emotes []interface{} `json:"emotes"`
+}
+
+// RaidEvent represents a raid event
+// subscription type: channel.raid
+type RaidEvent struct {
+	FromBroadcasterUserID    string    `json:"from_broadcaster_user_id"`
+	FromBroadcasterUserLogin string    `json:"from_broadcaster_user_login"`
+	FromBroadcasterUserName  string    `json:"from_broadcaster_user_name"`
+	ToBroadcasterUserID      string    `json:"to_broadcaster_user_id"`
+	ToBroadcasterUserLogin   string    `json:"to_broadcaster_user_login"`
+	ToBroadcasterUserName    string    `json:"to_broadcaster_user_name"`
+	Viewers                  int       `json:"viewers"`
+}
+
+// CheerEvent represents a bits/cheer event
+// subscription type: channel.cheer
+type CheerEvent struct {
+	IsAnonymous          bool   `json:"is_anonymous"`
+	UserID               string `json:"user_id"`
+	UserLogin            string `json:"user_login"`
+	UserName             string `json:"user_name"`
+	BroadcasterUserID    string `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string `json:"broadcaster_user_login"`
+	BroadcasterUserName  string `json:"broadcaster_user_name"`
+	Message              string `json:"message"`
+	Bits                 int    `json:"bits"`
+}
+
+// FollowEvent represents a follow event
+// subscription type: channel.follow (v2)
+type FollowEvent struct {
+	UserID               string    `json:"user_id"`
+	UserLogin            string    `json:"user_login"`
+	UserName             string    `json:"user_name"`
+	BroadcasterUserID    string    `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string    `json:"broadcaster_user_login"`
+	BroadcasterUserName  string    `json:"broadcaster_user_name"`
+	FollowedAt           time.Time `json:"followed_at"`
+}
+
+// SubscriptionInfo contains subscription metadata (used in webhook callbacks)
+type SubscriptionInfo struct {
+	ID        string                 `json:"id"`
+	Status    string                 `json:"status"`
+	Type      string                 `json:"type"`
+	Version   string                 `json:"version"`
+	Condition map[string]interface{} `json:"condition"`
+	Transport map[string]interface{} `json:"transport"`
+	CreatedAt time.Time              `json:"created_at"`
+	Cost      int                    `json:"cost"`
+}

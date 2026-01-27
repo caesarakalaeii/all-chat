@@ -13,13 +13,14 @@ import (
 
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/channels"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
-	"github.com/caesar/all-chat/services/twitch-eventsub-listener/models"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
+	"github.com/caesar/all-chat/services/twitch-eventsub-listener/webhooks"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -42,8 +43,7 @@ const (
 // leaderState holds the shared leadership state with thread-safe access
 type leaderState struct {
 	sync.RWMutex
-	isLeader          bool
-	eventSubSessionID string
+	isLeader bool
 }
 
 func main() {
@@ -62,8 +62,17 @@ func main() {
 	// Get configuration from environment
 	twitchClientID := strings.TrimSpace(os.Getenv("TWITCH_CLIENT_ID"))
 	twitchClientSecret := strings.TrimSpace(os.Getenv("TWITCH_CLIENT_SECRET"))
+	webhookSecret := strings.TrimSpace(os.Getenv("EVENTSUB_WEBHOOK_SECRET"))
+	callbackURL := strings.TrimSpace(os.Getenv("EVENTSUB_CALLBACK_URL"))
+
 	if twitchClientID == "" || twitchClientSecret == "" {
 		log.Fatal("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are required")
+	}
+	if webhookSecret == "" {
+		log.Fatal("EVENTSUB_WEBHOOK_SECRET is required for webhook signature verification")
+	}
+	if callbackURL == "" {
+		log.Fatal("EVENTSUB_CALLBACK_URL is required (e.g., https://allch.at/webhooks/eventsub)")
 	}
 
 	// Connect to PostgreSQL
@@ -116,90 +125,71 @@ func main() {
 
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
-	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, log)
+	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
 	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher)
 
-	// Create EventSub client
-	eventSubClient := eventsub.NewClient(log)
+	// Create webhook handler
+	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, streamPublisher, log)
 
 	// Leader election state (use struct with mutex for thread-safe access from HTTP handlers)
 	state := &leaderState{}
 
-	// Set up notification handler (processes channel point redemptions)
-	eventSubClient.SetOnNotification(func(event eventsub.Event, subscription *eventsub.Subscription) {
-		// Only process if we're the leader
+	// Set up channel manager callback (creates/deletes subscriptions for all event types)
+	channelManager.SetSubscriptionCallback(func(broadcasterID string, accessToken string, action string) error {
 		state.RLock()
 		isLdr := state.isLeader
 		state.RUnlock()
 
 		if !isLdr {
-			log.Debug("Received notification but not leader, ignoring")
-			return
-		}
-
-		handleEventSubNotification(ctx, event, subscription, streamPublisher, log)
-	})
-
-	// Set up welcome handler (session established, ready to create subscriptions)
-	eventSubClient.SetOnWelcome(func(sessionID string) {
-		state.Lock()
-		state.eventSubSessionID = sessionID
-		state.Unlock()
-		subscriptionMgr.SetSessionID(sessionID)
-
-		log.Info("EventSub session established",
-			zap.String("session_id", sessionID),
-		)
-
-		// Subscribe to all active channels (check leadership status)
-		state.RLock()
-		isLdr := state.isLeader
-		state.RUnlock()
-
-		if isLdr {
-			activeChannels := channelManager.GetActiveChannels()
-			for broadcasterID, channel := range activeChannels {
-				if _, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID, channel.AccessToken); err != nil {
-					log.Error("Failed to create subscription",
-						zap.String("broadcaster_id", broadcasterID),
-						zap.Error(err),
-					)
-				}
-			}
-		}
-	})
-
-	// Set up reconnect handler
-	eventSubClient.SetOnReconnect(func(reconnectURL string) {
-		log.Warn("EventSub reconnection requested",
-			zap.String("reconnect_url", reconnectURL),
-		)
-
-		// Disconnect from current connection
-		eventSubClient.Disconnect()
-
-		// Reconnect to new URL
-		time.Sleep(1 * time.Second) // Brief delay before reconnect
-		if err := eventSubClient.ConnectTo(ctx, reconnectURL); err != nil {
-			log.Error("Failed to reconnect", zap.Error(err))
-		}
-	})
-
-	// Set up channel manager callback (creates/deletes subscriptions)
-	channelManager.SetSubscriptionCallback(func(broadcasterID string, accessToken string, action string) error {
-		state.RLock()
-		isLdr := state.isLeader
-		sessionID := state.eventSubSessionID
-		state.RUnlock()
-
-		if !isLdr || sessionID == "" {
-			// Only leader creates subscriptions, and only after session is established
+			// Only leader creates/deletes subscriptions
 			return nil
 		}
 
 		if action == "subscribe" {
-			_, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID, accessToken)
-			return err
+			// Subscribe to all event types for this broadcaster
+			var errs []error
+
+			if _, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID, accessToken); err != nil {
+				log.Error("Failed to subscribe to channel points", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+				errs = append(errs, err)
+			}
+
+			if _, err := subscriptionMgr.SubscribeToSubscriptions(ctx, broadcasterID, accessToken); err != nil {
+				log.Error("Failed to subscribe to subscriptions", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+				errs = append(errs, err)
+			}
+
+			if _, err := subscriptionMgr.SubscribeToGifts(ctx, broadcasterID, accessToken); err != nil {
+				log.Error("Failed to subscribe to gifts", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+				errs = append(errs, err)
+			}
+
+			if _, err := subscriptionMgr.SubscribeToResubscriptions(ctx, broadcasterID, accessToken); err != nil {
+				log.Error("Failed to subscribe to resubs", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+				errs = append(errs, err)
+			}
+
+			if _, err := subscriptionMgr.SubscribeToRaids(ctx, broadcasterID, accessToken); err != nil {
+				log.Error("Failed to subscribe to raids", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+				errs = append(errs, err)
+			}
+
+			if _, err := subscriptionMgr.SubscribeToCheers(ctx, broadcasterID, accessToken); err != nil {
+				log.Error("Failed to subscribe to cheers", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+				errs = append(errs, err)
+			}
+
+			if _, err := subscriptionMgr.SubscribeToFollows(ctx, broadcasterID, accessToken); err != nil {
+				log.Error("Failed to subscribe to follows", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+				errs = append(errs, err)
+			}
+
+			// Return first error if any
+			if len(errs) > 0 {
+				return errs[0]
+			}
+			return nil
+
 		} else if action == "unsubscribe" {
 			return subscriptionMgr.Unsubscribe(ctx, broadcasterID)
 		}
@@ -236,37 +226,26 @@ func main() {
 				state.Unlock()
 
 				if !wasLeader && acquired {
-					// Became leader
+					// Became leader - start managing subscriptions
 					log.Info("Acquired leadership", zap.String("instance_id", instanceID))
 
-					// Connect to EventSub WebSocket
-					if err := eventSubClient.Connect(ctx); err != nil {
-						log.Error("Failed to connect to EventSub", zap.Error(err))
-						state.Lock()
-						state.isLeader = false
-						state.Unlock()
-						continue
-					}
-
-					// Start channel manager
+					// Start channel manager (creates/deletes EventSub subscriptions)
 					channelManager.Start(ctx, ChannelSyncInterval)
 
 				} else if wasLeader && !acquired {
-					// Lost leadership
+					// Lost leadership - stop managing subscriptions
 					log.Warn("Lost leadership", zap.String("instance_id", instanceID))
 
-					// Disconnect from EventSub
-					eventSubClient.Disconnect()
-
-					// Stop channel manager
+					// Stop channel manager (stops creating/deleting subscriptions)
+					// Note: Webhook HTTP server continues running on all instances
 					channelManager.Stop()
 				}
 			}
 		}
 	}()
 
-	// Start HTTP server for health checks
-	startHTTPServer(log, getEnv("PORT", "8090"), state, eventSubClient)
+	// Start HTTP server for health checks and webhook endpoint
+	startHTTPServer(log, getEnv("PORT", "8090"), state, webhookHandler, db, redisClient)
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
@@ -282,7 +261,6 @@ func main() {
 
 	if isLdr {
 		releaseLeadership(context.Background(), redisClient, instanceID)
-		eventSubClient.Disconnect()
 		channelManager.Stop()
 	}
 
@@ -322,91 +300,14 @@ func releaseLeadership(ctx context.Context, client *redis.Client, instanceID str
 	}
 }
 
-// handleEventSubNotification processes EventSub notifications
-func handleEventSubNotification(
-	ctx context.Context,
-	event eventsub.Event,
-	subscription *eventsub.Subscription,
-	pub *publisher.StreamPublisher,
-	log *zap.Logger,
-) {
-	switch subscription.Type {
-	case "channel.channel_points_custom_reward_redemption.add":
-		handleChannelPointsRedemption(ctx, event, pub, log)
-
-	case "channel.subscribe":
-		// Optional: handle subscribe events (already have via IRC)
-		log.Debug("Received subscribe event (already handled via IRC)")
-
-	default:
-		log.Debug("Unhandled subscription type",
-			zap.String("type", subscription.Type),
-		)
-	}
-}
-
-// handleChannelPointsRedemption processes channel points redemption events
-func handleChannelPointsRedemption(
-	ctx context.Context,
-	event eventsub.Event,
-	pub *publisher.StreamPublisher,
-	log *zap.Logger,
-) {
-	redemption, err := eventsub.ParseChannelPointsRedemption(event)
-	if err != nil {
-		log.Error("Failed to parse channel points redemption", zap.Error(err))
-		return
-	}
-
-	// Create raw message
-	rawMsg := &models.RawChatMessage{
-		MessageID: uuid.New().String(),
-		Platform:  "twitch",
-		ChannelID: strings.ToLower(redemption.BroadcasterUserLogin),
-		UserID:    redemption.UserID,
-		Username:  strings.ToLower(redemption.UserLogin),
-		Text:      fmt.Sprintf("Redeemed %s", redemption.Reward.Title),
-		Timestamp: redemption.RedeemedAt.UTC(),
-		Tags: map[string]string{
-			"user-id":      redemption.UserID,
-			"login":        redemption.UserLogin,
-			"display-name": redemption.UserName,
-		},
-		EventType: "channel_points",
-		EventData: map[string]interface{}{
-			"reward_id":    redemption.Reward.ID,
-			"reward_title": redemption.Reward.Title,
-			"reward_cost":  redemption.Reward.Cost,
-			"reward_prompt": redemption.Reward.Prompt,
-			"user_input":   redemption.UserInput,
-			"status":       redemption.Status,
-			"redeemed_at":  redemption.RedeemedAt.Format(time.RFC3339),
-		},
-	}
-
-	// Publish to Redis Stream
-	if err := pub.Publish(ctx, rawMsg); err != nil {
-		log.Error("Failed to publish channel points redemption",
-			zap.String("channel", rawMsg.ChannelID),
-			zap.String("reward", redemption.Reward.Title),
-			zap.Error(err),
-		)
-		return
-	}
-
-	log.Info("Published channel points redemption",
-		zap.String("channel", rawMsg.ChannelID),
-		zap.String("username", rawMsg.Username),
-		zap.String("reward", redemption.Reward.Title),
-		zap.Int("cost", redemption.Reward.Cost),
-	)
-}
-
-// startHTTPServer starts the HTTP server for health checks
-func startHTTPServer(log *zap.Logger, port string, state *leaderState, client *eventsub.Client) {
+// startHTTPServer starts the HTTP server for health checks and webhook endpoint
+func startHTTPServer(log *zap.Logger, port string, state *leaderState, webhookHandler *webhooks.Handler, db *pgxpool.Pool, redis *redis.Client) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// EventSub webhook endpoint
+	router.POST("/webhooks/eventsub", webhookHandler.HandleEventSubWebhook)
 
 	// Liveness probe
 	router.GET("/health/live", func(c *gin.Context) {
@@ -415,16 +316,27 @@ func startHTTPServer(log *zap.Logger, port string, state *leaderState, client *e
 
 	// Readiness probe
 	router.GET("/health/ready", func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		// Check database connection
+		if err := db.Ping(ctx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not ready", "error": "database unavailable"})
+			return
+		}
+
+		// Check Redis connection
+		if err := redis.Ping(ctx).Err(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not ready", "error": "redis unavailable"})
+			return
+		}
+
 		state.RLock()
 		isLdr := state.isLeader
 		state.RUnlock()
 
-		// Pod is ready if service is running
-		// Leader status and WebSocket connection don't affect readiness
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "ready",
 			"is_leader": isLdr,
-			"connected": client.IsConnected(),
 		})
 	})
 
@@ -435,9 +347,8 @@ func startHTTPServer(log *zap.Logger, port string, state *leaderState, client *e
 		state.RUnlock()
 
 		c.JSON(http.StatusOK, gin.H{
-			"is_leader":  isLdr,
-			"connected":  client.IsConnected(),
-			"session_id": client.GetSessionID(),
+			"is_leader": isLdr,
+			"transport": "webhook",
 		})
 	})
 
