@@ -105,20 +105,17 @@ func (sm *SubscriptionManager) SubscribeChannelPoints(ctx context.Context, broad
 
 // SubscribeToSubscriptions creates a subscription for subscription events
 func (sm *SubscriptionManager) SubscribeToSubscriptions(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	// Use user token for this subscription type
-	return sm.SubscribeWithUserToken(ctx, "channel.subscribe", broadcasterID, userAccessToken, "1")
+	return sm.Subscribe(ctx, "channel.subscribe", broadcasterID, userAccessToken, "1")
 }
 
 // SubscribeToGifts creates a subscription for gift subscription events
 func (sm *SubscriptionManager) SubscribeToGifts(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	// Use user token for this subscription type
-	return sm.SubscribeWithUserToken(ctx, "channel.subscription.gift", broadcasterID, userAccessToken, "1")
+	return sm.Subscribe(ctx, "channel.subscription.gift", broadcasterID, userAccessToken, "1")
 }
 
 // SubscribeToResubscriptions creates a subscription for resub message events
 func (sm *SubscriptionManager) SubscribeToResubscriptions(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	// Use user token for this subscription type
-	return sm.SubscribeWithUserToken(ctx, "channel.subscription.message", broadcasterID, userAccessToken, "1")
+	return sm.Subscribe(ctx, "channel.subscription.message", broadcasterID, userAccessToken, "1")
 }
 
 // SubscribeToRaids creates a subscription for raid events (when this broadcaster is raided)
@@ -132,7 +129,7 @@ func (sm *SubscriptionManager) SubscribeToRaids(ctx context.Context, broadcaster
 	}
 	sm.mu.RUnlock()
 
-	// Get app access token (raids work with app token)
+	// Get app access token
 	token, err := sm.getAccessToken(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get access token: %w", err)
@@ -148,8 +145,7 @@ func (sm *SubscriptionManager) SubscribeToRaids(ctx context.Context, broadcaster
 
 // SubscribeToCheers creates a subscription for bits/cheer events
 func (sm *SubscriptionManager) SubscribeToCheers(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	// Use user token for this subscription type
-	return sm.SubscribeWithUserToken(ctx, "channel.cheer", broadcasterID, userAccessToken, "1")
+	return sm.Subscribe(ctx, "channel.cheer", broadcasterID, userAccessToken, "1")
 }
 
 // SubscribeToFollows creates a subscription for follow events
@@ -163,13 +159,19 @@ func (sm *SubscriptionManager) SubscribeToFollows(ctx context.Context, broadcast
 	}
 	sm.mu.RUnlock()
 
+	// Get app access token
+	token, err := sm.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
+
 	// Follow subscription needs both broadcaster_user_id and moderator_user_id
 	condition := map[string]string{
 		"broadcaster_user_id": broadcasterID,
 		"moderator_user_id":   broadcasterID,
 	}
 
-	return sm.subscribeWithCondition(ctx, "channel.follow", broadcasterID, userAccessToken, "2", condition, cacheKey)
+	return sm.subscribeWithCondition(ctx, "channel.follow", broadcasterID, token, "2", condition, cacheKey)
 }
 
 // Unsubscribe deletes a subscription
