@@ -262,6 +262,22 @@ func main() {
 		ticker := time.NewTicker(LeaderRenewalInterval)
 		defer ticker.Stop()
 
+		// Try to acquire leadership immediately on startup
+		acquired, err := tryAcquireLeadership(ctx, redisClient, instanceID)
+		if err != nil {
+			log.Error("Initial leader election failed", zap.Error(err))
+		} else {
+			state.Lock()
+			state.isLeader = acquired
+			state.Unlock()
+
+			if acquired {
+				log.Info("Acquired leadership", zap.String("instance_id", instanceID))
+				// Start channel manager (creates/deletes EventSub subscriptions)
+				channelManager.Start(ctx, ChannelSyncInterval)
+			}
+		}
+
 		for {
 			select {
 			case <-leaderCtx.Done():
