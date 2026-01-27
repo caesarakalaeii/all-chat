@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/caesar/all-chat/shared/crypto"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -31,12 +31,12 @@ type ExpiringToken struct {
 // TokenRepository handles database operations for OAuth tokens
 type TokenRepository struct {
 	db     *pgxpool.Pool
-	cipher crypto.StringCipher
+	cipher *encryption.AESEncryptor
 	logger *zap.Logger
 }
 
 // NewTokenRepository creates a new token repository
-func NewTokenRepository(db *pgxpool.Pool, cipher crypto.StringCipher, logger *zap.Logger) *TokenRepository {
+func NewTokenRepository(db *pgxpool.Pool, cipher *encryption.AESEncryptor, logger *zap.Logger) *TokenRepository {
 	return &TokenRepository{
 		db:     db,
 		cipher: cipher,
@@ -400,7 +400,7 @@ func (r *TokenRepository) encryptToken(token string) (string, error) {
 	if r.cipher == nil || token == "" {
 		return token, nil
 	}
-	return r.cipher.Encrypt(token)
+	return r.cipher.EncryptString(token)
 }
 
 // decryptToken decrypts a token string
@@ -408,5 +408,5 @@ func (r *TokenRepository) decryptToken(token string) (string, error) {
 	if r.cipher == nil || token == "" {
 		return token, nil
 	}
-	return r.cipher.Decrypt(token)
+	return r.cipher.DecryptString(token)
 }

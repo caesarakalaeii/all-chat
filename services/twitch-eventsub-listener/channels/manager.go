@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/caesar/all-chat/shared/crypto"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -34,7 +34,7 @@ type Manager struct {
 	logger   *zap.Logger
 	resolver UserIDResolver
 	callback SubscriptionCallback
-	cipher   crypto.StringCipher
+	cipher   *encryption.AESEncryptor
 
 	mu       sync.RWMutex
 	channels map[string]*Channel // broadcaster_id -> Channel
@@ -44,7 +44,7 @@ type Manager struct {
 }
 
 // NewManager creates a new channel manager
-func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, cipher crypto.StringCipher) *Manager {
+func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, cipher *encryption.AESEncryptor) *Manager {
 	return &Manager{
 		db:       db,
 		cipher:   cipher,
@@ -270,5 +270,5 @@ func (m *Manager) decryptToken(encryptedToken string) (string, error) {
 	if m.cipher == nil || encryptedToken == "" {
 		return encryptedToken, nil
 	}
-	return m.cipher.Decrypt(encryptedToken)
+	return m.cipher.DecryptString(encryptedToken)
 }
