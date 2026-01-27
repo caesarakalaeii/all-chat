@@ -177,13 +177,22 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		channelName = req.ChannelID
 	}
 
-	// For Twitch, ensure channel_id is the lowercase username, not numeric ID
-	// Twitch IRC uses channel names (usernames), not numeric IDs
-	// The Twitch Listener publishes messages with channel_id=<lowercase_username>
-	// so the database must match this format for overlay routing to work
+	// For Twitch, validate that channel_id is a valid username (lowercase alphanumeric + underscore)
+	// This prevents display names from being stored (e.g., "شوشو" instead of "shahin200x")
 	channelID := req.ChannelID
 	if req.Platform == "twitch" {
-		channelID = strings.ToLower(channelName)
+		// Twitch usernames must be lowercase alphanumeric + underscore only
+		channelID = strings.ToLower(strings.TrimSpace(channelID))
+		
+		// Basic validation: only allow alphanumeric and underscore
+		for _, r := range channelID {
+			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_') {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": fmt.Sprintf("Invalid Twitch username: '%s'. Twitch usernames can only contain lowercase letters, numbers, and underscores.", channelID),
+				})
+				return
+			}
+		}
 	}
 
 	source := &models.ChatSource{
@@ -302,13 +311,22 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		channelName = req.ChannelID
 	}
 
-	// For Twitch, ensure channel_id is the lowercase username, not numeric ID
-	// Twitch IRC uses channel names (usernames), not numeric IDs
-	// The Twitch Listener publishes messages with channel_id=<lowercase_username>
-	// so the database must match this format for overlay routing to work
+	// For Twitch, validate that channel_id is a valid username (lowercase alphanumeric + underscore)
+	// This prevents display names from being stored (e.g., "شوشو" instead of "shahin200x")
 	channelID := req.ChannelID
 	if req.Platform == "twitch" {
-		channelID = strings.ToLower(channelName)
+		// Twitch usernames must be lowercase alphanumeric + underscore only
+		channelID = strings.ToLower(strings.TrimSpace(channelID))
+		
+		// Basic validation: only allow alphanumeric and underscore
+		for _, r := range channelID {
+			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_') {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": fmt.Sprintf("Invalid Twitch username: '%s'. Twitch usernames can only contain lowercase letters, numbers, and underscores.", channelID),
+				})
+				return
+			}
+		}
 	}
 
 	source := &models.ChatSource{

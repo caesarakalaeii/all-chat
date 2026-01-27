@@ -743,7 +743,10 @@ func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 	jwtToken string,
 ) error {
 	// Prepare request body
-	channelID := platformUser.GetID()
+	// IMPORTANT: For Twitch, use username (login) not display_name for channel_id
+	// Twitch usernames are lowercase alphanumeric only (e.g., "shahin200x")
+	// Display names can have Unicode, mixed case (e.g., "شوشو")
+	channelID := platformUser.GetUsername() // For Twitch this is the "login" field
 	channelName := platformUser.GetDisplayName()
 
 	if details != nil {
