@@ -235,6 +235,12 @@ func (h *Handler) handleChannelPointsRedemption(ctx context.Context, eventData j
 		return err
 	}
 
+	// Determine message text: use user input if provided, otherwise system message
+	text := event.UserInput
+	if text == "" {
+		text = fmt.Sprintf("Redeemed %s", event.Reward.Title)
+	}
+
 	// Create raw message for Message Processor
 	rawMsg := &models.RawChatMessage{
 		MessageID:   uuid.New().String(),
@@ -242,7 +248,7 @@ func (h *Handler) handleChannelPointsRedemption(ctx context.Context, eventData j
 		ChannelID:   event.BroadcasterUserLogin,
 		UserID:      event.UserID,
 		Username:    event.UserLogin,
-		Text:        fmt.Sprintf("Redeemed %s", event.Reward.Title),
+		Text:        text, // User input if available, otherwise system message
 		Timestamp:   event.RedeemedAt,
 		EventType:   "channel_points",
 		EventData: map[string]interface{}{

@@ -242,6 +242,9 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 	// Extract user info
 	userInfo := n.extractUserInfo(raw)
 
+	// Extract Twitch native emotes from tags (for events with user text like resubs)
+	emotes := n.extractTwitchEmotes(raw)
+
 	// Build EventValue from EventData
 	var eventValue *models.EventValue
 
@@ -366,8 +369,8 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 		ChannelName: raw.ChannelID,
 		User:        userInfo,
 		Message: models.MessageInfo{
-			Text:   raw.Text, // System message from Twitch
-			Emotes: []models.Emote{}, // Events don't have emotes
+			Text:   raw.Text, // User message (resubs, channel points) or system message
+			Emotes: emotes,   // Twitch native emotes from tags (will be enriched with 3rd party later)
 		},
 		Timestamp: raw.Timestamp,
 		Metadata:  n.extractMetadata(raw),

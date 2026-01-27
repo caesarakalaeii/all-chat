@@ -308,9 +308,9 @@ func main() {
 				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized_event", "success")
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "event_normalization").Observe(time.Since(startNormalize).Seconds())
 
-				// Enrich events with avatars and badges (user identity)
-				// Note: Emote enrichment is intentionally skipped for events since event messages
-				// are system-generated and don't contain user-typed text with emotes
+				// Enrich events with user identity (avatars, badges)
+				// Some events have user-defined text (Super Chat, resubs, channel points with input)
+				// which may contain emotes, so we enrich those conditionally
 
 				// Enrich with avatars (Twitch only, cached in Redis)
 				startAvatar := time.Now()
@@ -335,6 +335,36 @@ func main() {
 					// Continue even if enrichment fails
 				}
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "event_badge_enrichment").Observe(time.Since(startBadge).Seconds())
+
+				// Conditionally enrich with emotes if event has user-defined text
+				// Examples: Super Chat messages, resub messages, channel point redemptions with user input
+				// Skip for system-only events: raids, follows, subscriptions without messages
+				if unified.Message.Text != "" {
+					startEmote := time.Now()
+					if err := emoteEnricher.Enrich(ctx, unified); err != nil {
+						log.Warn("Failed to enrich emotes for event",
+							zap.String("message_id", rawMsg.MessageID),
+							zap.String("event_type", rawMsg.EventType),
+							zap.Error(err),
+						)
+						// Continue even if enrichment fails
+					}
+					processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "event_emote_enrichment").Observe(time.Since(startEmote).Seconds())
+
+					// Enrich with cheermotes for Twitch events (if message contains bits)
+					if unified.Platform == "twitch" {
+						startCheer := time.Now()
+						if err := cheermoteEnricher.Enrich(ctx, unified); err != nil {
+							log.Warn("Failed to enrich cheermotes for event",
+								zap.String("message_id", rawMsg.MessageID),
+								zap.String("event_type", rawMsg.EventType),
+								zap.Error(err),
+							)
+							// Continue even if cheermote enrichment fails
+						}
+						processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "event_cheermote_enrichment").Observe(time.Since(startCheer).Seconds())
+					}
+				}
 
 			} else {
 				// CHAT PATH (existing logic)
