@@ -308,7 +308,33 @@ func main() {
 				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized_event", "success")
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "event_normalization").Observe(time.Since(startNormalize).Seconds())
 
-				// Events don't get emote/avatar/badge enrichment
+				// Enrich events with avatars and badges (user identity)
+				// Note: Emote enrichment is intentionally skipped for events since event messages
+				// are system-generated and don't contain user-typed text with emotes
+
+				// Enrich with avatars (Twitch only, cached in Redis)
+				startAvatar := time.Now()
+				if err := avatarEnricher.Enrich(ctx, unified); err != nil {
+					log.Warn("Failed to enrich avatar for event",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.String("event_type", rawMsg.EventType),
+						zap.Error(err),
+					)
+					// Continue even if enrichment fails
+				}
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "event_avatar_enrichment").Observe(time.Since(startAvatar).Seconds())
+
+				// Enrich with badge icons (Twitch only, cached in Redis)
+				startBadge := time.Now()
+				if err := badgeEnricher.Enrich(ctx, unified); err != nil {
+					log.Warn("Failed to enrich badges for event",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.String("event_type", rawMsg.EventType),
+						zap.Error(err),
+					)
+					// Continue even if enrichment fails
+				}
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "event_badge_enrichment").Observe(time.Since(startBadge).Seconds())
 
 			} else {
 				// CHAT PATH (existing logic)
