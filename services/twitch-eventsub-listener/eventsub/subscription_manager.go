@@ -105,32 +105,71 @@ func (sm *SubscriptionManager) SubscribeChannelPoints(ctx context.Context, broad
 
 // SubscribeToSubscriptions creates a subscription for subscription events
 func (sm *SubscriptionManager) SubscribeToSubscriptions(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	return sm.Subscribe(ctx, "channel.subscribe", broadcasterID, userAccessToken, "1")
+	// Use user token for this subscription type
+	return sm.SubscribeWithUserToken(ctx, "channel.subscribe", broadcasterID, userAccessToken, "1")
 }
 
 // SubscribeToGifts creates a subscription for gift subscription events
 func (sm *SubscriptionManager) SubscribeToGifts(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	return sm.Subscribe(ctx, "channel.subscription.gift", broadcasterID, userAccessToken, "1")
+	// Use user token for this subscription type
+	return sm.SubscribeWithUserToken(ctx, "channel.subscription.gift", broadcasterID, userAccessToken, "1")
 }
 
 // SubscribeToResubscriptions creates a subscription for resub message events
 func (sm *SubscriptionManager) SubscribeToResubscriptions(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	return sm.Subscribe(ctx, "channel.subscription.message", broadcasterID, userAccessToken, "1")
+	// Use user token for this subscription type
+	return sm.SubscribeWithUserToken(ctx, "channel.subscription.message", broadcasterID, userAccessToken, "1")
 }
 
-// SubscribeToRaids creates a subscription for raid events
+// SubscribeToRaids creates a subscription for raid events (when this broadcaster is raided)
 func (sm *SubscriptionManager) SubscribeToRaids(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	return sm.Subscribe(ctx, "channel.raid", broadcasterID, userAccessToken, "1")
+	// Raids need special handling - use to_broadcaster_user_id in condition
+	cacheKey := broadcasterID + ":channel.raid"
+	sm.mu.RLock()
+	if subID, exists := sm.subscriptions[cacheKey]; exists {
+		sm.mu.RUnlock()
+		return subID, nil
+	}
+	sm.mu.RUnlock()
+
+	// Get app access token (raids work with app token)
+	token, err := sm.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
+
+	// Raid subscription needs to_broadcaster_user_id (when this channel is raided)
+	condition := map[string]string{
+		"to_broadcaster_user_id": broadcasterID,
+	}
+
+	return sm.subscribeWithCondition(ctx, "channel.raid", broadcasterID, token, "1", condition, cacheKey)
 }
 
 // SubscribeToCheers creates a subscription for bits/cheer events
 func (sm *SubscriptionManager) SubscribeToCheers(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	return sm.Subscribe(ctx, "channel.cheer", broadcasterID, userAccessToken, "1")
+	// Use user token for this subscription type
+	return sm.SubscribeWithUserToken(ctx, "channel.cheer", broadcasterID, userAccessToken, "1")
 }
 
 // SubscribeToFollows creates a subscription for follow events
 func (sm *SubscriptionManager) SubscribeToFollows(ctx context.Context, broadcasterID string, userAccessToken string) (string, error) {
-	return sm.Subscribe(ctx, "channel.follow", broadcasterID, userAccessToken, "2")
+	// Follows need special handling - requires moderator_user_id
+	cacheKey := broadcasterID + ":channel.follow"
+	sm.mu.RLock()
+	if subID, exists := sm.subscriptions[cacheKey]; exists {
+		sm.mu.RUnlock()
+		return subID, nil
+	}
+	sm.mu.RUnlock()
+
+	// Follow subscription needs both broadcaster_user_id and moderator_user_id
+	condition := map[string]string{
+		"broadcaster_user_id": broadcasterID,
+		"moderator_user_id":   broadcasterID,
+	}
+
+	return sm.subscribeWithCondition(ctx, "channel.follow", broadcasterID, userAccessToken, "2", condition, cacheKey)
 }
 
 // Unsubscribe deletes a subscription
@@ -338,4 +377,95 @@ func (sm *SubscriptionManager) GetUserIDByLogin(ctx context.Context, login strin
 	}
 
 	return result.Data[0].ID, nil
+}
+
+// SubscribeWithUserToken creates an EventSub subscription using a user OAuth token
+func (sm *SubscriptionManager) SubscribeWithUserToken(ctx context.Context, subscriptionType string, broadcasterID string, userAccessToken string, version string) (string, error) {
+	// Check if already subscribed
+	cacheKey := broadcasterID + ":" + subscriptionType
+	sm.mu.RLock()
+	if subID, exists := sm.subscriptions[cacheKey]; exists {
+		sm.mu.RUnlock()
+		return subID, nil
+	}
+	sm.mu.RUnlock()
+
+	condition := map[string]string{
+		"broadcaster_user_id": broadcasterID,
+	}
+
+	return sm.subscribeWithCondition(ctx, subscriptionType, broadcasterID, userAccessToken, version, condition, cacheKey)
+}
+
+// subscribeWithCondition creates an EventSub subscription with custom condition and token
+func (sm *SubscriptionManager) subscribeWithCondition(ctx context.Context, subscriptionType string, broadcasterID string, accessToken string, version string, condition map[string]string, cacheKey string) (string, error) {
+	// Create subscription request
+	reqBody := map[string]interface{}{
+		"type":    subscriptionType,
+		"version": version,
+		"condition": condition,
+		"transport": map[string]interface{}{
+			"method":   "webhook",
+			"callback": sm.callbackURL,
+			"secret":   sm.webhookSecret,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", EventSubAPIURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", fmt.Errorf("failed to create subscription request: %w", err)
+	}
+
+	req.Header.Set("Client-Id", sm.clientID)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to create subscription: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return "", fmt.Errorf("subscription failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var subResp struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Type   string `json:"type"`
+		} `json:"data"`
+		Total int `json:"total"`
+	}
+
+	if err := json.Unmarshal(body, &subResp); err != nil {
+		return "", fmt.Errorf("failed to decode subscription response: %w", err)
+	}
+
+	if len(subResp.Data) == 0 {
+		return "", fmt.Errorf("subscription response missing data")
+	}
+
+	subscriptionID := subResp.Data[0].ID
+
+	// Store subscription
+	sm.mu.Lock()
+	sm.subscriptions[cacheKey] = subscriptionID
+	sm.mu.Unlock()
+
+	sm.logger.Info("Created EventSub subscription",
+		zap.String("broadcaster_id", broadcasterID),
+		zap.String("subscription_id", subscriptionID),
+		zap.String("type", subscriptionType),
+	)
+
+	return subscriptionID, nil
 }
