@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/shared/crypto"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -33,6 +34,7 @@ type Manager struct {
 	logger   *zap.Logger
 	resolver UserIDResolver
 	callback SubscriptionCallback
+	cipher   crypto.StringCipher
 
 	mu       sync.RWMutex
 	channels map[string]*Channel // broadcaster_id -> Channel
@@ -42,9 +44,10 @@ type Manager struct {
 }
 
 // NewManager creates a new channel manager
-func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver) *Manager {
+func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, cipher crypto.StringCipher) *Manager {
 	return &Manager{
 		db:       db,
+		cipher:   cipher,
 		logger:   logger,
 		resolver: resolver,
 		channels: make(map[string]*Channel),
@@ -166,11 +169,22 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			continue
 		}
 
+		// Decrypt the access token (tokens are encrypted at rest)
+		decryptedToken, err := m.decryptToken(*accessToken)
+		if err != nil {
+			m.logger.Error("Failed to decrypt access token",
+				zap.String("broadcaster_id", broadcasterID),
+				zap.String("username", channelID),
+				zap.Error(err),
+			)
+			continue
+		}
+
 		if _, exists := activeChannels[broadcasterID]; !exists {
 			activeChannels[broadcasterID] = &Channel{
 				BroadcasterID:   broadcasterID,
 				BroadcasterName: channelID,
-				AccessToken:     *accessToken, // Store user OAuth token for EventSub subscriptions
+				AccessToken:     decryptedToken, // Store decrypted user OAuth token
 				OverlayIDs:      []string{},
 			}
 		}
@@ -249,4 +263,12 @@ func (m *Manager) GetActiveChannels() map[string]*Channel {
 		channels[k] = v
 	}
 	return channels
+}
+
+// decryptToken decrypts an encrypted access token
+func (m *Manager) decryptToken(encryptedToken string) (string, error) {
+	if m.cipher == nil || encryptedToken == "" {
+		return encryptedToken, nil
+	}
+	return m.cipher.Decrypt(encryptedToken)
 }
