@@ -26,7 +26,10 @@ func NewTwitchOAuth(clientID, clientSecret, redirectURL string) *TwitchOAuth {
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
 		Scopes: []string{
-			"channel:read:redemptions", // Required for EventSub channel points subscriptions
+			"channel:read:redemptions",   // Required for EventSub channel points
+			"channel:read:subscriptions", // Required for EventSub subscription events
+			"bits:read",                  // Required for EventSub cheer/bits events
+			"moderator:read:followers",   // Required for EventSub follow events
 		},
 		Endpoint: twitch.Endpoint,
 	}
