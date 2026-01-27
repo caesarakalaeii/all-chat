@@ -147,7 +147,13 @@ func main() {
 
 		if action == "subscribe" {
 			// Subscribe to all supported EventSub event types
-			var successCount, failCount int
+			var successCount, failCount, scopeErrorCount int
+
+			// Helper function to check if error is due to missing OAuth scopes
+			isScopeError := func(err error) bool {
+				return strings.Contains(err.Error(), "missing proper authorization") ||
+					strings.Contains(err.Error(), "403")
+			}
 
 			// Channel points - uses app access token
 			if _, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID, accessToken); err != nil {
@@ -167,6 +173,10 @@ func main() {
 			if _, err := subscriptionMgr.SubscribeToSubscriptions(ctx, broadcasterID, accessToken); err != nil {
 				if strings.Contains(err.Error(), "subscription already exists") {
 					successCount++
+				} else if isScopeError(err) {
+					log.Info("Subscription event requires re-authentication with channel:read:subscriptions scope",
+						zap.String("broadcaster_id", broadcasterID))
+					scopeErrorCount++
 				} else {
 					log.Warn("Failed to subscribe to subscriptions", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
 					failCount++
@@ -179,6 +189,10 @@ func main() {
 			if _, err := subscriptionMgr.SubscribeToGifts(ctx, broadcasterID, accessToken); err != nil {
 				if strings.Contains(err.Error(), "subscription already exists") {
 					successCount++
+				} else if isScopeError(err) {
+					log.Info("Gift event requires re-authentication with channel:read:subscriptions scope",
+						zap.String("broadcaster_id", broadcasterID))
+					scopeErrorCount++
 				} else {
 					log.Warn("Failed to subscribe to gifts", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
 					failCount++
@@ -191,6 +205,10 @@ func main() {
 			if _, err := subscriptionMgr.SubscribeToResubscriptions(ctx, broadcasterID, accessToken); err != nil {
 				if strings.Contains(err.Error(), "subscription already exists") {
 					successCount++
+				} else if isScopeError(err) {
+					log.Info("Resub event requires re-authentication with channel:read:subscriptions scope",
+						zap.String("broadcaster_id", broadcasterID))
+					scopeErrorCount++
 				} else {
 					log.Warn("Failed to subscribe to resubs", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
 					failCount++
@@ -215,6 +233,10 @@ func main() {
 			if _, err := subscriptionMgr.SubscribeToCheers(ctx, broadcasterID, accessToken); err != nil {
 				if strings.Contains(err.Error(), "subscription already exists") {
 					successCount++
+				} else if isScopeError(err) {
+					log.Info("Cheer event requires re-authentication with bits:read scope",
+						zap.String("broadcaster_id", broadcasterID))
+					scopeErrorCount++
 				} else {
 					log.Warn("Failed to subscribe to cheers", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
 					failCount++
@@ -227,6 +249,10 @@ func main() {
 			if _, err := subscriptionMgr.SubscribeToFollows(ctx, broadcasterID, accessToken); err != nil {
 				if strings.Contains(err.Error(), "subscription already exists") {
 					successCount++
+				} else if isScopeError(err) {
+					log.Info("Follow event requires re-authentication with moderator:read:followers scope",
+						zap.String("broadcaster_id", broadcasterID))
+					scopeErrorCount++
 				} else {
 					log.Warn("Failed to subscribe to follows", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
 					failCount++
@@ -239,9 +265,11 @@ func main() {
 				zap.String("broadcaster_id", broadcasterID),
 				zap.Int("success", successCount),
 				zap.Int("failed", failCount),
+				zap.Int("scope_errors", scopeErrorCount),
 			)
 
 			// Don't return error if at least one subscription succeeded
+			// Scope errors don't count as failures (user just needs to re-auth)
 			if successCount > 0 {
 				return nil
 			}
