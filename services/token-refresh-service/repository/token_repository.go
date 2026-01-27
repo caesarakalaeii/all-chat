@@ -45,13 +45,16 @@ func NewTokenRepository(db *pgxpool.Pool, cipher crypto.StringCipher, logger *za
 }
 
 // GetExpiringUserTokens returns user tokens expiring within the specified duration
+// Also includes already-expired tokens from the last 24 hours for recovery
 func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
 	query := `
 		SELECT id, auth_provider, username, display_name,
 		       access_token, refresh_token, token_expires_at
 		FROM users
-		WHERE token_expires_at < $1
-		  AND token_expires_at > NOW()
+		WHERE (
+		    (token_expires_at < $1 AND token_expires_at > NOW())
+		    OR (token_expires_at > NOW() - INTERVAL '24 hours' AND token_expires_at < NOW())
+		  )
 		  AND refresh_token IS NOT NULL
 		  AND refresh_token != ''
 		  AND is_banned = false
@@ -116,13 +119,16 @@ func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWith
 }
 
 // GetExpiringViewerTokens returns viewer session tokens expiring within the specified duration
+// Also includes already-expired tokens from the last 24 hours for recovery
 func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
 	query := `
 		SELECT id, platform, username, display_name,
 		       access_token, refresh_token, token_expires_at
 		FROM viewer_sessions
-		WHERE token_expires_at < $1
-		  AND token_expires_at > NOW()
+		WHERE (
+		    (token_expires_at < $1 AND token_expires_at > NOW())
+		    OR (token_expires_at > NOW() - INTERVAL '24 hours' AND token_expires_at < NOW())
+		  )
 		  AND refresh_token IS NOT NULL
 		  AND refresh_token != ''
 		ORDER BY token_expires_at ASC
@@ -186,12 +192,15 @@ func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWi
 }
 
 // GetExpiringYouTubeTokens returns YouTube channel tokens expiring within the specified duration
+// Also includes already-expired tokens from the last 24 hours for recovery
 func (r *TokenRepository) GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
 	query := `
 		SELECT user_id, channel_id, access_token, refresh_token, expiry
 		FROM youtube_oauth_tokens
-		WHERE expiry < $1
-		  AND expiry > NOW()
+		WHERE (
+		    (expiry < $1 AND expiry > NOW())
+		    OR (expiry > NOW() - INTERVAL '24 hours' AND expiry < NOW())
+		  )
 		  AND refresh_token IS NOT NULL
 		  AND refresh_token != ''
 		ORDER BY expiry ASC
