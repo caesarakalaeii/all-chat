@@ -12,8 +12,8 @@ import (
 	"github.com/caesar/all-chat/services/token-refresh-service/refresher"
 	"github.com/caesar/all-chat/services/token-refresh-service/repository"
 	authOAuth "github.com/caesar/all-chat/services/auth-service/oauth"
-	"github.com/caesar/all-chat/shared/crypto"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -58,8 +58,13 @@ func main() {
 		log.Fatal("ENCRYPTION_KEY is required")
 	}
 
-	// Initialize AES-GCM encryptor for token encryption/decryption
-	encryptor, err := crypto.NewAESGCMCipher(encryptionKey)
+	// Initialize AES encryptor for token encryption/decryption (must match auth-service)
+	parsedKey, err := encryption.ParseKey(encryptionKey)
+	if err != nil {
+		log.Fatal("Failed to parse ENCRYPTION_KEY", zap.Error(err))
+	}
+
+	encryptor, err := encryption.NewAESEncryptor(parsedKey)
 	if err != nil {
 		log.Fatal("Failed to initialize encryptor", zap.Error(err))
 	}
