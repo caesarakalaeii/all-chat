@@ -26,6 +26,7 @@ vendor/
 shared/pkg
 
 # Service binaries
+services/*/bin/
 services/*/auth-service
 services/*/overlay-manager
 services/*/emote-service
@@ -76,6 +77,12 @@ logs/
 # Temporary files
 tmp/
 temp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
 
 .resources
 
