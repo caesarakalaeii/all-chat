@@ -456,7 +456,7 @@ curl http://localhost:8089/status
 |---------|---------|------|
 | Protocol | HTTP REST | WebSocket (Pusher) |
 | Latency | 2-5 seconds | Real-time (~100ms) |
-| API Quota | 10,000 units/day | No quota (WebSocket) |
+| API Quota | 1,009,000 units/day | No quota (WebSocket) |
 | Authentication | OAuth per user | No auth required |
 | Scalability | Leader election needed | Fully horizontal |
 

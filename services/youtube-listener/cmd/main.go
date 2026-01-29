@@ -117,11 +117,11 @@ func main() {
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 
 	// Initialize quota tracker (legacy - kept for backward compatibility)
-	quotaLimitStr := getEnvOrDefault("QUOTA_LIMIT_DAILY", "10000")
+	quotaLimitStr := getEnvOrDefault("QUOTA_LIMIT_DAILY", "1009000")
 	quotaLimit, err := strconv.Atoi(quotaLimitStr)
 	if err != nil {
-		log.Warn("Invalid QUOTA_LIMIT_DAILY, using default 10000", zap.Error(err))
-		quotaLimit = 10000
+		log.Warn("Invalid QUOTA_LIMIT_DAILY, using default 1009000", zap.Error(err))
+		quotaLimit = 1009000
 	}
 
 	quotaTracker := quota.NewTracker(db, quotaLimit, log, listenerMetrics)
@@ -131,7 +131,7 @@ func main() {
 
 	// Initialize per-channel quota tracker (new)
 	perChannelQuotaConfig := quota.Config{
-		GlobalDailyQuota:  parseIntEnv("YOUTUBE_GLOBAL_DAILY_QUOTA", 10000),
+		GlobalDailyQuota:  parseIntEnv("YOUTUBE_GLOBAL_DAILY_QUOTA", 1009000),
 		HighTierQuota:     parseIntEnv("YOUTUBE_HIGH_TIER_QUOTA", 200),
 		StandardTierQuota: parseIntEnv("YOUTUBE_STANDARD_TIER_QUOTA", 100),
 		LowTierQuota:      parseIntEnv("YOUTUBE_LOW_TIER_QUOTA", 50),

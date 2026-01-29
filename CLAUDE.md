@@ -211,7 +211,7 @@ REDIS_PORT=6379
 
 ### Scalability
 - Shared PostgreSQL database (consider separate per service)
-- YouTube quota limit (10,000 units/day, request increase to 1M)
+- YouTube quota limit increased to 1,009,000 units/day (was 10,000)
 
 **See**: [CRITICAL_ARCHITECTURE_ANALYSIS.md](./docs/phase-reports/CRITICAL_ARCHITECTURE_ANALYSIS.md) for historical security audit.
 
