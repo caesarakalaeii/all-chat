@@ -280,7 +280,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       POLLING_INTERVAL_MS: "2000"
-      QUOTA_LIMIT_DAILY: "10000"
+      QUOTA_LIMIT_DAILY: "1009000"
       SOURCE_MANAGER_URL: http://source-manager:8088
       SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:-dev-service-secret}
     ports:
