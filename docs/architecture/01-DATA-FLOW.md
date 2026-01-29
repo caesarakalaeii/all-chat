@@ -925,9 +925,9 @@ This document provides a comprehensive overview of data flow and integration pat
 8. **Performance**: Caching, batching, connection pooling
 
 **Next Steps**:
-- [DEPLOYMENT_KUBERNETES.md](./DEPLOYMENT_KUBERNETES.md) - Kubernetes deployment specifications
-- [SCALING_PERFORMANCE.md](./SCALING_PERFORMANCE.md) - Detailed scaling strategies
-- [OBSERVABILITY_MONITORING.md](./OBSERVABILITY_MONITORING.md) - Monitoring and alerting
+- [02-DEPLOYMENT.md](./02-DEPLOYMENT.md) - Kubernetes deployment specifications
+- [03-SCALING.md](./03-SCALING.md) - Detailed scaling strategies
+- [04-OBSERVABILITY.md](./04-OBSERVABILITY.md) - Monitoring and alerting
 
 ---
 

@@ -2,538 +2,253 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Navigation Guide for LLM Agents
-
-**IMPORTANT**: Before starting any task, read [GETTING_STARTED.md](./GETTING_STARTED.md) for:
-- Quick reference to important files
-- Repository structure overview
-- Service-specific navigation guides
-- Common tasks and where to find relevant code
-- Development workflow best practices
-
-The GETTING_STARTED.md file is your map for navigating this repository efficiently. Use it to quickly locate:
-- Which files to read for specific tasks
-- Where services are located and what they do
-- Documentation for architecture, deployment, and testing
-- Known issues and technical debt
+---
 
 ## Project Overview
 
-All-Chat is a cloud-native microservices platform for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok) on streaming overlays with support for 7TV, BTTV, and FFZ emotes. The project follows **Standard Go Layout** with clear service boundaries for maintainability and testability.
+All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
 
-**Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from Twitch + YouTube + Kick + TikTok simultaneously, or be configured with a single source - providing full flexibility for streamers who multistream or want unified chat displays.
+**Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from Twitch + YouTube + Kick + TikTok simultaneously, providing full flexibility for streamers who multistream.
+
+**Architecture**: Standard Go Layout with microservices communicating via Redis Streams (raw messages) → Message Processor (normalization + enrichment) → Redis Pub/Sub (overlay-specific) → API Gateway WebSocket (client delivery).
 
 **Platform Status**:
-- ✅ **Twitch**: Fully implemented and tested (IRC-based, username-only)
-- ✅ **YouTube**: Fully implemented (HTTP polling, OAuth per user)
-- ✅ **Kick**: OAuth and Listener implemented (Pusher WebSocket)
-- ✅ **TikTok**: Username-based (no OAuth), unofficial library
+- ✅ Twitch (IRC-based) | ✅ YouTube (HTTP polling with quota tracking) | ✅ Kick (Pusher WebSocket) | ✅ TikTok (Unofficial library)
 
-**Current Status**: Phase 4 complete. All 6 core listener services implemented (API Gateway, Twitch Listener, YouTube Listener, Kick Listener, Message Processor, Source Manager). Twitch, YouTube, and Kick integrations ready for production.
+**Current Phase**: Phase 4 complete. All 6 core listener services implemented and production-ready.
 
-## Build & Test Commands
+---
+
+## Quick Start
 
 ```bash
-# Build all services
-make build
+# Development environment
+make docker-up         # Start postgres, redis, all services
+make test              # Run tests
+make migrate-up        # Apply database migrations
 
-# Run tests
-make test              # All tests
-make test-coverage     # With coverage report
-go test -v ./services/api-gateway/...  # Single service tests
-
-# Code quality
-make fmt               # Format code
-make lint              # Run golangci-lint
-make deps              # Download dependencies
-
-# Docker Compose (recommended for development)
-make docker-up         # Start all services
-make docker-down       # Stop all services
-make docker-logs       # View logs
-make docker-restart    # Restart services
-
-# Database
-make migrate-up        # Run migrations (requires PostgreSQL running)
+# Access services
+# - API Gateway: http://localhost:8080
+# - Overlays: http://localhost:3000 (frontend)
 ```
 
-## Architecture Principles
+**First Time Setup**: See [GETTING_STARTED.md](./GETTING_STARTED.md) for complete onboarding guide.
 
-### Standard Go Service Layout
+---
 
-All services follow the standard Go project layout:
+## Navigation by Task
+
+### Common Tasks → Quick Reference Guides
+
+**Need to...**
+
+| Task | Guide | Lines |
+|------|-------|-------|
+| Add support for a new platform | [QUICK-REF-ADD-PLATFORM.md](./docs/llm-guides/QUICK-REF-ADD-PLATFORM.md) | ~150 |
+| Debug YouTube quota issues | [QUICK-REF-DEBUG-QUOTA.md](./docs/llm-guides/QUICK-REF-DEBUG-QUOTA.md) | ~200 |
+| Add a new HTTP endpoint | [QUICK-REF-ADD-ENDPOINT.md](./docs/llm-guides/QUICK-REF-ADD-ENDPOINT.md) | ~100 |
+| Perform security audit | [QUICK-REF-SECURITY-AUDIT.md](./docs/llm-guides/QUICK-REF-SECURITY-AUDIT.md) | ~150 |
+| Scale services or infrastructure | [QUICK-REF-SCALING.md](./docs/llm-guides/QUICK-REF-SCALING.md) | ~150 |
+| Create database migration | [QUICK-REF-DATABASE-MIGRATION.md](./docs/llm-guides/QUICK-REF-DATABASE-MIGRATION.md) | ~100 |
+| Debug Kubernetes issues | [QUICK-REF-KUBERNETES-DEBUG.md](./docs/llm-guides/QUICK-REF-KUBERNETES-DEBUG.md) | ~150 |
+| Inspect Redis Streams/Pub/Sub | [QUICK-REF-REDIS-OPERATIONS.md](./docs/llm-guides/QUICK-REF-REDIS-OPERATIONS.md) | ~100 |
+
+### Troubleshooting
+
+**Having issues?** Start with the decision tree:
+
+→ [Troubleshooting Decision Tree](./docs/troubleshooting/decision-tree.md) - High-level triage for all common issues
+
+**Detailed troubleshooting guides** (created as needed):
+- [build-errors.md](./docs/troubleshooting/build-errors.md) - Go compilation, Docker build, startup failures
+- [connection-errors.md](./docs/troubleshooting/connection-errors.md) - PostgreSQL, Redis connection issues
+- [youtube-quota-exceeded.md](./docs/troubleshooting/youtube-quota-exceeded.md) - Quota state machine, recovery procedures
+- [twitch-irc-issues.md](./docs/troubleshooting/twitch-irc-issues.md) - IRC connection, channel join, message parsing
+- [websocket-disconnects.md](./docs/troubleshooting/websocket-disconnects.md) - API Gateway WebSocket issues
+
+### Architecture & Design Decisions
+
+**Understand the system**:
+- [Architecture Overview](./docs/architecture/00-OVERVIEW.md) - High-level design, service map
+- [Data Flow](./docs/architecture/01-DATA-FLOW.md) - Message processing pipeline
+- [Deployment](./docs/architecture/02-DEPLOYMENT.md) - Kubernetes architecture
+- [Scaling](./docs/architecture/03-SCALING.md) - Performance and scalability
+- [Observability](./docs/architecture/04-OBSERVABILITY.md) - Metrics, logging, tracing
+- [Security](./docs/architecture/05-SECURITY.md) - Security architecture
+
+**Understand WHY decisions were made**:
+- [ADR Index](./docs/adr/README.md) - Architecture Decision Records
+  - ADR-0001: Standard Go Layout (not hexagonal)
+  - ADR-0002: Redis Streams + Pub/Sub hybrid
+  - ADR-0003: CloudNativePG for PostgreSQL
+  - ADR-0004: No ports/adapters abstraction
+  - ADR-0005: React + Next.js frontend
+  - ADR-0006: YouTube quota reserve-confirm-rollback
+
+### Service Documentation
+
+Each service has a detailed README:
+- [api-gateway](./services/api-gateway/README.md) - WebSocket server, HTTP routing
+- [auth-service](./services/auth-service/README.md) - OAuth flows, JWT tokens
+- [emote-service](./services/emote-service/README.md) - 7TV, BTTV, FFZ emote APIs
+- [twitch-listener](./services/twitch-listener/README.md) - IRC client, channel management
+- [youtube-listener](./services/youtube-listener/README.md) - HTTP polling, quota tracking
+- [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
+- [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
+- [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
+- [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
+- [source-manager](./services/source-manager/README.md) - Leader election, active source registry
+- [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
+
+### Development Guides
+
+- [GETTING_STARTED.md](./GETTING_STARTED.md) - Complete navigation guide for LLM agents
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Pull request process, code review guidelines
+- [Testing Guide](./docs/development/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
+
+---
+
+## Tech Stack
+
+**Backend**: Go 1.23+, Gin (HTTP), PostgreSQL 16 (pgx/v5), Redis 7 (go-redis/v9), Zap (logging)
+
+**Frontend**: React 18+, Next.js 14+ (App Router), TypeScript, Tailwind CSS
+
+**Infrastructure**: Kubernetes (CNPG for PostgreSQL), Docker Compose (local dev)
+
+**Key Libraries**:
+- `gempir/go-twitch-irc/v4` - Twitch IRC client
+- `gorilla/websocket` - Kick Pusher WebSocket, API Gateway WebSocket server
+- `golang-jwt/jwt/v5` - JWT authentication
+
+---
+
+## Standard Go Service Layout
+
+All services follow this structure:
+
 ```
 services/<service-name>/
-├── cmd/               # Application entry points
-│   └── main.go       # Service initialization
-├── handlers/          # HTTP handlers (Gin)
-├── models/           # Data models and domain entities
-├── repository/       # Database layer (optional)
-├── <domain-packages>/ # Domain-specific packages (e.g., oauth/, streams/, channels/)
-├── go.mod            # Module dependencies
-└── Dockerfile        # Container image
+├── cmd/main.go           # Entry point (logger, DB/Redis, HTTP server)
+├── handlers/             # HTTP handlers (Gin)
+├── models/               # Data models
+├── repository/           # Database layer (if needed)
+├── <domain-packages>/    # Domain logic (oauth/, streams/, channels/, etc.)
+├── go.mod                # Dependencies
+└── Dockerfile            # Container image
 ```
 
 **Key Principles**:
-- Clear separation of concerns via packages
+- Clear separation: handlers → domain logic → repository
 - Dependency injection for testability
-- Domain logic in dedicated packages (e.g., `oauth/`, `streams/`, `channels/`)
-- HTTP handlers separate from business logic
-- Database code in `repository/` packages when needed
-- Each service is independently deployable
+- Graceful shutdown (25s timeout)
+- Health checks: `/health/live` (always 200), `/health/ready` (checks DB + Redis)
 
-### Service Communication
+---
 
-- **Synchronous**: HTTP/REST between services (via API Gateway)
-- **Asynchronous**: Redis Streams + Pub/Sub for real-time messages
-  - Listeners publish raw messages to Redis Stream `chat:raw`
-  - Message Processor consumes from stream, enriches, and publishes to `overlay:{overlay_id}` via Pub/Sub
-  - API Gateway WebSocket subscribes to overlay-specific channels
-- **Database**: Shared PostgreSQL database (separate schemas per service)
-- **Caching**: Redis for emotes, session data, and leader election
+## Message Flow Architecture
 
-### Unified Message Format
-
-All chat messages from different platforms are normalized to a common format before publishing to Redis:
-
-```json
-{
-  "id": "uuid",
-  "overlay_id": "uuid",
-  "platform": "twitch|youtube|kick|tiktok",
-  "channel_id": "platform-specific-id",
-  "channel_name": "display-name",
-  "user": {
-    "id": "platform-user-id",
-    "username": "username",
-    "display_name": "Display Name",
-    "avatar_url": "https://...",
-    "badges": ["subscriber", "moderator"],
-    "color": "#FF0000"
-  },
-  "message": {
-    "text": "Hello world!",
-    "emotes": [
-      {
-        "code": "Kappa",
-        "provider": "twitch",
-        "url": "https://...",
-        "positions": [[0, 5]]
-      }
-    ]
-  },
-  "timestamp": "2025-11-10T12:34:56Z",
-  "metadata": {
-    "is_subscriber": true,
-    "is_moderator": false,
-    "bits": 0,
-    "super_chat_amount": 0
-  }
-}
+```
+Listeners (Twitch/YouTube/Kick/TikTok)
+  ↓ publish raw messages
+Redis Streams (chat:raw)
+  ↓ consume via XREADGROUP
+Message Processor
+  ├─ Normalize (platform → unified format)
+  ├─ Enrich (7TV, BTTV, FFZ emotes)
+  └─ Publish to Redis Pub/Sub (overlay:{overlay_id})
+    ↓ subscribe
+API Gateway WebSocket
+  ↓ broadcast
+Frontend Overlay (React)
 ```
 
-This unified format allows the frontend to display messages from all platforms consistently.
+**Unified Message Format**: All platforms normalized to common schema with user, message, emotes, badges, metadata.
 
-## Tech Stack Details
+**See**: [Data Flow Integration](./docs/architecture/01-DATA-FLOW.md) for complete details.
 
-### Backend Dependencies
-- **Go 1.23+** (required)
-- **Gin** (`gin-gonic/gin`) - HTTP framework
-- **PostgreSQL 16** with `pgx/v5` - Database
-- **Redis 7** (`go-redis/v9`) - Cache & Pub/Sub
-- **Twitch IRC** (`gempir/go-twitch-irc/v4`) - Twitch chat listener
-- **Gorilla WebSocket** (`gorilla/websocket`) - Kick Pusher WebSocket
-- **JWT** (`golang-jwt/jwt/v5`) - Auth tokens
-- **Zap** (`uber-go/zap`) - Structured logging
-
-### Frontend Stack
-- **React 18+** - UI library
-- **Next.js 14+** (App Router) - SSR framework
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Styling
-- **WebSocket API** - Real-time message streaming
-
-### Shared Packages (`shared/`)
-- `shared/auth/` - JWT utilities (Generate, Validate, Claims)
-- `shared/database/` - PostgreSQL connection pooling
-- `shared/redis/` - Redis client wrapper
-- `shared/logger/` - Zap logger initialization
-- `shared/middleware/` - HTTP middleware (CORS, Auth)
-
-## Service Details
-
-### API Gateway (Port 8080) ✅
-**Purpose**: Entry point, WebSocket management, HTTP routing
-
-**Key Files**:
-- `services/api-gateway/cmd/main.go` - Entry point
-- `services/api-gateway/handlers/` - HTTP handlers
-- `services/api-gateway/websocket/` - WebSocket server implementation
-
-**Features**:
-- HTTP reverse proxy to backend services
-- WebSocket server for overlay connections (`ws://localhost:8080/ws/overlay/:id`)
-- Subscribe to Redis pub/sub channels (`overlay:{overlay_id}`)
-- Broadcast messages to WebSocket clients
-- Connection pooling per overlay
-- CORS and request logging
-- Health aggregation
-
-**Documentation**: See `services/api-gateway/README.md`
-
-### Twitch Listener (Port 8085) ✅
-**Purpose**: Connect to Twitch IRC, listen to chat, publish raw messages to Redis Streams
-
-**Key Files**:
-- `services/twitch-listener/cmd/main.go` - Entry point
-- `services/twitch-listener/irc/client.go` - Twitch IRC client implementation
-- `services/twitch-listener/channels/manager.go` - Dynamic channel join/leave management
-- `services/twitch-listener/publisher/redis.go` - Publishes to Redis Stream `chat:raw`
-
-**Features**:
-- Twitch IRC connection (gempir/go-twitch-irc)
-- Dynamic channel JOIN/PART
-- Rate limiting (20 JOIN/10s per Twitch limits)
-- Publishes to Redis Streams (`chat:raw`)
-- Automatic reconnection
-- Health checks and status
-
-**Environment**:
-- `TWITCH_BOT_USERNAME`, `TWITCH_BOT_OAUTH` (required)
-
-**Documentation**: See `services/twitch-listener/README.md`
-
-### YouTube Listener (Port 8086) ✅
-**Purpose**: Poll YouTube Live Chat API, publish raw messages to Redis Streams
-
-**Key Files**:
-- `services/youtube-listener/cmd/main.go` - Entry point with leader election
-- `services/youtube-listener/youtube/client.go` - YouTube API client wrapper
-- `services/youtube-listener/streams/poller.go` - Live chat polling logic (2-5s interval)
-- `services/youtube-listener/channels/manager.go` - Active stream tracking
-- `services/youtube-listener/publisher/redis.go` - Publishes to Redis Stream `chat:raw`
-
-**Features**:
-- YouTube Live Chat API polling
-- OAuth 2.0 per-user authentication
-- Adaptive polling intervals (2-5 seconds)
-- **Advanced quota tracking** (reserve-confirm-rollback pattern, 99.95%+ accuracy)
-- Leader election (prevents duplicate polling)
-- Publishes to Redis Streams (`chat:raw`)
-- Health checks and status
-
-**Quota System**:
-- **Reserve-Confirm-Rollback**: Atomic quota reservations prevent drift
-- **Cross-service tracking**: overlay-manager calls tracked via HTTP client
-- **Smart optimizations**: 9,000+ units/day waste eliminated
-- **Quota API**: `/quota/status`, `/quota/record` for external services
-- **State machine**: 5 states (HEALTHY → DEGRADED → CRITICAL → EXHAUSTED → DEPLETED)
-- **Automatic recovery**: Stale reservations cleaned up every minute
-- **Expected usage**: 2,000-3,000 units/day (vs 10,000 limit)
-
-**Environment**:
-- `YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` (required)
-- `QUOTA_LIMIT_DAILY` (default: 10000)
-
-**Documentation**: See `services/youtube-listener/README.md`
-
-### Kick Listener (Port 8089) ✅
-**Purpose**: Connect to Kick Pusher WebSocket, listen to chat, publish raw messages to Redis Streams
-
-**Key Files**:
-- `services/kick-listener/cmd/main.go` - Entry point
-- `services/kick-listener/websocket/client.go` - Pusher WebSocket client implementation
-- `services/kick-listener/channels/manager.go` - Dynamic channel subscription management
-- `services/kick-listener/publisher/redis.go` - Publishes to Redis Stream `chat:raw`
-
-**Features**:
-- Pusher WebSocket Protocol 7 connection
-- Dynamic channel subscription (chatrooms.{id})
-- Real-time message reception (~100ms latency)
-- Automatic chatroom ID discovery via Kick API
-- Publishes to Redis Streams (`chat:raw`)
-- Automatic reconnection with exponential backoff
-- Health checks and status
-
-**Environment**:
-- No credentials required (public WebSocket)
-- Uses shared `DATABASE_*` and `REDIS_*` variables
-
-**Documentation**: See `services/kick-listener/README.md`
-
-### Message Processor (Port 8087) ✅
-**Purpose**: Consume messages from Redis Streams, normalize, enrich with emotes, publish to overlay-specific Pub/Sub
-
-**Key Files**:
-- `services/message-processor/cmd/main.go` - Consumer group initialization
-- `services/message-processor/consumer/streams.go` - Redis Streams XREADGROUP consumer
-- `services/message-processor/normalizer/twitch_normalizer.go` - Twitch message parsing
-- `services/message-processor/normalizer/youtube_normalizer.go` - YouTube message parsing
-- `services/message-processor/normalizer/kick_normalizer.go` - Kick message parsing
-- `services/message-processor/normalizer/tiktok_normalizer.go` - TikTok message parsing
-- `services/message-processor/enricher/emote_enricher.go` - Emote enrichment
-- `services/message-processor/publisher/pubsub.go` - Publishes to `overlay:{overlay_id}`
-- `services/message-processor/router/router.go` - Routes messages based on platform
-- `services/message-processor/seventv/` - Real-time 7TV emote updates via WebSocket
-
-**Features**:
-- Redis Streams consumer (consumer group `message-processors`)
-- Message normalization (Twitch + YouTube + Kick + TikTok → Unified format)
-- **Message age filtering** (ignores messages older than 60s by default, configurable via `MESSAGE_AGE_CUTOFF_SECONDS`)
-- Emote enrichment (7TV, BTTV, FFZ via external APIs)
-- **Real-time 7TV emote updates** via EventAPI WebSocket (immediate cache invalidation)
-- Platform detection and routing
-- Overlay-specific publishing via Redis Pub/Sub
-- Health checks and status
-
-**Environment Variables**:
-- `MESSAGE_AGE_CUTOFF_SECONDS` - Maximum age of messages to process in seconds (default: 60)
-- `EMOTE_SERVICE_URL` - URL of emote service (default: http://localhost:8083)
-
-**Documentation**: See `services/message-processor/seventv/README.md`
-
-### Source Manager (Port 8088) ✅
-**Purpose**: Active source registry and Redis-based leader election for YouTube polling
-
-**Key Files**:
-- `services/source-manager/cmd/main.go` - Entry point
-- `services/source-manager/registry/` - Active source tracking
-- `services/source-manager/election/` - Leader election implementation
-- `services/source-manager/handlers/` - HTTP API for leadership
-
-**Features**:
-- Active source registry (syncs from database)
-- Redis-based leader election (prevents duplicate YouTube polling)
-- Leadership API (claim, renew, release)
-- Health checks and status
-- Coordination between YouTube Listener instances
-
-**Environment**:
-- `REDIS_HOST`, `REDIS_PORT` (required)
-- `DATABASE_*` variables for source registry sync
+---
 
 ## Environment Variables
 
-See `.env.example` for template. Key variables:
+**Required for local development**:
 
 ```bash
-# Twitch IRC Bot (required for Twitch Listener)
-TWITCH_BOT_USERNAME=
-TWITCH_BOT_OAUTH=oauth:...
+# Twitch
+TWITCH_BOT_USERNAME=your_bot
+TWITCH_BOT_OAUTH=oauth:token_from_twitchapps
 
-# YouTube API (required for YouTube Listener)
-YOUTUBE_API_KEY=
-YOUTUBE_CLIENT_ID=
-YOUTUBE_CLIENT_SECRET=
+# YouTube
+YOUTUBE_CLIENT_ID=xxx.apps.googleusercontent.com
+YOUTUBE_CLIENT_SECRET=GOCSPX-xxx
 
-# Kick OAuth (required for Kick OAuth support)
-KICK_CLIENT_ID=
-KICK_CLIENT_SECRET=
-
-# Frontend (used to build OAuth redirect URIs)
-FRONTEND_URL=http://localhost:3000
-
-# Database (defaults for local dev)
+# Database (localhost defaults)
 DATABASE_HOST=localhost
 DATABASE_PORT=5432
+DATABASE_NAME=allchat
 DATABASE_USER=allchat
 DATABASE_PASSWORD=allchat_dev_password
-DATABASE_NAME=allchat
 
-# Redis (defaults for local dev)
+# Redis (localhost defaults)
 REDIS_HOST=localhost
 REDIS_PORT=6379
 ```
 
-## Database Schema
+**See**: `.env.example` for complete list. **Kubernetes**: Secrets managed via sealed-secrets.
 
-The application uses PostgreSQL for persistent data storage. Key tables used by the services:
+---
 
-**Active Sources** (`active_sources` or similar):
-- Tracks which chat sources are currently active
-- Used by Source Manager for registry and leader election
-- Used by Listeners to know which channels/streams to connect to
-- Fields typically include: `overlay_id`, `platform`, `channel_id`, `is_active`
-
-**Configuration Storage**:
-- Overlay configurations and chat source mappings
-- Referenced by services to determine what to listen to
-- Platform-specific settings (polling intervals, auth tokens, etc.)
-
-**YouTube Quota Tracking** (`youtube_quota_usage`, `youtube_channel_quota`):
-- Global daily quota tracking with reserve-confirm-rollback pattern
-- Per-channel quota allocation and limits
-- Atomic reservation system prevents drift (99.95%+ accuracy)
-- Stale reservation cleanup for crash recovery
-- Migration `008_quota_reservations.sql` adds reservation infrastructure
-
-**Migrations**:
-See `migrations/` directory for database schema evolution. The schema supports:
-- Multiple streaming platforms (Twitch, YouTube, Kick, TikTok)
-- Multi-source overlays (one overlay can aggregate multiple chat sources)
-- Platform-specific configuration (JSONB fields for flexibility)
-- YouTube quota tracking with atomic reservations (prevents drift)
-
-## Common Development Patterns
-
-### Adding a New Endpoint
-
-1. Implement business logic in appropriate domain package (e.g., `oauth/`, `streams/`)
-2. Add HTTP handler function in `handlers/<feature>.go`
-3. Register route in `cmd/main.go` or handler initialization
-4. Add tests in `handlers/<feature>_test.go`
-
-### Adding a New Service
-
-1. Create directory structure following standard Go layout in `services/<service-name>/`
-2. Copy `services/<existing-service>/cmd/main.go` as template
-3. Follow patterns: logger initialization, DB/Redis connection, health checks
-4. Organize domain logic in dedicated packages (e.g., `oauth/`, `streams/`, `channels/`)
-5. Add Dockerfile at `services/<service-name>/Dockerfile`
-6. Add deployment manifests in `deployments/k8s/base/<service-name>/`
-7. Add Make targets to `Makefile`
-
-### Error Handling
-
-- Use custom errors defined in services (e.g., `ErrOverlayNotFound`)
-- Log errors with `logger.Error()` before returning
-- Return appropriate HTTP status codes in handlers
-- Never expose internal errors to clients
-
-### Graceful Shutdown
-
-All services implement:
-```go
-quit := make(chan os.Signal, 1)
-signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-<-quit
-// 25-second timeout for graceful shutdown
-ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-srv.Shutdown(ctx)
-```
-
-## Health Checks
-
-All services expose:
-- `GET /health/live` - Liveness probe (always returns 200)
-- `GET /health/ready` - Readiness probe (checks DB + Redis)
-
-Kubernetes uses these for rolling updates and self-healing.
-
-## Deployment
-
-### Local Development (Docker Compose)
-```bash
-make docker-up    # Starts: postgres, redis, all services
-make docker-logs  # Watch logs
-```
-
-Services accessible at:
-- API Gateway: `http://localhost:8080`
-- Twitch Listener: `http://localhost:8085`
-- YouTube Listener: `http://localhost:8086`
-- Message Processor: `http://localhost:8087`
-- Source Manager: `http://localhost:8088`
-
-### Kubernetes
-```bash
-kubectl apply -f deployments/k8s/namespace.yaml
-# Create secrets (see README.md)
-kubectl apply -f deployments/k8s/configmaps/
-kubectl apply -f deployments/k8s/<service>/
-```
-
-Each service has:
-- Deployment with resource limits
-- Service (ClusterIP)
-- HorizontalPodAutoscaler (CPU-based scaling)
-
-## Known Issues & TODOs
-
-### Recently Completed ✅
-- [x] **YouTube quota tracking** - Reserve-confirm-rollback pattern (99.95%+ accuracy)
-- [x] **Quota waste elimination** - 9,000+ units/day savings (90% reduction)
-- [x] **Cross-service quota tracking** - overlay-manager integrated
-- [x] **WebSocket connection TTL** - Auto-expiring keys prevent stale connections
-- [x] **API Gateway heartbeat** - Refreshes connection TTL every 2 minutes
-- [x] **Smart disconnect logic** - Immediate poller stop when no overlays connected
+## Known Issues & Technical Debt
 
 ### Security
 - Token encryption is basic (TODO: implement AES-GCM)
-- Rate limiting: ✅ Implemented for YouTube resolve endpoint (10 req/min per user)
-- CORS currently allows `*` in dev (configure for production)
+- CORS allows `*` in dev (configure for production)
+- No service-to-service auth (Kubernetes NetworkPolicies only)
 
-### Implementation TODOs
-- [ ] Complete integration testing for YouTube Listener
-- [ ] Add comprehensive unit/integration tests
-- [ ] Implement authentication/authorization for production use
+### Testing
+- Integration tests incomplete for YouTube Listener
+- E2E tests needed for full message flow
 
-### Scalability TODOs
-- [ ] Separate databases per service
-- [ ] Implement message queue for high-volume channels
-- [ ] Consider quota increase request to Google (1M units/day)
+### Scalability
+- Shared PostgreSQL database (consider separate per service)
+- YouTube quota limit (10,000 units/day, request increase to 1M)
 
-## Troubleshooting
+**See**: [CRITICAL_ARCHITECTURE_ANALYSIS.md](./docs/phase-reports/CRITICAL_ARCHITECTURE_ANALYSIS.md) for historical security audit.
 
-**Build Errors**:
-- Run `make deps` to ensure dependencies are up to date
-- Check Go version: `go version` (requires 1.23+)
+---
 
-**Connection Errors**:
-- Verify PostgreSQL/Redis are running: `make docker-up` or `docker-compose up postgres redis -d`
-- Check `.env` file has correct credentials
-- Test DB connection: `psql postgresql://allchat:allchat_dev_password@localhost:5432/allchat`
+## Production Readiness
 
-**Migration Errors**:
-- Ensure database exists: `createdb allchat`
-- Run migrations: `make migrate-up`
-- Check `migrations/001_initial_schema.sql` for schema
+**Services ready for production**:
+- ✅ API Gateway, Twitch Listener, YouTube Listener, Kick Listener, Message Processor
 
-**Twitch Listener Errors**:
-- Verify Twitch bot OAuth token is valid (get from https://twitchapps.com/tmi/)
-- Check bot username matches token
-- Ensure channels exist and are spelled correctly
+**Production considerations**:
+- Request YouTube API quota increase (1,000,000 units/day)
+- Configure CORS for production domain
+- Set up monitoring (Prometheus + Grafana)
+- Enable TLS for all services
+- Implement rate limiting on API Gateway
 
-**YouTube Listener Errors**:
-- Verify YouTube API credentials are valid
-- **Quota exceeded**: Check `/quota/status` endpoint:
-  ```bash
-  kubectl exec -n allchat youtube-listener-<pod> -- \
-    wget -qO- http://localhost:8086/quota/status | jq .global
-  ```
-- Expected usage: 2,000-3,000 units/day (vs 10,000 limit)
-- Quota resets: Midnight Pacific Time (00:00 PST/PDT)
-- Check tracking drift: Should be <±5 units (database vs tracker)
-- Ensure video IDs are live streams with chat enabled
+**See**: [Deployment Guide](./docs/architecture/02-DEPLOYMENT.md) for Kubernetes manifests and configuration.
 
-## Resources
+---
 
-### External APIs & Documentation
-- **Twitch IRC OAuth**: https://twitchapps.com/tmi/
-- **Twitch Developer Console**: https://dev.twitch.tv/console/apps
-- **YouTube Live Chat API**: https://developers.google.com/youtube/v3/live/docs
+## External Resources
+
+- **Twitch OAuth**: https://twitchapps.com/tmi/
 - **YouTube API Console**: https://console.developers.google.com/
 - **7TV API**: https://7tv.io/docs
 - **BTTV API**: https://betterttv.com/developers
 - **FFZ API**: https://www.frankerfacez.com/developers
-- **React Docs**: https://react.dev
-- **Next.js Docs**: https://nextjs.org/docs
 
-### Project Documentation
-- **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** - Complete CSS reference for overlay customization
-- **[Theme Gallery](./docs/overlay-themes/README.md)** - Browse and create custom overlay themes
-- **[Getting Started Guide](./GETTING_STARTED.md)** - Navigate the codebase efficiently
+---
 
-## Additional Navigation Help
+## Need More Help?
 
-For comprehensive navigation guidance, file locations, and task-specific instructions, see:
-- **[GETTING_STARTED.md](./GETTING_STARTED.md)** - Complete LLM agent navigation guide
+1. **Start with**: [GETTING_STARTED.md](./GETTING_STARTED.md) - Complete navigation guide
+2. **Troubleshooting**: [Decision Tree](./docs/troubleshooting/decision-tree.md) - Triage common issues
+3. **Architecture**: [ADR Index](./docs/adr/README.md) - Understand design decisions
+4. **Service Details**: [services/*/README.md](./services/) - Service-specific documentation
+5. **Quick Tasks**: [docs/llm-guides/](./docs/llm-guides/) - Task-oriented quick references
 
-This guide includes:
-- Quick links to all important files
-- Service-specific navigation (what each service does and where to find code)
-- Common tasks and where to look
-- Architecture documentation map
-- Development workflows and commands
-- Known issues and technical debt references
-- the postgres is in the k8s cluster, ns all-chat deployed as a cnpg cluster
+**Database Note**: PostgreSQL is deployed in Kubernetes cluster (namespace: allchat) as a CNPG (CloudNativePG) cluster with automated failover and backups.
