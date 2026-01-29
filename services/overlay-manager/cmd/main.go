@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/overlay-manager/clients"
+	"github.com/caesar/all-chat/services/overlay-manager/creditroll"
 	"github.com/caesar/all-chat/services/overlay-manager/handlers"
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/caesar/all-chat/services/overlay-manager/youtube"
@@ -122,6 +123,8 @@ func main() {
 		log.Fatal("Failed to create event settings repository", zap.Error(err))
 	}
 
+	creditRollRepo := repository.NewCreditRollRepository(dbPool)
+
 	// Initialize handlers
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
@@ -131,6 +134,7 @@ func main() {
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)
 	eventSettingsHandler := handlers.NewEventSettingsHandler(eventSettingsRepo, overlayRepo)
+	creditRollHandler := creditroll.NewHandler(creditRollRepo, overlayRepo, redisClient, log)
 
 	// YouTube helper
 	youtubeAPIKey := getEnv("YOUTUBE_API_KEY", "")
@@ -172,6 +176,8 @@ func main() {
 	// Public config for OBS/browser sources
 	router.GET("/public/:id/config", configHandler.HandleGetPublicConfig)
 	router.GET("/public/:id/event-settings", eventSettingsHandler.HandleGetPublicEventSettings)
+	router.GET("/public/:id/credit-roll/config", creditRollHandler.HandleGetPublicConfig)
+	router.GET("/public/:id/credit-roll", creditRollHandler.HandleGetCreditRoll)
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
@@ -193,6 +199,8 @@ func main() {
 		protected.PUT("/:id/config", configHandler.HandleUpdateConfig)
 		protected.GET("/:id/event-settings", eventSettingsHandler.HandleGetEventSettings)
 		protected.PUT("/:id/event-settings", eventSettingsHandler.HandleUpdateEventSettings)
+		protected.GET("/:id/credit-roll/config", creditRollHandler.HandleGetConfig)
+		protected.PUT("/:id/credit-roll/config", creditRollHandler.HandleUpdateConfig)
 		protected.POST("/:id/mock-messages", mockHandler.HandleSendMockMessage)
 
 		// YouTube helper routes

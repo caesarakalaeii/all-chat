@@ -125,7 +125,7 @@ func main() {
 	)
 
 	// Create WebSocket components
-	wsManager := wsconn.NewManager(log, gatewayMetrics, redisClient)
+	wsManager := wsconn.NewManager(log, gatewayMetrics, redisClient, db)
 
 	// Create WebSocket health checker for state reconciliation
 	healthChecker := wsconn.NewHealthChecker(wsManager, redisClient, log, gatewayMetrics)

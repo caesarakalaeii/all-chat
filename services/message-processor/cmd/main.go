@@ -19,6 +19,7 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/normalizer"
 	"github.com/caesar/all-chat/services/message-processor/publisher"
 	"github.com/caesar/all-chat/services/message-processor/router"
+	"github.com/caesar/all-chat/services/message-processor/sessions"
 	"github.com/caesar/all-chat/services/message-processor/seventv"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
@@ -167,6 +168,9 @@ func main() {
 
 	// Create event filter to check if event types are enabled per overlay
 	eventFilter := filter.NewEventFilter(db, log)
+
+	// Create event capture for credit roll sessions
+	eventCapture := sessions.NewEventCapture(redisClient, log)
 
 	// Define message handler
 	messageHandler := func(ctx context.Context, rawMsg *models.RawChatMessage) error {
@@ -443,6 +447,18 @@ func main() {
 						// Continue even if cheermote enrichment fails
 					}
 					processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "cheermote_enrichment").Observe(time.Since(startCheer).Seconds())
+				}
+			}
+
+			// Capture event for credit roll if applicable
+			if unified.Event != nil {
+				if err := eventCapture.CaptureIfActive(ctx, unified); err != nil {
+					log.Warn("Failed to capture event for credit roll",
+						zap.String("overlay_id", overlay.OverlayID),
+						zap.String("event_type", unified.Event.Type),
+						zap.Error(err),
+					)
+					// Continue - event capture failure shouldn't break message delivery
 				}
 			}
 

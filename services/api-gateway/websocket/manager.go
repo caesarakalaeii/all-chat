@@ -8,7 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/api-gateway/sessions"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -38,10 +40,13 @@ type Manager struct {
 	connectionTTL     time.Duration
 	stopHeartbeat     chan struct{}
 	heartbeatWg       sync.WaitGroup
+
+	// Session management for credit roll
+	sessionManager *sessions.SessionManager
 }
 
 // NewManager creates a new WebSocket manager
-func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redis.Client) *Manager {
+func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redis.Client, db *pgxpool.Pool) *Manager {
 	// Get grace period from environment variable, default to 60 seconds
 	gracePeriod := 60 * time.Second
 	if envGrace := os.Getenv("WEBSOCKET_DISCONNECT_GRACE_PERIOD_SECONDS"); envGrace != "" {
@@ -71,6 +76,7 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		heartbeatInterval:     heartbeatInterval,
 		connectionTTL:         connectionTTL,
 		stopHeartbeat:         make(chan struct{}),
+		sessionManager:        sessions.NewSessionManager(redisClient, db, logger, gracePeriod),
 	}
 
 	// Start heartbeat goroutine to refresh connection TTLs
@@ -83,6 +89,15 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 func (m *Manager) AddConnection(ctx context.Context, conn *Connection) {
 	overlayID := conn.OverlayID()
 
+	// Ensure session exists (creates new or reactivates existing)
+	if err := m.sessionManager.EnsureSession(ctx, overlayID); err != nil {
+		m.logger.Error("Failed to ensure session",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+		// Continue - session management is non-critical for overlay display
+	}
+
 	// Cancel grace period timer if overlay was in grace period
 	m.gracePeriodMu.Lock()
 	if timer, exists := m.gracePeriodTimers[overlayID]; exists {
@@ -91,6 +106,13 @@ func (m *Manager) AddConnection(ctx context.Context, conn *Connection) {
 		m.logger.Info("Cancelled disconnect grace period (overlay reconnected)",
 			zap.String("overlay_id", overlayID),
 		)
+		// Update session state back to ACTIVE
+		if err := m.sessionManager.CancelGracePeriod(ctx, overlayID); err != nil {
+			m.logger.Error("Failed to cancel grace period",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		}
 	}
 	m.gracePeriodMu.Unlock()
 
@@ -231,6 +253,15 @@ func (m *Manager) startDisconnectGracePeriod(overlayID string) {
 	m.gracePeriodMu.Lock()
 	defer m.gracePeriodMu.Unlock()
 
+	// Update session state to ENDING
+	ctx := context.Background()
+	if err := m.sessionManager.StartGracePeriod(ctx, overlayID); err != nil {
+		m.logger.Error("Failed to start grace period",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+	}
+
 	// Cancel existing timer if present
 	if timer, exists := m.gracePeriodTimers[overlayID]; exists {
 		timer.Stop()
@@ -248,8 +279,17 @@ func (m *Manager) startDisconnectGracePeriod(overlayID string) {
 		m.mu.RUnlock()
 
 		if !hasPool {
-			// Still no connections, publish disconnected event
+			// Still no connections, end session and publish disconnected event
 			ctx := context.Background()
+
+			// End session
+			if err := m.sessionManager.EndSession(ctx, overlayID); err != nil {
+				m.logger.Error("Failed to end session",
+					zap.String("overlay_id", overlayID),
+					zap.Error(err),
+				)
+			}
+
 			m.publishConnectionEvent(ctx, overlayID, "disconnected")
 			m.logger.Info("Grace period expired, overlay still disconnected",
 				zap.String("overlay_id", overlayID),
