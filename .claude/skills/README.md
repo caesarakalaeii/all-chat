@@ -99,6 +99,28 @@ Custom Claude Code skills for automating documentation tasks.
 
 ---
 
+### /doc-migration
+
+**Purpose**: Create and apply database migrations with automation
+
+**Usage**: `/doc-migration <action> [migration-name]`
+
+**Actions**: create, apply local, apply k8s, rollback, verify
+
+**What it does**:
+- Creates migration files with correct numbering
+- Generates SQL based on user requirements
+- Applies migrations locally or to Kubernetes CNPG cluster
+- Grants permissions to application user
+- Verifies replication across pods
+- Creates rollback migrations
+
+**Output**: `migrations/<NNN>_<name>.sql`
+
+**→ Details**: [doc-migration.md](./doc-migration.md)
+
+---
+
 ## Benefits of Using Skills
 
 1. **Consistency**: All documentation follows standardized templates
@@ -118,6 +140,8 @@ Custom Claude Code skills for automating documentation tasks.
 | Users reporting common issue | `/doc-troubleshoot <category>` |
 | Made architectural decision | `/doc-adr <decision-title>` |
 | Documenting common procedure | `/doc-quickref <task-name>` |
+| Need to create database migration | `/doc-migration create <name>` |
+| Apply migrations to Kubernetes | `/doc-migration apply k8s` |
 
 ---
 
@@ -130,6 +154,7 @@ Custom Claude Code skills for automating documentation tasks.
 | /doc-troubleshoot | ✅ Complete | doc-troubleshoot.md |
 | /doc-adr | ✅ Complete | doc-adr.md |
 | /doc-quickref | ✅ Complete | doc-quickref.md |
+| /doc-migration | ✅ Complete | doc-migration.md |
 
 ---
 
@@ -166,7 +191,7 @@ To create a new documentation skill:
 
 ## Summary
 
-**Total Skills**: 5
+**Total Skills**: 6
 **Purpose**: Automate documentation generation and maintenance
 **Status**: All skills complete and ready to use
 
