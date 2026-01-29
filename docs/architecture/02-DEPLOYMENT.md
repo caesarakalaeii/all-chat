@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Last Updated:** 2025-11-11
-**Related Docs**: [Approved Architecture](./APPROVED_ARCHITECTURE.md), [Scaling & Performance](./SCALING_PERFORMANCE.md)
+**Related Docs**: [Architecture Overview](./00-OVERVIEW.md), [Scaling & Performance](./03-SCALING.md)
 
 ---
 
@@ -1464,9 +1464,9 @@ This document provides comprehensive Kubernetes deployment specifications for Al
 9. **Rolling Updates**: Zero-downtime deployments
 
 **Next Steps**:
-- [SCALING_PERFORMANCE.md](./SCALING_PERFORMANCE.md) - Detailed scaling strategies
-- [OBSERVABILITY_MONITORING.md](./OBSERVABILITY_MONITORING.md) - Monitoring and alerting setup
-- [SECURITY_ARCHITECTURE.md](./SECURITY_ARCHITECTURE.md) - Security hardening
+- [03-SCALING.md](./03-SCALING.md) - Detailed scaling strategies
+- [04-OBSERVABILITY.md](./04-OBSERVABILITY.md) - Monitoring and alerting setup
+- [05-SECURITY.md](./05-SECURITY.md) - Security hardening
 
 ---
 
