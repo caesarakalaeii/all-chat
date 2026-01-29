@@ -86,7 +86,7 @@ func main() {
 		Clusters: clusterList,
 	}
 
-	sourceManagerURL := getEnvOrDefault("SOURCE_MANAGER_URL", "http://source-manager:8088")
+	sourceManagerURL := getEnvOrDefault("SOURCE_MANAGER_URL", "http://source-controller:8088")
 	sourceManagerSecret := getEnvOrDefault("SOURCE_MANAGER_SECRET", "dev-service-secret")
 	var leaderCoord *sourcemanager.LeadershipCoordinator
 	if sourceManagerSecret == "" {
