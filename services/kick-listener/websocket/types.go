@@ -78,12 +78,12 @@ type KickBadge struct {
 
 // KickChannelInfo represents channel information from Kick API
 type KickChannelInfo struct {
-	ID       int              `json:"id"`
-	UserID   int              `json:"user_id"`
-	Slug     string           `json:"slug"`
-	IsLive   bool             `json:"is_live"`
-	Playback KickPlaybackInfo `json:"playback_url"`
-	Chatroom KickChatroomInfo `json:"chatroom"`
+	ID          int              `json:"id"`
+	UserID      int              `json:"user_id"`
+	Slug        string           `json:"slug"`
+	IsLive      bool             `json:"is_live"`
+	PlaybackURL json.RawMessage  `json:"playback_url"` // Can be string or object
+	Chatroom    KickChatroomInfo `json:"chatroom"`
 }
 
 // KickPlaybackInfo contains stream playback information

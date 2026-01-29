@@ -434,9 +434,21 @@ func (c *Client) sendControlEvent(event string) error {
 
 func (c *Client) handleConnectionEstablished(data json.RawMessage) {
 	var connData PusherConnectionEstablished
-	if err := json.Unmarshal(data, &connData); err != nil {
-		c.logger.Error("Failed to unmarshal connection data", zap.Error(err))
-		return
+
+	// Pusher may send data as a JSON-encoded string, so try to unmarshal twice
+	var dataStr string
+	if err := json.Unmarshal(data, &dataStr); err == nil {
+		// Data is a string, unmarshal the string as JSON
+		if err := json.Unmarshal([]byte(dataStr), &connData); err != nil {
+			c.logger.Error("Failed to unmarshal connection data from string", zap.Error(err))
+			return
+		}
+	} else {
+		// Data is already an object, unmarshal directly
+		if err := json.Unmarshal(data, &connData); err != nil {
+			c.logger.Error("Failed to unmarshal connection data", zap.Error(err))
+			return
+		}
 	}
 
 	c.connMu.Lock()
