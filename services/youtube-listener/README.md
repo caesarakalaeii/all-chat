@@ -45,7 +45,7 @@ Redis Streams (chat:raw)
 - **OAuth 2.0**: Per-user OAuth tokens stored in PostgreSQL
 - **Live Stream Detection**: Automatically detects when channels go live
 - **Adaptive Polling**: Uses API-recommended polling intervals (typically 2-5 seconds)
-- **Quota Management**: Tracks daily YouTube API quota (default 10,000 units/day)
+- **Quota Management**: Tracks daily YouTube API quota (default 1,009,000 units/day)
 - **Health Checks**: Liveness, readiness, and status endpoints
 - **Graceful Shutdown**: Stops all pollers cleanly
 
@@ -78,7 +78,7 @@ SOURCE_MANAGER_SECRET=dev-service-secret
 PORT=8086
 LOG_LEVEL=info
 POLLING_INTERVAL_MS=2000          # Default if API doesn't specify
-QUOTA_LIMIT_DAILY=10000           # Daily API quota limit
+QUOTA_LIMIT_DAILY=1009000         # Daily API quota limit
 ```
 
 ## Database Schema
@@ -272,7 +272,7 @@ GET /quota/channels/:channel_id
 
 ### Rate Limits
 
-- **Quota**: 10,000 units/day (default), can request increase to 1,000,000
+- **Quota**: 1,009,000 units/day (increased from default 10,000)
 - **Example**: 10,000 units ÷ 5 units/poll = ~2,000 API calls/day
 - With 2-second intervals: ~4 hours of continuous polling per day
 

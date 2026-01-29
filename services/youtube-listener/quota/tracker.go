@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	// DefaultDailyQuota is the default YouTube API quota (10,000 units/day)
-	DefaultDailyQuota = 10000
+	// DefaultDailyQuota is the default YouTube API quota (1,009,000 units/day)
+	DefaultDailyQuota = 1009000
 
 	// QuotaCostLiveChatMessages is the quota cost for liveChatMessages.streamList (5 units)
 	QuotaCostLiveChatMessages = 5

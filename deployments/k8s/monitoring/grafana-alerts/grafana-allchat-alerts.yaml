@@ -49,7 +49,7 @@ data:
             for: 5m
             annotations:
               summary: "YouTube API quota >95%, approaching exhaustion"
-              description: "YouTube quota is at {{ $values.A }}%. Critical threshold exceeded. Only {{ printf \"%.0f\" (sub 10000 (mul (div $values.A 100) 10000)) }} units remaining."
+              description: "YouTube quota is at {{ $values.A }}%. Critical threshold exceeded. Only {{ printf \"%.0f\" (sub 1009000 (mul (div $values.A 100) 1009000)) }} units remaining."
             labels:
               severity: critical
               team: allchat
