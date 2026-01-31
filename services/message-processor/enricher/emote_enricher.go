@@ -165,6 +165,11 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 				}
 			}
 		}
+		// Default to "global" for Twitch if no channel is specified
+		// This ensures Twitch global emotes (like PogChamp) work in mock messages
+		if strings.TrimSpace(channelIdentifier) == "" {
+			channelIdentifier = "global"
+		}
 	}
 	// Fetch emotes for the channel (with user context if available)
 	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID)
