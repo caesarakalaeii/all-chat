@@ -10,8 +10,9 @@ The Emote Service fetches and caches third-party emotes from multiple providers 
 
 ### Features
 
-- ✅ **Multi-Provider Support**: 7TV, BTTV (BetterTTV), FFZ (FrankerFaceZ)
-- ✅ **Redis Caching**: 1-hour TTL with automatic cache-aside pattern
+- ✅ **Multi-Provider Support**: Twitch, 7TV, BTTV (BetterTTV), FFZ (FrankerFaceZ)
+- ✅ **Twitch Global Emotes**: Cross-platform support for Twitch global emotes (PogChamp, Kappa, etc.)
+- ✅ **Redis Caching**: 1-hour TTL for channel emotes, 30-day TTL for Twitch global emotes
 - ✅ **Graceful Degradation**: Continues if one provider fails
 - ✅ **Health Checks**: Kubernetes-ready liveness/readiness probes
 - ✅ **Structured Logging**: JSON logs with request/response details
@@ -22,12 +23,23 @@ The Emote Service fetches and caches third-party emotes from multiple providers 
 
 ### Emote Endpoints
 
-#### GET `/emotes/channel/:channel`
-**Description**: Fetch all emotes for a channel from all providers (aggregated)
+#### GET `/emotes/channel/:channel?platform=<platform>&user_id=<user_id>`
+**Description**: Fetch all emotes for a channel from all providers (aggregated). For non-Twitch platforms (YouTube, Kick, TikTok), automatically includes Twitch global emotes to enable cross-platform emote usage.
+
+**Query Parameters**:
+- `platform` (optional): Platform name (twitch, youtube, kick, tiktok). When set to non-Twitch platform, Twitch global emotes are included.
+- `user_id` (optional): User ID for user-specific emotes (currently 7TV only).
 
 **Example**:
 ```bash
+# Twitch channel (standard emotes)
 curl http://localhost:8083/emotes/channel/xqc
+
+# YouTube channel (includes Twitch global emotes like Kappa, PogChamp)
+curl "http://localhost:8083/emotes/channel/somechannel?platform=youtube"
+
+# With user-specific emotes
+curl "http://localhost:8083/emotes/channel/xqc?platform=twitch&user_id=123456"
 ```
 
 **Response**:
@@ -145,9 +157,46 @@ curl \
 
 ### Cache Configuration
 
-- **TTL**: 1 hour (emotes don't change frequently)
-- **Key Format**: `emotes:{provider}:{channel}`
+- **TTL**:
+  - Channel emotes: 1 hour (emotes change occasionally)
+  - Twitch global emotes: 30 days (rarely change, preloaded on startup)
+- **Key Format**: `emotes:v2:{provider}:{channel}`
 - **Strategy**: Cache-aside (check cache first, fetch on miss, then store)
+- **Preloading**: Twitch global emotes are fetched and cached on service startup
+
+## Cross-Platform Twitch Emote Support
+
+The emote service enables users on **YouTube, Kick, and TikTok** to use Twitch's global emotes (e.g., `Kappa`, `PogChamp`, `LUL`) in their chat messages. This feature provides a familiar emote experience across all streaming platforms.
+
+### How It Works
+
+1. **Preloading**: On startup, the service fetches all Twitch global emotes and caches them for 30 days.
+2. **Platform Detection**: When the message processor requests emotes with `?platform=youtube` (or kick/tiktok), the service automatically includes Twitch global emotes.
+3. **No Duplication**: For Twitch channels, global emotes are included only once (not fetched twice).
+4. **Channel Emotes Excluded**: Only Twitch **global** emotes are included (not channel-specific or subscription emotes, as those require paid subscriptions).
+
+### Example Flow
+
+```
+YouTube Viewer: "That was amazing Kappa PogChamp"
+                        ↓
+Message Processor: GET /emotes/channel/youtubechannel?platform=youtube
+                        ↓
+Emote Service Returns:
+  - 7TV emotes (for youtubechannel)
+  - BTTV emotes (for youtubechannel)
+  - FFZ emotes (for youtubechannel)
+  - Twitch global emotes (Kappa, PogChamp, etc.)
+                        ↓
+Message displayed with all emote images rendered
+```
+
+### Benefits
+
+- **Unified Experience**: Users can use familiar Twitch emotes on any platform
+- **No API Overhead**: Twitch global emotes cached for 30 days (only ~300 emotes)
+- **Automatic Updates**: Cache refreshes when emotes expire or service restarts
+- **Fair Usage**: Only free global emotes are included (respects Twitch's paid subscription model)
 
 ## Development
 

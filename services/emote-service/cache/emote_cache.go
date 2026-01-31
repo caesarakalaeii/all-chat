@@ -27,19 +27,21 @@ type RedisClient interface {
 
 // EmoteCache handles caching of emotes in Redis
 type EmoteCache struct {
-	client RedisClient
-	logger *zap.Logger
-	ttl    time.Duration
-	keyNS  string
+	client    RedisClient
+	logger    *zap.Logger
+	ttl       time.Duration
+	globalTTL time.Duration
+	keyNS     string
 }
 
 // NewEmoteCache creates a new emote cache
 func NewEmoteCache(client RedisClient, logger *zap.Logger, ttl time.Duration) *EmoteCache {
 	return &EmoteCache{
-		client: client,
-		logger: logger,
-		ttl:    ttl,
-		keyNS:  cacheNamespace,
+		client:    client,
+		logger:    logger,
+		ttl:       ttl,
+		globalTTL: 30 * 24 * time.Hour, // Global Twitch emotes cached for 30 days
+		keyNS:     cacheNamespace,
 	}
 }
 
@@ -79,12 +81,18 @@ func (c *EmoteCache) Set(ctx context.Context, provider, channel string, emotes [
 		return fmt.Errorf("failed to marshal emotes: %w", err)
 	}
 
+	// Use longer TTL for Twitch global emotes
+	ttl := c.ttl
+	if provider == "twitch" && channel == "global" {
+		ttl = c.globalTTL
+	}
+
 	c.logger.Debug("Setting emotes in cache",
 		zap.String("key", key),
 		zap.Int("count", len(emotes)),
-		zap.Duration("ttl", c.ttl))
+		zap.Duration("ttl", ttl))
 
-	if err := c.client.Set(ctx, key, data, c.ttl).Err(); err != nil {
+	if err := c.client.Set(ctx, key, data, ttl).Err(); err != nil {
 		return fmt.Errorf("failed to set cache: %w", err)
 	}
 

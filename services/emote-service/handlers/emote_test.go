@@ -325,3 +325,152 @@ func TestEmoteHandler_GetProviderEmotes(t *testing.T) {
 		})
 	}
 }
+
+func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		channel        string
+		platform       string
+		setupClients   func() map[string]EmoteClient
+		setupCache     func() EmoteCache
+		wantStatusCode int
+		wantEmoteCount int
+		hasTwitchGlobal bool
+	}{
+		{
+			name:     "YouTube channel includes Twitch global emotes",
+			channel:  "somechannel",
+			platform: "youtube",
+			setupClients: func() map[string]EmoteClient {
+				return map[string]EmoteClient{
+					"twitch": &mockEmoteClient{
+						emotes: []models.Emote{
+							{Code: "Kappa", URL: "https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0", Provider: "twitch", Channel: "global"},
+							{Code: "PogChamp", URL: "https://static-cdn.jtvnw.net/emoticons/v2/305954156/default/dark/2.0", Provider: "twitch", Channel: "global"},
+						},
+						provider: "twitch",
+					},
+					"7tv": &mockEmoteClient{
+						emotes: []models.Emote{
+							{Code: "OMEGALUL", URL: "https://7tv.app/1", Provider: "7tv", Channel: "somechannel"},
+						},
+						provider: "7tv",
+					},
+				}
+			},
+			setupCache:     func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode: http.StatusOK,
+			wantEmoteCount: 5, // 2 Twitch global + 2 regular Twitch (from mock) + 1 7TV = 5 total
+			hasTwitchGlobal: true,
+		},
+		{
+			name:     "Kick channel includes Twitch global emotes",
+			channel:  "kickstreamer",
+			platform: "kick",
+			setupClients: func() map[string]EmoteClient {
+				return map[string]EmoteClient{
+					"twitch": &mockEmoteClient{
+						emotes: []models.Emote{
+							{Code: "Kappa", URL: "https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0", Provider: "twitch", Channel: "global"},
+						},
+						provider: "twitch",
+					},
+					"bttv": &mockEmoteClient{
+						emotes: []models.Emote{
+							{Code: "xqcL", URL: "https://bttv.net/1", Provider: "bttv", Channel: "kickstreamer"},
+						},
+						provider: "bttv",
+					},
+				}
+			},
+			setupCache:     func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode: http.StatusOK,
+			wantEmoteCount: 3, // 1 Twitch global + 1 regular Twitch + 1 BTTV = 3 total
+			hasTwitchGlobal: true,
+		},
+		{
+			name:     "Twitch channel does NOT duplicate global emotes",
+			channel:  "twitchstreamer",
+			platform: "twitch",
+			setupClients: func() map[string]EmoteClient {
+				return map[string]EmoteClient{
+					"twitch": &mockEmoteClient{
+						emotes: []models.Emote{
+							{Code: "Kappa", URL: "https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0", Provider: "twitch", Channel: "global"},
+						},
+						provider: "twitch",
+					},
+					"7tv": &mockEmoteClient{
+						emotes: []models.Emote{
+							{Code: "OMEGALUL", URL: "https://7tv.app/1", Provider: "7tv", Channel: "twitchstreamer"},
+						},
+						provider: "7tv",
+					},
+				}
+			},
+			setupCache:     func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode: http.StatusOK,
+			wantEmoteCount: 2, // 1 Twitch + 1 7TV (no duplicate fetch of global)
+			hasTwitchGlobal: false,
+		},
+		{
+			name:     "No platform specified - no Twitch global added",
+			channel:  "somechannel",
+			platform: "",
+			setupClients: func() map[string]EmoteClient {
+				return map[string]EmoteClient{
+					"twitch": &mockEmoteClient{
+						emotes: []models.Emote{
+							{Code: "Kappa", URL: "https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0", Provider: "twitch", Channel: "somechannel"},
+						},
+						provider: "twitch",
+					},
+				}
+			},
+			setupCache:     func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode: http.StatusOK,
+			wantEmoteCount: 1, // Just regular Twitch emotes
+			hasTwitchGlobal: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := zaptest.NewLogger(t)
+			handler := NewEmoteHandler(tt.setupClients(), tt.setupCache(), logger)
+
+			router := gin.New()
+			router.GET("/emotes/channel/:channel", handler.GetChannelEmotes)
+
+			url := "/emotes/channel/" + tt.channel
+			if tt.platform != "" {
+				url += "?platform=" + tt.platform
+			}
+			req, _ := http.NewRequest("GET", url, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.wantStatusCode, w.Code)
+
+			var resp models.EmoteResponse
+			err := json.Unmarshal(w.Body.Bytes(), &resp)
+			require.NoError(t, err)
+			assert.Equal(t, tt.channel, resp.Channel)
+			assert.Len(t, resp.Emotes, tt.wantEmoteCount)
+
+			if tt.hasTwitchGlobal {
+				// Verify at least one Twitch emote with channel="global" is present
+				hasTwitchGlobal := false
+				for _, emote := range resp.Emotes {
+					if emote.Provider == "twitch" && emote.Channel == "global" {
+						hasTwitchGlobal = true
+						break
+					}
+				}
+				assert.True(t, hasTwitchGlobal, "Expected Twitch global emotes to be present")
+			}
+		})
+	}
+}
