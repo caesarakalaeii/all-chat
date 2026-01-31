@@ -45,6 +45,7 @@ func (r *EventSettingsRepository) GetByOverlayID(ctx context.Context, overlayID 
 		       enable_youtube_member_milestones, enable_youtube_member_gifts,
 		       enable_kick_subs, enable_kick_gifts,
 		       enable_tiktok_likes, enable_tiktok_gifts, enable_tiktok_follows, enable_tiktok_shares,
+		       enable_token_warnings,
 		       tiktok_like_aggregation_window_seconds, event_display_duration_multiplier,
 		       created_at, updated_at
 		FROM overlay_event_settings
@@ -76,10 +77,11 @@ func (r *EventSettingsRepository) Update(ctx context.Context, settings *models.E
 		    enable_tiktok_gifts = $15,
 		    enable_tiktok_follows = $16,
 		    enable_tiktok_shares = $17,
-		    tiktok_like_aggregation_window_seconds = $18,
-		    event_display_duration_multiplier = $19,
+		    enable_token_warnings = $18,
+		    tiktok_like_aggregation_window_seconds = $19,
+		    event_display_duration_multiplier = $20,
 		    updated_at = NOW()
-		WHERE overlay_id = $20
+		WHERE overlay_id = $21
 		RETURNING id, overlay_id,
 		          enable_twitch_subs, enable_twitch_resubs, enable_twitch_gift_subs,
 		          enable_twitch_bits, enable_twitch_raids, enable_twitch_channel_points,
@@ -87,6 +89,7 @@ func (r *EventSettingsRepository) Update(ctx context.Context, settings *models.E
 		          enable_youtube_member_milestones, enable_youtube_member_gifts,
 		          enable_kick_subs, enable_kick_gifts,
 		          enable_tiktok_likes, enable_tiktok_gifts, enable_tiktok_follows, enable_tiktok_shares,
+		          enable_token_warnings,
 		          tiktok_like_aggregation_window_seconds, event_display_duration_multiplier,
 		          created_at, updated_at
 	`
@@ -109,6 +112,7 @@ func (r *EventSettingsRepository) Update(ctx context.Context, settings *models.E
 		settings.EnableTikTokGifts,
 		settings.EnableTikTokFollows,
 		settings.EnableTikTokShares,
+		settings.EnableTokenWarnings,
 		settings.TikTokLikeAggregationWindowSeconds,
 		settings.EventDisplayDurationMultiplier,
 		settings.OverlayID,
@@ -147,6 +151,7 @@ func scanEventSettings(row pgx.Row) (*models.EventSettings, error) {
 		&settings.EnableTikTokGifts,
 		&settings.EnableTikTokFollows,
 		&settings.EnableTikTokShares,
+		&settings.EnableTokenWarnings,
 		&settings.TikTokLikeAggregationWindowSeconds,
 		&settings.EventDisplayDurationMultiplier,
 		&settings.CreatedAt,
