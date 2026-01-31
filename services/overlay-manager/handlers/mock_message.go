@@ -112,6 +112,13 @@ func (h *MockMessageHandler) resolveSource(c *gin.Context, overlayID, requestedP
 	channelID := strings.TrimSpace(requestedChannelID)
 	channelName := strings.TrimSpace(requestedChannelName)
 
+	// Early return for explicit requests - don't resolve from sources
+	// This prevents Twitch mock messages from using YouTube/other platform channels
+	if platform != "" && channelID == "" {
+		// Platform specified but no channel - use fallback (which gives "global" for Twitch)
+		return fallbackTarget(platform, channelID, channelName)
+	}
+
 	sources, err := h.sourceRepo.ListByOverlayID(c.Request.Context(), overlayID)
 	if err != nil {
 		return fallbackTarget(platform, channelID, channelName)
