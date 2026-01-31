@@ -43,7 +43,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'twitch' | 'youtube' | 'kick' | 'tiktok' | 'global'>('twitch');
+  const [activeTab, setActiveTab] = useState<'global' | 'twitch' | 'youtube' | 'kick' | 'tiktok'>('global');
   const router = useRouter();
 
   // Load event settings
@@ -181,7 +181,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
 
           {/* Platform Tabs */}
           <div className="flex space-x-4 border-b border-gray-700 mb-6">
-            {(['twitch', 'youtube', 'kick', 'tiktok', 'global'] as const).map((platform) => (
+            {(['global', 'twitch', 'youtube', 'kick', 'tiktok'] as const).map((platform) => (
               <button
                 key={platform}
                 onClick={() => setActiveTab(platform)}
