@@ -43,7 +43,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'twitch' | 'youtube' | 'kick' | 'tiktok'>('twitch');
+  const [activeTab, setActiveTab] = useState<'twitch' | 'youtube' | 'kick' | 'tiktok' | 'global'>('twitch');
   const router = useRouter();
 
   // Load event settings
@@ -181,7 +181,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
 
           {/* Platform Tabs */}
           <div className="flex space-x-4 border-b border-gray-700 mb-6">
-            {(['twitch', 'youtube', 'kick', 'tiktok'] as const).map((platform) => (
+            {(['twitch', 'youtube', 'kick', 'tiktok', 'global'] as const).map((platform) => (
               <button
                 key={platform}
                 onClick={() => setActiveTab(platform)}
@@ -322,9 +322,14 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
                 value={settings.enable_tiktok_shares}
                 onChange={(v) => updateSetting('enable_tiktok_shares', v)}
               />
+            </div>
+          )}
 
+          {/* Global Settings Tab */}
+          {activeTab === 'global' && (
+            <div className="space-y-0">
               {/* System Events */}
-              <div className="pt-4 mt-4 border-t border-gray-700">
+              <div className="mb-6">
                 <h3 className="font-medium text-white mb-4">System Events</h3>
                 <EventToggle
                   label="Token Warnings"
@@ -334,9 +339,33 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
                 />
               </div>
 
-              {/* Advanced Settings */}
+              {/* Display Settings */}
               <div className="pt-4 mt-4 border-t border-gray-700">
-                <h3 className="font-medium text-white mb-4">Advanced Settings</h3>
+                <h3 className="font-medium text-white mb-4">Display Settings</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Event Display Duration Multiplier
+                    </label>
+                    <p className="text-xs text-gray-400 mb-2">
+                      Multiply all event display durations by this factor (0.5 = half time, 2.0 = double time)
+                    </p>
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="5"
+                      step="0.1"
+                      value={settings.event_display_duration_multiplier}
+                      onChange={(e) => updateSetting('event_display_duration_multiplier', parseFloat(e.target.value))}
+                      className="bg-gray-700 border border-gray-600 text-white rounded px-3 py-2 w-32"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* TikTok Advanced Settings */}
+              <div className="pt-4 mt-4 border-t border-gray-700">
+                <h3 className="font-medium text-white mb-4">TikTok Advanced Settings</h3>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -358,30 +387,6 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
               </div>
             </div>
           )}
-
-          {/* Global Settings */}
-          <div className="mt-8 pt-6 border-t border-gray-700">
-            <h3 className="font-medium text-white mb-4">Global Settings</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Event Display Duration Multiplier
-                </label>
-                <p className="text-xs text-gray-400 mb-2">
-                  Multiply all event display durations by this factor (0.5 = half time, 2.0 = double time)
-                </p>
-                <input
-                  type="number"
-                  min="0.1"
-                  max="5"
-                  step="0.1"
-                  value={settings.event_display_duration_multiplier}
-                  onChange={(e) => updateSetting('event_display_duration_multiplier', parseFloat(e.target.value))}
-                  className="bg-gray-700 border border-gray-600 text-white rounded px-3 py-2 w-32"
-                />
-              </div>
-            </div>
-          </div>
 
           {/* Save Button */}
           <div className="mt-8 flex gap-4">
