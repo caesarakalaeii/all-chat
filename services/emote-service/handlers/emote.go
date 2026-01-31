@@ -57,6 +57,7 @@ func NewEmoteHandler(clients map[string]EmoteClient, cache EmoteCache, logger *z
 // GetChannelEmotes handles GET /emotes/channel/:channel?user_id=123&platform=twitch
 // Returns aggregated emotes from all providers
 // If user_id and platform are provided, includes user-specific emotes from 7TV
+// For non-Twitch platforms, includes Twitch global emotes
 func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 	channel := c.Param("channel")
 	if channel == "" {
@@ -83,7 +84,7 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 		provider string
 	}
 
-	results := make(chan providerResult, len(h.clients))
+	results := make(chan providerResult, len(h.clients)+1) // +1 for potential Twitch global
 	var wg sync.WaitGroup
 
 	for provider, client := range h.clients {
@@ -103,6 +104,28 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 			case <-ctx.Done():
 			}
 		}(provider, client)
+	}
+
+	// For non-Twitch platforms, fetch Twitch global emotes
+	if platform != "" && platform != "twitch" {
+		if twitchClient, ok := h.clients["twitch"]; ok {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				providerCtx := ctx
+				cancel := func() {}
+				if h.fetchTimeout > 0 {
+					providerCtx, cancel = context.WithTimeout(ctx, h.fetchTimeout)
+				}
+				defer cancel()
+
+				emotes, err := h.fetchWithCache(providerCtx, twitchClient, "twitch", "global")
+				select {
+				case results <- providerResult{emotes: emotes, err: err, provider: "twitch-global"}:
+				case <-ctx.Done():
+				}
+			}()
+		}
 	}
 
 	go func() {
@@ -130,6 +153,7 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 	h.logger.Info("Fetched emotes for channel",
 		zap.String("channel", channel),
 		zap.String("user_id", userID),
+		zap.String("platform", platform),
 		zap.Int("total_count", len(allEmotes)))
 
 	c.JSON(http.StatusOK, response)

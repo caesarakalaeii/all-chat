@@ -28,14 +28,16 @@ type twitchChatEmote struct {
 }
 
 type TwitchEmoteClient struct {
-	helix  *TwitchClient
-	logger *zap.Logger
+	helix       *TwitchClient
+	logger      *zap.Logger
+	globalCache map[string]models.Emote // In-memory cache of global emote codes
 }
 
 func NewTwitchEmoteClient(helix *TwitchClient, logger *zap.Logger) *TwitchEmoteClient {
 	return &TwitchEmoteClient{
-		helix:  helix,
-		logger: logger.With(zap.String("provider", "twitch")),
+		helix:       helix,
+		logger:      logger.With(zap.String("provider", "twitch")),
+		globalCache: make(map[string]models.Emote),
 	}
 }
 
@@ -80,7 +82,16 @@ func (c *TwitchEmoteClient) fetchGlobal(ctx context.Context) ([]models.Emote, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch global emotes: %w", err)
 	}
-	return convertTwitchEmotes(resp, "global"), nil
+	emotes := convertTwitchEmotes(resp, "global")
+
+	// Update in-memory cache with global emote codes
+	for _, emote := range emotes {
+		c.globalCache[emote.Code] = emote
+	}
+
+	c.logger.Info("Updated global emote cache", zap.Int("count", len(emotes)))
+
+	return emotes, nil
 }
 
 func (c *TwitchEmoteClient) fetchChannel(ctx context.Context, broadcasterID, channelName string) ([]models.Emote, error) {
@@ -214,4 +225,16 @@ func mergeEmoteSets(global, channel []models.Emote) []models.Emote {
 	})
 
 	return merged
+}
+
+// IsGlobalEmote checks if an emote code is a known Twitch global emote
+func (c *TwitchEmoteClient) IsGlobalEmote(code string) bool {
+	_, exists := c.globalCache[code]
+	return exists
+}
+
+// GetGlobalEmote retrieves a global emote by code from the in-memory cache
+func (c *TwitchEmoteClient) GetGlobalEmote(code string) (models.Emote, bool) {
+	emote, exists := c.globalCache[code]
+	return emote, exists
 }

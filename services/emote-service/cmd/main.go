@@ -73,11 +73,28 @@ func main() {
 	twitchClient := clients.NewTwitchClient(twitchClientID, twitchClientSecret, log)
 
 	// Initialize emote clients
+	twitchEmoteClient := clients.NewTwitchEmoteClient(twitchClient, log)
 	emoteClients := map[string]handlers.EmoteClient{
-		"twitch": clients.NewTwitchEmoteClient(twitchClient, log),
+		"twitch": twitchEmoteClient,
 		"7tv":    clients.NewSevenTVClient(log, twitchClient),
 		"bttv":   clients.NewBTTVClient(log),
 		"ffz":    clients.NewFFZClient(log),
+	}
+
+	// Preload Twitch global emotes on startup
+	log.Info("Preloading Twitch global emotes")
+	preloadCtx, preloadCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	globalEmotes, err := twitchEmoteClient.FetchEmotes(preloadCtx, "global")
+	preloadCancel()
+	if err != nil {
+		log.Warn("Failed to preload Twitch global emotes, will retry on first request", zap.Error(err))
+	} else {
+		// Cache global emotes
+		if err := emoteCache.Set(context.Background(), "twitch", "global", globalEmotes); err != nil {
+			log.Warn("Failed to cache Twitch global emotes", zap.Error(err))
+		} else {
+			log.Info("Preloaded and cached Twitch global emotes", zap.Int("count", len(globalEmotes)))
+		}
 	}
 
 	// Initialize cheermote client
