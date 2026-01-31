@@ -322,6 +322,29 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
                 value={settings.enable_tiktok_shares}
                 onChange={(v) => updateSetting('enable_tiktok_shares', v)}
               />
+
+              {/* Advanced Settings */}
+              <div className="pt-4 mt-4 border-t border-gray-700">
+                <h3 className="font-medium text-white mb-4">Advanced Settings</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Like Aggregation Window (seconds)
+                    </label>
+                    <p className="text-xs text-gray-400 mb-2">
+                      Likes are collected and updated in this time window to prevent spam
+                    </p>
+                    <input
+                      type="number"
+                      min="10"
+                      max="60"
+                      value={settings.tiktok_like_aggregation_window_seconds}
+                      onChange={(e) => updateSetting('tiktok_like_aggregation_window_seconds', parseInt(e.target.value))}
+                      className="bg-gray-700 border border-gray-600 text-white rounded px-3 py-2 w-32"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -357,29 +380,6 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
                       step="0.1"
                       value={settings.event_display_duration_multiplier}
                       onChange={(e) => updateSetting('event_display_duration_multiplier', parseFloat(e.target.value))}
-                      className="bg-gray-700 border border-gray-600 text-white rounded px-3 py-2 w-32"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* TikTok Advanced Settings */}
-              <div className="pt-4 mt-4 border-t border-gray-700">
-                <h3 className="font-medium text-white mb-4">TikTok Advanced Settings</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Like Aggregation Window (seconds)
-                    </label>
-                    <p className="text-xs text-gray-400 mb-2">
-                      Likes are collected and updated in this time window to prevent spam
-                    </p>
-                    <input
-                      type="number"
-                      min="10"
-                      max="60"
-                      value={settings.tiktok_like_aggregation_window_seconds}
-                      onChange={(e) => updateSetting('tiktok_like_aggregation_window_seconds', parseInt(e.target.value))}
                       className="bg-gray-700 border border-gray-600 text-white rounded px-3 py-2 w-32"
                     />
                   </div>
