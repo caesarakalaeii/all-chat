@@ -131,7 +131,9 @@ func (h *MockMessageHandler) resolveSource(c *gin.Context, overlayID, requestedP
 		}
 	}
 
-	if preferred == nil && len(sources) > 0 {
+	// If no explicit match and no platform specified, use first source
+	// But ONLY use its channel if a channel was requested
+	if preferred == nil && len(sources) > 0 && platform == "" {
 		preferred = sources[0]
 	}
 
@@ -139,10 +141,10 @@ func (h *MockMessageHandler) resolveSource(c *gin.Context, overlayID, requestedP
 		if platform == "" {
 			platform = preferred.Platform
 		}
-		if channelID == "" {
+		// Only use the preferred source's channel if one wasn't explicitly requested
+		// This prevents Twitch mock messages from incorrectly using YouTube/Kick channel IDs
+		if channelID == "" && strings.EqualFold(platform, preferred.Platform) {
 			channelID = preferred.ChannelID
-		}
-		if channelName == "" {
 			channelName = preferred.ChannelName
 		}
 	}
