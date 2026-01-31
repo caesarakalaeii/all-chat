@@ -497,6 +497,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(gin.Logger())
 
 	// Add tracing middleware if enabled
 	if tracingEnabled {
