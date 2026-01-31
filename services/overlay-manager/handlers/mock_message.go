@@ -7,19 +7,22 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/clients"
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type MockMessageHandler struct {
 	overlayRepo OverlayRepository
 	sourceRepo  SourceRepository
 	mpClient    *clients.MessageProcessorClient
+	logger      *zap.Logger
 }
 
-func NewMockMessageHandler(overlayRepo OverlayRepository, sourceRepo SourceRepository, mpClient *clients.MessageProcessorClient) *MockMessageHandler {
+func NewMockMessageHandler(overlayRepo OverlayRepository, sourceRepo SourceRepository, mpClient *clients.MessageProcessorClient, logger *zap.Logger) *MockMessageHandler {
 	return &MockMessageHandler{
 		overlayRepo: overlayRepo,
 		sourceRepo:  sourceRepo,
 		mpClient:    mpClient,
+		logger:      logger,
 	}
 }
 
@@ -112,14 +115,26 @@ func (h *MockMessageHandler) resolveSource(c *gin.Context, overlayID, requestedP
 	channelID := strings.TrimSpace(requestedChannelID)
 	channelName := strings.TrimSpace(requestedChannelName)
 
-	fmt.Printf("[MOCK_DEBUG] resolveSource input: platform='%s', channelID='%s', channelName='%s'\n", platform, channelID, channelName)
+	if h.logger != nil {
+		h.logger.Info("resolveSource input",
+			zap.String("platform", platform),
+			zap.String("channelID", channelID),
+			zap.String("channelName", channelName),
+		)
+	}
 
 	// Early return for explicit requests - don't resolve from sources
 	// This prevents Twitch mock messages from using YouTube/other platform channels
 	if platform != "" && channelID == "" {
 		// Platform specified but no channel - use fallback (which gives "global" for Twitch)
 		resultPlatform, resultChannel, resultName := fallbackTarget(platform, channelID, channelName)
-		fmt.Printf("[MOCK_DEBUG] Early return - result: platform='%s', channelID='%s', channelName='%s'\n", resultPlatform, resultChannel, resultName)
+		if h.logger != nil {
+			h.logger.Info("Using fallback target (early return)",
+				zap.String("platform", resultPlatform),
+				zap.String("channelID", resultChannel),
+				zap.String("channelName", resultName),
+			)
+		}
 		return resultPlatform, resultChannel, resultName
 	}
 
