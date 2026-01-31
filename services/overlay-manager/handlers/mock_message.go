@@ -155,7 +155,13 @@ func fallbackTarget(platform, channelID, channelName string) (string, string, st
 		platform = "twitch"
 	}
 	if channelID == "" {
-		channelID = "mock-channel"
+		// For Twitch, use "global" to enable Twitch global emotes (PogChamp, Kappa, etc.)
+		// For other platforms, use a generic mock channel
+		if platform == "twitch" {
+			channelID = "global"
+		} else {
+			channelID = "mock-channel"
+		}
 	}
 	if channelName == "" {
 		channelName = channelID
