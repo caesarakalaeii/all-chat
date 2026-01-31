@@ -130,7 +130,7 @@ func main() {
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo)
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log)
-	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient)
+	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient, log)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)
 	eventSettingsHandler := handlers.NewEventSettingsHandler(eventSettingsRepo, overlayRepo)
