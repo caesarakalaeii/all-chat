@@ -593,9 +593,17 @@ func main() {
 			}
 		}
 
+		log.Info("Enriching mock message",
+			zap.String("channel_id", msg.ChannelID),
+			zap.String("platform", msg.Platform),
+			zap.String("text", msg.Message.Text),
+		)
 		if err := emoteEnricher.Enrich(ctx, msg); err != nil {
 			log.Warn("Failed to enrich mock message", zap.Error(err))
 		}
+		log.Info("Mock message enriched",
+			zap.Int("emote_count", len(msg.Message.Emotes)),
+		)
 
 		// Enrich cheermotes for Twitch mock messages
 		if msg.Platform == "twitch" {
