@@ -304,6 +304,7 @@ func main() {
 
 		// Overlay config for public overlays
 		publicAPI.GET("/overlays/public/:id/config", proxyHandler.ForwardRequest)
+		publicAPI.GET("/overlays/public/:id/creditroll", proxyHandler.ForwardRequest)
 	}
 
 	// Twitch badge proxy endpoints (public, but not part of /api/v1 service registry)
@@ -339,6 +340,9 @@ func main() {
 		protectedAPI.DELETE("/overlays/:id/sources/:source_id", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/event-settings", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/overlays/:id/event-settings", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/overlays/:id/creditroll", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/creditroll", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/overlays/:id/credit-roll", proxyHandler.ForwardRequest)
 
 		// YouTube resolver routes (protected)
 		protectedAPI.POST("/youtube/resolve", proxyHandler.ForwardRequest)
