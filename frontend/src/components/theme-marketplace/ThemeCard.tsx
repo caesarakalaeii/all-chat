@@ -58,7 +58,7 @@ export default function ThemeCard({
     >
       {/* Preview */}
       {themeType === 'creditroll' ? (
-        <CreditRollThemePreview css={theme.css} />
+        <CreditRollThemePreview css={theme.css} themeId={theme.id} />
       ) : (
         <ThemePreview css={theme.css} messages={messages} themeId={theme.id} />
       )}

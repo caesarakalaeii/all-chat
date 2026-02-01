@@ -7,8 +7,11 @@
 
 'use client';
 
+import { useMemo } from 'react';
+
 interface CreditRollThemePreviewProps {
   css: string;
+  themeId?: string;
 }
 
 const SAMPLE_LEADERBOARD_DATA = [
@@ -35,37 +38,69 @@ const SAMPLE_LEADERBOARD_DATA = [
   },
 ];
 
-export default function CreditRollThemePreview({ css }: CreditRollThemePreviewProps) {
-  // Scope CSS to this preview only
-  const scopedCss = css
-    .replace(/body\s*{/g, '.credit-roll-preview-body {')
-    .replace(/\bbody\b/g, '.credit-roll-preview-body')
-    .split('\n')
-    .map(line => {
-      // Skip @import, @keyframes, and already scoped selectors
-      if (line.trim().startsWith('@import') ||
-          line.trim().startsWith('@keyframes') ||
-          line.includes('.credit-roll-preview')) {
-        return line;
-      }
-      // Scope other selectors to .credit-roll-preview-root
-      if (line.includes('{') && !line.trim().startsWith('@')) {
-        const parts = line.split('{');
-        if (parts[0].trim()) {
-          return `.credit-roll-preview-root ${parts[0]} {${parts[1] || ''}`;
+export default function CreditRollThemePreview({ css, themeId = 'preview' }: CreditRollThemePreviewProps) {
+  // Create unique scope ID for this preview
+  const scopeId = `credit-roll-preview-${themeId.replace(/[^a-z0-9]/gi, '-')}`;
+
+  // Scope CSS using Shadow DOM approach - wrap all selectors with unique ID
+  const scopedCss = useMemo(() => {
+    return css
+      .split('\n')
+      .map(line => {
+        const trimmed = line.trim();
+
+        // Keep @import and @font-face as-is
+        if (trimmed.startsWith('@import') || trimmed.startsWith('@font-face')) {
+          return line;
         }
-      }
-      return line;
-    })
-    .join('\n');
+
+        // Handle @keyframes
+        if (trimmed.startsWith('@keyframes')) {
+          const name = trimmed.match(/@keyframes\s+([^\s{]+)/)?.[1];
+          if (name) {
+            return line.replace(name, `${scopeId}-${name}`);
+          }
+          return line;
+        }
+
+        // Handle animation references
+        if (trimmed.includes('animation:') && !trimmed.startsWith('@')) {
+          // Replace animation names with scoped versions
+          return line.replace(/animation:\s*([^\s]+)/g, (match, animName) => {
+            return `animation: ${scopeId}-${animName}`;
+          });
+        }
+
+        // Scope regular CSS rules
+        if (trimmed.includes('{') && !trimmed.startsWith('@') && !trimmed.startsWith('/*')) {
+          const selectorEnd = line.indexOf('{');
+          const selector = line.substring(0, selectorEnd).trim();
+          const rest = line.substring(selectorEnd);
+
+          if (selector) {
+            // Replace body with scoped class
+            const scopedSelector = selector
+              .replace(/\bbody\b/g, `#${scopeId}`)
+              .split(',')
+              .map(s => `#${scopeId} ${s.trim()}`)
+              .join(', ');
+
+            return scopedSelector + rest;
+          }
+        }
+
+        return line;
+      })
+      .join('\n');
+  }, [css, scopeId]);
 
   return (
-    <div className="credit-roll-preview-root relative w-full h-full overflow-hidden">
+    <div id={scopeId} className="relative w-full h-full overflow-hidden">
       {/* Inject scoped theme CSS */}
       <style dangerouslySetInnerHTML={{ __html: scopedCss }} />
 
       {/* Credit roll preview container */}
-      <div className="credit-roll-preview-body min-h-full overflow-y-auto p-4 bg-gradient-to-b from-gray-900 to-black">
+      <div className="min-h-full overflow-y-auto p-4 bg-gradient-to-b from-gray-900 to-black">
         {/* Header */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold text-white mb-2">
