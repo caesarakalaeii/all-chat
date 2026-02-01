@@ -1,0 +1,167 @@
+/**
+ * Theme Name: Hollywood Blockbuster
+ * Description: Clean, professional movie credits with simple text and minimal effects
+ * Tags: hollywood, blockbuster, movie, professional, simple, clean
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-02-01
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Helvetica+Neue:wght@300;400;500;700&family=Arial&display=swap');
+
+body {
+  background: #000 !important;
+  font-family: 'Helvetica Neue', Arial, sans-serif !important;
+  color: #fff !important;
+}
+
+/* Main title - simple and bold */
+h1 {
+  font-family: 'Helvetica Neue', Arial, sans-serif !important;
+  font-weight: 300 !important;
+  color: #fff !important;
+  text-shadow: none !important;
+  font-size: 4rem !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+}
+
+/* Section headers - understated */
+h2 {
+  font-family: 'Helvetica Neue', Arial, sans-serif !important;
+  font-weight: 500 !important;
+  color: #fff !important;
+  text-shadow: none !important;
+  font-size: 2rem !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 2rem !important;
+}
+
+/* Remove all special background effects */
+.space-y-4 > div {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: none !important;
+  transition: none !important;
+  border-radius: 0 !important;
+  padding: 1.5rem 0 !important;
+}
+
+.space-y-4 > div:hover {
+  transform: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Remove special styling for 1st, 2nd, 3rd place */
+.bg-yellow-500\/20,
+.bg-gray-400\/20,
+.bg-orange-600\/20 {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+/* Rank numbers - simple white */
+.text-3xl.font-bold {
+  font-family: 'Helvetica Neue', Arial, sans-serif !important;
+  font-weight: 300 !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  text-shadow: none !important;
+  font-size: 1.5rem !important;
+}
+
+.text-yellow-400,
+.text-gray-300,
+.text-orange-500,
+.text-gray-500 {
+  color: rgba(255, 255, 255, 0.5) !important;
+  text-shadow: none !important;
+  background: none !important;
+  -webkit-text-fill-color: unset !important;
+}
+
+/* Display names - clean white text */
+.text-xl.font-semibold {
+  font-family: 'Helvetica Neue', Arial, sans-serif !important;
+  color: #fff !important;
+  font-weight: 400 !important;
+  text-shadow: none !important;
+  font-size: 1.25rem !important;
+}
+
+/* Platform labels - subtle gray */
+.text-sm.text-gray-400 {
+  color: rgba(255, 255, 255, 0.4) !important;
+  text-transform: uppercase !important;
+  font-size: 0.75rem !important;
+  letter-spacing: 0.1em !important;
+  font-weight: 300 !important;
+}
+
+/* Values - clean white */
+.text-2xl.font-bold {
+  font-family: 'Helvetica Neue', Arial, sans-serif !important;
+  color: #fff !important;
+  font-weight: 400 !important;
+  text-shadow: none !important;
+  font-size: 1.5rem !important;
+}
+
+/* Avatars - simple circular with subtle border */
+.rounded-full {
+  box-shadow: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  opacity: 0.9 !important;
+}
+
+/* Thank you message - elegant simplicity */
+.text-4xl.font-bold {
+  font-family: 'Helvetica Neue', Arial, sans-serif !important;
+  color: #fff !important;
+  font-weight: 300 !important;
+  text-shadow: none !important;
+  font-size: 3rem !important;
+  letter-spacing: 0.1em !important;
+  animation: none !important;
+}
+
+.text-xl.text-gray-300 {
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-weight: 300 !important;
+}
+
+/* Overall aesthetic - clean, minimal, professional */
+.text-gray-300,
+.text-gray-400 {
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-weight: 300 !important;
+}
+
+.text-white {
+  color: #fff !important;
+}
+
+/* Remove any card-like appearance */
+.bg-gray-800\/50 {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Smooth, subtle fade-in for text */
+@keyframes simpleFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: simpleFadeIn 1.5s ease-out !important;
+}
