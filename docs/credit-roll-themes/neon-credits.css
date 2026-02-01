@@ -1,0 +1,152 @@
+/**
+ * Theme Name: Neon Credits
+ * Description: Vibrant neon-style credit roll with glowing cyan effects
+ * Tags: neon, modern, glowing, vibrant, cyberpunk
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-02-01
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
+body {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(0, 0, 0, 0.98)) !important;
+  font-family: 'Orbitron', sans-serif !important;
+}
+
+h1 {
+  color: #0ff !important;
+  font-weight: 900 !important;
+  text-shadow:
+    0 0 10px #0ff,
+    0 0 20px #0ff,
+    0 0 30px #0ff,
+    0 0 40px #0ff !important;
+  animation: neonPulse 2s ease-in-out infinite !important;
+  letter-spacing: 0.1em !important;
+}
+
+h2 {
+  color: #0ff !important;
+  font-weight: 700 !important;
+  text-shadow:
+    0 0 10px #0ff,
+    0 0 20px #0ff,
+    0 0 30px #0ff !important;
+  animation: neonPulse 2s ease-in-out infinite 0.5s !important;
+  letter-spacing: 0.15em !important;
+}
+
+@keyframes neonPulse {
+  0%, 100% {
+    text-shadow:
+      0 0 10px #0ff,
+      0 0 20px #0ff;
+  }
+  50% {
+    text-shadow:
+      0 0 20px #0ff,
+      0 0 30px #0ff,
+      0 0 40px #0ff,
+      0 0 50px #0ff;
+  }
+}
+
+.space-y-4 > div {
+  background: rgba(0, 255, 255, 0.1) !important;
+  border: 2px solid rgba(0, 255, 255, 0.5) !important;
+  box-shadow:
+    0 0 20px rgba(0, 255, 255, 0.3),
+    inset 0 0 10px rgba(0, 255, 255, 0.1) !important;
+  transition: all 0.3s ease !important;
+}
+
+.space-y-4 > div:hover {
+  border-color: rgba(0, 255, 255, 0.8) !important;
+  box-shadow:
+    0 0 30px rgba(0, 255, 255, 0.5),
+    inset 0 0 15px rgba(0, 255, 255, 0.2) !important;
+  transform: translateX(5px) !important;
+}
+
+/* 1st place - Bright cyan */
+.bg-yellow-500\/20 {
+  background: rgba(0, 255, 255, 0.2) !important;
+  border-color: #0ff !important;
+  border-width: 3px !important;
+  box-shadow:
+    0 0 40px rgba(0, 255, 255, 0.6),
+    inset 0 0 20px rgba(0, 255, 255, 0.2) !important;
+}
+
+/* 2nd place - Magenta */
+.bg-gray-400\/20 {
+  background: rgba(255, 0, 255, 0.15) !important;
+  border-color: rgba(255, 0, 255, 0.7) !important;
+  border-width: 3px !important;
+  box-shadow:
+    0 0 30px rgba(255, 0, 255, 0.4),
+    inset 0 0 15px rgba(255, 0, 255, 0.1) !important;
+}
+
+/* 3rd place - Yellow */
+.bg-orange-600\/20 {
+  background: rgba(255, 255, 0, 0.15) !important;
+  border-color: rgba(255, 255, 0, 0.7) !important;
+  border-width: 3px !important;
+  box-shadow:
+    0 0 25px rgba(255, 255, 0, 0.4),
+    inset 0 0 10px rgba(255, 255, 0, 0.1) !important;
+}
+
+/* Rank numbers with glow */
+.text-yellow-400 {
+  color: #0ff !important;
+  text-shadow: 0 0 10px #0ff !important;
+}
+
+.text-gray-300 {
+  color: #f0f !important;
+  text-shadow: 0 0 10px #f0f !important;
+}
+
+.text-orange-500 {
+  color: #ff0 !important;
+  text-shadow: 0 0 10px #ff0 !important;
+}
+
+/* Display names */
+.text-xl.font-semibold {
+  color: #fff !important;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Platform labels */
+.text-sm.text-gray-400 {
+  color: #0ff !important;
+  text-transform: uppercase !important;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.1em !important;
+}
+
+/* Value amounts */
+.text-2xl.font-bold {
+  color: #0ff !important;
+  text-shadow: 0 0 10px #0ff !important;
+  font-weight: 900 !important;
+}
+
+/* Avatars with glow */
+.rounded-full {
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.5) !important;
+  border: 2px solid rgba(0, 255, 255, 0.3) !important;
+}
+
+/* Thank you message */
+.text-4xl.font-bold {
+  color: #0ff !important;
+  text-shadow:
+    0 0 20px #0ff,
+    0 0 40px #0ff !important;
+  animation: neonPulse 2s ease-in-out infinite !important;
+}

@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import ThemeCard from './ThemeCard';
 import ThemeFilters from './ThemeFilters';
 import { useThemeMarketplace } from '@/hooks/useThemeMarketplace';
+import { useCreditRollThemeMarketplace } from '@/hooks/useCreditRollThemeMarketplace';
 import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { clearCache } from '@/lib/theme-marketplace/cache';
@@ -18,12 +19,14 @@ interface ThemeMarketplaceModalProps {
   isOpen: boolean;
   onClose: () => void;
   onApplyTheme: (css: string) => void;
+  themeType?: 'overlay' | 'creditroll';
 }
 
 export default function ThemeMarketplaceModal({
   isOpen,
   onClose,
   onApplyTheme,
+  themeType = 'overlay',
 }: ThemeMarketplaceModalProps) {
   const { user } = useAuthStore();
   const isAdmin = user?.is_admin || false;
@@ -73,6 +76,11 @@ export default function ThemeMarketplaceModal({
       }
     };
   }, [isOpen]);
+
+  // Use appropriate hook based on theme type
+  const overlayThemes = useThemeMarketplace();
+  const creditRollThemes = useCreditRollThemeMarketplace();
+
   const {
     themes,
     loading,
@@ -89,7 +97,7 @@ export default function ThemeMarketplaceModal({
     totalCount,
     filteredCount,
     refreshThemes,
-  } = useThemeMarketplace();
+  } = themeType === 'creditroll' ? creditRollThemes : overlayThemes;
 
   // Handle ESC key to close modal
   useEffect(() => {

@@ -17,9 +17,24 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { overlaysApi } from '@/lib/api/overlays';
 import type { Overlay, CreditRollConfig } from '@/lib/types/overlay';
+
+const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[400px] bg-gray-900 border border-gray-700 rounded-lg flex items-center justify-center">
+      <div className="text-gray-400 text-sm">Loading editor...</div>
+    </div>
+  )
+});
+
+const ThemeMarketplaceModal = dynamic(
+  () => import('@/components/theme-marketplace/ThemeMarketplaceModal'),
+  { ssr: false }
+);
 
 export default function CreditRollConfigPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -50,6 +65,9 @@ export default function CreditRollConfigPage({ params }: { params: { id: string 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [customCss, setCustomCss] = useState('');
+  const [useCustomCss, setUseCustomCss] = useState(false);
+  const [showThemeMarketplace, setShowThemeMarketplace] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -65,6 +83,9 @@ export default function CreditRollConfigPage({ params }: { params: { id: string 
         try {
           const configData = await overlaysApi.getCreditRollConfig(params.id);
           setConfig(configData);
+          const css = configData.custom_css || '';
+          setCustomCss(css);
+          setUseCustomCss(Boolean(css.trim().length));
         } catch (error) {
           console.warn('Credit roll config not found, using defaults');
         }
@@ -85,7 +106,10 @@ export default function CreditRollConfigPage({ params }: { params: { id: string 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await overlaysApi.updateCreditRollConfig(params.id, config);
+      await overlaysApi.updateCreditRollConfig(params.id, {
+        ...config,
+        custom_css: useCustomCss ? customCss : ''
+      });
       setNotification({
         type: 'success',
         message: 'Credit roll settings saved successfully!'
@@ -388,6 +412,67 @@ export default function CreditRollConfigPage({ params }: { params: { id: string 
           </>
         )}
 
+        {/* CSS Customization Section */}
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-semibold text-white">Custom CSS Editor</h3>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={useCustomCss}
+                  onChange={(e) => setUseCustomCss(e.target.checked)}
+                  className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-twitch focus:ring-twitch focus:ring-offset-gray-800"
+                />
+                Enable Custom CSS
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowThemeMarketplace(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                </svg>
+                Browse Themes
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomCss('');
+                  setUseCustomCss(false);
+                }}
+                className="px-4 py-2 text-sm border border-gray-600 rounded-lg text-gray-200 hover:bg-gray-600 transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <MonacoCSSEditor
+            value={customCss}
+            onChange={setCustomCss}
+            height="400px"
+            placeholder="/* Enter your custom CSS for credit roll */"
+          />
+
+          <p className="text-sm text-gray-400 mt-4">
+            Customize your credit roll appearance with CSS. Browse themes or write your own styles.
+            See{' '}
+            <a
+              href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/credit-roll-themes"
+              target="_blank"
+              rel="noreferrer"
+              className="text-twitch hover:underline"
+            >
+              credit roll theme docs
+            </a>{' '}
+            for examples and CSS selectors.
+          </p>
+        </div>
+
         {/* Action Buttons */}
         <div className="flex gap-4">
           <button
@@ -405,6 +490,18 @@ export default function CreditRollConfigPage({ params }: { params: { id: string 
           </button>
         </div>
       </div>
+
+      {/* Theme Marketplace Modal */}
+      <ThemeMarketplaceModal
+        isOpen={showThemeMarketplace}
+        onClose={() => setShowThemeMarketplace(false)}
+        onApplyTheme={(css) => {
+          setCustomCss(css);
+          setUseCustomCss(true);
+          setShowThemeMarketplace(false);
+        }}
+        themeType="creditroll"
+      />
     </div>
   );
 }
