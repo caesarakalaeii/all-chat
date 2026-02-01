@@ -13,7 +13,9 @@ import type {
   CreateOverlayRequest,
   UpdateOverlayRequest,
   AddSourceRequest,
-  MockMessagePayload
+  MockMessagePayload,
+  CreditRollConfig,
+  CreditRollResponse
 } from '../types/overlay';
 
 export const overlaysApi = {
@@ -96,5 +98,30 @@ export const overlaysApi = {
    */
   async sendMockMessage(id: string, payload: MockMessagePayload): Promise<void> {
     await apiClient.post(`/api/v1/overlays/${id}/mock-messages`, payload);
+  },
+
+  /**
+   * Get credit roll configuration for an overlay
+   */
+  async getCreditRollConfig(id: string): Promise<CreditRollConfig> {
+    return apiClient.get<CreditRollConfig>(`/api/v1/overlays/${id}/creditroll`);
+  },
+
+  /**
+   * Update credit roll configuration
+   */
+  async updateCreditRollConfig(id: string, config: Partial<CreditRollConfig>): Promise<CreditRollConfig> {
+    return apiClient.post<CreditRollConfig>(`/api/v1/overlays/${id}/creditroll`, config);
+  },
+
+  /**
+   * Get credit roll data (public endpoint)
+   */
+  async getCreditRoll(id: string): Promise<CreditRollResponse> {
+    const response = await fetch(`/api/v1/overlays/${id}/credit-roll`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch credit roll');
+    }
+    return response.json();
   }
 };
