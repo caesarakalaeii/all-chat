@@ -761,23 +761,24 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   };
 
   const resolveMockTarget = (requestedPlatform?: ChatMessage['platform']) => {
-    const preferred =
-      sources.find((source) =>
-        requestedPlatform ? source.platform === requestedPlatform : true
-      ) ?? sources[0];
+    const preferred = sources.find((source) =>
+      requestedPlatform ? source.platform === requestedPlatform : true
+    );
 
+    // If a specific platform was requested but not found in sources,
+    // don't fallback to other platform's sources - use undefined
     if (!preferred) {
       return {
         platform: requestedPlatform || 'twitch',
-        channel_id: 'mock-channel',
-        channel_name: 'Mock Channel'
+        channel_id: undefined,  // Let backend handle default
+        channel_name: undefined
       };
     }
 
     return {
       platform: requestedPlatform || (preferred.platform as ChatMessage['platform']),
-      channel_id: preferred.channel_id || 'mock-channel',
-      channel_name: preferred.channel_name || preferred.channel_id || 'Mock Channel'
+      channel_id: preferred.channel_id,
+      channel_name: preferred.channel_name || preferred.channel_id
     };
   };
 
