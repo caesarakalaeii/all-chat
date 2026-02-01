@@ -150,10 +150,12 @@ export default function ThemeMarketplaceModal({
               id="theme-marketplace-title"
               className="text-2xl font-bold text-white"
             >
-              Theme Marketplace
+              {themeType === 'creditroll' ? 'Credit Roll' : ''} Theme Marketplace
             </h2>
             <p className="text-gray-400 text-sm mt-1">
-              Browse and apply custom CSS themes for your overlay
+              {themeType === 'creditroll'
+                ? 'Browse and apply custom CSS themes for your credit roll'
+                : 'Browse and apply custom CSS themes for your overlay'}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -302,6 +304,7 @@ export default function ThemeMarketplaceModal({
                     messages={SAMPLE_PREVIEW_MESSAGES}
                     onToggleFavorite={toggleFavorite}
                     onApply={handleApply}
+                    themeType={themeType}
                   />
                 ))}
               </div>

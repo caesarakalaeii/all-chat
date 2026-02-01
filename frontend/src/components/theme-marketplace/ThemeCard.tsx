@@ -8,6 +8,7 @@
 
 import type { Theme, ChatMessagePreview } from '@/lib/theme-marketplace/types';
 import ThemePreview from './ThemePreview';
+import CreditRollThemePreview from './CreditRollThemePreview';
 
 interface ThemeCardProps {
   theme: Theme;
@@ -15,6 +16,7 @@ interface ThemeCardProps {
   messages: ChatMessagePreview[];
   onToggleFavorite: (themeId: string) => void;
   onApply: (css: string) => void;
+  themeType?: 'overlay' | 'creditroll';
 }
 
 /**
@@ -46,6 +48,7 @@ export default function ThemeCard({
   messages,
   onToggleFavorite,
   onApply,
+  themeType = 'overlay',
 }: ThemeCardProps) {
   return (
     <div
@@ -54,7 +57,11 @@ export default function ThemeCard({
                  transition-all duration-200 hover:-translate-y-1 flex flex-col"
     >
       {/* Preview */}
-      <ThemePreview css={theme.css} messages={messages} themeId={theme.id} />
+      {themeType === 'creditroll' ? (
+        <CreditRollThemePreview css={theme.css} />
+      ) : (
+        <ThemePreview css={theme.css} messages={messages} themeId={theme.id} />
+      )}
 
       {/* Metadata */}
       <div className="p-4 flex-1 flex flex-col">
