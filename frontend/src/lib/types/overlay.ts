@@ -98,3 +98,70 @@ export interface MockMessagePayload {
   event?: import('./message').EventInfo;
   metadata?: Record<string, unknown>;
 }
+
+export interface CreditRollConfig {
+  id: string;
+  overlay_id: string;
+  enabled: boolean;
+  include_subs: boolean;
+  include_resubs: boolean;
+  include_gift_subs: boolean;
+  include_bits: boolean;
+  include_raids: boolean;
+  include_channel_points: boolean;
+  include_super_chats: boolean;
+  include_memberships: boolean;
+  include_follows: boolean;
+  leaderboard_top_n: number;
+  leaderboard_sort_by: 'value' | 'count';
+  scroll_speed: number;
+  display_duration_seconds: number;
+  background_opacity: number;
+  theme: 'classic' | 'cinematic' | 'modern';
+  clips_enabled: boolean;
+  clips_max_count: number;
+  clips_fallback_days: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  user_id: string;
+  display_name: string;
+  avatar_url: string;
+  platform: string;
+  count?: number;
+  total_value?: number;
+  metadata?: Record<string, any>;
+}
+
+export interface Leaderboards {
+  subs?: LeaderboardEntry[];
+  bits?: LeaderboardEntry[];
+  raids?: LeaderboardEntry[];
+  super_chats?: LeaderboardEntry[];
+  follows?: LeaderboardEntry[];
+  gifts?: LeaderboardEntry[];
+}
+
+export interface Clip {
+  id: string;
+  url: string;
+  embed_url: string;
+  title: string;
+  view_count: number;
+  created_at: string;
+  thumbnail_url: string;
+  duration: number;
+}
+
+export interface CreditRollResponse {
+  overlay_id: string;
+  session_id: string;
+  session_started_at: string;
+  session_duration_seconds: number;
+  leaderboards: Leaderboards;
+  clips: Clip[];
+  clips_is_fallback: boolean;
+}
