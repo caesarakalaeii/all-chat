@@ -1,0 +1,114 @@
+/**
+ * Theme Name: Minimal Clean
+ * Description: Clean modern design with subtle gradients and Inter font
+ * Tags: minimal, modern, clean, simple, professional
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-02-01
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+
+body {
+  background: linear-gradient(to bottom, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 1)) !important;
+  font-family: 'Inter', sans-serif !important;
+  color: #1e293b !important;
+}
+
+h1 {
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.02em !important;
+  font-size: 4rem !important;
+}
+
+h2 {
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 700 !important;
+  color: #334155 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.text-gray-300,
+.text-gray-400 {
+  color: #64748b !important;
+}
+
+.text-white {
+  color: #0f172a !important;
+}
+
+.space-y-4 > div {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(226, 232, 240, 1) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  transition: all 0.2s ease !important;
+}
+
+.space-y-4 > div:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* 1st place - Blue */
+.bg-yellow-500\/20 {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.25)) !important;
+  border: 2px solid rgba(59, 130, 246, 0.5) !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* 2nd place - Purple */
+.bg-gray-400\/20 {
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.15), rgba(139, 92, 246, 0.25)) !important;
+  border: 2px solid rgba(139, 92, 246, 0.5) !important;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2) !important;
+}
+
+/* 3rd place - Green */
+.bg-orange-600\/20 {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.25)) !important;
+  border: 2px solid rgba(34, 197, 94, 0.5) !important;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2) !important;
+}
+
+/* Rank colors */
+.text-yellow-400 {
+  color: #3b82f6 !important;
+}
+
+.text-gray-300 {
+  color: #8b5cf6 !important;
+}
+
+.text-orange-500 {
+  color: #22c55e !important;
+}
+
+/* Display names */
+.text-xl.font-semibold {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+/* Values */
+.text-2xl.font-bold {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+/* Avatars */
+.rounded-full {
+  border: 2px solid rgba(226, 232, 240, 1) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Thank you message */
+.text-4xl.font-bold {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+.text-xl.text-gray-300 {
+  color: #64748b !important;
+}

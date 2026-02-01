@@ -1,0 +1,93 @@
+/**
+ * Theme Name: Classic Cinematic
+ * Description: Traditional movie credits with elegant scrolling and gold accents
+ * Tags: classic, cinematic, movie, elegant, gold
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-02-01
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Lora:wght@400;600;700&display=swap');
+
+body {
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 1)) !important;
+  font-family: 'Lora', serif !important;
+}
+
+h1 {
+  font-family: 'Cinzel', serif !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.25em !important;
+  font-weight: 900 !important;
+  color: #d4af37 !important;
+  text-shadow: 0 0 20px rgba(212, 175, 55, 0.6), 0 0 40px rgba(212, 175, 55, 0.3) !important;
+  font-size: 4rem !important;
+}
+
+h2 {
+  font-family: 'Cinzel', serif !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.2em !important;
+  font-weight: 700 !important;
+  color: #d4af37 !important;
+  text-shadow: 0 0 15px rgba(212, 175, 55, 0.5) !important;
+}
+
+.space-y-4 > div {
+  border-color: rgba(212, 175, 55, 0.4) !important;
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.05), rgba(212, 175, 55, 0.1), rgba(212, 175, 55, 0.05)) !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+.space-y-4 > div:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3) !important;
+}
+
+/* Gold for 1st place */
+.bg-yellow-500\/20 {
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.2), rgba(255, 215, 0, 0.3), rgba(212, 175, 55, 0.2)) !important;
+  border-color: rgba(255, 215, 0, 0.8) !important;
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.5), inset 0 0 20px rgba(255, 215, 0, 0.1) !important;
+}
+
+/* Silver for 2nd place */
+.bg-gray-400\/20 {
+  background: linear-gradient(90deg, rgba(192, 192, 192, 0.2), rgba(224, 224, 224, 0.3), rgba(192, 192, 192, 0.2)) !important;
+  border-color: rgba(192, 192, 192, 0.8) !important;
+  box-shadow: 0 0 25px rgba(192, 192, 192, 0.4) !important;
+}
+
+/* Bronze for 3rd place */
+.bg-orange-600\/20 {
+  background: linear-gradient(90deg, rgba(205, 127, 50, 0.2), rgba(205, 127, 50, 0.3), rgba(205, 127, 50, 0.2)) !important;
+  border-color: rgba(205, 127, 50, 0.8) !important;
+  box-shadow: 0 0 20px rgba(205, 127, 50, 0.4) !important;
+}
+
+/* Rank numbers */
+.text-3xl.font-bold {
+  font-family: 'Cinzel', serif !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Display names */
+.text-xl.font-semibold {
+  font-family: 'Lora', serif !important;
+  color: #f5f5f5 !important;
+  font-weight: 600 !important;
+}
+
+/* Value display */
+.text-2xl.font-bold {
+  font-family: 'Cinzel', serif !important;
+  color: #d4af37 !important;
+}
+
+/* Footer thank you message */
+.text-4xl.font-bold {
+  font-family: 'Cinzel', serif !important;
+  color: #d4af37 !important;
+  text-shadow: 0 0 30px rgba(212, 175, 55, 0.6) !important;
+}

@@ -1,0 +1,132 @@
+/**
+ * Theme Name: Elegant Script
+ * Description: Cursive fancy credits with soft shadows and romantic styling
+ * Tags: elegant, script, fancy, cursive, romantic
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-02-01
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;600;700&family=Playfair+Display:wght@400;600;700;900&display=swap');
+
+body {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.15), rgba(219, 39, 119, 0.15), rgba(0, 0, 0, 0.95)) !important;
+  font-family: 'Playfair Display', serif !important;
+}
+
+h1 {
+  font-family: 'Dancing Script', cursive !important;
+  font-weight: 700 !important;
+  color: #fce7f3 !important;
+  text-shadow: 0 2px 20px rgba(252, 231, 243, 0.6), 0 0 60px rgba(219, 39, 119, 0.4) !important;
+  font-size: 5rem !important;
+  letter-spacing: 0.05em !important;
+}
+
+h2 {
+  font-family: 'Dancing Script', cursive !important;
+  font-weight: 600 !important;
+  color: #fbcfe8 !important;
+  text-shadow: 0 2px 15px rgba(251, 207, 232, 0.5), 0 0 40px rgba(219, 39, 119, 0.3) !important;
+  font-size: 3rem !important;
+}
+
+.space-y-4 > div {
+  background: linear-gradient(90deg, rgba(219, 39, 119, 0.1), rgba(147, 51, 234, 0.1)) !important;
+  border: 1px solid rgba(251, 207, 232, 0.3) !important;
+  box-shadow: 0 4px 16px rgba(219, 39, 119, 0.2) !important;
+  backdrop-filter: blur(10px) !important;
+  transition: all 0.4s ease !important;
+}
+
+.space-y-4 > div:hover {
+  border-color: rgba(251, 207, 232, 0.6) !important;
+  box-shadow: 0 8px 24px rgba(219, 39, 119, 0.4) !important;
+  transform: scale(1.02) !important;
+}
+
+/* 1st place - Rose gold */
+.bg-yellow-500\/20 {
+  background: linear-gradient(135deg, rgba(244, 114, 182, 0.3), rgba(236, 72, 153, 0.3)) !important;
+  border: 2px solid rgba(244, 114, 182, 0.8) !important;
+  box-shadow: 0 0 40px rgba(244, 114, 182, 0.6), inset 0 0 20px rgba(244, 114, 182, 0.2) !important;
+}
+
+/* 2nd place - Lavender */
+.bg-gray-400\/20 {
+  background: linear-gradient(135deg, rgba(196, 181, 253, 0.3), rgba(167, 139, 250, 0.3)) !important;
+  border: 2px solid rgba(196, 181, 253, 0.8) !important;
+  box-shadow: 0 0 30px rgba(167, 139, 250, 0.5) !important;
+}
+
+/* 3rd place - Soft pink */
+.bg-orange-600\/20 {
+  background: linear-gradient(135deg, rgba(252, 165, 165, 0.3), rgba(254, 202, 202, 0.3)) !important;
+  border: 2px solid rgba(252, 165, 165, 0.8) !important;
+  box-shadow: 0 0 25px rgba(252, 165, 165, 0.5) !important;
+}
+
+/* Rank numbers */
+.text-3xl.font-bold {
+  font-family: 'Dancing Script', cursive !important;
+}
+
+.text-yellow-400 {
+  color: #f472b6 !important;
+  text-shadow: 0 0 10px rgba(244, 114, 182, 0.8) !important;
+}
+
+.text-gray-300 {
+  color: #c4b5fd !important;
+  text-shadow: 0 0 10px rgba(196, 181, 253, 0.8) !important;
+}
+
+.text-orange-500 {
+  color: #fca5a5 !important;
+  text-shadow: 0 0 10px rgba(252, 165, 165, 0.8) !important;
+}
+
+.text-gray-500 {
+  color: #fbcfe8 !important;
+}
+
+/* Display names */
+.text-xl.font-semibold {
+  font-family: 'Playfair Display', serif !important;
+  color: #fce7f3 !important;
+  font-weight: 600 !important;
+}
+
+/* Platform labels */
+.text-sm.text-gray-400 {
+  color: #fbcfe8 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  opacity: 0.8 !important;
+}
+
+/* Values */
+.text-2xl.font-bold {
+  font-family: 'Playfair Display', serif !important;
+  color: #fce7f3 !important;
+  font-weight: 700 !important;
+}
+
+/* Avatars with soft glow */
+.rounded-full {
+  box-shadow: 0 0 20px rgba(219, 39, 119, 0.5) !important;
+  border: 2px solid rgba(251, 207, 232, 0.5) !important;
+}
+
+/* Thank you message */
+.text-4xl.font-bold {
+  font-family: 'Dancing Script', cursive !important;
+  color: #fbcfe8 !important;
+  font-size: 3.5rem !important;
+  text-shadow: 0 0 30px rgba(251, 207, 232, 0.8), 0 0 60px rgba(219, 39, 119, 0.5) !important;
+}
+
+.text-xl.text-gray-300 {
+  font-family: 'Playfair Display', serif !important;
+  color: #fce7f3 !important;
+}

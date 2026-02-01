@@ -36,6 +36,9 @@ type CreditRollConfig struct {
 	ClipsMaxCount     int  `json:"clips_max_count" db:"clips_max_count"`
 	ClipsFallbackDays int  `json:"clips_fallback_days" db:"clips_fallback_days"`
 
+	// Custom CSS
+	CustomCSS string `json:"custom_css" db:"custom_css"`
+
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
