@@ -36,13 +36,36 @@ const SAMPLE_LEADERBOARD_DATA = [
 ];
 
 export default function CreditRollThemePreview({ css }: CreditRollThemePreviewProps) {
+  // Scope CSS to this preview only
+  const scopedCss = css
+    .replace(/body\s*{/g, '.credit-roll-preview-body {')
+    .replace(/\bbody\b/g, '.credit-roll-preview-body')
+    .split('\n')
+    .map(line => {
+      // Skip @import, @keyframes, and already scoped selectors
+      if (line.trim().startsWith('@import') ||
+          line.trim().startsWith('@keyframes') ||
+          line.includes('.credit-roll-preview')) {
+        return line;
+      }
+      // Scope other selectors to .credit-roll-preview-root
+      if (line.includes('{') && !line.trim().startsWith('@')) {
+        const parts = line.split('{');
+        if (parts[0].trim()) {
+          return `.credit-roll-preview-root ${parts[0]} {${parts[1] || ''}`;
+        }
+      }
+      return line;
+    })
+    .join('\n');
+
   return (
-    <div className="relative w-full h-full overflow-hidden">
-      {/* Inject theme CSS */}
-      <style dangerouslySetInnerHTML={{ __html: css }} />
+    <div className="credit-roll-preview-root relative w-full h-full overflow-hidden">
+      {/* Inject scoped theme CSS */}
+      <style dangerouslySetInnerHTML={{ __html: scopedCss }} />
 
       {/* Credit roll preview container */}
-      <div className="min-h-full overflow-y-auto p-4 bg-gradient-to-b from-gray-900 to-black">
+      <div className="credit-roll-preview-body min-h-full overflow-y-auto p-4 bg-gradient-to-b from-gray-900 to-black">
         {/* Header */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold text-white mb-2">
