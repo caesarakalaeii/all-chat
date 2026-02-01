@@ -176,8 +176,8 @@ func main() {
 	// Public config for OBS/browser sources
 	router.GET("/public/:id/config", configHandler.HandleGetPublicConfig)
 	router.GET("/public/:id/event-settings", eventSettingsHandler.HandleGetPublicEventSettings)
-	router.GET("/public/:id/credit-roll/config", creditRollHandler.HandleGetPublicConfig)
-	router.GET("/public/:id/credit-roll", creditRollHandler.HandleGetCreditRoll)
+	router.GET("/public/:id/creditroll", creditRollHandler.HandleGetPublicConfig)
+	router.GET("/:id/credit-roll", creditRollHandler.HandleGetCreditRoll)
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
@@ -199,8 +199,8 @@ func main() {
 		protected.PUT("/:id/config", configHandler.HandleUpdateConfig)
 		protected.GET("/:id/event-settings", eventSettingsHandler.HandleGetEventSettings)
 		protected.PUT("/:id/event-settings", eventSettingsHandler.HandleUpdateEventSettings)
-		protected.GET("/:id/credit-roll/config", creditRollHandler.HandleGetConfig)
-		protected.PUT("/:id/credit-roll/config", creditRollHandler.HandleUpdateConfig)
+		protected.GET("/:id/creditroll", creditRollHandler.HandleGetConfig)
+		protected.POST("/:id/creditroll", creditRollHandler.HandleUpdateConfig)
 		protected.POST("/:id/mock-messages", mockHandler.HandleSendMockMessage)
 
 		// YouTube helper routes
