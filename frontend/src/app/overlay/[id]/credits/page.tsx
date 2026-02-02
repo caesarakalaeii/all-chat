@@ -39,7 +39,7 @@ export default function CreditRollPage({ params }: { params: { id: string } }) {
         }
 
         // Load credit roll data
-        const dataResponse = await fetch(`/api/v1/overlays/${params.id}/credit-roll`);
+        const dataResponse = await fetch(`/api/v1/overlays/public/${params.id}/credit-roll`);
         if (!dataResponse.ok) {
           const errorData = await dataResponse.json();
           throw new Error(errorData.error || 'Failed to load credit roll');

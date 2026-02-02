@@ -305,6 +305,7 @@ func main() {
 		// Overlay config for public overlays
 		publicAPI.GET("/overlays/public/:id/config", proxyHandler.ForwardRequest)
 		publicAPI.GET("/overlays/public/:id/creditroll", proxyHandler.ForwardRequest)
+		publicAPI.GET("/overlays/public/:id/credit-roll", proxyHandler.ForwardRequest)
 	}
 
 	// Twitch badge proxy endpoints (public, but not part of /api/v1 service registry)
