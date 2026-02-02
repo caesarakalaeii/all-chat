@@ -437,6 +437,7 @@ class TikTokListenerService {
           ocs.is_active
         FROM overlay_chat_sources ocs
         WHERE ocs.platform = 'tiktok'
+          AND ocs.is_active = true
           AND ocs.overlay_id = ANY($1::uuid[])
       `, [connectedOverlays]);
 
