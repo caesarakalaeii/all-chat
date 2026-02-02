@@ -562,6 +562,17 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		return fmt.Errorf("failed to get user ID: %w", err)
 	}
 
+	// Ensure quota record exists before any quota operations
+	// This prevents "no rows" errors in GetChannelQuota() calls
+	if err := m.quotaCoordinator.GetPerChannelTracker().EnsureChannelExists(ctx, channelID, userID); err != nil {
+		m.logger.Error("Failed to ensure quota record exists",
+			zap.String("channel_id", channelID),
+			zap.String("user_id", userID),
+			zap.Error(err),
+		)
+		// Don't fail - continue and let downstream handle it
+	}
+
 	// Create YouTube service with OAuth
 	service, httpClient, err := m.oauthManager.CreateYouTubeService(ctx, userID, channelID)
 	if err != nil {

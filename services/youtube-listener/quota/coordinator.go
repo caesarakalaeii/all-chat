@@ -173,9 +173,17 @@ func (c *Coordinator) CanMakeRequest(
 	if channelID != "" {
 		channelQuota, err := c.perChannelTracker.GetChannelQuota(ctx, channelID)
 		if err != nil {
-			c.logger.Error("Failed to get channel quota", zap.String("channel_id", channelID), zap.Error(err))
-			// Continue with request if we can't check channel quota
-			return RequestDecision{Allowed: true}
+			c.logger.Error("Failed to get channel quota - quota record missing after initialization",
+				zap.String("channel_id", channelID),
+				zap.Error(err))
+
+			// Block the request to make missing quota records visible
+			// This should never happen after proactive initialization in syncChannel()
+			return RequestDecision{
+				Allowed:     false,
+				Reason:      DecisionReason("channel_quota_lookup_failed"),
+				GlobalState: globalState,
+			}
 		}
 
 		channelUsage := channelQuota.DailyQuotaUsed
@@ -300,4 +308,10 @@ func (c *Coordinator) GetPollingDelayMultiplier() float64 {
 	default:
 		return 1.0
 	}
+}
+
+// GetPerChannelTracker returns the per-channel tracker for direct quota operations
+// Used by Manager to initialize channel quota records before quota checks
+func (c *Coordinator) GetPerChannelTracker() *PerChannelTracker {
+	return c.perChannelTracker
 }
