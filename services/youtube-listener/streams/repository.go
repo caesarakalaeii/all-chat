@@ -32,6 +32,7 @@ func (r *Repository) GetActiveSources(ctx context.Context) ([]*models.StreamSour
 		FROM overlay_chat_sources ocs
 		JOIN overlays o ON ocs.overlay_id = o.id
 		WHERE o.is_active = true
+		  AND ocs.is_active = true
 		  AND ocs.platform = 'youtube'
 		ORDER BY ocs.channel_id
 	`
