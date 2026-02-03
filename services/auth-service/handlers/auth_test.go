@@ -17,6 +17,10 @@ import (
 
 // TestAuthHandlerCreation verifies the auth handler can be created
 func TestAuthHandlerCreation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	logger := zaptest.NewLogger(t)
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
@@ -53,6 +57,10 @@ func TestAuthHandlerCreation(t *testing.T) {
 
 // TestAuthHandlerLogout tests the logout endpoint
 func TestAuthHandlerLogout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -122,6 +130,10 @@ func TestAuthHandlerLogout(t *testing.T) {
 
 // TestAuthHandlerGetMe tests the /me endpoint behavior without auth
 func TestAuthHandlerGetMe_Unauthorized(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	gin.SetMode(gin.TestMode)
 
 	logger := zaptest.NewLogger(t)
