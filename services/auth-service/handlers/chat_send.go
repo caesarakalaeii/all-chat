@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
-	"github.com/caesar/all-chat/services/auth-service/oauth"
-	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -24,28 +22,48 @@ const (
 	rateLimit1Hour   = 100
 )
 
+// ViewerRepositoryInterface defines the interface for viewer repository operations
+type ViewerRepositoryInterface interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*models.ViewerSession, error)
+	DecryptAccessToken(token string) (string, error)
+	DecryptRefreshToken(token string) (string, error)
+	Update(ctx context.Context, session *models.ViewerSession) error
+	UpdateRateLimits(ctx context.Context, sessionID uuid.UUID, count1Min, count1Hour int, reset1Min, reset1Hour time.Time) error
+	LogMessage(ctx context.Context, log *models.ViewerMessageLog) error
+}
+
+// UserRepositoryInterface defines the interface for user repository operations
+type UserRepositoryInterface interface {
+	GetByUsername(ctx context.Context, username string) (*models.User, error)
+}
+
+// OAuthTokenRefresher defines the interface for OAuth token refresh operations
+type OAuthTokenRefresher interface {
+	RefreshToken(ctx context.Context, refreshToken string) (*oauth2.Token, error)
+}
+
 // ChatSendHandler handles viewer message sending
 type ChatSendHandler struct {
 	log             *zap.Logger
-	viewerRepo      *repository.ViewerRepository
-	userRepo        *repository.UserRepository
+	viewerRepo      ViewerRepositoryInterface
+	userRepo        UserRepositoryInterface
 	httpClient      *http.Client
 	clientID        string
-	twitchProvider  *oauth.ViewerTwitchOAuth
-	youtubeProvider *oauth.ViewerYouTubeOAuth
-	kickProvider    *oauth.ViewerKickOAuth
+	twitchProvider  OAuthTokenRefresher
+	youtubeProvider OAuthTokenRefresher
+	kickProvider    OAuthTokenRefresher
 	cipher          StringEncryptor
 }
 
 // NewChatSendHandler creates a new chat send handler
 func NewChatSendHandler(
 	log *zap.Logger,
-	viewerRepo *repository.ViewerRepository,
-	userRepo *repository.UserRepository,
+	viewerRepo ViewerRepositoryInterface,
+	userRepo UserRepositoryInterface,
 	clientID string,
-	twitchProvider *oauth.ViewerTwitchOAuth,
-	youtubeProvider *oauth.ViewerYouTubeOAuth,
-	kickProvider *oauth.ViewerKickOAuth,
+	twitchProvider OAuthTokenRefresher,
+	youtubeProvider OAuthTokenRefresher,
+	kickProvider OAuthTokenRefresher,
 	cipher StringEncryptor,
 ) *ChatSendHandler {
 	return &ChatSendHandler{
