@@ -47,6 +47,7 @@ func setupTestDatabase(t *testing.T) (*OverlayRepository, func()) {
 			name VARCHAR(100) NOT NULL,
 			description TEXT,
 			is_active BOOLEAN DEFAULT TRUE,
+			is_public_for_viewers BOOLEAN NOT NULL DEFAULT false,
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW()
 		);
