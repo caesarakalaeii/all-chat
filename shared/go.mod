@@ -1,6 +1,6 @@
 module github.com/caesar/all-chat/shared
 
-go 1.25.4
+go 1.25.6
 
 require (
 	github.com/gin-contrib/cors v1.7.6
