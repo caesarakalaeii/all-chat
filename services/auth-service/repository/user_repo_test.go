@@ -66,18 +66,25 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			twitch_id VARCHAR(50) UNIQUE,
 			google_id VARCHAR(100) UNIQUE,
+			kick_id VARCHAR(255) UNIQUE,
 			auth_provider VARCHAR(20) NOT NULL DEFAULT 'twitch',
 			username VARCHAR(50) UNIQUE NOT NULL,
 			display_name VARCHAR(100) NOT NULL,
 			profile_image_url TEXT,
-		access_token TEXT NOT NULL,
+			is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+			is_banned BOOLEAN NOT NULL DEFAULT FALSE,
+			banned_at TIMESTAMP,
+			banned_reason TEXT,
+			banned_by VARCHAR(255),
+			access_token TEXT NOT NULL,
 			refresh_token TEXT NOT NULL,
 			token_expires_at TIMESTAMP NOT NULL,
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW(),
 			CONSTRAINT check_auth_ids CHECK (
 				(auth_provider = 'twitch' AND twitch_id IS NOT NULL) OR
-				(auth_provider = 'youtube' AND google_id IS NOT NULL)
+				(auth_provider = 'youtube' AND google_id IS NOT NULL) OR
+				(auth_provider = 'kick' AND kick_id IS NOT NULL)
 			)
 		);
 
@@ -198,6 +205,7 @@ func TestUserRepository_GetByID(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a test user
+	twitchID := "123456789"
 	testUser := &models.User{
 		TwitchID:        &twitchID,
 		AuthProvider:    "twitch",
@@ -256,8 +264,10 @@ func TestUserRepository_GetByID(t *testing.T) {
 				if user.ID != testUser.ID {
 					t.Errorf("GetByID() ID = %v, want %v", user.ID, testUser.ID)
 				}
-				if user.TwitchID != testUser.TwitchID {
+				if (user.TwitchID == nil && testUser.TwitchID != nil) || (user.TwitchID != nil && testUser.TwitchID == nil) {
 					t.Errorf("GetByID() TwitchID = %v, want %v", user.TwitchID, testUser.TwitchID)
+				} else if user.TwitchID != nil && testUser.TwitchID != nil && *user.TwitchID != *testUser.TwitchID {
+					t.Errorf("GetByID() TwitchID = %v, want %v", *user.TwitchID, *testUser.TwitchID)
 				}
 				if user.Username != testUser.Username {
 					t.Errorf("GetByID() Username = %v, want %v", user.Username, testUser.Username)
@@ -275,8 +285,10 @@ func TestUserRepository_GetByTwitchID(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a test user
+	twitchID := "123456"
 	testUser := &models.User{
-		TwitchID:        &[]string{"123456"}[0],
+		TwitchID:        &twitchID,
+		AuthProvider:    "twitch",
 		Username:        "testuser",
 		DisplayName:     "TestUser",
 		ProfileImageURL: "https://example.com/avatar.png",
@@ -323,8 +335,10 @@ func TestUserRepository_GetByTwitchID(t *testing.T) {
 			}
 
 			if !tt.wantErr && !tt.wantNil {
-				if user.TwitchID != testUser.TwitchID {
+				if (user.TwitchID == nil && testUser.TwitchID != nil) || (user.TwitchID != nil && testUser.TwitchID == nil) {
 					t.Errorf("GetByTwitchID() TwitchID = %v, want %v", user.TwitchID, testUser.TwitchID)
+				} else if user.TwitchID != nil && testUser.TwitchID != nil && *user.TwitchID != *testUser.TwitchID {
+					t.Errorf("GetByTwitchID() TwitchID = %v, want %v", *user.TwitchID, *testUser.TwitchID)
 				}
 			}
 		})
@@ -339,8 +353,10 @@ func TestUserRepository_Update(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a test user
+	twitchID := "123456"
 	testUser := &models.User{
-		TwitchID:        &[]string{"123456"}[0],
+		TwitchID:        &twitchID,
+		AuthProvider:    "twitch",
 		Username:        "testuser",
 		DisplayName:     "TestUser",
 		ProfileImageURL: "https://example.com/avatar.png",
@@ -418,8 +434,10 @@ func TestUserRepository_Delete(t *testing.T) {
 		{
 			name: "successful delete",
 			setup: func() string {
+				twitchID := "123456"
 				user := &models.User{
-					TwitchID:       &[]string{"123456"}[0],
+					TwitchID:       &twitchID,
+					AuthProvider:   "twitch",
 					Username:       "deleteuser",
 					DisplayName:    "DeleteUser",
 					AccessToken:    "encrypted_access_token",
@@ -471,8 +489,10 @@ func TestUserRepository_UpdateTokens(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a test user
+	twitchID := "123456"
 	testUser := &models.User{
-		TwitchID:       &[]string{"123456"}[0],
+		TwitchID:       &twitchID,
+		AuthProvider:   "twitch",
 		Username:       "testuser",
 		DisplayName:    "TestUser",
 		AccessToken:    "old_encrypted_access_token",
