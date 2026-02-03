@@ -292,12 +292,14 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	}
 
 	// Record active sources and source events
-	m.metrics.SetActiveSources("twitch", "twitch-listener", len(m.activeChans))
-	for range toJoin {
-		m.metrics.RecordSourceEvent("twitch", "twitch-listener", "added")
-	}
-	for range toPart {
-		m.metrics.RecordSourceEvent("twitch", "twitch-listener", "removed")
+	if m.metrics != nil {
+		m.metrics.SetActiveSources("twitch", "twitch-listener", len(m.activeChans))
+		for range toJoin {
+			m.metrics.RecordSourceEvent("twitch", "twitch-listener", "added")
+		}
+		for range toPart {
+			m.metrics.RecordSourceEvent("twitch", "twitch-listener", "removed")
+		}
 	}
 
 	m.logger.Info("Channel sync completed",
