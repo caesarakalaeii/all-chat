@@ -1,0 +1,112 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":dependencyDashboard"
+  ],
+  "description": "Renovate configuration for All-Chat monorepo",
+  "timezone": "Europe/Berlin",
+  "schedule": [
+    "before 6am on Monday"
+  ],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "labels": ["dependencies"],
+  "assignees": [],
+  "reviewers": [],
+  "packageRules": [
+    {
+      "description": "Group all Go module updates per service",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Go dependencies (non-major)",
+      "automerge": false
+    },
+    {
+      "description": "Separate PR for Go major updates",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "Go dependencies (major)",
+      "automerge": false
+    },
+    {
+      "description": "Group Docker base image updates",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["golang", "alpine", "postgres", "redis"],
+      "groupName": "Docker base images",
+      "automerge": false,
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
+      "description": "Group frontend non-major updates",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchPaths": ["frontend/**"],
+      "groupName": "Frontend dependencies (non-major)",
+      "automerge": false
+    },
+    {
+      "description": "Separate PR for frontend major updates",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["major"],
+      "matchPaths": ["frontend/**"],
+      "groupName": "Frontend dependencies (major)",
+      "automerge": false
+    },
+    {
+      "description": "Auto-merge Go patch updates for shared modules",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["patch"],
+      "matchPaths": ["shared/**"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
+      "description": "Security updates - high priority",
+      "matchUpdateTypes": ["patch"],
+      "matchPackagePatterns": ["*"],
+      "matchDatasources": ["npm", "go"],
+      "labels": ["dependencies", "security"],
+      "prPriority": 10,
+      "automerge": false
+    },
+    {
+      "description": "GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "automerge": true,
+      "automergeType": "pr",
+      "schedule": ["before 6am on the first day of the month"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security", "dependencies"],
+    "prPriority": 20,
+    "automerge": false
+  },
+  "ignoreDeps": [],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/vendor/**",
+    "**/testdata/**"
+  ],
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths"
+  ],
+  "customManagers": [
+    {
+      "description": "Update Go version in Dockerfiles",
+      "customType": "regex",
+      "fileMatch": ["(^|/)Dockerfile$"],
+      "matchStrings": [
+        "FROM golang:(?<currentValue>.*?)-alpine"
+      ],
+      "depNameTemplate": "golang",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ]
+}
