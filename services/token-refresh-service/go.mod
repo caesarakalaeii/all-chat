@@ -1,6 +1,6 @@
 module github.com/caesar/all-chat/services/token-refresh-service
 
-go 1.25.4
+go 1.25.6
 
 require (
 	github.com/caesar/all-chat/services/auth-service v0.0.0
