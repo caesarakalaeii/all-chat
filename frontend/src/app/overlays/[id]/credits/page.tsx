@@ -15,7 +15,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useAuthStore } from '@/lib/stores/auth-store';
@@ -36,7 +36,8 @@ const ThemeMarketplaceModal = dynamic(
   { ssr: false }
 );
 
-export default function CreditRollConfigPage({ params }: { params: { id: string } }) {
+export default function CreditRollConfigPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const { token } = useAuthStore();
 
@@ -77,11 +78,11 @@ export default function CreditRollConfigPage({ params }: { params: { id: string 
 
     const loadData = async () => {
       try {
-        const overlayData = await overlaysApi.get(params.id);
+        const overlayData = await overlaysApi.get(id);
         setOverlay(overlayData);
 
         try {
-          const configData = await overlaysApi.getCreditRollConfig(params.id);
+          const configData = await overlaysApi.getCreditRollConfig(id);
           setConfig(configData);
           const css = configData.custom_css || '';
           setCustomCss(css);
@@ -101,12 +102,12 @@ export default function CreditRollConfigPage({ params }: { params: { id: string 
     };
 
     loadData();
-  }, [params.id, token, router]);
+  }, [id, token, router]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await overlaysApi.updateCreditRollConfig(params.id, {
+      await overlaysApi.updateCreditRollConfig(id, {
         ...config,
         custom_css: useCustomCss ? customCss : ''
       });
@@ -187,7 +188,7 @@ export default function CreditRollConfigPage({ params }: { params: { id: string 
         {/* Header */}
         <div className="mb-8">
           <a
-            href={`/overlays/${params.id}`}
+            href={`/overlays/${id}`}
             className="text-gray-400 hover:text-white transition-colors inline-flex items-center gap-2 mb-4"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -483,7 +484,7 @@ export default function CreditRollConfigPage({ params }: { params: { id: string 
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
           <button
-            onClick={() => router.push(`/overlays/${params.id}`)}
+            onClick={() => router.push(`/overlays/${id}`)}
             className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors"
           >
             Cancel
