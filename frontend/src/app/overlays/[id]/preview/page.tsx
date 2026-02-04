@@ -23,7 +23,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { use, useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { WebSocketClient } from '@/lib/api/websocket';
@@ -434,7 +434,8 @@ const scopeCustomCss = (css: string, scopeSelector: string, bodySelector: string
   });
 };
 
-export default function OverlayPreviewPage({ params }: { params: { id: string } }) {
+export default function OverlayPreviewPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const { token } = useAuthStore();
 
@@ -473,7 +474,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
 
     const loadConfig = async () => {
       try {
-        const config = await overlaysApi.getConfig(params.id);
+        const config = await overlaysApi.getConfig(id);
         const display = config.display_settings || {};
 
         if (typeof display.max_messages === 'number') {
@@ -509,13 +510,13 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     };
 
     loadConfig();
-  }, [params.id, token]);
+  }, [id, token]);
 
   // Load overlay sources for determining mock targets
   useEffect(() => {
     const loadSources = async () => {
       try {
-        const loadedSources = await overlaysApi.getSources(params.id);
+        const loadedSources = await overlaysApi.getSources(id);
         setSources(loadedSources);
       } catch (error) {
         console.error('[Preview] Failed to load sources:', error);
@@ -523,7 +524,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     };
 
     loadSources();
-  }, [params.id]);
+  }, [id]);
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -537,7 +538,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     wsClientRef.current = wsClient;
 
     // Connect to overlay WebSocket
-    wsClient.connect(params.id, token);
+    wsClient.connect(id, token);
 
     // Listen for messages
     const unsubscribe = wsClient.onMessage(async (incoming) => {
@@ -557,7 +558,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
       wsClient.disconnect();
       clearInterval(interval);
     };
-  }, [params.id, token, maxMessages, router]);
+  }, [id, token, maxMessages, router]);
 
   // Trim message buffer when maxMessages changes
   useEffect(() => {
@@ -585,7 +586,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
   // }, [messages]);
 
   const copyOverlayUrl = () => {
-    const url = `${window.location.origin}/overlay/${params.id}`;
+    const url = `${window.location.origin}/overlay/${id}`;
     navigator.clipboard.writeText(url);
     alert('Overlay URL copied to clipboard!\n\nAdd this as a Browser Source in OBS.');
   };
@@ -790,7 +791,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     const target = resolveMockTarget(mockForm.platform);
 
     try {
-      await overlaysApi.sendMockMessage(params.id, {
+      await overlaysApi.sendMockMessage(id, {
         platform: target.platform,
         channel_id: target.channel_id,
         channel_name: target.channel_name,
@@ -820,7 +821,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
       const target = resolveMockTarget(sample.platform);
 
       try {
-        await overlaysApi.sendMockMessage(params.id, {
+        await overlaysApi.sendMockMessage(id, {
           platform: target.platform,
           channel_id: target.channel_id,
           channel_name: target.channel_name,
@@ -850,7 +851,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
       const target = resolveMockTarget(sample.platform);
 
       try {
-        await overlaysApi.sendMockMessage(params.id, {
+        await overlaysApi.sendMockMessage(id, {
           platform: target.platform,
           channel_id: target.channel_id,
           channel_name: target.channel_name,
@@ -888,7 +889,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
     setConfigAlert(null);
 
     try {
-      await overlaysApi.updateConfig(params.id, {
+      await overlaysApi.updateConfig(id, {
         display_settings: {
           font_size: fontSize,
           message_duration: messageDuration,
@@ -925,7 +926,7 @@ export default function OverlayPreviewPage({ params }: { params: { id: string } 
         <div className="container mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => router.push(`/overlays/${params.id}`)}
+              onClick={() => router.push(`/overlays/${id}`)}
               className="text-gray-400 hover:text-white transition-colors"
             >
               ← Back
