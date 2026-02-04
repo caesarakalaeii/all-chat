@@ -1,7 +1,7 @@
 // Event Settings Page - Configure overlay event display preferences
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/stores/auth-store';
@@ -37,7 +37,8 @@ interface EventSettings {
   event_display_duration_multiplier: number;
 }
 
-export default function EventSettingsPage({ params }: { params: { id: string } }) {
+export default function EventSettingsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const { token } = useAuthStore();
   const [settings, setSettings] = useState<EventSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,7 +56,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
 
     const loadSettings = async () => {
       try {
-        const res = await fetch(`/api/v1/overlays/${params.id}/event-settings`, {
+        const res = await fetch(`/api/v1/overlays/${id}/event-settings`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
@@ -75,7 +76,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
     };
 
     loadSettings();
-  }, [params.id, token, router]);
+  }, [id, token, router]);
 
   const handleSave = async () => {
     if (!settings || !token) return;
@@ -84,7 +85,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
     setError(null);
 
     try {
-      const res = await fetch(`/api/v1/overlays/${params.id}/event-settings`, {
+      const res = await fetch(`/api/v1/overlays/${id}/event-settings`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +128,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
       <div className="min-h-screen bg-gray-900 text-white p-8">
         <div className="max-w-4xl mx-auto">
           <p className="text-red-400">Failed to load event settings: {error}</p>
-          <Link href={`/overlays/${params.id}`} className="text-blue-400 hover:underline mt-4 block">
+          <Link href={`/overlays/${id}`} className="text-blue-400 hover:underline mt-4 block">
             Back to Overlay
           </Link>
         </div>
@@ -162,7 +163,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
-          <Link href={`/overlays/${params.id}`} className="text-blue-400 hover:underline">
+          <Link href={`/overlays/${id}`} className="text-blue-400 hover:underline">
             ← Back to Overlay
           </Link>
         </div>
@@ -398,7 +399,7 @@ export default function EventSettingsPage({ params }: { params: { id: string } }
               {saving ? 'Saving...' : 'Save Settings'}
             </button>
             <Link
-              href={`/overlays/${params.id}`}
+              href={`/overlays/${id}`}
               className="bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-6 rounded transition-colors inline-block"
             >
               Cancel

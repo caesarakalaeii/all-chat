@@ -21,7 +21,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useState, useRef } from 'react';
+import { use, useEffect, useState, useRef } from 'react';
 import type { ChatMessage, EventTier } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
@@ -29,7 +29,8 @@ import { sortMessageBadges } from '@/lib/badgeOrder';
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
 import '@/styles/events.css';
 
-export default function OBSOverlayPage({ params }: { params: { id: string } }) {
+export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [maxMessages, setMaxMessages] = useState(50);
   const [fontSize, setFontSize] = useState(16);
@@ -51,7 +52,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const response = await fetch(`/api/v1/overlays/public/${params.id}/config`);
+        const response = await fetch(`/api/v1/overlays/public/${id}/config`);
         if (!response.ok) {
           throw new Error('failed to load config');
         }
@@ -103,11 +104,11 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
     // Refresh source status periodically (every 30 seconds)
     const interval = setInterval(loadConfig, 30000);
     return () => clearInterval(interval);
-  }, [params.id]);
+  }, [id]);
 
   // Initialize WebSocket connection (no auth required)
   useEffect(() => {
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/overlay/${params.id}`;
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/overlay/${id}`;
 
     console.log('[OBS Overlay] Connecting to:', wsUrl, reconnectAttempts ? `(attempt ${reconnectAttempts + 1})` : '');
 
@@ -206,7 +207,7 @@ export default function OBSOverlayPage({ params }: { params: { id: string } }) {
         ws.close();
       }
     };
-  }, [params.id, maxMessages, forceReconnect]);
+  }, [id, maxMessages, forceReconnect]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {

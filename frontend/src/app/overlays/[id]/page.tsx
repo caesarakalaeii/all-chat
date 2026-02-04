@@ -16,14 +16,15 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { overlaysApi } from '@/lib/api/overlays';
 import type { Overlay, ChatSource } from '@/lib/types/overlay';
 import { BetaWarning } from '@/components/BetaWarning';
 
-export default function OverlayEditorPage({ params }: { params: { id: string } }) {
+export default function OverlayEditorPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { token, user } = useAuthStore();
@@ -49,12 +50,12 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
 
     const loadData = async () => {
       try {
-        const overlayData = await overlaysApi.get(params.id);
+        const overlayData = await overlaysApi.get(id);
         setOverlay(overlayData);
 
         // Try to fetch sources, but handle 404 gracefully (endpoint may not be implemented yet)
         try {
-          const sourcesData = await overlaysApi.getSources(params.id);
+          const sourcesData = await overlaysApi.getSources(id);
           setSources(sourcesData);
         } catch (sourcesError) {
           console.warn('Sources endpoint not available yet, starting with empty sources');
@@ -69,7 +70,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     };
 
     loadData();
-  }, [params.id, token, router]);
+  }, [id, token, router]);
 
   // Handle OAuth callback redirects
   useEffect(() => {
@@ -82,9 +83,9 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
         message: `Successfully added ${sourceAdded} source!`
       });
       // Refresh sources
-      overlaysApi.getSources(params.id).then(setSources).catch(console.error);
+      overlaysApi.getSources(id).then(setSources).catch(console.error);
       // Clean up URL
-      window.history.replaceState({}, '', `/overlays/${params.id}`);
+      window.history.replaceState({}, '', `/overlays/${id}`);
       // Auto-hide notification after 5 seconds
       setTimeout(() => setNotification(null), 5000);
     } else if (error === 'failed_to_add_source') {
@@ -93,11 +94,11 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
         message: 'Failed to add source. Please try again or use manual entry.'
       });
       // Clean up URL
-      window.history.replaceState({}, '', `/overlays/${params.id}`);
+      window.history.replaceState({}, '', `/overlays/${id}`);
       // Auto-hide notification after 5 seconds
       setTimeout(() => setNotification(null), 5000);
     }
-  }, [searchParams, params.id]);
+  }, [searchParams, id]);
 
   const handleOAuthAddSource = async (platform: 'twitch' | 'youtube' | 'kick' | 'tiktok') => {
     // TikTok uses username input (no OAuth)
@@ -118,7 +119,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
   const proceedWithOAuthAddSource = async (platform: 'youtube' | 'twitch' | 'kick') => {
     try {
       // Get OAuth URL (or short-circuit response) from backend
-      const response = await fetch(`/api/v1/auth/${platform}/add-source/${params.id}`, {
+      const response = await fetch(`/api/v1/auth/${platform}/add-source/${id}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -137,7 +138,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
           type: 'success',
           message: `Successfully added ${data.source_added} source!`
         });
-        overlaysApi.getSources(params.id).then(setSources).catch(console.error);
+        overlaysApi.getSources(id).then(setSources).catch(console.error);
         setShowAddSource(false);
         setTimeout(() => setNotification(null), 5000);
         return;
@@ -194,11 +195,11 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
         }
       }
 
-      await overlaysApi.addSource(params.id, {
+      await overlaysApi.addSource(id, {
         platform: newSourcePlatform as any,
         channel_id: channelId
       });
-      const updatedSources = await overlaysApi.getSources(params.id);
+      const updatedSources = await overlaysApi.getSources(id);
       setSources(updatedSources);
       setShowAddSource(false);
       setShowAdvanced(false);
@@ -224,11 +225,11 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     try {
       const username = tiktokUsername.trim().toLowerCase().replace(/^@/, '');
 
-      await overlaysApi.addSource(params.id, {
+      await overlaysApi.addSource(id, {
         platform: 'tiktok',
         channel_id: username
       });
-      const updatedSources = await overlaysApi.getSources(params.id);
+      const updatedSources = await overlaysApi.getSources(id);
       setSources(updatedSources);
       setShowAddSource(false);
       setShowTikTokInput(false);
@@ -252,8 +253,8 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     if (!confirm('Remove this source?')) return;
 
     try {
-      await overlaysApi.removeSource(params.id, sourceId);
-      const updatedSources = await overlaysApi.getSources(params.id);
+      await overlaysApi.removeSource(id, sourceId);
+      const updatedSources = await overlaysApi.getSources(id);
       setSources(updatedSources);
       setNotification({
         type: 'success',
@@ -274,7 +275,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
     if (!overlay) return;
 
     try {
-      const updatedOverlay = await overlaysApi.update(params.id, {
+      const updatedOverlay = await overlaysApi.update(id, {
         is_public_for_viewers: !overlay.is_public_for_viewers
       });
       setOverlay(updatedOverlay);
@@ -466,7 +467,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
 
           <div className="flex gap-3">
             <button
-              onClick={() => router.push(`/overlays/${params.id}/events`)}
+              onClick={() => router.push(`/overlays/${id}/events`)}
               title="Configure which platform events (subs, channel points, etc.) to display"
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center gap-2"
             >
@@ -481,7 +482,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
               Event Settings
             </button>
             <button
-              onClick={() => router.push(`/overlays/${params.id}/credits`)}
+              onClick={() => router.push(`/overlays/${id}/credits`)}
               title="Configure end-of-stream credit roll"
               className="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center gap-2"
             >
@@ -496,7 +497,7 @@ export default function OverlayEditorPage({ params }: { params: { id: string } }
               Credits
             </button>
             <button
-              onClick={() => router.push(`/overlays/${params.id}/preview`)}
+              onClick={() => router.push(`/overlays/${id}/preview`)}
               className="bg-twitch hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

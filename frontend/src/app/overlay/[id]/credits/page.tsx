@@ -17,10 +17,11 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay';
 
-export default function CreditRollPage({ params }: { params: { id: string } }) {
+export default function CreditRollPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [creditData, setCreditData] = useState<CreditRollResponse | null>(null);
   const [config, setConfig] = useState<CreditRollConfig | null>(null);
   const [customCss, setCustomCss] = useState('');
@@ -31,7 +32,7 @@ export default function CreditRollPage({ params }: { params: { id: string } }) {
     const loadCreditRoll = async () => {
       try {
         // Load config
-        const configResponse = await fetch(`/api/v1/overlays/public/${params.id}/creditroll`);
+        const configResponse = await fetch(`/api/v1/overlays/public/${id}/creditroll`);
         if (configResponse.ok) {
           const configData = await configResponse.json();
           setConfig(configData);
@@ -39,7 +40,7 @@ export default function CreditRollPage({ params }: { params: { id: string } }) {
         }
 
         // Load credit roll data
-        const dataResponse = await fetch(`/api/v1/overlays/public/${params.id}/credit-roll`);
+        const dataResponse = await fetch(`/api/v1/overlays/public/${id}/credit-roll`);
         if (!dataResponse.ok) {
           const errorData = await dataResponse.json();
           throw new Error(errorData.error || 'Failed to load credit roll');
@@ -56,7 +57,7 @@ export default function CreditRollPage({ params }: { params: { id: string } }) {
     };
 
     loadCreditRoll();
-  }, [params.id]);
+  }, [id]);
 
   const renderLeaderboard = (title: string, entries: LeaderboardEntry[] | undefined, emoji: string) => {
     if (!entries || entries.length === 0) return null;
