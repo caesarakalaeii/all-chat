@@ -26,6 +26,7 @@ const (
 type LiveStreamDetector struct {
 	client       *api.Client
 	quotaTracker *quota.PerChannelTracker
+	quotaBudget  *QuotaBudget // Per-channel quota budgeting
 	logger       *zap.Logger
 
 	// Feature flag for hybrid detection
@@ -56,12 +57,14 @@ func DefaultDetectorConfig() DetectorConfig {
 func NewLiveStreamDetector(
 	client *api.Client,
 	quotaTracker *quota.PerChannelTracker,
+	quotaBudget *QuotaBudget,
 	logger *zap.Logger,
 	config DetectorConfig,
 ) *LiveStreamDetector {
 	return &LiveStreamDetector{
 		client:                      client,
 		quotaTracker:                quotaTracker,
+		quotaBudget:                 quotaBudget,
 		logger:                      logger,
 		enableHybridDetection:       config.EnableHybridDetection,
 		statusCheckFailureThreshold: config.StatusCheckFailureThreshold,
@@ -106,6 +109,7 @@ func (d *LiveStreamDetector) DetectLiveStream(ctx context.Context, channelID str
 }
 
 // selectDetectionMethod determines which detection method to use
+// UPDATED: Integrates quota budget system for per-channel caps and adaptive throttling
 func (d *LiveStreamDetector) selectDetectionMethod(ctx context.Context, channelQuota *quota.ChannelQuota) DetectionMethod {
 	// Feature flag disabled: always use full detection
 	if !d.enableHybridDetection {
@@ -117,33 +121,65 @@ func (d *LiveStreamDetector) selectDetectionMethod(ctx context.Context, channelQ
 		return MethodFullDetection
 	}
 
+	channelID := channelQuota.ChannelID
+
 	// Has cached video ID: use cheap status check
 	if channelQuota.CachedVideoID != nil && *channelQuota.CachedVideoID != "" {
 		// But fallback to full detection if status checks keep failing
 		if channelQuota.ConsecutiveStatusCheckFailures >= d.statusCheckFailureThreshold {
 			d.logger.Info("Status check failures exceeded threshold, using full detection",
-				zap.String("channel_id", channelQuota.ChannelID),
+				zap.String("channel_id", channelID),
 				zap.Int("failures", channelQuota.ConsecutiveStatusCheckFailures),
 			)
+
+			// Check quota budget before full detection
+			if d.quotaBudget != nil {
+				canUse, reason := d.quotaBudget.CanChannelUseFullDetection(channelID)
+				if !canUse {
+					d.quotaBudget.RecordDetectionSkipped(reason)
+					d.logger.Warn("Cannot use full detection",
+						zap.String("channel_id", channelID),
+						zap.String("reason", reason),
+					)
+					return MethodSkip
+				}
+			}
+
 			return MethodFullDetection
 		}
+
+		// Prefer status check (1 unit) - always allowed
 		return MethodStatusCheck
 	}
 
 	// No cached video ID: need full detection to discover stream
-	// But first check if quota allows it
-	canUse, err := d.quotaTracker.CanUseQuota(ctx, channelQuota.ChannelID, 100)
+	// UPDATED: Check quota budget for per-channel cap
+	if d.quotaBudget != nil {
+		canUse, reason := d.quotaBudget.CanChannelUseFullDetection(channelID)
+		if !canUse {
+			d.quotaBudget.RecordDetectionSkipped(reason)
+			d.logger.Warn("Cannot use full detection (quota budget)",
+				zap.String("channel_id", channelID),
+				zap.String("reason", reason),
+			)
+			return MethodSkip
+		}
+	}
+
+	// Check per-channel quota tracker
+	canUse, err := d.quotaTracker.CanUseQuota(ctx, channelID, 100)
 	if err != nil {
 		d.logger.Error("Failed to check quota availability",
-			zap.String("channel_id", channelQuota.ChannelID),
+			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
 		return MethodSkip
 	}
 
 	if !canUse {
-		d.logger.Warn("Insufficient quota for full detection",
-			zap.String("channel_id", channelQuota.ChannelID),
+		d.quotaBudget.RecordDetectionSkipped("per_channel_quota_exceeded")
+		d.logger.Warn("Insufficient per-channel quota for full detection",
+			zap.String("channel_id", channelID),
 			zap.String("tier", channelQuota.PriorityTier),
 			zap.Int("quota_used", channelQuota.DailyQuotaUsed),
 			zap.Int("quota_limit", channelQuota.DailyQuotaLimit),
@@ -286,6 +322,7 @@ func (d *LiveStreamDetector) performStatusCheck(
 }
 
 // performFullDetection performs full stream detection (100 quota units)
+// UPDATED: Records full detection in quota budget
 func (d *LiveStreamDetector) performFullDetection(
 	ctx context.Context,
 	channelID string,
@@ -311,6 +348,16 @@ func (d *LiveStreamDetector) performFullDetection(
 			zap.String("channel_id", channelID),
 			zap.Error(recordErr),
 		)
+	}
+
+	// Record full detection in quota budget
+	if d.quotaBudget != nil {
+		if recordErr := d.quotaBudget.RecordFullDetection(ctx, channelID); recordErr != nil {
+			d.logger.Warn("Failed to record full detection in quota budget",
+				zap.String("channel_id", channelID),
+				zap.Error(recordErr),
+			)
+		}
 	}
 
 	if err != nil {

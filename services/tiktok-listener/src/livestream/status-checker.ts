@@ -24,19 +24,26 @@ export interface LiveStatusResult {
 interface CachedStatus {
   isLive: boolean;
   timestamp: number;
+  ttlMs: number; // Dynamic TTL based on result type
 }
 
 /**
  * TikTokStatusChecker handles lightweight live status checks for TikTok users
+ * UPDATED: Implements dynamic cache TTL based on result type
  */
 export class TikTokStatusChecker {
   private logger: Logger;
   private statusCache: Map<string, CachedStatus> = new Map();
-  private readonly cacheTTLMs: number;
+  private readonly cacheTTLMs: number; // Kept for backwards compatibility
+
+  // Dynamic TTL based on result type
+  private readonly liveTTLMs: number = 5000;     // 5 seconds - stream could end
+  private readonly offlineTTLMs: number = 15000; // 15 seconds - less critical
+  private readonly errorTTLMs: number = 2000;    // 2 seconds - retry quickly
 
   /**
    * @param logger Winston logger instance
-   * @param cacheTTLMs Cache TTL in milliseconds (default: 10 seconds)
+   * @param cacheTTLMs Cache TTL in milliseconds (default: 10 seconds) - used as fallback
    */
   constructor(logger: Logger, cacheTTLMs: number = 10000) {
     this.logger = logger;
@@ -52,12 +59,14 @@ export class TikTokStatusChecker {
    */
   async checkLiveStatus(username: string): Promise<LiveStatusResult> {
     // Check cache first to prevent rapid duplicate checks
+    // UPDATED: Use dynamic TTL from cache entry
     const cached = this.statusCache.get(username);
-    if (cached && Date.now() - cached.timestamp < this.cacheTTLMs) {
-      this.logger.debug('Using cached live status', {
+    if (cached && Date.now() - cached.timestamp < cached.ttlMs) {
+      this.logger.debug('Using cached live status (dynamic TTL)', {
         username,
         isLive: cached.isLive,
-        age_ms: Date.now() - cached.timestamp
+        age_ms: Date.now() - cached.timestamp,
+        ttl_ms: cached.ttlMs
       });
       return { isLive: cached.isLive };
     }
@@ -73,16 +82,22 @@ export class TikTokStatusChecker {
       this.logger.debug('Performing live status check', { username });
       const isLive = await connection.fetchIsLive();
 
-      this.logger.debug('Live status check complete', {
+      // Determine dynamic TTL based on result
+      // Live: 5s (stream could end), Offline: 15s (less critical)
+      const ttlMs = isLive ? this.liveTTLMs : this.offlineTTLMs;
+
+      this.logger.debug('Live status check complete (dynamic TTL)', {
         username,
         isLive,
-        cached: false
+        cached: false,
+        ttl_ms: ttlMs
       });
 
-      // Update cache
+      // Update cache with dynamic TTL
       this.statusCache.set(username, {
         isLive,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        ttlMs
       });
 
       // If live, fetch roomId for connection
@@ -109,6 +124,13 @@ export class TikTokStatusChecker {
         username,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined
+      });
+
+      // Cache error result with short TTL (2 seconds) to retry quickly
+      this.statusCache.set(username, {
+        isLive: false,
+        timestamp: Date.now(),
+        ttlMs: this.errorTTLMs
       });
 
       return {
@@ -143,17 +165,30 @@ export class TikTokStatusChecker {
 
   /**
    * Get cache statistics
+   * UPDATED: Uses dynamic TTL from cache entries
    */
   getCacheStats() {
     const now = Date.now();
     let validEntries = 0;
     let expiredEntries = 0;
+    let liveEntries = 0;
+    let offlineEntries = 0;
+    let errorEntries = 0;
 
     for (const [_, cached] of this.statusCache) {
-      if (now - cached.timestamp < this.cacheTTLMs) {
+      if (now - cached.timestamp < cached.ttlMs) {
         validEntries++;
       } else {
         expiredEntries++;
+      }
+
+      // Count by TTL type
+      if (cached.ttlMs === this.liveTTLMs) {
+        liveEntries++;
+      } else if (cached.ttlMs === this.offlineTTLMs) {
+        offlineEntries++;
+      } else if (cached.ttlMs === this.errorTTLMs) {
+        errorEntries++;
       }
     }
 
@@ -161,27 +196,36 @@ export class TikTokStatusChecker {
       totalEntries: this.statusCache.size,
       validEntries,
       expiredEntries,
-      cacheTTLMs: this.cacheTTLMs
+      liveEntries,
+      offlineEntries,
+      errorEntries,
+      dynamicTTL: {
+        live_ms: this.liveTTLMs,
+        offline_ms: this.offlineTTLMs,
+        error_ms: this.errorTTLMs
+      }
     };
   }
 
   /**
    * Clean up expired cache entries
    * Call this periodically to prevent memory leaks
+   * UPDATED: Uses dynamic TTL from cache entries
    */
   cleanupExpiredCache(): number {
     const now = Date.now();
     let cleaned = 0;
 
     for (const [username, cached] of this.statusCache) {
-      if (now - cached.timestamp >= this.cacheTTLMs) {
+      // Use dynamic TTL from cache entry
+      if (now - cached.timestamp >= cached.ttlMs) {
         this.statusCache.delete(username);
         cleaned++;
       }
     }
 
     if (cleaned > 0) {
-      this.logger.debug('Cleaned up expired cache entries', { count: cleaned });
+      this.logger.debug('Cleaned up expired cache entries (dynamic TTL)', { count: cleaned });
     }
 
     return cleaned;

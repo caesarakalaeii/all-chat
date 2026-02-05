@@ -310,6 +310,89 @@ class TikTokListenerService {
           res.writeHead(500, { 'Content-Type': 'text/plain' });
           res.end('Error generating metrics');
         });
+      } else if (req.url?.startsWith('/api/channel') && req.method === 'GET') {
+        // Get channel state
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const username = url.searchParams.get('username');
+
+        if (!username) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'username parameter required' }));
+          return;
+        }
+
+        const state = this.getChannelState(username);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(state));
+      } else if (req.url === '/api/channels' && req.method === 'GET') {
+        // List all channel states
+        const states = this.getAllChannelStates();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          channels: states,
+          summary: {
+            total: states.length,
+            active: states.filter(s => s.hasActiveConnection).length,
+            in_backoff: states.filter(s => s.backoffState && s.backoffState.currentBackoffMs > 0).length,
+          }
+        }));
+      } else if (req.url === '/api/retry' && req.method === 'POST') {
+        // Force retry for a username
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            if (!data.username) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'username required in request body' }));
+              return;
+            }
+
+            this.forceRetry(data.username);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              message: 'Retry triggered successfully',
+              username: data.username,
+              timestamp: new Date().toISOString()
+            }));
+          } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+          }
+        });
+      } else if (req.url === '/api/reset-backoff' && req.method === 'POST') {
+        // Reset backoff for username or all
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', () => {
+          try {
+            const data = body ? JSON.parse(body) : {};
+
+            if (data.username) {
+              // Reset specific username
+              this.resetBackoff(data.username);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                message: 'Backoff reset successfully',
+                username: data.username,
+                timestamp: new Date().toISOString()
+              }));
+            } else {
+              // Reset all
+              const count = this.resetAllBackoff();
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                message: 'All backoff reset successfully',
+                channels_reset: count,
+                timestamp: new Date().toISOString()
+              }));
+            }
+          } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+          }
+        });
       } else {
         res.writeHead(404);
         res.end();
@@ -331,6 +414,11 @@ class TikTokListenerService {
     this.pollTimer = setInterval(() => {
       this.pollActiveStreams();
     }, POLL_INTERVAL_MS);
+
+    // Start periodic metrics update (every 1 minute)
+    setInterval(() => {
+      this.updateBackoffMetrics();
+    }, 60000); // 1 minute
 
     // Start PostgreSQL LISTEN for instant notifications
     this.startDatabaseListener();
@@ -985,6 +1073,123 @@ class TikTokListenerService {
       logger.info('Like aggregation publisher stopped');
     }
   }
+  // ============================================================================
+  // State Inspection and Control Methods (for API endpoints)
+  // ============================================================================
+
+  /**
+   * Get channel state for a username
+   */
+  private getChannelState(username: string) {
+    const backoffState = this.backoffManager.getState(username);
+    const activeStream = this.activeStreams.get(username);
+    const isConnecting = this.connectingStreams.has(username);
+    const pollerTargets = this.livePoller.getTargets();
+    const isInPoller = pollerTargets.some(t => t.username === username);
+
+    let riskLevel = "low";
+    let recommendedAction = "";
+
+    if (backoffState && backoffState.currentBackoffMs > 180000) {
+      // Backoff > 3 minutes
+      riskLevel = "high";
+      recommendedAction = "Consider reset-backoff or force retry";
+    } else if (backoffState && backoffState.currentBackoffMs > 60000) {
+      // Backoff > 1 minute
+      riskLevel = "medium";
+      recommendedAction = "Monitor for automatic recovery";
+    }
+
+    return {
+      username,
+      backoffState: backoffState ? {
+        consecutiveOfflineChecks: backoffState.consecutiveOfflineChecks,
+        consecutiveErrors: backoffState.consecutiveErrors,
+        currentBackoffMs: backoffState.currentBackoffMs,
+        currentBackoffMinutes: Math.round(backoffState.currentBackoffMs / 60000),
+        nextCheckTime: new Date(backoffState.nextCheckTime).toISOString(),
+        lastCheckTime: new Date(backoffState.lastCheckTime).toISOString(),
+        lastSeenLive: backoffState.lastSeenLive ? new Date(backoffState.lastSeenLive).toISOString() : null,
+      } : null,
+      hasActiveConnection: activeStream?.is_connected || false,
+      isConnecting,
+      isInPoller,
+      riskLevel,
+      recommendedAction,
+    };
+  }
+
+  /**
+   * Get all channel states
+   */
+  private getAllChannelStates() {
+    const usernames = new Set<string>();
+
+    // Collect from all sources
+    for (const username of this.activeStreams.keys()) {
+      usernames.add(username);
+    }
+    for (const username of this.backoffManager.getAllUsernames()) {
+      usernames.add(username);
+    }
+    for (const target of this.livePoller.getTargets()) {
+      usernames.add(target.username);
+    }
+
+    return Array.from(usernames).map(username => this.getChannelState(username));
+  }
+
+  /**
+   * Force retry for a username (reset backoff and trigger immediate check)
+   */
+  private forceRetry(username: string): void {
+    logger.info("Manual force retry requested", { username, action: "admin_force_retry" });
+
+    // Reset backoff
+    this.backoffManager.removeState(username);
+
+    // Add to poller if not already there
+    const pollerTargets = this.livePoller.getTargets();
+    const inPoller = pollerTargets.some(t => t.username === username);
+    if (!inPoller) {
+      // Get overlay ID from active streams or use placeholder
+      const activeStream = this.activeStreams.get(username);
+      const overlayId = activeStream?.overlay_id || "admin-force-retry";
+      this.livePoller.addTarget(username, overlayId);
+    }
+
+    // Trigger immediate poll
+    this.pollActiveStreams();
+  }
+
+  /**
+   * Reset backoff for a specific username
+   */
+  private resetBackoff(username: string): void {
+    logger.info("Manual backoff reset requested", { username, action: "admin_reset_backoff" });
+    this.backoffManager.removeState(username);
+  }
+
+  /**
+   * Reset backoff for all usernames
+   */
+  private resetAllBackoff(): number {
+    const usernames = this.backoffManager.getAllUsernames();
+    logger.warn("Manual reset ALL backoff requested", {
+      action: "admin_reset_all_backoff",
+      count: usernames.length,
+    });
+
+    for (const username of usernames) {
+      this.backoffManager.removeState(username);
+    }
+
+    // Trigger immediate poll
+    this.pollActiveStreams();
+
+    return usernames.length;
+  }
+
 
   async stop(): Promise<void> {
     this.isShuttingDown = true;
@@ -1069,3 +1274,42 @@ process.on('SIGTERM', async () => {
   await service.stop();
   process.exit(0);
 });
+
+  /**
+   * Update backoff and detection metrics periodically
+   * Runs every minute to emit current backoff states to Prometheus
+   * 
+   * @private
+   */
+  private updateBackoffMetrics(): void {
+    const states = this.getAllChannelStates();
+    
+    let stuckCount = 0;
+    const atRiskCounts = { high: 0, medium: 0, low: 0 };
+
+    for (const state of states) {
+      // Update per-username backoff interval
+      if (state.backoffState) {
+        this.metrics.recordBackoffInterval(
+          state.username,
+          state.backoffState.currentBackoffMs
+        );
+
+        // Count stuck (>3min = 180000ms)
+        if (state.backoffState.currentBackoffMs > 180000) {
+          stuckCount++;
+        }
+      }
+
+      // Count at-risk
+      if (state.riskLevel) {
+        atRiskCounts[state.riskLevel as 'high' | 'medium' | 'low']++;
+      }
+    }
+
+    // Update aggregate metrics
+    this.metrics.setBackoffUsernamesStuck(stuckCount);
+    this.metrics.setUsernamesAtRisk('high', atRiskCounts.high);
+    this.metrics.setUsernamesAtRisk('medium', atRiskCounts.medium);
+    this.metrics.setUsernamesAtRisk('low', atRiskCounts.low);
+  }

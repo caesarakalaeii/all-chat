@@ -3,8 +3,8 @@
  *
  * Manages exponential backoff for offline checks and connection errors.
  * Implements separate backoff strategies for:
- * - Offline checks: User not streaming (1m → 10m)
- * - Connection errors: Network/API failures (2s → 5m)
+ * - Offline checks: User not streaming (20s → 3m) - UPDATED: 70% faster than previous (1m → 10m)
+ * - Connection errors: Network/API failures (1s → 1m) - UPDATED: Faster recovery
  */
 
 import { Logger } from '../types/logger.js';
@@ -53,15 +53,17 @@ export class BackoffManager {
     this.logger = logger;
 
     // Apply configuration with defaults
-    this.BASE_OFFLINE_BACKOFF_MS = config?.baseOfflineBackoffMs ?? 60000; // 1 minute
-    this.MAX_OFFLINE_BACKOFF_MS = config?.maxOfflineBackoffMs ?? 600000;  // 10 minutes
-    this.ERROR_BACKOFF_MS = config?.errorBackoffMs ?? 2000;              // 2 seconds
-    this.MAX_ERROR_BACKOFF_MS = config?.maxErrorBackoffMs ?? 300000;     // 5 minutes
+    // UPDATED: Reduced backoff parameters for faster stream detection
+    this.BASE_OFFLINE_BACKOFF_MS = config?.baseOfflineBackoffMs ?? 20000;  // 20 seconds (was 60s)
+    this.MAX_OFFLINE_BACKOFF_MS = config?.maxOfflineBackoffMs ?? 180000;   // 3 minutes (was 10min)
+    this.ERROR_BACKOFF_MS = config?.errorBackoffMs ?? 1000;                // 1 second (was 2s)
+    this.MAX_ERROR_BACKOFF_MS = config?.maxErrorBackoffMs ?? 60000;        // 1 minute (was 5min)
   }
 
   /**
    * Record an offline check (user is not streaming)
-   * Implements exponential backoff: 1m → 2m → 4m → 8m → 10m (max)
+   * Implements exponential backoff: 20s → 40s → 80s → 160s → 3m (max)
+   * UPDATED: 70% faster than previous (1m → 10m)
    *
    * @param username TikTok username
    */
@@ -71,7 +73,7 @@ export class BackoffManager {
     state.lastCheckTime = Date.now();
 
     // Calculate exponential backoff for offline status
-    // Progression: 1min, 2min, 4min, 8min, 10min (capped)
+    // Progression: 20s, 40s, 80s, 160s, 180s (3min capped)
     const backoffMinutes = Math.pow(2, state.consecutiveOfflineChecks - 1);
     state.currentBackoffMs = Math.min(
       backoffMinutes * this.BASE_OFFLINE_BACKOFF_MS,
@@ -91,7 +93,8 @@ export class BackoffManager {
 
   /**
    * Record a connection error (network error, API error, etc.)
-   * Uses faster backoff than offline checks: 2s → 4s → 8s → 16s → ... → 5m (max)
+   * Uses faster backoff than offline checks: 1s → 2s → 4s → 8s → ... → 1m (max)
+   * UPDATED: Faster recovery from errors
    *
    * @param username TikTok username
    * @param error Error that occurred
@@ -101,7 +104,7 @@ export class BackoffManager {
     state.consecutiveErrors++;
     state.lastCheckTime = Date.now();
 
-    // Exponential backoff for errors: 2s, 4s, 8s, 16s, 32s, ..., 5min (max)
+    // Exponential backoff for errors: 1s, 2s, 4s, 8s, 16s, 32s, 60s (1min max)
     const backoffSeconds = Math.pow(2, state.consecutiveErrors);
     state.currentBackoffMs = Math.min(
       backoffSeconds * this.ERROR_BACKOFF_MS,
@@ -167,7 +170,7 @@ export class BackoffManager {
     // Reset to minimal backoff for quick re-check
     state.consecutiveOfflineChecks = 0;
     state.consecutiveErrors = 0;
-    state.currentBackoffMs = this.BASE_OFFLINE_BACKOFF_MS; // Start at 1 minute
+    state.currentBackoffMs = this.BASE_OFFLINE_BACKOFF_MS; // Start at 20 seconds
     state.lastCheckTime = Date.now();
     state.nextCheckTime = Date.now() + state.currentBackoffMs;
   }
