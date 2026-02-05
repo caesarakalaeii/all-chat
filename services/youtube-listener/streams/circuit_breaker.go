@@ -1,6 +1,8 @@
 package streams
 
 import (
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -38,23 +40,33 @@ type CircuitBreaker struct {
 	lastStateChange     time.Time
 
 	// Configuration
-	failureThreshold    int           // Open circuit after N consecutive failures (default: 3)
+	failureThreshold    int           // Open circuit after N consecutive failures (default: 5, was 3)
 	successThreshold    int           // Close circuit after N consecutive successes in half-open (default: 2)
-	openDuration        time.Duration // How long to keep circuit open (default: 30 minutes)
+	openDuration        time.Duration // How long to keep circuit open (default: 10 minutes, was 30)
 	halfOpenMaxAttempts int           // Max attempts in half-open state (default: 3)
 }
 
 // NewCircuitBreaker creates a new circuit breaker for a channel
 func NewCircuitBreaker(channelID string, logger *zap.Logger, ytMetrics *metrics.YouTubeMetrics) *CircuitBreaker {
+	// Load configurable parameters from environment variables with defaults
+	// CHANGED FROM 3 to 5: Allow more failures before opening circuit
+	failureThreshold := getEnvAsIntCB("CIRCUIT_BREAKER_FAILURE_THRESHOLD", 5)
+
+	// CHANGED FROM 30 to 10: Recover 3x faster (10min vs 30min)
+	openDurationMinutes := getEnvAsIntCB("CIRCUIT_BREAKER_OPEN_DURATION_MINUTES", 10)
+
+	successThreshold := getEnvAsIntCB("CIRCUIT_BREAKER_SUCCESS_THRESHOLD", 2)
+	halfOpenMaxAttempts := getEnvAsIntCB("CIRCUIT_BREAKER_HALF_OPEN_MAX_ATTEMPTS", 3)
+
 	cb := &CircuitBreaker{
 		channelID:           channelID,
 		logger:              logger,
 		metrics:             ytMetrics,
 		state:               CircuitClosed,
-		failureThreshold:    3,  // Open after 3 consecutive failures (300 units wasted)
-		successThreshold:    2,  // Need 2 successes to fully close
-		openDuration:        30 * time.Minute,
-		halfOpenMaxAttempts: 3,
+		failureThreshold:    failureThreshold,
+		successThreshold:    successThreshold,
+		openDuration:        time.Duration(openDurationMinutes) * time.Minute,
+		halfOpenMaxAttempts: halfOpenMaxAttempts,
 		lastStateChange:     time.Now(),
 	}
 
@@ -65,6 +77,16 @@ func NewCircuitBreaker(channelID string, logger *zap.Logger, ytMetrics *metrics.
 	}
 
 	return cb
+}
+
+// getEnvAsIntCB gets an environment variable as int or returns default
+func getEnvAsIntCB(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
 }
 
 // CanAttemptDiscovery checks if expensive channel discovery should be attempted

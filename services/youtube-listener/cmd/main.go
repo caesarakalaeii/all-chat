@@ -230,6 +230,9 @@ func main() {
 	quotaHandler.SetCircuitBreakerGetter(streamManager)
 	quotaHandler.SetCircuitBreakerResetter(streamManager)
 
+	// Detection control handler (new endpoints for manual intervention)
+	detectionHandler := handlers.NewDetectionHandler(streamManager, streamManager.GetQuotaBudget(), quotaTracker, log)
+
 	router.GET("/quota/status", quotaHandler.GetQuotaStatus)
 	router.GET("/quota/channels/:channel_id", quotaHandler.GetChannelQuota)
 	router.GET("/quota/history", quotaHandler.GetQuotaHistory)
@@ -250,6 +253,14 @@ func main() {
 	{
 		admin.POST("/circuit-breakers/:channel_id/reset", quotaHandler.ResetCircuitBreaker)
 		admin.POST("/circuit-breakers/reset-all", quotaHandler.ResetAllCircuitBreakers)
+
+		// Detection control endpoints (new)
+		admin.GET("/detection/channels/:channel_id", detectionHandler.GetChannelState)
+		admin.GET("/detection/channels", detectionHandler.ListAllChannelStates)
+		admin.POST("/detection/channels/:channel_id/reset-backoff", detectionHandler.ResetChannelBackoff)
+		admin.POST("/detection/channels/:channel_id/force-check", detectionHandler.ForceChannelDetection)
+		admin.POST("/detection/reset-all", detectionHandler.ResetAllBackoff)
+		admin.GET("/detection/quota-budget", detectionHandler.GetQuotaBudgetStatus)
 	}
 
 	// Prometheus metrics endpoint

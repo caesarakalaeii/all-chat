@@ -32,6 +32,13 @@ export class PrometheusMetrics {
   // Error classification metrics
   private errorsByType: Counter<string>;
 
+  // Backoff and detection metrics (NEW)
+  private backoffCurrentInterval: Gauge<string>;
+  private backoffUsernamesStuck: Gauge;
+  private detectionSkippedTotal: Counter<string>;
+  private usernamesAtRisk: Gauge<string>;
+  private autoRecoveryTotal: Counter<string>;
+
   constructor(logger: Logger) {
     this.logger = logger;
     this.registry = new Registry();
@@ -110,6 +117,41 @@ export class PrometheusMetrics {
       registers: [this.registry]
     });
 
+    // Initialize backoff and detection metrics (NEW)
+    this.backoffCurrentInterval = new Gauge({
+      name: 'tiktok_backoff_current_interval_ms',
+      help: 'Current backoff interval per username in milliseconds',
+      labelNames: ['username'],
+      registers: [this.registry]
+    });
+
+    this.backoffUsernamesStuck = new Gauge({
+      name: 'tiktok_backoff_usernames_stuck',
+      help: 'Number of usernames stuck in backoff >5 minutes',
+      registers: [this.registry]
+    });
+
+    this.detectionSkippedTotal = new Counter({
+      name: 'tiktok_detection_skipped_total',
+      help: 'Detections skipped by reason',
+      labelNames: ['reason'], // backoff, error, offline
+      registers: [this.registry]
+    });
+
+    this.usernamesAtRisk = new Gauge({
+      name: 'tiktok_usernames_at_risk',
+      help: 'Usernames with long backoff (risk level)',
+      labelNames: ['risk_level'], // high, medium, low
+      registers: [this.registry]
+    });
+
+    this.autoRecoveryTotal = new Counter({
+      name: 'tiktok_auto_recovery_total',
+      help: 'Automatic stuck state recoveries',
+      labelNames: ['username', 'reason'], // max_backoff_stuck
+      registers: [this.registry]
+    });
+
     this.logger.info('Prometheus metrics initialized');
   }
 
@@ -155,6 +197,27 @@ export class PrometheusMetrics {
     this.errorsByType.inc({ username, type: errorType });
   }
 
+  // Backoff and detection methods (NEW)
+  recordBackoffInterval(username: string, intervalMs: number): void {
+    this.backoffCurrentInterval.set({ username }, intervalMs);
+  }
+
+  setBackoffUsernamesStuck(count: number): void {
+    this.backoffUsernamesStuck.set(count);
+  }
+
+  recordDetectionSkipped(reason: string): void {
+    this.detectionSkippedTotal.inc({ reason });
+  }
+
+  setUsernamesAtRisk(riskLevel: string, count: number): void {
+    this.usernamesAtRisk.set({ risk_level: riskLevel }, count);
+  }
+
+  recordAutoRecovery(username: string, reason: string): void {
+    this.autoRecoveryTotal.inc({ username, reason });
+  }
+
   // Cleanup methods
   clearMetricsForUsername(username: string): void {
     // Clear all labeled metrics for a username
@@ -163,6 +226,7 @@ export class PrometheusMetrics {
     this.messageQueueSize.remove({ username });
     this.circuitBreakerState.remove({ username });
     this.connectionSubscribers.remove({ username });
+    this.backoffCurrentInterval.remove({ username }); // NEW
 
     this.logger.debug('Cleared metrics for username', { username });
   }
