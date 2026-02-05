@@ -226,6 +226,9 @@ export class LiveStreamPoller {
       found_live: liveCount
     });
 
+    // Run stuck state recovery (checks for channels in max backoff >5min)
+    this.recoverStuckChannels();
+
     // Clean up expired cache entries
     this.statusChecker.cleanupExpiredCache();
   }
@@ -293,3 +296,60 @@ export class LiveStreamPoller {
     }
   }
 }
+
+  /**
+   * Recover stuck channels (channels in max backoff for too long)
+   * Run periodically to prevent channels from being permanently stuck
+   * 
+   * Detects:
+   * - Max backoff (3min) for >5 minutes
+   * - Last check >5 minutes ago
+   * 
+   * Action: Force reset to base backoff
+   */
+  recoverStuckChannels(): void {
+    const now = Date.now();
+    const stuckChannels: string[] = [];
+
+    for (const username of this.backoffManager.getAllUsernames()) {
+      const state = this.backoffManager.getState(username);
+      
+      if (!state) continue;
+
+      // Check if stuck: max backoff (180000ms = 3min) for >5 minutes
+      const isAtMaxBackoff = state.currentBackoffMs >= 180000;
+      const timeSinceLastCheck = now - state.lastCheckTime;
+      const stuckDuration = 5 * 60 * 1000; // 5 minutes
+
+      if (isAtMaxBackoff && timeSinceLastCheck > stuckDuration) {
+        stuckChannels.push(username);
+
+        this.logger.warn('Detected stuck channel in max backoff, forcing recovery', {
+          username,
+          current_backoff_ms: state.currentBackoffMs,
+          time_since_last_check_ms: timeSinceLastCheck,
+          time_since_last_check_minutes: Math.round(timeSinceLastCheck / 60000),
+          consecutive_offline: state.consecutiveOfflineChecks,
+          consecutive_errors: state.consecutiveErrors,
+          action: 'auto_recovery'
+        });
+
+        // Force reset to base backoff (20 seconds)
+        this.backoffManager.removeState(username);
+
+        // Mark that we should check this immediately
+        const target = this.pollingTargets.get(username);
+        if (target) {
+          // Target will be checked in next cycle with fresh backoff
+          this.logger.info('Stuck channel will be rechecked immediately', { username });
+        }
+      }
+    }
+
+    if (stuckChannels.length > 0) {
+      this.logger.info('Auto-recovery cycle complete', {
+        stuck_channels_recovered: stuckChannels.length,
+        usernames: stuckChannels
+      });
+    }
+  }

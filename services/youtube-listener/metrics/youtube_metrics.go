@@ -33,6 +33,15 @@ type YouTubeMetrics struct {
 	// Emergency Shutoff
 	EmergencyShutoffTriggers *prometheus.CounterVec // Emergency shutoff activations
 	EmergencyShutoffBlocked  *prometheus.CounterVec // Requests blocked by shutoff
+
+	// Backoff and Detection Metrics (NEW)
+	BackoffCurrentInterval  *prometheus.GaugeVec   // Current backoff interval per channel (seconds)
+	BackoffChannelsStuck    *prometheus.GaugeVec   // Channels in >5min backoff
+	DetectionSkippedTotal   *prometheus.CounterVec // Detections skipped by reason
+	ChannelsAtRisk          *prometheus.GaugeVec   // Channels with long backoff + connected overlays
+	AutoRecoveryTotal       *prometheus.CounterVec // Automatic stuck state recoveries
+	QuotaBudgetRemaining    *prometheus.GaugeVec   // Per-channel quota budget remaining
+	QuotaBudgetThrottled    *prometheus.CounterVec // Detections throttled by quota budget
 }
 
 // NewYouTubeMetrics creates YouTube-specific metrics
@@ -170,6 +179,56 @@ func NewYouTubeMetrics() *YouTubeMetrics {
 				Help: "Number of API calls blocked by emergency shutoff",
 			},
 			[]string{"operation", "allow_critical"},
+		),
+		// Backoff and Detection Metrics (NEW)
+		BackoffCurrentInterval: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "youtube_backoff_current_interval_seconds",
+				Help: "Current backoff interval per channel in seconds",
+			},
+			[]string{"channel_id"},
+		),
+		BackoffChannelsStuck: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "youtube_backoff_channels_stuck",
+				Help: "Number of channels stuck in backoff >5 minutes",
+			},
+			[]string{},
+		),
+		DetectionSkippedTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_detection_skipped_total",
+				Help: "Detections skipped by reason",
+			},
+			[]string{"reason"}, // backoff_interval, negative_cache, circuit_breaker, quota_budget, etc.
+		),
+		ChannelsAtRisk: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "youtube_channels_at_risk",
+				Help: "Channels with long backoff and connected overlays",
+			},
+			[]string{"risk_level"}, // high, medium, low
+		),
+		AutoRecoveryTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_auto_recovery_total",
+				Help: "Automatic stuck state recoveries",
+			},
+			[]string{"channel_id", "reason"}, // circuit_breaker_open_30min, high_backoff_recently_active
+		),
+		QuotaBudgetRemaining: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "youtube_quota_budget_remaining_per_channel",
+				Help: "Per-channel quota budget remaining (full detections left today)",
+			},
+			[]string{"channel_id", "priority"}, // high, standard, low
+		),
+		QuotaBudgetThrottled: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_quota_budget_throttled_total",
+				Help: "Detections throttled by quota budget",
+			},
+			[]string{"channel_id", "reason"}, // channel_quota_cap_reached, emergency_mode_low_priority
 		),
 	}
 }
