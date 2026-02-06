@@ -295,7 +295,6 @@ export class LiveStreamPoller {
       return false;
     }
   }
-}
 
   /**
    * Recover stuck channels (channels in max backoff for too long)
@@ -353,3 +352,4 @@ export class LiveStreamPoller {
       });
     }
   }
+}

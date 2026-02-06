@@ -418,7 +418,7 @@ class TikTokListenerService {
     // Start periodic metrics update (every 1 minute)
     setInterval(() => {
       this.updateBackoffMetrics();
-    }, 60000); // 1 minute
+    }, 60000);
 
     // Start PostgreSQL LISTEN for instant notifications
     this.startDatabaseListener();
@@ -1254,6 +1254,31 @@ class TikTokListenerService {
 
     logger.info('Service shutdown complete');
   }
+
+  /**
+   * Update backoff and detection metrics periodically
+   * Runs every minute to emit current backoff states to Prometheus
+   */
+  private updateBackoffMetrics(): void {
+    let stuckCount = 0;
+
+    for (const username of this.backoffManager.getAllUsernames()) {
+      const backoffState = this.backoffManager.getState(username);
+
+      if (backoffState) {
+        this.metrics.recordBackoffInterval(
+          username,
+          backoffState.currentBackoffMs
+        );
+
+        if (backoffState.currentBackoffMs > 180000) {
+          stuckCount++;
+        }
+      }
+    }
+
+    this.metrics.setBackoffUsernamesStuck(stuckCount);
+  }
 }
 
 // Main
@@ -1276,42 +1301,3 @@ process.on('SIGTERM', async () => {
   await service.stop();
   process.exit(0);
 });
-
-  /**
-   * Update backoff and detection metrics periodically
-   * Runs every minute to emit current backoff states to Prometheus
-   * 
-   * @private
-   */
-  private updateBackoffMetrics(): void {
-    const states = this.getAllChannelStates();
-    
-    let stuckCount = 0;
-    const atRiskCounts = { high: 0, medium: 0, low: 0 };
-
-    for (const state of states) {
-      // Update per-username backoff interval
-      if (state.backoffState) {
-        this.metrics.recordBackoffInterval(
-          state.username,
-          state.backoffState.currentBackoffMs
-        );
-
-        // Count stuck (>3min = 180000ms)
-        if (state.backoffState.currentBackoffMs > 180000) {
-          stuckCount++;
-        }
-      }
-
-      // Count at-risk
-      if (state.riskLevel) {
-        atRiskCounts[state.riskLevel as 'high' | 'medium' | 'low']++;
-      }
-    }
-
-    // Update aggregate metrics
-    this.metrics.setBackoffUsernamesStuck(stuckCount);
-    this.metrics.setUsernamesAtRisk('high', atRiskCounts.high);
-    this.metrics.setUsernamesAtRisk('medium', atRiskCounts.medium);
-    this.metrics.setUsernamesAtRisk('low', atRiskCounts.low);
-  }
