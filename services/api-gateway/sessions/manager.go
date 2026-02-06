@@ -161,8 +161,12 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 func (sm *SessionManager) StartGracePeriod(ctx context.Context, overlayID string) error {
 	key := SessionKeyPrefix + overlayID
 
-	// Update state to ENDING
-	if err := sm.redis.HSet(ctx, key, "state", "ENDING").Err(); err != nil {
+	// Update state to ENDING and refresh TTL
+	pipe := sm.redis.Pipeline()
+	pipe.HSet(ctx, key, "state", "ENDING")
+	pipe.Expire(ctx, key, SessionTTL)
+
+	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("failed to update session state to ENDING: %w", err)
 	}
 
@@ -178,8 +182,12 @@ func (sm *SessionManager) StartGracePeriod(ctx context.Context, overlayID string
 func (sm *SessionManager) CancelGracePeriod(ctx context.Context, overlayID string) error {
 	key := SessionKeyPrefix + overlayID
 
-	// Update state back to ACTIVE
-	if err := sm.redis.HSet(ctx, key, "state", "ACTIVE").Err(); err != nil {
+	// Update state back to ACTIVE and refresh TTL
+	pipe := sm.redis.Pipeline()
+	pipe.HSet(ctx, key, "state", "ACTIVE")
+	pipe.Expire(ctx, key, SessionTTL)
+
+	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("failed to update session state to ACTIVE: %w", err)
 	}
 
