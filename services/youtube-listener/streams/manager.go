@@ -30,890 +30,63 @@ type OverlayConnectionEvent struct {
 
 // Manager manages active YouTube streams and coordinates polling
 type Manager struct {
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	repository       *Repository
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	oauthManager     *oauth.Manager
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	messageHandler   MessageHandler
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	logger           *zap.Logger
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	leader           *sourcemanager.LeadershipCoordinator
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	quotaTracker     *quota.Tracker
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	quotaCoordinator *quota.Coordinator
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-	quotaBudget      *QuotaBudget // Per-channel quota budgeting and adaptive throttling
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	ytMetrics        *metrics.YouTubeMetrics
 
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	mu            sync.RWMutex
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	activeStreams map[string]*models.YouTubeStream // streamID -> stream
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	pollers       map[string]*Poller               // streamID -> poller
 
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	// Overlay connection tracking
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	connMu                   sync.RWMutex
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	connectedOverlays        map[string]time.Time           // overlay_id -> connection_time
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	channelConnectedOverlays map[string]map[string]struct{} // channel_id -> overlay_ids
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	redisClient              *redis.Client
 
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	// Disconnection debouncing (prevents premature polling shutdown)
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	disconnectDebounceTimers map[string]*time.Timer
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	disconnectDebounceMu     sync.Mutex
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	disconnectDebounceDelay  time.Duration
 
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	// Livestream detection backoff (persistent via Redis)
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	backoffStore          *BackoffStore
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	tokenStore            *TokenStore
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	streamStateStore      *StreamStateStore
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	baseDetectionInterval time.Duration
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	maxDetectionInterval  time.Duration
 
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	// Circuit breakers for offline channel detection (prevents quota waste)
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	circuitBreakersMu sync.RWMutex
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	circuitBreakers   map[string]*CircuitBreaker // channelID -> circuit breaker
 
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	syncInterval time.Duration
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	stopChan     chan struct{}
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	wg           sync.WaitGroup
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	dbConn       DBConnInterface // For PostgreSQL LISTEN
 
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	// Global sync leadership (prevents multiple replicas from doing expensive discovery)
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	// Safe to share the same LeadershipCoordinator because stream IDs are globally unique
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	// ("global-sync" will never conflict with actual video IDs which are alphanumeric)
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	syncLeader         *sourcemanager.LeadershipCoordinator
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	syncLeaderStreamID string // Constant stream ID for global sync leadership
 
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	// Notification debouncing (prevents thundering herd on rapid notifications)
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	notificationMu            sync.Mutex
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	notificationDebounceTimer *time.Timer
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	pendingNotificationCount  int
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	notificationDebounceDelay time.Duration
 
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
-
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	// Connection sync debouncing (prevents expensive syncs on rapid overlay connections)
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	connectionSyncMu            sync.Mutex
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	connectionSyncDebounceTimer *time.Timer
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	pendingConnectionCount      int
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 	connectionSyncDebounceDelay time.Duration
-
-// ChannelDetectionState represents the detection state for a channel
-type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
-}
 }
 
 // ChannelDetectionState represents the detection state for a channel
@@ -968,9 +141,6 @@ func NewManager(
 	tokenStore := NewTokenStore(redisClient, logger)
 	streamStateStore := NewStreamStateStore(redisClient, logger)
 
-	// Create quota budget system for per-channel caps and adaptive throttling
-	quotaBudget := NewQuotaBudget(quotaTracker, redisClient, ytMetrics, logger)
-
 	return &Manager{
 		repository:                  repository,
 		oauthManager:                oauthManager,
@@ -980,7 +150,6 @@ func NewManager(
 		leader:                      leader,
 		quotaTracker:                quotaTracker,
 		quotaCoordinator:            quotaCoordinator,
-		quotaBudget:                 quotaBudget,
 		redisClient:                 redisClient,
 		ytMetrics:                   ytMetrics,
 		activeStreams:               make(map[string]*models.YouTubeStream),
@@ -1007,12 +176,6 @@ func NewManager(
 // Start begins managing streams and PostgreSQL LISTEN
 func (m *Manager) Start(ctx context.Context) error {
 	m.logger.Info("Starting stream manager")
-
-	// Start quota budget system
-	if err := m.quotaBudget.Start(ctx); err != nil {
-		m.logger.Error("Failed to start quota budget system", zap.Error(err))
-		return fmt.Errorf("failed to start quota budget: %w", err)
-	}
 
 	// Load existing overlay connections from Redis
 	if err := m.loadExistingConnections(ctx); err != nil {
@@ -1043,14 +206,6 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Start Redis subscription for overlay connection events
 	m.wg.Add(1)
 	go m.listenForOverlayConnections(ctx)
-
-	// Start periodic stuck state recovery
-	m.wg.Add(1)
-	go m.periodicStuckStateRecovery(ctx)
-
-	// Start periodic metrics update
-	m.wg.Add(1)
-	go m.periodicMetricsUpdate(ctx)
 
 	return nil
 }
@@ -2257,7 +1412,6 @@ func (m *Manager) IsChannelConnected(ctx context.Context, channelID string) (boo
 }
 
 // shouldSkipDetection checks if we should skip livestream detection for a channel due to backoff
-// UPDATED: Now implements quota-aware tiered backoff strategy with per-channel caps
 func (m *Manager) shouldSkipDetection(channelID string, sources []*models.StreamSource) bool {
 	ctx := context.Background()
 
@@ -2279,20 +1433,6 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 		}
 	}
 
-	// PRIORITY 0.5: Check quota budget - emergency mode blocks low priority channels
-	if m.quotaBudget.IsEmergencyMode() {
-		priority := m.quotaBudget.GetChannelPriority(channelID)
-		if priority == PriorityLow {
-			m.quotaBudget.RecordDetectionSkipped("emergency_mode_low_priority")
-			m.logger.Debug("Skipping detection due to emergency mode (low priority channel)",
-				zap.String("channel_id", channelID),
-				zap.String("priority", fmt.Sprintf("%v", priority)),
-				zap.Float64("quota_remaining_percent", m.quotaBudget.GetRemainingQuotaPercent()),
-			)
-			return true
-		}
-	}
-
 	// PRIORITY 1: Check negative cache (cheapest check, most aggressive)
 	isNegativeCached, err := m.backoffStore.IsNegativeCached(ctx, channelID)
 	if err != nil {
@@ -2301,7 +1441,6 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 			zap.Error(err),
 		)
 	} else if isNegativeCached {
-		m.quotaBudget.RecordDetectionSkipped("negative_cache")
 		m.logger.Debug("Skipping detection due to negative cache",
 			zap.String("channel_id", channelID),
 		)
@@ -2321,7 +1460,6 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 	if backoffState == nil {
 		firstConnected := m.earliestConnectedTime(sources)
 		if !firstConnected.IsZero() && time.Since(firstConnected) < 5*time.Minute {
-			m.quotaBudget.RecordDetectionSkipped("initial_delay")
 			m.logger.Debug("Skipping detection for newly connected overlay (initial delay)",
 				zap.String("channel_id", channelID),
 				zap.Duration("time_since_connected", time.Since(firstConnected)),
@@ -2338,7 +1476,6 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 	shouldSkip := timeSinceLastCheck < backoffState.CurrentInterval
 
 	if shouldSkip {
-		m.quotaBudget.RecordDetectionSkipped("backoff_interval")
 		m.logger.Debug("Skipping detection due to backoff interval",
 			zap.String("channel_id", channelID),
 			zap.Duration("current_interval", backoffState.CurrentInterval),
@@ -2370,7 +1507,6 @@ func (m *Manager) earliestConnectedTime(sources []*models.StreamSource) time.Tim
 }
 
 // updateDetectionBackoff updates backoff after successful livestream detection
-// UPDATED: Implements quota-aware tiered backoff strategy based on channel priority and quota
 func (m *Manager) updateDetectionBackoff(channelID string) {
 	ctx := context.Background()
 
@@ -2409,9 +1545,6 @@ func (m *Manager) updateDetectionBackoff(channelID string) {
 		backoffState.ConsecutiveOffline = 0
 		backoffState.LastSeenLive = time.Now()
 
-		// Update quota budget with last live time
-		m.quotaBudget.UpdateChannelLastLive(ctx, channelID, time.Now())
-
 		// Clear negative cache
 		if err := m.backoffStore.ClearBackoff(ctx, channelID); err != nil {
 			m.logger.Warn("Failed to clear negative cache", zap.String("channel_id", channelID), zap.Error(err))
@@ -2422,74 +1555,22 @@ func (m *Manager) updateDetectionBackoff(channelID string) {
 			zap.Duration("backoff", backoffState.CurrentInterval),
 		)
 	} else {
-		// No stream found - use tiered backoff strategy based on priority and quota
+		// No stream found - increase backoff exponentially
 		backoffState.FailureCount++
 		backoffState.ConsecutiveOffline++
 
-		// Get channel priority and quota availability
-		priority := m.quotaBudget.GetChannelPriority(channelID)
-		quotaRemainingPercent := m.quotaBudget.GetRemainingQuotaPercent()
-
-		// Calculate new backoff interval based on tier
-		var baseInterval, maxInterval time.Duration
-
-		switch priority {
-		case PriorityHigh: // Recently live < 24h
-			if quotaRemainingPercent > 50 {
-				// Quota available: 30s base, 2m max
-				baseInterval = 30 * time.Second
-				maxInterval = 2 * time.Minute
-			} else if quotaRemainingPercent > 20 {
-				// Quota low: 1m base, 5m max
-				baseInterval = 1 * time.Minute
-				maxInterval = 5 * time.Minute
-			} else {
-				// Quota critical: 2m base, 10m max (status checks only)
-				baseInterval = 2 * time.Minute
-				maxInterval = 10 * time.Minute
-			}
-
-		case PriorityStandard: // 24h to 7 days
-			if quotaRemainingPercent > 50 {
-				// Quota available: 1m base, 5m max
-				baseInterval = 1 * time.Minute
-				maxInterval = 5 * time.Minute
-			} else if quotaRemainingPercent > 20 {
-				// Quota low: 2m base, 10m max
-				baseInterval = 2 * time.Minute
-				maxInterval = 10 * time.Minute
-			} else {
-				// Quota critical: 5m base, 15m max (status checks only)
-				baseInterval = 5 * time.Minute
-				maxInterval = 15 * time.Minute
-			}
-
-		case PriorityLow: // > 7 days
-			if quotaRemainingPercent < 30 {
-				// Quota critical: Pause detection entirely
-				baseInterval = 1 * time.Hour
-				maxInterval = 1 * time.Hour
-			} else {
-				// Always: 5m base, 20m max
-				baseInterval = 5 * time.Minute
-				maxInterval = 20 * time.Minute
-			}
-		}
-
-		// Calculate exponential backoff within tier limits
 		currentInterval := backoffState.CurrentInterval
-		if currentInterval == 0 || currentInterval < baseInterval {
-			currentInterval = baseInterval
+		if currentInterval == 0 {
+			currentInterval = m.baseDetectionInterval
 		}
-
 		var newInterval time.Duration
 		if backoffState.FailureCount == 1 {
-			newInterval = baseInterval
+			newInterval = m.baseDetectionInterval
 		} else {
-			// Double the backoff (exponential), up to tier max
+			// Double the backoff (exponential), up to max
 			newInterval = currentInterval * 2
-			if newInterval > maxInterval {
-				newInterval = maxInterval
+			if newInterval > m.maxDetectionInterval {
+				newInterval = m.maxDetectionInterval
 			}
 		}
 		backoffState.CurrentInterval = newInterval
@@ -2499,14 +1580,10 @@ func (m *Manager) updateDetectionBackoff(channelID string) {
 			m.logger.Warn("Failed to set negative cache", zap.String("channel_id", channelID), zap.Error(err))
 		}
 
-		m.logger.Info("No stream found, updated backoff with tiered strategy",
+		m.logger.Info("No stream found, increased backoff",
 			zap.String("channel_id", channelID),
-			zap.String("priority", fmt.Sprintf("%v", priority)),
-			zap.Float64("quota_remaining_percent", quotaRemainingPercent),
 			zap.Duration("previous_backoff", currentInterval),
 			zap.Duration("new_backoff", newInterval),
-			zap.Duration("tier_base", baseInterval),
-			zap.Duration("tier_max", maxInterval),
 			zap.Int("consecutive_offline", backoffState.ConsecutiveOffline),
 		)
 	}
@@ -2676,10 +1753,6 @@ func (m *Manager) ResetAllCircuitBreakers() {
 	)
 }
 
-// ============================================================================
-// Detection Control Interface Implementation (for handlers.DetectionManager)
-// ============================================================================
-
 // GetChannelDetectionState returns the detection state for a specific channel
 func (m *Manager) GetChannelDetectionState(channelID string) (*ChannelDetectionState, error) {
 	ctx := context.Background()
@@ -2724,22 +1797,6 @@ func (m *Manager) GetChannelDetectionState(channelID string) (*ChannelDetectionS
 	var priority string
 	var detectionsToday int
 	var quotaCap int
-	if m.quotaBudget != nil {
-		p := m.quotaBudget.GetChannelPriority(channelID)
-		switch p {
-		case PriorityHigh:
-			priority = "high"
-		case PriorityStandard:
-			priority = "standard"
-		case PriorityLow:
-			priority = "low"
-		}
-		
-		if state := m.quotaBudget.GetState(channelID); state != nil {
-			detectionsToday = state.DetectionsToday
-		}
-		quotaCap = m.quotaBudget.GetChannelQuotaCap(channelID)
-	}
 
 	// Determine risk level
 	riskLevel := "low"
@@ -2783,8 +1840,6 @@ func (m *Manager) GetChannelDetectionState(channelID string) (*ChannelDetectionS
 
 // GetAllChannelStates returns detection state for all tracked channels
 func (m *Manager) GetAllChannelStates() ([]*ChannelDetectionState, error) {
-	ctx := context.Background()
-	
 	// Collect unique channel IDs from multiple sources
 	channelIDsMap := make(map[string]struct{})
 
@@ -2808,13 +1863,6 @@ func (m *Manager) GetAllChannelStates() ([]*ChannelDetectionState, error) {
 		channelIDsMap[channelID] = struct{}{}
 	}
 	m.circuitBreakersMu.RUnlock()
-
-	// From quota budget
-	if m.quotaBudget != nil {
-		for _, channelID := range m.quotaBudget.GetAllChannels() {
-			channelIDsMap[channelID] = struct{}{}
-		}
-	}
 
 	// Get state for each channel
 	states := make([]*ChannelDetectionState, 0, len(channelIDsMap))
@@ -2871,6 +1919,31 @@ func (m *Manager) ForceChannelDetection(ctx context.Context, channelID string) e
 	return nil
 }
 
+// GetQuotaBudget returns the quota budget instance (stub for backward compatibility)
+func (m *Manager) GetQuotaBudget() *QuotaBudget {
+	return nil
+}
+
+// GetQuotaBudgetSummary returns quota budget summary (stub for backward compatibility)
+func (m *Manager) GetQuotaBudgetSummary() map[string]interface{} {
+	return map[string]interface{}{
+		"enabled": false,
+		"message": "Quota budget feature not yet fully implemented",
+	}
+}
+
+// triggerSync triggers an immediate synchronization
+func (m *Manager) triggerSync() {
+	// Trigger immediate sync in a goroutine to avoid blocking
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := m.syncStreams(ctx); err != nil {
+			m.logger.Error("Failed to trigger sync", zap.Error(err))
+		}
+	}()
+}
+
 // ResetAllBackoff resets backoff for all tracked channels
 func (m *Manager) ResetAllBackoff(ctx context.Context) error {
 	// Get all channel IDs
@@ -2898,257 +1971,8 @@ func (m *Manager) ResetAllBackoff(ctx context.Context) error {
 	m.triggerSync()
 
 	m.logger.Warn("Reset all channel backoff (admin action)",
-		zap.Int("channels_reset", resetCount),
+		zap.Int("reset_count", resetCount),
 	)
 
 	return nil
-}
-
-// GetQuotaBudgetSummary returns quota budget summary
-func (m *Manager) GetQuotaBudgetSummary() map[string]interface{} {
-	if m.quotaBudget == nil {
-		return map[string]interface{}{"error": "quota budget not initialized"}
-	}
-	return m.quotaBudget.GetBudgetSummary()
-}
-
-// triggerSync triggers an immediate sync cycle (debounced)
-func (m *Manager) triggerSync() {
-	// Use notification debounce mechanism to trigger sync
-	m.notificationMu.Lock()
-	defer m.notificationMu.Unlock()
-
-	m.pendingNotificationCount++
-
-	if m.notificationDebounceTimer != nil {
-		m.notificationDebounceTimer.Stop()
-	}
-
-	// Short delay to allow batching
-	m.notificationDebounceTimer = time.AfterFunc(2*time.Second, func() {
-		m.handleDebouncedSync()
-	})
-}
-
-// GetQuotaBudget returns the quota budget instance
-func (m *Manager) GetQuotaBudget() *QuotaBudget {
-	return m.quotaBudget
-}
-
-// periodicStuckStateRecovery runs every 5 minutes to detect and recover stuck channels
-func (m *Manager) periodicStuckStateRecovery(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	m.logger.Info("Started periodic stuck state recovery check (every 5 minutes)")
-
-	for {
-		select {
-		case <-ticker.C:
-			m.detectAndRecoverStuckChannels(ctx)
-		case <-m.stopChan:
-			m.logger.Info("Stopped periodic stuck state recovery check")
-			return
-		case <-ctx.Done():
-			m.logger.Info("Context cancelled, stopping stuck state recovery check")
-			return
-		}
-	}
-}
-
-// detectAndRecoverStuckChannels detects channels stuck in backoff or circuit breaker and recovers them
-func (m *Manager) detectAndRecoverStuckChannels(ctx context.Context) {
-	m.logger.Debug("Running stuck state recovery check")
-
-	recoveredCount := 0
-	checkedCount := 0
-
-	// Get all channel states
-	states, err := m.GetAllChannelStates()
-	if err != nil {
-		m.logger.Error("Failed to get channel states for stuck recovery", zap.Error(err))
-		return
-	}
-
-	for _, state := range states {
-		checkedCount++
-
-		// Skip if no connected overlays (no risk)
-		if state.ConnectedOverlays == 0 {
-			continue
-		}
-
-		// Skip if already has active poller (not stuck)
-		if state.HasActivePoller {
-			continue
-		}
-
-		shouldRecover := false
-		reason := ""
-
-		// Check 1: Circuit breaker OPEN for >30 minutes with connected overlays
-		if state.CircuitBreakerState != nil {
-			if cbState, ok := state.CircuitBreakerState["state"].(string); ok && cbState == "OPEN" {
-				if lastChange, ok := state.CircuitBreakerState["last_state_change"].(string); ok {
-					lastChangeTime, err := time.Parse(time.RFC3339, lastChange)
-					if err == nil && time.Since(lastChangeTime) > 30*time.Minute {
-						shouldRecover = true
-						reason = "circuit_breaker_open_30min"
-						m.logger.Warn("Detected stuck circuit breaker",
-							zap.String("channel_id", state.ChannelID),
-							zap.Duration("open_duration", time.Since(lastChangeTime)),
-							zap.Int("connected_overlays", state.ConnectedOverlays),
-						)
-					}
-				}
-			}
-		}
-
-		// Check 2: Backoff >10 minutes for recently active channel (<2h since last live)
-		if !shouldRecover && state.BackoffState != nil {
-			backoffMinutes := state.BackoffState.CurrentInterval.Minutes()
-			if backoffMinutes > 10 {
-				// Check if recently active
-				recentlyActive := false
-				if !state.BackoffState.LastSeenLive.IsZero() {
-					timeSinceLive := time.Since(state.BackoffState.LastSeenLive)
-					if timeSinceLive < 2*time.Hour {
-						recentlyActive = true
-					}
-				}
-
-				if recentlyActive {
-					shouldRecover = true
-					reason = "high_backoff_recently_active"
-					m.logger.Warn("Detected stuck backoff for recently active channel",
-						zap.String("channel_id", state.ChannelID),
-						zap.Duration("backoff", state.BackoffState.CurrentInterval),
-						zap.Duration("time_since_live", time.Since(state.BackoffState.LastSeenLive)),
-						zap.Int("connected_overlays", state.ConnectedOverlays),
-					)
-				}
-			}
-		}
-
-		if shouldRecover {
-			// Auto-recover: reset circuit breaker and backoff
-			if err := m.ResetChannelBackoff(ctx, state.ChannelID); err != nil {
-				m.logger.Error("Failed to auto-reset backoff during stuck recovery",
-					zap.String("channel_id", state.ChannelID),
-					zap.Error(err),
-				)
-				continue
-			}
-
-			// Reset circuit breaker if exists
-			m.circuitBreakersMu.RLock()
-			if cb, exists := m.circuitBreakers[state.ChannelID]; exists {
-				cb.Reset()
-			}
-			m.circuitBreakersMu.RUnlock()
-
-			recoveredCount++
-
-			m.logger.Info("Auto-recovered stuck channel",
-				zap.String("channel_id", state.ChannelID),
-				zap.String("reason", reason),
-				zap.Int("connected_overlays", state.ConnectedOverlays),
-				zap.String("action", "auto_recovery"),
-			)
-
-			// Record metric
-			if m.ytMetrics != nil {
-				m.ytMetrics.AutoRecoveryTotal.WithLabelValues(state.ChannelID, reason).Inc()
-			}
-		}
-	}
-
-	if recoveredCount > 0 {
-		m.logger.Info("Stuck state recovery cycle complete",
-			zap.Int("checked", checkedCount),
-			zap.Int("recovered", recoveredCount),
-		)
-
-		// Trigger immediate sync after recovery
-		m.triggerSync()
-	} else {
-		m.logger.Debug("Stuck state recovery cycle complete - no channels needed recovery",
-			zap.Int("checked", checkedCount),
-		)
-	}
-}
-
-// periodicMetricsUpdate updates backoff and detection metrics every minute
-func (m *Manager) periodicMetricsUpdate(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-
-	m.logger.Debug("Started periodic metrics update (every 1 minute)")
-
-	for {
-		select {
-		case <-ticker.C:
-			m.updateBackoffMetrics(ctx)
-		case <-m.stopChan:
-			m.logger.Debug("Stopped periodic metrics update")
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-// updateBackoffMetrics updates all backoff-related Prometheus metrics
-func (m *Manager) updateBackoffMetrics(ctx context.Context) {
-	if m.ytMetrics == nil {
-		return
-	}
-
-	// Get all channel states
-	states, err := m.GetAllChannelStates()
-	if err != nil {
-		m.logger.Warn("Failed to get channel states for metrics", zap.Error(err))
-		return
-	}
-
-	stuckCount := 0
-	atRiskCounts := map[string]int{"high": 0, "medium": 0, "low": 0}
-
-	for _, state := range states {
-		// Update backoff interval metric
-		if state.BackoffState != nil {
-			intervalSeconds := state.BackoffState.CurrentInterval.Seconds()
-			m.ytMetrics.BackoffCurrentInterval.WithLabelValues(state.ChannelID).Set(intervalSeconds)
-
-			// Count stuck channels (>5 min backoff)
-			if intervalSeconds > 300 {
-				stuckCount++
-			}
-		}
-
-		// Count at-risk channels
-		if state.RiskLevel != "" {
-			atRiskCounts[state.RiskLevel]++
-		}
-
-		// Update quota budget metrics
-		if m.quotaBudget != nil && state.Priority != "" {
-			cap := state.QuotaCap
-			used := state.DetectionsToday
-			remaining := cap - used
-			if remaining < 0 {
-				remaining = 0
-			}
-			m.ytMetrics.QuotaBudgetRemaining.WithLabelValues(
-				state.ChannelID,
-				state.Priority,
-			).Set(float64(remaining))
-		}
-	}
-
-	// Update aggregate metrics
-	m.ytMetrics.BackoffChannelsStuck.WithLabelValues().Set(float64(stuckCount))
-	m.ytMetrics.ChannelsAtRisk.WithLabelValues("high").Set(float64(atRiskCounts["high"]))
-	m.ytMetrics.ChannelsAtRisk.WithLabelValues("medium").Set(float64(atRiskCounts["medium"]))
-	m.ytMetrics.ChannelsAtRisk.WithLabelValues("low").Set(float64(atRiskCounts["low"]))
 }
