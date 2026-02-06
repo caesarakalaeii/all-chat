@@ -289,22 +289,26 @@ func (h *Handler) getActiveSession(ctx context.Context, overlayID string) (*mode
 		State:     result["state"],
 	}
 
-	if startedAtStr, ok := result["started_at"]; ok {
-		startedAt, err := parseSessionTime(startedAtStr, "started_at")
-		if err != nil {
-			h.logger.Error("Invalid started_at in session",
-				zap.String("overlay_id", overlayID),
-				zap.Error(err),
-			)
-			return nil, fmt.Errorf("invalid started_at: %w", err)
-		}
-
-		if err := validateStartedAt(startedAt); err != nil {
-			return nil, fmt.Errorf("started_at validation failed: %w", err)
-		}
-
-		session.StartedAt = startedAt
+	// started_at is required
+	startedAtStr, ok := result["started_at"]
+	if !ok {
+		return nil, fmt.Errorf("started_at missing from session")
 	}
+
+	startedAt, err := parseSessionTime(startedAtStr, "started_at")
+	if err != nil {
+		h.logger.Error("Invalid started_at in session",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("invalid started_at: %w", err)
+	}
+
+	if err := validateStartedAt(startedAt); err != nil {
+		return nil, fmt.Errorf("started_at validation failed: %w", err)
+	}
+
+	session.StartedAt = startedAt
 
 	if eventCountStr, ok := result["event_count"]; ok {
 		fmt.Sscanf(eventCountStr, "%d", &session.EventCount)
