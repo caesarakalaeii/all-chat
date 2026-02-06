@@ -500,7 +500,9 @@ class TikTokListenerService {
 
     try {
       // Get list of overlays with active WebSocket connections from Redis
-      const connectedOverlays = await this.redis.sMembers('overlay:connected');
+      // API Gateway uses individual TTL keys: overlay:connected:{overlay_id}
+      const keys = await this.redis.keys('overlay:connected:*');
+      const connectedOverlays = keys.map(key => key.replace('overlay:connected:', ''));
 
       if (connectedOverlays.length === 0) {
         logger.debug('No overlays with active connections, skipping poll');
