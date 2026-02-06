@@ -20,6 +20,45 @@ const (
 	SessionTTL = 24 * time.Hour
 )
 
+// parseSessionTime safely parses RFC3339 time with validation
+func parseSessionTime(timeStr string, fieldName string) (time.Time, error) {
+	if timeStr == "" {
+		return time.Time{}, fmt.Errorf("%s is empty", fieldName)
+	}
+
+	parsed, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse %s: %w", fieldName, err)
+	}
+
+	if parsed.IsZero() {
+		return time.Time{}, fmt.Errorf("%s is zero value", fieldName)
+	}
+
+	return parsed, nil
+}
+
+// validateStartedAt checks if time is valid for duration calculation
+func validateStartedAt(t time.Time) error {
+	if t.IsZero() {
+		return fmt.Errorf("started_at is zero value")
+	}
+
+	// Sanity check: reject times before 2020 or in future
+	minTime := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	maxTime := time.Now().UTC().Add(1 * time.Hour)
+
+	if t.Before(minTime) {
+		return fmt.Errorf("started_at before 2020: %s", t.Format(time.RFC3339))
+	}
+
+	if t.After(maxTime) {
+		return fmt.Errorf("started_at in future: %s", t.Format(time.RFC3339))
+	}
+
+	return nil
+}
+
 // SessionInfo represents the active session information
 type SessionInfo struct {
 	SessionID   string    `json:"session_id"`
@@ -180,7 +219,15 @@ func (sm *SessionManager) EndSession(ctx context.Context, overlayID string) erro
 		fmt.Sscanf(eventCountStr, "%d", &eventCount)
 	}
 
-	startedAt, _ := time.Parse(time.RFC3339, startedAtStr)
+	startedAt, err := parseSessionTime(startedAtStr, "started_at")
+	if err != nil {
+		sm.logger.Error("Failed to parse started_at, using fallback",
+			zap.String("session_id", sessionID),
+			zap.Error(err),
+		)
+		// Fallback: use minimal duration for DB record
+		startedAt = time.Now().UTC().Add(-1 * time.Minute)
+	}
 	endedAt := time.Now().UTC()
 	duration := endedAt.Sub(startedAt)
 
@@ -233,7 +280,19 @@ func (sm *SessionManager) GetActiveSession(ctx context.Context, overlayID string
 	}
 
 	if startedAtStr, ok := result["started_at"]; ok {
-		startedAt, _ := time.Parse(time.RFC3339, startedAtStr)
+		startedAt, err := parseSessionTime(startedAtStr, "started_at")
+		if err != nil {
+			sm.logger.Error("Invalid started_at in session",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+			return nil, fmt.Errorf("invalid started_at: %w", err)
+		}
+
+		if err := validateStartedAt(startedAt); err != nil {
+			return nil, fmt.Errorf("started_at validation failed: %w", err)
+		}
+
 		session.StartedAt = startedAt
 	}
 
