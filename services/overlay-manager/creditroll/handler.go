@@ -5,13 +5,76 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// parseSessionTime safely parses RFC3339 time with validation
+func parseSessionTime(timeStr string, fieldName string) (time.Time, error) {
+	if timeStr == "" {
+		return time.Time{}, fmt.Errorf("%s is empty", fieldName)
+	}
+
+	parsed, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse %s: %w", fieldName, err)
+	}
+
+	if parsed.IsZero() {
+		return time.Time{}, fmt.Errorf("%s is zero value", fieldName)
+	}
+
+	return parsed, nil
+}
+
+// validateStartedAt checks if time is valid for duration calculation
+func validateStartedAt(t time.Time) error {
+	if t.IsZero() {
+		return fmt.Errorf("started_at is zero value")
+	}
+
+	// Sanity check: reject times before 2020 or in future
+	minTime := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	maxTime := time.Now().UTC().Add(1 * time.Hour)
+
+	if t.Before(minTime) {
+		return fmt.Errorf("started_at before 2020: %s", t.Format(time.RFC3339))
+	}
+
+	if t.After(maxTime) {
+		return fmt.Errorf("started_at in future: %s", t.Format(time.RFC3339))
+	}
+
+	return nil
+}
+
+// calculateSessionDuration safely calculates duration with bounds checking
+func calculateSessionDuration(startedAt time.Time) int {
+	if startedAt.IsZero() {
+		return 0
+	}
+
+	duration := time.Since(startedAt)
+
+	// Sanity checks
+	if duration < 0 {
+		return 0
+	}
+
+	// Cap at 30 days (reasonable max stream duration)
+	maxDuration := 30 * 24 * time.Hour
+	if duration > maxDuration {
+		return int(maxDuration.Seconds())
+	}
+
+	return int(duration.Seconds())
+}
 
 // OverlayRepository defines overlay lookup operations
 type OverlayRepository interface {
@@ -173,10 +236,10 @@ func (h *Handler) HandleGetCreditRoll(c *gin.Context) {
 		return
 	}
 
-	// Get active session
-	session, err := h.getActiveSession(ctx, overlayID)
+	// Get active session (with auto-repair if corrupted)
+	session, err := h.getOrRepairSession(ctx, overlayID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "no active session", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get session", "details": err.Error()})
 		return
 	}
 
@@ -196,7 +259,7 @@ func (h *Handler) HandleGetCreditRoll(c *gin.Context) {
 		OverlayID:              overlayID,
 		SessionID:              session.SessionID,
 		SessionStartedAt:       session.StartedAt,
-		SessionDurationSeconds: int(time.Since(session.StartedAt).Seconds()),
+		SessionDurationSeconds: calculateSessionDuration(session.StartedAt),
 		Leaderboards:           *leaderboards,
 		Clips:                  []models.Clip{}, // Will be populated if clips enabled
 		ClipsIsFallback:        false,
@@ -227,7 +290,19 @@ func (h *Handler) getActiveSession(ctx context.Context, overlayID string) (*mode
 	}
 
 	if startedAtStr, ok := result["started_at"]; ok {
-		startedAt, _ := time.Parse(time.RFC3339, startedAtStr)
+		startedAt, err := parseSessionTime(startedAtStr, "started_at")
+		if err != nil {
+			h.logger.Error("Invalid started_at in session",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+			return nil, fmt.Errorf("invalid started_at: %w", err)
+		}
+
+		if err := validateStartedAt(startedAt); err != nil {
+			return nil, fmt.Errorf("started_at validation failed: %w", err)
+		}
+
 		session.StartedAt = startedAt
 	}
 
@@ -241,6 +316,64 @@ func (h *Handler) getActiveSession(ctx context.Context, overlayID string) (*mode
 	}
 
 	return session, nil
+}
+
+// getOrRepairSession attempts to get session, repairs if corrupted
+func (h *Handler) getOrRepairSession(ctx context.Context, overlayID string) (*models.SessionInfo, error) {
+	session, err := h.getActiveSession(ctx, overlayID)
+
+	if err == nil {
+		// Session valid
+		return session, nil
+	}
+
+	// Check if error is due to invalid started_at
+	if strings.Contains(err.Error(), "started_at") || strings.Contains(err.Error(), "parse") {
+		h.logger.Warn("Detected corrupted session, attempting repair",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+
+		// Delete corrupted session
+		key := "session:active:" + overlayID
+		if delErr := h.redis.Del(ctx, key).Err(); delErr != nil {
+			h.logger.Error("Failed to delete corrupted session",
+				zap.String("overlay_id", overlayID),
+				zap.Error(delErr),
+			)
+		}
+
+		// Create new session
+		sessionID := uuid.New().String()
+		startedAt := time.Now().UTC()
+
+		pipe := h.redis.Pipeline()
+		pipe.HSet(ctx, key, "session_id", sessionID)
+		pipe.HSet(ctx, key, "started_at", startedAt.Format(time.RFC3339))
+		pipe.HSet(ctx, key, "state", "ACTIVE")
+		pipe.HSet(ctx, key, "event_count", 0)
+		pipe.Expire(ctx, key, 24*time.Hour)
+
+		if _, execErr := pipe.Exec(ctx); execErr != nil {
+			return nil, fmt.Errorf("failed to create new session: %w", execErr)
+		}
+
+		h.logger.Info("Repaired corrupted session",
+			zap.String("overlay_id", overlayID),
+			zap.String("new_session_id", sessionID),
+		)
+
+		// Return new session
+		return &models.SessionInfo{
+			SessionID:  sessionID,
+			StartedAt:  startedAt,
+			State:      "ACTIVE",
+			EventCount: 0,
+		}, nil
+	}
+
+	// Error not related to corruption
+	return nil, err
 }
 
 // aggregateLeaderboards retrieves and formats leaderboard data from Redis
