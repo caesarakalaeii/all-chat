@@ -35,6 +35,7 @@ type CreditRollConfig struct {
 	ClipsEnabled      bool `json:"clips_enabled" db:"clips_enabled"`
 	ClipsMaxCount     int  `json:"clips_max_count" db:"clips_max_count"`
 	ClipsFallbackDays int  `json:"clips_fallback_days" db:"clips_fallback_days"`
+	ClipsMuted        bool `json:"clips_muted" db:"clips_muted"`
 
 	// Custom CSS
 	CustomCSS string `json:"custom_css" db:"custom_css"`

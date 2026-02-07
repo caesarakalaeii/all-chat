@@ -27,7 +27,7 @@ func (r *CreditRollRepository) GetByOverlayID(ctx context.Context, overlayID str
 		       include_memberships, include_follows,
 		       leaderboard_top_n, leaderboard_sort_by,
 		       scroll_speed, display_duration_seconds, background_opacity, theme,
-		       clips_enabled, clips_max_count, clips_fallback_days,
+		       clips_enabled, clips_max_count, clips_fallback_days, clips_muted,
 		       custom_css,
 		       created_at, updated_at
 		FROM credit_roll_configs
@@ -42,7 +42,7 @@ func (r *CreditRollRepository) GetByOverlayID(ctx context.Context, overlayID str
 		&config.IncludeMemberships, &config.IncludeFollows,
 		&config.LeaderboardTopN, &config.LeaderboardSortBy,
 		&config.ScrollSpeed, &config.DisplayDurationSeconds, &config.BackgroundOpacity, &config.Theme,
-		&config.ClipsEnabled, &config.ClipsMaxCount, &config.ClipsFallbackDays,
+		&config.ClipsEnabled, &config.ClipsMaxCount, &config.ClipsFallbackDays, &config.ClipsMuted,
 		&config.CustomCSS,
 		&config.CreatedAt, &config.UpdatedAt,
 	)
@@ -64,10 +64,10 @@ func (r *CreditRollRepository) Update(ctx context.Context, config *models.Credit
 		    include_memberships = $9, include_follows = $10,
 		    leaderboard_top_n = $11, leaderboard_sort_by = $12,
 		    scroll_speed = $13, display_duration_seconds = $14, background_opacity = $15, theme = $16,
-		    clips_enabled = $17, clips_max_count = $18, clips_fallback_days = $19,
-		    custom_css = $20,
+		    clips_enabled = $17, clips_max_count = $18, clips_fallback_days = $19, clips_muted = $20,
+		    custom_css = $21,
 		    updated_at = NOW()
-		WHERE id = $21
+		WHERE id = $22
 	`
 
 	_, err := r.db.Exec(ctx, query,
@@ -77,7 +77,7 @@ func (r *CreditRollRepository) Update(ctx context.Context, config *models.Credit
 		config.IncludeMemberships, config.IncludeFollows,
 		config.LeaderboardTopN, config.LeaderboardSortBy,
 		config.ScrollSpeed, config.DisplayDurationSeconds, config.BackgroundOpacity, config.Theme,
-		config.ClipsEnabled, config.ClipsMaxCount, config.ClipsFallbackDays,
+		config.ClipsEnabled, config.ClipsMaxCount, config.ClipsFallbackDays, config.ClipsMuted,
 		config.CustomCSS,
 		config.ID,
 	)

@@ -62,6 +62,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
     clips_enabled: false,
     clips_max_count: 5,
     clips_fallback_days: 7,
+    clips_muted: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -406,6 +407,20 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
                     />
                     <p className="text-xs text-gray-400 mt-1">If no clips from this stream, show clips from last N days</p>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-3 p-3 bg-gray-750 rounded-lg border border-gray-600 cursor-pointer hover:border-gray-500 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={config.clips_muted ?? true}
+                        onChange={(e) => setConfig({ ...config, clips_muted: e.target.checked })}
+                        className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-twitch focus:ring-twitch focus:ring-offset-gray-800"
+                      />
+                      <div className="flex-1">
+                        <span className="text-white font-medium">Mute Clips Audio</span>
+                        <p className="text-xs text-gray-400 mt-1">Required for browser autoplay. Unmuting may require viewer interaction.</p>
+                      </div>
+                    </label>
                   </div>
                 </div>
               )}

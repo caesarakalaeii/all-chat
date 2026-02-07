@@ -182,7 +182,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           <iframe
             key={currentClip.id}
             ref={videoRef}
-            src={`${currentClip.embed_url}&parent=${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}&autoplay=true&muted=true`}
+            src={`${currentClip.embed_url}&parent=${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}&autoplay=true&muted=${config.clips_muted ?? true}`}
             height="100%"
             width="100%"
             allowFullScreen
