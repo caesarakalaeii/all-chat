@@ -12,7 +12,7 @@ type ChatSource struct {
 	Platform      string                 `json:"platform"`
 	ChannelID     string                 `json:"channel_id"`
 	ChannelName   string                 `json:"channel_name"`
-	ChannelHandle string                 `json:"channel_handle"`
+	ChannelHandle *string                `json:"channel_handle,omitempty"`
 	AuthRequired  bool                   `json:"auth_required"`
 	Config        map[string]interface{} `json:"config"`
 	IsActive      bool                   `json:"is_active"`
