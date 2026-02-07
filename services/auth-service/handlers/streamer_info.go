@@ -43,6 +43,9 @@ type StreamerInfoResponse struct {
 }
 
 // HandleGetStreamerInfo returns information about a streamer and their active platforms
+// Supports lookup by:
+// - Username (case-insensitive) - works for Twitch, Kick, TikTok
+// - Channel handle/ID - works for YouTube (@handle or channel ID)
 func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 	username := c.Param("username")
 	if username == "" {
@@ -52,12 +55,42 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get user by username
+	// Try Method 1: Get user by username (case-insensitive)
 	user, err := h.userRepo.GetByUsername(ctx, username)
+
+	// If not found by username, try Method 2: Look up by channel_id in overlay_chat_sources
+	// This handles YouTube handles/channel IDs which aren't stored as usernames
 	if err != nil {
-		h.log.Error("Failed to get user", zap.Error(err), zap.String("username", username))
-		c.JSON(http.StatusNotFound, gin.H{"error": "streamer not found"})
-		return
+		h.log.Debug("User not found by username, trying channel_id lookup",
+			zap.String("username", username))
+
+		// Query to find user by channel_id (case-insensitive for handles)
+		channelQuery := `
+			SELECT DISTINCT u.id, u.username
+			FROM users u
+			INNER JOIN overlays o ON o.user_id = u.id
+			INNER JOIN overlay_chat_sources ocs ON ocs.overlay_id = o.id
+			WHERE LOWER(ocs.channel_id) = LOWER($1) AND ocs.is_active = true
+			LIMIT 1
+		`
+
+		var userID, foundUsername string
+		err = h.db.QueryRow(ctx, channelQuery, username).Scan(&userID, &foundUsername)
+		if err != nil {
+			h.log.Error("Streamer not found by username or channel_id",
+				zap.Error(err),
+				zap.String("lookup_value", username))
+			c.JSON(http.StatusNotFound, gin.H{"error": "streamer not found"})
+			return
+		}
+
+		// Now get the full user object
+		user, err = h.userRepo.GetByUsername(ctx, foundUsername)
+		if err != nil {
+			h.log.Error("Failed to get user after channel_id lookup", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user"})
+			return
+		}
 	}
 
 	// Query active sources from overlay_chat_sources
