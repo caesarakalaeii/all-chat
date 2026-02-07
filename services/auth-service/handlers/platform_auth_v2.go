@@ -447,8 +447,9 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				}
 				youtubeChannel = channelInfo
 				sourceDetails = &OverlaySourceDetails{
-					ChannelID:   channelInfo.ChannelID,
-					ChannelName: channelInfo.Title,
+					ChannelID:     channelInfo.ChannelID,
+					ChannelName:   channelInfo.Title,
+					ChannelHandle: channelInfo.Handle,
 				}
 			} else {
 				// For login flow, skip channel resolution to save quota
@@ -729,8 +730,9 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 
 // addSourceToOverlay calls the overlay-manager internal API to add a source
 type OverlaySourceDetails struct {
-	ChannelID   string
-	ChannelName string
+	ChannelID     string
+	ChannelName   string
+	ChannelHandle string
 }
 
 func (h *PlatformAuthHandlerV2) addSourceToOverlay(
@@ -748,6 +750,7 @@ func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 	// Display names can have Unicode, mixed case (e.g., "شوشو")
 	channelID := platformUser.GetUsername() // For Twitch this is the "login" field
 	channelName := platformUser.GetDisplayName()
+	channelHandle := ""
 
 	if details != nil {
 		if details.ChannelID != "" {
@@ -756,12 +759,16 @@ func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 		if details.ChannelName != "" {
 			channelName = details.ChannelName
 		}
+		if details.ChannelHandle != "" {
+			channelHandle = details.ChannelHandle
+		}
 	}
 
 	reqBody := map[string]interface{}{
-		"platform":     string(platform),
-		"channel_id":   channelID,
-		"channel_name": channelName,
+		"platform":       string(platform),
+		"channel_id":     channelID,
+		"channel_name":   channelName,
+		"channel_handle": channelHandle,
 	}
 
 	jsonBody, err := json.Marshal(reqBody)

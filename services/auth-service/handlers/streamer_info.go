@@ -64,7 +64,7 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 		h.log.Debug("User not found by username, trying channel_id lookup",
 			zap.String("username", username))
 
-		// Query to find user by channel_id (case-insensitive for handles)
+		// Query to find user by channel_id OR channel_handle (case-insensitive)
 		// Note: Don't filter by is_active - we want to find streamers who have
 		// All-Chat configured even if they're not currently live
 		channelQuery := `
@@ -72,7 +72,7 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 			FROM users u
 			INNER JOIN overlays o ON o.user_id = u.id
 			INNER JOIN overlay_chat_sources ocs ON ocs.overlay_id = o.id
-			WHERE LOWER(ocs.channel_id) = LOWER($1)
+			WHERE (LOWER(ocs.channel_id) = LOWER($1) OR LOWER(ocs.channel_handle) = LOWER($1))
 			LIMIT 1
 		`
 
