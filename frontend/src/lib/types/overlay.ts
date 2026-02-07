@@ -121,6 +121,7 @@ export interface CreditRollConfig {
   clips_enabled: boolean;
   clips_max_count: number;
   clips_fallback_days: number;
+  clips_muted: boolean;
   custom_css?: string;
   created_at: string;
   updated_at: string;
