@@ -144,6 +144,7 @@ export interface Leaderboards {
   super_chats?: LeaderboardEntry[];
   follows?: LeaderboardEntry[];
   gifts?: LeaderboardEntry[];
+  points?: LeaderboardEntry[];
 }
 
 export interface Clip {
