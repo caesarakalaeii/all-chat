@@ -130,6 +130,7 @@ func (h *SourcesHandler) HandleListSources(c *gin.Context) {
 	// Get sources
 	sources, err := h.sourceRepo.ListByOverlayID(c.Request.Context(), overlayID)
 	if err != nil {
+		h.log.Error("Failed to list sources", zap.Error(err), zap.String("overlay_id", overlayID))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list sources"})
 		return
 	}
