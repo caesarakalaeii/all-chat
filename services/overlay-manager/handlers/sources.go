@@ -161,9 +161,10 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	}
 
 	var req struct {
-		Platform    string `json:"platform" binding:"required"`
-		ChannelID   string `json:"channel_id" binding:"required"`
-		ChannelName string `json:"channel_name"`
+		Platform      string `json:"platform" binding:"required"`
+		ChannelID     string `json:"channel_id" binding:"required"`
+		ChannelName   string `json:"channel_name"`
+		ChannelHandle string `json:"channel_handle"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -183,7 +184,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	if req.Platform == "twitch" {
 		// Twitch usernames must be lowercase alphanumeric + underscore only
 		channelID = strings.ToLower(strings.TrimSpace(channelID))
-		
+
 		// Basic validation: only allow alphanumeric and underscore
 		for _, r := range channelID {
 			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_') {
@@ -196,13 +197,14 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	}
 
 	source := &models.ChatSource{
-		OverlayID:    overlayID,
-		Platform:     req.Platform,
-		ChannelID:    channelID,
-		ChannelName:  channelName,
-		AuthRequired: req.Platform == "youtube", // YouTube requires OAuth
-		Config:       make(map[string]interface{}),
-		IsActive:     false, // Will be set to true by listeners when they connect
+		OverlayID:     overlayID,
+		Platform:      req.Platform,
+		ChannelID:     channelID,
+		ChannelName:   channelName,
+		ChannelHandle: req.ChannelHandle,
+		AuthRequired:  req.Platform == "youtube", // YouTube requires OAuth
+		Config:        make(map[string]interface{}),
+		IsActive:      false, // Will be set to true by listeners when they connect
 	}
 
 	// Validate
@@ -295,9 +297,10 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 	}
 
 	var req struct {
-		Platform    string `json:"platform" binding:"required"`
-		ChannelID   string `json:"channel_id" binding:"required"`
-		ChannelName string `json:"channel_name"`
+		Platform      string `json:"platform" binding:"required"`
+		ChannelID     string `json:"channel_id" binding:"required"`
+		ChannelName   string `json:"channel_name"`
+		ChannelHandle string `json:"channel_handle"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -317,7 +320,7 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 	if req.Platform == "twitch" {
 		// Twitch usernames must be lowercase alphanumeric + underscore only
 		channelID = strings.ToLower(strings.TrimSpace(channelID))
-		
+
 		// Basic validation: only allow alphanumeric and underscore
 		for _, r := range channelID {
 			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_') {
@@ -330,13 +333,14 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 	}
 
 	source := &models.ChatSource{
-		OverlayID:    overlayID,
-		Platform:     req.Platform,
-		ChannelID:    channelID,
-		ChannelName:  channelName,
-		AuthRequired: req.Platform == "youtube" || req.Platform == "kick",
-		Config:       make(map[string]interface{}),
-		IsActive:     true,
+		OverlayID:     overlayID,
+		Platform:      req.Platform,
+		ChannelID:     channelID,
+		ChannelName:   channelName,
+		ChannelHandle: req.ChannelHandle,
+		AuthRequired:  req.Platform == "youtube" || req.Platform == "kick",
+		Config:        make(map[string]interface{}),
+		IsActive:      true,
 	}
 
 	// Validate
