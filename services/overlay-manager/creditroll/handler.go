@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/caesar/all-chat/services/overlay-manager/clients"
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -88,26 +89,37 @@ type ConfigRepository interface {
 	Update(ctx context.Context, config *models.CreditRollConfig) error
 }
 
+// SourceRepository defines chat source lookup operations
+type SourceRepository interface {
+	ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error)
+}
+
 // Handler handles credit roll HTTP requests
 type Handler struct {
 	configRepo  ConfigRepository
 	overlayRepo OverlayRepository
+	sourceRepo  SourceRepository
 	redis       *redis.Client
 	logger      *zap.Logger
+	clipsClient *clients.TwitchClipsClient
 }
 
 // NewHandler creates a new credit roll handler
 func NewHandler(
 	configRepo ConfigRepository,
 	overlayRepo OverlayRepository,
+	sourceRepo SourceRepository,
 	redis *redis.Client,
 	logger *zap.Logger,
+	clipsClient *clients.TwitchClipsClient,
 ) *Handler {
 	return &Handler{
 		configRepo:  configRepo,
 		overlayRepo: overlayRepo,
+		sourceRepo:  sourceRepo,
 		redis:       redis,
 		logger:      logger,
+		clipsClient: clipsClient,
 	}
 }
 
@@ -254,6 +266,17 @@ func (h *Handler) HandleGetCreditRoll(c *gin.Context) {
 		return
 	}
 
+	// Fetch clips if enabled
+	clips, clipsIsFallback, err := h.fetchClips(ctx, overlayID, session, config)
+	if err != nil {
+		h.logger.Error("Failed to fetch clips",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+		clips = []models.Clip{}
+		clipsIsFallback = false
+	}
+
 	// Build response
 	response := models.CreditRollResponse{
 		OverlayID:              overlayID,
@@ -261,8 +284,8 @@ func (h *Handler) HandleGetCreditRoll(c *gin.Context) {
 		SessionStartedAt:       session.StartedAt,
 		SessionDurationSeconds: calculateSessionDuration(session.StartedAt),
 		Leaderboards:           *leaderboards,
-		Clips:                  []models.Clip{}, // Will be populated if clips enabled
-		ClipsIsFallback:        false,
+		Clips:                  clips,
+		ClipsIsFallback:        clipsIsFallback,
 	}
 
 	// Increment credit roll display count (fire-and-forget)
@@ -392,6 +415,7 @@ func (h *Handler) aggregateLeaderboards(ctx context.Context, sessionID string, c
 		"super_chats": &leaderboards.SuperChats,
 		"follows":     &leaderboards.Follows,
 		"gifts":       &leaderboards.Gifts,
+		"points":      &leaderboards.Points,
 	}
 
 	for category, dest := range categories {
@@ -478,4 +502,74 @@ func getString(m map[string]interface{}, key string) string {
 		return val
 	}
 	return ""
+}
+
+// fetchClips retrieves clips for the credit roll
+func (h *Handler) fetchClips(ctx context.Context, overlayID string, session *models.SessionInfo, config *models.CreditRollConfig) ([]models.Clip, bool, error) {
+	if !config.ClipsEnabled {
+		return []models.Clip{}, false, nil
+	}
+
+	// Get broadcaster Twitch ID
+	broadcasterID, err := h.getBroadcasterTwitchID(ctx, overlayID)
+	if err != nil {
+		return nil, false, fmt.Errorf("no twitch broadcaster found: %w", err)
+	}
+
+	// Try fetching clips from current session timeframe
+	endTime := time.Now().UTC()
+	clips, err := h.clipsClient.GetClips(ctx, broadcasterID, session.StartedAt, endTime, config.ClipsMaxCount)
+	if err != nil {
+		h.logger.Warn("Failed to fetch clips for session", zap.Error(err))
+		clips = []clients.ClipData{}
+	}
+
+	isFallback := false
+
+	// If no clips from session, try fallback period
+	if len(clips) == 0 && config.ClipsFallbackDays > 0 {
+		fallbackStart := time.Now().UTC().AddDate(0, 0, -config.ClipsFallbackDays)
+		clips, err = h.clipsClient.GetClips(ctx, broadcasterID, fallbackStart, endTime, config.ClipsMaxCount)
+		if err != nil {
+			h.logger.Warn("Failed to fetch fallback clips", zap.Error(err))
+			return []models.Clip{}, false, nil
+		}
+		isFallback = len(clips) > 0
+	}
+
+	// Convert to models.Clip
+	result := make([]models.Clip, len(clips))
+	for i, clip := range clips {
+		createdAt, _ := time.Parse(time.RFC3339, clip.CreatedAt)
+		result[i] = models.Clip{
+			ID:           clip.ID,
+			URL:          clip.URL,
+			EmbedURL:     clip.EmbedURL,
+			Title:        clip.Title,
+			ViewCount:    clip.ViewCount,
+			CreatedAt:    createdAt,
+			ThumbnailURL: clip.ThumbnailURL,
+			Duration:     clip.Duration,
+		}
+	}
+
+	return result, isFallback, nil
+}
+
+// getBroadcasterTwitchID retrieves the Twitch broadcaster ID for an overlay
+func (h *Handler) getBroadcasterTwitchID(ctx context.Context, overlayID string) (string, error) {
+	sources, err := h.sourceRepo.ListByOverlayID(ctx, overlayID)
+	if err != nil {
+		return "", fmt.Errorf("failed to list sources: %w", err)
+	}
+
+	// Find first Twitch source
+	for _, source := range sources {
+		if source.Platform == "twitch" {
+			// channel_id is already the broadcaster ID for Twitch
+			return source.ChannelID, nil
+		}
+	}
+
+	return "", fmt.Errorf("no twitch source found for overlay")
 }

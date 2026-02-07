@@ -58,6 +58,11 @@ func main() {
 	// Load configuration from environment
 	config := loadConfig()
 
+	// Validate Twitch credentials
+	if config.TwitchClientID == "" || config.TwitchClientSecret == "" {
+		log.Fatal("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are required")
+	}
+
 	// Connect to PostgreSQL
 	log.Info("Connecting to PostgreSQL",
 		zap.String("host", config.DatabaseHost),
@@ -125,6 +130,9 @@ func main() {
 
 	creditRollRepo := repository.NewCreditRollRepository(dbPool)
 
+	// Initialize Twitch clips client
+	twitchClipsClient := clients.NewTwitchClipsClient(config.TwitchClientID, config.TwitchClientSecret, log)
+
 	// Initialize handlers
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
@@ -134,7 +142,7 @@ func main() {
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)
 	eventSettingsHandler := handlers.NewEventSettingsHandler(eventSettingsRepo, overlayRepo)
-	creditRollHandler := creditroll.NewHandler(creditRollRepo, overlayRepo, redisClient, log)
+	creditRollHandler := creditroll.NewHandler(creditRollRepo, overlayRepo, sourceRepo, redisClient, log, twitchClipsClient)
 
 	// YouTube helper
 	youtubeAPIKey := getEnv("YOUTUBE_API_KEY", "")
@@ -276,6 +284,8 @@ type Config struct {
 	JWTSecret              string
 	MessageProcessorURL    string
 	MessageProcessorAPIKey string
+	TwitchClientID         string
+	TwitchClientSecret     string
 }
 
 // loadConfig loads configuration from environment variables
@@ -293,6 +303,8 @@ func loadConfig() *Config {
 		JWTSecret:              getEnv("JWT_SECRET", "default-secret-change-in-production"),
 		MessageProcessorURL:    getEnv("MESSAGE_PROCESSOR_URL", "http://message-processor:8087"),
 		MessageProcessorAPIKey: getEnv("MESSAGE_PROCESSOR_API_KEY", ""),
+		TwitchClientID:         getEnv("TWITCH_CLIENT_ID", ""),
+		TwitchClientSecret:     getEnv("TWITCH_CLIENT_SECRET", ""),
 	}
 }
 
