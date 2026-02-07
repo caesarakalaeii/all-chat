@@ -65,12 +65,14 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 			zap.String("username", username))
 
 		// Query to find user by channel_id (case-insensitive for handles)
+		// Note: Don't filter by is_active - we want to find streamers who have
+		// All-Chat configured even if they're not currently live
 		channelQuery := `
 			SELECT DISTINCT u.id, u.username
 			FROM users u
 			INNER JOIN overlays o ON o.user_id = u.id
 			INNER JOIN overlay_chat_sources ocs ON ocs.overlay_id = o.id
-			WHERE LOWER(ocs.channel_id) = LOWER($1) AND ocs.is_active = true
+			WHERE LOWER(ocs.channel_id) = LOWER($1)
 			LIMIT 1
 		`
 
@@ -93,7 +95,9 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 		}
 	}
 
-	// Query active sources from overlay_chat_sources
+	// Query all configured sources from overlay_chat_sources
+	// Note: Return all configured sources regardless of is_active status
+	// so the extension can show the badge even when the streamer isn't live
 	query := `
 		SELECT DISTINCT
 			ocs.platform,
@@ -102,7 +106,7 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 			ocs.is_active
 		FROM overlay_chat_sources ocs
 		INNER JOIN overlays o ON ocs.overlay_id = o.id
-		WHERE o.user_id = $1 AND ocs.is_active = true
+		WHERE o.user_id = $1
 		ORDER BY ocs.platform
 	`
 
