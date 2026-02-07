@@ -18,7 +18,14 @@
 
 import Image from 'next/image';
 import { use, useEffect, useState, useRef } from 'react';
+import Script from 'next/script';
 import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay';
+
+declare global {
+  interface Window {
+    Twitch: any;
+  }
+}
 
 export default function CreditRollPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -28,7 +35,9 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentClipIndex, setCurrentClipIndex] = useState(0);
-  const videoRef = useRef<HTMLIFrameElement>(null);
+  const [twitchReady, setTwitchReady] = useState(false);
+  const playerRef = useRef<any>(null);
+  const playerContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadCreditRoll = async () => {
@@ -61,20 +70,56 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
     loadCreditRoll();
   }, [id]);
 
-  // Auto-rotate clips
+  // Initialize Twitch Player when clip changes
   useEffect(() => {
-    if (!creditData?.clips || creditData.clips.length === 0) return;
+    if (!twitchReady || !creditData?.clips || creditData.clips.length === 0) return;
+    if (!playerContainerRef.current) return;
 
-    // Get duration of current clip (in seconds) + 2 second buffer
     const currentClip = creditData.clips[currentClipIndex];
-    const duration = (currentClip?.duration || 30) * 1000 + 2000;
+    if (!currentClip) return;
 
-    const timer = setTimeout(() => {
-      setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length);
-    }, duration);
+    // Destroy previous player
+    if (playerRef.current) {
+      playerRef.current = null;
+    }
 
-    return () => clearTimeout(timer);
-  }, [creditData, currentClipIndex]);
+    // Clear container
+    playerContainerRef.current.innerHTML = '';
+
+    // Create new player
+    const options = {
+      width: '100%',
+      height: '100%',
+      clip: currentClip.id,
+      parent: [window.location.hostname],
+      autoplay: true,
+      muted: config?.clips_muted ?? true,
+    };
+
+    try {
+      playerRef.current = new window.Twitch.Embed(playerContainerRef.current, options);
+
+      // Listen for player ready event
+      playerRef.current.addEventListener(window.Twitch.Embed.VIDEO_READY, () => {
+        const player = playerRef.current.getPlayer();
+
+        // Auto-advance when clip ends
+        player.addEventListener(window.Twitch.Player.ENDED, () => {
+          setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length);
+        });
+
+        // Fallback timer in case ENDED event doesn't fire
+        const duration = (currentClip.duration || 30) * 1000 + 3000;
+        setTimeout(() => {
+          if (playerRef.current) {
+            setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length);
+          }
+        }, duration);
+      });
+    } catch (err) {
+      console.error('Failed to initialize Twitch player:', err);
+    }
+  }, [twitchReady, creditData, currentClipIndex, config?.clips_muted]);
 
   const renderLeaderboard = (title: string, entries: LeaderboardEntry[] | undefined, emoji: string) => {
     if (!entries || entries.length === 0) return null;
@@ -171,6 +216,13 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   return (
     <>
+      {/* Load Twitch Embed SDK */}
+      <Script
+        src="https://embed.twitch.tv/embed/v1.js"
+        onLoad={() => setTwitchReady(true)}
+        strategy="afterInteractive"
+      />
+
       {/* Custom CSS Injection */}
       {customCss && customCss.trim() && (
         <style dangerouslySetInnerHTML={{ __html: customCss }} />
@@ -179,22 +231,17 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       {/* Background Clip Video */}
       {config?.clips_enabled && currentClip && (
         <div className="fixed inset-0 z-0">
-          <iframe
-            key={currentClip.id}
-            ref={videoRef}
-            src={`${currentClip.embed_url}&parent=${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}&autoplay=true&muted=${config.clips_muted ?? true}`}
-            height="100%"
-            width="100%"
-            allowFullScreen
-            allow="autoplay; fullscreen"
+          <div
+            ref={playerContainerRef}
+            id="twitch-clip-player"
             className="absolute inset-0 w-full h-full"
-            style={{ border: 'none', pointerEvents: 'none' }}
           />
           {/* Overlay gradient for better text readability */}
           <div
-            className="absolute inset-0"
+            className="absolute inset-0 z-10"
             style={{
-              background: `linear-gradient(to bottom, rgba(0, 0, 0, ${bgOpacity * 0.7}), rgba(0, 0, 0, ${bgOpacity * 0.5}))`
+              background: `linear-gradient(to bottom, rgba(0, 0, 0, ${bgOpacity * 0.7}), rgba(0, 0, 0, ${bgOpacity * 0.5}))`,
+              pointerEvents: 'none'
             }}
           />
         </div>
