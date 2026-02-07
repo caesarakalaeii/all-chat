@@ -129,14 +129,14 @@ WHERE id = $1
 	return user, nil
 }
 
-// GetByUsername retrieves a user by username
+// GetByUsername retrieves a user by username (case-insensitive)
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_banned, banned_at, banned_reason, banned_by,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
-WHERE username = $1
+WHERE LOWER(username) = LOWER($1)
 `
 
 	user, err := r.scanUser(r.db.QueryRow(ctx, query, username))
