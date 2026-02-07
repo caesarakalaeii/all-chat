@@ -110,6 +110,53 @@ func (c *TwitchClipsClient) GetClips(ctx context.Context, broadcasterID string, 
 	return clipResp.Data, nil
 }
 
+// GetUserID resolves a Twitch username to its broadcaster ID
+func (c *TwitchClipsClient) GetUserID(ctx context.Context, username string) (string, error) {
+	token, err := c.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
+
+	params := url.Values{}
+	params.Add("login", username)
+
+	urlStr := "https://api.twitch.tv/helix/users?" + params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Client-Id", c.clientID)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to call users API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("twitch users API returned status %d", resp.StatusCode)
+	}
+
+	var usersResp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&usersResp); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if len(usersResp.Data) == 0 {
+		return "", fmt.Errorf("user not found: %s", username)
+	}
+
+	return usersResp.Data[0].ID, nil
+}
+
 // getAccessToken gets or refreshes app access token using client credentials flow
 func (c *TwitchClipsClient) getAccessToken(ctx context.Context) (string, error) {
 	c.tokenMu.Lock()
