@@ -197,12 +197,17 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		}
 	}
 
+	var channelHandle *string
+	if req.ChannelHandle != "" {
+		channelHandle = &req.ChannelHandle
+	}
+
 	source := &models.ChatSource{
 		OverlayID:     overlayID,
 		Platform:      req.Platform,
 		ChannelID:     channelID,
 		ChannelName:   channelName,
-		ChannelHandle: req.ChannelHandle,
+		ChannelHandle: channelHandle,
 		AuthRequired:  req.Platform == "youtube", // YouTube requires OAuth
 		Config:        make(map[string]interface{}),
 		IsActive:      false, // Will be set to true by listeners when they connect
@@ -333,12 +338,17 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		}
 	}
 
+	var channelHandle *string
+	if req.ChannelHandle != "" {
+		channelHandle = &req.ChannelHandle
+	}
+
 	source := &models.ChatSource{
 		OverlayID:     overlayID,
 		Platform:      req.Platform,
 		ChannelID:     channelID,
 		ChannelName:   channelName,
-		ChannelHandle: req.ChannelHandle,
+		ChannelHandle: channelHandle,
 		AuthRequired:  req.Platform == "youtube" || req.Platform == "kick",
 		Config:        make(map[string]interface{}),
 		IsActive:      true,
