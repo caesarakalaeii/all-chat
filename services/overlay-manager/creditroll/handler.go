@@ -566,8 +566,12 @@ func (h *Handler) getBroadcasterTwitchID(ctx context.Context, overlayID string) 
 	// Find first Twitch source
 	for _, source := range sources {
 		if source.Platform == "twitch" {
-			// channel_id is already the broadcaster ID for Twitch
-			return source.ChannelID, nil
+			// Convert username to broadcaster ID
+			broadcasterID, err := h.clipsClient.GetUserID(ctx, source.ChannelID)
+			if err != nil {
+				return "", fmt.Errorf("failed to get broadcaster ID for %s: %w", source.ChannelID, err)
+			}
+			return broadcasterID, nil
 		}
 	}
 
