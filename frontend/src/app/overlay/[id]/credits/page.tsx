@@ -17,7 +17,7 @@
 'use client';
 
 import Image from 'next/image';
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useState, useRef } from 'react';
 import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay';
 
 export default function CreditRollPage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,6 +27,8 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
   const [customCss, setCustomCss] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentClipIndex, setCurrentClipIndex] = useState(0);
+  const videoRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const loadCreditRoll = async () => {
@@ -58,6 +60,21 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
     loadCreditRoll();
   }, [id]);
+
+  // Auto-rotate clips
+  useEffect(() => {
+    if (!creditData?.clips || creditData.clips.length === 0) return;
+
+    // Get duration of current clip (in seconds) + 2 second buffer
+    const currentClip = creditData.clips[currentClipIndex];
+    const duration = (currentClip?.duration || 30) * 1000 + 2000;
+
+    const timer = setTimeout(() => {
+      setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length);
+    }, duration);
+
+    return () => clearTimeout(timer);
+  }, [creditData, currentClipIndex]);
 
   const renderLeaderboard = (title: string, entries: LeaderboardEntry[] | undefined, emoji: string) => {
     if (!entries || entries.length === 0) return null;
@@ -150,6 +167,8 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
   const theme = config?.theme || 'cinematic';
   const bgOpacity = config?.background_opacity || 0.8;
 
+  const currentClip = creditData?.clips?.[currentClipIndex];
+
   return (
     <>
       {/* Custom CSS Injection */}
@@ -157,14 +176,38 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
         <style dangerouslySetInnerHTML={{ __html: customCss }} />
       )}
 
+      {/* Background Clip Video */}
+      {config?.clips_enabled && currentClip && (
+        <div className="fixed inset-0 z-0">
+          <iframe
+            ref={videoRef}
+            src={`${currentClip.embed_url}&parent=${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}&autoplay=true&muted=false`}
+            height="100%"
+            width="100%"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full"
+            style={{ border: 'none', pointerEvents: 'none' }}
+          />
+          {/* Overlay gradient for better text readability */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: `linear-gradient(to bottom, rgba(0, 0, 0, ${bgOpacity * 0.7}), rgba(0, 0, 0, ${bgOpacity * 0.5}))`
+            }}
+          />
+        </div>
+      )}
+
       <div
-        className="min-h-screen overflow-hidden"
+        className="min-h-screen overflow-hidden relative z-10"
         style={{
-          background: theme === 'cinematic'
-            ? `linear-gradient(to bottom, rgba(17, 24, 39, ${bgOpacity}), rgba(0, 0, 0, ${bgOpacity}))`
-            : theme === 'modern'
-            ? `linear-gradient(135deg, rgba(99, 102, 241, ${bgOpacity * 0.3}), rgba(139, 92, 246, ${bgOpacity * 0.3}))`
-            : `rgba(17, 24, 39, ${bgOpacity})`,
+          background: (!config?.clips_enabled || !currentClip) ? (
+            theme === 'cinematic'
+              ? `linear-gradient(to bottom, rgba(17, 24, 39, ${bgOpacity}), rgba(0, 0, 0, ${bgOpacity}))`
+              : theme === 'modern'
+              ? `linear-gradient(135deg, rgba(99, 102, 241, ${bgOpacity * 0.3}), rgba(139, 92, 246, ${bgOpacity * 0.3}))`
+              : `rgba(17, 24, 39, ${bgOpacity})`
+          ) : 'transparent'
         }}
       >
         <div className="container mx-auto px-8 py-12">
@@ -187,38 +230,25 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
             {renderLeaderboard('Top Subscribers', creditData.leaderboards.subs, '⭐')}
             {renderLeaderboard('Top Gifters', creditData.leaderboards.gifts, '🎁')}
             {renderLeaderboard('Top Cheerers', creditData.leaderboards.bits, '💎')}
+            {renderLeaderboard('Top Channel Points', creditData.leaderboards.points, '🎯')}
             {renderLeaderboard('Top Raiders', creditData.leaderboards.raids, '⚔️')}
             {renderLeaderboard('Top Super Chats', creditData.leaderboards.super_chats, '💰')}
             {renderLeaderboard('New Followers', creditData.leaderboards.follows, '❤️')}
           </div>
 
-          {/* Clips Section */}
-          {config?.clips_enabled && creditData.clips && creditData.clips.length > 0 && (
-            <div className="max-w-4xl mx-auto mt-16">
-              <h2 className="text-4xl font-bold text-white mb-6 flex items-center gap-3">
-                <span className="text-5xl">🎥</span>
-                Stream Highlights
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {creditData.clips.map((clip) => (
-                  <div key={clip.id} className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-700">
-                    <div className="relative h-48">
-                      <Image
-                        src={clip.thumbnail_url}
-                        alt={clip.title}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                    <div className="p-4">
-                      <h3 className="text-lg font-semibold text-white mb-2">{clip.title}</h3>
-                      <div className="flex justify-between text-sm text-gray-400">
-                        <span>{clip.view_count.toLocaleString()} views</span>
-                        <span>{clip.duration.toFixed(1)}s</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+          {/* Now Playing Indicator */}
+          {config?.clips_enabled && currentClip && (
+            <div className="fixed bottom-8 right-8 z-50">
+              <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4 border border-gray-700 shadow-2xl max-w-sm">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🎥</span>
+                  <span className="text-white font-semibold">Now Playing</span>
+                </div>
+                <div className="text-lg text-white font-medium mb-1">{currentClip.title}</div>
+                <div className="flex items-center justify-between text-sm text-gray-400">
+                  <span>{currentClip.view_count.toLocaleString()} views</span>
+                  <span>Clip {currentClipIndex + 1}/{creditData?.clips?.length || 0}</span>
+                </div>
               </div>
             </div>
           )}
