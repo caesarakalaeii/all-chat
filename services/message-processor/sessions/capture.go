@@ -98,6 +98,7 @@ func (ec *EventCapture) shouldCaptureEvent(msg *models.UnifiedChatMessage) bool 
 		"membership_gift":    true,
 		"follow":             true,
 		"gift":               true, // TikTok/Kick
+		"channel_points":     true,
 	}
 
 	return captureTypes[msg.Event.Type]
@@ -119,6 +120,7 @@ func (ec *EventCapture) getEventCategory(eventType string) string {
 		"membership_gift":    "gifts",
 		"follow":             "follows",
 		"gift":               "gifts", // TikTok/Kick
+		"channel_points":     "points",
 	}
 
 	if category, ok := categories[eventType]; ok {
