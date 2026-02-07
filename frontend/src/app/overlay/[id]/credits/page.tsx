@@ -180,11 +180,13 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       {config?.clips_enabled && currentClip && (
         <div className="fixed inset-0 z-0">
           <iframe
+            key={currentClip.id}
             ref={videoRef}
-            src={`${currentClip.embed_url}&parent=${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}&autoplay=true&muted=false`}
+            src={`${currentClip.embed_url}&parent=${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}&autoplay=true&muted=true`}
             height="100%"
             width="100%"
             allowFullScreen
+            allow="autoplay; fullscreen"
             className="absolute inset-0 w-full h-full"
             style={{ border: 'none', pointerEvents: 'none' }}
           />
