@@ -83,6 +83,7 @@ type Leaderboards struct {
 	SuperChats []LeaderboardEntry `json:"super_chats,omitempty"`
 	Follows    []LeaderboardEntry `json:"follows,omitempty"`
 	Gifts      []LeaderboardEntry `json:"gifts,omitempty"`
+	Points     []LeaderboardEntry `json:"points,omitempty"`
 }
 
 // Clip represents a Twitch clip
