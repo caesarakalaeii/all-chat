@@ -40,8 +40,8 @@ func (r *SourceRepository) Create(ctx context.Context, source *models.ChatSource
 	}
 
 	query := `
-		INSERT INTO overlay_chat_sources (id, overlay_id, platform, channel_id, channel_name, auth_required, config, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+		INSERT INTO overlay_chat_sources (id, overlay_id, platform, channel_id, channel_name, channel_handle, auth_required, config, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
 		RETURNING created_at, updated_at
 	`
 
@@ -51,6 +51,7 @@ func (r *SourceRepository) Create(ctx context.Context, source *models.ChatSource
 		source.Platform,
 		source.ChannelID,
 		source.ChannelName,
+		source.ChannelHandle,
 		source.AuthRequired,
 		source.Config,
 		source.IsActive,
@@ -66,7 +67,7 @@ func (r *SourceRepository) Create(ctx context.Context, source *models.ChatSource
 // ListByOverlayID retrieves all sources for an overlay
 func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error) {
 	query := `
-		SELECT id, overlay_id, platform, channel_id, channel_name, auth_required, config, is_active, created_at, updated_at
+		SELECT id, overlay_id, platform, channel_id, channel_name, channel_handle, auth_required, config, is_active, created_at, updated_at
 		FROM overlay_chat_sources
 		WHERE overlay_id = $1
 		ORDER BY created_at DESC
@@ -87,6 +88,7 @@ func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string
 			&source.Platform,
 			&source.ChannelID,
 			&source.ChannelName,
+			&source.ChannelHandle,
 			&source.AuthRequired,
 			&source.Config,
 			&source.IsActive,
@@ -109,7 +111,7 @@ func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string
 // GetByID retrieves a source by ID
 func (r *SourceRepository) GetByID(ctx context.Context, id string) (*models.ChatSource, error) {
 	query := `
-		SELECT id, overlay_id, platform, channel_id, channel_name, auth_required, config, is_active, created_at, updated_at
+		SELECT id, overlay_id, platform, channel_id, channel_name, channel_handle, auth_required, config, is_active, created_at, updated_at
 		FROM overlay_chat_sources
 		WHERE id = $1
 	`
@@ -121,6 +123,7 @@ func (r *SourceRepository) GetByID(ctx context.Context, id string) (*models.Chat
 		&source.Platform,
 		&source.ChannelID,
 		&source.ChannelName,
+		&source.ChannelHandle,
 		&source.AuthRequired,
 		&source.Config,
 		&source.IsActive,
@@ -157,7 +160,7 @@ func (r *SourceRepository) Delete(ctx context.Context, id string) error {
 // GetAllSources returns all sources across all overlays (admin only)
 func (r *SourceRepository) GetAllSources(ctx context.Context) ([]*models.ChatSource, error) {
 	query := `
-		SELECT id, overlay_id, platform, channel_id, channel_name, is_active, created_at, updated_at
+		SELECT id, overlay_id, platform, channel_id, channel_name, channel_handle, is_active, created_at, updated_at
 		FROM overlay_chat_sources
 		ORDER BY created_at DESC
 	`
@@ -171,7 +174,7 @@ func (r *SourceRepository) GetAllSources(ctx context.Context) ([]*models.ChatSou
 	var sources []*models.ChatSource
 	for rows.Next() {
 		var source models.ChatSource
-		if err := rows.Scan(&source.ID, &source.OverlayID, &source.Platform, &source.ChannelID, &source.ChannelName, &source.IsActive, &source.CreatedAt, &source.UpdatedAt); err != nil {
+		if err := rows.Scan(&source.ID, &source.OverlayID, &source.Platform, &source.ChannelID, &source.ChannelName, &source.ChannelHandle, &source.IsActive, &source.CreatedAt, &source.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan source: %w", err)
 		}
 		sources = append(sources, &source)

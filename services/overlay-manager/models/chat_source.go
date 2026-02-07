@@ -7,16 +7,17 @@ import (
 
 // ChatSource represents a chat source configuration for an overlay
 type ChatSource struct {
-	ID           string                 `json:"id"`
-	OverlayID    string                 `json:"overlay_id"`
-	Platform     string                 `json:"platform"`
-	ChannelID    string                 `json:"channel_id"`
-	ChannelName  string                 `json:"channel_name"`
-	AuthRequired bool                   `json:"auth_required"`
-	Config       map[string]interface{} `json:"config"`
-	IsActive     bool                   `json:"is_active"`
-	CreatedAt    time.Time              `json:"created_at"`
-	UpdatedAt    time.Time              `json:"updated_at"`
+	ID            string                 `json:"id"`
+	OverlayID     string                 `json:"overlay_id"`
+	Platform      string                 `json:"platform"`
+	ChannelID     string                 `json:"channel_id"`
+	ChannelName   string                 `json:"channel_name"`
+	ChannelHandle string                 `json:"channel_handle"`
+	AuthRequired  bool                   `json:"auth_required"`
+	Config        map[string]interface{} `json:"config"`
+	IsActive      bool                   `json:"is_active"`
+	CreatedAt     time.Time              `json:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at"`
 }
 
 // Valid platforms

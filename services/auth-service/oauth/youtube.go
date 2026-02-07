@@ -24,6 +24,7 @@ type YouTubeOAuth struct {
 type YouTubeChannelInfo struct {
 	ChannelID string
 	Title     string
+	Handle    string
 }
 
 // NewYouTubeOAuth creates a new YouTube OAuth handler
@@ -92,7 +93,8 @@ func (y *YouTubeOAuth) GetPrimaryChannel(ctx context.Context, accessToken string
 		Items []struct {
 			ID      string `json:"id"`
 			Snippet struct {
-				Title string `json:"title"`
+				Title     string `json:"title"`
+				CustomUrl string `json:"customUrl"`
 			} `json:"snippet"`
 		} `json:"items"`
 	}
@@ -113,6 +115,7 @@ func (y *YouTubeOAuth) GetPrimaryChannel(ctx context.Context, accessToken string
 	return &YouTubeChannelInfo{
 		ChannelID: channel.ID,
 		Title:     channel.Snippet.Title,
+		Handle:    channel.Snippet.CustomUrl,
 	}, nil
 }
 
