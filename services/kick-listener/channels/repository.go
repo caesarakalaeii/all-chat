@@ -52,6 +52,7 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, e
 		JOIN overlays o ON ocs.overlay_id = o.id
 		WHERE ocs.platform = 'kick'
 		  AND o.is_active = true
+		  AND ocs.is_active = true
 	`
 
 	rows, err := r.db.Query(ctx, query)
