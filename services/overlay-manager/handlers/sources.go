@@ -197,6 +197,28 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		}
 	}
 
+	// For Kick, validate that channel_id is a valid slug (not a numeric ID)
+	// Kick channel IDs should be usernames like "xqc", not numeric IDs like "52390613"
+	if req.Platform == "kick" {
+		channelID = strings.TrimSpace(channelID)
+
+		// Check if it's purely numeric (invalid for Kick slugs)
+		isNumeric := true
+		for _, r := range channelID {
+			if r < '0' || r > '9' {
+				isNumeric = false
+				break
+			}
+		}
+
+		if isNumeric {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("Invalid Kick channel ID: '%s'. Kick requires a username/slug (like 'xqc'), not a numeric ID. Please provide the channel username.", channelID),
+			})
+			return
+		}
+	}
+
 	var channelHandle *string
 	if req.ChannelHandle != "" {
 		channelHandle = &req.ChannelHandle
@@ -335,6 +357,28 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 				})
 				return
 			}
+		}
+	}
+
+	// For Kick, validate that channel_id is a valid slug (not a numeric ID)
+	// Kick channel IDs should be usernames like "xqc", not numeric IDs like "52390613"
+	if req.Platform == "kick" {
+		channelID = strings.TrimSpace(channelID)
+
+		// Check if it's purely numeric (invalid for Kick slugs)
+		isNumeric := true
+		for _, r := range channelID {
+			if r < '0' || r > '9' {
+				isNumeric = false
+				break
+			}
+		}
+
+		if isNumeric {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("Invalid Kick channel ID: '%s'. Kick requires a username/slug (like 'xqc'), not a numeric ID. Please provide the channel username.", channelID),
+			})
+			return
 		}
 	}
 
