@@ -26,6 +26,9 @@ const (
 
 	// WSMessageTypeConnected is sent when connection is established
 	WSMessageTypeConnected WSMessageType = "connected"
+
+	// WSMessageTypePlatformStatus is sent when platform connection status changes
+	WSMessageTypePlatformStatus WSMessageType = "platform_status"
 )
 
 // WSMessage is the wrapper for all WebSocket messages
@@ -97,6 +100,15 @@ type ViewerConnectedData struct {
 	Message string `json:"message"`
 }
 
+// PlatformStatusData represents connection status for a platform
+type PlatformStatusData struct {
+	Platform     string     `json:"platform"`                // "youtube", "twitch", "kick", "tiktok"
+	ChannelID    string     `json:"channel_id"`              // Platform-specific channel identifier
+	Status       string     `json:"status"`                  // "connected", "reconnecting", "offline", "quota_exceeded"
+	NextRetryAt  *time.Time `json:"next_retry_at,omitempty"` // Timestamp when next reconnection happens (nil if connected)
+	ErrorMessage string     `json:"error_message,omitempty"` // Human-readable error
+}
+
 // NewChatMessage creates a new chat message WebSocket message
 func NewChatMessage(data ChatMessageData) *WSMessage {
 	return &WSMessage{
@@ -153,6 +165,15 @@ func NewViewerConnected() *WSMessage {
 		Data: ViewerConnectedData{
 			Message: "Connected to chat stream",
 		},
+		Timestamp: time.Now().UTC(),
+	}
+}
+
+// NewPlatformStatus creates a new platform status WebSocket message
+func NewPlatformStatus(data PlatformStatusData) *WSMessage {
+	return &WSMessage{
+		Type:      WSMessageTypePlatformStatus,
+		Data:      data,
 		Timestamp: time.Now().UTC(),
 	}
 }

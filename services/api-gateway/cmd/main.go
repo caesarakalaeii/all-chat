@@ -170,6 +170,13 @@ func main() {
 	subscriber := subscription.NewSubscriber(redisClient, log, messageHandler)
 	defer subscriber.Stop()
 
+	// Create status subscriber for platform connection status
+	statusSubscriber := subscription.NewStatusSubscriber(redisClient, wsManager, log)
+	if err := statusSubscriber.Start(ctx); err != nil {
+		log.Fatal("Failed to start status subscriber", zap.Error(err))
+	}
+	defer statusSubscriber.Stop()
+
 	// Create repository for overlay verification
 	subRepo := subscription.NewRepository(db)
 

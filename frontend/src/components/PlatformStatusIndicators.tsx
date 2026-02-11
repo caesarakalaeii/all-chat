@@ -4,14 +4,19 @@
  * Displays small icons for each platform (Twitch, YouTube, Kick, TikTok).
  * Active platforms (recently sent messages) appear in color.
  * Inactive platforms appear in grayscale.
+ * Reconnecting platforms show a countdown timer.
  *
  * Can be hidden via CSS by targeting `.platform-status-indicators`
  */
 
 'use client';
 
+import { useEffect, useState } from 'react';
+import type { PlatformStatus } from '@/lib/types/message';
+
 interface PlatformStatusIndicatorsProps {
   activePlatforms: Set<string>;
+  platformStatuses: Map<string, PlatformStatus>;
 }
 
 // Platform SVG Icons - Using official brand colors per platform guidelines
@@ -43,7 +48,9 @@ const TikTokIcon = () => (
   </svg>
 );
 
-export default function PlatformStatusIndicators({ activePlatforms }: PlatformStatusIndicatorsProps) {
+export default function PlatformStatusIndicators({ activePlatforms, platformStatuses }: PlatformStatusIndicatorsProps) {
+  const [countdowns, setCountdowns] = useState<Map<string, number>>(new Map());
+
   const platforms = [
     {
       name: 'twitch',
@@ -71,25 +78,66 @@ export default function PlatformStatusIndicators({ activePlatforms }: PlatformSt
     },
   ];
 
+  // Update countdown timers every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newCountdowns = new Map<string, number>();
+
+      platformStatuses.forEach((status, platform) => {
+        if (status.status === 'reconnecting' && status.next_retry_at) {
+          const nextRetry = new Date(status.next_retry_at).getTime();
+          const now = Date.now();
+          const secondsRemaining = Math.max(0, Math.ceil((nextRetry - now) / 1000));
+          newCountdowns.set(platform, secondsRemaining);
+        }
+      });
+
+      setCountdowns(newCountdowns);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [platformStatuses]);
+
   return (
     <div className="platform-status-indicators fixed top-4 right-4 flex gap-2 bg-gray-900/80 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg z-50">
       {platforms.map((platform) => {
         const isActive = activePlatforms.has(platform.name);
+        const status = platformStatuses.get(platform.name);
+        const countdown = countdowns.get(platform.name);
         const Icon = platform.icon;
-        // Brand compliance: All platform icons use fixed official colors, no filters applied
-        // When inactive, only reduce opacity to maintain brand color integrity
-        const inactiveClass = 'opacity-40 bg-gray-800/50';
-        const activeClass = 'bg-white/10';
+
+        // Determine status class
+        let statusClass = isActive ? 'bg-white/10' : 'opacity-40 bg-gray-800/50';
+        let tooltipText = `${platform.label} ${isActive ? '(Active)' : '(Inactive)'}`;
+
+        if (status) {
+          if (status.status === 'reconnecting' && countdown !== undefined) {
+            statusClass = 'bg-yellow-500/20 opacity-100';
+            tooltipText = `${platform.label} - Reconnecting in ${countdown}s`;
+          } else if (status.status === 'quota_exceeded') {
+            statusClass = 'bg-red-500/20 opacity-100';
+            tooltipText = `${platform.label} - Quota exceeded`;
+          } else if (status.status === 'offline') {
+            statusClass = 'opacity-20 bg-gray-800/50';
+            tooltipText = `${platform.label} - Offline`;
+          } else if (status.status === 'connected') {
+            statusClass = 'bg-green-500/20 opacity-100';
+            tooltipText = `${platform.label} - Connected`;
+          }
+        }
 
         return (
           <div
             key={platform.name}
-            className={`platform-indicator platform-indicator-${platform.name} flex items-center justify-center w-8 h-8 rounded-md transition-all duration-300 ${
-              isActive ? activeClass : inactiveClass
-            }`}
-            title={`${platform.label} ${isActive ? '(Active)' : '(Inactive)'}`}
+            className={`platform-indicator platform-indicator-${platform.name} relative flex items-center justify-center w-8 h-8 rounded-md transition-all duration-300 ${statusClass}`}
+            title={tooltipText}
           >
             <Icon />
+            {status?.status === 'reconnecting' && countdown !== undefined && (
+              <div className="absolute -bottom-1 -right-1 bg-yellow-500 text-white text-xs px-1 rounded font-mono">
+                {countdown}s
+              </div>
+            )}
           </div>
         );
       })}

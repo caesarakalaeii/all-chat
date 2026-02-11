@@ -80,9 +80,17 @@ export interface Emote {
   positions: number[][];
 }
 
+export interface PlatformStatus {
+  platform: 'youtube' | 'twitch' | 'kick' | 'tiktok';
+  channel_id: string;
+  status: 'connected' | 'reconnecting' | 'offline' | 'quota_exceeded';
+  next_retry_at?: string; // ISO 8601 timestamp
+  error_message?: string;
+}
+
 export interface WebSocketMessage {
-  type: 'chat_message' | 'message_update' | 'ping' | 'pong' | 'error';
-  data?: ChatMessage;
+  type: 'chat_message' | 'message_update' | 'ping' | 'pong' | 'error' | 'platform_status';
+  data?: ChatMessage | PlatformStatus;
   timestamp?: string;
   error?: string;
 }
