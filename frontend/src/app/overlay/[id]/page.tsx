@@ -22,7 +22,7 @@
 
 import Image from 'next/image';
 import { use, useEffect, useState, useRef } from 'react';
-import type { ChatMessage, EventTier } from '@/lib/types/message';
+import type { ChatMessage, EventTier, PlatformStatus } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
@@ -38,6 +38,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [disableMessageFade, setDisableMessageFade] = useState(false);
   const [customCss, setCustomCss] = useState('');
   const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set());
+  const [platformStatuses, setPlatformStatuses] = useState<Map<string, PlatformStatus>>(new Map());
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [forceReconnect, setForceReconnect] = useState(0);
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
@@ -168,6 +169,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             const updated = [...prev];
             updated[index] = updatedMessage;
             return updated;
+          });
+        }
+
+        // Handle platform status updates
+        if (envelope.type === 'platform_status' && envelope.data) {
+          const statusData = envelope.data as PlatformStatus;
+          setPlatformStatuses((prev) => {
+            const next = new Map(prev);
+            next.set(statusData.platform, statusData);
+            return next;
           });
         }
       } catch (error) {
@@ -452,7 +463,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       )}
 
       {/* Platform Status Indicators */}
-      <PlatformStatusIndicators activePlatforms={activePlatforms} />
+      <PlatformStatusIndicators activePlatforms={activePlatforms} platformStatuses={platformStatuses} />
 
       <div className="space-y-3">
         {messages.map((message, index) => {

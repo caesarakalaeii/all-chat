@@ -65,8 +65,8 @@ export class WebSocketClient {
         const wsMessage: WebSocketMessage = JSON.parse(event.data);
 
         if (wsMessage.type === 'chat_message' && wsMessage.data) {
-          // Notify all listeners
-          this.messageCallbacks.forEach((cb) => cb(wsMessage.data!));
+          // Notify all listeners (type narrowing: only ChatMessage in this branch)
+          this.messageCallbacks.forEach((cb) => cb(wsMessage.data as ChatMessage));
         } else if (wsMessage.type === 'ping') {
           // Respond to server ping
           this.ws?.send(
@@ -78,6 +78,7 @@ export class WebSocketClient {
         } else if (wsMessage.type === 'error') {
           console.error('[WebSocket] Server error:', wsMessage.error);
         }
+        // Note: platform_status messages are not handled here - they're handled in the overlay page component
       } catch (error) {
         console.error('[WebSocket] Failed to parse message:', error);
       }

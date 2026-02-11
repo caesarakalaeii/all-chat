@@ -317,6 +317,23 @@ func (m *Manager) BroadcastToOverlay(overlayID string, message []byte) int {
 	return pool.Broadcast(message)
 }
 
+// BroadcastToAll sends a message to all connected clients (all overlays)
+func (m *Manager) BroadcastToAll(message []byte) int {
+	m.mu.RLock()
+	pools := make([]*Pool, 0, len(m.pools))
+	for _, pool := range m.pools {
+		pools = append(pools, pool)
+	}
+	m.mu.RUnlock()
+
+	totalSent := 0
+	for _, pool := range pools {
+		totalSent += pool.Broadcast(message)
+	}
+
+	return totalSent
+}
+
 // GetPoolSize returns the number of connections for an overlay
 func (m *Manager) GetPoolSize(overlayID string) int {
 	m.mu.RLock()

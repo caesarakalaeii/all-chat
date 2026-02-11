@@ -12,6 +12,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener/models"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
+	"github.com/caesar/all-chat/services/youtube-listener/status"
 	"go.uber.org/zap"
 	"google.golang.org/api/youtube/v3"
 )
@@ -35,6 +36,7 @@ type Poller struct {
 	logger         *zap.Logger
 	ytMetrics      *metrics.YouTubeMetrics
 	tokenStore     *TokenStore
+	statusPublisher *status.Publisher
 
 	// Connection-aware polling (prevents quota waste when overlay disconnected)
 	connectionChecker ConnectionChecker
@@ -59,6 +61,7 @@ func NewPoller(
 	ytMetrics *metrics.YouTubeMetrics,
 	logger *zap.Logger,
 	tokenStore *TokenStore,
+	statusPublisher *status.Publisher,
 ) *Poller {
 	return &Poller{
 		stream:            stream,
@@ -67,6 +70,7 @@ func NewPoller(
 		logger:            logger,
 		ytMetrics:         ytMetrics,
 		tokenStore:        tokenStore,
+		statusPublisher:   statusPublisher,
 		stopChan:          make(chan struct{}),
 		maxBackoff:        5 * time.Minute, // Maximum backoff of 5 minutes (only for errors)
 		backoffDuration:   0,               // Start with no backoff
@@ -379,6 +383,18 @@ func (p *Poller) handlePollError(err error) {
 		zap.Duration("backoff_duration", p.backoffDuration),
 		zap.Int("consecutive_errors", p.consecutiveErrors),
 	)
+
+	// Publish reconnecting status if statusPublisher is available
+	if p.statusPublisher != nil && p.channelID != "" {
+		nextRetry := time.Now().Add(p.backoffDuration)
+		_ = p.statusPublisher.PublishStatus(context.Background(), status.StatusMessage{
+			Platform:     "youtube",
+			ChannelID:    p.channelID,
+			Status:       "reconnecting",
+			NextRetryAt:  &nextRetry,
+			ErrorMessage: err.Error(),
+		})
+	}
 }
 
 // resetBackoff resets the exponential backoff state after a successful poll
@@ -390,6 +406,15 @@ func (p *Poller) resetBackoff() {
 		)
 		p.consecutiveErrors = 0
 		p.backoffDuration = 0
+
+		// Publish connected status if statusPublisher is available
+		if p.statusPublisher != nil && p.channelID != "" {
+			_ = p.statusPublisher.PublishStatus(context.Background(), status.StatusMessage{
+				Platform:  "youtube",
+				ChannelID: p.channelID,
+				Status:    "connected",
+			})
+		}
 	}
 }
 
