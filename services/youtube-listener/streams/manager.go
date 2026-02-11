@@ -14,6 +14,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/models"
 	"github.com/caesar/all-chat/services/youtube-listener/oauth"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
+	"github.com/caesar/all-chat/services/youtube-listener/status"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -38,6 +39,7 @@ type Manager struct {
 	quotaTracker     *quota.Tracker
 	quotaCoordinator *quota.Coordinator
 	ytMetrics        *metrics.YouTubeMetrics
+	statusPublisher  *status.Publisher
 
 	mu            sync.RWMutex
 	activeStreams map[string]*models.YouTubeStream // streamID -> stream
@@ -119,6 +121,7 @@ func NewManager(
 	perChannelTracker *quota.PerChannelTracker,
 	redisClient *redis.Client,
 	ytMetrics *metrics.YouTubeMetrics,
+	statusPublisher *status.Publisher,
 	logger *zap.Logger,
 ) *Manager {
 	// Get disconnect debounce delay from environment variable, default to 90 seconds
@@ -152,6 +155,7 @@ func NewManager(
 		quotaCoordinator:            quotaCoordinator,
 		redisClient:                 redisClient,
 		ytMetrics:                   ytMetrics,
+		statusPublisher:             statusPublisher,
 		activeStreams:               make(map[string]*models.YouTubeStream),
 		pollers:                     make(map[string]*Poller),
 		connectedOverlays:           make(map[string]time.Time),
@@ -930,7 +934,7 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 	)
 
 	// Create and start poller
-	poller := NewPoller(stream, apiClient, m.ytMetrics, m.logger, m.tokenStore)
+	poller := NewPoller(stream, apiClient, m.ytMetrics, m.logger, m.tokenStore, m.statusPublisher)
 	poller.SetMessageHandler(m.messageHandler)
 
 	// Set connection checker for connection-aware polling

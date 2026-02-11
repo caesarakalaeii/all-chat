@@ -16,6 +16,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/oauth"
 	"github.com/caesar/all-chat/services/youtube-listener/publisher"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
+	"github.com/caesar/all-chat/services/youtube-listener/status"
 	"github.com/caesar/all-chat/services/youtube-listener/streams"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
@@ -196,10 +197,13 @@ func main() {
 	// Initialize YouTube-specific metrics
 	ytMetrics := ytmetrics.NewYouTubeMetrics()
 
+	// Initialize status publisher for platform connection status
+	statusPublisher := status.NewPublisher(redisClient, log)
+
 	// Initialize stream manager
 	streamRepo := streams.NewRepository(db, log)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, leaderCoord, quotaTracker, perChannelQuotaTracker, redisClient, ytMetrics, log)
+	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, leaderCoord, quotaTracker, perChannelQuotaTracker, redisClient, ytMetrics, statusPublisher, log)
 
 	// Start stream manager
 	if err := streamManager.Start(ctx); err != nil {
