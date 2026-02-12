@@ -67,6 +67,49 @@ func (r *Repository) GetActiveSources(ctx context.Context) ([]*models.StreamSour
 	return sources, nil
 }
 
+// GetAllSources gets ALL YouTube sources (including inactive) for token validation
+func (r *Repository) GetAllSources(ctx context.Context) ([]*models.StreamSource, error) {
+	query := `
+		SELECT DISTINCT
+			ocs.overlay_id,
+			ocs.channel_id
+		FROM overlay_chat_sources ocs
+		JOIN overlays o ON ocs.overlay_id = o.id
+		WHERE o.is_active = true
+		  AND ocs.platform = 'youtube'
+		ORDER BY ocs.channel_id
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		r.logger.Error("Failed to query YouTube sources", zap.Error(err))
+		return nil, fmt.Errorf("failed to query sources: %w", err)
+	}
+	defer rows.Close()
+
+	sources := make([]*models.StreamSource, 0)
+
+	for rows.Next() {
+		var source models.StreamSource
+		if err := rows.Scan(&source.OverlayID, &source.ChannelID); err != nil {
+			r.logger.Error("Failed to scan stream source", zap.Error(err))
+			continue
+		}
+		sources = append(sources, &source)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Error iterating stream sources", zap.Error(err))
+		return nil, fmt.Errorf("error iterating sources: %w", err)
+	}
+
+	r.logger.Debug("Fetched all YouTube sources",
+		zap.Int("count", len(sources)),
+	)
+
+	return sources, nil
+}
+
 // GetUserIDForChannel gets the user ID associated with a YouTube channel
 // This is needed to retrieve OAuth tokens
 func (r *Repository) GetUserIDForChannel(ctx context.Context, channelID string) (string, error) {
