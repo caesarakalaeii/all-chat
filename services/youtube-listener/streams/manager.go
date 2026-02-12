@@ -550,12 +550,22 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		// Try to create YouTube service - this will validate the token
 		_, _, err = m.oauthManager.CreateYouTubeService(ctx, userID, source.ChannelID)
 		if err != nil {
-			// Token validation failed - status already published in CreateYouTubeService
+			// Token validation failed - publish offline status
 			m.logger.Info("Inactive source has invalid OAuth token",
 				zap.String("channel_id", source.ChannelID),
 				zap.String("overlay_id", source.OverlayID),
 				zap.Error(err),
 			)
+
+			// Publish offline status with error message
+			if m.statusPublisher != nil {
+				_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+					Platform:     "youtube",
+					ChannelID:    source.ChannelID,
+					Status:       "offline",
+					ErrorMessage: fmt.Sprintf("OAuth token error: %v", err),
+				})
+			}
 		}
 	}
 
