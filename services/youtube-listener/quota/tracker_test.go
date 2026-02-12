@@ -142,7 +142,7 @@ func TestCanMakeRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tracker.mu.Lock()
 			tracker.usageToday = tt.used
-			tracker.currentDate = time.Now().Format("2006-01-02")
+			tracker.currentDate = time.Now().In(YouTubePST).Format("2006-01-02")
 			tracker.mu.Unlock()
 
 			can := tracker.CanMakeRequest(tt.units)
@@ -173,7 +173,7 @@ func TestGetUsagePercentage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tracker.mu.Lock()
 			tracker.usageToday = tt.used
-			tracker.currentDate = time.Now().Format("2006-01-02")
+			tracker.currentDate = time.Now().In(YouTubePST).Format("2006-01-02")
 			tracker.mu.Unlock()
 
 			percentage := tracker.GetUsagePercentage()
@@ -188,7 +188,7 @@ func TestDateRollover(t *testing.T) {
 	tracker := NewTracker(nil, 10000, logger, m)
 
 	// Set up tracker with yesterday's date and usage
-	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	yesterday := time.Now().In(YouTubePST).AddDate(0, 0, -1).Format("2006-01-02")
 	tracker.mu.Lock()
 	tracker.currentDate = yesterday
 	tracker.usageToday = 5000
@@ -202,7 +202,7 @@ func TestDateRollover(t *testing.T) {
 
 	// Current date should be updated to today
 	tracker.mu.RLock()
-	today := time.Now().Format("2006-01-02")
+	today := time.Now().In(YouTubePST).Format("2006-01-02")
 	assert.Equal(t, today, tracker.currentDate)
 	tracker.mu.RUnlock()
 }
@@ -213,7 +213,7 @@ func TestDateRolloverConcurrency(t *testing.T) {
 	tracker := NewTracker(nil, 10000, logger, m)
 
 	// Set up tracker with yesterday's date and usage
-	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	yesterday := time.Now().In(YouTubePST).AddDate(0, 0, -1).Format("2006-01-02")
 	tracker.mu.Lock()
 	tracker.currentDate = yesterday
 	tracker.usageToday = 5000
@@ -242,7 +242,7 @@ func TestDateRolloverConcurrency(t *testing.T) {
 
 	// Current date should be today
 	tracker.mu.RLock()
-	today := time.Now().Format("2006-01-02")
+	today := time.Now().In(YouTubePST).Format("2006-01-02")
 	assert.Equal(t, today, tracker.currentDate)
 	tracker.mu.RUnlock()
 }
