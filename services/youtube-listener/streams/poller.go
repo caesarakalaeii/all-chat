@@ -109,6 +109,15 @@ func (p *Poller) Stop() {
 		zap.String("stream_id", p.stream.StreamID),
 	)
 
+	// Publish offline status when poller stops gracefully
+	if p.statusPublisher != nil && p.channelID != "" {
+		_ = p.statusPublisher.PublishStatus(context.Background(), status.StatusMessage{
+			Platform:  "youtube",
+			ChannelID: p.channelID,
+			Status:    "offline",
+		})
+	}
+
 	close(p.stopChan)
 	p.wg.Wait()
 }
