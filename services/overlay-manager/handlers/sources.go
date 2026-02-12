@@ -41,8 +41,8 @@ func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepositor
 // copyYouTubeTokenForChannel copies the admin's YouTube OAuth token to a new channel
 // This allows admins to add YouTube channels manually (by link) without OAuth flow
 func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
-	// Step 1: Find any existing YouTube token for this admin
-	// We'll copy the first token found (admins typically have one YouTube account)
+	// Step 1: Find the best YouTube token for this admin
+	// Prefer non-expired tokens, then most recently updated
 	var existingToken struct {
 		AccessToken        string
 		RefreshToken       string
@@ -56,6 +56,8 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 		       expiry::text, encryption_version
 		FROM youtube_oauth_tokens
 		WHERE user_id = $1
+		  AND expiry > NOW()  -- Only select non-expired tokens
+		ORDER BY expiry DESC  -- Prefer tokens that expire furthest in the future
 		LIMIT 1
 	`
 
@@ -68,7 +70,7 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 	)
 
 	if err != nil {
-		return fmt.Errorf("admin has no YouTube OAuth token: %w", err)
+		return fmt.Errorf("admin has no valid (non-expired) YouTube OAuth token - please re-authorize YouTube: %w", err)
 	}
 
 	// Step 2: Copy token to new channel_id (insert or update)
