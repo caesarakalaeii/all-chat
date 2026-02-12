@@ -624,6 +624,19 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 				zap.String("stream_id", cachedStream.StreamID),
 			)
 
+			// Publish "reconnecting" status while poller is starting
+			if m.statusPublisher != nil {
+				// Estimated time to start: ~2 seconds for API client creation + poller startup
+				estimatedStart := time.Now().Add(2 * time.Second)
+				_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+					Platform:     "youtube",
+					ChannelID:    channelID,
+					Status:       "reconnecting",
+					NextRetryAt:  &estimatedStart,
+					ErrorMessage: "Starting poller from cached stream state...",
+				})
+			}
+
 			// Start poller directly without expensive detection
 			if err := m.syncChannel(ctx, channelID, channelSourceList); err != nil {
 				m.logger.Error("Failed to start poller from cached state",
