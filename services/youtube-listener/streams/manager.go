@@ -581,6 +581,10 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		}
 	}
 
+	m.logger.Info("Channel sources after inactive validation",
+		zap.Int("channel_count", len(channelSources)),
+	)
+
 	// For each channel, check for live streams (with exponential backoff)
 	for channelID, channelSourceList := range channelSources {
 		// CRITICAL OPTIMIZATION: Skip expensive discovery if poller already running
