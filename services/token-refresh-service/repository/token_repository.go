@@ -45,7 +45,7 @@ func NewTokenRepository(db *pgxpool.Pool, cipher *encryption.AESEncryptor, logge
 }
 
 // GetExpiringUserTokens returns user tokens expiring within the specified duration
-// Also includes already-expired tokens from the last 24 hours for recovery
+// Also includes ALL already-expired tokens for recovery and warning
 func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
 	query := `
 		SELECT id, auth_provider, username, display_name,
@@ -53,7 +53,7 @@ func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWith
 		FROM users
 		WHERE (
 		    (token_expires_at < $1 AND token_expires_at > NOW())
-		    OR (token_expires_at > NOW() - INTERVAL '24 hours' AND token_expires_at < NOW())
+		    OR (token_expires_at < NOW())
 		  )
 		  AND refresh_token IS NOT NULL
 		  AND refresh_token != ''
@@ -119,7 +119,7 @@ func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWith
 }
 
 // GetExpiringViewerTokens returns viewer session tokens expiring within the specified duration
-// Also includes already-expired tokens from the last 24 hours for recovery
+// Also includes ALL already-expired tokens for recovery and warning
 func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
 	query := `
 		SELECT id, platform, username, display_name,
@@ -127,7 +127,7 @@ func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWi
 		FROM viewer_sessions
 		WHERE (
 		    (token_expires_at < $1 AND token_expires_at > NOW())
-		    OR (token_expires_at > NOW() - INTERVAL '24 hours' AND token_expires_at < NOW())
+		    OR (token_expires_at < NOW())
 		  )
 		  AND refresh_token IS NOT NULL
 		  AND refresh_token != ''
@@ -199,7 +199,7 @@ func (r *TokenRepository) GetExpiringYouTubeTokens(ctx context.Context, expiresW
 		FROM youtube_oauth_tokens
 		WHERE (
 		    (expiry < $1 AND expiry > NOW())
-		    OR (expiry > NOW() - INTERVAL '24 hours' AND expiry < NOW())
+		    OR (expiry < NOW())
 		  )
 		  AND refresh_token IS NOT NULL
 		  AND refresh_token != ''

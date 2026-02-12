@@ -129,6 +129,20 @@ func (m *Manager) CreateYouTubeService(ctx context.Context, userID, channelID st
 		return nil, nil, fmt.Errorf("failed to get token: %w", err)
 	}
 
+	// Validate token is not expired (with 1 minute buffer for clock skew)
+	if !token.Expiry.IsZero() && token.Expiry.Before(time.Now().Add(-1*time.Minute)) {
+		m.logger.Error("YouTube OAuth token is expired",
+			zap.String("user_id", userID),
+			zap.String("channel_id", channelID),
+			zap.Time("expiry", token.Expiry),
+			zap.Duration("expired_ago", time.Since(token.Expiry)),
+		)
+		return nil, nil, fmt.Errorf("OAuth token expired on %s (%.0f days ago) - please re-authorize YouTube channel",
+			token.Expiry.Format(time.RFC3339),
+			time.Since(token.Expiry).Hours()/24,
+		)
+	}
+
 	tokenSource := m.config.TokenSource(ctx, token)
 	baseTransport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,

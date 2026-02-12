@@ -601,6 +601,17 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 				zap.Error(setErr),
 			)
 		}
+
+		// Publish offline status with error message
+		if m.statusPublisher != nil {
+			_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+				Platform:     "youtube",
+				ChannelID:    channelID,
+				Status:       "offline",
+				ErrorMessage: fmt.Sprintf("OAuth token error: %v", err),
+			})
+		}
+
 		return fmt.Errorf("failed to create YouTube service: %w", err)
 	}
 
@@ -974,6 +985,15 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 			zap.String("channel_id", stream.ChannelID),
 			zap.Error(err),
 		)
+	}
+
+	// Publish initial "connected" status
+	if m.statusPublisher != nil {
+		_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+			Platform:  "youtube",
+			ChannelID: stream.ChannelID,
+			Status:    "connected",
+		})
 	}
 
 	return nil

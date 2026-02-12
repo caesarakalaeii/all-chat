@@ -258,6 +258,14 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelI
 		return fmt.Errorf("channel_id is required for storing YouTube tokens")
 	}
 
+	// Validate token is not already expired (with 5 minute buffer for clock skew)
+	if !token.Expiry.IsZero() && token.Expiry.Before(time.Now().Add(-5*time.Minute)) {
+		return fmt.Errorf("refusing to store expired YouTube token (expiry: %s, expired %.0f days ago)",
+			token.Expiry.Format(time.RFC3339),
+			time.Since(token.Expiry).Hours()/24,
+		)
+	}
+
 	query := `
 		INSERT INTO youtube_oauth_tokens (
 			user_id, channel_id, access_token, refresh_token, token_type, expiry, encryption_version, created_at, updated_at
