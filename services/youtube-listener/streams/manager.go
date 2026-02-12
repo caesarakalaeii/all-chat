@@ -612,6 +612,24 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 			continue
 		}
 
+		// OPTIMIZATION: If source is already ACTIVE with cached stream state, just start poller
+		// No need for expensive detection - we already know the stream_id
+		if cachedStream, err := m.streamStateStore.LoadStreamState(ctx, channelID); err == nil && cachedStream != nil {
+			m.logger.Info("Found cached stream state, starting poller without detection (saved 100 quota units)",
+				zap.String("channel_id", channelID),
+				zap.String("stream_id", cachedStream.StreamID),
+			)
+
+			// Start poller directly without expensive detection
+			if err := m.syncChannel(ctx, channelID, channelSourceList); err != nil {
+				m.logger.Error("Failed to start poller from cached state",
+					zap.String("channel_id", channelID),
+					zap.Error(err),
+				)
+			}
+			continue
+		}
+
 		// Check if we should skip this channel due to backoff
 		if m.shouldSkipDetection(channelID, channelSourceList) {
 			continue
