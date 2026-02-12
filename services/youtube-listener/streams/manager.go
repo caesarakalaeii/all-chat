@@ -471,6 +471,13 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		return fmt.Errorf("failed to get active sources: %w", err)
 	}
 
+	// Also get ALL sources (including inactive) for token validation
+	allSources, err := m.repository.GetAllSources(ctx)
+	if err != nil {
+		m.logger.Warn("Failed to get all sources for token validation", zap.Error(err))
+		// Continue with active sources only
+	}
+
 	// Filter sources to only those with connected overlays
 	m.connMu.RLock()
 	connectedSources := make([]*models.StreamSource, 0)
@@ -479,11 +486,32 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 			connectedSources = append(connectedSources, source)
 		}
 	}
+
+	// Check ALL sources with connected overlays for token issues (including inactive)
+	inactiveSourcesWithConnection := make([]*models.StreamSource, 0)
+	if allSources != nil {
+		for _, source := range allSources {
+			if _, connected := m.connectedOverlays[source.OverlayID]; connected {
+				// Check if this source is NOT in the active sources list
+				isInActive := false
+				for _, activeSource := range connectedSources {
+					if activeSource.ChannelID == source.ChannelID && activeSource.OverlayID == source.OverlayID {
+						isInActive = true
+						break
+					}
+				}
+				if !isInActive {
+					inactiveSourcesWithConnection = append(inactiveSourcesWithConnection, source)
+				}
+			}
+		}
+	}
 	m.connMu.RUnlock()
 
 	m.logger.Info("Filtered YouTube sources by overlay connections",
 		zap.Int("total_sources", len(sources)),
 		zap.Int("connected_sources", len(connectedSources)),
+		zap.Int("inactive_sources_with_connection", len(inactiveSourcesWithConnection)),
 		zap.Int("connected_overlays", len(m.connectedOverlays)),
 	)
 
@@ -506,6 +534,30 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		zap.Int("channel_count", len(channelSources)),
 		zap.Int("source_count", len(connectedSources)),
 	)
+
+	// Validate tokens for inactive sources with connected overlays
+	// This ensures users see status/warnings for sources that can't activate due to token issues
+	for _, source := range inactiveSourcesWithConnection {
+		userID, err := m.repository.GetUserIDForChannel(ctx, source.ChannelID)
+		if err != nil {
+			m.logger.Warn("Failed to get user ID for inactive source token validation",
+				zap.String("channel_id", source.ChannelID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		// Try to create YouTube service - this will validate the token
+		_, _, err = m.oauthManager.CreateYouTubeService(ctx, userID, source.ChannelID)
+		if err != nil {
+			// Token validation failed - status already published in CreateYouTubeService
+			m.logger.Info("Inactive source has invalid OAuth token",
+				zap.String("channel_id", source.ChannelID),
+				zap.String("overlay_id", source.OverlayID),
+				zap.Error(err),
+			)
+		}
+	}
 
 	// For each channel, check for live streams (with exponential backoff)
 	for channelID, channelSourceList := range channelSources {
