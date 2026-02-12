@@ -566,6 +566,18 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 					ErrorMessage: fmt.Sprintf("OAuth token error: %v", err),
 				})
 			}
+		} else {
+			// Token is valid! Add to channelSources for livestream detection
+			m.logger.Info("Inactive source has valid OAuth token, will attempt livestream detection",
+				zap.String("channel_id", source.ChannelID),
+				zap.String("overlay_id", source.OverlayID),
+			)
+
+			// Add to channel sources map for detection in the main loop
+			if channelSources[source.ChannelID] == nil {
+				channelSources[source.ChannelID] = make([]*models.StreamSource, 0)
+			}
+			channelSources[source.ChannelID] = append(channelSources[source.ChannelID], source)
 		}
 	}
 
