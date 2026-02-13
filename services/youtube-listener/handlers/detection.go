@@ -191,7 +191,9 @@ func (h *DetectionHandler) ForceChannelDetection(c *gin.Context) {
 	}
 
 	// Record manual operation in quota budget (100 units for full detection)
-	h.quotaBudget.RecordManualOperation(ctx, 100, fmt.Sprintf("force_detection:%s", channelID))
+	if h.quotaBudget != nil {
+		h.quotaBudget.RecordManualOperation(ctx, 100, fmt.Sprintf("force_detection:%s", channelID))
+	}
 
 	h.logger.Info("Manually forced channel detection",
 		zap.String("channel_id", channelID),
