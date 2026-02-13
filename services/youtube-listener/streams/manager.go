@@ -573,17 +573,9 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 				zap.String("overlay_id", source.OverlayID),
 			)
 
-			// Publish "reconnecting" status to indicate detection is in progress
-			if m.statusPublisher != nil {
-				estimatedDetection := time.Now().Add(30 * time.Second) // Detection usually takes 1-30s depending on backoff
-				_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
-					Platform:     "youtube",
-					ChannelID:    source.ChannelID,
-					Status:       "reconnecting",
-					NextRetryAt:  &estimatedDetection,
-					ErrorMessage: "Searching for active livestream...",
-				})
-			}
+			// NOTE: Don't publish "Searching..." status here - it gets published every sync cycle
+			// even when detection is blocked by backoff. Status is published in syncChannel()
+			// when detection actually runs.
 
 			// Add to channel sources map for detection in the main loop
 			if channelSources[source.ChannelID] == nil {
@@ -611,6 +603,11 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 
 	// For each channel, check for live streams (with exponential backoff)
 	for channelID, channelSourceList := range channelSources {
+		m.logger.Info("Processing channel in main loop",
+			zap.String("channel_id", channelID),
+			zap.Int("source_count", len(channelSourceList)),
+		)
+
 		// CRITICAL OPTIMIZATION: Skip expensive discovery if poller already running
 		// This prevents wasting 100 quota units on redundant searches
 		m.mu.RLock()
@@ -672,7 +669,22 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		}
 
 		// Check if we should skip this channel due to backoff
-		if m.shouldSkipDetection(channelID, channelSourceList) {
+		skipReason := m.shouldSkipDetection(channelID, channelSourceList)
+		if skipReason != "" {
+			m.logger.Info("Skipping detection",
+				zap.String("channel_id", channelID),
+				zap.String("reason", skipReason),
+			)
+
+			// Publish status indicating why detection was skipped
+			if m.statusPublisher != nil {
+				_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+					Platform:     "youtube",
+					ChannelID:    channelID,
+					Status:       "offline",
+					ErrorMessage: fmt.Sprintf("Detection skipped: %s", skipReason),
+				})
+			}
 			continue
 		}
 
@@ -914,10 +926,21 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	canAttempt, reason := circuitBreaker.CanAttemptDiscovery()
 
 	if !canAttempt {
-		m.logger.Debug("Circuit breaker blocking expensive discovery",
+		m.logger.Info("Circuit breaker blocking expensive discovery",
 			zap.String("channel_id", channelID),
 			zap.String("reason", reason),
 		)
+
+		// Publish offline status with circuit breaker reason
+		if m.statusPublisher != nil {
+			_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+				Platform:     "youtube",
+				ChannelID:    channelID,
+				Status:       "offline",
+				ErrorMessage: fmt.Sprintf("Circuit breaker open: %s", reason),
+			})
+		}
+
 		return fmt.Errorf("circuit breaker open: %s", reason)
 	}
 
@@ -950,12 +973,32 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 			zap.String("global_state", string(searchDecision.GlobalState)),
 		)
 
-		// Apply retry-after delay if provided
+		// Publish offline status with quota reason
+		errorMsg := fmt.Sprintf("Quota limit: %s", searchDecision.Reason)
 		if searchDecision.RetryAfter != nil {
 			m.logger.Debug("Search blocked, will retry after delay",
 				zap.String("channel_id", channelID),
 				zap.Duration("retry_after", *searchDecision.RetryAfter),
 			)
+			nextRetry := time.Now().Add(*searchDecision.RetryAfter)
+			if m.statusPublisher != nil {
+				_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+					Platform:     "youtube",
+					ChannelID:    channelID,
+					Status:       "offline",
+					NextRetryAt:  &nextRetry,
+					ErrorMessage: errorMsg,
+				})
+			}
+		} else {
+			if m.statusPublisher != nil {
+				_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+					Platform:     "youtube",
+					ChannelID:    channelID,
+					Status:       "offline",
+					ErrorMessage: errorMsg,
+				})
+			}
 		}
 
 		return fmt.Errorf("quota check failed: %s", searchDecision.Reason)
@@ -1583,16 +1626,34 @@ func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID strin
 
 // IsChannelConnected checks if any overlay is connected for a channel.
 // Implements ConnectionChecker interface for connection-aware polling.
+// Uses real-time connection state to avoid race conditions with channelConnectedOverlays map.
 func (m *Manager) IsChannelConnected(ctx context.Context, channelID string) (bool, error) {
+	// Get all active streams for this channel
+	m.mu.RLock()
+	var streamOverlayIDs []string
+	for _, stream := range m.activeStreams {
+		if stream.ChannelID == channelID {
+			streamOverlayIDs = append(streamOverlayIDs, stream.OverlayID)
+		}
+	}
+	m.mu.RUnlock()
+
+	// Check if any of these overlays are connected (real-time check)
 	m.connMu.RLock()
 	defer m.connMu.RUnlock()
 
-	overlays := m.channelConnectedOverlays[channelID]
-	return len(overlays) > 0, nil
+	for _, overlayID := range streamOverlayIDs {
+		if _, connected := m.connectedOverlays[overlayID]; connected {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // shouldSkipDetection checks if we should skip livestream detection for a channel due to backoff
-func (m *Manager) shouldSkipDetection(channelID string, sources []*models.StreamSource) bool {
+// Returns empty string if detection should proceed, or a reason string if detection should be skipped
+func (m *Manager) shouldSkipDetection(channelID string, sources []*models.StreamSource) string {
 	ctx := context.Background()
 
 	// PRIORITY 0: Check Redis stream state (instant resumption bypass)
@@ -1605,11 +1666,11 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 				zap.Error(err),
 			)
 		} else if streamState != nil && streamState.IsLive {
-			m.logger.Debug("Stream state exists, allowing immediate detection (bypass all delays)",
+			m.logger.Info("Stream state exists, allowing immediate detection (bypass all delays)",
 				zap.String("channel_id", channelID),
 				zap.String("stream_id", streamState.StreamID),
 			)
-			return false // Don't skip - we have active stream state
+			return "" // Don't skip - we have active stream state
 		}
 	}
 
@@ -1621,10 +1682,10 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 			zap.Error(err),
 		)
 	} else if isNegativeCached {
-		m.logger.Debug("Skipping detection due to negative cache",
+		m.logger.Info("Skipping detection due to negative cache",
 			zap.String("channel_id", channelID),
 		)
-		return true // Channel recently checked and offline
+		return "Channel in negative cache (recently checked and offline)"
 	}
 
 	// PRIORITY 2: Check persistent backoff state from Redis
@@ -1634,21 +1695,14 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
-		return false // On error, allow check (fail open)
+		return "" // On error, allow check (fail open)
 	}
 
 	if backoffState == nil {
-		firstConnected := m.earliestConnectedTime(sources)
-		if !firstConnected.IsZero() && time.Since(firstConnected) < 5*time.Minute {
-			m.logger.Debug("Skipping detection for newly connected overlay (initial delay)",
-				zap.String("channel_id", channelID),
-				zap.Duration("time_since_connected", time.Since(firstConnected)),
-				zap.Duration("initial_delay", 5*time.Minute),
-			)
-			return true
-		}
-
-		return false // No backoff state exists, allow check
+		// REMOVED: Initial 5-minute delay for new sources
+		// This was causing newly added sources to not detect for 5 minutes
+		// Sources should detect immediately when overlays connect
+		return "" // No backoff state exists, allow check
 	}
 
 	// Calculate time since last check
@@ -1656,16 +1710,24 @@ func (m *Manager) shouldSkipDetection(channelID string, sources []*models.Stream
 	shouldSkip := timeSinceLastCheck < backoffState.CurrentInterval
 
 	if shouldSkip {
-		m.logger.Debug("Skipping detection due to backoff interval",
+		nextRetry := backoffState.LastCheckTime.Add(backoffState.CurrentInterval)
+		timeUntilRetry := time.Until(nextRetry)
+
+		m.logger.Info("Skipping detection due to backoff interval",
 			zap.String("channel_id", channelID),
 			zap.Duration("current_interval", backoffState.CurrentInterval),
 			zap.Duration("time_since_last_check", timeSinceLastCheck),
+			zap.Duration("time_until_retry", timeUntilRetry),
 			zap.Int("failure_count", backoffState.FailureCount),
 			zap.Int("consecutive_offline", backoffState.ConsecutiveOffline),
 		)
+
+		return fmt.Sprintf("Backoff active: %d consecutive offline checks, next retry in %s",
+			backoffState.ConsecutiveOffline,
+			timeUntilRetry.Round(time.Second))
 	}
 
-	return shouldSkip
+	return "" // No skip conditions met, allow detection
 }
 
 func (m *Manager) earliestConnectedTime(sources []*models.StreamSource) time.Time {

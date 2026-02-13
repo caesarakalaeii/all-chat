@@ -1,3 +1,7 @@
+// IMPORTANT: Tracing must be initialized before any other imports for auto-instrumentation to work
+import { initTracing } from './tracing.js';
+initTracing();
+
 import { Client, GatewayIntentBits, EmbedBuilder } from 'discord.js';
 import { createClient } from 'redis';
 import axios from 'axios';

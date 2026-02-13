@@ -18,6 +18,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -55,6 +56,25 @@ func main() {
 	log.Info("Starting Twitch EventSub Listener Service",
 		zap.String("version", getEnv("APP_VERSION", "dev")),
 	)
+
+	// Initialize tracing
+	tracingEnabled := getEnv("OTEL_ENABLED", "false") == "true"
+	if tracingEnabled {
+		tracingCfg := tracing.Config{
+			ServiceName:    "twitch-eventsub-listener",
+			ServiceVersion: getEnv("APP_VERSION", "dev"),
+			Environment:    getEnv("ENVIRONMENT", "development"),
+			OTLPEndpoint:   getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+			Enabled:        true,
+		}
+		shutdownTracer, err := tracing.InitTracer(tracingCfg, log)
+		if err != nil {
+			log.Error("Failed to initialize tracer", zap.Error(err))
+		} else {
+			defer shutdownTracer(context.Background())
+			log.Info("Tracer initialized", zap.String("service", "twitch-eventsub-listener"))
+		}
+	}
 
 	ctx := context.Background()
 	instanceID := uuid.New().String()
@@ -406,6 +426,9 @@ func startHTTPServer(log *zap.Logger, port string, state *leaderState, webhookHa
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
+	if tracingEnabled {
+		router.Use(tracing.GinMiddleware("twitch-eventsub-listener"))
+	}
 
 	// EventSub webhook endpoint
 	router.POST("/webhooks/eventsub", webhookHandler.HandleEventSubWebhook)
