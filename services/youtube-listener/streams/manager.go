@@ -573,6 +573,18 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 				zap.String("overlay_id", source.OverlayID),
 			)
 
+			// Publish "reconnecting" status to indicate detection is in progress
+			if m.statusPublisher != nil {
+				estimatedDetection := time.Now().Add(30 * time.Second) // Detection usually takes 1-30s depending on backoff
+				_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+					Platform:     "youtube",
+					ChannelID:    source.ChannelID,
+					Status:       "reconnecting",
+					NextRetryAt:  &estimatedDetection,
+					ErrorMessage: "Searching for active livestream...",
+				})
+			}
+
 			// Add to channel sources map for detection in the main loop
 			if channelSources[source.ChannelID] == nil {
 				channelSources[source.ChannelID] = make([]*models.StreamSource, 0)
@@ -909,6 +921,18 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		return fmt.Errorf("circuit breaker open: %s", reason)
 	}
 
+	// Publish status indicating search is about to start
+	if m.statusPublisher != nil {
+		estimatedSearch := time.Now().Add(5 * time.Second) // Search API call takes ~1-5 seconds
+		_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+			Platform:     "youtube",
+			ChannelID:    channelID,
+			Status:       "reconnecting",
+			NextRetryAt:  &estimatedSearch,
+			ErrorMessage: "Searching for active livestream...",
+		})
+	}
+
 	// Fallback to full search (expensive: 100 units)
 	// This is discovery, so use normal priority (can be blocked in degraded/critical states)
 	searchDecision := m.quotaCoordinator.CanMakeRequest(
@@ -967,6 +991,17 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 			zap.String("circuit_state", string(state)),
 			zap.Int("consecutive_failures", failures),
 		)
+
+		// Publish "offline" status indicating no active livestream
+		if m.statusPublisher != nil {
+			_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
+				Platform:     "youtube",
+				ChannelID:    channelID,
+				Status:       "offline",
+				ErrorMessage: "No active livestream found",
+			})
+		}
+
 		// Don't deactivate sources when no stream is found
 		// The channel might go live later, and we already have exponential backoff
 		// Sources should only be deactivated on hard errors (OAuth, API failures)
