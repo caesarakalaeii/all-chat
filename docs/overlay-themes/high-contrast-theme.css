@@ -1,0 +1,467 @@
+/**
+ * Theme Name: High Contrast Theme
+ * Description: Maximum readability with WCAG AAA contrast ratios (7:1+)
+ * Tags: high-contrast, accessibility, readability, wcag
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-02-13
+ *
+ * FEATURES:
+ * - WCAG AAA compliant (21:1 white-on-black contrast)
+ * - Bold typography with increased font sizes
+ * - Multi-layer text shadows for username color legibility
+ * - Enhanced avatar borders and shadows
+ * - Larger, more distinct platform badges
+ * - High-contrast event styling
+ * - Thicker borders and stronger shadows throughout
+ *
+ * ACCESSIBILITY NOTES:
+ * - Pure black (#000) background for maximum contrast
+ * - Pure white (#FFF) text (21:1 ratio)
+ * - Username colors enhanced with filters and shadows
+ * - All interactive elements have 3px+ borders
+ * - Text size increased: usernames 20px, messages 22px
+ *
+ * USAGE:
+ * Copy this entire file and paste into OBS Browser Source → Custom CSS field
+ * or apply via the All-Chat theme marketplace.
+ */
+
+/* ========================================
+   SECTION 2: FONT CONFIGURATION
+   ======================================== */
+
+* {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif !important;
+  -webkit-font-smoothing: none !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  text-rendering: optimizeLegibility !important;
+}
+
+body {
+  letter-spacing: 0.02em !important;
+}
+
+/* ========================================
+   SECTION 3: MESSAGE CONTAINER
+   ======================================== */
+
+.space-y-3 > div,
+.chat-message {
+  background: #000000 !important;
+  border: 3px solid #FFFFFF !important;
+  border-left: 6px solid #FFFF00 !important;
+  border-radius: 8px !important;
+  padding: 1.5rem !important;
+  box-shadow:
+    0 0 0 1px #FFFFFF,
+    0 8px 24px rgba(255, 255, 255, 0.3),
+    inset 0 0 40px rgba(255, 255, 255, 0.05) !important;
+  margin-bottom: 1rem !important;
+}
+
+/* Platform-specific border colors */
+.space-y-3 > div[data-platform="twitch"],
+.chat-message[data-platform="twitch"] {
+  border-left-color: #E879F9 !important; /* Bright magenta */
+}
+
+.space-y-3 > div[data-platform="youtube"],
+.chat-message[data-platform="youtube"] {
+  border-left-color: #FF3333 !important; /* Bright red */
+}
+
+.space-y-3 > div[data-platform="kick"],
+.chat-message[data-platform="kick"] {
+  border-left-color: #00FF00 !important; /* Pure green */
+}
+
+.space-y-3 > div[data-platform="tiktok"],
+.chat-message[data-platform="tiktok"] {
+  border-left-color: #FE2C55 !important; /* Bright pink */
+}
+
+/* ========================================
+   SECTION 4: AVATAR ENHANCEMENT
+   ======================================== */
+
+.flex-shrink-0 img,
+.flex-shrink-0 > div {
+  border: 4px solid #FFFFFF !important;
+  border-radius: 4px !important;
+  box-shadow:
+    0 0 0 2px #000000,
+    0 0 20px rgba(255, 255, 255, 0.8) !important;
+  filter: contrast(1.3) brightness(1.2) !important;
+  background: #000000 !important;
+}
+
+/* Fallback avatar styling */
+.flex-shrink-0 > div {
+  background: #000000 !important;
+  color: #FFFFFF !important;
+  font-weight: 900 !important;
+  font-size: 1.5rem !important;
+  text-shadow:
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000,
+    2px 2px 0 #000,
+    0 0 12px rgba(255, 255, 255, 0.9) !important;
+}
+
+/* ========================================
+   SECTION 5: PLATFORM BADGE ENHANCEMENT
+   ======================================== */
+
+.platform-badge,
+.platform-badge-text {
+  background: #000000 !important;
+  border: 2px solid #FFFFFF !important;
+  border-radius: 4px !important;
+  padding: 0.3rem 0.6rem !important;
+  font-weight: 800 !important;
+  font-size: 12px !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  text-shadow:
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000,
+    0 0 8px rgba(255, 255, 255, 0.8) !important;
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 12px rgba(255, 255, 255, 0.6) !important;
+}
+
+.platform-badge-icon {
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8)) brightness(1.5) contrast(1.3) !important;
+  border: 2px solid #FFFFFF !important;
+  border-radius: 4px !important;
+  background: #000000 !important;
+  padding: 2px !important;
+}
+
+/* Platform-specific badge colors (high-contrast variants) */
+.text-purple-400 {
+  color: #E879F9 !important; /* Twitch - bright magenta */
+}
+
+.text-red-400 {
+  color: #FF3333 !important; /* YouTube - bright red */
+}
+
+.text-green-400 {
+  color: #00FF00 !important; /* Kick - pure green */
+}
+
+.text-pink-400 {
+  color: #FE2C55 !important; /* TikTok - bright pink */
+}
+
+/* ========================================
+   SECTION 6: USERNAME ENHANCEMENT
+   ======================================== */
+
+.font-semibold.text-sm,
+.username {
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.03em !important;
+
+  /* Multi-layer text shadow for legibility with any user color */
+  text-shadow:
+    /* 4-direction black outline */
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000,
+    2px 2px 0 #000,
+    /* Diagonal outline */
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000,
+    /* White glow */
+    0 0 12px rgba(255, 255, 255, 0.9),
+    0 0 20px rgba(255, 255, 255, 0.6) !important;
+
+  /* Brighten dark user colors */
+  filter: brightness(1.5) saturate(1.4) contrast(1.3) !important;
+
+  /* Background gradient for additional contrast */
+  background: linear-gradient(to right, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 100%) !important;
+  padding: 2px 8px 2px 4px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+}
+
+/* ========================================
+   SECTION 7: BADGE ENHANCEMENT
+   ======================================== */
+
+.flex.gap-1 img,
+.badge-image {
+  width: 24px !important;
+  height: 24px !important;
+  border: 2px solid #FFFFFF !important;
+  border-radius: 4px !important;
+  box-shadow:
+    0 0 0 2px #000000,
+    0 0 12px rgba(255, 255, 255, 0.8) !important;
+  filter: contrast(1.4) brightness(1.3) saturate(1.2) !important;
+  background: #000000 !important;
+  padding: 2px !important;
+}
+
+.flex.gap-1 {
+  gap: 8px !important;
+}
+
+/* ========================================
+   SECTION 8: MESSAGE TEXT ENHANCEMENT
+   ======================================== */
+
+.text-white.break-words,
+.message-content {
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  color: #FFFFFF !important;
+  line-height: 1.8 !important;
+  letter-spacing: 0.02em !important;
+  text-shadow:
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000,
+    0 0 8px rgba(255, 255, 255, 0.6) !important;
+  padding: 0.5rem 0 !important;
+}
+
+/* Emote styling */
+.text-white.break-words img,
+.message-content img,
+.emote {
+  max-height: 36px !important;
+  border: 2px solid #FFFFFF !important;
+  border-radius: 4px !important;
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 12px rgba(255, 255, 255, 0.6) !important;
+  filter: contrast(1.3) brightness(1.2) !important;
+  margin: 0 6px !important;
+  vertical-align: middle !important;
+}
+
+/* ========================================
+   SECTION 9: TIMESTAMP ENHANCEMENT
+   ======================================== */
+
+.text-xs.text-gray-500,
+.timestamp {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #E0E0E0 !important; /* 17.3:1 contrast ratio */
+  letter-spacing: 0.05em !important;
+  text-shadow:
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000 !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  margin-top: 8px !important;
+  display: inline-block !important;
+}
+
+/* ========================================
+   SECTION 10: EVENT MESSAGE ENHANCEMENT
+   ======================================== */
+
+.event-message {
+  background: #000000 !important;
+  border: 4px solid #FFFFFF !important;
+  border-radius: 12px !important;
+  padding: 2rem !important;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 40px rgba(255, 255, 255, 0.8),
+    inset 0 0 60px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* High-tier events (subscriptions, large donations) */
+.event-tier-high {
+  border-color: #FFFF00 !important; /* Pure yellow */
+  background: linear-gradient(135deg, rgba(255, 255, 0, 0.15) 0%, rgba(255, 215, 0, 0.1) 100%) !important;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 60px rgba(255, 255, 0, 0.9),
+    inset 0 0 60px rgba(255, 255, 0, 0.1) !important;
+}
+
+/* Medium-tier events */
+.event-tier-medium {
+  border-color: #00FFFF !important; /* Cyan */
+  background: rgba(0, 255, 255, 0.1) !important;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 50px rgba(0, 255, 255, 0.8),
+    inset 0 0 60px rgba(0, 255, 255, 0.1) !important;
+}
+
+/* Low-tier events */
+.event-tier-low {
+  border-color: #FFFFFF !important;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 30px rgba(255, 255, 255, 0.6),
+    inset 0 0 60px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Event title */
+.event-message h3,
+.event-title {
+  font-size: 1.5rem !important; /* 24px */
+  font-weight: 900 !important;
+  color: #FFFFFF !important;
+  text-shadow:
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000,
+    2px 2px 0 #000,
+    0 0 16px rgba(255, 255, 255, 0.9),
+    0 0 24px rgba(255, 255, 255, 0.6) !important;
+  margin-bottom: 1rem !important;
+}
+
+/* Event value (donation amount, etc.) */
+.event-value,
+.event-message .text-yellow-400 {
+  color: #FFFF00 !important; /* Pure yellow */
+  font-weight: 900 !important;
+  text-shadow:
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000,
+    2px 2px 0 #000,
+    0 0 16px rgba(255, 255, 0, 0.9) !important;
+}
+
+/* Event icon */
+.event-message svg,
+.event-icon {
+  font-size: 3rem !important; /* 48px */
+  filter: drop-shadow(0 0 16px rgba(255, 255, 255, 0.9)) !important;
+}
+
+/* ========================================
+   SECTION 11: ANIMATION ADJUSTMENTS
+   ======================================== */
+
+/* Custom animation for high-contrast entrance */
+@keyframes highContrastSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.space-y-3 > div {
+  animation: highContrastSlide 0.3s ease-out !important;
+}
+
+/* Disable complex animations that reduce clarity */
+.event-message svg {
+  animation: none !important;
+}
+
+/* ========================================
+   SECTION 12: SHARED CHAT SPECIAL HANDLING
+   ======================================== */
+
+.bg-purple-900\/40,
+.shared-chat-message {
+  background: rgba(128, 0, 128, 0.2) !important;
+  border: 4px solid #FF00FF !important; /* Bright magenta */
+  border-left: 8px solid #FF00FF !important; /* Extra thick */
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 30px rgba(255, 0, 255, 0.8),
+    inset 0 0 40px rgba(255, 0, 255, 0.1) !important;
+}
+
+/* ========================================
+   SECTION 13: PLATFORM STATUS INDICATORS
+   ======================================== */
+
+.platform-status,
+.status-indicator {
+  border: 2px solid #FFFFFF !important;
+  border-radius: 6px !important;
+  padding: 8px 12px !important;
+  background: #000000 !important;
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 16px rgba(255, 255, 255, 0.6) !important;
+}
+
+.platform-status svg,
+.status-indicator svg {
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8)) brightness(1.5) !important;
+}
+
+/* ========================================
+   SECTION 14: OPTIONAL CUSTOMIZATIONS
+   ======================================== */
+
+/* OPTIONAL: Reduce text size for compact layout */
+/*
+.font-semibold.text-sm { font-size: 18px !important; }
+.text-white.break-words { font-size: 20px !important; }
+*/
+
+/* OPTIONAL: Square avatars instead of circular */
+/*
+.flex-shrink-0 img { border-radius: 0 !important; }
+*/
+
+/* OPTIONAL: Hide avatars for maximum focus on text */
+/*
+.flex-shrink-0 { display: none !important; }
+*/
+
+/* OPTIONAL: Change accent color to cyan */
+/*
+.space-y-3 > div {
+  border-left-color: #00FFFF !important;
+}
+*/
+
+/* OPTIONAL: Increase border thickness */
+/*
+.space-y-3 > div {
+  border: 4px solid #FFFFFF !important;
+  border-left: 8px solid #FFFF00 !important;
+}
+*/
+
+/* OPTIONAL: Remove all animations for maximum stability */
+/*
+* {
+  animation: none !important;
+  transition: none !important;
+}
+*/
+
+/* OPTIONAL: Increase spacing between messages */
+/*
+.space-y-3 > div {
+  margin-bottom: 2rem !important;
+}
+*/
