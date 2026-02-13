@@ -17,6 +17,7 @@ import (
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
+	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -33,6 +34,25 @@ func main() {
 	log.Info("Starting Twitch Listener",
 		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
 	)
+
+	// Initialize tracing
+	tracingEnabled := getEnvOrDefault("OTEL_ENABLED", "false") == "true"
+	if tracingEnabled {
+		tracingCfg := tracing.Config{
+			ServiceName:    "twitch-listener",
+			ServiceVersion: getEnvOrDefault("APP_VERSION", "dev"),
+			Environment:    getEnvOrDefault("ENVIRONMENT", "development"),
+			OTLPEndpoint:   getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+			Enabled:        true,
+		}
+		shutdownTracer, err := tracing.InitTracer(tracingCfg, log)
+		if err != nil {
+			log.Error("Failed to initialize tracer", zap.Error(err))
+		} else {
+			defer shutdownTracer(context.Background())
+			log.Info("Tracer initialized", zap.String("service", "twitch-listener"))
+		}
+	}
 
 	ctx := context.Background()
 
@@ -123,6 +143,9 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	if tracingEnabled {
+		router.Use(tracing.GinMiddleware("twitch-listener"))
+	}
 
 	// Health check handlers
 	healthHandler := handlers.NewHealthHandler(ircConn, streamPublisher, channelMgr)
