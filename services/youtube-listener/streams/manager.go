@@ -578,8 +578,20 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 				channelSources[source.ChannelID] = make([]*models.StreamSource, 0)
 			}
 			channelSources[source.ChannelID] = append(channelSources[source.ChannelID], source)
+
+			// CRITICAL: Also add to channelConnectedOverlays for poller connection check
+			// Without this, poller thinks overlay is disconnected and stops immediately!
+			if _, exists := channelConnectedOverlays[source.ChannelID]; !exists {
+				channelConnectedOverlays[source.ChannelID] = make(map[string]struct{})
+			}
+			channelConnectedOverlays[source.ChannelID][source.OverlayID] = struct{}{}
 		}
 	}
+
+	// Update the global connection map to include inactive sources we're processing
+	m.connMu.Lock()
+	m.channelConnectedOverlays = channelConnectedOverlays
+	m.connMu.Unlock()
 
 	m.logger.Info("Channel sources after inactive validation",
 		zap.Int("channel_count", len(channelSources)),
