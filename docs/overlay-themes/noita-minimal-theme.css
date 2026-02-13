@@ -1,0 +1,456 @@
+/**
+ * Theme Name: Noita Minimal
+ * Description: Dark fantasy pixel-art theme inspired by Noita's mystical underground atmosphere. Features glowing magical text, earthy colors, and alchemical aesthetics. Uses Noita Blackletter font by viowlet.
+ * Tags: minimal, pixel-art, dark, fantasy, magic, retro, noita, gaming
+ * Author: All-Chat
+ * Version: 1.0.0
+ * Updated: 2026-02-13
+ * Font Credit: Noita Blackletter by viowlet (https://www.reddit.com/r/noita/comments/jp56ub/)
+ */
+
+/* ============================================
+   FONTS
+   ============================================ */
+
+/* Noita Blackletter - Custom font by viowlet */
+@font-face {
+  font-family: 'Noita Blackletter';
+  src: url('../custom-fonts/Noita Blackletter-Regular (new)/NoitaBlackletter-Regular.ttf') format('truetype'),
+       url('../custom-fonts/Noita Blackletter-Regular (new)/NoitaBlackletter-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Pixel fonts for message text */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes noita-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes magic-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 4px rgba(157, 123, 216, 0.8),
+      0 0 8px rgba(157, 123, 216, 0.6),
+      0 0 12px rgba(157, 123, 216, 0.4),
+      0 0 16px rgba(157, 123, 216, 0.2),
+      1px 1px 2px rgba(0, 0, 0, 0.9),
+      -1px -1px 2px rgba(0, 0, 0, 0.9);
+  }
+  50% {
+    text-shadow:
+      0 0 6px rgba(157, 123, 216, 1),
+      0 0 12px rgba(157, 123, 216, 0.8),
+      0 0 18px rgba(157, 123, 216, 0.6),
+      0 0 24px rgba(157, 123, 216, 0.4),
+      1px 1px 2px rgba(0, 0, 0, 0.9),
+      -1px -1px 2px rgba(0, 0, 0, 0.9);
+  }
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.2);
+  }
+}
+
+/* ============================================
+   BASE LAYOUT
+   ============================================ */
+
+/* Transparent background for OBS */
+body {
+  background: transparent !important;
+  font-family: 'Press Start 2P', 'VT323', 'Courier New', monospace;
+  color: #c9b896;
+  letter-spacing: 1px;
+}
+
+/* Message container - inline layout */
+.space-y-3 > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 6px 12px;
+  background: transparent !important;
+  border: none !important;
+  animation: noita-fade-in 0.4s ease-out;
+}
+
+/* Content layout - inline (icon + badges + username + message on one line) */
+.flex-col.flex-1 {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: wrap !important;
+}
+
+/* Hide avatar - minimal theme convention */
+.flex-shrink-0 {
+  display: none !important;
+}
+
+/* ============================================
+   PLATFORM BADGES (INLINE ICONS)
+   ============================================ */
+
+/* Platform badge container */
+.inline-flex.items-center.gap-2.mb-1 {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin-bottom: 0 !important;
+  margin-right: 6px !important;
+}
+
+/* Platform icon styling */
+.inline-flex.items-center.gap-2.mb-1 img {
+  width: 18px !important;
+  height: 18px !important;
+  filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.6));
+  opacity: 0.9;
+}
+
+/* Platform badge text alternative */
+.inline-flex.items-center.gap-2.mb-1 span {
+  background: rgba(42, 35, 28, 0.8) !important;
+  border: 2px solid rgba(157, 123, 216, 0.4) !important;
+  padding: 2px 6px !important;
+  border-radius: 2px !important;
+  font-size: 10px !important;
+  text-transform: uppercase;
+  color: #e8d4a0 !important;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   USER BADGES
+   ============================================ */
+
+/* Badge container */
+.flex.items-center.gap-1.mb-1 {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  margin-bottom: 0 !important;
+  margin-right: 6px !important;
+}
+
+/* Individual badges */
+.flex.items-center.gap-1.mb-1 img {
+  width: 16px !important;
+  height: 16px !important;
+  filter: drop-shadow(0 0 3px rgba(244, 208, 63, 0.5));
+  border: 1px solid rgba(157, 123, 216, 0.3);
+  padding: 1px;
+  border-radius: 2px;
+}
+
+/* ============================================
+   USERNAME STYLING
+   ============================================ */
+
+/* Username - Noita Blackletter font with magical glow */
+.font-semibold.text-sm {
+  font-family: 'Noita Blackletter', 'Blackletter', 'Old English Text MT', serif !important;
+  font-size: 20px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase;
+  color: #e8d4a0 !important;
+  display: inline !important;
+  margin-right: 6px !important;
+  position: relative;
+
+  /* Magical glowing outline */
+  text-shadow:
+    0 0 4px rgba(157, 123, 216, 0.8),
+    0 0 8px rgba(157, 123, 216, 0.6),
+    0 0 12px rgba(157, 123, 216, 0.4),
+    0 0 16px rgba(157, 123, 216, 0.2),
+    1px 1px 2px rgba(0, 0, 0, 0.9),
+    -1px -1px 2px rgba(0, 0, 0, 0.9),
+    1px -1px 2px rgba(0, 0, 0, 0.9),
+    -1px 1px 2px rgba(0, 0, 0, 0.9);
+
+  /* Magical pulse animation */
+  animation: magic-pulse 3s ease-in-out infinite;
+}
+
+/* Optional: Sparkle particle effect near username */
+/* Uncomment to enable sparkle decorations */
+/*
+.font-semibold.text-sm::before {
+  content: '✦';
+  position: absolute;
+  left: -16px;
+  color: #f4d03f;
+  font-size: 10px;
+  opacity: 0.6;
+  animation: sparkle 2s ease-in-out infinite;
+}
+*/
+
+/* Colon after username */
+.font-semibold.text-sm::after {
+  content: ':';
+  color: #d4af37;
+  margin-left: 2px;
+}
+
+/* ============================================
+   MESSAGE TEXT STYLING
+   ============================================ */
+
+/* Message text - pixel font with dark outline */
+.text-sm.break-words {
+  font-family: 'Press Start 2P', 'VT323', 'Courier New', monospace !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  color: #c9b896 !important;
+  display: inline !important;
+
+  /* Subtle dark outline for contrast */
+  text-shadow:
+    1px 1px 0 #1a1410,
+    -1px -1px 0 #1a1410,
+    1px -1px 0 #1a1410,
+    -1px 1px 0 #1a1410;
+}
+
+/* ============================================
+   EMOTE STYLING
+   ============================================ */
+
+/* Inline emotes */
+.text-sm.break-words img {
+  display: inline-block !important;
+  vertical-align: middle !important;
+  margin: 0 2px !important;
+  filter: drop-shadow(0 0 2px rgba(212, 175, 55, 0.3));
+}
+
+/* ============================================
+   EVENT MESSAGES
+   ============================================ */
+
+/* Event message container */
+.space-y-3 > div[class*="event"],
+.space-y-3 > div:has(.event-icon) {
+  background: rgba(42, 35, 28, 0.7) !important;
+  border: 2px solid rgba(157, 123, 216, 0.5) !important;
+  border-radius: 4px !important;
+  padding: 8px 12px !important;
+  box-shadow: 0 0 12px rgba(157, 123, 216, 0.3);
+}
+
+/* Event icon styling */
+.event-icon,
+.space-y-3 > div:has(.event-icon) img:first-child {
+  filter: drop-shadow(0 0 6px rgba(244, 208, 63, 0.8)) !important;
+}
+
+/* ============================================
+   PLATFORM-SPECIFIC COLOR OVERRIDES
+   ============================================ */
+
+/* Twitch - dark mystic purple */
+.space-y-3 > div[data-platform="twitch"] .font-semibold.text-sm {
+  color: #8b6ba8 !important;
+}
+
+/* YouTube - dark crimson */
+.space-y-3 > div[data-platform="youtube"] .font-semibold.text-sm {
+  color: #a84442 !important;
+}
+
+/* Kick - mossy green */
+.space-y-3 > div[data-platform="kick"] .font-semibold.text-sm {
+  color: #6b8e6b !important;
+}
+
+/* TikTok - charcoal gray */
+.space-y-3 > div[data-platform="tiktok"] .font-semibold.text-sm {
+  color: #8a8a8a !important;
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  .font-semibold.text-sm {
+    font-size: 18px !important;
+  }
+
+  .text-sm.break-words {
+    font-size: 13px !important;
+  }
+}
+
+/* ============================================
+   CUSTOMIZATION OPTIONS (COMMENTED OUT)
+   ============================================ */
+
+/* --- THICKER GLOW EFFECT ---
+   Uncomment to intensify the magical glow on usernames */
+/*
+.font-semibold.text-sm {
+  text-shadow:
+    0 0 6px rgba(157, 123, 216, 1),
+    0 0 12px rgba(157, 123, 216, 0.8),
+    0 0 18px rgba(157, 123, 216, 0.6),
+    0 0 24px rgba(157, 123, 216, 0.4),
+    0 0 32px rgba(157, 123, 216, 0.2),
+    1px 1px 2px rgba(0, 0, 0, 0.9),
+    -1px -1px 2px rgba(0, 0, 0, 0.9);
+}
+*/
+
+/* --- NO ANIMATIONS ---
+   Uncomment to disable all animations */
+/*
+.space-y-3 > div {
+  animation: none !important;
+}
+
+.font-semibold.text-sm {
+  animation: none !important;
+}
+
+.font-semibold.text-sm::before {
+  animation: none !important;
+}
+*/
+
+/* --- MONOCHROME USERNAMES ---
+   Uncomment to use single gold color for all usernames */
+/*
+.space-y-3 > div[data-platform="twitch"] .font-semibold.text-sm,
+.space-y-3 > div[data-platform="youtube"] .font-semibold.text-sm,
+.space-y-3 > div[data-platform="kick"] .font-semibold.text-sm,
+.space-y-3 > div[data-platform="tiktok"] .font-semibold.text-sm {
+  color: #d4af37 !important;
+}
+*/
+
+/* --- HIDE PLATFORM BADGES ---
+   Uncomment to hide platform icons/badges */
+/*
+.inline-flex.items-center.gap-2.mb-1 {
+  display: none !important;
+}
+*/
+
+/* --- HIDE USER BADGES ---
+   Uncomment to hide user badges (moderator, subscriber, etc.) */
+/*
+.flex.items-center.gap-1.mb-1 {
+  display: none !important;
+}
+*/
+
+/* --- COMPACT SPACING ---
+   Uncomment to reduce margins and gaps for tighter layout */
+/*
+.space-y-3 > div {
+  margin-bottom: 6px !important;
+  padding: 4px 8px !important;
+  gap: 4px !important;
+}
+
+.flex-col.flex-1 {
+  gap: 4px !important;
+}
+*/
+
+/* --- BRIGHTER TEXT ---
+   Uncomment to increase text brightness */
+/*
+.font-semibold.text-sm {
+  color: #f5e6c8 !important;
+}
+
+.text-sm.break-words {
+  color: #e8d4a0 !important;
+}
+*/
+
+/* --- STACKED LAYOUT ---
+   Uncomment to stack username above message instead of inline */
+/*
+.flex-col.flex-1 {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+}
+
+.font-semibold.text-sm {
+  display: block !important;
+  margin-bottom: 4px !important;
+}
+
+.text-sm.break-words {
+  display: block !important;
+}
+*/
+
+/* --- PARTICLE EFFECTS ---
+   Uncomment to enable sparkle decorations near usernames */
+/*
+.font-semibold.text-sm::before {
+  content: '✦';
+  position: absolute;
+  left: -16px;
+  color: #f4d03f;
+  font-size: 10px;
+  opacity: 0.6;
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+.font-semibold.text-sm::after {
+  content: '✦';
+  position: absolute;
+  right: -16px;
+  color: #f4d03f;
+  font-size: 10px;
+  opacity: 0.6;
+  animation: sparkle 2s ease-in-out infinite 1s;
+}
+*/
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+/* Ensure sufficient contrast (WCAG AA) */
+/* Gold text #e8d4a0 on dark backgrounds: ~8:1 ratio ✓ */
+/* Message text #c9b896: ~6:1 ratio ✓ */
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
