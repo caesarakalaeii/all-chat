@@ -144,15 +144,16 @@ func (s *BackoffStore) ClearBackoff(ctx context.Context, channelID string) error
 }
 
 // calculateNegativeCacheTTL returns appropriate TTL based on consecutive offline checks
+// Reduced TTL values to allow faster recovery when channels go live
 func (s *BackoffStore) calculateNegativeCacheTTL(consecutiveOffline int) time.Duration {
 	switch {
 	case consecutiveOffline < 2:
 		return 0 // No caching for first offline
 	case consecutiveOffline < 4:
-		return 5 * time.Minute
+		return 2 * time.Minute // Was 5 min → now 2 min
 	case consecutiveOffline < 7:
-		return 15 * time.Minute
+		return 5 * time.Minute // Was 15 min → now 5 min
 	default:
-		return 30 * time.Minute
+		return 10 * time.Minute // Was 30 min → now 10 min
 	}
 }
