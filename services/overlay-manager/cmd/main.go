@@ -134,7 +134,7 @@ func main() {
 	twitchClipsClient := clients.NewTwitchClipsClient(config.TwitchClientID, config.TwitchClientSecret, log)
 
 	// Initialize handlers
-	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, log)
+	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, tracingEnabled, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo)
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log)
@@ -149,7 +149,7 @@ func main() {
 
 	// Initialize YouTube quota client (connects to youtube-listener for quota tracking)
 	youtubeListenerURL := getEnv("YOUTUBE_LISTENER_URL", "http://youtube-listener:8086")
-	youtubeQuotaClient := clients.NewYouTubeQuotaClient(youtubeListenerURL, log)
+	youtubeQuotaClient := clients.NewYouTubeQuotaClient(youtubeListenerURL, tracingEnabled, log)
 
 	// Initialize resolver with quota tracking
 	youtubeResolver := youtube.NewResolver(youtubeAPIKey, youtubeQuotaClient, log)
