@@ -15,6 +15,10 @@
  * - Graceful shutdown
  */
 
+// IMPORTANT: Tracing must be initialized before any other imports for auto-instrumentation to work
+import { initTracing } from './tracing.js';
+initTracing();
+
 import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
 import { Pool, Client, Notification } from 'pg';

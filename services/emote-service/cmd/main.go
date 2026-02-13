@@ -18,6 +18,7 @@ import (
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
+	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -39,6 +40,25 @@ func main() {
 	defer log.Sync()
 
 	log.Info("Starting Emote Service")
+
+	// Initialize tracing
+	tracingEnabled := getEnv("OTEL_ENABLED", "false") == "true"
+	if tracingEnabled {
+		tracingCfg := tracing.Config{
+			ServiceName:    "emote-service",
+			ServiceVersion: getEnv("APP_VERSION", "dev"),
+			Environment:    getEnv("ENVIRONMENT", "development"),
+			OTLPEndpoint:   getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+			Enabled:        true,
+		}
+		shutdownTracer, err := tracing.InitTracer(tracingCfg, log)
+		if err != nil {
+			log.Error("Failed to initialize tracer", zap.Error(err))
+		} else {
+			defer shutdownTracer(context.Background())
+			log.Info("Tracer initialized", zap.String("service", "emote-service"))
+		}
+	}
 
 	// Initialize Redis client
 	log.Info("Connecting to Redis")
@@ -110,6 +130,9 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(ginLogger(log))
+	if tracingEnabled {
+		router.Use(tracing.GinMiddleware("emote-service"))
+	}
 	router.Use(rateLimitMiddleware(newRedisRateLimiter(redisClient, rateLimitRequests, rateLimitWindow), log))
 	if apiKey != "" {
 		router.Use(apiKeyMiddleware(apiKey, log))

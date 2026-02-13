@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -21,13 +22,14 @@ const (
 
 // Manager handles YouTube OAuth 2.0 authentication
 type Manager struct {
-	config *oauth2.Config
-	store  TokenStore
-	logger *zap.Logger
+	config         *oauth2.Config
+	store          TokenStore
+	logger         *zap.Logger
+	tracingEnabled bool
 }
 
 // NewManager creates a new OAuth manager
-func NewManager(clientID, clientSecret, redirectURL string, store TokenStore, logger *zap.Logger) *Manager {
+func NewManager(clientID, clientSecret, redirectURL string, tracingEnabled bool, store TokenStore, logger *zap.Logger) *Manager {
 	config := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -37,9 +39,10 @@ func NewManager(clientID, clientSecret, redirectURL string, store TokenStore, lo
 	}
 
 	return &Manager{
-		config: config,
-		store:  store,
-		logger: logger,
+		config:         config,
+		store:          store,
+		logger:         logger,
+		tracingEnabled: tracingEnabled,
 	}
 }
 
@@ -158,11 +161,21 @@ func (m *Manager) CreateYouTubeService(ctx context.Context, userID, channelID st
 		ExpectContinueTimeout: 1 * time.Second,
 		DisableCompression:    true,
 	}
+
+	// Create OAuth2 transport
+	oauth2Transport := &oauth2.Transport{
+		Source: tokenSource,
+		Base:   baseTransport,
+	}
+
+	// Wrap with OpenTelemetry instrumentation if tracing enabled
+	var finalTransport http.RoundTripper = oauth2Transport
+	if m.tracingEnabled {
+		finalTransport = otelhttp.NewTransport(oauth2Transport)
+	}
+
 	client := &http.Client{
-		Transport: &oauth2.Transport{
-			Source: tokenSource,
-			Base:   baseTransport,
-		},
+		Transport: finalTransport,
 	}
 
 	service, err := youtube.NewService(ctx, option.WithHTTPClient(client))

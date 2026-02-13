@@ -19,6 +19,10 @@
   "author": "All-Chat",
   "license": "MIT",
   "dependencies": {
+    "@opentelemetry/api": "^1.7.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.39.4",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.45.1",
+    "@opentelemetry/sdk-node": "^0.45.1",
     "dotenv": "^16.3.1",
     "pg": "^8.11.3",
     "prom-client": "^15.1.3",
