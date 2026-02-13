@@ -573,17 +573,9 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 				zap.String("overlay_id", source.OverlayID),
 			)
 
-			// Publish "reconnecting" status to indicate detection is in progress
-			if m.statusPublisher != nil {
-				estimatedDetection := time.Now().Add(30 * time.Second) // Detection usually takes 1-30s depending on backoff
-				_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
-					Platform:     "youtube",
-					ChannelID:    source.ChannelID,
-					Status:       "reconnecting",
-					NextRetryAt:  &estimatedDetection,
-					ErrorMessage: "Searching for active livestream...",
-				})
-			}
+			// NOTE: Don't publish "Searching..." status here - it gets published every sync cycle
+			// even when detection is blocked by backoff. Status is published in syncChannel()
+			// when detection actually runs.
 
 			// Add to channel sources map for detection in the main loop
 			if channelSources[source.ChannelID] == nil {
@@ -611,6 +603,11 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 
 	// For each channel, check for live streams (with exponential backoff)
 	for channelID, channelSourceList := range channelSources {
+		m.logger.Info("Processing channel in main loop",
+			zap.String("channel_id", channelID),
+			zap.Int("source_count", len(channelSourceList)),
+		)
+
 		// CRITICAL OPTIMIZATION: Skip expensive discovery if poller already running
 		// This prevents wasting 100 quota units on redundant searches
 		m.mu.RLock()
