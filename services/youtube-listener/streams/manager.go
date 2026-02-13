@@ -673,6 +673,9 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 
 		// Check if we should skip this channel due to backoff
 		if m.shouldSkipDetection(channelID, channelSourceList) {
+			m.logger.Info("Skipping detection due to backoff",
+				zap.String("channel_id", channelID),
+			)
 			continue
 		}
 
