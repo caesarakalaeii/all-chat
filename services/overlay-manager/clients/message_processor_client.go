@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/caesar/all-chat/shared/tracing"
 	"go.uber.org/zap"
 )
 
@@ -62,13 +63,13 @@ type MessageProcessorClient struct {
 	logger     *zap.Logger
 }
 
-func NewMessageProcessorClient(baseURL, apiKey string, logger *zap.Logger) *MessageProcessorClient {
+func NewMessageProcessorClient(baseURL, apiKey string, tracingEnabled bool, logger *zap.Logger) *MessageProcessorClient {
 	return &MessageProcessorClient{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
-		httpClient: &http.Client{
+		httpClient: tracing.NewInstrumentedClient(tracingEnabled, "overlay-manager", &tracing.HTTPClientConfig{
 			Timeout: 5 * time.Second,
-		},
+		}),
 		logger: logger.With(zap.String("component", "message-processor-client")),
 	}
 }

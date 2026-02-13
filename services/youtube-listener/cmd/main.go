@@ -23,6 +23,7 @@ import (
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
+	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -50,6 +51,25 @@ func main() {
 		zap.String("grpc_log_level", os.Getenv("GRPC_GO_LOG_VERBOSITY_LEVEL")),
 		zap.String("grpc_trace", os.Getenv("GRPC_TRACE")),
 	)
+
+	// Initialize tracing
+	tracingEnabled := getEnvOrDefault("OTEL_ENABLED", "false") == "true"
+	if tracingEnabled {
+		tracingCfg := tracing.Config{
+			ServiceName:    "youtube-listener",
+			ServiceVersion: getEnvOrDefault("APP_VERSION", "dev"),
+			Environment:    getEnvOrDefault("ENVIRONMENT", "development"),
+			OTLPEndpoint:   getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+			Enabled:        true,
+		}
+		shutdownTracer, err := tracing.InitTracer(tracingCfg, log)
+		if err != nil {
+			log.Error("Failed to initialize tracer", zap.Error(err))
+		} else {
+			defer shutdownTracer(context.Background())
+			log.Info("Tracer initialized", zap.String("service", "youtube-listener"))
+		}
+	}
 
 	ctx := context.Background()
 
@@ -113,7 +133,7 @@ func main() {
 
 	// Initialize components
 	tokenStore := oauth.NewPostgresTokenStore(db, tokenEncryptor, log)
-	oauthManager := oauth.NewManager(youtubeClientID, youtubeClientSecret, youtubeRedirectURL, tokenStore, log)
+	oauthManager := oauth.NewManager(youtubeClientID, youtubeClientSecret, youtubeRedirectURL, tracingEnabled, tokenStore, log)
 
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 
@@ -219,6 +239,9 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	if tracingEnabled {
+		router.Use(tracing.GinMiddleware("youtube-listener"))
+	}
 
 	// Health check handlers
 	healthHandler := handlers.NewHealthHandler(streamManager, streamPublisher, quotaTracker)
