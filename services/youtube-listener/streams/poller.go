@@ -364,6 +364,33 @@ func (p *Poller) sleepToRespectInterval() {
 
 // handlePollError implements exponential backoff on consecutive errors
 func (p *Poller) handlePollError(err error) {
+	// Check if this is a terminal error (stream ended gracefully)
+	isTerminalError := strings.Contains(err.Error(), "liveChatEnded") ||
+		strings.Contains(err.Error(), "liveChatNotFound") ||
+		strings.Contains(err.Error(), "videoNotFound")
+
+	if isTerminalError {
+		p.logger.Info("Stream ended or not found, stopping poller",
+			zap.String("stream_id", p.stream.StreamID),
+			zap.String("channel_id", p.channelID),
+			zap.Error(err),
+		)
+
+		// Publish offline status (stream ended gracefully)
+		if p.statusPublisher != nil && p.channelID != "" {
+			_ = p.statusPublisher.PublishStatus(context.Background(), status.StatusMessage{
+				Platform:     "youtube",
+				ChannelID:    p.channelID,
+				Status:       "offline",
+				ErrorMessage: "Stream ended",
+			})
+		}
+
+		// Stop the poller - no point in retrying an ended stream
+		go p.Stop()
+		return
+	}
+
 	p.logger.Error("Poll failed",
 		zap.String("stream_id", p.stream.StreamID),
 		zap.Error(err),
