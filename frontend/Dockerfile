@@ -50,6 +50,8 @@ RUN adduser --system --uid 1001 nextjs
 # Note: public directory may not exist if there are no static files
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Copy public directory for static assets (fonts, images, etc.)
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 
