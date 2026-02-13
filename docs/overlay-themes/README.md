@@ -60,6 +60,120 @@ Clean, modern theme showcasing the new **[ICON] [BADGES] USERNAME** layout!
      12:34:56 PM
 ```
 
+### High Contrast Theme (`high-contrast-theme.css`) ⭐ ACCESSIBILITY
+
+Maximum readability theme optimized for WCAG AAA compliance!
+
+**Features:**
+- WCAG AAA compliant (21:1 contrast ratios)
+- Pure black background (#000) with pure white text (#FFF)
+- Bold typography with increased font sizes (usernames: 20px, messages: 22px)
+- Multi-layer text shadows for username color legibility
+- Enhanced avatar borders (4px) and shadows
+- Larger, more distinct platform badges and user badges (24px)
+- High-contrast event styling with tier-based glows
+- Thick borders (3-6px) for all elements
+- Optimized for visibility over any content
+
+**Best For:**
+- Streamers prioritizing accessibility
+- Viewers with visual impairments
+- Maximum readability in all lighting conditions
+- Professional/corporate streaming environments
+- Streaming over very light or very dark games
+
+**Contrast Ratios (WCAG AAA):**
+- White text on black: 21:1 ✓
+- Light gray timestamps on black: 17.3:1 ✓
+- Yellow accents on black: 19.6:1 ✓
+
+**Customization Options:**
+- ✅ Adjust text sizes (compact/large modes)
+- ✅ Hide avatars for text-only focus
+- ✅ Change accent color (yellow/cyan/magenta)
+- ✅ Square vs rounded avatars
+- ✅ Border thickness adjustments
+- ✅ Disable animations for maximum stability
+
+**Usage:**
+1. Copy contents of `high-contrast-theme.css`
+2. Open OBS → Browser Source → Custom CSS field
+3. Paste and save
+4. Verify contrast in OBS preview
+
+**Preview:**
+```
+┌──────────────────────────────────────────────┐
+│ [🎮] [💎] [⚔️] Username (bold, white)        │
+│    Hello from Twitch chat!                   │
+│    (22px white text, thick black outline)    │
+│    [🕐 12:34:56 PM] (14px gray)              │
+└──────────────────────────────────────────────┘
+(Pure black background, 3px white border, 6px yellow left border)
+```
+
+### Noita Minimal Theme (`noita-minimal-theme.css`) ⭐ DARK FANTASY
+
+Dark fantasy pixel-art theme inspired by Noita's mystical underground atmosphere!
+
+**Features:**
+- **Authentic Noita Blackletter font** for usernames (custom font by viowlet)
+- Pixel-art fonts for message text (Press Start 2P / VT323)
+- Magical glowing text effects (purple/gold aura)
+- Earthy color palette (browns, golds, dark purples)
+- Transparent background (OBS-friendly)
+- Inline minimal layout: `[ICON] [BADGES] USERNAME: message`
+- Platform-specific muted colors (mystic purple, crimson, mossy green)
+- Animated magical pulse effect on usernames
+- Optional sparkle particle decorations
+- Alchemical event styling with mystical borders
+
+**Color Palette:**
+- Background: Fully transparent
+- Usernames: `#e8d4a0` (warm parchment) with purple magical glow
+- Messages: `#c9b896` (earthy tone) with pixel font
+- Platform colors: Muted earthy versions (purple, crimson, green, gray)
+
+**Typography:**
+- Username font: `Noita Blackletter` (20px, uppercase, blackletter style)
+- Message font: `Press Start 2P` (14px, pixel art)
+- Magical text-shadow glow: Multi-layer purple aura
+
+**Customization Options:**
+- ✅ Thicker glow effect (intensify magical aura)
+- ✅ No animations (disable pulse/fade effects)
+- ✅ Monochrome usernames (single gold color)
+- ✅ Hide platform badges/icons
+- ✅ Hide user badges
+- ✅ Compact spacing (tighter layout)
+- ✅ Brighter text (increase brightness)
+- ✅ Stacked layout (username above message)
+- ✅ Particle effects (sparkle decorations)
+
+**Best For:**
+- Noita streamers
+- Dark fantasy/roguelike games
+- Retro/pixel art aesthetics
+- Mystical/magical stream themes
+- Minimal overlay designs with character
+
+**Font Attribution:**
+- Noita Blackletter font created by **viowlet** (Reddit)
+- Source: [r/noita community](https://www.reddit.com/r/noita/comments/jp56ub/)
+
+**Accessibility:**
+- WCAG AA compliant (gold text ~8:1 contrast ratio)
+- Readable 14-16px pixel fonts at 1080p
+- Multi-layer outline ensures readability on any background
+- Respects `prefers-reduced-motion` for accessibility
+
+**Preview:**
+```
+[🎮] [💎] USERNAME: Hello from the mystical caves!
+     (Glowing blackletter username with magical purple aura)
+     (Pixel font message with dark outline)
+```
+
 ### Windows 98 Theme (`win98-theme.css`)
 
 Transform your chat into a nostalgic Windows 98 experience!
