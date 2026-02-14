@@ -524,14 +524,13 @@ class TikTokListenerService {
       });
 
       // Query database for TikTok channels that belong to overlays with active connections
+      // Note: We don't filter by is_active here - the listener will set is_active=true after successful connection
       const result = await this.db.query(`
         SELECT DISTINCT
           ocs.overlay_id,
-          ocs.channel_id as tiktok_username,
-          ocs.is_active
+          ocs.channel_id as tiktok_username
         FROM overlay_chat_sources ocs
         WHERE ocs.platform = 'tiktok'
-          AND ocs.is_active = true
           AND ocs.overlay_id = ANY($1::uuid[])
       `, [connectedOverlays]);
 
@@ -544,7 +543,9 @@ class TikTokListenerService {
       }
 
       logger.debug('Found TikTok sources for connected overlays', {
-        source_count: activeUsernames.size
+        source_count: activeUsernames.size,
+        connected_overlays_count: connectedOverlays.length,
+        sources: Array.from(activeUsernames.keys())
       });
 
       // Connect to new streams (prevent concurrent connections to same stream)
