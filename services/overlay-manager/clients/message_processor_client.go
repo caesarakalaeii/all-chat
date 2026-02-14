@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 )
 
@@ -63,11 +65,32 @@ type MessageProcessorClient struct {
 }
 
 func NewMessageProcessorClient(baseURL, apiKey string, tracingEnabled bool, logger *zap.Logger) *MessageProcessorClient {
+	// Create custom transport with connection pooling for internal service calls
+	baseTransport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          10,
+		MaxIdleConnsPerHost:   5,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	// Conditionally wrap with OpenTelemetry instrumentation
+	var finalTransport http.RoundTripper = baseTransport
+	if tracingEnabled {
+		finalTransport = otelhttp.NewTransport(baseTransport)
+	}
+
 	return &MessageProcessorClient{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
+			Transport: finalTransport,
+			Timeout:   5 * time.Second,
 		},
 		logger: logger.With(zap.String("component", "message-processor-client")),
 	}
