@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/caesar/all-chat/shared/tracing"
 	"go.uber.org/zap"
 )
 
@@ -32,9 +31,9 @@ type QuotaStatus struct {
 func NewYouTubeQuotaClient(baseURL string, tracingEnabled bool, logger *zap.Logger) *YouTubeQuotaClient {
 	return &YouTubeQuotaClient{
 		baseURL: baseURL,
-		httpClient: tracing.NewInstrumentedClient(tracingEnabled, "overlay-manager", &tracing.HTTPClientConfig{
+		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
-		}),
+		},
 		logger: logger,
 	}
 }
