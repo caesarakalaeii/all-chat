@@ -16,9 +16,8 @@
  */
 
 // IMPORTANT: Tracing must be initialized before any other imports for auto-instrumentation to work
-// TODO: Implement tracing.ts module for OpenTelemetry instrumentation
-// import { initTracing } from './tracing.js';
-// initTracing();
+import { initTracing, shutdownTracing } from './tracing.js';
+initTracing();
 
 import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
@@ -1257,6 +1256,9 @@ class TikTokListenerService {
     // Close database pool
     await this.db.end();
     logger.info('Database connection closed');
+
+    // Shutdown OpenTelemetry tracing
+    await shutdownTracing();
 
     logger.info('Service shutdown complete');
   }
