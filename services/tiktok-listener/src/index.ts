@@ -16,8 +16,9 @@
  */
 
 // IMPORTANT: Tracing must be initialized before any other imports for auto-instrumentation to work
-import { initTracing } from './tracing.js';
-initTracing();
+// TODO: Implement tracing.ts module for OpenTelemetry instrumentation
+// import { initTracing } from './tracing.js';
+// initTracing();
 
 import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
