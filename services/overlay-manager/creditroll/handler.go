@@ -87,6 +87,7 @@ type OverlayRepository interface {
 type ConfigRepository interface {
 	GetByOverlayID(ctx context.Context, overlayID string) (*models.CreditRollConfig, error)
 	Update(ctx context.Context, config *models.CreditRollConfig) error
+	GetMostRecentCompletedSession(ctx context.Context, overlayID string) (*models.SessionInfo, error)
 }
 
 // SourceRepository defines chat source lookup operations
@@ -399,7 +400,32 @@ func (h *Handler) getOrRepairSession(ctx context.Context, overlayID string) (*mo
 		}, nil
 	}
 
-	// Error not related to corruption
+	// Check if error is "no active session" - try database fallback
+	if strings.Contains(err.Error(), "no active session") {
+		h.logger.Info("No active session in Redis, checking database for completed session",
+			zap.String("overlay_id", overlayID),
+		)
+
+		// Try to get most recent completed session from database
+		dbSession, dbErr := h.configRepo.GetMostRecentCompletedSession(ctx, overlayID)
+		if dbErr == nil && dbSession != nil {
+			h.logger.Info("Found completed session in database",
+				zap.String("overlay_id", overlayID),
+				zap.String("session_id", dbSession.SessionID),
+				zap.Time("started_at", dbSession.StartedAt),
+			)
+			// Return completed session from database
+			// Leaderboard data should still be in Redis (48h TTL)
+			return dbSession, nil
+		}
+
+		h.logger.Warn("No completed session found in database",
+			zap.String("overlay_id", overlayID),
+			zap.Error(dbErr),
+		)
+	}
+
+	// Error not related to corruption or no session available
 	return nil, err
 }
 

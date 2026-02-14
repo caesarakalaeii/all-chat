@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/caesar/all-chat/shared/tracing"
 	"go.uber.org/zap"
 )
 
@@ -67,9 +66,9 @@ func NewMessageProcessorClient(baseURL, apiKey string, tracingEnabled bool, logg
 	return &MessageProcessorClient{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
-		httpClient: tracing.NewInstrumentedClient(tracingEnabled, "overlay-manager", &tracing.HTTPClientConfig{
+		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
-		}),
+		},
 		logger: logger.With(zap.String("component", "message-processor-client")),
 	}
 }
