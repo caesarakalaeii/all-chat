@@ -40,10 +40,10 @@ func InitTracer(cfg Config, logger *zap.Logger) (func(context.Context) error, er
 	)
 
 	// Create resource with service information
+	// Note: Don't specify SchemaURL to avoid conflicts with resource.Default()
 	res, err := resource.Merge(
 		resource.Default(),
-		resource.NewWithAttributes(
-			semconv.SchemaURL,
+		resource.NewSchemaless(
 			semconv.ServiceName(cfg.ServiceName),
 			semconv.ServiceVersion(cfg.ServiceVersion),
 			semconv.DeploymentEnvironment(cfg.Environment),
