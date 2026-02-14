@@ -88,3 +88,38 @@ func (r *CreditRollRepository) Update(ctx context.Context, config *models.Credit
 
 	return nil
 }
+
+// GetMostRecentCompletedSession retrieves the most recent completed session for an overlay
+func (r *CreditRollRepository) GetMostRecentCompletedSession(ctx context.Context, overlayID string) (*models.SessionInfo, error) {
+	query := `
+		SELECT id, started_at, ended_at, state, total_events
+		FROM stream_sessions
+		WHERE overlay_id = $1
+		  AND state = 'COMPLETED'
+		  AND ended_at IS NOT NULL
+		ORDER BY ended_at DESC
+		LIMIT 1
+	`
+
+	var session models.SessionInfo
+	var endedAt *string
+	var totalEvents *int
+
+	err := r.db.QueryRow(ctx, query, overlayID).Scan(
+		&session.SessionID,
+		&session.StartedAt,
+		&endedAt,
+		&session.State,
+		&totalEvents,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get most recent completed session: %w", err)
+	}
+
+	if totalEvents != nil {
+		session.EventCount = *totalEvents
+	}
+
+	return &session, nil
+}
