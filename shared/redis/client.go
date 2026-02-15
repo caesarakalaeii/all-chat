@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -15,8 +16,8 @@ type Client interface {
 	TTL(ctx context.Context, key string) *redis.DurationCmd
 }
 
-// NewClient creates a new Redis client with optimized settings
-func NewClient(addr, password string) (*redis.Client, error) {
+// NewClientWithTracing creates a Redis client with optional OpenTelemetry instrumentation
+func NewClientWithTracing(addr, password string, tracingEnabled bool) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:         addr,
 		Password:     password, // Support password auth
@@ -30,7 +31,7 @@ func NewClient(addr, password string) (*redis.Client, error) {
 		PoolTimeout:  4 * time.Second, // Wait for connection from pool
 	})
 
-	// Test connection
+	// Test connection BEFORE instrumentation
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -39,12 +40,32 @@ func NewClient(addr, password string) (*redis.Client, error) {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
+	// Add OpenTelemetry instrumentation if enabled
+	if tracingEnabled {
+		// Add distributed tracing (creates spans for each Redis command)
+		if err := redisotel.InstrumentTracing(client); err != nil {
+			client.Close()
+			return nil, fmt.Errorf("failed to instrument Redis tracing: %w", err)
+		}
+
+		// Add metrics (connection pool stats, command counts)
+		if err := redisotel.InstrumentMetrics(client); err != nil {
+			// Metrics are optional - don't fail if this errors
+			// Continue with tracing only
+		}
+	}
+
 	return client, nil
 }
 
-// NewRedisClient is an alias for backwards compatibility
+// NewClient creates a Redis client without tracing (backward compatibility)
+func NewClient(addr, password string) (*redis.Client, error) {
+	return NewClientWithTracing(addr, password, false)
+}
+
+// NewRedisClient is an alias for backwards compatibility (no error handling, no tracing)
 func NewRedisClient(addr string) *redis.Client {
-	client, _ := NewClient(addr, "")
+	client, _ := NewClientWithTracing(addr, "", false)
 	return client
 }
 

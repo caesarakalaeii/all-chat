@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NewPostgresPool creates a new PostgreSQL connection pool with optimized settings
-func NewPostgresPool(connString string) (*pgxpool.Pool, error) {
+// NewPostgresPoolWithTracing creates a PostgreSQL pool with optional OpenTelemetry tracing
+func NewPostgresPoolWithTracing(connString string, tracingEnabled bool) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(connString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse connection string: %w", err)
@@ -21,6 +22,11 @@ func NewPostgresPool(connString string) (*pgxpool.Pool, error) {
 	config.MaxConnLifetime = 1 * time.Hour     // Recycle connections after 1 hour
 	config.MaxConnIdleTime = 10 * time.Minute  // Close idle connections
 	config.HealthCheckPeriod = 1 * time.Minute // Verify connections health
+
+	// Add OpenTelemetry tracer if enabled
+	if tracingEnabled {
+		config.ConnConfig.Tracer = otelpgx.NewTracer()
+	}
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
@@ -37,6 +43,11 @@ func NewPostgresPool(connString string) (*pgxpool.Pool, error) {
 	}
 
 	return pool, nil
+}
+
+// NewPostgresPool creates a PostgreSQL pool without tracing (backward compatibility)
+func NewPostgresPool(connString string) (*pgxpool.Pool, error) {
+	return NewPostgresPoolWithTracing(connString, false)
 }
 
 // HealthCheck verifies the database connection is healthy
