@@ -78,7 +78,7 @@ func main() {
 		config.DatabaseName,
 	)
 
-	dbPool, err := database.NewPostgresPool(connString)
+	dbPool, err := database.NewPostgresPoolWithTracing(connString, tracingEnabled)
 	if err != nil {
 		log.Fatal("Failed to connect to database", zap.Error(err))
 	}
@@ -93,13 +93,11 @@ func main() {
 	)
 
 	redisAddr := fmt.Sprintf("%s:%s", config.RedisHost, config.RedisPort)
-	redisClient := sharedRedis.NewRedisClient(redisAddr)
-	defer redisClient.Close()
-
-	// Test Redis connection
-	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+	redisClient, err := sharedRedis.NewClientWithTracing(redisAddr, "", tracingEnabled)
+	if err != nil {
 		log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
+	defer redisClient.Close()
 
 	log.Info("Connected to Redis successfully")
 
