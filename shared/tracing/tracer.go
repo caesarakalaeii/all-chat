@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -53,11 +54,13 @@ func InitTracer(cfg Config, logger *zap.Logger) (func(context.Context) error, er
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Create OTLP exporter
-	ctx := context.Background()
+	// Create OTLP exporter with timeout context
+	// Note: Using non-blocking dial so app starts even if tracing backend is temporarily unavailable
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	conn, err := grpc.DialContext(ctx, cfg.OTLPEndpoint,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
