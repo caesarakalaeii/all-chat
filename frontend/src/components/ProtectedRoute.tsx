@@ -12,9 +12,10 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useHydrated } from '@/hooks/useHydrated';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -24,25 +25,27 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
   const router = useRouter();
   const { user, token, loading, init } = useAuthStore();
-  const [isInitialized, setIsInitialized] = useState(false);
+  const isHydrated = useHydrated();
 
   useEffect(() => {
-    init().then(() => setIsInitialized(true));
-  }, [init]);
+    if (isHydrated) {
+      init();
+    }
+  }, [isHydrated, init]);
 
   useEffect(() => {
-    if (!isInitialized || loading) {
-      return;
+    if (!isHydrated || loading) {
+      return; // Still hydrating or loading
     }
 
     if (!token || !user) {
       router.push('/');
       return;
     }
-  }, [token, user, loading, isInitialized, router]);
+  }, [token, user, loading, isHydrated, router]);
 
   // Show loading spinner while initializing or checking auth
-  if (!isInitialized || loading || !token || !user) {
+  if (!isHydrated || loading || !token || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-twitch"></div>

@@ -11,10 +11,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 function SettingsContent() {
   const router = useRouter();
-  const { user, loading } = useAuthStore((state) => ({
-    user: state.user,
-    loading: state.loading
-  }));
+  const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -51,12 +48,9 @@ function SettingsContent() {
     }
   };
 
-  if (loading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-twitch"></div>
-      </div>
-    );
+  // ProtectedRoute guarantees user is not null, but TypeScript doesn't know this
+  if (!user) {
+    return null;
   }
 
   return (
