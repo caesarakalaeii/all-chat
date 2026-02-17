@@ -16,11 +16,15 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useHydrated } from '@/hooks/useHydrated';
 
 export default function CookieBanner() {
+  const isHydrated = useHydrated();
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
+    if (!isHydrated) return; // Wait for hydration
+
     // Do not render the banner on public overlays where it obstructs the chat view
     if (window.location.pathname.startsWith('/overlay')) {
       return;
@@ -33,14 +37,14 @@ export default function CookieBanner() {
       const timer = setTimeout(() => setShowBanner(true), 1000);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [isHydrated]);
 
   const acknowledgeBanner = () => {
     localStorage.setItem('cookieBannerAcknowledged', 'true');
     setShowBanner(false);
   };
 
-  if (!showBanner) return null;
+  if (!isHydrated || !showBanner) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 pointer-events-none">

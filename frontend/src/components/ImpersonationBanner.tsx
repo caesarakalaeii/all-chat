@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useHydrated } from '@/hooks/useHydrated';
 
 export default function ImpersonationBanner() {
   const router = useRouter();
+  const isHydrated = useHydrated();
   const [isImpersonating, setIsImpersonating] = useState(false);
   const [impersonatedUser, setImpersonatedUser] = useState<string>('');
 
   useEffect(() => {
+    if (!isHydrated) return; // Wait for hydration
+
     const checkImpersonation = () => {
       const impersonating = localStorage.getItem('impersonating') === 'true';
       const user = localStorage.getItem('impersonated_user') || '';
@@ -21,7 +25,7 @@ export default function ImpersonationBanner() {
     // Listen for storage changes (in case impersonation starts/stops in another tab)
     window.addEventListener('storage', checkImpersonation);
     return () => window.removeEventListener('storage', checkImpersonation);
-  }, []);
+  }, [isHydrated]);
 
   const handleExitImpersonation = () => {
     // Restore the original admin token
@@ -40,7 +44,7 @@ export default function ImpersonationBanner() {
     router.refresh();
   };
 
-  if (!isImpersonating) {
+  if (!isHydrated || !isImpersonating) {
     return null;
   }
 
