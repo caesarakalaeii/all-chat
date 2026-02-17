@@ -55,10 +55,22 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		}
 	}
 
-	// Connection TTL: 5 minutes (auto-expire if heartbeat stops)
-	connectionTTL := 5 * time.Minute
+	// Connection TTL: 10 minutes (auto-expire if heartbeat stops)
+	// Increased from 5 minutes to tolerate temporary Redis failures
+	connectionTTL := 10 * time.Minute
+	if envTTL := os.Getenv("WEBSOCKET_CONNECTION_TTL_MINUTES"); envTTL != "" {
+		if minutes, err := strconv.Atoi(envTTL); err == nil && minutes > 0 {
+			connectionTTL = time.Duration(minutes) * time.Minute
+		}
+	}
+
 	// Heartbeat interval: 2 minutes (refresh TTL before expiration)
 	heartbeatInterval := 2 * time.Minute
+	if envInterval := os.Getenv("WEBSOCKET_HEARTBEAT_INTERVAL_MINUTES"); envInterval != "" {
+		if minutes, err := strconv.Atoi(envInterval); err == nil && minutes > 0 {
+			heartbeatInterval = time.Duration(minutes) * time.Minute
+		}
+	}
 
 	logger.Info("WebSocket manager initialized",
 		zap.Duration("disconnect_grace_period", gracePeriod),
@@ -421,11 +433,26 @@ func (m *Manager) refreshConnectionTTLs() {
 	refreshed := 0
 	for _, overlayID := range overlayIDs {
 		key := "overlay:connected:" + overlayID
-		if err := m.redisClient.Expire(ctx, key, m.connectionTTL).Err(); err != nil {
-			m.logger.Error("Failed to refresh connection TTL",
-				zap.String("overlay_id", overlayID),
-				zap.Error(err),
-			)
+		err := m.redisClient.Expire(ctx, key, m.connectionTTL).Err()
+
+		if err != nil {
+			// Retry once after 100ms for transient failures
+			time.Sleep(100 * time.Millisecond)
+			retryErr := m.redisClient.Expire(ctx, key, m.connectionTTL).Err()
+
+			if retryErr != nil {
+				m.logger.Error("Failed to refresh connection TTL after retry",
+					zap.String("overlay_id", overlayID),
+					zap.Error(err),
+					zap.NamedError("retry_error", retryErr),
+				)
+				m.metrics.RecordSubscriptionEvent("api-gateway", "heartbeat_failed")
+			} else {
+				m.logger.Warn("Heartbeat retry succeeded after initial failure",
+					zap.String("overlay_id", overlayID),
+				)
+				refreshed++
+			}
 		} else {
 			refreshed++
 		}

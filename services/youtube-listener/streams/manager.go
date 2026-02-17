@@ -1626,7 +1626,7 @@ func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID strin
 
 // IsChannelConnected checks if any overlay is connected for a channel.
 // Implements ConnectionChecker interface for connection-aware polling.
-// Uses real-time connection state to avoid race conditions with channelConnectedOverlays map.
+// Queries Redis directly for real-time connection state to avoid stale in-memory state.
 func (m *Manager) IsChannelConnected(ctx context.Context, channelID string) (bool, error) {
 	// Get all active streams for this channel
 	m.mu.RLock()
@@ -1638,12 +1638,27 @@ func (m *Manager) IsChannelConnected(ctx context.Context, channelID string) (boo
 	}
 	m.mu.RUnlock()
 
-	// Check if any of these overlays are connected (real-time check)
-	m.connMu.RLock()
-	defer m.connMu.RUnlock()
-
+	// Check if any of these overlays are connected (query Redis directly for real-time state)
 	for _, overlayID := range streamOverlayIDs {
-		if _, connected := m.connectedOverlays[overlayID]; connected {
+		key := "overlay:connected:" + overlayID
+		exists, err := m.redisClient.Exists(ctx, key).Result()
+
+		if err != nil {
+			// On Redis error, fall back to in-memory map (defensive)
+			m.logger.Warn("Redis query failed in IsChannelConnected, using cached state",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+			m.connMu.RLock()
+			_, connected := m.connectedOverlays[overlayID]
+			m.connMu.RUnlock()
+			if connected {
+				return true, nil
+			}
+			continue
+		}
+
+		if exists > 0 {
 			return true, nil
 		}
 	}
