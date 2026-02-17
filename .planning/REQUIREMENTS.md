@@ -112,13 +112,49 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be filled during roadmap creation) | | |
+| MSGID-01 | Phase 1 | Pending |
+| MSGID-02 | Phase 1 | Pending |
+| MSGID-03 | Phase 1 | Pending |
+| MSGID-04 | Phase 1 | Pending |
+| MSGID-05 | Phase 1 | Pending |
+| DEL-01 | Phase 1 | Pending |
+| DEL-02 | Phase 1 | Pending |
+| DEL-03 | Phase 1 | Pending |
+| DEL-04 | Phase 1 | Pending |
+| DEL-05 | Phase 1 | Pending |
+| DEL-06 | Phase 1 | Pending |
+| RACE-01 | Phase 1 | Pending |
+| RACE-02 | Phase 1 | Pending |
+| RACE-03 | Phase 1 | Pending |
+| TWITCH-01 | Phase 1 | Pending |
+| TWITCH-02 | Phase 1 | Pending |
+| TWITCH-03 | Phase 1 | Pending |
+| TWITCH-04 | Phase 1 | Pending |
+| FRONTEND-01 | Phase 1 | Pending |
+| FRONTEND-02 | Phase 1 | Pending |
+| FRONTEND-03 | Phase 1 | Pending |
+| FRONTEND-04 | Phase 1 | Pending |
+| FRONTEND-05 | Phase 1 | Pending |
+| FRONTEND-06 | Phase 1 | Pending |
+| YOUTUBE-01 | Phase 2 | Pending |
+| YOUTUBE-02 | Phase 2 | Pending |
+| YOUTUBE-03 | Phase 2 | Pending |
+| KICK-01 | Phase 3 | Pending |
+| KICK-02 | Phase 3 | Pending |
+| KICK-03 | Phase 3 | Pending |
+| REL-01 | Phase 3 | Pending |
+| REL-02 | Phase 3 | Pending |
+| REL-03 | Phase 3 | Pending |
+| REL-04 | Phase 3 | Pending |
+| REL-05 | Phase 3 | Pending |
+| TIKTOK-01 | Phase 4 | Pending |
+| TIKTOK-02 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 0 total
-- Mapped to phases: 0
-- Unmapped: 0 ⚠️
+- v1 requirements: 37 total
+- Mapped to phases: 37
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-17*
-*Last updated: 2026-02-17 after initial definition*
+*Last updated: 2026-02-17 after roadmap creation*
