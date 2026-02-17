@@ -29,12 +29,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. When Twitch moderator clears entire chat, all messages disappear from overlay
   4. Deletion events arriving before corresponding messages still remove messages correctly (no orphaned messages persist)
   5. Frontend receives and processes deletion events via WebSocket with message removal working across all event types
-**Plans**: TBD
+**Plans**: 5 plans in 3 waves
 
 Plans:
-- [ ] 01-01: TBD during planning
-- [ ] 01-02: TBD during planning
-- [ ] 01-03: TBD during planning
+- [ ] 01-01-PLAN.md — Message ID Registry infrastructure (Redis hash, O(1) lookups, 1-hour TTL)
+- [ ] 01-02-PLAN.md — Twitch deletion event capture (IRC handlers for CLEARMSG/CLEARCHAT)
+- [ ] 01-03-PLAN.md — Message processor deletion handling (buffer, normalization, publishing)
+- [ ] 01-04-PLAN.md — Frontend deletion handling (WebSocket events, DOM removal)
+- [ ] 01-05-PLAN.md — End-to-end integration testing and verification
 
 ### Phase 2: YouTube Integration
 **Goal**: Add YouTube message deletion support via polling-based detection with 30-60s latency
@@ -87,7 +89,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation + Twitch | 0/3 | Not started | - |
+| 1. Foundation + Twitch | 0/5 | Ready to execute | - |
 | 2. YouTube Integration | 0/2 | Not started | - |
 | 3. Kick Integration + Edge Cases | 0/3 | Not started | - |
 | 4. TikTok Documentation + Polish | 0/1 | Not started | - |
