@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -643,6 +645,15 @@ func (p *Poller) monitorConnection(ctx context.Context, cancel context.CancelFun
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
+	// Track consecutive disconnects for debounce
+	consecutiveDisconnects := 0
+	disconnectThreshold := 2
+	if envThreshold := os.Getenv("YOUTUBE_DISCONNECT_THRESHOLD_COUNT"); envThreshold != "" {
+		if count, err := strconv.Atoi(envThreshold); err == nil && count > 0 {
+			disconnectThreshold = count
+		}
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -654,14 +665,40 @@ func (p *Poller) monitorConnection(ctx context.Context, cancel context.CancelFun
 			if p.connectionChecker == nil || p.channelID == "" {
 				continue
 			}
+
 			connected, err := p.connectionChecker.IsChannelConnected(ctx, p.channelID)
+
 			if err != nil || !connected {
-				select {
-				case disconnected <- struct{}{}:
-				default:
+				consecutiveDisconnects++
+
+				if consecutiveDisconnects >= disconnectThreshold {
+					// Stop after N consecutive failures
+					p.logger.Info("Disconnect confirmed after grace period",
+						zap.String("channel_id", p.channelID),
+						zap.Int("consecutive_failures", consecutiveDisconnects),
+					)
+					select {
+					case disconnected <- struct{}{}:
+					default:
+					}
+					cancel()
+					return
 				}
-				cancel()
-				return
+
+				p.logger.Warn("Disconnect detected, waiting for confirmation",
+					zap.String("channel_id", p.channelID),
+					zap.Int("consecutive_failures", consecutiveDisconnects),
+					zap.Int("threshold", disconnectThreshold),
+				)
+			} else {
+				// Reset counter on successful connection check
+				if consecutiveDisconnects > 0 {
+					p.logger.Info("Connection restored after temporary disconnect",
+						zap.String("channel_id", p.channelID),
+						zap.Int("previous_failures", consecutiveDisconnects),
+					)
+				}
+				consecutiveDisconnects = 0
 			}
 		}
 	}
