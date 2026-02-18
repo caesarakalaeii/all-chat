@@ -12,7 +12,7 @@ This milestone adds message deletion event support to All-Chat's multi-platform 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation + Twitch** - Message ID registry and end-to-end Twitch deletion flow
+- [x] **Phase 1: Foundation + Twitch** - Message ID registry and end-to-end Twitch deletion flow (completed 2026-02-18)
 - [ ] **Phase 2: YouTube Integration** - Polling-based deletion detection for YouTube streams
 - [ ] **Phase 3: Kick Integration + Edge Cases** - Kick WebSocket events and reconnection handling
 - [ ] **Phase 4: TikTok Documentation + Polish** - Document limitations and add reliability improvements
@@ -89,7 +89,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation + Twitch | 2/5 | In Progress|  |
+| 1. Foundation + Twitch | 5/5 | Complete   | 2026-02-18 |
 | 2. YouTube Integration | 0/2 | Not started | - |
 | 3. Kick Integration + Edge Cases | 0/3 | Not started | - |
 | 4. TikTok Documentation + Polish | 0/1 | Not started | - |
