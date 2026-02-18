@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/api-gateway/models"
+	"github.com/caesar/all-chat/services/api-gateway/replay"
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 	"github.com/caesar/all-chat/shared/auth"
@@ -17,12 +18,13 @@ import (
 // ViewerWebSocketHandler handles WebSocket connections for viewers
 // Viewers connect via /ws/chat/{streamer_username} without knowing the overlay ID
 type ViewerWebSocketHandler struct {
-	wsManager  *wsconn.Manager
-	subscriber *subscription.Subscriber
-	repo       *subscription.Repository
-	jwtSecret  string
-	logger     *zap.Logger
-	upgrader   websocket.Upgrader
+	wsManager    *wsconn.Manager
+	subscriber   *subscription.Subscriber
+	repo         *subscription.Repository
+	jwtSecret    string
+	replayBuffer replay.DeletionReplayBuffer
+	logger       *zap.Logger
+	upgrader     websocket.Upgrader
 }
 
 // NewViewerWebSocketHandler creates a new viewer WebSocket handler
@@ -31,14 +33,16 @@ func NewViewerWebSocketHandler(
 	subscriber *subscription.Subscriber,
 	repo *subscription.Repository,
 	jwtSecret string,
+	replayBuffer replay.DeletionReplayBuffer,
 	logger *zap.Logger,
 ) *ViewerWebSocketHandler {
 	h := &ViewerWebSocketHandler{
-		wsManager:  wsManager,
-		subscriber: subscriber,
-		repo:       repo,
-		jwtSecret:  jwtSecret,
-		logger:     logger.Named("viewer-websocket"),
+		wsManager:    wsManager,
+		subscriber:   subscriber,
+		repo:         repo,
+		jwtSecret:    jwtSecret,
+		replayBuffer: replayBuffer,
+		logger:       logger.Named("viewer-websocket"),
 	}
 
 	// Configure WebSocket upgrader with permissive origin check for viewers
@@ -129,7 +133,7 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 
 	// Create WebSocket connection wrapper for viewer (marks as viewer connection)
 	// Viewer connections will have overlay_id stripped from all messages
-	wsConn := wsconn.NewViewerConnection(conn, overlayID, viewerID, h.logger)
+	wsConn := wsconn.NewViewerConnection(conn, overlayID, viewerID, h.replayBuffer, h.logger)
 
 	// Subscribe to overlay's Redis Pub/Sub channel WITHOUT publishing connection event
 	// This is critical: viewers should NOT trigger YouTube polling
