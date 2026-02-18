@@ -61,12 +61,12 @@ Plans:
   2. When overlay WebSocket disconnects and reconnects, deletion events during disconnect window are replayed (1-minute buffer)
   3. Batch deletions of 1,000+ messages complete without blocking frontend UI (measured via load testing)
   4. All three platforms (Twitch, YouTube, Kick) handle deletion events consistently through unified pipeline
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 03-01: TBD during planning
-- [ ] 03-02: TBD during planning
-- [ ] 03-03: TBD during planning
+- [ ] 03-01-PLAN.md — Kick deletion event handler (Pusher WebSocket, registry integration)
+- [ ] 03-02-PLAN.md — Deletion replay buffer (Redis sorted set, reconnection resilience)
+- [ ] 03-03-PLAN.md — Load testing and feature documentation (Artillery, platform matrix)
 
 ### Phase 4: TikTok Documentation + Polish
 **Goal**: Document TikTok deletion limitation and validate production readiness across all platforms
