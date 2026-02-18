@@ -280,6 +280,19 @@ func main() {
 			isEvent := rawMsg.EventType != "" && rawMsg.EventType != "chat"
 
 			if isEvent {
+				// DELETION EVENT PATH: Handle message deletions specially
+				if rawMsg.EventType == "message_deletion" {
+					// Normalize deletion event (platform-agnostic)
+					startNormalize := time.Now()
+					unified = normalizer.NormalizeDeletion(rawMsg)
+					unified.OverlayID = overlay.OverlayID // Set overlay ID for this target
+					processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized_deletion", "success")
+					processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "deletion_normalization").Observe(time.Since(startNormalize).Seconds())
+
+					// Deletions don't need enrichment - go straight to publishing
+					goto publish
+				}
+
 				// EVENT PATH: Check if event type is enabled for this overlay
 				enabled, filterErr := eventFilter.IsEventEnabled(ctx, overlay.OverlayID, rawMsg.Platform, rawMsg.EventType)
 				if filterErr != nil {
@@ -459,6 +472,7 @@ func main() {
 				}
 			}
 
+		publish:
 			// Capture event for credit roll if applicable
 			if unified.Event != nil {
 				if err := eventCapture.CaptureIfActive(ctx, unified); err != nil {
