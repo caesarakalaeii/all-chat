@@ -25,6 +25,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
+	github.com/caesar/all-chat/services/message-processor v0.0.0
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
@@ -91,3 +92,5 @@ require (
 )
 
 replace github.com/caesar/all-chat/shared => ../../shared
+
+replace github.com/caesar/all-chat/services/message-processor => ../message-processor
