@@ -12,7 +12,7 @@ import (
 // DeletionEvent represents a deletion event for replay buffer
 // Matches Phase 1 deletion event structure from message-processor
 type DeletionEvent struct {
-	Type         string    `json:"type"`                    // "single", "batch", "clear"
+	DeletionType string    `json:"deletion_type"`           // "single", "batch", "clear"
 	TargetUUID   string    `json:"target_uuid,omitempty"`   // For single deletions
 	TargetUserID string    `json:"target_user_id,omitempty"` // For batch deletions
 	Platform     string    `json:"platform"`

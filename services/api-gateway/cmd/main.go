@@ -17,6 +17,7 @@ import (
 	"github.com/caesar/all-chat/services/api-gateway/handlers"
 	localmiddleware "github.com/caesar/all-chat/services/api-gateway/middleware"
 	"github.com/caesar/all-chat/services/api-gateway/models"
+	"github.com/caesar/all-chat/services/api-gateway/replay"
 	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
@@ -127,6 +128,10 @@ func main() {
 	// Create WebSocket components
 	wsManager := wsconn.NewManager(log, gatewayMetrics, redisClient, db)
 
+	// Initialize deletion replay buffer
+	replayBuffer := replay.NewRedisDeletionReplayBuffer(redisClient, 60*time.Second)
+	log.Info("Initialized deletion replay buffer", zap.Duration("ttl", 60*time.Second))
+
 	// Create WebSocket health checker for state reconciliation
 	healthChecker := wsconn.NewHealthChecker(wsManager, redisClient, log, gatewayMetrics)
 	healthChecker.Start()
@@ -140,6 +145,47 @@ func main() {
 		msgType := models.WSMessageTypeChatMessage
 		if len(channel) > 8 && channel[len(channel)-8:] == ":updates" {
 			msgType = models.WSMessageTypeMessageUpdate
+		}
+
+		// Check if this is a deletion event for replay buffer
+		// Parse the message to detect deletion events
+		var unifiedMsg struct {
+			Platform string `json:"platform"`
+			Event    *struct {
+				Type     string                 `json:"type"`
+				Metadata map[string]interface{} `json:"metadata"`
+			} `json:"event"`
+		}
+		if err := json.Unmarshal(message, &unifiedMsg); err == nil && unifiedMsg.Event != nil && unifiedMsg.Event.Type == "message_deletion" {
+			// Add deletion event to replay buffer (best-effort, don't fail broadcast)
+			deletionEvent := &replay.DeletionEvent{
+				Platform:  unifiedMsg.Platform,
+				Timestamp: time.Now().UTC(),
+			}
+
+			// Extract deletion type and target from metadata
+			if delType, ok := unifiedMsg.Event.Metadata["deletion_type"].(string); ok {
+				deletionEvent.DeletionType = delType
+			}
+			if targetUUID, ok := unifiedMsg.Event.Metadata["target_uuid"].(string); ok {
+				deletionEvent.TargetUUID = targetUUID
+			}
+			if targetUserID, ok := unifiedMsg.Event.Metadata["target_user_id"].(string); ok {
+				deletionEvent.TargetUserID = targetUserID
+			}
+
+			if err := replayBuffer.Add(context.Background(), overlayID, deletionEvent); err != nil {
+				log.Error("Failed to add deletion to replay buffer",
+					zap.String("overlay_id", overlayID),
+					zap.Error(err),
+				)
+				// Continue - Pub/Sub broadcast is more critical than replay buffer
+			} else {
+				log.Debug("Added deletion to replay buffer",
+					zap.String("overlay_id", overlayID),
+					zap.String("type", deletionEvent.DeletionType),
+				)
+			}
 		}
 
 		// Wrap the unified message in a WebSocket message envelope
@@ -197,7 +243,7 @@ func main() {
 	proxyHandler := handlers.NewProxyHandler(registry)
 	healthHandler := handlers.NewHealthHandler(registry)
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchAccessToken)
-	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, jwtSecret, log)
+	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, jwtSecret, replayBuffer, log)
 
 	// Create viewer WebSocket handler (same origin policy as owner handler)
 	viewerWsHandler := handlers.NewViewerWebSocketHandler(
@@ -205,6 +251,7 @@ func main() {
 		subscriber,
 		subRepo,
 		jwtSecret,
+		replayBuffer,
 		log,
 	)
 
