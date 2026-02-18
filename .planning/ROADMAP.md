@@ -32,11 +32,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 5 plans in 3 waves
 
 Plans:
-- [ ] 01-01-PLAN.md — Message ID Registry infrastructure (Redis hash, O(1) lookups, 1-hour TTL)
-- [ ] 01-02-PLAN.md — Twitch deletion event capture (IRC handlers for CLEARMSG/CLEARCHAT)
-- [ ] 01-03-PLAN.md — Message processor deletion handling (buffer, normalization, publishing)
-- [ ] 01-04-PLAN.md — Frontend deletion handling (WebSocket events, DOM removal)
-- [ ] 01-05-PLAN.md — End-to-end integration testing and verification
+- [x] 01-01-PLAN.md — Message ID Registry infrastructure (Redis hash, O(1) lookups, 1-hour TTL)
+- [x] 01-02-PLAN.md — Twitch deletion event capture (IRC handlers for CLEARMSG/CLEARCHAT)
+- [x] 01-03-PLAN.md — Message processor deletion handling (buffer, normalization, publishing)
+- [x] 01-04-PLAN.md — Frontend deletion handling (WebSocket events, DOM removal)
+- [x] 01-05-PLAN.md — End-to-end integration testing and verification
 
 ### Phase 2: YouTube Integration
 **Goal**: Add YouTube message deletion support via polling-based detection with 30-60s latency
@@ -49,7 +49,7 @@ Plans:
 **Plans**: 2 plans in 2 waves
 
 Plans:
-- [ ] 02-01-PLAN.md — YouTube parser deletion event mapping to Phase 1 schema
+- [x] 02-01-PLAN.md — YouTube parser deletion event mapping to Phase 1 schema
 - [ ] 02-02-PLAN.md — YouTube registry integration and end-to-end verification
 
 ### Phase 3: Kick Integration + Edge Cases
@@ -90,6 +90,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation + Twitch | 5/5 | Complete   | 2026-02-18 |
-| 2. YouTube Integration | 0/2 | Not started | - |
+| 2. YouTube Integration | 1/2 | In progress | - |
 | 3. Kick Integration + Edge Cases | 0/3 | Not started | - |
 | 4. TikTok Documentation + Polish | 0/1 | Not started | - |
