@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation + Twitch** - Message ID registry and end-to-end Twitch deletion flow (completed 2026-02-18)
 - [x] **Phase 2: YouTube Integration** - Polling-based deletion detection for YouTube streams (completed 2026-02-18)
-- [ ] **Phase 3: Kick Integration + Edge Cases** - Kick WebSocket events and reconnection handling
+- [x] **Phase 3: Kick Integration + Edge Cases** - Kick WebSocket events and reconnection handling (completed 2026-02-18)
 - [ ] **Phase 4: TikTok Documentation + Polish** - Document limitations and add reliability improvements
 
 ## Phase Details
@@ -61,12 +61,13 @@ Plans:
   2. When overlay WebSocket disconnects and reconnects, deletion events during disconnect window are replayed (1-minute buffer)
   3. Batch deletions of 1,000+ messages complete without blocking frontend UI (measured via load testing)
   4. All three platforms (Twitch, YouTube, Kick) handle deletion events consistently through unified pipeline
-**Plans**: 3 plans in 2 waves
+**Plans**: 4 plans in 2 waves (3 original + 1 gap closure)
 
 Plans:
-- [ ] 03-01-PLAN.md — Kick deletion event handler (Pusher WebSocket, registry integration)
-- [ ] 03-02-PLAN.md — Deletion replay buffer (Redis sorted set, reconnection resilience)
-- [ ] 03-03-PLAN.md — Load testing and feature documentation (Artillery, platform matrix)
+- [x] 03-01-PLAN.md — Kick deletion event handler (Pusher WebSocket, registry integration)
+- [x] 03-02-PLAN.md — Deletion replay buffer (Redis sorted set, reconnection resilience)
+- [x] 03-03-PLAN.md — Load testing and feature documentation (Artillery, platform matrix)
+- [x] 03-04-PLAN.md — Replay buffer test compilation fix (gap closure for test validation)
 
 ### Phase 4: TikTok Documentation + Polish
 **Goal**: Document TikTok deletion limitation and validate production readiness across all platforms
@@ -91,5 +92,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation + Twitch | 5/5 | Complete   | 2026-02-18 |
 | 2. YouTube Integration | 2/2 | Complete   | 2026-02-18 |
-| 3. Kick Integration + Edge Cases | 0/3 | Not started | - |
+| 3. Kick Integration + Edge Cases | 4/4 | Complete   | 2026-02-18 |
 | 4. TikTok Documentation + Polish | 0/1 | Not started | - |
