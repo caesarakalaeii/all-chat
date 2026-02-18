@@ -45,9 +45,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Kick Integration
 
-- [ ] **KICK-01**: Listener detects ChatMessageDeletedEvent via WebSocket
-- [ ] **KICK-02**: Kick event structure validated in production environment
-- [ ] **KICK-03**: Kick deletion events include message ID for matching
+- [x] **KICK-01**: Listener detects ChatMessageDeletedEvent via WebSocket
+- [x] **KICK-02**: Kick event structure validated in production environment
+- [x] **KICK-03**: Kick deletion events include message ID for matching
 
 ### TikTok Handling
 
@@ -139,9 +139,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | YOUTUBE-01 | Phase 2 | Complete |
 | YOUTUBE-02 | Phase 2 | Complete |
 | YOUTUBE-03 | Phase 2 | Complete |
-| KICK-01 | Phase 3 | Pending |
-| KICK-02 | Phase 3 | Pending |
-| KICK-03 | Phase 3 | Pending |
+| KICK-01 | Phase 3 | Complete |
+| KICK-02 | Phase 3 | Complete |
+| KICK-03 | Phase 3 | Complete |
 | REL-01 | Phase 3 | Pending |
 | REL-02 | Phase 3 | Pending |
 | REL-03 | Phase 3 | Pending |
