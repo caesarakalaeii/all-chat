@@ -9,11 +9,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Message ID Infrastructure
 
-- [ ] **MSGID-01**: System preserves platform-native message IDs alongside internal UUIDs
-- [ ] **MSGID-02**: Redis-based Message ID Registry maps platform IDs to internal UUIDs
-- [ ] **MSGID-03**: Registry entries have 24-hour TTL to match message retention
-- [ ] **MSGID-04**: Registry provides O(1) lookup for deletion event matching
-- [ ] **MSGID-05**: Platform IDs flow through entire pipeline (Listener → Processor → Gateway)
+- [x] **MSGID-01**: System preserves platform-native message IDs alongside internal UUIDs
+- [x] **MSGID-02**: Redis-based Message ID Registry maps platform IDs to internal UUIDs
+- [x] **MSGID-03**: Registry entries have 24-hour TTL to match message retention
+- [x] **MSGID-04**: Registry provides O(1) lookup for deletion event matching
+- [x] **MSGID-05**: Platform IDs flow through entire pipeline (Listener → Processor → Gateway)
 
 ### Core Deletion Features
 
@@ -112,11 +112,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MSGID-01 | Phase 1 | Pending |
-| MSGID-02 | Phase 1 | Pending |
-| MSGID-03 | Phase 1 | Pending |
-| MSGID-04 | Phase 1 | Pending |
-| MSGID-05 | Phase 1 | Pending |
+| MSGID-01 | Phase 1 | Complete |
+| MSGID-02 | Phase 1 | Complete |
+| MSGID-03 | Phase 1 | Complete |
+| MSGID-04 | Phase 1 | Complete |
+| MSGID-05 | Phase 1 | Complete |
 | DEL-01 | Phase 1 | Pending |
 | DEL-02 | Phase 1 | Pending |
 | DEL-03 | Phase 1 | Pending |
