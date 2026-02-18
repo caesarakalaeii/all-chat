@@ -140,6 +140,11 @@ func main() {
 	// Create WebSocket client with message handler
 	wsClient := websocket.NewClient(wsConfig, messageHandler, log)
 
+	// Set deletion handler
+	wsClient.SetDeletionHandler(func(channel string, event *websocket.KickMessageDeletedEvent) {
+		handleDeletionEvent(channel, event, streamPublisher, channelMgr, log)
+	})
+
 	// Now initialize channel manager with the WebSocket client
 	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, leaderCoord, log)
 
@@ -378,6 +383,79 @@ func pickKickUsername(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// handleDeletionEvent processes a Kick deletion event and publishes to Redis Streams
+func handleDeletionEvent(
+	channel string,
+	event *websocket.KickMessageDeletedEvent,
+	pub *publisher.StreamPublisher,
+	channelMgr *channels.Manager,
+	log *zap.Logger,
+) {
+	// Extract chatroom ID from channel (format: "chatrooms.{id}.v2")
+	chatroomIDStr := strings.TrimPrefix(channel, "chatrooms.")
+	chatroomIDStr = strings.TrimSuffix(chatroomIDStr, ".v2")
+	chatroomID, err := strconv.Atoi(chatroomIDStr)
+	if err != nil {
+		log.Error("Failed to parse chatroom ID from channel",
+			zap.String("channel", channel),
+			zap.Error(err))
+		metrics.IncDropped("invalid_chatroom_id")
+		return
+	}
+
+	// Get overlay targets for this chatroom
+	targets, found := channelMgr.GetOverlayTargetsForChatroom(chatroomID)
+	if !found || len(targets) == 0 {
+		log.Debug("Received deletion event for unknown chatroom",
+			zap.String("channel", channel),
+			zap.Int("chatroom_id", chatroomID),
+		)
+		metrics.IncDropped("unknown_chatroom")
+		return
+	}
+
+	// Publish deletion event for each overlay target
+	for _, target := range targets {
+		publishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+		// Build tags with deletion event metadata following Phase 1 schema
+		tags := make(map[string]string)
+		tags["event_type"] = "message_deletion"
+		tags["deletion_type"] = "single" // Kick only supports single message deletion
+		tags["target_msg_id"] = event.DeletedMessage.ID
+		tags["deleted_by"] = strconv.Itoa(event.DeletedMessage.DeletedBy)
+		tags["chatroom_id"] = event.DeletedMessage.ChatroomID
+
+		// Create raw deletion event
+		rawMsg := publisher.RawMessage{
+			Platform:    "kick",
+			OverlayID:   target.OverlayID,
+			ChannelID:   target.ChannelSlug,
+			ChannelName: target.ChannelSlug,
+			Tags:        tags,
+			Timestamp:   time.Now().UTC(),
+		}
+
+		if err := pub.Publish(publishCtx, &rawMsg); err != nil {
+			log.Error("Failed to publish deletion event to Redis",
+				zap.Error(err),
+				zap.String("overlay_id", target.OverlayID),
+				zap.String("channel", target.ChannelSlug),
+				zap.String("message_id", event.DeletedMessage.ID),
+			)
+			metrics.IncDropped("publish_error")
+		} else {
+			log.Debug("Published Kick deletion event to Redis Streams",
+				zap.String("overlay_id", target.OverlayID),
+				zap.String("message_id", event.DeletedMessage.ID),
+				zap.Int("deleted_by", event.DeletedMessage.DeletedBy),
+			)
+			metrics.IncMessage("published", "deletion")
+		}
+		cancel()
+	}
 }
 
 // handleReconnections handles WebSocket reconnection logic
