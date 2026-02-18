@@ -22,7 +22,7 @@
 
 import Image from 'next/image';
 import { use, useEffect, useState, useRef } from 'react';
-import type { ChatMessage, EventTier, PlatformStatus } from '@/lib/types/message';
+import type { ChatMessage, EventTier, PlatformStatus, DeletionMetadata } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
@@ -128,8 +128,49 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
         console.log('[OBS Overlay] Received message:', envelope);
 
+        // Handle deletion events FIRST (before regular messages)
+        if (envelope.type === 'chat_message' && envelope.data?.event?.type === 'message_deletion') {
+          const deletion = envelope.data.event.metadata as DeletionMetadata;
+
+          // Update state based on deletion type
+          setMessages((prev) => {
+            switch (deletion.deletion_type) {
+              case 'single':
+                // Remove specific message by internal UUID
+                const targetId = deletion.target_uuid;
+                if (!targetId) {
+                  console.warn('[Deletion] Single deletion missing target_uuid');
+                  return prev;
+                }
+                console.debug('[Deletion] Removing single message:', targetId);
+                return prev.filter((m) => m.id !== targetId);
+
+              case 'batch':
+                // Remove all messages from specific user (timeout/ban)
+                const targetUserId = deletion.target_user_id;
+                if (!targetUserId) {
+                  console.warn('[Deletion] Batch deletion missing target_user_id');
+                  return prev;
+                }
+                console.debug('[Deletion] Removing all messages from user:', targetUserId, deletion.target_username);
+                return prev.filter((m) => m.user.id !== targetUserId);
+
+              case 'clear':
+                // Remove all messages (full chat clear)
+                console.debug('[Deletion] Clearing all messages');
+                return [];
+
+              default:
+                console.warn('[Deletion] Unknown deletion type:', deletion.deletion_type);
+                return prev;
+            }
+          });
+
+          return; // Don't process as regular message
+        }
+
         // Handle chat messages and events
-        if (envelope.type === 'chat_message' && envelope.data) {
+        if (envelope.type === 'chat_message' && envelope.data && !envelope.data.event) {
           let message: ChatMessage = envelope.data;
           message = await resolveTwitchBadgeIcons(message);
           message = sortMessageBadges(message);
@@ -475,6 +516,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           return (
           <div
             key={`${message.id}-${index}`}
+            data-message-id={message.id}
             data-platform={message.platform}
             data-event-type={isEvent ? message.event?.type : undefined}
             className={
