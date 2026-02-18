@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/api/youtube/v3"
 )
 
@@ -252,4 +253,110 @@ func TestExtractNextPageToken(t *testing.T) {
 
 	token := parser.ExtractNextPageToken(response)
 	assert.Equal(t, "next-page-token-123", token)
+}
+
+func TestParseYouTubeDeletionEvents(t *testing.T) {
+	parser := NewParser()
+
+	t.Run("MessageDeletedEvent", func(t *testing.T) {
+		msg := &youtube.LiveChatMessage{
+			Id: "CjoKGkNKem93WjJkQkljQ0ZRcWFRZ29kSnU4T0JBEhxDTXV4c2YyZEJJY0NGUWVQdXdvZDFjd0JRQSgB",
+			Snippet: &youtube.LiveChatMessageSnippet{
+				Type:        "messageDeletedEvent",
+				PublishedAt: "2024-01-15T10:30:00.000Z",
+				MessageDeletedDetails: &youtube.LiveChatMessageDeletedDetails{
+					DeletedMessageId: "CjoKGkNKem93WjJkQkljQ0ZRcWFRZ29kSnU4T0JBEhxDTXV4c2YyZEJJY0NGUWVQdXdvZDFjd0JRQSgA",
+				},
+			},
+			AuthorDetails: &youtube.LiveChatMessageAuthorDetails{
+				ChannelId:   "UC_mod_channel_id",
+				DisplayName: "ModeratorName",
+			},
+		}
+
+		raw, err := parser.ParseChatMessage(msg, "UCxxxxxx", "stream123")
+		require.NoError(t, err)
+
+		// Verify Phase 1 deletion schema
+		assert.Equal(t, "message_deletion", raw.EventType)
+		assert.Equal(t, "single", raw.EventData["deletion_type"])
+		assert.Equal(t, "CjoKGkNKem93WjJkQkljQ0ZRcWFRZ29kSnU4T0JBEhxDTXV4c2YyZEJJY0NGUWVQdXdvZDFjd0JRQSgA",
+			raw.EventData["target_msg_id"])
+
+		// Verify YouTube message ID in tags
+		assert.Equal(t, "CjoKGkNKem93WjJkQkljQ0ZRcWFRZ29kSnU4T0JBEhxDTXV4c2YyZEJJY0NGUWVQdXdvZDFjd0JRQSgB",
+			raw.Tags["youtube_message_id"])
+	})
+
+	t.Run("UserBannedEvent_Permanent", func(t *testing.T) {
+		msg := &youtube.LiveChatMessage{
+			Id: "CjoKGkNKem93WjJkQkljQ0ZRcWFRZ29kSnU4T0JBEhxDTXV4c2YyZEJJY0NGUWVQdXdvZDFjd0JRQSgC",
+			Snippet: &youtube.LiveChatMessageSnippet{
+				Type:        "userBannedEvent",
+				PublishedAt: "2024-01-15T10:35:00.000Z",
+				UserBannedDetails: &youtube.LiveChatUserBannedMessageDetails{
+					BanType: "permanent",
+					BannedUserDetails: &youtube.ChannelProfileDetails{
+						ChannelId:   "UC_banned_user_id",
+						DisplayName: "BannedUser",
+					},
+				},
+			},
+			AuthorDetails: &youtube.LiveChatMessageAuthorDetails{
+				ChannelId:   "UC_mod_channel_id",
+				DisplayName: "ModeratorName",
+			},
+		}
+
+		raw, err := parser.ParseChatMessage(msg, "UCxxxxxx", "stream123")
+		require.NoError(t, err)
+
+		// Verify Phase 1 batch deletion schema
+		assert.Equal(t, "message_deletion", raw.EventType)
+		assert.Equal(t, "batch", raw.EventData["deletion_type"])
+		assert.Equal(t, "UC_banned_user_id", raw.EventData["target_user_id"])
+		assert.Equal(t, "BannedUser", raw.EventData["target_username"])
+		assert.Equal(t, "permanent", raw.EventData["ban_type"])
+
+		// Verify YouTube message ID in tags
+		assert.Equal(t, "CjoKGkNKem93WjJkQkljQ0ZRcWFRZ29kSnU4T0JBEhxDTXV4c2YyZEJJY0NGUWVQdXdvZDFjd0JRQSgC",
+			raw.Tags["youtube_message_id"])
+	})
+
+	t.Run("UserBannedEvent_Temporary", func(t *testing.T) {
+		msg := &youtube.LiveChatMessage{
+			Id: "CjoKGkNKem93WjJkQkljQ0ZRcWFRZ29kSnU4T0JBEhxDTXV4c2YyZEJJY0NGUWVQdXdvZDFjd0JRQSgD",
+			Snippet: &youtube.LiveChatMessageSnippet{
+				Type:        "userBannedEvent",
+				PublishedAt: "2024-01-15T10:40:00.000Z",
+				UserBannedDetails: &youtube.LiveChatUserBannedMessageDetails{
+					BanType:            "temporary",
+					BanDurationSeconds: 600,
+					BannedUserDetails: &youtube.ChannelProfileDetails{
+						ChannelId:   "UC_timeout_user_id",
+						DisplayName: "TimeoutUser",
+					},
+				},
+			},
+			AuthorDetails: &youtube.LiveChatMessageAuthorDetails{
+				ChannelId:   "UC_mod_channel_id",
+				DisplayName: "ModeratorName",
+			},
+		}
+
+		raw, err := parser.ParseChatMessage(msg, "UCxxxxxx", "stream123")
+		require.NoError(t, err)
+
+		// Verify Phase 1 batch deletion schema
+		assert.Equal(t, "message_deletion", raw.EventType)
+		assert.Equal(t, "batch", raw.EventData["deletion_type"])
+		assert.Equal(t, "UC_timeout_user_id", raw.EventData["target_user_id"])
+		assert.Equal(t, "TimeoutUser", raw.EventData["target_username"])
+		assert.Equal(t, "temporary", raw.EventData["ban_type"])
+		assert.Equal(t, uint64(600), raw.EventData["ban_duration_seconds"])
+
+		// Verify YouTube message ID in tags
+		assert.Equal(t, "CjoKGkNKem93WjJkQkljQ0ZRcWFRZ29kSnU4T0JBEhxDTXV4c2YyZEJJY0NGUWVQdXdvZDFjd0JRQSgD",
+			raw.Tags["youtube_message_id"])
+	})
 }
