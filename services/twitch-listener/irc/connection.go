@@ -56,6 +56,10 @@ func NewConnectionManager(
 	// Set up event handlers
 	client.OnUserNoticeMessage(cm.handleUserNotice)
 
+	// Set up deletion handlers
+	client.OnClearMessage(cm.handleClearMessage)
+	client.OnClearChatMessage(cm.handleClearChat)
+
 	// Set up connection handlers
 	client.OnConnect(cm.handleConnect)
 
@@ -235,6 +239,91 @@ func (cm *ConnectionManager) handleUserNotice(message twitch.UserNoticeMessage) 
 		zap.String("event_type", rawMsg.EventType),
 		zap.String("msg-id", message.MsgID),
 		zap.String("username", rawMsg.Username),
+	)
+}
+
+// handleClearMessage processes CLEARMSG (single message deletion)
+func (cm *ConnectionManager) handleClearMessage(message twitch.ClearMessage) {
+	start := time.Now()
+
+	// Record deletion event received
+	cm.metrics.RecordMessage("twitch", "twitch-listener", message.Channel, "deletion")
+
+	// Parse to RawChatMessage with EventType="message_deletion"
+	rawMsg := cm.parser.ParseClearMessage(message)
+	if rawMsg == nil {
+		cm.logger.Error("Failed to parse CLEARMSG",
+			zap.String("channel", message.Channel),
+			zap.String("target_msg_id", message.TargetMsgID),
+		)
+		cm.metrics.RecordError("twitch", "twitch-listener", "parsing", "error")
+		return
+	}
+
+	// Publish to Redis Streams
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := cm.publisher.Publish(ctx, rawMsg); err != nil {
+		cm.logger.Error("Failed to publish deletion event",
+			zap.Error(err),
+			zap.String("channel", message.Channel),
+			zap.String("target_msg_id", message.TargetMsgID),
+		)
+		cm.metrics.RecordPublish("twitch", "twitch-listener", "failed")
+		cm.metrics.RecordError("twitch", "twitch-listener", "internal", "error")
+		return
+	}
+
+	// Record successful processing
+	cm.metrics.RecordPublish("twitch", "twitch-listener", "success")
+	cm.metrics.MessageLatency.WithLabelValues("twitch", "twitch-listener").Observe(time.Since(start).Seconds())
+
+	cm.logger.Debug("Processed CLEARMSG",
+		zap.String("channel", message.Channel),
+		zap.String("target_msg_id", message.TargetMsgID),
+		zap.Duration("duration", time.Since(start)),
+	)
+}
+
+// handleClearChat processes CLEARCHAT (user timeout/ban or full clear)
+func (cm *ConnectionManager) handleClearChat(message twitch.ClearChatMessage) {
+	start := time.Now()
+
+	cm.metrics.RecordMessage("twitch", "twitch-listener", message.Channel, "deletion")
+
+	// Parse to RawChatMessage
+	rawMsg := cm.parser.ParseClearChat(message)
+	if rawMsg == nil {
+		cm.logger.Error("Failed to parse CLEARCHAT",
+			zap.String("channel", message.Channel),
+			zap.String("target_user", message.TargetUsername),
+		)
+		cm.metrics.RecordError("twitch", "twitch-listener", "parsing", "error")
+		return
+	}
+
+	// Publish to Redis Streams
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := cm.publisher.Publish(ctx, rawMsg); err != nil {
+		cm.logger.Error("Failed to publish deletion event",
+			zap.Error(err),
+			zap.String("channel", message.Channel),
+		)
+		cm.metrics.RecordPublish("twitch", "twitch-listener", "failed")
+		cm.metrics.RecordError("twitch", "twitch-listener", "internal", "error")
+		return
+	}
+
+	cm.metrics.RecordPublish("twitch", "twitch-listener", "success")
+	cm.metrics.MessageLatency.WithLabelValues("twitch", "twitch-listener").Observe(time.Since(start).Seconds())
+
+	cm.logger.Debug("Processed CLEARCHAT",
+		zap.String("channel", message.Channel),
+		zap.String("target_user", message.TargetUsername),
+		zap.Duration("duration", time.Since(start)),
 	)
 }
 
