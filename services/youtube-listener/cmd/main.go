@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/youtube-listener/handlers"
 	ytmetrics "github.com/caesar/all-chat/services/youtube-listener/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener/oauth"
@@ -127,6 +128,10 @@ func main() {
 
 	log.Info("Connected to Redis")
 
+	// Initialize Message ID Registry for deletion event matching
+	msgIDRegistry := registry.NewRedisRegistry(redisClient, 1*time.Hour)
+	log.Info("Initialized Message ID Registry", zap.Duration("ttl", 1*time.Hour))
+
 	// Initialize metrics (available via /metrics endpoint)
 	listenerMetrics := metrics.NewListenerMetrics("youtube", "youtube-listener")
 	log.Info("Initialized Prometheus metrics")
@@ -198,7 +203,7 @@ func main() {
 	}()
 
 	// Create message handler that publishes to Redis Streams and tracks quota
-	messageHandler := NewMessageHandler(streamPublisher, quotaTracker, log)
+	messageHandler := NewMessageHandler(streamPublisher, quotaTracker, msgIDRegistry, log)
 
 	sourceManagerURL := getEnvOrDefault("SOURCE_MANAGER_URL", "http://source-manager:8088")
 	sourceManagerSecret := getEnvOrDefault("SOURCE_MANAGER_SECRET", "dev-service-secret")
