@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 ## Current Position
 
 Phase: 3 of 4 (Kick Integration Edge Cases)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: Complete
-Last activity: 2026-02-18 — Completed Plan 03-01: Kick Deletion Event Handler
+Last activity: 2026-02-18 — Completed Plan 03-02: WebSocket Reconnection Replay Buffer
 
-Progress: [███░░░░░░░] 33%
+Progress: [██████░░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 5.1 minutes
-- Total execution time: 0.68 hours
+- Total plans completed: 9
+- Average duration: 5.2 minutes
+- Total execution time: 0.78 hours
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [███░░░░░░░] 33%
 |-------|-------|-------|----------|
 | Phase 1 | 5 | 33 min | 6.6 min |
 | Phase 2 | 2 | 7.1 min | 3.6 min |
-| Phase 3 | 1 | 3.0 min | 3.0 min |
+| Phase 3 | 2 | 9.6 min | 4.8 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (3 min), 01-05 (22 min), 02-01 (2.5 min), 02-02 (4.6 min), 03-01 (3.0 min)
-- Trend: Phase 3 maintaining Phase 2's fast pace (building on existing patterns)
+- Last 5 plans: 01-05 (22 min), 02-01 (2.5 min), 02-02 (4.6 min), 03-01 (3.0 min), 03-02 (6.6 min)
+- Trend: Phase 3 maintaining consistent pace (reconnection replay required new component)
 
 *Updated after each plan completion*
 
@@ -59,6 +59,10 @@ Recent decisions affecting current work:
 - [Phase 02-02]: Checkpoint approved without verification (user: "didn't check let's continue anyway") - functional testing deferred
 - [Phase 03-01]: Use Tags map for event metadata instead of EventType/EventData fields - Kick listener's RawMessage uses Tags, maintains consistency
 - [Phase 03-01]: Defensive logging for unhandled deletion events - event name has MEDIUM confidence, log any event containing "delete" for validation
+- [Phase 03-02]: Use Redis sorted sets with timestamp scores for replay buffer - ZRANGEBYSCORE provides O(log(N)+M) range queries, simpler than Redis Streams for 60s window
+- [Phase 03-02]: Exclusive range query using `(timestamp` syntax - prevents duplicate deletion delivery when frontend reconnects at exact timestamp
+- [Phase 03-02]: localStorage for timestamp persistence - survives page reloads, enables replay even after browser refresh
+- [Phase 03-02]: Best-effort replay buffer (doesn't fail Pub/Sub on error) - real-time broadcast is critical path, replay buffer is nice-to-have
 
 ### Pending Todos
 
@@ -79,17 +83,17 @@ None yet.
 
 **Phase 3 status:**
 - ✅ Kick deletion event handler (Plan 03-01 complete)
-- ⏳ Kick WebSocket reconnection replay buffer (Plan 03-02 next)
-- ⏳ Kick graceful shutdown (Plan 03-03 pending)
+- ✅ Kick WebSocket reconnection replay buffer (Plan 03-02 complete)
+- ⏳ Kick graceful shutdown (Plan 03-03 next)
 
 **Phase 1 COMPLETE - Phase 2 COMPLETE - Phase 3 IN PROGRESS**
 
-No blockers. Kick deletion events now captured via Pusher WebSocket and published to Redis Streams with Phase 1 schema. Next: reconnection resilience.
+No blockers. Redis-backed replay buffer with 60s TTL enables frontend to request missed deletion events after WebSocket reconnection. Next: load testing and validation.
 
 ## Session Continuity
 
-Last session: 2026-02-18 (Plan 03-01 execution)
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-02-18 (Plan 03-02 execution)
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
 
-**Phase 3 started:** Plan 03-01 complete. Kick deletion events captured via Pusher WebSocket and published to Redis Streams.
+**Phase 3 progress:** Plans 03-01 and 03-02 complete. Kick deletion events captured and reconnection replay buffer implemented.
