@@ -65,9 +65,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Reliability & Edge Cases
 
-- [ ] **REL-01**: Deletion events persisted for 1-minute replay window on reconnect
-- [ ] **REL-02**: WebSocket reconnection triggers deletion event replay
-- [ ] **REL-03**: System handles Redis Pub/Sub message loss gracefully (best-effort delivery acceptable)
+- [x] **REL-01**: Deletion events persisted for 1-minute replay window on reconnect
+- [x] **REL-02**: WebSocket reconnection triggers deletion event replay
+- [x] **REL-03**: System handles Redis Pub/Sub message loss gracefully (best-effort delivery acceptable)
 - [ ] **REL-04**: Load testing validates batch deletion performance (1,000+ messages)
 - [ ] **REL-05**: DOM update optimization prevents UI blocking during large deletions
 
@@ -142,9 +142,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | KICK-01 | Phase 3 | Complete |
 | KICK-02 | Phase 3 | Complete |
 | KICK-03 | Phase 3 | Complete |
-| REL-01 | Phase 3 | Pending |
-| REL-02 | Phase 3 | Pending |
-| REL-03 | Phase 3 | Pending |
+| REL-01 | Phase 3 | Complete |
+| REL-02 | Phase 3 | Complete |
+| REL-03 | Phase 3 | Complete |
 | REL-04 | Phase 3 | Pending |
 | REL-05 | Phase 3 | Pending |
 | TIKTOK-01 | Phase 4 | Pending |
