@@ -46,11 +46,11 @@ Plans:
   1. When YouTube moderator deletes message, it disappears from overlay within 60 seconds
   2. YouTube deletion detection operates within existing quota limits (no additional API cost)
   3. YouTube deletion events flow through same Message ID Registry and pipeline established in Phase 1
-**Plans**: TBD
+**Plans**: 2 plans in 2 waves
 
 Plans:
-- [ ] 02-01: TBD during planning
-- [ ] 02-02: TBD during planning
+- [ ] 02-01-PLAN.md — YouTube parser deletion event mapping to Phase 1 schema
+- [ ] 02-02-PLAN.md — YouTube registry integration and end-to-end verification
 
 ### Phase 3: Kick Integration + Edge Cases
 **Goal**: Add Kick WebSocket deletion events and implement reconnection handling for all platforms
