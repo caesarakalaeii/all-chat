@@ -26,6 +26,10 @@ type ProcessorMetrics struct {
 	// Routing & Publishing
 	MessagesPublished      *prometheus.CounterVec
 	FanoutDuration         *prometheus.HistogramVec
+
+	// Deletion Buffer
+	DeletionsBuffered      prometheus.Counter
+	BufferedDeletionsApplied prometheus.Counter
 }
 
 // NewProcessorMetrics creates a new set of processor metrics
@@ -118,6 +122,18 @@ func NewProcessorMetrics() *ProcessorMetrics {
 				Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5},
 			},
 			[]string{"service"},
+		),
+		DeletionsBuffered: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "processor_deletions_buffered_total",
+				Help: "Number of deletion events buffered for messages not yet in registry",
+			},
+		),
+		BufferedDeletionsApplied: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "processor_buffered_deletions_applied_total",
+				Help: "Number of buffered deletions applied when message arrived",
+			},
 		),
 	}
 }

@@ -121,8 +121,9 @@ func main() {
 	msgIDRegistry := registry.NewRedisRegistry(redisClient, 1*time.Hour)
 	log.Info("Initialized Message ID Registry", zap.Duration("ttl", 1*time.Hour))
 
-	// TODO(Plan 01-02): Pass msgIDRegistry to message handler for storing platform IDs
-	_ = msgIDRegistry // Will be used in Plan 01-02
+	// Initialize Deletion Buffer (60 second TTL per requirements)
+	deletionBuffer := registry.NewRedisDeletionBuffer(redisClient, 60*time.Second)
+	log.Info("Initialized Deletion Buffer", zap.Duration("ttl", 60*time.Second))
 
 	// Initialize components
 	twitchNormalizer := normalizer.NewTwitchNormalizer()
@@ -489,7 +490,7 @@ func main() {
 	}
 
 	// Create and start stream consumer
-	streamConsumer := consumer.NewStreamConsumer(redisClient, log, processorMetrics, messageHandler)
+	streamConsumer := consumer.NewStreamConsumer(redisClient, log, processorMetrics, messageHandler, msgIDRegistry, deletionBuffer)
 	if err := streamConsumer.Start(ctx); err != nil {
 		log.Fatal("Failed to start stream consumer", zap.Error(err))
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -33,21 +34,25 @@ type MessageHandler func(ctx context.Context, msg *models.RawChatMessage) error
 
 // StreamConsumer consumes messages from Redis Streams
 type StreamConsumer struct {
-	client  *redis.Client
-	logger  *zap.Logger
-	metrics *metrics.ProcessorMetrics
-	handler MessageHandler
-	stopCh  chan struct{}
+	client         *redis.Client
+	logger         *zap.Logger
+	metrics        *metrics.ProcessorMetrics
+	handler        MessageHandler
+	stopCh         chan struct{}
+	msgIDRegistry  registry.MessageIDRegistry
+	deletionBuffer registry.DeletionBuffer
 }
 
 // NewStreamConsumer creates a new Redis Streams consumer
-func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.ProcessorMetrics, handler MessageHandler) *StreamConsumer {
+func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.ProcessorMetrics, handler MessageHandler, msgIDRegistry registry.MessageIDRegistry, deletionBuffer registry.DeletionBuffer) *StreamConsumer {
 	return &StreamConsumer{
-		client:  client,
-		logger:  logger,
-		metrics: m,
-		handler: handler,
-		stopCh:  make(chan struct{}),
+		client:         client,
+		logger:         logger,
+		metrics:        m,
+		handler:        handler,
+		stopCh:         make(chan struct{}),
+		msgIDRegistry:  msgIDRegistry,
+		deletionBuffer: deletionBuffer,
 	}
 }
 
@@ -184,7 +189,47 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 		zap.String("platform", rawMsg.Platform),
 		zap.String("channel", rawMsg.ChannelID),
 		zap.String("user", rawMsg.Username),
+		zap.String("event_type", rawMsg.EventType),
 	)
+
+	// Handle deletion events specially
+	if rawMsg.EventType == "message_deletion" {
+		return c.processDeletionEvent(ctx, rawMsg)
+	}
+
+	// For regular messages, check if deletion was buffered
+	if rawMsg.EventType == "" || rawMsg.EventType == "chat_message" {
+		// Extract platform message ID from tags
+		platformMsgID := rawMsg.Tags["id"]
+		if platformMsgID != "" {
+			// NOTE: registry.Add() happens in twitch-listener per user decision (CONTEXT.md)
+			// We only CHECK the buffer here for pending deletions
+
+			// Check if deletion was buffered for this message
+			deletion, err := c.deletionBuffer.Get(ctx, rawMsg.Platform, rawMsg.ChannelID, platformMsgID)
+			if err != nil {
+				c.logger.Error("Failed to check deletion buffer", zap.Error(err))
+			} else if deletion != nil {
+				// Apply buffered deletion
+				c.logger.Info("Applying buffered deletion",
+					zap.String("platform_msg_id", platformMsgID),
+					zap.String("deletion_type", deletion.EventData["deletion_type"].(string)),
+				)
+
+				// Process deletion event immediately
+				if err := c.processDeletionEvent(ctx, deletion); err != nil {
+					c.logger.Error("Failed to process buffered deletion", zap.Error(err))
+				}
+
+				// Remove from buffer
+				if err := c.deletionBuffer.Remove(ctx, rawMsg.Platform, rawMsg.ChannelID, platformMsgID); err != nil {
+					c.logger.Error("Failed to remove from buffer", zap.Error(err))
+				}
+
+				c.metrics.BufferedDeletionsApplied.Inc()
+			}
+		}
+	}
 
 	// Call the handler (which does normalization + enrichment + publishing)
 	start := time.Now()
@@ -207,4 +252,61 @@ func (c *StreamConsumer) GetPendingCount(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return pending.Count, nil
+}
+
+// processDeletionEvent handles deletion events from Redis Streams
+func (c *StreamConsumer) processDeletionEvent(ctx context.Context, raw *models.RawChatMessage) error {
+	deletionType, ok := raw.EventData["deletion_type"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid deletion_type in event data")
+	}
+
+	switch deletionType {
+	case "single":
+		// Lookup internal UUID from platform message ID
+		platformMsgID, ok := raw.EventData["target_msg_id"].(string)
+		if !ok {
+			return fmt.Errorf("missing target_msg_id for single deletion")
+		}
+
+		internalUUID, err := c.msgIDRegistry.Lookup(ctx, raw.Platform, raw.ChannelID, platformMsgID)
+		if err != nil {
+			// Message not in registry yet - buffer deletion
+			c.logger.Debug("Buffering deletion for message not yet in registry",
+				zap.String("platform_msg_id", platformMsgID),
+			)
+
+			if err := c.deletionBuffer.Add(ctx, raw.Platform, raw.ChannelID, platformMsgID, raw); err != nil {
+				c.logger.Error("Failed to buffer deletion", zap.Error(err))
+				return err
+			}
+
+			c.metrics.DeletionsBuffered.Inc()
+			return nil // Successfully buffered
+		}
+
+		// Message found - proceed with deletion
+		raw.EventData["target_uuid"] = internalUUID
+
+	case "batch", "clear":
+		// No registry lookup needed - frontend filters by user ID or clears all
+		// EventData already contains target_user_id for batch, nothing for clear
+
+	default:
+		c.logger.Warn("Unknown deletion type", zap.String("type", deletionType))
+		return fmt.Errorf("unknown deletion type: %s", deletionType)
+	}
+
+	// Continue with normal processing (normalize, enrich, route, publish)
+	// Handler will call normalizer which handles deletion events specially
+	start := time.Now()
+	if err := c.handler(ctx, raw); err != nil {
+		c.metrics.RecordMessageProcessed("message-processor", raw.Platform, "deletion_handler", "failed")
+		return fmt.Errorf("deletion handler failed: %w", err)
+	}
+
+	c.metrics.RecordMessageProcessed("message-processor", raw.Platform, "deletion_handler", "success")
+	c.metrics.ProcessingDuration.WithLabelValues("message-processor", raw.Platform).Observe(time.Since(start).Seconds())
+
+	return nil
 }
