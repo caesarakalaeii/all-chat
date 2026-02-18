@@ -56,12 +56,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Frontend Integration
 
-- [ ] **FRONTEND-01**: Frontend tracks platform message IDs in DOM elements
-- [ ] **FRONTEND-02**: Frontend receives deletion events via WebSocket
-- [ ] **FRONTEND-03**: Frontend removes messages immediately on deletion event (no animation)
-- [ ] **FRONTEND-04**: Frontend handles single message deletion
-- [ ] **FRONTEND-05**: Frontend handles batch deletion (timeout/ban)
-- [ ] **FRONTEND-06**: Frontend handles full chat clear
+- [x] **FRONTEND-01**: Frontend tracks platform message IDs in DOM elements
+- [x] **FRONTEND-02**: Frontend receives deletion events via WebSocket
+- [x] **FRONTEND-03**: Frontend removes messages immediately on deletion event (no animation)
+- [x] **FRONTEND-04**: Frontend handles single message deletion
+- [x] **FRONTEND-05**: Frontend handles batch deletion (timeout/ban)
+- [x] **FRONTEND-06**: Frontend handles full chat clear
 
 ### Reliability & Edge Cases
 
@@ -130,12 +130,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TWITCH-02 | Phase 1 | Pending |
 | TWITCH-03 | Phase 1 | Pending |
 | TWITCH-04 | Phase 1 | Pending |
-| FRONTEND-01 | Phase 1 | Pending |
-| FRONTEND-02 | Phase 1 | Pending |
-| FRONTEND-03 | Phase 1 | Pending |
-| FRONTEND-04 | Phase 1 | Pending |
-| FRONTEND-05 | Phase 1 | Pending |
-| FRONTEND-06 | Phase 1 | Pending |
+| FRONTEND-01 | Phase 1 | Complete |
+| FRONTEND-02 | Phase 1 | Complete |
+| FRONTEND-03 | Phase 1 | Complete |
+| FRONTEND-04 | Phase 1 | Complete |
+| FRONTEND-05 | Phase 1 | Complete |
+| FRONTEND-06 | Phase 1 | Complete |
 | YOUTUBE-01 | Phase 2 | Pending |
 | YOUTUBE-02 | Phase 2 | Pending |
 | YOUTUBE-03 | Phase 2 | Pending |
