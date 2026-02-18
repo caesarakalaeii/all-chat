@@ -20,15 +20,15 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **DEL-01**: System detects single message deletion events from platforms
 - [ ] **DEL-02**: System detects user batch deletion events (timeout/ban)
 - [ ] **DEL-03**: System detects full chat clear events
-- [ ] **DEL-04**: Deletion events normalized to unified schema across all platforms
-- [ ] **DEL-05**: Deletion events propagate through existing Redis Streams → Pub/Sub pipeline
-- [ ] **DEL-06**: Batch deletions use coalesced schema to prevent amplification (single event for multiple messages)
+- [x] **DEL-04**: Deletion events normalized to unified schema across all platforms
+- [x] **DEL-05**: Deletion events propagate through existing Redis Streams → Pub/Sub pipeline
+- [x] **DEL-06**: Batch deletions use coalesced schema to prevent amplification (single event for multiple messages)
 
 ### Race Condition Handling
 
-- [ ] **RACE-01**: System buffers deletion events for messages not yet received (60-second window)
-- [ ] **RACE-02**: Deletion events processed after corresponding messages arrive
-- [ ] **RACE-03**: Expired deletion events (no matching message after 60s) are discarded without error
+- [x] **RACE-01**: System buffers deletion events for messages not yet received (60-second window)
+- [x] **RACE-02**: Deletion events processed after corresponding messages arrive
+- [x] **RACE-03**: Expired deletion events (no matching message after 60s) are discarded without error
 
 ### Twitch Integration
 
@@ -120,12 +120,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEL-01 | Phase 1 | Pending |
 | DEL-02 | Phase 1 | Pending |
 | DEL-03 | Phase 1 | Pending |
-| DEL-04 | Phase 1 | Pending |
-| DEL-05 | Phase 1 | Pending |
-| DEL-06 | Phase 1 | Pending |
-| RACE-01 | Phase 1 | Pending |
-| RACE-02 | Phase 1 | Pending |
-| RACE-03 | Phase 1 | Pending |
+| DEL-04 | Phase 1 | Complete |
+| DEL-05 | Phase 1 | Complete |
+| DEL-06 | Phase 1 | Complete |
+| RACE-01 | Phase 1 | Complete |
+| RACE-02 | Phase 1 | Complete |
+| RACE-03 | Phase 1 | Complete |
 | TWITCH-01 | Phase 1 | Pending |
 | TWITCH-02 | Phase 1 | Pending |
 | TWITCH-03 | Phase 1 | Pending |
