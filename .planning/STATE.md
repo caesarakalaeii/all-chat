@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 ## Current Position
 
 Phase: 1 of 4 (Foundation + Twitch)
-Plan: 1 of 5 in current phase
+Plan: 2 of 5 in current phase
 Status: Executing
-Last activity: 2026-02-18 — Completed Plan 01-01: Message ID Registry Infrastructure
+Last activity: 2026-02-18 — Completed Plan 01-04: Frontend Deletion Event Handling
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 3 minutes
-- Total execution time: 0.05 hours
+- Total plans completed: 2
+- Average duration: 2.5 minutes
+- Total execution time: 0.08 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 1 | 1 | 3 min | 3 min |
+| Phase 1 | 2 | 5 min | 2.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min)
-- Trend: First plan completed
+- Last 5 plans: 01-01 (3 min), 01-04 (2 min)
+- Trend: Consistent velocity
 
 *Updated after each plan completion*
 
@@ -45,9 +45,9 @@ Recent decisions affecting current work:
 - **Plan 01-01:** Use unidirectional mapping (platform ID → UUID only) for message ID registry - deletion events always provide platform ID, bidirectional would add unnecessary complexity and 2x memory overhead
 - **Plan 01-01:** 1-hour TTL per channel for message ID mappings - balances memory usage with deletion latency, TTL refreshes on each add for active channels
 - **Plan 01-01:** Store timestamp with UUID for debugging - value format {uuid}|{timestamp} enables debugging without additional Redis operations
-- Research deletion formats first: Each platform provides different event structures and identifiers (pending implementation)
-- Additive feature: Existing message flow continues unchanged; deletion adds parallel event handling (pending implementation)
-- Remove completely from overlay: User requested immediate removal without placeholder or fade (pending implementation)
+- **Plan 01-04:** Process deletion events before regular messages in WebSocket handler - prevents race conditions where message renders before deletion arrives
+- **Plan 01-04:** Use React 18 automatic batching for deletions - single setMessages call sufficient, no manual optimization needed
+- **Plan 01-04:** Instant removal without animation - user requested immediate removal without placeholder or fade (implemented)
 
 ### Pending Todos
 
@@ -57,11 +57,11 @@ None yet.
 
 **Phase 1 readiness:**
 - ✅ Message ID Registry implemented (Plan 01-01 complete)
-- Race condition handling strategy needs decision: frontend deletion buffer vs routing through enrichment pipeline
-- Batch deletion threshold unknown (load testing required to establish DOM operation limits)
+- ✅ Frontend deletion event handling implemented (Plan 01-04 complete)
+- Plans 01-02, 01-03, 01-05 remain (Twitch listener, message processor, E2E testing)
 
 ## Session Continuity
 
-Last session: 2026-02-18 (Plan 01-01 execution)
-Stopped at: Completed Plan 01-01 - Message ID Registry Infrastructure (commits b810ad4, 0be3de5)
+Last session: 2026-02-18 (Plan 01-04 execution)
+Stopped at: Completed Plan 01-04 - Frontend Deletion Event Handling (commits 39b48d3, 1974ee4)
 Resume file: None
