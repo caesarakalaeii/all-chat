@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gempir/go-twitch-irc/v4"
@@ -16,6 +17,7 @@ type ConnectionManager struct {
 	client      *twitch.Client
 	parser      *Parser
 	publisher   *publisher.StreamPublisher
+	registry    registry.MessageIDRegistry // Registry for message ID tracking
 	logger      *zap.Logger
 	metrics     *metrics.ListenerMetrics
 	connected   bool
@@ -36,6 +38,7 @@ func NewConnectionManager(
 	config Config,
 	parser *Parser,
 	pub *publisher.StreamPublisher,
+	reg registry.MessageIDRegistry,
 	logger *zap.Logger,
 	m *metrics.ListenerMetrics,
 ) *ConnectionManager {
@@ -45,6 +48,7 @@ func NewConnectionManager(
 		client:    client,
 		parser:    parser,
 		publisher: pub,
+		registry:  reg,
 		logger:    logger,
 		metrics:   m,
 		stopChan:  make(chan struct{}),
@@ -166,7 +170,26 @@ func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage)
 		return
 	}
 
-	// Publish to Redis Streams
+	// Add to registry IMMEDIATELY at capture point (per CONTEXT.md user decision)
+	// This happens BEFORE publishing to Redis Streams
+	if platformMsgID := rawMsg.Tags["id"]; platformMsgID != "" {
+		ctx := context.Background()
+		if err := cm.registry.Add(ctx, rawMsg.Platform, rawMsg.ChannelID, platformMsgID, rawMsg.MessageID); err != nil {
+			cm.logger.Error("Failed to add message to registry at listener",
+				zap.Error(err),
+				zap.String("platform_msg_id", platformMsgID),
+				zap.String("internal_uuid", rawMsg.MessageID),
+			)
+			// Continue processing - registry is best-effort
+		} else {
+			cm.logger.Debug("Added message to registry at capture",
+				zap.String("platform_msg_id", platformMsgID),
+				zap.String("internal_uuid", rawMsg.MessageID),
+			)
+		}
+	}
+
+	// Publish to Redis Streams (AFTER registry)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
