@@ -139,6 +139,63 @@ func (p *Parser) ParsePrivateMessage(msg twitch.PrivateMessage) (*models.RawChat
 	return rawMsg, nil
 }
 
+// ParseClearMessage converts Twitch CLEARMSG to RawChatMessage deletion event
+func (p *Parser) ParseClearMessage(msg twitch.ClearMessage) *models.RawChatMessage {
+	channelName := strings.TrimPrefix(msg.Channel, "#")
+
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(), // New UUID for deletion event itself
+		Platform:  "twitch",
+		ChannelID: channelName,
+		UserID:    "",        // Not provided in CLEARMSG
+		Username:  msg.Login, // User whose message was deleted (if available)
+		Text:      "",        // No message text for deletion events
+		Timestamp: time.Now().UTC(),
+		Tags:      msg.Tags, // Preserve IRC tags for debugging
+		EventType: "message_deletion",
+		EventData: map[string]interface{}{
+			"deletion_type": "single",
+			"target_msg_id": msg.TargetMsgID, // Platform message ID to delete
+		},
+	}
+}
+
+// ParseClearChat converts Twitch CLEARCHAT to RawChatMessage deletion event
+func (p *Parser) ParseClearChat(msg twitch.ClearChatMessage) *models.RawChatMessage {
+	channelName := strings.TrimPrefix(msg.Channel, "#")
+
+	// Determine deletion type: batch (user timeout/ban) or clear (full chat)
+	deletionType := "clear"
+	eventData := map[string]interface{}{
+		"deletion_type": deletionType,
+	}
+
+	if msg.TargetUserID != "" {
+		// User timeout or ban - batch deletion
+		deletionType = "batch"
+		eventData["deletion_type"] = deletionType
+		eventData["target_user_id"] = msg.TargetUserID
+		eventData["target_username"] = msg.TargetUsername
+
+		if msg.BanDuration > 0 {
+			eventData["ban_duration"] = msg.BanDuration // Timeout duration in seconds
+		}
+	}
+
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: channelName,
+		UserID:    msg.TargetUserID,   // Empty for full clear
+		Username:  msg.TargetUsername, // Empty for full clear
+		Text:      "",
+		Timestamp: time.Now().UTC(),
+		Tags:      msg.Tags,
+		EventType: "message_deletion",
+		EventData: eventData,
+	}
+}
+
 // boolToString converts a boolean to "1" or "0"
 func boolToString(b bool) string {
 	if b {
