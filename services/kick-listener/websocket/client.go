@@ -24,7 +24,8 @@ const (
 	pusherUnsubscribe           = "pusher:unsubscribe"
 
 	// Kick chat event
-	kickChatMessageEvent = "App\\Events\\ChatMessageSentEvent"
+	kickChatMessageEvent     = "App\\Events\\ChatMessageSentEvent"
+	kickMessageDeletedEvent  = "App\\Events\\ChatMessageDeletedEvent"
 
 	// Kick channel format (chatrooms.<chatroom_id>.v2)
 	kickChannelFormat = "chatrooms.%d.v2"
@@ -102,16 +103,21 @@ func (cfg Config) urlForCluster(cluster string) string {
 // MessageHandler is called when a chat message is received
 type MessageHandler func(channel string, message *KickChatMessage)
 
+// DeletionHandler is called when a message deletion event is received
+type DeletionHandler func(channel string, event *KickMessageDeletedEvent)
+
 // Client represents a Pusher WebSocket client for Kick
 type Client struct {
-	conn           *websocket.Conn
-	connMu         sync.RWMutex
-	writeMu        sync.Mutex // Protects concurrent writes to WebSocket
-	logger         *zap.Logger
-	messageHandler MessageHandler
-	config         Config
-	clusterOrder   []string
-	activeCluster  string
+	conn            *websocket.Conn
+	connMu          sync.RWMutex
+	writeMu         sync.Mutex // Protects concurrent writes to WebSocket
+	handlerMu       sync.RWMutex
+	logger          *zap.Logger
+	messageHandler  MessageHandler
+	deletionHandler DeletionHandler
+	config          Config
+	clusterOrder    []string
+	activeCluster   string
 
 	// Channel subscriptions
 	subscribedChannels map[string]int
@@ -149,6 +155,13 @@ func NewClient(cfg Config, messageHandler MessageHandler, logger *zap.Logger) *C
 		ctx:                ctx,
 		cancel:             cancel,
 	}
+}
+
+// SetDeletionHandler sets the deletion event handler
+func (c *Client) SetDeletionHandler(handler DeletionHandler) {
+	c.handlerMu.Lock()
+	defer c.handlerMu.Unlock()
+	c.deletionHandler = handler
 }
 
 // Connect establishes connection to Pusher WebSocket
@@ -618,7 +631,17 @@ func (c *Client) handleMessage(data []byte) {
 	case kickChatMessageEvent:
 		c.handleChatMessage(msg.Channel, msg.Data)
 
+	case kickMessageDeletedEvent:
+		c.handleMessageDeleted(msg.Channel, msg.Data)
+
 	default:
+		// Log any unhandled events containing "delete" or "Delete" for validation
+		if strings.Contains(strings.ToLower(msg.Event), "delete") {
+			c.logger.Warn("Unhandled deletion-related Pusher event",
+				zap.String("event", msg.Event),
+				zap.String("channel", msg.Channel),
+			)
+		}
 		c.logger.Debug("Unhandled Pusher event", zap.String("event", msg.Event))
 	}
 }
@@ -640,6 +663,30 @@ func (c *Client) handleChatMessage(channel string, data json.RawMessage) {
 	// Call message handler
 	if c.messageHandler != nil {
 		c.messageHandler(channel, &chatMsg)
+	}
+}
+
+// handleMessageDeleted processes a Kick message deletion event
+func (c *Client) handleMessageDeleted(channel string, data json.RawMessage) {
+	var deletedEvent KickMessageDeletedEvent
+	if err := json.Unmarshal(data, &deletedEvent); err != nil {
+		c.logger.Error("Failed to unmarshal deletion event", zap.Error(err))
+		return
+	}
+
+	c.logger.Debug("Received message deletion",
+		zap.String("channel", channel),
+		zap.String("deleted_message_id", deletedEvent.DeletedMessage.ID),
+		zap.Int("deleted_by", deletedEvent.DeletedMessage.DeletedBy),
+	)
+
+	// Call deletion handler (wired in main.go)
+	c.handlerMu.RLock()
+	handler := c.deletionHandler
+	c.handlerMu.RUnlock()
+
+	if handler != nil {
+		handler(channel, &deletedEvent)
 	}
 }
 

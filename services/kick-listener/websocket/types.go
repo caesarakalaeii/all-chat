@@ -107,3 +107,13 @@ type PusherErrorMessage struct {
 	Code    int    `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
 }
+
+// KickMessageDeletedEvent represents a deleted message event from Kick
+// Event: "App\\Events\\ChatMessageDeletedEvent"
+type KickMessageDeletedEvent struct {
+	DeletedMessage struct {
+		ID         string `json:"id"`          // Kick platform message ID
+		DeletedBy  int    `json:"deleted_by"`  // User ID who deleted message
+		ChatroomID string `json:"chatroom_id"` // Chatroom ID
+	} `json:"deletedMessage"`
+}
