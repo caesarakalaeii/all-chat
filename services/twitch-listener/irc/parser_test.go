@@ -332,3 +332,86 @@ func TestBoolToString(t *testing.T) {
 	assert.Equal(t, "1", boolToString(true))
 	assert.Equal(t, "0", boolToString(false))
 }
+
+func TestParseClearMessage(t *testing.T) {
+	parser := NewParser()
+
+	msg := twitch.ClearMessage{
+		Channel:     "#shroud",
+		Login:       "testuser",
+		Message:     "inappropriate message",
+		TargetMsgID: "abc-123-def-456",
+		Tags:        map[string]string{"room-id": "12345"},
+	}
+
+	raw := parser.ParseClearMessage(msg)
+
+	assert.NotNil(t, raw)
+	assert.Equal(t, "message_deletion", raw.EventType)
+	assert.Equal(t, "twitch", raw.Platform)
+	assert.Equal(t, "shroud", raw.ChannelID)
+	assert.Equal(t, "single", raw.EventData["deletion_type"])
+	assert.Equal(t, "abc-123-def-456", raw.EventData["target_msg_id"])
+
+	// Verify UUID format for deletion event ID
+	_, uuidErr := uuid.Parse(raw.MessageID)
+	assert.NoError(t, uuidErr, "MessageID should be a valid UUID")
+
+	// Verify timestamp is set
+	assert.False(t, raw.Timestamp.IsZero())
+}
+
+func TestParseClearChat_Batch(t *testing.T) {
+	parser := NewParser()
+
+	msg := twitch.ClearChatMessage{
+		Channel:        "#shroud",
+		TargetUserID:   "999",
+		TargetUsername: "spammer",
+		BanDuration:    600, // 10 minute timeout
+		Tags:           map[string]string{"room-id": "12345"},
+	}
+
+	raw := parser.ParseClearChat(msg)
+
+	assert.NotNil(t, raw)
+	assert.Equal(t, "message_deletion", raw.EventType)
+	assert.Equal(t, "batch", raw.EventData["deletion_type"])
+	assert.Equal(t, "999", raw.EventData["target_user_id"])
+	assert.Equal(t, "spammer", raw.EventData["target_username"])
+	assert.Equal(t, 600, raw.EventData["ban_duration"])
+
+	// Verify user fields populated for batch deletion
+	assert.Equal(t, "999", raw.UserID)
+	assert.Equal(t, "spammer", raw.Username)
+
+	// Verify UUID format for deletion event ID
+	_, uuidErr := uuid.Parse(raw.MessageID)
+	assert.NoError(t, uuidErr, "MessageID should be a valid UUID")
+}
+
+func TestParseClearChat_FullClear(t *testing.T) {
+	parser := NewParser()
+
+	msg := twitch.ClearChatMessage{
+		Channel:        "#shroud",
+		TargetUserID:   "", // Empty = full chat clear
+		TargetUsername: "",
+		Tags:           map[string]string{"room-id": "12345"},
+	}
+
+	raw := parser.ParseClearChat(msg)
+
+	assert.NotNil(t, raw)
+	assert.Equal(t, "message_deletion", raw.EventType)
+	assert.Equal(t, "clear", raw.EventData["deletion_type"])
+	assert.NotContains(t, raw.EventData, "target_user_id")
+
+	// Verify user fields are empty for full clear
+	assert.Equal(t, "", raw.UserID)
+	assert.Equal(t, "", raw.Username)
+
+	// Verify UUID format for deletion event ID
+	_, uuidErr := uuid.Parse(raw.MessageID)
+	assert.NoError(t, uuidErr, "MessageID should be a valid UUID")
+}
