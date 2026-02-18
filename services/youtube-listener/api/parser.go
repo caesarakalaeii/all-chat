@@ -96,19 +96,22 @@ func (p *Parser) ParseChatMessage(msg *youtube.LiveChatMessage, channelID, strea
 		}
 
 	} else if msg.Snippet.MessageDeletedDetails != nil {
-		// Message deleted (moderation) event
-		eventType = "message_deleted"
-		text = "Message deleted"
-		eventData["deleted_message_id"] = msg.Snippet.MessageDeletedDetails.DeletedMessageId
+		// Message deleted (moderation) event - Phase 1 single deletion schema
+		eventType = "message_deletion"
+		text = ""
+		eventData["deletion_type"] = "single"
+		eventData["target_msg_id"] = msg.Snippet.MessageDeletedDetails.DeletedMessageId
 
 	} else if msg.Snippet.UserBannedDetails != nil {
-		// User banned (moderation) event
-		eventType = "user_banned"
-		text = "User banned"
+		// User banned (moderation) event - Phase 1 batch deletion schema
+		eventType = "message_deletion"
+		text = ""
+		eventData["deletion_type"] = "batch"
 		if msg.Snippet.UserBannedDetails.BannedUserDetails != nil {
-			eventData["banned_user_id"] = msg.Snippet.UserBannedDetails.BannedUserDetails.ChannelId
-			eventData["banned_user_name"] = msg.Snippet.UserBannedDetails.BannedUserDetails.DisplayName
+			eventData["target_user_id"] = msg.Snippet.UserBannedDetails.BannedUserDetails.ChannelId
+			eventData["target_username"] = msg.Snippet.UserBannedDetails.BannedUserDetails.DisplayName
 		}
+		// Keep ban metadata for logging
 		eventData["ban_type"] = msg.Snippet.UserBannedDetails.BanType
 		if msg.Snippet.UserBannedDetails.BanDurationSeconds > 0 {
 			eventData["ban_duration_seconds"] = msg.Snippet.UserBannedDetails.BanDurationSeconds
@@ -117,6 +120,7 @@ func (p *Parser) ParseChatMessage(msg *youtube.LiveChatMessage, channelID, strea
 
 	// Build tags map with YouTube-specific metadata
 	tags := make(map[string]string)
+	tags["youtube_message_id"] = msg.Id
 	tags["channel_id"] = msg.AuthorDetails.ChannelId
 	tags["channel_url"] = msg.AuthorDetails.ChannelUrl
 	displayName := strings.TrimPrefix(msg.AuthorDetails.DisplayName, "@")
