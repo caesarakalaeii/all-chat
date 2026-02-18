@@ -18,6 +18,7 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/models"
 	"github.com/caesar/all-chat/services/message-processor/normalizer"
 	"github.com/caesar/all-chat/services/message-processor/publisher"
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/message-processor/router"
 	"github.com/caesar/all-chat/services/message-processor/sessions"
 	"github.com/caesar/all-chat/services/message-processor/seventv"
@@ -115,6 +116,13 @@ func main() {
 	// Initialize metrics (available via /metrics endpoint)
 	processorMetrics := metrics.NewProcessorMetrics()
 	log.Info("Initialized Prometheus metrics")
+
+	// Initialize Message ID Registry
+	msgIDRegistry := registry.NewRedisRegistry(redisClient, 1*time.Hour)
+	log.Info("Initialized Message ID Registry", zap.Duration("ttl", 1*time.Hour))
+
+	// TODO(Plan 01-02): Pass msgIDRegistry to message handler for storing platform IDs
+	_ = msgIDRegistry // Will be used in Plan 01-02
 
 	// Initialize components
 	twitchNormalizer := normalizer.NewTwitchNormalizer()
