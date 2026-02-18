@@ -20,9 +20,25 @@ export type EventType =
   // TikTok
   | 'gift' | 'follow' | 'like_aggregate' | 'share'
   // System
-  | 'token_expiration_warning';
+  | 'token_expiration_warning'
+  // Deletion events
+  | 'message_deletion';
 
 export type EventTier = 'low' | 'medium' | 'high';
+
+export type DeletionType = 'single' | 'batch' | 'clear';
+
+export interface DeletionMetadata {
+  deletion_type: DeletionType;
+  // Single message deletion
+  target_uuid?: string;        // Internal message UUID to delete
+  target_msg_id?: string;      // Platform message ID (debugging)
+  // Batch deletion (user timeout/ban)
+  target_user_id?: string;     // User ID to delete all messages from
+  target_username?: string;    // Username (display purposes)
+  ban_duration?: number;       // Timeout duration in seconds (0 = permanent ban)
+  // Full clear has no additional metadata
+}
 
 export interface EventInfo {
   type: EventType;
@@ -35,7 +51,7 @@ export interface EventInfo {
   duration: number; // Display duration in seconds
   aggregation_id?: string; // For TikTok like updates
   is_update: boolean; // True for TikTok like aggregate updates
-  metadata: Record<string, unknown>;
+  metadata: Record<string, unknown>; // Use DeletionMetadata interface for message_deletion events
 }
 
 export interface ChatMessage {
