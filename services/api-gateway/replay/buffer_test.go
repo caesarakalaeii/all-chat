@@ -29,22 +29,22 @@ func TestReplayBuffer_AddAndGetSince(t *testing.T) {
 
 	// Add deletion events at different timestamps
 	event1 := &DeletionEvent{
-		Type:       "single",
-		TargetUUID: "msg-1",
-		Platform:   "twitch",
-		Timestamp:  time.Unix(0, 1000*1000000), // 1000ms
+		DeletionType: "single",
+		TargetUUID:   "msg-1",
+		Platform:     "twitch",
+		Timestamp:    time.Unix(0, 1000*1000000), // 1000ms
 	}
 	event2 := &DeletionEvent{
-		Type:       "single",
-		TargetUUID: "msg-2",
-		Platform:   "twitch",
-		Timestamp:  time.Unix(0, 2000*1000000), // 2000ms
+		DeletionType: "single",
+		TargetUUID:   "msg-2",
+		Platform:     "twitch",
+		Timestamp:    time.Unix(0, 2000*1000000), // 2000ms
 	}
 	event3 := &DeletionEvent{
-		Type:       "batch",
+		DeletionType: "batch",
 		TargetUserID: "user-1",
-		Platform:   "youtube",
-		Timestamp:  time.Unix(0, 3000*1000000), // 3000ms
+		Platform:     "youtube",
+		Timestamp:    time.Unix(0, 3000*1000000), // 3000ms
 	}
 
 	// Add events
@@ -71,10 +71,10 @@ func TestReplayBuffer_GetSinceExclusiveBound(t *testing.T) {
 
 	// Add event at exact timestamp 2000ms
 	event := &DeletionEvent{
-		Type:       "single",
-		TargetUUID: "msg-1",
-		Platform:   "kick",
-		Timestamp:  time.Unix(0, 2000*1000000),
+		DeletionType: "single",
+		TargetUUID:   "msg-1",
+		Platform:     "kick",
+		Timestamp:    time.Unix(0, 2000*1000000),
 	}
 	require.NoError(t, buffer.Add(ctx, overlayID, event))
 
@@ -100,10 +100,10 @@ func TestReplayBuffer_TTLExpiration(t *testing.T) {
 
 	// Add event
 	event := &DeletionEvent{
-		Type:       "single",
-		TargetUUID: "msg-1",
-		Platform:   "twitch",
-		Timestamp:  time.Now(),
+		DeletionType: "single",
+		TargetUUID:   "msg-1",
+		Platform:     "twitch",
+		Timestamp:    time.Now(),
 	}
 	require.NoError(t, buffer.Add(ctx, overlayID, event))
 
@@ -145,16 +145,16 @@ func TestReplayBuffer_MultipleOverlaysNoConflict(t *testing.T) {
 
 	// Add events for different overlays
 	event1 := &DeletionEvent{
-		Type:       "single",
-		TargetUUID: "overlay1-msg",
-		Platform:   "twitch",
-		Timestamp:  time.Now(),
+		DeletionType: "single",
+		TargetUUID:   "overlay1-msg",
+		Platform:     "twitch",
+		Timestamp:    time.Now(),
 	}
 	event2 := &DeletionEvent{
-		Type:       "single",
-		TargetUUID: "overlay2-msg",
-		Platform:   "youtube",
-		Timestamp:  time.Now(),
+		DeletionType: "single",
+		TargetUUID:   "overlay2-msg",
+		Platform:     "youtube",
+		Timestamp:    time.Now(),
 	}
 
 	require.NoError(t, buffer.Add(ctx, "overlay-1", event1))
@@ -183,16 +183,16 @@ func TestReplayBuffer_Prune(t *testing.T) {
 
 	// Add events at different timestamps
 	oldEvent := &DeletionEvent{
-		Type:       "single",
-		TargetUUID: "old-msg",
-		Platform:   "twitch",
-		Timestamp:  time.Unix(0, 1000*1000000), // 1000ms
+		DeletionType: "single",
+		TargetUUID:   "old-msg",
+		Platform:     "twitch",
+		Timestamp:    time.Unix(0, 1000*1000000), // 1000ms
 	}
 	newEvent := &DeletionEvent{
-		Type:       "single",
-		TargetUUID: "new-msg",
-		Platform:   "twitch",
-		Timestamp:  time.Unix(0, 3000*1000000), // 3000ms
+		DeletionType: "single",
+		TargetUUID:   "new-msg",
+		Platform:     "twitch",
+		Timestamp:    time.Unix(0, 3000*1000000), // 3000ms
 	}
 
 	require.NoError(t, buffer.Add(ctx, overlayID, oldEvent))
