@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/twitch-listener/channels"
 	"github.com/caesar/all-chat/services/twitch-listener/handlers"
 	"github.com/caesar/all-chat/services/twitch-listener/irc"
@@ -103,11 +104,15 @@ func main() {
 	parser := irc.NewParser()
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 
+	// Initialize message ID registry with 1-hour TTL (per Plan 01-01 decision)
+	msgRegistry := registry.NewRedisRegistry(redisClient, 1*time.Hour)
+	log.Info("Initialized message ID registry", zap.Duration("ttl", 1*time.Hour))
+
 	ircConfig := irc.Config{
 		Username: twitchUsername,
 		OAuth:    twitchOAuth,
 	}
-	ircConn := irc.NewConnectionManager(ircConfig, parser, streamPublisher, log, listenerMetrics)
+	ircConn := irc.NewConnectionManager(ircConfig, parser, streamPublisher, msgRegistry, log, listenerMetrics)
 
 	// Twitch Listener does NOT use leadership coordination
 	// Twitch IRC is stateless and event-driven (push, not pull like YouTube polling)
