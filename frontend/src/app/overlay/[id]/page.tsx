@@ -48,6 +48,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSeenTimestampRef = useRef<number>(0);
 
   // Load overlay display configuration (public endpoint)
   useEffect(() => {
@@ -113,6 +114,13 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
     console.log('[OBS Overlay] Connecting to:', wsUrl, reconnectAttempts ? `(attempt ${reconnectAttempts + 1})` : '');
 
+    // Load last seen timestamp from localStorage (survives page reload)
+    const storageKey = `ws_last_seen_${id}`;
+    const storedTimestamp = localStorage.getItem(storageKey);
+    if (storedTimestamp) {
+      lastSeenTimestampRef.current = parseInt(storedTimestamp, 10);
+    }
+
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -120,6 +128,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       console.log('[OBS Overlay] Connected');
       // Reset reconnection attempts on successful connection
       setReconnectAttempts(0);
+
+      // Request replay if reconnecting (not first connect)
+      if (lastSeenTimestampRef.current > 0) {
+        const replayRequest = {
+          type: 'replay_request',
+          data: {
+            since: lastSeenTimestampRef.current,
+          },
+          timestamp: new Date().toISOString(),
+        };
+        ws.send(JSON.stringify(replayRequest));
+        console.log('[OBS Overlay] Requested deletion replay since:', new Date(lastSeenTimestampRef.current));
+      }
     };
 
     ws.onmessage = async (event) => {
@@ -127,6 +148,37 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         const envelope = JSON.parse(event.data);
 
         console.log('[OBS Overlay] Received message:', envelope);
+
+        // Handle replay response (batch of missed deletions)
+        if (envelope.type === 'replay_response') {
+          const deletions = envelope.data as DeletionMetadata[];
+          console.log(`[OBS Overlay] Replaying ${deletions.length} missed deletions`);
+
+          // Apply each deletion
+          deletions.forEach((deletion) => {
+            setMessages((prev) => {
+              switch (deletion.deletion_type) {
+                case 'single':
+                  const targetId = deletion.target_uuid;
+                  if (!targetId) return prev;
+                  return prev.filter((m) => m.id !== targetId);
+
+                case 'batch':
+                  const targetUserId = deletion.target_user_id;
+                  if (!targetUserId) return prev;
+                  return prev.filter((m) => m.user.id !== targetUserId);
+
+                case 'clear':
+                  return [];
+
+                default:
+                  return prev;
+              }
+            });
+          });
+
+          return; // Don't process further
+        }
 
         // Handle deletion events FIRST (before regular messages)
         if (envelope.type === 'chat_message' && envelope.data?.event?.type === 'message_deletion') {
@@ -165,6 +217,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                 return prev;
             }
           });
+
+          // Update last seen timestamp AFTER processing deletion
+          lastSeenTimestampRef.current = Date.now();
+          localStorage.setItem(`ws_last_seen_${id}`, String(lastSeenTimestampRef.current));
 
           return; // Don't process as regular message
         }

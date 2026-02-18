@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/api-gateway/models"
+	"github.com/caesar/all-chat/services/api-gateway/replay"
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 	"github.com/caesar/all-chat/shared/auth"
@@ -22,6 +23,7 @@ type WebSocketHandler struct {
 	subscriber      *subscription.Subscriber
 	repo            *subscription.Repository
 	jwtSecret       string
+	replayBuffer    replay.DeletionReplayBuffer
 	logger          *zap.Logger
 	upgrader        websocket.Upgrader
 	allowAllOrigins bool
@@ -34,6 +36,7 @@ func NewWebSocketHandler(
 	subscriber *subscription.Subscriber,
 	repo *subscription.Repository,
 	jwtSecret string,
+	replayBuffer replay.DeletionReplayBuffer,
 	logger *zap.Logger,
 ) *WebSocketHandler {
 	allowedOrigins, allowAll := loadAllowedOrigins()
@@ -42,6 +45,7 @@ func NewWebSocketHandler(
 		subscriber:      subscriber,
 		repo:            repo,
 		jwtSecret:       jwtSecret,
+		replayBuffer:    replayBuffer,
 		logger:          logger,
 		allowedOrigins:  allowedOrigins,
 		allowAllOrigins: allowAll,
@@ -140,7 +144,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	}
 
 	// Create WebSocket connection wrapper
-	wsConn := wsconn.NewConnection(conn, overlayID, userID, h.logger)
+	wsConn := wsconn.NewConnection(conn, overlayID, userID, h.replayBuffer, h.logger)
 
 	// Subscribe to overlay's Redis Pub/Sub channel
 	// Use background context - subscription must outlive the HTTP request

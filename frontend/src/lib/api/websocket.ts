@@ -42,6 +42,7 @@ export class WebSocketClient {
   private maxReconnectAttempts = 10;
   private overlayId: string = '';
   private token: string = '';
+  private lastSeenTimestamp: number = 0;
 
   /**
    * Connect to WebSocket for a specific overlay
@@ -49,6 +50,13 @@ export class WebSocketClient {
   connect(overlayId: string, token: string) {
     this.overlayId = overlayId;
     this.token = token;
+
+    // Load last seen timestamp from localStorage (survives page reload)
+    const storageKey = `ws_last_seen_${overlayId}`;
+    const storedTimestamp = localStorage.getItem(storageKey);
+    if (storedTimestamp) {
+      this.lastSeenTimestamp = parseInt(storedTimestamp, 10);
+    }
 
     const url = `${WS_URL}/ws/overlay/${overlayId}?token=${token}`;
     console.log('[WebSocket] Connecting to:', url);
@@ -58,6 +66,19 @@ export class WebSocketClient {
     this.ws.onopen = () => {
       console.log('[WebSocket] Connected');
       this.reconnectAttempts = 0;
+
+      // Request replay if reconnecting (not first connect)
+      if (this.lastSeenTimestamp > 0) {
+        const replayRequest = {
+          type: 'replay_request',
+          data: {
+            since: this.lastSeenTimestamp,
+          },
+          timestamp: new Date().toISOString(),
+        };
+        this.ws?.send(JSON.stringify(replayRequest));
+        console.log('[WebSocket] Requested deletion replay since:', new Date(this.lastSeenTimestamp));
+      }
     };
 
     this.ws.onmessage = (event) => {

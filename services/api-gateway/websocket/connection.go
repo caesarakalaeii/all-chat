@@ -2,10 +2,12 @@ package websocket
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/api-gateway/models"
+	"github.com/caesar/all-chat/services/api-gateway/replay"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
@@ -26,38 +28,41 @@ const (
 
 // Connection wraps a WebSocket connection for an overlay
 type Connection struct {
-	conn       *websocket.Conn
-	overlayID  string
-	userID     string
-	send       chan []byte
-	logger     *zap.Logger
-	mu         sync.Mutex
-	closed     bool
-	isViewer   bool // True for viewer connections (extension, public viewers)
+	conn         *websocket.Conn
+	overlayID    string
+	userID       string
+	send         chan []byte
+	replayBuffer replay.DeletionReplayBuffer
+	logger       *zap.Logger
+	mu           sync.Mutex
+	closed       bool
+	isViewer     bool // True for viewer connections (extension, public viewers)
 }
 
 // NewConnection creates a new WebSocket connection for overlay owners
-func NewConnection(conn *websocket.Conn, overlayID, userID string, logger *zap.Logger) *Connection {
+func NewConnection(conn *websocket.Conn, overlayID, userID string, replayBuffer replay.DeletionReplayBuffer, logger *zap.Logger) *Connection {
 	return &Connection{
-		conn:      conn,
-		overlayID: overlayID,
-		userID:    userID,
-		send:      make(chan []byte, 256),
-		logger:    logger,
-		isViewer:  false,
+		conn:         conn,
+		overlayID:    overlayID,
+		userID:       userID,
+		send:         make(chan []byte, 256),
+		replayBuffer: replayBuffer,
+		logger:       logger,
+		isViewer:     false,
 	}
 }
 
 // NewViewerConnection creates a new WebSocket connection for viewers
 // Viewer connections should never receive overlay_id in messages
-func NewViewerConnection(conn *websocket.Conn, overlayID, userID string, logger *zap.Logger) *Connection {
+func NewViewerConnection(conn *websocket.Conn, overlayID, userID string, replayBuffer replay.DeletionReplayBuffer, logger *zap.Logger) *Connection {
 	return &Connection{
-		conn:      conn,
-		overlayID: overlayID,
-		userID:    userID,
-		send:      make(chan []byte, 256),
-		logger:    logger,
-		isViewer:  true,
+		conn:         conn,
+		overlayID:    overlayID,
+		userID:       userID,
+		send:         make(chan []byte, 256),
+		replayBuffer: replayBuffer,
+		logger:       logger,
+		isViewer:     true,
 	}
 }
 
@@ -209,12 +214,81 @@ func (c *Connection) handleMessage(data []byte) {
 		return
 	}
 
-	// Handle pong responses
-	if msg.Type == models.WSMessageTypePong {
+	// Handle different message types
+	switch msg.Type {
+	case models.WSMessageTypePong:
 		c.logger.Debug("Received pong",
 			zap.String("overlay_id", c.overlayID),
 		)
+
+	case "replay_request":
+		c.handleReplayRequest(msg.Data)
+
+	default:
+		c.logger.Debug("Unhandled message type",
+			zap.String("overlay_id", c.overlayID),
+			zap.String("type", string(msg.Type)),
+		)
 	}
+}
+
+// handleReplayRequest processes replay request from client
+func (c *Connection) handleReplayRequest(data interface{}) {
+	// Parse the data as JSON
+	var request struct {
+		Since int64 `json:"since"` // Unix milliseconds
+	}
+
+	// Convert interface{} to JSON and back to struct
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		c.logger.Warn("Invalid replay request data",
+			zap.String("overlay_id", c.overlayID),
+			zap.Error(err),
+		)
+		return
+	}
+
+	if err := json.Unmarshal(jsonBytes, &request); err != nil {
+		c.logger.Warn("Invalid replay request format",
+			zap.String("overlay_id", c.overlayID),
+			zap.Error(err),
+		)
+		return
+	}
+
+	// Query replay buffer for missed deletions
+	deletions, err := c.replayBuffer.GetSince(context.Background(), c.overlayID, request.Since)
+	if err != nil {
+		c.logger.Error("Failed to retrieve replay buffer",
+			zap.String("overlay_id", c.overlayID),
+			zap.Error(err),
+		)
+		return
+	}
+
+	if len(deletions) == 0 {
+		c.logger.Debug("No missed deletions to replay",
+			zap.String("overlay_id", c.overlayID),
+			zap.Int64("since", request.Since),
+		)
+		return
+	}
+
+	// Send replay response
+	response := models.WSMessage{
+		Type:      "replay_response",
+		Data:      deletions,
+		Timestamp: time.Now().UTC(),
+	}
+	responseJSON, _ := json.Marshal(response)
+	c.Send(responseJSON)
+
+	c.logger.Info("Replayed missed deletions",
+		zap.String("overlay_id", c.overlayID),
+		zap.Int("count", len(deletions)),
+		zap.Int64("since", request.Since),
+	)
 }
 
 // OverlayID returns the overlay ID for this connection
