@@ -39,8 +39,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### YouTube Integration
 
-- [ ] **YOUTUBE-01**: Listener polls for messageDeletedEvent message type
-- [ ] **YOUTUBE-02**: YouTube deletion events processed within existing polling interval
+- [x] **YOUTUBE-01**: Listener polls for messageDeletedEvent message type
+- [x] **YOUTUBE-02**: YouTube deletion events processed within existing polling interval
 - [ ] **YOUTUBE-03**: System handles 60-second polling lag gracefully (via deletion buffer)
 
 ### Kick Integration
@@ -136,8 +136,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FRONTEND-04 | Phase 1 | Complete |
 | FRONTEND-05 | Phase 1 | Complete |
 | FRONTEND-06 | Phase 1 | Complete |
-| YOUTUBE-01 | Phase 2 | Pending |
-| YOUTUBE-02 | Phase 2 | Pending |
+| YOUTUBE-01 | Phase 2 | Complete |
+| YOUTUBE-02 | Phase 2 | Complete |
 | YOUTUBE-03 | Phase 2 | Pending |
 | KICK-01 | Phase 3 | Pending |
 | KICK-02 | Phase 3 | Pending |
