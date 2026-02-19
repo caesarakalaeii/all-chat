@@ -22,7 +22,7 @@ type Coordinator struct {
 	k8sClient   *kubernetes.Clientset
 	registry    *AssignmentRegistry
 	assigner    *Assigner
-	sourceRepo  registry.Repository
+	sourceRepo  *registry.Repository
 	redisClient *redis.Client
 	logger      *zap.Logger
 
@@ -34,7 +34,7 @@ type Coordinator struct {
 func NewCoordinator(
 	registry *AssignmentRegistry,
 	assigner *Assigner,
-	sourceRepo registry.Repository,
+	sourceRepo *registry.Repository,
 	redisClient *redis.Client,
 	logger *zap.Logger,
 ) *Coordinator {
@@ -190,10 +190,19 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 
 	for _, source := range sources {
 		// Compute assignment using bounded-load consistent hashing
-		podID := c.assigner.AssignChannel(source.ID)
+		podID, err := c.assigner.AssignChannel(source.ID)
+		if err != nil {
+			c.logger.Error("Failed to assign channel",
+				zap.String("source_id", source.ID),
+				zap.Error(err),
+			)
+			errorCount++
+			continue // Continue processing other sources
+		}
 
 		// Store assignment in Redis registry
-		if err := c.registry.StoreAssignment(ctx, source.ID, podID); err != nil {
+		_, err = c.registry.StoreAssignment(ctx, source.ID, podID)
+		if err != nil {
 			c.logger.Error("Failed to store assignment",
 				zap.String("source_id", source.ID),
 				zap.String("pod_id", podID),
