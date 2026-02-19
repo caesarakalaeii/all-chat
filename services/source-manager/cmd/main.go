@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/source-manager/cleanup"
+	"github.com/caesar/all-chat/services/source-manager/coordination"
 	"github.com/caesar/all-chat/services/source-manager/election"
 	"github.com/caesar/all-chat/services/source-manager/handlers"
 	"github.com/caesar/all-chat/services/source-manager/registry"
@@ -97,6 +98,17 @@ func main() {
 	leaderManager := election.NewManager(redisClient, log)
 	cleanupJob := cleanup.NewJob(db, log)
 
+	// Initialize coordinator components
+	assignmentRegistry := coordination.NewAssignmentRegistry(redisClient)
+	assigner := coordination.NewAssigner([]string{}) // Empty initially, populated by reconcile
+	coordinator := coordination.NewCoordinator(
+		assignmentRegistry,
+		assigner,
+		repo,
+		redisClient,
+		log,
+	)
+
 	// Start registry
 	if err := sourceRegistry.Start(ctx); err != nil {
 		log.Fatal("Failed to start source registry", zap.Error(err))
@@ -165,12 +177,23 @@ func main() {
 		}
 	}()
 
+	// Start coordinator
+	go func() {
+		log.Info("Starting shard coordinator")
+		if err := coordinator.Run(ctx); err != nil {
+			log.Error("Coordinator failed", zap.Error(err))
+		}
+	}()
+
 	// Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Info("Shutting down service...")
+
+	// Stop coordinator
+	coordinator.Stop()
 
 	// Stop registry and cleanup job
 	sourceRegistry.Stop()
