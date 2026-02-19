@@ -11,7 +11,7 @@
 - [ ] **SHARD-02**: System stores channel assignments in Redis registry with O(1) lookup performance
 - [ ] **SHARD-03**: Listener pod queries assignment registry on startup to determine which channels to connect
 - [ ] **SHARD-04**: Listener pod publishes heartbeat to Redis every 10 seconds with pod ID and timestamp
-- [ ] **SHARD-05**: System detects pod failure when heartbeat missing for 30 seconds
+- [ ] **SHARD-05**: System detects pod failure when heartbeat missing for 15 seconds (user override from 30s - per CONTEXT.md for fast stream recovery)
 - [ ] **SHARD-06**: System redistributes channels from failed pod to healthy pods within 60 seconds
 - [ ] **SHARD-07**: System uses Kubernetes Lease API for coordinator leader election (not Redlock)
 - [ ] **SHARD-08**: System uses fencing tokens to prevent split-brain during leader failover
@@ -172,18 +172,3 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TRACE-04 | Phase 8 | Pending |
 | TRACE-05 | Phase 8 | Pending |
 | TRACE-06 | Phase 8 | Pending |
-
-**Coverage:**
-- v1.1 requirements: 56 total
-- Mapped to phases: 56 (100%)
-- Unmapped: 0
-
-**Phase Breakdown:**
-- Phase 5: 9 requirements (SHARD-01 to SHARD-08, REBAL-08)
-- Phase 6: 24 requirements (MIGRATE-01 to MIGRATE-06, TWITCH-01 to TWITCH-07, KICK-01 to KICK-05, TIKTOK-01 to TIKTOK-05)
-- Phase 7: 7 requirements (REBAL-01 to REBAL-07)
-- Phase 8: 17 requirements (METRICS-01 to METRICS-11, TRACE-01 to TRACE-06)
-
----
-*Requirements defined: 2026-02-19*
-*Last updated: 2026-02-19 after roadmap creation (100% coverage)*
