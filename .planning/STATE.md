@@ -2,68 +2,42 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-17)
+See: .planning/PROJECT.md (updated 2026-02-19)
 
-**Core value:** When a message is deleted on the streaming platform, it must be removed from connected overlays in real-time so streamers see an accurate representation of chat.
-**Current focus:** Phase 3 - Kick Integration Edge Cases
+**Core value:** Listener instances must efficiently distribute channel workload based on actual message volume, enabling cost-effective scaling and reliable service for both small and high-traffic streams.
+**Current focus:** Milestone v1.1 - Listener Load Balancing
 
 ## Current Position
 
-Phase: 3 of 4 (Kick Integration Edge Cases)
-Plan: 4 of 4 in current phase
-Status: Complete
-Last activity: 2026-02-18 — Completed Plan 03-04: Replay Buffer Test Compilation Fix (Gap Closure)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-19 — Milestone v1.1 started
 
-Progress: [████████░░] 80%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
-**Velocity:**
-- Total plans completed: 11
-- Average duration: 4.6 minutes
-- Total execution time: 0.95 hours
+**Milestone v1.1:**
+- Plans completed: 0
+- Total time: 0 hours
+- Status: Defining requirements
 
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| Phase 1 | 5 | 33 min | 6.6 min |
-| Phase 2 | 2 | 7.1 min | 3.6 min |
-| Phase 3 | 4 | 14.1 min | 3.5 min |
-
-**Recent Trend:**
-- Last 5 plans: 02-02 (4.6 min), 03-01 (3.0 min), 03-02 (6.6 min), 03-03 (3.4 min), 03-04 (1.1 min)
-- Trend: Phase 3 complete with exceptional velocity (gap closure completed in 1.1 min)
-
-*Updated after each plan completion*
-| Phase 03-kick-integration-edge-cases P04 | 1.1 | 1 task | 1 file |
+**Previous Milestone (v1.0):**
+- Plans completed: 11
+- Average: 4.6 min/plan
+- Total time: 0.95 hours
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
 
-- **Plan 01-01:** Use unidirectional mapping (platform ID → UUID only) for message ID registry - deletion events always provide platform ID, bidirectional would add unnecessary complexity and 2x memory overhead
-- **Plan 01-01:** 1-hour TTL per channel for message ID mappings - balances memory usage with deletion latency, TTL refreshes on each add for active channels
-- **Plan 01-01:** Store timestamp with UUID for debugging - value format {uuid}|{timestamp} enables debugging without additional Redis operations
-- **Plan 01-04:** Process deletion events before regular messages in WebSocket handler - prevents race conditions where message renders before deletion arrives
-- **Plan 01-04:** Use React 18 automatic batching for deletions - single setMessages call sufficient, no manual optimization needed
-- **Plan 01-04:** Instant removal without animation - user requested immediate removal without placeholder or fade (implemented)
-- **Plan 01-05:** Automated verification via tests sufficient for checkpoint approval - backend tests + code review + type checking validated integration without manual E2E testing
-- [Phase 01]: Redis deletion buffer with 60s TTL for race condition handling - simpler than sorted set approach
-- [Phase 01]: Platform-agnostic NormalizeDeletion function - deletion schema unified across all platforms
-- [Phase 02-01]: Map YouTube deletion events to Phase 1 schema in parser (not processor) - maintains platform-agnostic processor design
-- [Phase 02-02]: Reuse Phase 1 registry with same 1-hour TTL for YouTube messages - consistent across platforms
-- [Phase 02-02]: Add to registry BEFORE Redis Streams publish - ensures registry populated before message processor receives message
-- [Phase 02-02]: Checkpoint approved without verification (user: "didn't check let's continue anyway") - functional testing deferred
-- [Phase 03-01]: Use Tags map for event metadata instead of EventType/EventData fields - Kick listener's RawMessage uses Tags, maintains consistency
-- [Phase 03-01]: Defensive logging for unhandled deletion events - event name has MEDIUM confidence, log any event containing "delete" for validation
-- [Phase 03-02]: Use Redis sorted sets with timestamp scores for replay buffer - ZRANGEBYSCORE provides O(log(N)+M) range queries, simpler than Redis Streams for 60s window
-- [Phase 03-02]: Exclusive range query using `(timestamp` syntax - prevents duplicate deletion delivery when frontend reconnects at exact timestamp
-- [Phase 03-02]: localStorage for timestamp persistence - survives page reloads, enables replay even after browser refresh
-- [Phase 03-02]: Best-effort replay buffer (doesn't fail Pub/Sub on error) - real-time broadcast is critical path, replay buffer is nice-to-have
+**Milestone v1.1 decisions:**
+(None yet - will be populated during planning)
+
+**Previous milestone (v1.0) decisions archived in git history.**
 
 ### Pending Todos
 
@@ -71,31 +45,12 @@ None yet.
 
 ### Blockers/Concerns
 
-**Phase 1 status:**
-- ✅ Message ID Registry implemented (Plan 01-01 complete)
-- ✅ Twitch deletion event capture (Plan 01-02 complete)
-- ✅ Message processor deletion handling (Plan 01-03 complete)
-- ✅ Frontend deletion event handling implemented (Plan 01-04 complete)
-- ✅ End-to-end integration verified (Plan 01-05 complete)
-
-**Phase 2 status:**
-- ✅ YouTube deletion event parser mapping (Plan 02-01 complete)
-- ✅ YouTube registry integration (Plan 02-02 complete)
-
-**Phase 3 status:**
-- ✅ Kick deletion event handler (Plan 03-01 complete)
-- ✅ Kick WebSocket reconnection replay buffer (Plan 03-02 complete)
-- ✅ Batch deletion load testing & documentation (Plan 03-03 complete)
-- ✅ Replay buffer test compilation fix (Plan 03-04 gap closure complete)
-
-**Phase 1 COMPLETE - Phase 2 COMPLETE - Phase 3 COMPLETE**
-
-No blockers. Phase 3 complete with all verification gaps closed. Replay buffer unit tests now compile and validate 88.5% test coverage. Artillery load test infrastructure and comprehensive message deletion documentation covering all 4 platforms ready. Ready for Phase 4 or production deployment.
+No blockers. Starting requirements definition for v1.1 load balancing milestone.
 
 ## Session Continuity
 
-Last session: 2026-02-18 (Plan 03-04 execution)
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-02-19 (Milestone v1.1 initialization)
+Stopped at: Requirements definition starting
 Resume file: None
 
-**Phase 3 progress:** All 4 plans complete (including gap closure). Kick deletion integration, reconnection replay buffer, load testing infrastructure, and replay buffer test compilation fix all implemented with comprehensive documentation and test validation.
+**Milestone status:** PROJECT.md and STATE.md updated for v1.1. Ready for research → requirements → roadmap workflow.
