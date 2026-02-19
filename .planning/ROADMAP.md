@@ -74,10 +74,14 @@ Plans:
   3. Leader election via Kubernetes Lease API prevents split-brain (only one coordinator computes assignments at a time)
   4. Failed pod channels redistribute to healthy pods within 60 seconds of heartbeat timeout
   5. Coordinator survives chaos testing (network partitions, pod failures, leader changes)
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 05-01: TBD (planning required)
+- [ ] 05-01-PLAN.md — Bounded-load consistent hashing + Redis assignment registry (TDD)
+- [ ] 05-02-PLAN.md — Kubernetes Lease coordinator with reconciliation loop
+- [ ] 05-03-PLAN.md — Heartbeat monitoring with 15s timeout detection
+- [ ] 05-04-PLAN.md — HTTP endpoints for assignment queries and heartbeat publishing
+- [ ] 05-05-PLAN.md — Chaos testing validation (checkpoint for human verification)
 
 ### Phase 6: Connection Management & Migration Protocol
 **Goal**: All platform listeners (Twitch, Kick, TikTok) integrate with coordinator and support graceful zero-loss channel migration
@@ -134,10 +138,10 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 1. Foundation + Twitch | v1.0 | 5/5 | Complete | 2026-02-18 |
 | 2. YouTube Integration | v1.0 | 2/2 | Complete | 2026-02-18 |
 | 3. Kick Integration + Edge Cases | v1.0 | 4/4 | Complete | 2026-02-18 |
-| 5. Sharding Infrastructure & Coordinator | v1.1 | 0/? | Not started | - |
+| 5. Sharding Infrastructure & Coordinator | v1.1 | 0/5 | Not started | - |
 | 6. Connection Management & Migration | v1.1 | 0/? | Not started | - |
 | 7. Dynamic Rebalancing & HPA | v1.1 | 0/? | Not started | - |
 | 8. Observability & Production Readiness | v1.1 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-02-19 after v1.1 roadmap creation*
+*Last updated: 2026-02-19 after Phase 5 planning*
