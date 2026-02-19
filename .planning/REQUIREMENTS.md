@@ -13,8 +13,8 @@
 - [ ] **SHARD-04**: Listener pod publishes heartbeat to Redis every 10 seconds with pod ID and timestamp
 - [ ] **SHARD-05**: System detects pod failure when heartbeat missing for 15 seconds (user override from 30s - per CONTEXT.md for fast stream recovery)
 - [ ] **SHARD-06**: System redistributes channels from failed pod to healthy pods within 60 seconds
-- [ ] **SHARD-07**: System uses Kubernetes Lease API for coordinator leader election (not Redlock)
-- [ ] **SHARD-08**: System uses fencing tokens to prevent split-brain during leader failover
+- [x] **SHARD-07**: System uses Kubernetes Lease API for coordinator leader election (not Redlock)
+- [x] **SHARD-08**: System uses fencing tokens to prevent split-brain during leader failover
 
 ### Rebalancing & Coordination
 
@@ -25,7 +25,7 @@
 - [ ] **REBAL-05**: System reassigns hot channels from overloaded pods to underutilized pods
 - [ ] **REBAL-06**: System enforces 5-minute cooldown between rebalancing operations
 - [ ] **REBAL-07**: System limits rebalancing to maximum 20% of channels per operation
-- [ ] **REBAL-08**: Coordinator service extends existing source-manager with rebalancing logic
+- [x] **REBAL-08**: Coordinator service extends existing source-manager with rebalancing logic
 
 ### Channel Migration
 
@@ -122,8 +122,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SHARD-04 | Phase 5 | Pending |
 | SHARD-05 | Phase 5 | Pending |
 | SHARD-06 | Phase 5 | Pending |
-| SHARD-07 | Phase 5 | Pending |
-| SHARD-08 | Phase 5 | Pending |
+| SHARD-07 | Phase 5 | Complete |
+| SHARD-08 | Phase 5 | Complete |
 | REBAL-01 | Phase 7 | Pending |
 | REBAL-02 | Phase 7 | Pending |
 | REBAL-03 | Phase 7 | Pending |
@@ -131,7 +131,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REBAL-05 | Phase 7 | Pending |
 | REBAL-06 | Phase 7 | Pending |
 | REBAL-07 | Phase 7 | Pending |
-| REBAL-08 | Phase 5 | Pending |
+| REBAL-08 | Phase 5 | Complete |
 | MIGRATE-01 | Phase 6 | Pending |
 | MIGRATE-02 | Phase 6 | Pending |
 | MIGRATE-03 | Phase 6 | Pending |
