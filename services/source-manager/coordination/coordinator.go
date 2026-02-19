@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/source-manager/registry"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +26,7 @@ type Coordinator struct {
 	sourceRepo       *registry.Repository
 	redisClient      *redis.Client
 	heartbeatMonitor *HeartbeatMonitor
+	metrics          *metrics.ShardMetrics
 	logger           *zap.Logger
 
 	reconcileInterval time.Duration
@@ -38,6 +40,7 @@ func NewCoordinator(
 	sourceRepo *registry.Repository,
 	redisClient *redis.Client,
 	heartbeatMonitor *HeartbeatMonitor,
+	shardMetrics *metrics.ShardMetrics,
 	logger *zap.Logger,
 ) *Coordinator {
 	return &Coordinator{
@@ -46,6 +49,7 @@ func NewCoordinator(
 		sourceRepo:        sourceRepo,
 		redisClient:       redisClient,
 		heartbeatMonitor:  heartbeatMonitor,
+		metrics:           shardMetrics,
 		logger:            logger,
 		reconcileInterval: 30 * time.Second, // Default: 30s per user constraint
 		stopCh:            make(chan struct{}),
@@ -106,10 +110,12 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(ctx context.Context) {
 				c.logger.Info("Acquired leadership, starting reconciliation loop")
+				c.metrics.CoordinatorIsLeader.Set(1)
 				go c.reconcile(ctx)
 			},
 			OnStoppedLeading: func() {
 				c.logger.Warn("Lost leadership, stopping reconciliation")
+				c.metrics.CoordinatorIsLeader.Set(0)
 				c.Stop()
 			},
 			OnNewLeader: func(identity string) {
@@ -153,11 +159,15 @@ func (c *Coordinator) reconcile(ctx context.Context) {
 // computeAssignments queries active sources and listener pods, then computes assignments
 func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	startTime := time.Now()
+	defer func() {
+		c.metrics.ReconciliationCycles.Inc()
+	}()
 
 	// Step 1: Detect failed pods via heartbeat monitoring
 	failedPods, err := c.heartbeatMonitor.GetFailedPods(ctx)
 	if err != nil {
 		c.logger.Error("Failed to detect failed pods", zap.Error(err))
+		c.metrics.ReconciliationErrors.Inc()
 		// Continue with empty failed list - don't block reconciliation
 		failedPods = []string{}
 	} else if len(failedPods) > 0 {
@@ -165,6 +175,9 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 			zap.Strings("failed_pods", failedPods),
 		)
 	}
+
+	// Update pod health metrics
+	c.metrics.FailedPods.Set(float64(len(failedPods)))
 
 	// Step 2: Query active sources from source-manager registry
 	sources, err := c.sourceRepo.GetAllActiveSources(ctx)
@@ -178,11 +191,13 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	pods, err := c.getHealthyListenerPods(ctx, failedPods)
 	if err != nil {
 		c.logger.Error("Failed to query healthy listener pods", zap.Error(err))
+		c.metrics.ReconciliationErrors.Inc()
 		return fmt.Errorf("failed to query healthy listener pods: %w", err)
 	}
 
 	if len(pods) == 0 {
 		c.logger.Warn("No healthy listener pods available, skipping assignment computation")
+		c.metrics.HealthyPods.Set(0)
 		return nil
 	}
 
@@ -191,6 +206,9 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	for _, pod := range pods {
 		podIDs = append(podIDs, pod.Name)
 	}
+
+	// Update healthy pod metrics
+	c.metrics.HealthyPods.Set(float64(len(podIDs)))
 
 	// Step 4: Update assigner with healthy pod list
 	c.assigner = NewAssigner(podIDs)
@@ -213,6 +231,7 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 				zap.String("source_id", source.ID),
 				zap.Error(err),
 			)
+			c.metrics.ReconciliationErrors.Inc()
 			errorCount++
 			continue // Continue processing other sources
 		}
@@ -225,10 +244,12 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 				zap.String("pod_id", podID),
 				zap.Error(err),
 			)
+			c.metrics.ReconciliationErrors.Inc()
 			errorCount++
 			continue // Continue processing other sources
 		}
 
+		c.metrics.AssignmentsTotal.Inc()
 		assignmentCount++
 	}
 
