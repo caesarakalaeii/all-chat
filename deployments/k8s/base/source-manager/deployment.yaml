@@ -17,6 +17,7 @@ spec:
         app: source-manager
         component: controller
     spec:
+      serviceAccountName: source-manager
       containers:
       - name: source-manager
         image: localhost:5000/allchat-source-manager:latest
@@ -67,6 +68,14 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: REDIS_PORT
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         resources:
           requests:
             memory: "64Mi"
