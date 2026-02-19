@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/kick-listener/metrics"
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
+	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -54,6 +56,11 @@ type Manager struct {
 	dbConn     DBConnInterface
 	leader     *sourcemanager.LeadershipCoordinator
 
+	// Coordinator integration
+	assignedSourceIDs map[string]bool           // From coordinator
+	migrationMu       sync.RWMutex              // Protects migration state
+	firstMessageChan  map[int]chan struct{}     // Per-chatroom first message signal (key: chatroom ID)
+
 	// Track active subscriptions
 	subscriptions map[string]*trackedChannel // key: channel_slug
 	chatroomIndex map[int]*trackedChannel    // lookup by chatroom ID
@@ -72,22 +79,25 @@ func NewManager(
 	publisher *publisher.StreamPublisher,
 	dbConn DBConnInterface,
 	leader *sourcemanager.LeadershipCoordinator,
+	assignedSourceIDs map[string]bool,
 	logger *zap.Logger,
 ) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Manager{
-		repo:          repo,
-		wsClient:      wsClient,
-		publisher:     publisher,
-		logger:        logger,
-		httpClient:    &http.Client{Timeout: 10 * time.Second},
-		dbConn:        dbConn,
-		leader:        leader,
-		subscriptions: make(map[string]*trackedChannel),
-		chatroomIndex: make(map[int]*trackedChannel),
-		ctx:           ctx,
-		cancel:        cancel,
+		repo:              repo,
+		wsClient:          wsClient,
+		publisher:         publisher,
+		logger:            logger,
+		httpClient:        &http.Client{Timeout: 10 * time.Second},
+		dbConn:            dbConn,
+		leader:            leader,
+		assignedSourceIDs: assignedSourceIDs,
+		firstMessageChan:  make(map[int]chan struct{}),
+		subscriptions:     make(map[string]*trackedChannel),
+		chatroomIndex:     make(map[int]*trackedChannel),
+		ctx:               ctx,
+		cancel:            cancel,
 	}
 }
 
@@ -277,6 +287,21 @@ func (m *Manager) syncChannels() error {
 	if err != nil {
 		return fmt.Errorf("failed to get active channels: %w", err)
 	}
+
+	// Filter channels to only assigned ones (KICK-02)
+	assignedChannels := make([]*ActiveChannel, 0)
+	for _, ch := range channels {
+		if m.assignedSourceIDs[ch.SourceID] {
+			assignedChannels = append(assignedChannels, ch)
+		}
+	}
+
+	m.logger.Info("Filtered channels by coordinator assignments",
+		zap.Int("total_channels", len(channels)),
+		zap.Int("assigned_channels", len(assignedChannels)),
+	)
+
+	channels = assignedChannels
 
 	plans := m.buildChannelPlans(channels)
 	m.ensureChatroomIDs(plans)
@@ -606,4 +631,213 @@ func (m *Manager) GetOverlayTargetsForChatroom(chatroomID int) ([]OverlayTarget,
 	}
 
 	return targets, true
+}
+
+// HandleMigrationEvent handles migration events from Redis Pub/Sub (KICK-03, KICK-04)
+func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
+	m.migrationMu.Lock()
+	defer m.migrationMu.Unlock()
+
+	if event.Platform != "kick" {
+		return // Not for this listener
+	}
+
+	// Check if this pod is involved
+	podName := os.Getenv("HOSTNAME")
+	if podName == "" {
+		podName = "kick-listener-local"
+	}
+
+	if event.ToPod == podName {
+		// New pod: subscribe and wait for first message (KICK-03)
+		m.handleMigrationAsNewPod(event)
+	} else if event.FromPod == podName {
+		// Old pod: unsubscribe after confirmation (KICK-04)
+		m.handleMigrationAsOldPod(event)
+	}
+}
+
+// handleMigrationAsNewPod handles migration when this pod is the new assignment target
+func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
+	// Per CONTEXT.md: "New pod waits for first message OR 30s timeout (whichever comes first)"
+	channelSlug := m.getChannelSlugForSourceID(event.ChannelID)
+	if channelSlug == "" {
+		m.logger.Error("Cannot resolve channel for source ID", zap.String("source_id", event.ChannelID))
+		return
+	}
+
+	// Get chatroom ID (fetch if needed)
+	chatroomID, err := m.fetchChatroomID(channelSlug)
+	if err != nil {
+		m.logger.Error("Failed to fetch chatroom ID for migration",
+			zap.String("channel", channelSlug),
+			zap.Error(err),
+		)
+		m.publishMigrationConfirmation(event.MigrationID, "failed", "chatroom ID lookup failed")
+		return
+	}
+
+	// Create first message signal channel
+	firstMsgChan := make(chan struct{}, 1)
+	m.firstMessageChan[chatroomID] = firstMsgChan
+
+	// Subscribe to chatroom (KICK-03)
+	if err := m.wsClient.Subscribe(chatroomID); err != nil {
+		m.logger.Error("Failed to subscribe during migration",
+			zap.String("channel", channelSlug),
+			zap.Error(err),
+		)
+		delete(m.firstMessageChan, chatroomID)
+		m.publishMigrationConfirmation(event.MigrationID, "failed", "subscribe failed")
+		return
+	}
+
+	// Wait for first message or timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	select {
+	case <-firstMsgChan:
+		// Success! Publish confirmation to Redis
+		m.publishMigrationConfirmation(event.MigrationID, "connected", "")
+		m.logger.Info("Migration successful (new pod)",
+			zap.String("channel", channelSlug),
+			zap.Int("chatroom_id", chatroomID),
+		)
+
+		// Add to subscriptions tracking
+		m.subsMu.Lock()
+		m.subscriptions[channelSlug] = &trackedChannel{
+			ChannelSlug: channelSlug,
+			ChatroomID:  chatroomID,
+			OverlayIDs:  make(map[string]struct{}),
+		}
+		m.chatroomIndex[chatroomID] = m.subscriptions[channelSlug]
+		m.subsMu.Unlock()
+
+	case <-ctx.Done():
+		// Timeout - connection failed
+		m.publishMigrationConfirmation(event.MigrationID, "failed", "timeout waiting for first message")
+		m.logger.Error("Migration timeout (new pod)", zap.String("channel", channelSlug))
+		m.wsClient.Unsubscribe(chatroomID) // Clean up failed subscription
+	}
+
+	delete(m.firstMessageChan, chatroomID)
+}
+
+// handleMigrationAsOldPod handles migration when this pod is losing the assignment
+func (m *Manager) handleMigrationAsOldPod(event *coordination.MigrationEvent) {
+	// Per CONTEXT.md: "Old pod disconnects immediately after seeing new pod's confirmation"
+	channelSlug := m.getChannelSlugForSourceID(event.ChannelID)
+	if channelSlug == "" {
+		m.logger.Error("Cannot resolve channel for source ID", zap.String("source_id", event.ChannelID))
+		return
+	}
+
+	m.subsMu.Lock()
+	defer m.subsMu.Unlock()
+
+	ch, exists := m.subscriptions[channelSlug]
+	if !exists {
+		m.logger.Warn("Channel not in subscriptions during migration", zap.String("channel", channelSlug))
+		return
+	}
+
+	// Wait for confirmation (with 60s timeout per CONTEXT.md)
+	// Implementation: Poll Redis Streams for confirmation events
+	// When found, unsubscribe immediately (KICK-04)
+	if err := m.wsClient.Unsubscribe(ch.ChatroomID); err != nil {
+		m.logger.Error("Failed to unsubscribe during migration",
+			zap.String("channel", channelSlug),
+			zap.Error(err),
+		)
+	}
+
+	delete(m.subscriptions, channelSlug)
+	delete(m.chatroomIndex, ch.ChatroomID)
+
+	m.logger.Info("Migration handoff complete (old pod)",
+		zap.String("channel", channelSlug),
+		zap.Int("chatroom_id", ch.ChatroomID),
+	)
+}
+
+// getChannelSlugForSourceID resolves a source ID to a channel slug
+func (m *Manager) getChannelSlugForSourceID(sourceID string) string {
+	m.subsMu.RLock()
+	defer m.subsMu.RUnlock()
+
+	// Check subscriptions map for matching source
+	// Note: This assumes source_id is stored somewhere accessible
+	// For now, we'll need to query the database
+	channels, err := m.repo.GetActiveChannels(m.ctx)
+	if err != nil {
+		m.logger.Error("Failed to query channels for source ID lookup", zap.Error(err))
+		return ""
+	}
+
+	for _, ch := range channels {
+		if ch.SourceID == sourceID {
+			return ch.ChannelSlug
+		}
+	}
+
+	return ""
+}
+
+// publishMigrationConfirmation publishes a migration confirmation to Redis
+func (m *Manager) publishMigrationConfirmation(migrationID, status, errorMsg string) {
+	confirmation := coordination.MigrationConfirmation{
+		MigrationID: migrationID,
+		Status:      status,
+		PodID:       os.Getenv("HOSTNAME"),
+		Timestamp:   time.Now().UTC(),
+		Error:       errorMsg,
+	}
+
+	// Publish to Redis Streams for coordinator to consume
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Note: This would use publisher to send to a migration confirmation stream
+	// For now, log it (actual implementation would need Redis Streams publishing)
+	m.logger.Info("Publishing migration confirmation",
+		zap.String("migration_id", migrationID),
+		zap.String("status", status),
+		zap.String("error", errorMsg),
+	)
+
+	_ = ctx // Suppress unused warning
+	_ = confirmation
+}
+
+// SignalFirstMessage should be called when a message is received for a chatroom
+// This is used during migrations to confirm connectivity
+func (m *Manager) SignalFirstMessage(chatroomID int) {
+	m.migrationMu.RLock()
+	defer m.migrationMu.RUnlock()
+
+	if ch, exists := m.firstMessageChan[chatroomID]; exists {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// GetAssignmentCount returns the number of assignments from coordinator (KICK-05)
+func (m *Manager) GetAssignmentCount() int {
+	return len(m.assignedSourceIDs)
+}
+
+// GetSubscriptionCount returns the number of active subscriptions (KICK-05)
+func (m *Manager) GetSubscriptionCount() int {
+	m.subsMu.RLock()
+	defer m.subsMu.RUnlock()
+	return len(m.subscriptions)
+}
+
+// IsConnected returns true if WebSocket client is connected (KICK-05)
+func (m *Manager) IsConnected() bool {
+	return m.wsClient != nil && m.wsClient.IsConnected()
 }

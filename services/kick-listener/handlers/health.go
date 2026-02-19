@@ -37,18 +37,40 @@ func (h *HealthHandler) LivenessProbe(c *gin.Context) {
 	})
 }
 
-// ReadinessProbe checks if the service is ready to handle requests
+// ReadinessProbe checks if the service is ready to handle requests (KICK-05)
 func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
-	// Check WebSocket connection
-	if !h.wsClient.IsConnected() {
+	// Check 1: WebSocket connection established
+	if !h.channelMgr.IsConnected() {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "not ready",
-			"reason": "websocket not connected",
+			"reason": "WebSocket not connected",
 		})
 		return
 	}
 
-	// Check Redis connection
+	// Check 2: Assignments received from coordinator
+	assignmentCount := h.channelMgr.GetAssignmentCount()
+	if assignmentCount == 0 {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "not ready",
+			"reason": "no assignments from coordinator",
+		})
+		return
+	}
+
+	// Check 3: Active subscriptions match assignment count (all chatrooms subscribed)
+	subscriptionCount := h.channelMgr.GetSubscriptionCount()
+	if subscriptionCount < assignmentCount {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":      "not ready",
+			"reason":      "subscriptions connecting",
+			"expected":    assignmentCount,
+			"subscribed":  subscriptionCount,
+		})
+		return
+	}
+
+	// Check 4: Redis connection
 	if !h.publisher.IsHealthy(c.Request.Context()) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "not ready",
@@ -57,8 +79,11 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 		return
 	}
 
+	// All checks passed
 	c.JSON(http.StatusOK, gin.H{
-		"status": "ready",
+		"status":        "ready",
+		"assignments":   assignmentCount,
+		"subscriptions": subscriptionCount,
 	})
 }
 

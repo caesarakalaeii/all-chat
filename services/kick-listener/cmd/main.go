@@ -17,6 +17,7 @@ import (
 	"github.com/caesar/all-chat/services/kick-listener/metrics"
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
+	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/sourcemanager"
@@ -91,6 +92,32 @@ func main() {
 
 	log.Info("Connected to Redis")
 
+	// Initialize coordinator client and query assignments (KICK-01)
+	coordinatorURL := getEnvOrDefault("COORDINATOR_URL", "http://source-manager:8088")
+	serviceJWT := getEnvOrDefault("SERVICE_JWT_SECRET", "dev-service-secret")
+	podName := os.Getenv("HOSTNAME") // Kubernetes sets HOSTNAME to pod name
+	if podName == "" {
+		podName = "kick-listener-local" // Fallback for local development
+	}
+
+	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, log)
+
+	// Query assignments from coordinator (blocks until response)
+	assignments, err := coordClient.QueryAssignments(ctx, podName)
+	if err != nil {
+		log.Fatal("Failed to query coordinator assignments", zap.Error(err))
+	}
+	log.Info("Received assignments from coordinator",
+		zap.Int("count", len(assignments)),
+		zap.String("pod_id", podName),
+	)
+
+	// Extract assigned source IDs into map for filtering
+	assignedSourceIDs := make(map[string]bool)
+	for _, a := range assignments {
+		assignedSourceIDs[a.SourceID] = true
+	}
+
 	// Configure Pusher connection
 	pusherAppKey := getEnvOrDefault("KICK_PUSHER_APP_KEY", "32cbd69e4b950bf97679")
 	if pusherAppKey == "" {
@@ -145,8 +172,8 @@ func main() {
 		handleDeletionEvent(channel, event, streamPublisher, channelMgr, log)
 	})
 
-	// Now initialize channel manager with the WebSocket client
-	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, leaderCoord, log)
+	// Now initialize channel manager with the WebSocket client and assigned source IDs
+	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, leaderCoord, assignedSourceIDs, log)
 
 	// Connect to Kick Pusher WebSocket
 	if err := wsClient.Connect(); err != nil {
@@ -160,6 +187,34 @@ func main() {
 	if err := channelMgr.Start(); err != nil {
 		log.Fatal("Failed to start channel manager", zap.Error(err))
 	}
+
+	// Start migration subscriber (KICK-03, KICK-04)
+	migrationSub := coordination.NewMigrationSubscriber(
+		redisClient,
+		channelMgr.HandleMigrationEvent,
+		log,
+	)
+	go func() {
+		if err := migrationSub.Subscribe(ctx); err != nil {
+			log.Error("Migration subscriber error", zap.Error(err))
+		}
+	}()
+
+	// Start heartbeat publisher (KICK-02)
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := coordClient.PublishHeartbeat(ctx, podName); err != nil {
+					log.Warn("Failed to publish heartbeat", zap.Error(err))
+				}
+			}
+		}
+	}()
 
 	// Handle reconnections
 	go handleReconnections(wsClient, channelMgr, log)
@@ -259,6 +314,9 @@ func handleChatMessage(
 		metrics.IncMessage("dropped", "missing_chatroom_id")
 		return
 	}
+
+	// Signal first message for migration protocol
+	channelMgr.SignalFirstMessage(chatroomID)
 
 	// Get overlay targets for this chatroom
 	targets, found := channelMgr.GetOverlayTargetsForChatroom(chatroomID)
