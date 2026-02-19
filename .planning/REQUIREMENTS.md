@@ -7,8 +7,8 @@
 
 ### Core Sharding Infrastructure
 
-- [ ] **SHARD-01**: System computes channel-to-pod assignment using consistent hashing with virtual nodes
-- [ ] **SHARD-02**: System stores channel assignments in Redis registry with O(1) lookup performance
+- [x] **SHARD-01**: System computes channel-to-pod assignment using consistent hashing with virtual nodes
+- [x] **SHARD-02**: System stores channel assignments in Redis registry with O(1) lookup performance
 - [ ] **SHARD-03**: Listener pod queries assignment registry on startup to determine which channels to connect
 - [ ] **SHARD-04**: Listener pod publishes heartbeat to Redis every 10 seconds with pod ID and timestamp
 - [ ] **SHARD-05**: System detects pod failure when heartbeat missing for 15 seconds (user override from 30s - per CONTEXT.md for fast stream recovery)
@@ -116,8 +116,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHARD-01 | Phase 5 | Pending |
-| SHARD-02 | Phase 5 | Pending |
+| SHARD-01 | Phase 5 | Complete |
+| SHARD-02 | Phase 5 | Complete |
 | SHARD-03 | Phase 5 | Pending |
 | SHARD-04 | Phase 5 | Pending |
 | SHARD-05 | Phase 5 | Pending |
