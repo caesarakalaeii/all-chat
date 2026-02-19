@@ -1,569 +1,225 @@
-# Stack Research: Message Deletion Events
+# Stack Research: Listener Load Balancing
 
-**Domain:** Streaming chat aggregation message deletion
-**Researched:** 2026-02-17
+**Domain:** Distributed Channel Sharding with Load-Aware Rebalancing
+**Researched:** 2026-02-19
 **Confidence:** HIGH
 
 ## Executive Summary
 
-All four streaming platforms provide mechanisms to detect and handle message deletion events, but with varying approaches:
+For implementing hybrid hash-based channel sharding with load-aware rebalancing across Go microservices, the stack additions required are minimal and leverage proven production libraries. The core requirements are: (1) consistent hashing with bounded loads for channel-to-pod assignment, (2) custom Prometheus metrics for load tracking, (3) Redis sorted sets for assignment registry, and (4) graceful WebSocket migration patterns. All required libraries are production-ready, actively maintained, and integrate with the existing All-Chat infrastructure (Redis 7, Kubernetes, Prometheus).
 
-- **Twitch**: Native IRC commands (CLEARMSG, CLEARCHAT) with full support in go-twitch-irc v4
-- **YouTube**: API-native deletion events via polling with dedicated message type
-- **Kick**: Pusher WebSocket events (unofficial, reverse-engineered)
-- **TikTok**: **NO DELETION SUPPORT** in tiktok-live-connector library
+## Recommended Stack
 
-The existing All-Chat stack requires NO new libraries - all platforms except TikTok can be supported with current dependencies. TikTok message deletion is not feasible without official API support.
+### Core Sharding Library
 
----
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| **github.com/buraksezer/consistent** | v0.10.0+ | Consistent hashing with bounded loads for channel → pod assignment | Industry-proven bounded load consistent hashing used by OpenTelemetry, SeaweedFS, and Celo Blockchain. Implements Google Research algorithm that prevents hotspots by calculating average load per member and ensuring no member exceeds it. Despite last release in Nov 2022, it's stable and production-tested. |
 
-## Platform-Specific Stack Requirements
+**Confidence:** MEDIUM - Library is stable and production-used but minimally maintained (last release 2022). No breaking changes expected for use case.
 
-### 1. Twitch (IRC)
+**Rationale for Bounded Loads:** Standard consistent hashing (like Jump Hash) only minimizes reassignment on topology changes but doesn't prevent load imbalance. Bounded load consistent hashing ensures no pod exceeds average load by 1 + ε factor, critical for preventing cascading failures when high-traffic channels (e.g., xQc with 50k viewers) would overwhelm a single pod.
 
-**Status:** ✅ **FULLY SUPPORTED** - No new libraries needed
+### Metrics Collection
 
-**Library:** `gempir/go-twitch-irc/v4` v4.3.1 (already in use)
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| **github.com/prometheus/client_golang** | v1.23.2+ | Custom load metrics (messages/sec, channel count, connection health) | Official Prometheus Go client with v1.23.2 released Sep 2025. Provides Gauge (current load), Counter (total messages), and Histogram (latency) metrics. Already integrated with Kubernetes via ServiceMonitor. |
 
-**Deletion Mechanisms:**
+**Confidence:** HIGH - Official library, actively maintained, already in use by All-Chat infrastructure.
 
-| Event Type | IRC Command | Purpose | Identifier |
-|------------|-------------|---------|------------|
-| Single Message Deletion | `CLEARMSG` | Moderator deletes one message | `target-msg-id` (UUID) |
-| User Timeout/Ban | `CLEARCHAT` | Remove all messages from user | `target-user-id` |
-| Full Chat Clear | `CLEARCHAT` | Clear entire chat | None (channel-wide) |
+**Key Metric Types for Load Balancing:**
+- **Gauge**: Current channels per pod (`listener_channels_active`), current msg/sec (`listener_messages_per_second`)
+- **Counter**: Total messages processed (`listener_messages_total`), rebalances triggered (`listener_rebalances_total`)
+- **Histogram**: Rebalancing duration (`listener_rebalance_duration_seconds`)
 
-**Implementation Details:**
+### Redis Data Structures
 
-```go
-// Callback registration (gempir/go-twitch-irc/v4)
-client.OnClearMessage(func(msg twitch.ClearMessage) {
-    // Single message deletion
-    // msg.TargetMsgID - UUID of deleted message
-    // msg.Channel - channel name
-    // msg.Login - username of message author
-})
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| **github.com/redis/go-redis/v9** | v9.18.0+ | Assignment registry using sorted sets and hashes | Already in use by All-Chat (v9.x). Redis sorted sets enable efficient load-based queries (`ZRANGEBYSCORE` for finding underloaded pods), hashes store channel metadata. Published Feb 16, 2026, imported by 14,968 projects. |
 
-client.OnClearChatMessage(func(msg twitch.ClearChatMessage) {
-    // User timeout/ban or full chat clear
-    // msg.TargetUsername - user whose messages to clear (empty for full clear)
-    // msg.TargetUserID - user ID
-    // msg.BanDuration - timeout duration in seconds (0 for permanent ban)
-    // msg.Channel - channel name
-})
+**Confidence:** HIGH - Already part of All-Chat stack, official client, recent release.
+
+**Data Structure Choices:**
+- **Sorted Set** (`assignments:load`): Pod ID → current load score for O(log N) load-based queries
+- **Hash** (`assignment:{channel_id}`): Channel metadata (pod_id, platform, assigned_at) for O(1) lookups
+- **Hash** (`pod:{pod_id}:channels`): Pod's channel list for fast rebalancing decisions
+
+### Supporting Libraries
+
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| **github.com/gorilla/websocket** | v1.5.3+ | Graceful WebSocket migration during rebalancing | Already in All-Chat for Kick/API Gateway. Use for implementing connection draining: send migration notification, wait for client reconnect, close old connection. Essential for zero-message-loss migration. |
+| **context** (stdlib) | Go 1.23+ | Cancellation propagation during graceful shutdown | Standard library. Use for coordinating shutdown across goroutines (IRC read loop, message processor, health check). Pass context from rebalance coordinator to listener instances. |
+
+**Confidence:** HIGH - Both are production-standard, gorilla/websocket already in use.
+
+## Installation
+
+```bash
+# New dependency for consistent hashing
+go get github.com/buraksezer/consistent@v0.10.0
+
+# Already present in All-Chat (verify versions)
+go get github.com/prometheus/client_golang@v1.23.2
+go get github.com/redis/go-redis/v9@v9.18.0
+go get github.com/gorilla/websocket@v1.5.3
 ```
-
-**Data Structures:**
-
-**ClearMessage** (single deletion):
-- `TargetMsgID` (string): UUID of deleted message - **PRIMARY IDENTIFIER**
-- `Channel` (string): Channel name
-- `Login` (string): Username of original author
-- `Tags` (map[string]string): Full IRC tags
-- `Time` (time.Time): Timestamp
-
-**ClearChatMessage** (bulk deletion):
-- `TargetUsername` (string): Username (empty = full clear)
-- `TargetUserID` (string): User ID (empty = full clear)
-- `BanDuration` (int): Seconds (0 = permanent, empty = full clear)
-- `RoomID` (string): Channel ID
-- `Channel` (string): Channel name
-- `Tags` (map[string]string): Full IRC tags
-- `Time` (time.Time): Timestamp
-
-**IRC Tag Details:**
-
-CLEARMSG tags:
-- `target-msg-id`: UUID format (e.g., "94e6c7ff-bf98-4faa-af5d-7ad633a158a9")
-- `login`: Username
-- `room-id`: Channel ID
-- `tmi-sent-ts`: Unix timestamp (milliseconds)
-
-CLEARCHAT tags:
-- `target-user-id`: User ID (optional)
-- `ban-duration`: Timeout seconds (optional, only for timeouts)
-- `room-id`: Channel ID
-- `tmi-sent-ts`: Unix timestamp (milliseconds)
-
-**Confidence:** HIGH - Official Twitch IRC protocol, well-documented in go-twitch-irc v4
-
-**Sources:**
-- [Twitch IRC Tags Documentation](https://dev.twitch.tv/docs/irc/tags/)
-- [Twitch IRC Commands](https://dev.twitch.tv/docs/irc/commands)
-- [go-twitch-irc v4 Package Documentation](https://pkg.go.dev/github.com/gempir/go-twitch-irc/v4)
-- [go-twitch-irc GitHub Repository](https://github.com/gempir/go-twitch-irc)
-
----
-
-### 2. YouTube (HTTP Polling API)
-
-**Status:** ✅ **FULLY SUPPORTED** - No new libraries needed
-
-**Library:** YouTube Data API v3 (already in use via HTTP client)
-
-**Deletion Mechanism:**
-
-| Event Type | API Message Type | Purpose | Identifier |
-|------------|------------------|---------|------------|
-| Message Deletion | `messageDeletedEvent` | Moderator/owner deletes message | `deletedMessageId` |
-
-**Implementation Details:**
-
-YouTube deletions are detected via the same polling mechanism used for chat messages:
-
-```go
-// Existing polling flow (services/youtube-listener/streams/poller.go)
-// GET /youtube/v3/liveChat/messages?liveChatId={id}&pageToken={token}
-
-// Response includes messageDeletedEvent types
-{
-  "snippet": {
-    "type": "messageDeletedEvent",  // Check this field
-    "authorChannelId": "UCxxxxxxx",  // Moderator who deleted
-    "publishedAt": "2026-02-17T10:00:00Z",
-    "hasDisplayContent": false,
-    "messageDeletedDetails": {
-      "deletedMessageId": "original_message_id"  // PRIMARY IDENTIFIER
-    }
-  }
-}
-```
-
-**API Response Structure:**
-
-**snippet.type Values:**
-- `"textMessageEvent"` - Normal chat message
-- `"messageDeletedEvent"` - **Message deletion event**
-- `"memberMilestoneChatEvent"` - Membership milestone
-- `"newSponsorEvent"` - New sponsor
-- etc.
-
-**messageDeletedDetails Object:**
-- `deletedMessageId` (string): ID of the original deleted message - **PRIMARY IDENTIFIER**
-
-**Additional Context (snippet):**
-- `authorChannelId` (string): Channel ID of moderator who deleted
-- `publishedAt` (string): ISO 8601 timestamp of deletion
-- `hasDisplayContent` (boolean): Always `false` for deletions
-
-**API Quota Cost:**
-- Same as regular message polling: **5 units per request**
-- No additional quota consumption for deletion events
-
-**Detection Flow:**
-1. Poll `liveChatMessages.list` (existing behavior)
-2. For each message in response, check `snippet.type`
-3. If `type == "messageDeletedEvent"`, extract `messageDeletedDetails.deletedMessageId`
-4. Match against cached messages using `deletedMessageId` (same format as original message `id`)
-5. Publish deletion event to Redis
-
-**Confidence:** HIGH - Official YouTube API, well-documented
-
-**Sources:**
-- [YouTube LiveChatMessages API](https://developers.google.com/youtube/v3/live/docs/liveChatMessages)
-- [YouTube LiveChatMessages.list Method](https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list)
-
----
-
-### 3. Kick (Pusher WebSocket)
-
-**Status:** ⚠️ **PARTIALLY SUPPORTED** - Unofficial, reverse-engineered
-
-**Library:** `gorilla/websocket` (already in use)
-
-**Deletion Mechanism:**
-
-| Event Type | Pusher Event | Purpose | Identifier |
-|------------|--------------|---------|------------|
-| Message Deletion | `App\\Events\\ChatMessageDeletedEvent` | Message removed | `id` (UUID) |
-
-**Implementation Details:**
-
-```go
-// Pusher WebSocket message format (services/kick-listener/websocket/client.go)
-{
-  "event": "App\\Events\\ChatMessageDeletedEvent",
-  "channel": "chatrooms.123456",
-  "data": {
-    "id": "e4a2cc71-5e99-49e5-9112-2eafb30b414d",  // Deletion event ID
-    "message": {
-      "id": "original_message_uuid"  // PRIMARY IDENTIFIER
-    },
-    // OR (alternate structure)
-    "deletedMessage": {
-      "id": "original_message_uuid",  // PRIMARY IDENTIFIER
-      "deleted_by": 12345,             // User ID of moderator
-      "chatroom_id": 123456
-    }
-  }
-}
-```
-
-**Event Structure:**
-
-**ChatMessageDeletedEvent:**
-- `event` (string): `"App\\Events\\ChatMessageDeletedEvent"`
-- `channel` (string): `"chatrooms.{chatroom_id}"`
-- `data.id` (string): UUID of deletion event (NOT the deleted message)
-- `data.message.id` OR `data.deletedMessage.id` (string): UUID of deleted message - **PRIMARY IDENTIFIER**
-- `data.deletedMessage.deleted_by` (int): User ID of moderator (optional)
-- `data.deletedMessage.chatroom_id` (int): Chatroom ID
-
-**Message ID Format:**
-- UUID format: `"e4a2cc71-5e99-49e5-9112-2eafb30b414d"`
-- Same format as original message IDs in `ChatMessageSentEvent`
-
-**Implementation Notes:**
-- Event arrives over existing WebSocket connection (no additional connections needed)
-- Must track original message IDs to match deletions
-- Structure may vary (two possible formats observed in community libraries)
-- Event is pushed in real-time (sub-100ms latency)
-
-**Confidence:** MEDIUM - Unofficial/reverse-engineered, but widely used in community libraries
-
-**Limitations:**
-- ⚠️ Unofficial event structure (Kick may change without notice)
-- ⚠️ No official documentation
-- ⚠️ Two conflicting structures observed (`message.id` vs `deletedMessage`)
-- ⚠️ May break if Kick changes Pusher implementation
-
-**Sources:**
-- [KickLib C# Library](https://github.com/Bukk94/KickLib) (NuGet package with deletion support)
-- [Kick Chat Wrapper (Go)](https://pkg.go.dev/github.com/johanvandegriff/kick-chat-wrapper)
-- [Kick Alerts GitHub](https://github.com/Jake4-CX/Kick-Alerts) (mentions ChatMessageDeletedEvent structure)
-
----
-
-### 4. TikTok (Unofficial WebSocket)
-
-**Status:** ❌ **NOT SUPPORTED** - No deletion events available
-
-**Library:** `tiktok-live-connector` (already in use via Node.js)
-
-**Deletion Support:** **NONE**
-
-**Available Events:**
-- `chat` - Chat messages
-- `member` - Members joining
-- `gift` - Gifts
-- `social` - Follows/shares
-- `like` - Likes
-- `roomUser` - Viewer count
-- `emote` - Emote reactions
-- `envelope` - Red envelope events
-- `questionNew` - Q&A questions
-- `linkMicBattle` - Battle events
-
-**Message Deletion:** Not supported by library or TikTok's WebSocket API
-
-**Rationale:**
-- TikTok-Live-Connector is reverse-engineered (unofficial)
-- No deletion events observed in community-maintained libraries
-- TikTok's internal WebSocket API likely doesn't expose deletion events
-- No official TikTok Live Chat API exists
-
-**Confidence:** HIGH - Verified via library documentation and source code inspection
-
-**Recommendations:**
-1. Document limitation in user-facing documentation
-2. Mark TikTok deletion support as "Not Available (Platform Limitation)"
-3. Consider adding fallback: client-side timeout-based removal after X minutes
-4. Monitor for official TikTok Live API release
-
-**Sources:**
-- [TikTok-Live-Connector GitHub](https://github.com/zerodytrash/TikTok-Live-Connector)
-- [tiktok-live-connector npm package](https://www.npmjs.com/package/tiktok-live-connector)
-
----
-
-## Implementation Strategy
-
-### Phase 1: Twitch + YouTube (High Confidence)
-
-**No new dependencies required.**
-
-**Twitch Implementation:**
-1. Add `OnClearMessage` and `OnClearChatMessage` handlers to `services/twitch-listener/irc/client.go`
-2. Publish deletion events to Redis Streams (`chat:deletions` or reuse `chat:raw` with type flag)
-3. Message Processor handles deletion events
-4. API Gateway forwards to WebSocket clients
-5. Frontend removes messages from overlay
-
-**YouTube Implementation:**
-1. Modify `services/youtube-listener/streams/poller.go` to check `snippet.type`
-2. When `type == "messageDeletedEvent"`, extract `deletedMessageId`
-3. Publish deletion event to Redis Streams
-4. Same processing flow as Twitch
-
-**Estimated Effort:** 2-3 days (both platforms)
-
-### Phase 2: Kick (Medium Confidence)
-
-**No new dependencies required.**
-
-**Implementation:**
-1. Add `ChatMessageDeletedEvent` handler to `services/kick-listener/websocket/client.go`
-2. Handle both structure variations (`message.id` vs `deletedMessage`)
-3. Publish deletion event to Redis Streams
-4. Test with live Kick streams to verify structure
-
-**Estimated Effort:** 1-2 days
-
-**Risks:**
-- Structure may differ from community documentation
-- Kick may change event format without notice
-- Requires production testing for validation
-
-### Phase 3: TikTok (Not Feasible)
-
-**Recommendation:** Skip or implement client-side fallback
-
-**Options:**
-1. **Document limitation** - "TikTok does not support message deletion"
-2. **Client-side TTL** - Auto-remove messages after 5 minutes (configurable)
-3. **Manual moderation** - Admin panel to hide specific messages
-4. **Wait for official API** - Monitor TikTok developer announcements
-
----
-
-## Redis Streams Message Format
-
-### Unified Deletion Event Schema
-
-Publish to existing `chat:raw` stream with new message type:
-
-```json
-{
-  "message_id": "deletion_event_uuid",
-  "platform": "twitch|youtube|kick|tiktok",
-  "event_type": "deletion",  // NEW FIELD
-  "deletion_type": "single|user|chat",  // single message, user ban, or full clear
-  "channel_id": "channel_identifier",
-  "timestamp": "2026-02-17T10:00:00Z",
-  "deleted_message_id": "original_message_uuid",  // For single deletions
-  "deleted_user_id": "user_id",  // For user bans/timeouts (optional)
-  "deleted_username": "username",  // For user bans/timeouts (optional)
-  "ban_duration": 600,  // Timeout seconds (0 = permanent, null = not applicable)
-  "moderator_id": "mod_user_id",  // Who performed deletion (optional)
-  "tags": {
-    // Platform-specific metadata
-  }
-}
-```
-
-**Deletion Types:**
-- `"single"` - One message deleted (Twitch CLEARMSG, YouTube messageDeletedEvent, Kick ChatMessageDeletedEvent)
-- `"user"` - All messages from user (Twitch CLEARCHAT with target)
-- `"chat"` - Full chat clear (Twitch CLEARCHAT without target)
-
----
 
 ## Alternatives Considered
 
-### Alternative 1: Twitch EventSub Instead of IRC
-
-**Why Not:**
-- ❌ Requires webhook infrastructure (extra complexity)
-- ❌ Would need to migrate entire Twitch integration
-- ❌ IRC already working, tested, and reliable
-- ✅ IRC CLEARMSG/CLEARCHAT fully supported in go-twitch-irc v4
-
-**When to Consider:**
-- If Twitch deprecates IRC (not announced)
-- If webhook latency becomes acceptable
-- If other EventSub features are needed
-
-### Alternative 2: YouTube EventSub/WebSocket
-
-**Why Not:**
-- ❌ YouTube doesn't offer WebSocket for live chat
-- ❌ Polling is official approach (documented in API)
-- ❌ No EventSub equivalent for YouTube Live Chat
-
-### Alternative 3: Official Kick API
-
-**Why Not:**
-- ❌ Kick has no official chat API
-- ❌ All integrations are reverse-engineered via Pusher
-- ✅ Pusher WebSocket is de facto standard
-
-### Alternative 4: Wait for TikTok Official API
-
-**Why Consider:**
-- ✅ Would be production-ready and supported
-- ✅ Would likely include deletion events
-- ❌ No timeline or announcement from TikTok
-- ❌ Current library is only option for real-time events
-
----
-
-## Version Compatibility
-
-| Package | Current Version | Deletion Support | Notes |
-|---------|----------------|------------------|-------|
-| `gempir/go-twitch-irc/v4` | v4.3.1 | ✅ Full | `OnClearMessage`, `OnClearChatMessage` |
-| YouTube Data API v3 | v3 | ✅ Full | `messageDeletedEvent` type |
-| `gorilla/websocket` | (in use) | ✅ Compatible | No changes needed |
-| `tiktok-live-connector` | (in use) | ❌ None | No deletion events exposed |
-
-**No version upgrades required for deletion support.**
-
----
+| Category | Recommended | Alternative | When to Use Alternative |
+|----------|-------------|-------------|-------------------------|
+| Consistent Hashing | buraksezer/consistent (bounded) | lithammer/go-jump-consistent-hash (Jump Hash) | **DO NOT use Jump Hash** - No bounded load support, requires fixed bucket count (incompatible with dynamic pod scaling), cannot prevent hotspots. Only use if pod count is static and all channels have similar load. |
+| Consistent Hashing | buraksezer/consistent | lafikl/consistent (bounded) | **DO NOT use** - No official releases, unclear maintenance status (688 stars but "No releases published"). API looks similar but production risk too high. |
+| Metrics | Prometheus client_golang | Custom metrics exporter | Only if you need metrics in multiple formats (e.g., StatsD + Prometheus). Adds complexity without benefit since Kubernetes ecosystem standardizes on Prometheus. |
+| Assignment Registry | Redis Sorted Sets | PostgreSQL table with indexes | Only if you need ACID transactions across assignments + other tables. Redis sorted sets provide O(log N) load queries vs O(N) table scans. For 100-1000 pods, Redis is 10-100x faster. |
+| Assignment Registry | Redis | etcd v3 (watch API) | Consider if you need strong consistency guarantees and already use etcd. Requires additional infrastructure. Redis is sufficient since source-manager already provides leader election via locking. |
 
 ## What NOT to Use
 
-### ❌ Twitch PubSub API for Deletions
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| **Jump Consistent Hash** (dgryski/go-jump, lithammer/go-jump-consistent-hash) | No bounded load support - will create hotspots with high-traffic channels. Fixed bucket count incompatible with Kubernetes HPA. | buraksezer/consistent with bounded loads |
+| **Standard consistent hash** (stathat/consistent, serialx/hashring) | Minimizes reassignment but allows unbounded load imbalance. One pod could handle 90% of traffic while others idle. | buraksezer/consistent with bounded loads |
+| **Rendezvous hashing** (HRW/highest random weight) | O(N) lookup complexity per key (must compute hash for every node). Impractical for 1000+ channels with frequent lookups. | buraksezer/consistent (O(1) lookup) |
+| **Custom HPA metrics via metrics-server** | Kubernetes metrics-server only exposes CPU/memory, requires custom metrics API and Prometheus Adapter. | Direct Prometheus metrics + manual rebalancing logic (simpler, no adapter dependency) |
+| **KEDA for autoscaling** | Overkill for this use case - designed for event-driven scale-to-zero (queue depth, cron). All-Chat listeners must stay running (WebSocket connections). | HPA with CPU/memory metrics (already works) |
 
-**Why Avoid:**
-- Deprecated in favor of EventSub
-- Requires WebSocket connection per channel (doesn't scale)
-- IRC provides same functionality with better performance
+## Stack Patterns by Scenario
 
-### ❌ YouTube API v2 (Legacy)
+### Scenario 1: Initial Implementation (Phase 1)
 
-**Why Avoid:**
-- Deprecated since 2015
-- No live chat support
-- Use YouTube Data API v3
+**Use:**
+- buraksezer/consistent with static config (load factor = 1.25)
+- Redis sorted set for pod load tracking
+- Prometheus Gauge metrics (messages/sec, channel count)
+- Manual rebalancing trigger (admin API endpoint)
 
-### ❌ Unofficial Kick REST API for Deletions
+**Because:** Simplest path to production. Manual rebalancing reduces blast radius during initial rollout. Load factor 1.25 allows 25% imbalance before rebalancing (proven reasonable by Google Research paper).
 
-**Why Avoid:**
-- No deletion event endpoints in REST API
-- Pusher WebSocket is only real-time option
-- REST API cannot provide immediate notification
+### Scenario 2: Production Hardening (Phase 2)
 
-### ❌ Screen Scraping / Browser Automation
+**Use:**
+- Same as Phase 1, add automatic rebalancing based on Prometheus metrics
+- Graceful WebSocket migration (gorilla/websocket CloseMessage with code 1012 "Service Restart")
+- Context-based cancellation for listener shutdown
+- Rebalancing backoff (exponential, max 5 minutes)
 
-**Why Avoid:**
-- Extremely fragile (DOM changes break implementation)
-- High latency (seconds vs milliseconds)
-- Platform TOS violations
-- Use official/unofficial APIs instead
+**Because:** Automatic rebalancing enables true production autonomy but needs safeguards (backoff prevents thrashing, graceful migration prevents message loss).
 
----
+### Scenario 3: High Scale (1000+ channels)
 
-## Production Considerations
+**Use:**
+- Increase partition count in buraksezer/consistent (default 271, increase to 1009 for better distribution)
+- Redis cluster mode (if single-node Redis becomes bottleneck)
+- Histogram metrics for rebalancing latency percentiles (p50, p95, p99)
 
-### Message ID Storage
+**Because:** Higher partition count improves load distribution but increases memory (271 partitions = 271 * member count entries). Only needed at scale. Redis cluster adds complexity but handles 100K+ ops/sec.
 
-**Problem:** Need to match deletion events to original messages
+## Integration with Existing Infrastructure
 
-**Solutions:**
-1. **Redis Cache** (Recommended)
-   - Store `message_id → overlay_id` mapping
-   - TTL: 5-10 minutes (messages older than this rarely deleted)
-   - Key format: `msg:{platform}:{message_id} → overlay_id`
+### Redis 7 Compatibility
 
-2. **PostgreSQL** (Not Recommended)
-   - Would require schema change (messages currently not persisted)
-   - Adds database load
-   - Slower than Redis
+**Data structures required:**
+- `ZADD`, `ZINCRBY`, `ZRANGEBYSCORE` (sorted sets) - Available since Redis 1.2
+- `HSET`, `HGET`, `HSCAN` (hashes) - Available since Redis 2.0
+- `PUBLISH` (Pub/Sub) - Available since Redis 2.0
 
-3. **Frontend Only** (Fallback)
-   - Frontend tracks message IDs
-   - Matches deletion events locally
-   - Works even if backend cache expires
+**Confidence:** HIGH - All operations available in Redis 7, no compatibility issues.
 
-### Race Conditions
+### Kubernetes Integration
 
-**Scenario:** Deletion event arrives before original message
+**Custom metrics path (OPTIONAL):**
+1. Prometheus scrapes `/metrics` endpoint (already configured via ServiceMonitor)
+2. Install prometheus-adapter (translates Prometheus metrics → Kubernetes custom metrics API)
+3. Configure HPA to use `listener_messages_per_second` for autoscaling
 
-**Mitigation:**
-1. Buffer deletion events in Redis for 10 seconds
-2. If matching message arrives late, apply deletion immediately
-3. If no match after 10 seconds, discard (message never sent to overlay)
+**Simpler path (RECOMMENDED):**
+- Use existing HPA with CPU/memory metrics
+- Implement rebalancing in source-manager (already has leader election)
+- Query Prometheus API directly from Go using `github.com/prometheus/client_golang/api`
 
-### API Gateway WebSocket Protocol
+**Confidence:** MEDIUM - Prometheus Adapter adds operational complexity. Recommend direct API queries.
 
-**New Message Type:** Add `deletion` event type
+### Source-Manager Integration
 
-```json
-{
-  "type": "deletion",
-  "payload": {
-    "deletion_type": "single|user|chat",
-    "deleted_message_id": "uuid",  // For single
-    "deleted_user_id": "user_id"   // For user bans
-  }
-}
-```
+**Leverage existing capabilities:**
+- Leader election (source-manager already uses Redis-based locking)
+- Active source registry (extend to include pod assignments)
+- Heartbeat mechanism (detect pod failures for reassignment)
 
-Frontend listens for `deletion` events and removes matching messages from DOM.
+**New responsibilities:**
+- Run consistent hash ring calculation (leader only)
+- Trigger rebalancing when load imbalance > threshold
+- Coordinate graceful channel migrations across pods
 
----
+**Confidence:** HIGH - Minimal changes to source-manager, fits existing responsibilities.
 
-## Testing Strategy
+## Version Compatibility
 
-### Unit Tests
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| buraksezer/consistent@v0.10.0 | Go 1.11+ (uses modules) | No dependencies, pure Go. Thread-safe. Compatible with existing All-Chat Go 1.23+ requirement. |
+| prometheus/client_golang@v1.23.2 | Go 1.21+ | Works with existing Prometheus 2.x in All-Chat Kubernetes cluster. |
+| redis/go-redis/v9@v9.18.0 | Go 1.18+ (uses generics) | All-Chat already uses Go 1.23+, no issues. Requires Redis 6+ (All-Chat uses Redis 7). |
+| gorilla/websocket@v1.5.3 | Go 1.20+ | All-Chat already uses this for Kick listener and API Gateway. |
 
-**Twitch:**
-- Mock IRC CLEARMSG/CLEARCHAT messages
-- Verify callback registration and parsing
-- Test `TargetMsgID` and `TargetUserID` extraction
+## Performance Characteristics
 
-**YouTube:**
-- Mock API responses with `messageDeletedEvent`
-- Verify `deletedMessageId` extraction
-- Test polling flow with mixed message types
+### Consistent Hashing Performance
 
-**Kick:**
-- Mock Pusher WebSocket messages
-- Test both structure variations
-- Verify UUID parsing
+**buraksezer/consistent:**
+- Lookup: O(1) average case (hash → partition → member mapping)
+- Add/Remove member: O(P) where P = partition count (default 271)
+- Memory: O(M * P) where M = member count, P = partition count
+  - For 10 pods, 271 partitions: ~2.7KB metadata
+  - For 100 pods, 271 partitions: ~27KB metadata
 
-### Integration Tests
+**Comparison with Jump Hash:**
+- Jump Hash: O(1) lookup, O(1) add/remove, but NO bounded loads
+- Consistent Hash Ring: O(log N) lookup (binary search), O(1) add/remove
 
-**E2E Flow:**
-1. Publish test message to overlay
-2. Trigger deletion event (mock or real)
-3. Verify deletion event published to Redis
-4. Verify Message Processor handles deletion
-5. Verify API Gateway sends deletion to WebSocket
-6. Verify frontend removes message
+**Verdict:** buraksezer/consistent offers best tradeoff - O(1) lookup with bounded loads.
 
-### Production Validation
+### Redis Performance
 
-**Twitch:**
-- Delete message via Twitch chat moderation
-- Verify overlay updates immediately
+**Expected operations:**
+- Channel assignment lookup: `HGET assignment:{channel_id} pod_id` - O(1), <1ms
+- Find underloaded pod: `ZRANGEBYSCORE assignments:load 0 avg_load LIMIT 0 1` - O(log N + M), <5ms for 100 pods
+- Update pod load: `ZINCRBY assignments:load increment pod_id` - O(log N), <1ms
 
-**YouTube:**
-- Delete message via YouTube Studio live dashboard
-- Verify overlay updates within polling interval (2-5 seconds)
+**Scale characteristics:**
+- Redis single-node: 100K ops/sec sustained
+- All-Chat workload: ~1000 channels * 10 messages/sec = 10K msg/sec, ~100 assignment lookups/sec
+- Headroom: 1000x, Redis is not the bottleneck
 
-**Kick:**
-- Delete message via Kick chat moderation
-- Verify overlay updates immediately
-- Confirm event structure matches documentation
-
-**TikTok:**
-- Document that deletion is not supported
-- Test client-side TTL fallback if implemented
-
----
+**Confidence:** HIGH - Redis is massively over-provisioned for this workload.
 
 ## Sources
 
-### Official Documentation
-- [Twitch IRC Commands](https://dev.twitch.tv/docs/irc/commands)
-- [Twitch IRC Tags](https://dev.twitch.tv/docs/irc/tags/)
-- [YouTube LiveChatMessages API](https://developers.google.com/youtube/v3/live/docs/liveChatMessages)
-- [YouTube LiveChatMessages.list Method](https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list)
+### High Confidence (Official Documentation)
+- [buraksezer/consistent GitHub](https://github.com/buraksezer/consistent) - v0.10.0 (Nov 2022), production use by OpenTelemetry, SeaweedFS, Celo
+- [prometheus/client_golang pkg.go.dev](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus) - v1.23.2 (Sep 2025), official Prometheus Go client
+- [redis/go-redis pkg.go.dev](https://pkg.go.dev/github.com/redis/go-redis/v9) - v9.18.0 (Feb 2026), official Redis Go client, 14,968 imports
+- [gorilla/websocket GitHub](https://github.com/gorilla/websocket) - v1.5.3+, graceful shutdown patterns
+- [Kubernetes HPA Documentation](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/) - Official K8s autoscaling guide
 
-### Library Documentation
-- [go-twitch-irc v4 Package](https://pkg.go.dev/github.com/gempir/go-twitch-irc/v4)
-- [go-twitch-irc GitHub Repository](https://github.com/gempir/go-twitch-irc)
-- [TikTok-Live-Connector GitHub](https://github.com/zerodytrash/TikTok-Live-Connector)
-- [tiktok-live-connector npm](https://www.npmjs.com/package/tiktok-live-connector)
+### Medium Confidence (Community Best Practices)
+- [Consistent Hashing Guide by Senthil](https://medium.com/@sent0hil/consistent-hashing-a-guide-go-implementation-fe3421ac3e8f) - Implementation patterns
+- [Data Sharding in Golang - Coding Explorations](https://www.codingexplorations.com/blog/data-sharding-in-golang-optimizing-performance-and-scalability) - Best practices for Go sharding
+- [Monitor Custom Kubernetes Pod Metrics | Better Stack](https://betterstack.com/community/questions/monitor-custom-kubernetes-pod-metrics-using-prometheus/) - Prometheus custom metrics patterns
+- [Redis Task Scheduling | Compile N Run](https://www.compilenrun.com/docs/middleware/redis/redis-development-patterns/redis-task-scheduling/) - Redis sorted sets for task distribution
+- [How to Implement Graceful Shutdown in Go | OneUpTime](https://oneuptime.com/blog/post/2026-01-23-go-graceful-shutdown/view) - Jan 2026 graceful shutdown patterns
 
-### Community Resources (Kick)
-- [KickLib C# Library](https://github.com/Bukk94/KickLib)
-- [Kick Chat Wrapper (Go)](https://pkg.go.dev/github.com/johanvandegriff/kick-chat-wrapper)
-- [Kick Alerts GitHub](https://github.com/Jake4-CX/Kick-Alerts)
+### Alternative Libraries Evaluated
+- [lafikl/consistent GitHub](https://github.com/lafikl/consistent) - No official releases, rejected
+- [lithammer/go-jump-consistent-hash](https://pkg.go.dev/github.com/lithammer/go-jump-consistent-hash) - Jump Hash implementation, no bounded loads, rejected
+- [dgryski/go-jump GitHub](https://github.com/dgryski/go-jump) - Another Jump Hash, same limitations, rejected
 
 ---
 
-**Research Date:** 2026-02-17
-**Researcher:** Claude Code (GSD Project Researcher Agent)
-**Overall Confidence:** HIGH (Twitch, YouTube), MEDIUM (Kick), HIGH (TikTok = Not Supported)
+**Stack research for:** All-Chat Listener Load Balancing
+**Researched:** 2026-02-19
+**Next step:** Use findings to create roadmap phases for implementation
