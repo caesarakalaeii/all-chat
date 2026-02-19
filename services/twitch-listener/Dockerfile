@@ -9,6 +9,9 @@ WORKDIR /build
 # Copy shared module first
 COPY shared /build/shared
 
+# Copy message-processor module (needed for registry import)
+COPY services/message-processor /build/services/message-processor
+
 # Copy service files
 COPY services/twitch-listener /build/services/twitch-listener
 
