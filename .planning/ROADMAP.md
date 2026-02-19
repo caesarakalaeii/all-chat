@@ -93,10 +93,15 @@ Plans:
   3. Platform-specific connection state migrates correctly (Twitch IRC JOIN list, Kick Pusher subscription IDs, TikTok connection state)
   4. HPA can scale Twitch listener from 1 to 5 replicas with all pods reporting ready (fixes current 1/5 ready issue)
   5. Migration events publish to Redis Streams with sequence numbers for gap detection
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 06-01: TBD (planning required)
+- [ ] 06-01-PLAN.md — Shared migration infrastructure (coordinator client, Redis Pub/Sub subscriber, migration event models)
+- [ ] 06-02-PLAN.md — Twitch listener integration (startup query, heartbeat, multiple IRC connections, migration, readiness)
+- [ ] 06-03-PLAN.md — Kick listener integration (startup query, heartbeat, Pusher subscription management, migration, readiness)
+- [ ] 06-04-PLAN.md — TikTok listener creation + integration (new service with coordinator integration and HPA support)
+- [ ] 06-05-PLAN.md — Migration observability + coordinator publisher (Redis Pub/Sub + Streams, migration triggers, confirmation wait)
+- [ ] 06-06-PLAN.md — End-to-end migration testing (HPA scale tests, zero-loss validation, checkpoint for human verification)
 
 ### Phase 7: Dynamic Rebalancing & HPA Integration
 **Goal**: Automatic load-aware rebalancing with safeguards against thundering herd and quota exhaustion
@@ -138,10 +143,10 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 1. Foundation + Twitch | v1.0 | 5/5 | Complete | 2026-02-18 |
 | 2. YouTube Integration | v1.0 | 2/2 | Complete | 2026-02-18 |
 | 3. Kick Integration + Edge Cases | v1.0 | 4/4 | Complete | 2026-02-18 |
-| 5. Sharding Infrastructure & Coordinator | 3/5 | In Progress|  | - |
-| 6. Connection Management & Migration | v1.1 | 0/? | Not started | - |
+| 5. Sharding Infrastructure & Coordinator | v1.1 | 5/5 | Complete | 2026-02-19 |
+| 6. Connection Management & Migration | v1.1 | 0/6 | Planning complete | - |
 | 7. Dynamic Rebalancing & HPA | v1.1 | 0/? | Not started | - |
 | 8. Observability & Production Readiness | v1.1 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-02-19 after Phase 5 planning*
+*Last updated: 2026-02-19 after Phase 6 planning*
