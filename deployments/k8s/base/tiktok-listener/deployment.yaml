@@ -72,6 +72,18 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: REDIS_PORT
+        - name: COORDINATOR_URL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: SOURCE_MANAGER_URL
+        - name: SERVICE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: SERVICE_JWT_SECRET
+        - name: HEARTBEAT_INTERVAL_MS
+          value: "10000"  # Publish heartbeat every 10 seconds
         - name: PORT
           value: "8089"
         - name: POLL_INTERVAL_MS
