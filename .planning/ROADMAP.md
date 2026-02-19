@@ -96,10 +96,10 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Shared migration infrastructure (coordinator client, Redis Pub/Sub subscriber, migration event models)
-- [ ] 06-02-PLAN.md — Twitch listener integration (startup query, heartbeat, multiple IRC connections, migration, readiness)
-- [ ] 06-03-PLAN.md — Kick listener integration (startup query, heartbeat, Pusher subscription management, migration, readiness)
-- [ ] 06-04-PLAN.md — TikTok listener creation + integration (new service with coordinator integration and HPA support)
+- [x] 06-01-PLAN.md — Shared migration infrastructure (coordinator client, Redis Pub/Sub subscriber, migration event models)
+- [x] 06-02-PLAN.md — Twitch listener integration (startup query, heartbeat, multiple IRC connections, migration, readiness)
+- [x] 06-03-PLAN.md — Kick listener integration (startup query, heartbeat, Pusher subscription management, migration, readiness)
+- [x] 06-04-PLAN.md — TikTok listener integration (TypeScript coordinator client, assignment filtering, migration, HPA 1-3 replicas)
 - [ ] 06-05-PLAN.md — Migration observability + coordinator publisher (Redis Pub/Sub + Streams, migration triggers, confirmation wait)
 - [ ] 06-06-PLAN.md — End-to-end migration testing (HPA scale tests, zero-loss validation, checkpoint for human verification)
 
