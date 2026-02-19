@@ -40,38 +40,63 @@ func (h *HealthHandler) LivenessProbe(c *gin.Context) {
 }
 
 // ReadinessProbe checks if the service is ready to handle requests
-// Checks: IRC connection, Redis connection, active channels
+// Checks: IRC connection, Redis connection, coordinator assignments, active channels
+// Per CONTEXT.md: Pod reports ready AFTER successfully connecting to all assigned channels
 func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
 	checks := make(map[string]interface{})
 	ready := true
+	reason := ""
 
-	// Check IRC connection
+	// Check 1: IRC connection established
 	ircConnected := h.ircConn.IsConnected()
 	checks["irc_connected"] = ircConnected
 	if !ircConnected {
 		ready = false
+		reason = "IRC not connected"
 	}
 
-	// Check Redis connection
+	// Check 2: Redis connection
 	redisErr := h.publisher.Ping(ctx)
 	checks["redis_connected"] = redisErr == nil
 	if redisErr != nil {
 		ready = false
 		checks["redis_error"] = redisErr.Error()
+		if reason == "" {
+			reason = "Redis not connected"
+		}
 	}
 
-	// Check active channels
-	activeChannels := h.chanMgr.GetActiveChannelCount()
-	checks["active_channels"] = activeChannels
+	// Check 3: Assignments received from coordinator (TWITCH-06, TWITCH-07)
+	assignmentCount := h.chanMgr.GetAssignmentCount()
+	checks["assignments"] = assignmentCount
+	if assignmentCount == 0 {
+		ready = false
+		if reason == "" {
+			reason = "no assignments from coordinator"
+		}
+	}
+
+	// Check 4: Active channels match assignment count (all channels connected)
+	activeChannelCount := h.chanMgr.GetActiveChannelCount()
+	checks["active_channels"] = activeChannelCount
+	if activeChannelCount < assignmentCount {
+		ready = false
+		if reason == "" {
+			reason = "channels connecting"
+		}
+		checks["expected"] = assignmentCount
+		checks["connected"] = activeChannelCount
+	}
 
 	status := "ready"
 	statusCode := http.StatusOK
 	if !ready {
 		status = "not_ready"
 		statusCode = http.StatusServiceUnavailable
+		checks["reason"] = reason
 	}
 
 	c.JSON(statusCode, gin.H{

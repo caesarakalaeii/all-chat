@@ -14,6 +14,7 @@ import (
 
 // ActiveChannel represents an active Kick channel to monitor
 type ActiveChannel struct {
+	SourceID    string // UUID from overlay_chat_sources.id
 	OverlayID   string
 	ChannelSlug string
 	ChatroomID  int
@@ -44,6 +45,7 @@ func NewRepository(db *pgxpool.Pool, logger *zap.Logger) *Repository {
 func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, error) {
 	query := `
 		SELECT
+			ocs.id as source_id,
 			ocs.overlay_id,
 			COALESCE(ocs.channel_handle, ocs.channel_name) as channel_slug,
 			ocs.config->>'chatroom_id' as chatroom_id,
@@ -67,6 +69,7 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, e
 		var chatroomID sql.NullString
 
 		err := rows.Scan(
+			&ch.SourceID,
 			&ch.OverlayID,
 			&ch.ChannelSlug,
 			&chatroomID,
