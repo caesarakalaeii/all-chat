@@ -9,7 +9,7 @@
 
 - [x] **SHARD-01**: System computes channel-to-pod assignment using consistent hashing with virtual nodes
 - [x] **SHARD-02**: System stores channel assignments in Redis registry with O(1) lookup performance
-- [ ] **SHARD-03**: Listener pod queries assignment registry on startup to determine which channels to connect
+- [x] **SHARD-03**: Listener pod queries assignment registry on startup to determine which channels to connect
 - [x] **SHARD-04**: Listener pod publishes heartbeat to Redis every 10 seconds with pod ID and timestamp
 - [x] **SHARD-05**: System detects pod failure when heartbeat missing for 15 seconds (user override from 30s - per CONTEXT.md for fast stream recovery)
 - [x] **SHARD-06**: System redistributes channels from failed pod to healthy pods within 60 seconds
@@ -118,7 +118,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | SHARD-01 | Phase 5 | Complete |
 | SHARD-02 | Phase 5 | Complete |
-| SHARD-03 | Phase 5 | Pending |
+| SHARD-03 | Phase 5 | Complete |
 | SHARD-04 | Phase 5 | Complete |
 | SHARD-05 | Phase 5 | Complete |
 | SHARD-06 | Phase 5 | Complete |
