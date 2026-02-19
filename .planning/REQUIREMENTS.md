@@ -56,11 +56,11 @@
 
 ### TikTok Load Balancing
 
-- [ ] **TIKTOK-01**: TikTok listener queries shard coordinator for assigned channels on startup
-- [ ] **TIKTOK-02**: TikTok listener connects via tiktok-live-connector only for assigned channels
-- [ ] **TIKTOK-03**: TikTok listener stores connection state in ConnectionSnapshot for migration
-- [ ] **TIKTOK-04**: TikTok listener handles connection state migration for unofficial library
-- [ ] **TIKTOK-05**: System allows HPA to scale TikTok listener from 1 to 3 replicas successfully
+- [x] **TIKTOK-01**: TikTok listener queries shard coordinator for assigned channels on startup
+- [x] **TIKTOK-02**: TikTok listener connects via tiktok-live-connector only for assigned channels
+- [x] **TIKTOK-03**: TikTok listener stores connection state in ConnectionSnapshot for migration
+- [x] **TIKTOK-04**: TikTok listener handles connection state migration for unofficial library
+- [x] **TIKTOK-05**: System allows HPA to scale TikTok listener from 1 to 3 replicas successfully
 
 ### Observability & Metrics
 
@@ -150,11 +150,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | KICK-03 | Phase 6 | Complete |
 | KICK-04 | Phase 6 | Complete |
 | KICK-05 | Phase 6 | Complete |
-| TIKTOK-01 | Phase 6 | Pending |
-| TIKTOK-02 | Phase 6 | Pending |
-| TIKTOK-03 | Phase 6 | Pending |
-| TIKTOK-04 | Phase 6 | Pending |
-| TIKTOK-05 | Phase 6 | Pending |
+| TIKTOK-01 | Phase 6 | Complete |
+| TIKTOK-02 | Phase 6 | Complete |
+| TIKTOK-03 | Phase 6 | Complete |
+| TIKTOK-04 | Phase 6 | Complete |
+| TIKTOK-05 | Phase 6 | Complete |
 | METRICS-01 | Phase 8 | Pending |
 | METRICS-02 | Phase 8 | Pending |
 | METRICS-03 | Phase 8 | Pending |
