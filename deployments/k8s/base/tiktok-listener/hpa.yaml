@@ -1,0 +1,29 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tiktok-listener
+  namespace: allchat
+  labels:
+    app: tiktok-listener
+    component: listener
+    platform: tiktok
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tiktok-listener
+  minReplicas: 1
+  maxReplicas: 3  # Lower than Twitch/Kick due to unofficial library stability concerns (per TIKTOK-05)
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
