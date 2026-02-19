@@ -1,404 +1,568 @@
-# Pitfalls Research: Message Deletion in Streaming Chat Aggregation
+# Pitfalls Research: Distributed Channel Sharding
 
-**Domain:** Chat Aggregation - Message Deletion Events
-**Researched:** 2026-02-17
-**Confidence:** HIGH
+**Domain:** Distributed Load Balancing for Real-Time Messaging Microservices
+**Researched:** 2026-02-19
+**Confidence:** MEDIUM-HIGH
 
 ## Critical Pitfalls
 
-### Pitfall 1: Message ID Mismatch Between Platform and System
+### Pitfall 1: Split-Brain During Channel Assignment
 
 **What goes wrong:**
-Platform sends deletion event with **platform-native message ID** (e.g., Twitch's `target-msg-id`), but your system has already transformed messages to use **internal UUIDs**. Deletion events fail to match any messages because the ID tracking is broken.
+Network partitions cause multiple pods to simultaneously believe they own the same channel, resulting in duplicate connections to the platform (e.g., two pods both join the same Twitch IRC channel) and duplicate message delivery to overlays.
 
 **Why it happens:**
-All-Chat generates new UUIDs when messages enter the system (`MessageID: uuid.New().String()` in `/services/message-processor/models/message.go`). Platform deletion events reference **original platform IDs** that were never preserved. The current architecture has no bidirectional ID mapping.
+Leader election or distributed lock implementations fail to handle network partitions correctly. Most systems use Redis or etcd for coordination, but without proper fencing tokens or quorum-based decisions, two partitions can both believe they're authoritative.
 
 **How to avoid:**
-- **Dual ID tracking**: Store both `platform_message_id` (original) and `internal_id` (UUID) in message models
-- **Add to RawChatMessage**: New field `PlatformMessageID string` to preserve original ID
-- **Add to UnifiedChatMessage**: Field `PlatformMessageID string` for deletion matching
-- **Implement ID registry**: Redis hash `msg:platform_id_to_internal` with 15-minute TTL (messages older than this unlikely to be deleted)
+- Use Kubernetes Lease API (coordination.k8s.io/v1) with proper TTLs and renewal intervals
+- Implement fencing tokens (monotonic counters) that increase with each channel assignment
+- Require majority quorum for channel ownership decisions
+- Add platform-level duplicate detection: track message IDs and filter duplicates before publishing to Redis
 
 **Warning signs:**
-- Deletion events arrive but no messages disappear from overlays
-- Logs show "message not found" errors when processing deletion events
-- Users manually refreshing overlays to remove deleted messages
+- Duplicate messages appearing in overlays (same message ID delivered twice)
+- Platform rate limit errors (two pods connecting to same channel)
+- Metrics showing: sum(channels_per_pod) > total_active_channels
+- Multiple pods logging "acquired channel X" simultaneously
 
 **Phase to address:**
-Phase 1 (Foundation) - MUST establish ID tracking before implementing deletion events, or all deletion features will fail.
+Phase 1 (Sharding Infrastructure) - Critical to get right from the start. Cannot be retrofitted easily once in production.
+
+**Severity:** CRITICAL - Causes duplicate charges for API quota (YouTube), rate limit bans (all platforms), and breaks message deduplication guarantees to users.
+
+**Sources:**
+- [Split-brain in distributed systems (DZone)](https://dzone.com/articles/split-brain-in-distributed-systems)
+- [Understanding Split-Brain Scenarios with etcd](https://sithara-wanigasooriya.medium.com/understanding-split-brain-scenarios-in-distributed-systems-and-how-etcd-mitigates-them-e3007acd506d)
+- [Leader Election in Distributed Systems 2026](https://www.devahmedali.click/post/leader-election-in-distributed-systems-complete-guide)
 
 ---
 
-### Pitfall 2: Race Condition Between Message Display and Deletion Event
+### Pitfall 2: Message Loss During Channel Migration
 
 **What goes wrong:**
-Deletion event arrives **before** the original message reaches overlay clients via WebSocket. Overlay stores deletion event, original message then displays, and **never gets deleted** (message persists indefinitely on screen).
+When a channel moves from Pod A to Pod B during rebalancing (scaling, rolling update, or pod crash), messages sent during the handoff window are lost. Old pod disconnects before new pod establishes connection, creating a 1-10 second gap where messages aren't captured.
 
 **Why it happens:**
-Message flow: Listener → Redis Streams → Message Processor (enrichment takes 50-200ms with emote API calls) → Redis Pub/Sub → API Gateway → WebSocket. Deletion events often bypass enrichment and arrive faster. This is a classic **out-of-order delivery** problem in distributed systems.
-
-Reference: [Causal Consistency in Distributed Systems](https://systemd.imshawan.dev/1-Fundamentals/1.5-Consistency-Models-Strong-Eventual-Causal/4-Causal-Consistency/) - "causal consistency ensures that the reply always appears after the original message, regardless of the delivery order."
+Migration implementations focus on state transfer but forget that real-time connections are stateful. IRC connections take 2-5 seconds to establish (TCP handshake → TLS → IRC NICK/PASS → JOIN channel). WebSocket connections (Kick) have similar overhead. During this window, the old pod has already disconnected.
 
 **How to avoid:**
-- **Tombstone buffer**: Overlay frontend maintains 5-second buffer of "pending deletions" for messages not yet received
-- **Sequence numbers**: Add monotonic counter per channel (`channel:sequence_number` in Redis) to messages and deletion events
-- **Deletion event enrichment**: Route deletion events through same Message Processor pipeline (DO NOT fast-track) to preserve ordering
-- **Client-side queue**: Frontend queues incoming messages for 200ms before display (allows late deletions to arrive first)
+- Implement overlap migration: new pod connects and confirms receiving messages BEFORE old pod disconnects
+- Use Redis Streams offset tracking: new pod starts consuming from old pod's last confirmed offset
+- Add replay buffer in Message Processor: keep last 60 seconds of messages per channel, replay on reconnect
+- For critical channels, implement dual-connection during migration (both pods listen, deduplicate downstream)
 
 **Warning signs:**
-- Messages "flicker" (appear then immediately disappear)
-- Deleted messages visible on some overlay instances but not others
-- Moderators report deletions "not working" intermittently (race condition is timing-dependent)
+- Users report "missed messages" during deployments
+- Gaps in Redis Streams consumer group offsets
+- Connection timing metrics show disconnect → reconnect gaps > 1 second
+- Increased "reconnect_events" metric correlated with "migration_events" metric
 
 **Phase to address:**
-Phase 2 (Event Processing) - After basic deletion works, validate ordering guarantees with stress testing.
+Phase 2 (Connection Management) - Build overlap migration before going to production. Message loss is unacceptable for streaming overlays.
+
+**Severity:** CRITICAL - Directly violates product promise. Streamers will notice missed chats during live streams.
+
+**Sources:**
+- [Stateful Microservice Migration Challenges in Kubernetes](https://cloudnativenow.com/features/stateful-microservice-migration-the-live-state-challenge-in-kubernetes/)
+- [Migrate Stateful Workloads with Zero Downtime](https://cast.ai/blog/how-to-migrate-stateful-workloads-on-kubernetes-with-zero-downtime/)
+- [How to Handle Graceful Shutdown for WebSocket Servers 2026](https://oneuptime.com/blog/post/2026-02-02-websocket-graceful-shutdown/view)
 
 ---
 
-### Pitfall 3: Batch Deletion Amplification (Ban/Timeout Events)
+### Pitfall 3: Thundering Herd on HPA Scale-Up
 
 **What goes wrong:**
-Moderator times out user with 5,000 messages in chat history. System attempts to **broadcast 5,000 individual deletion events** to all overlay WebSocket clients. This triggers:
-- API Gateway CPU spike (5,000 JSON serializations)
-- Network saturation (5,000 × number of connected clients WebSocket frames)
-- Frontend JavaScript hangs (5,000 DOM manipulations)
-- Redis Pub/Sub backlog accumulation
+When Kubernetes HPA adds 5 new pods simultaneously (traffic spike), all 5 pods attempt channel rebalancing at the exact same moment. This triggers:
+- Redis lock contention (all pods competing for same channels)
+- Platform rate limits (YouTube quota exhausted by simultaneous API calls)
+- Cascading failures (rebalancing failures trigger more HPA scaling)
+- Election storms (leadership changes multiple times in 10 seconds)
 
 **Why it happens:**
-Platforms send `CLEARCHAT` (Twitch) or batch deletion events referencing **all messages by user**, not individual message IDs. Naive implementation: "for each message in history by user: send deletion event." With ephemeral messages (Redis-only, no database), you must scan Redis Streams backlog or frontend's in-memory message buffer.
+HPA scale-up is synchronous - all new pods reach "ready" state within 1-2 seconds of each other. Each pod's startup logic immediately attempts to:
+1. Register in source-manager
+2. Participate in leader election
+3. Request channel assignments
+4. Establish platform connections
 
-Reference: [Broadcasting WebSockets Messages](https://websockets.readthedocs.io/en/stable/topics/broadcast.html) - "Calling broadcast() once is more efficient than calling send() in a loop."
+Without jitter or rate limiting, this creates a stampede.
 
 **How to avoid:**
-- **Coalesced deletion events**: Single event type `{type: "bulk_delete", user_id: "123", reason: "timeout"}` instead of N individual deletions
-- **Frontend-side filtering**: Overlay client removes all messages matching `user_id` with single filter operation
-- **Limit historical scope**: Only delete messages in frontend buffer (last 100-200 messages displayed), ignore older messages
-- **Throttling**: Batch deletion events trigger cooldown (prevent rapid consecutive bulk deletes)
+- Add startup jitter: sleep(random(0, pod_ordinal * 2)) before registration
+- Implement gradual rebalancing: leader assigns channels in batches (10/second) not all-at-once
+- Use token bucket rate limiter for platform API calls: shared across all pods via Redis
+- Set HPA scaleUp behavior: stabilizationWindowSeconds: 60, policies: limit 2 pods/min
+- Defer non-critical channels during rebalancing: prioritize high-traffic channels first
 
 **Warning signs:**
-- API Gateway CPU spikes correlate with timeouts/bans in logs
-- WebSocket disconnections during moderation actions (clients can't keep up)
-- Frontend performance degradation after bulk deletions (DOM thrashing)
-- Redis Pub/Sub subscribers lag (`PUBSUB NUMSUB` shows delayed delivery)
+- Spiking "redis_lock_timeout" errors during scale-up
+- Platform API 429 (rate limit) errors correlated with HPA events
+- "leader_election_changed" metric shows > 3 elections in 60 seconds
+- Multiple pods logging "failed to acquire channel" simultaneously
 
 **Phase to address:**
-Phase 1 (Foundation) - Design deletion event schema to support bulk operations from the start, or refactoring later is expensive.
+Phase 3 (Scaling & Resilience) - Test with simulated scale-ups before production. Add chaos engineering tests.
+
+**Severity:** CRITICAL - Can cause service-wide outages. YouTube quota exhaustion affects all users for 24 hours.
+
+**Sources:**
+- [Distributed Systems Horror Stories: The Thundering Herd Problem](https://encore.dev/blog/thundering-herd-problem)
+- [The Thundering Herd Problem and Solutions](https://singhajit.com/thundering-herd-problem/)
+- [Kubernetes Leader Election in Pods 2026](https://oneuptime.com/blog/post/2026-01-19-kubernetes-leader-election-pods/view)
 
 ---
 
-### Pitfall 4: Platform-Specific Deletion Event Gaps
+### Pitfall 4: Inconsistent Hashing Key Selection Breaks Channel Affinity
 
 **What goes wrong:**
-Assume all platforms provide real-time deletion events. Reality:
-- **Twitch IRC**: `CLEARMSG` (single), `CLEARCHAT` (user/full chat) - **immediate**
-- **YouTube Live Chat API**: Polling-based, **no push notifications for deletions** - must detect via absence in next poll (60-second delay)
-- **Kick Pusher**: Deletion events exist but **undocumented** - reverse-engineer WebSocket payloads
-- **TikTok**: Unofficial library - **deletions not supported** at all
-
-Result: Inconsistent deletion experience across platforms. Twitch deletions are instant, YouTube deletions lag 60 seconds, TikTok deletions never work.
+Poor choice of consistent hashing key causes:
+- Hot spots (all popular channels hash to same pod)
+- Migration churn (different components use different keys, causing repeated migrations)
+- State loss (channel metadata stored with one key, but channel assigned with different key)
 
 **Why it happens:**
-Each platform has different moderation APIs and event notification systems. All-Chat must adapt to **lowest common denominator** or implement platform-specific workarounds. Current architecture assumes uniform event delivery (wrong assumption).
+Team uses overlayID as hash key instead of channelID. When a channel is used by multiple overlays, it gets assigned to different pods depending on which overlay's consumer group processes it first. Channel bounces between pods every few minutes.
 
-Reference: [Twitch IRC Documentation](https://dev.twitch.tv/docs/chat/irc/) - CLEARMSG and CLEARCHAT specifications
-Reference: [YouTube Live Chat API](https://developers.google.com/youtube/v3/live/docs/liveChatMessages/delete) - DELETE operation, no webhook push
+Alternatively, team uses composite key like "platform:channelID:overlayID" which creates N connections for a channel used by N overlays, wasting resources and hitting platform connection limits.
 
 **How to avoid:**
-- **Platform capability matrix**: Document which platforms support real-time deletions (Phase 1)
-- **Polling fallback**: YouTube Listener fetches message list on each poll, diffs with previous poll to detect deletions (Phase 2)
-- **Graceful degradation**: Display notice "YouTube deletions delayed 60s" in overlay settings
-- **Event normalization layer**: Standardize deletion events regardless of how platform delivers them
+- Always hash on channelID (or "platform:channelID" for global uniqueness)
+- Document hash key selection in ADR with rationale
+- Use virtual nodes (150-200 per physical pod) to distribute load evenly
+- Implement "hot key detection" using Count-Min Sketch: track requests/sec per channel, move 1% hottest channels to dedicated pods
+- Add hash key validation in tests: ensure same channel always maps to same pod
 
 **Warning signs:**
-- Feature works perfectly on Twitch test streams, fails on YouTube
-- User reports "deletions don't work" but only for specific platforms
-- Logs show deletion events for some platforms, silence for others
+- Highly variable load across pods (1 pod at 90% CPU, others at 20%)
+- "channel_migration_events" metric shows frequent migrations for same channel
+- Platform connection limits reached despite total channels < limit
+- Duplicate connection errors from platforms
 
 **Phase to address:**
-Phase 1 (Foundation) - Document platform capabilities before implementation. Phase 2 (Platform Integration) - Implement platform-specific adapters.
+Phase 1 (Sharding Infrastructure) - Hash key selection is foundational. Wrong choice requires full rewrite.
+
+**Severity:** MAJOR - Doesn't cause immediate failure but degrades performance and causes cascading issues under load.
+
+**Sources:**
+- [How to Build Consistent Hashing Implementation](https://oneuptime.com/blog/post/2026-01-30-consistent-hashing-implementation/view)
+- [The Hot Key Crisis in Consistent Hashing](https://systemdr.substack.com/p/the-hot-key-crisis-in-consistent)
+- [Understanding Consistent Hashing](https://www.pubnub.com/blog/consistent-hashing-in-distributed-systems/)
 
 ---
 
-### Pitfall 5: Ephemeral Architecture Message Lookup Failure
+### Pitfall 5: Platform-Specific Connection State Not Migrated
 
 **What goes wrong:**
-Deletion event arrives: `{platform_message_id: "abc123"}`. To delete, need to find `overlay_id` to know which Redis Pub/Sub channel to publish deletion to. But messages are **ephemeral** (Redis Streams with `MAXLEN`, no database persistence). Message `abc123` was already trimmed from stream. Cannot determine target overlay. **Deletion event is dropped.**
+Different platforms have different stateful connection requirements:
+- **IRC (Twitch):** Channels must be explicitly JOINed, state includes active channel list
+- **HTTP Polling (YouTube):** Polling offset (pageToken) resets on migration, causing duplicate/missed messages
+- **WebSocket (Kick):** Subscription IDs must match original connection, can't resume on different pod
+
+When channels migrate, new pod establishes "clean" connection without transferring platform-specific state, causing:
+- Twitch: Pod connects but doesn't JOIN channels → no messages
+- YouTube: Polling restarts from beginning → duplicates or skipped messages
+- Kick: Subscription fails → connection alive but no messages
 
 **Why it happens:**
-All-Chat uses Redis Streams with `MAXLEN ~10000` (approximate trimming) for `chat:raw`. Old messages are evicted. Deletion events can arrive **minutes later** (e.g., moderator reviewing logs and deleting old messages). By then, original message is gone from Redis Streams, and there's no database to query.
-
-Reference: Current architecture in `/docs/architecture/01-DATA-FLOW.md` - "Redis Streams: Durable message queues" with MAXLEN limits, no database persistence for message content.
+Generic sharding implementation treats all platforms identically. Source-manager tracks "channelID → podID" mapping but doesn't track platform-specific connection metadata (YouTube pageToken, Kick subscription ID, IRC join state).
 
 **How to avoid:**
-- **Short-term ID mapping cache**: Redis hash `deletion:msg_map` stores `{platform_msg_id: overlay_id}` for 15 minutes after message published
-- **Optimistic deletion**: If overlay unknown, broadcast deletion to **all active overlays** for this channel (may delete from overlays that never received it, but harmless)
-- **Deletion event TTL**: Ignore deletion events older than 10 minutes (stale deletions unlikely to have visible messages)
-- **Accept partial success**: Some deletions may fail for old messages - document this limitation
+- Design platform-specific "connection snapshot" interface:
+  ```go
+  type ConnectionSnapshot interface {
+      Capture() ([]byte, error)  // Serialize current state
+      Restore([]byte) error       // Restore state on new pod
+  }
+  ```
+- Store snapshots in Redis with TTL: `connection_state:{platform}:{channelID}`
+- Implement per-platform migration handlers:
+  - Twitch: Capture active JOIN list, replay on new connection
+  - YouTube: Store last pageToken + timestamp, resume from that point
+  - Kick: Store subscription IDs, re-subscribe with same IDs
+- Add integration tests: migrate channel mid-stream, verify no message loss/duplication
 
 **Warning signs:**
-- Deletion success rate decreases over time (newer deletions work, old deletions fail)
-- Cannot delete messages older than ~5 minutes
-- Logs show "overlay_id not found for message" errors
+- After migrations, message rate drops to zero (connection alive but not receiving)
+- Duplicate messages appear after migration (YouTube polling restarted)
+- Platform error logs: "Not subscribed to channel" (Kick), "Not in channel" (Twitch)
+- Manual intervention required after migrations (restart pods to fix connections)
 
 **Phase to address:**
-Phase 1 (Foundation) - Implement ID mapping cache before deletion feature launches, or deletion reliability will be poor.
+Phase 2 (Connection Management) - Must be implemented before production. Each platform needs custom migration logic.
+
+**Severity:** CRITICAL - Without this, migration = downtime. Every rolling update loses messages.
+
+**Sources:**
+- [Effective Strategies for Managing WebSockets in Kubernetes](https://wafatech.sa/blog/devops/kubernetes/effective-strategies-for-managing-websockets-in-kubernetes-environments/)
+- [How to Handle WebSocket Connection Pooling 2026](https://oneuptime.com/blog/post/2026-01-24-websocket-connection-pooling/view)
 
 ---
 
-### Pitfall 6: Multiple Overlay Instances Race (Split-Brain Deletion)
+### Pitfall 6: Message Ordering Violations During Rebalancing
 
 **What goes wrong:**
-User has 3 overlays displaying same Twitch channel. Deletion event arrives. API Gateway has 3 connection pools, each with multiple WebSocket clients. Race occurs:
-- Pool 1: Receives deletion, removes message
-- Pool 2: Receives deletion, removes message
-- Pool 3: Pub/Sub subscriber lags, message still visible
-
-OR
-
-- Pool 1-3: All receive deletion, but different clients render at different times (network latency). Viewer sees message deleted on one screen, still visible on another screen for 2-5 seconds.
+During channel migration, messages from the same channel arrive out-of-order at Message Processor:
+- Old pod publishes message A (timestamp: T1) to Redis Streams
+- New pod connects, receives message B (timestamp: T2) and publishes immediately
+- Old pod finishes graceful shutdown, message A arrives AFTER message B
+- Overlay displays: "message B", then "message A" (backwards)
 
 **Why it happens:**
-Redis Pub/Sub has **at-most-once delivery** semantics. If API Gateway subscriber is slow or reconnecting, it may miss deletion events. Also, broadcasting to multiple WebSocket clients is **not atomic** - each client processes deletion independently.
-
-Reference: [Redis Pub/Sub Documentation](https://redis.io/docs/interact/pubsub/) - "At most once delivery" - messages can be lost if no subscribers at publish time.
-Reference: [WebSocket Broadcasting](https://tutorialedge.net/projects/chat-system-in-go-and-react/part-4-handling-multiple-clients/) - "Calling broadcast() once is more efficient than calling send() in a loop."
+Redis Streams provides ordering within a single producer, but not across producers. During migration, a channel temporarily has TWO producers (old pod + new pod), breaking ordering guarantees.
 
 **How to avoid:**
-- **Deletion event persistence**: Store deletion events in Redis with 1-minute TTL (`deletion_events:{overlay_id}` Set). New WebSocket connections replay recent deletions on connect.
-- **Idempotent deletions**: Frontend safely handles duplicate deletion events (delete message by ID, if not found, silently ignore)
-- **Subscriber health checks**: Monitor Redis Pub/Sub subscriber lag (`PUBSUB CHANNELS` and `PUBSUB NUMSUB`), alert if subscriber count drops
-- **Deletion acknowledgment**: Track which clients acknowledged deletion (complex, defer to Phase 3+)
+- Use sequence numbers per channel: each message includes channel-specific sequence number
+- Message Processor validates sequence: buffer out-of-order messages, deliver when gap fills
+- During migration, old pod stops publishing BEFORE new pod starts (brief gap acceptable, out-of-order not)
+- Alternative (zero-gap): Use "migration coordinator" - old pod routes messages through new pod during overlap
+- Add ordering verification in tests: inject messages A, B, C during migration, verify delivery order
 
 **Warning signs:**
-- "Message still shows on overlay" reports after confirmed deletion
-- Deletion works on dashboard but not on viewer overlay (different WebSocket connection pools)
-- Refreshing overlay makes deleted messages disappear (catches up on reconnect)
+- Users report "messages appearing in wrong order" during deployments
+- Message Processor logs "sequence gap detected" warnings
+- Metrics show increased "buffered_messages" during migration events
+- E2E tests fail with "ordering violation" errors
 
 **Phase to address:**
-Phase 2 (Event Processing) - Validate broadcast reliability with multiple client testing.
+Phase 2 (Connection Management) - Build sequence number system into message format from start.
+
+**Severity:** MAJOR - Breaks user experience. Chat messages out-of-order is confusing but not catastrophic (unlike message loss).
+
+**Sources:**
+- [How to Guarantee Message Order in Kafka 2026](https://oneuptime.com/blog/post/2026-01-26-kafka-message-ordering/view)
+- [Ordering, Grouping and Consistency in Messaging systems](https://www.architecture-weekly.com/p/ordering-grouping-and-consistency)
+- [How to Fix Message Ordering Issues in Event-Driven Systems 2026](https://oneuptime.com/blog/post/2026-01-24-message-ordering-event-driven/view)
+
+---
+
+### Pitfall 7: Redlock Anti-Pattern for Channel Ownership
+
+**What goes wrong:**
+Team uses Redlock (distributed Redis locks across multiple Redis instances) for channel assignment, believing it provides stronger guarantees. In practice:
+- Adds operational complexity (must run 3+ Redis instances)
+- Doesn't solve fundamental problems (clock skew causes false lock acquisitions)
+- No fencing tokens (can't prevent stale pod from acting on expired lock)
+- Fails during network partitions (minority partition loses locks immediately)
+
+**Why it happens:**
+Redlock marketing suggests it's "safer" than single-instance locks. Martin Kleppmann's famous critique explains why it's actually worse than alternatives (etcd with fencing tokens, or single Redis with proper TTLs).
+
+**How to avoid:**
+- Use Kubernetes Lease API with fencing tokens (built-in, battle-tested)
+- If using Redis: single instance with proper lock patterns:
+  - SET with NX (only if not exists) + PX (expiry)
+  - Store unique token (UUID) as value
+  - Delete only if value matches (Lua script for atomicity)
+  - Renew lock periodically (before expiry)
+- Add fencing tokens: monotonic counter that increments with each lock acquisition, pods include token in all operations, operations with stale tokens are rejected
+- Avoid Redlock entirely - it solves problems you don't have and introduces ones you do
+
+**Warning signs:**
+- Multiple Redis instances in architecture for "distributed locking"
+- No fencing token implementation
+- Locks being acquired by multiple pods simultaneously (clock skew)
+- Operations succeeding with expired locks (zombie pods)
+
+**Phase to address:**
+Phase 1 (Sharding Infrastructure) - Choose locking mechanism correctly from start. Redlock is a rewrite-level mistake.
+
+**Severity:** MAJOR - Doesn't fail immediately but causes subtle split-brain scenarios under network partitions or clock skew.
+
+**Sources:**
+- [How to do distributed locking - Martin Kleppmann](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+- [Distributed Locks with Redis (Official Docs)](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)
+- [10 Hidden Pitfalls of Using Redis Distributed Locks](https://leapcell.medium.com/10-hidden-pitfalls-of-using-redis-distributed-locks-b5234ddd6349)
+- [How to Implement Distributed Locks with Redis 2026](https://oneuptime.com/blog/post/2026-01-21-redis-distributed-locks/view)
 
 ---
 
 ## Technical Debt Patterns
 
+Shortcuts that seem reasonable but create long-term problems.
+
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Use internal UUID only, ignore platform message ID | Simpler data model | Deletion events cannot match messages | **Never** - breaks core feature |
-| Skip sequence numbering, assume in-order delivery | Faster initial implementation | Race conditions between message and deletion | Only for Phase 0 prototype |
-| Broadcast individual deletions for batch events | Simpler deletion logic | API Gateway and frontend performance collapse at scale | Only for MVP with <50 messages/overlay |
-| No deletion event persistence, rely on live Pub/Sub | Less Redis storage | Clients miss deletions during reconnect | Only if reconnect rate <0.1% |
-| Single deletion event type, no platform-specific handling | Unified event schema | Cannot leverage platform-specific optimizations | Acceptable for Phase 1, refactor in Phase 2 |
-| Frontend-only deletion (no backend tracking) | No backend changes needed | Cannot audit deletions, inconsistent state | Only for Phase 0 prototype |
+| Skip overlap migration, use disconnect→reconnect | Simpler implementation, faster to ship | Message loss during every migration. Users complain. | NEVER - core product requirement is zero message loss |
+| Use simple mod-N hashing instead of consistent hashing | Easy to implement, no library needed | Adding/removing pods causes 90%+ channels to migrate, causing thundering herd | Only if: single pod only, no autoscaling planned |
+| Single Redis instance (no clustering) | Simple setup, no cluster coordination | Single point of failure, scaling bottleneck at ~50k channels | Acceptable for MVP if: <10k channels, staged rollout plan exists |
+| Skip platform-specific state migration | Generic implementation works for all platforms | Silent failures after migration, requires manual intervention | NEVER - each platform is different, generic approach will break |
+| Store channel→pod mapping in memory (not Redis) | Lower latency, no network calls | Lost on pod restart, no coordination during split-brain | Only if: single pod only (defeats purpose of sharding) |
+| Use leader election without fencing tokens | Simpler implementation, one less counter | Split-brain possible during network partition, duplicate connections | NEVER - fencing tokens are critical for safety |
+| Skip observability (metrics, traces, logs) | Faster to ship, less code | Impossible to debug production issues, blind to problems until users complain | Only for: proof-of-concept (not MVP) |
 
 ---
 
 ## Integration Gotchas
 
-| Platform | Common Mistake | Correct Approach |
-|----------|----------------|------------------|
-| **Twitch IRC** | Parse `CLEARMSG` but miss `CLEARCHAT` (different event types for single vs bulk) | Handle both: `CLEARMSG` → single deletion, `CLEARCHAT` → user bulk or full clear |
-| **Twitch IRC** | Use `msg.ID` from `go-twitch-irc` library as message ID | Wrong - that's IRC message ID. Use `id` tag from IRC tags (platform message ID) |
-| **YouTube** | Poll API every 5 seconds to detect deletions | Exceeds API quota (10,000 units/day). Poll every 30-60 seconds, batch operations |
-| **YouTube** | Assume deletion API returns deleted message content | Wrong - DELETE returns 204 No Content. Must track messages client-side to know what was deleted |
-| **Kick Pusher** | Assume Pusher events match Twitch IRC event names | Wrong - Kick uses different event names (`ChatMessageDeleted` not `CLEARMSG`). Reverse-engineer from browser WebSocket |
-| **TikTok** | Expect deletion events from unofficial library | Not supported - TikTok library provides message create only. May need to implement "hide message" client-side for reported spam |
-| **All Platforms** | Use message text for matching deletions | Fragile - text may be truncated, contain emotes, or be modified. Always use message ID |
+Common mistakes when connecting to external platforms during sharding.
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| **Twitch IRC** | Connecting to each channel as separate IRC connection | Single IRC connection per pod, JOIN multiple channels on same connection (Twitch allows ~50 channels/connection) |
+| **YouTube API** | Each pod has independent quota tracking | Centralized quota tracking in Redis, pods reserve quota before making API call (reserve→use→confirm or rollback) |
+| **YouTube API** | Not handling quota exceeded gracefully | Implement quota circuit breaker: when approaching limit (90%), throttle polling rate globally, prioritize high-traffic channels |
+| **Kick WebSocket** | Reconnecting with new subscription IDs after migration | Store subscription IDs in Redis, reuse same IDs on new pod (Kick may maintain state server-side) |
+| **Kick WebSocket** | Not handling Pusher channel limits | Track total subscribed channels across all pods, stay under Pusher plan limits (varies by plan) |
+| **TikTok (unofficial)** | Assuming API stability | Implement aggressive error handling + graceful degradation, TikTok may block/change endpoints without notice |
+| **All Platforms** | Not implementing exponential backoff on reconnect | Use exponential backoff with jitter: 1s, 2s, 4s, 8s, max 30s (prevents thundering herd on platform outages) |
+| **All Platforms** | Storing OAuth tokens in pod memory | Store tokens in PostgreSQL, refresh proactively before expiry, use existing token-refresh-service |
 
 ---
 
 ## Performance Traps
 
+Patterns that work at small scale but fail as usage grows.
+
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| **Linear scan for message lookup** | Deletion latency increases with message volume | Use Redis hash for O(1) ID lookup, not O(n) stream scan | >1,000 messages in buffer |
-| **DOM thrashing on bulk delete** | Frontend freezes during timeouts | Batch DOM updates: `requestAnimationFrame()` + `DocumentFragment` | >100 simultaneous deletions |
-| **Pub/Sub channel per message** | Redis connection exhaustion | Single channel per overlay, multiplex deletion events within | >10,000 active overlays |
-| **No deletion event aggregation** | Network bandwidth saturation | Coalesce deletions: send `{deleted_ids: [1,2,3]}` not 3 separate events | >50 deletions/second/overlay |
-| **Synchronous WebSocket broadcast** | API Gateway blocks on slow clients | Async broadcast with timeout (drop slow clients after 5 seconds) | Any slow client blocks all others |
-| **Unbounded deletion history** | Memory leak in frontend | Limit deletion buffer to 1,000 most recent, evict older | After 24 hours uptime |
+| **N+1 Redis calls during rebalancing** | Rebalancing takes 30+ seconds for 1000 channels | Use Redis pipelines: batch channel assignments into single multi-exec transaction | >500 channels per rebalance |
+| **Polling every channel at same interval** | YouTube quota exhausted in first hour of day (quota resets midnight PT) | Implement staggered polling: offset each channel by (channelIndex * interval / totalChannels) | >100 YouTube channels |
+| **No connection pooling for HTTP clients** | Memory usage spikes during migrations, TCP connections exhausted | Reuse http.Client instances, set MaxIdleConns and MaxConnsPerHost limits | >200 concurrent HTTP connections |
+| **Synchronous channel assignment** | HPA scale-up blocked waiting for channels to connect (30+ seconds) | Async channel assignment: pod becomes ready immediately, establishes connections in background | >50 channels assigned at once |
+| **Full channel list broadcast on any change** | Redis pub/sub saturated, pods can't keep up with updates | Use incremental updates: only broadcast changed channels, not entire list | >1000 active channels |
+| **Leader doing all coordination work** | Leader pod at 100% CPU while followers idle | Distribute work: leader assigns, followers validate and report back | Leader managing >2000 channels |
+| **No caching of platform metadata** | Emote API rate limits hit (7TV, BTTV, FFZ) | Cache emote sets in Redis with TTL, share across all pods | >500 unique channels (each queries emotes) |
 
 ---
 
-## Platform-Specific Edge Cases
+## Observability Gaps
 
-### Twitch IRC Quirks
+Critical metrics/logs needed for debugging distributed sharding in production.
 
-**CLEARCHAT with no target user**: Clears entire chat
-```
-@room-id=12345;tmi-sent-ts=1642715695392 :tmi.twitch.tv CLEARCHAT #channel
-```
-**Action**: Broadcast `{type: "clear_all"}` to overlay
+| What to Measure | Why Critical | How to Detect Problems |
+|-----------------|--------------|------------------------|
+| **Per-pod channel count** | Detect uneven distribution (hot spots) | Alert: max(channels_per_pod) > 2 * avg(channels_per_pod) |
+| **Channel migration events** | Track migration frequency and success rate | Alert: migration_failure_rate > 5% OR migration_events > 10/min (thrashing) |
+| **Connection establishment time** | Detect platform slowdowns or network issues | Alert: p95(connection_time) > 10s (should be <3s) |
+| **Message gap duration** | Detect message loss during migration | Alert: gap_duration > 5s (overlap migration should eliminate gaps) |
+| **Redis lock contention** | Detect thundering herd or lock timeouts | Alert: lock_timeout_rate > 1% OR lock_wait_time p95 > 1s |
+| **Platform API errors per pod** | Detect quota issues or rate limits | Alert: api_error_rate > 5% OR error_count_diff between pods > 50 (uneven load) |
+| **Leader election changes** | Detect split-brain or network instability | Alert: leader_changes > 2 per hour (should be ~0 in steady state) |
+| **Message sequence gaps** | Detect ordering violations | Alert: sequence_gap_events > 0 (should never happen with proper implementation) |
+| **Graceful shutdown duration** | Detect pods not draining properly | Alert: shutdown_duration p95 > 20s (K8s terminationGracePeriod is 30s) |
+| **Distributed trace for message flow** | Debug end-to-end latency issues | Use OpenTelemetry: platform→listener→Redis→processor→gateway→overlay |
 
-**CLEARCHAT with ban duration**: Timeout (temporary) vs ban (permanent)
-```
-@ban-duration=600;room-id=12345;target-user-id=98765 :tmi.twitch.tv CLEARCHAT #channel :username
-```
-**Action**: If `ban-duration` tag exists = timeout, else = permanent ban
-
-**CLEARMSG target-msg-id format**: UUID string
-```
-@target-msg-id=94e6c7ff-bf98-4faa-af5d-7ad633a158a9 :tmi.twitch.tv CLEARMSG #channel :message text
-```
-**Action**: Extract `target-msg-id` tag value, map to internal ID
-
-**Missing message text in CLEARMSG**: Text may be empty or truncated
-```
-@target-msg-id=abc :tmi.twitch.tv CLEARMSG #channel :
-```
-**Action**: Never rely on message text for deletion matching, only use `target-msg-id`
-
-Reference: [Twitch IRC CLEARMSG Documentation](https://discuss.dev.twitch.com/t/message-deletion-confusion/19311)
-
-### YouTube API Quirks
-
-**No real-time deletion events**: Must poll and diff to detect deletions
-**Action**: Cache previous poll's message IDs, compare with current poll, deleted IDs = difference
-
-**Rate limit on DELETE operation**: 100 units per call (daily quota 10,000 units)
-**Action**: All-Chat **cannot initiate deletions** on YouTube (only display deletions initiated by moderators via YouTube interface)
-
-**liveChatMessages.delete requires OAuth**: Must use streamer's access token, not bot token
-**Action**: YouTube sources in overlays must have OAuth consent from channel owner
-
-**Deleted message not removed from list immediately**: API caching delay (30-60 seconds)
-**Action**: Display "Deletion requested" in UI, don't expect instant confirmation
-
-Reference: [YouTube liveChatMessages: delete API](https://developers.google.com/youtube/v3/live/docs/liveChatMessages/delete)
-
-### Kick Platform Quirks
-
-**Undocumented Pusher events**: Kick uses private Pusher WebSocket, events not in public API docs
-**Action**: Reverse-engineer by monitoring browser DevTools WebSocket traffic
-
-**Event name guess**: Likely `ChatMessageDeleted` or `message.deleted` (not confirmed)
-**Action**: Phase 1 research task - capture real deletion event from Kick stream
-
-**Chatroom ID vs Channel ID**: Kick has two identifiers - ensure using correct one for Pusher channel name
-**Action**: Test deletion on Kick staging environment before production
-
-### TikTok Platform Quirks
-
-**No deletion support in unofficial library**: `TikTokLiveClient` does not emit deletion events
-**Action**: Consider implementing client-side "hide message" feature for spam reports (user-initiated, not platform-initiated)
-
-**Connection stability issues**: Library drops connection frequently, may miss events
-**Action**: Focus TikTok implementation on message display, deprioritize deletion feature (low ROI)
-
----
-
-## "Looks Done But Isn't" Checklist
-
-- [ ] **Deletion works on Twitch test stream**: Did you test YouTube, Kick, TikTok? (Platform-specific bugs)
-- [ ] **Deletion works with single message**: Did you test timeout/ban (bulk deletion)? (Amplification issue)
-- [ ] **Deletion works in dashboard**: Did you test viewer overlay? (WebSocket connection pools differ)
-- [ ] **Deletion event arrives in logs**: Did you verify frontend received and processed it? (Pub/Sub delivery gap)
-- [ ] **Message disappears immediately**: Did you test with 200ms delay race condition? (Out-of-order delivery)
-- [ ] **ID matching works now**: Did you test after message evicted from Redis Streams? (Ephemeral architecture lookup failure)
-- [ ] **Deletion works in browser DevTools**: Did you test in OBS browser source (CEF)? (Chromium version differences)
-- [ ] **Deletion works with 10 messages**: Did you test with 1,000 messages on screen? (Performance scaling)
-- [ ] **Single overlay test passes**: Did you test with 5 overlays on same channel? (Split-brain deletion)
-- [ ] **Deletion works during normal operation**: Did you test during API Gateway restart? (Reconnection gaps)
+**Missing Observability Consequences:**
+- Without per-pod metrics: Can't detect uneven sharding (hot spots)
+- Without migration tracking: Blind to message loss during deployments
+- Without distributed tracing: Can't debug "why is overlay laggy?" questions
+- Without lock contention metrics: Thundering herd appears as "pods crashing randomly"
 
 ---
 
 ## Recovery Strategies
 
+When pitfalls occur despite prevention, how to recover.
+
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| **No platform ID preserved** | **HIGH** - requires data model change + migration | 1. Add `PlatformMessageID` to models, 2. Deploy new listeners to populate field, 3. Update processor to preserve it, 4. Deploy deletion feature |
-| **Race condition in production** | **MEDIUM** - frontend hotfix | 1. Add 200ms message queue buffer in frontend, 2. Implement tombstone logic for pending deletions, 3. Redeploy frontend |
-| **Batch deletion performance collapse** | **MEDIUM** - schema change + frontend optimization | 1. Deploy coalesced deletion event format, 2. Update frontend to handle bulk events, 3. Add throttling to API Gateway |
-| **YouTube deletions don't work** | **LOW** - expected limitation | 1. Document "YouTube deletions delayed 60s", 2. Add polling diff logic, 3. Display notice in UI |
-| **Ephemeral message lookup fails** | **LOW** - add caching layer | 1. Deploy Redis hash for ID mapping, 2. Set 15-minute TTL, 3. Accept old messages may not delete |
-| **Split-brain deletion across clients** | **HIGH** - architecture refactor | 1. Implement deletion event persistence, 2. Add reconnection replay logic, 3. Monitor Pub/Sub subscriber lag |
+| **Split-brain (duplicate connections)** | MEDIUM | 1. Identify duplicate channels (check platform connection logs)<br>2. Force leader re-election: delete Lease resource in K8s<br>3. Implement fencing tokens before restarting pods<br>4. Clear Redis channel assignments: `DEL channel_assignments`<br>5. Rolling restart all pods to reassign cleanly |
+| **Message loss during migration** | LOW | 1. Implement replay buffer in Message Processor (60s retention)<br>2. For affected overlays: trigger replay from last known offset<br>3. If no replay buffer: message loss is permanent (notify users) |
+| **Thundering herd (quota exhausted)** | HIGH | 1. YouTube quota exhausted = 24h lockout (no recovery)<br>2. Temporarily disable autoscaling to prevent more pods joining<br>3. Implement rate limiter before re-enabling<br>4. Reduce polling frequency for all channels until quota resets<br>5. Request quota increase from Google (takes 2-5 business days) |
+| **Hot spots (uneven sharding)** | LOW | 1. Identify hot channels (sort by message rate)<br>2. Manually reassign hot channels to underloaded pods<br>3. Implement virtual nodes (150-200 per pod) for better distribution<br>4. Use "hot key eviction" pattern: detect hot keys, move to dedicated pods |
+| **Platform connection state lost** | MEDIUM | 1. Implement connection snapshot/restore (see Pitfall 5)<br>2. Short-term: monitor for "zombie connections" (connected but not receiving)<br>3. Add health check: if message_rate=0 for 60s, force reconnect<br>4. Store pageToken/subscription IDs in Redis before next migration |
+| **Out-of-order messages** | LOW | 1. Add sequence numbers to messages<br>2. Message Processor buffers out-of-order (max 30s buffer)<br>3. If gap doesn't fill: log warning + deliver what we have (stale better than stuck) |
+| **Redlock causing split-brain** | HIGH (REWRITE) | 1. Immediate: switch to single-Redis locks with proper patterns<br>2. Long-term: migrate to Kubernetes Lease API<br>3. No in-place fix - Redlock is fundamentally broken design |
+
+**Prevention > Recovery:**
+Most critical pitfalls (split-brain, message loss, thundering herd) have HIGH recovery costs or no recovery at all. Prevention through proper design is mandatory.
 
 ---
 
-## Pitfall-to-Phase Mapping
+## Phase-Specific Warnings
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| **Message ID mismatch** | Phase 1 (Foundation) | Unit test: deletion event matches message after ID transformation |
-| **Race condition (message vs deletion)** | Phase 2 (Event Processing) | Integration test: deletion arrives before message, overlay still deletes correctly |
-| **Batch deletion amplification** | Phase 1 (Foundation) | Load test: 1,000 messages deleted, measure CPU/network/frontend latency |
-| **Platform-specific gaps** | Phase 1 (Foundation) + Phase 2 | Feature matrix: document which platforms support real-time deletion |
-| **Ephemeral lookup failure** | Phase 1 (Foundation) | Chaos test: delete message 10 minutes after publish, measure success rate |
-| **Split-brain deletion** | Phase 2 (Event Processing) | Multi-client test: 10 WebSocket connections to same overlay, all receive deletion |
+How roadmap phases should address these pitfalls.
+
+| Phase | Topic | Pitfalls to Prevent | How to Verify |
+|-------|-------|---------------------|---------------|
+| **Phase 1** | Sharding Infrastructure | Split-brain, Redlock anti-pattern, Inconsistent hashing | Chaos test: network partition between pods, verify only one pod owns each channel |
+| **Phase 1** | Leader Election | Election storms, missing fencing tokens | Verify: `kubectl delete pod <leader>` → new leader elected in <5s, no duplicate assignments |
+| **Phase 2** | Connection Migration | Message loss, platform state not migrated, out-of-order messages | E2E test: migrate channel mid-stream, verify zero message loss and ordering preserved |
+| **Phase 2** | Graceful Shutdown | Connections not drained, message gaps | Test: send SIGTERM to pod, verify continues processing for 20s, clean handoff to new pod |
+| **Phase 3** | HPA Scaling | Thundering herd, quota exhaustion | Load test: trigger HPA scale-up 2→10 pods, verify staggered startup, no lock contention |
+| **Phase 3** | Load Distribution | Hot spots, uneven sharding | Run with 1000 channels for 24h, verify: max/avg channel count per pod <1.5x |
+| **Phase 4** | Observability | Blind spots in metrics/logs | Simulate failure scenarios, verify: can identify root cause from metrics alone in <5 min |
+| **Phase 4** | Debugging | Missing distributed traces | Generate artificial lag, verify: can trace message from platform→overlay with OpenTelemetry |
 
 ---
 
-## Testing Requirements for Deletion Feature
+## "Looks Done But Isn't" Checklist
 
-### Unit Tests (Phase 1)
-- Parse Twitch `CLEARMSG` IRC message → extraction of `target-msg-id`
-- Parse Twitch `CLEARCHAT` IRC message → extraction of `target-user-id` and `ban-duration`
-- Map platform message ID to internal UUID via Redis hash
-- Serialize/deserialize deletion event JSON schema
+Features that appear complete but are missing critical pieces.
 
-### Integration Tests (Phase 2)
-- Send message → send deletion → verify overlay receives both in order
-- Send deletion → send message → verify overlay queues deletion and applies when message arrives
-- Send 100 messages by user → timeout user → verify single bulk deletion event (not 100 individual)
-- Delete message from Redis cache → deletion event arrives → verify graceful failure (log warning, don't crash)
+- [ ] **Channel migration:** Works in happy path but not tested with:
+  - Network partition during migration (simulated with tc/iptables)
+  - Pod crash mid-migration (kill -9 during handoff)
+  - Multiple simultaneous migrations (HPA scaling 2→10 pods)
 
-### E2E Tests (Phase 3)
-- Twitch IRC: `/delete <message>` in chat → overlay removes message within 2 seconds
-- Twitch IRC: `/timeout <user> 600` → all user messages removed from overlay
-- YouTube: Delete message in YouTube Studio → overlay removes message within 60 seconds
-- Multi-overlay: 3 overlays on same channel → delete message → all overlays update consistently
+- [ ] **Leader election:** Works but missing:
+  - Fencing tokens (pods must include token in all operations)
+  - Monitoring for election frequency (should alert if >2/hour)
+  - Automatic leader re-election on leader pod crash (<5s recovery)
 
-### Load Tests (Phase 3)
-- 10,000 messages/minute + 100 deletions/minute → measure API Gateway CPU/memory
-- 1,000 WebSocket clients → broadcast deletion event → measure P95 delivery latency
-- Bulk delete 5,000 messages → measure frontend render time (should be <100ms)
+- [ ] **Connection management:** Connects successfully but missing:
+  - Platform-specific state migration (YouTube pageToken, Kick subscription IDs)
+  - Exponential backoff on reconnect failures
+  - Circuit breaker for quota/rate limit protection
 
-### Chaos Tests (Phase 3)
-- API Gateway restart during deletion event → reconnect → verify deletion replayed
-- Redis Pub/Sub network partition → verify subscriber lag detection and alert
-- Message Processor crash after message published, before deletion → verify deletion still works (ID mapping cache survives)
+- [ ] **Message ordering:** Messages delivered but not tested with:
+  - Out-of-order scenarios (late-arriving messages during migration)
+  - Sequence gap detection and buffering
+  - Timeout for gaps that never fill (deliver what we have after 30s)
+
+- [ ] **Observability:** Basic metrics exist but missing:
+  - Per-pod channel count distribution (detect hot spots)
+  - Migration success/failure rate per platform
+  - Distributed tracing for end-to-end message flow
+  - Lock contention and wait time metrics
+
+- [ ] **Error handling:** Basic retries but missing:
+  - Graceful degradation when quota exhausted (throttle polling, prioritize channels)
+  - Platform-specific error handling (YouTube quota vs network error vs auth failure)
+  - Dead letter queue for messages that can't be processed
+
+- [ ] **Load testing:** Works with 10 channels but not validated:
+  - 1000+ channels across 10 pods
+  - HPA scale up/down (2→10→2 pods)
+  - 24+ hour soak test (detect memory leaks, connection exhaustion)
+  - Platform outage recovery (all channels reconnect simultaneously)
+
+---
+
+## All-Chat Specific Warnings
+
+Pitfalls unique to All-Chat's architecture.
+
+### YouTube Quota is Non-Negotiable
+
+**Problem:** YouTube quota is a HARD LIMIT. Once exhausted, ALL users are affected for 24 hours.
+
+**Why critical for sharding:**
+- Thundering herd during HPA scale-up can exhaust quota in minutes
+- Duplicate connections (split-brain) double quota consumption
+- Naive sharding: each pod independently polls = N*quota usage
+
+**Prevention specific to All-Chat:**
+- Centralized quota tracking in Redis (existing quota-manager service)
+- Before any YouTube API call: `RESERVE_QUOTA → USE → CONFIRM or ROLLBACK`
+- Circuit breaker at 90% quota: throttle polling rate globally
+- During rebalancing: pause new YouTube connections until complete
+
+**Phase to address:** Phase 1 (integrate with existing quota-manager), Phase 3 (test under load)
+
+### IRC Connection Limits (Twitch)
+
+**Problem:** Twitch allows ~50 channels per IRC connection, but limits total connections per IP.
+
+**Why critical for sharding:**
+- Naive approach: one connection per channel = hit connection limit at 50 channels
+- Multiple pods from same IP (Kubernetes node) count toward same limit
+
+**Prevention specific to All-Chat:**
+- Existing twitch-listener uses single connection per pod (correct approach)
+- Sharding must preserve this: each pod has 1 IRC connection, JOINs multiple channels
+- During migration: new pod JOINs channel BEFORE old pod PARTs (brief overlap, not duplicate connection)
+
+**Phase to address:** Phase 2 (connection migration must handle multi-channel IRC connections)
+
+### Redis Streams Consumer Groups
+
+**Problem:** All-Chat uses Redis Streams consumer groups for message delivery. Sharding adds coordination layer.
+
+**Why critical for sharding:**
+- Each listener pod publishes to same Redis Stream (`chat:raw`)
+- Message Processor consumes via consumer group (exactly-once delivery)
+- During migration: old pod stops publishing, new pod starts → no coordination needed at Redis level
+
+**Simplification:** Redis Streams consumer groups already handle multiple publishers correctly. Sharding doesn't complicate this.
+
+**What to watch:** Message ordering during migration (see Pitfall 6)
+
+### Emote Service Load
+
+**Problem:** Emote enrichment (7TV, BTTV, FFZ) queries external APIs per channel.
+
+**Why critical for sharding:**
+- More pods = more emote API calls (each pod independently caches)
+- Emote APIs have rate limits (lower than platform limits)
+
+**Prevention specific to All-Chat:**
+- Centralized emote cache in Redis (shared across all pods)
+- TTL: 5 minutes (emotes rarely change)
+- Cache key: `emotes:{platform}:{channelID}`
+- Only leader pod refreshes cache (followers read-only)
+
+**Phase to address:** Phase 1 (shared cache architecture), Phase 3 (test under load)
 
 ---
 
 ## Sources
 
-**Platform API Documentation:**
-- [Twitch IRC Concepts](https://dev.twitch.tv/docs/chat/irc/) - CLEARMSG and CLEARCHAT specifications
-- [Twitch IRC Migration Guide](https://dev.twitch.tv/docs/chat/irc-migration/) - EventSub alternatives
-- [YouTube liveChatMessages: delete API](https://developers.google.com/youtube/v3/live/docs/liveChatMessages/delete) - DELETE operation details
-- [Twitch Developer Forum: Message Deletion Confusion](https://discuss.dev.twitch.com/t/message-deletion-confusion/19311) - Community discussion on CLEARMSG
+### Core Distributed Systems Concepts
+- [A Guide to Large-Scale Distributed Systems (2026)](https://www.systemdesignhandbook.com/blog/large-scale-distributed-systems/)
+- [Distributed System Distributed Messaging](https://www.meegle.com/en_us/topics/distributed-system/distributed-system-distributed-messaging)
+- [Distributed Messaging System | System Design - GeeksforGeeks](https://www.geeksforgeeks.org/system-design/distributed-messaging-system-system-design/)
 
-**Distributed Systems Consistency:**
-- [Causal Consistency in Distributed Systems](https://systemd.imshawan.dev/1-Fundamentals/1.5-Consistency-Models-Strong-Eventual-Causal/4-Causal-Consistency/) - Message ordering guarantees
-- [Eventual Consistency in Distributed Systems](https://www.geeksforgeeks.org/system-design/eventual-consistency-in-distributive-systems-learn-system-design/) - Consistency models for chat
-- [Consistency Patterns in Distributed Systems](https://www.designgurus.io/blog/consistency-patterns-distributed-systems) - Strong vs eventual consistency tradeoffs
+### Split-Brain & Leader Election
+- [Split-Brain in Distributed Systems (DZone)](https://dzone.com/articles/split-brain-in-distributed-systems)
+- [Split brain in distributed systems | Medium](https://medium.com/nerd-for-tech/split-brain-in-distributed-systems-252b0d4d122e)
+- [Understanding Split-Brain Scenarios with etcd](https://sithara-wanigasooriya.medium.com/understanding-split-brain-scenarios-in-distributed-systems-and-how-etcd-mitigates-them-e3007acd506d)
+- [Leader Election in Distributed Systems: Complete Guide 2026](https://www.devahmedali.click/post/leader-election-in-distributed-systems-complete-guide)
+- [How to Implement Leader Election in Kubernetes Pods](https://oneuptime.com/blog/post/2026-01-19-kubernetes-leader-election-pods/view)
+- [How to Implement Kubernetes Leader Election](https://oneuptime.com/blog/post/2026-01-30-kubernetes-leader-election/view)
 
-**WebSocket Broadcasting:**
-- [Broadcasting - websockets documentation](https://websockets.readthedocs.io/en/stable/topics/broadcast.html) - Efficient broadcast patterns
-- [Broadcasting WebSockets Messages across FastAPI instances](https://medium.com/@philipokiokio/broadcasting-websockets-messages-across-instances-and-workers-with-fastapi-9a66d42cb30a) - Multi-instance challenges
-- [WebSockets with Elixir - How to Sync Multiple Clients](https://www.viget.com/articles/websockets-with-elixir-how-to-sync-multiple-clients) - Client synchronization strategies
+### Consistent Hashing & Sharding
+- [How to Build Consistent Hashing Implementation](https://oneuptime.com/blog/post/2026-01-30-consistent-hashing-implementation/view)
+- [Consistent Hashing 101: How Modern Systems Handle Growth](https://blog.bytebytego.com/p/consistent-hashing-101-how-modern)
+- [The "Hot Key" Crisis in Consistent Hashing](https://systemdr.substack.com/p/the-hot-key-crisis-in-consistent)
+- [Understanding Consistent Hashing](https://www.pubnub.com/blog/consistent-hashing-in-distributed-systems/)
 
-**Ephemeral Messaging:**
-- [Ephemeral Chat Messages](https://getstream.io/blog/ephemeral-chat-messages/) - Self-destructing message patterns
-- [Ephemeral group chat patent](https://patents.google.com/patent/WO2016179235A1/en) - Race conditions in group chat with deletion triggers
-- [Compliance Challenges of Ephemeral Messaging](https://mco.mycomplianceoffice.com/blog/the-compliance-challenges-of-ephemeral-messaging) - Audit and retention concerns
+### Stateful Migration & Zero Downtime
+- [Stateful Microservice Migration in Kubernetes](https://cloudnativenow.com/features/stateful-microservice-migration-the-live-state-challenge-in-kubernetes/)
+- [Migrate Stateful Workloads with Zero Downtime](https://cast.ai/blog/how-to-migrate-stateful-workloads-on-kubernetes-with-zero-downtime/)
+- [Container Live Migration: Zero Downtime](https://cast.ai/blog/introducing-container-live-migration-zero-downtime-for-stateful-kubernetes-workloads/)
+- [How to Migrate Workloads Between Kubernetes Clusters](https://oneuptime.com/blog/post/2026-01-06-kubernetes-migrate-workloads-zero-downtime/view)
 
-**Chat Moderation APIs:**
-- [StreamElements Nuke Command](https://docs.streamelements.com/chatbot/commands/default/nuke) - Bulk moderation patterns
-- [Moderation for Chat - React Docs](https://getstream.io/chat/docs/react/moderation/) - Client-side moderation implementation
-- [YouTube Live Chat Bans API](https://developers.google.com/youtube/v3/live/docs/liveChatBans) - Ban/timeout API specifications
+### WebSocket & Connection Management
+- [How to Handle Graceful Shutdown for WebSocket Servers](https://oneuptime.com/blog/post/2026-02-02-websocket-graceful-shutdown/view)
+- [How to Handle WebSocket Connection Pooling](https://oneuptime.com/blog/post/2026-01-24-websocket-connection-pooling/view)
+- [Effective Strategies for Managing WebSockets in Kubernetes](https://wafatech.sa/blog/devops/kubernetes/effective-strategies-for-managing-websockets-in-kubernetes-environments/)
+- [Kubernetes: zero-downtime rolling updates](https://www.driftrock.com/blog/kubernetes-zero-downtime-rolling-updates)
 
-**IRC Protocol Libraries:**
-- [go-twitch-irc on GitHub](https://github.com/gempir/go-twitch-irc) - Go IRC client used by All-Chat
-- [dank-twitch-irc on GitHub](https://github.com/robotty/dank-twitch-irc) - Node.js IRC client with CLEARMSG support
-- [ClearchatMessage Documentation](https://robotty.github.io/dank-twitch-irc/classes/clearchatmessage.html) - CLEARCHAT message structure
+### Distributed Locking
+- [How to do distributed locking — Martin Kleppmann](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+- [Distributed Locks with Redis (Official Docs)](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)
+- [10 Hidden Pitfalls of Using Redis Distributed Locks](https://leapcell.medium.com/10-hidden-pitfalls-of-using-redis-distributed-locks-b5234ddd6349)
+- [How to Implement Distributed Locks with Redis (Redlock)](https://oneuptime.com/blog/post/2026-01-21-redis-distributed-locks/view)
+- [Distributed Locking: A Practical Guide](https://www.architecture-weekly.com/p/distributed-locking-a-practical-guide)
 
-**All-Chat Codebase:**
-- `/services/message-processor/models/message.go` - Current message data models (UUID generation)
-- `/services/api-gateway/websocket/pool.go` - WebSocket connection pool and broadcasting
-- `/docs/architecture/01-DATA-FLOW.md` - Complete message flow architecture
+### Thundering Herd & Scaling
+- [Distributed Systems Horror Stories: The Thundering Herd Problem](https://encore.dev/blog/thundering-herd-problem)
+- [The Thundering Herd Problem and Its Solutions](https://singhajit.com/thundering-herd-problem/)
+- [The Thundering Herd Problem Explained 2025](https://medium.com/@work.dhairya.singla/the-thundering-herd-problem-explained-causes-examples-and-solutions-7166b7e26c0c)
+- [Thundering Herds: The Scalability Killer](https://docs.aonnis.com/blog/thundering-herds-the-scalability-killer)
+
+### Message Ordering & Duplicates
+- [How to Guarantee Message Order in Kafka 2026](https://oneuptime.com/blog/post/2026-01-26-kafka-message-ordering/view)
+- [Ordering, Grouping and Consistency in Messaging systems](https://www.architecture-weekly.com/p/ordering-grouping-and-consistency)
+- [How to Fix Message Ordering Issues in Event-Driven Systems 2026](https://oneuptime.com/blog/post/2026-01-24-message-ordering-event-driven/view)
+- [Handling Duplicate Messages in Distributed Systems](https://www.geeksforgeeks.org/system-design/handling-duplicate-messages-in-distributed-systems/)
+- [Idempotency in Distributed Systems](https://medium.com/javarevisited/idempotency-in-distributed-systems-preventing-duplicate-operations-85ce4468d161)
+
+### Observability
+- [Kubernetes Observability and Monitoring Trends in 2026](https://www.usdsi.org/data-science-insights/kubernetes-observability-and-monitoring-trends-in-2026)
+- [Building a Production Ready Observability Stack: 2026](https://medium.com/@krishnafattepurkar/building-a-production-ready-observability-stack-the-complete-2026-guide-9ec6e7e06da2)
+- [11 Key Observability Best Practices 2026](https://spacelift.io/blog/observability-best-practices)
+- [Distributed Systems Observability Explained 2025](https://edgedelta.com/company/knowledge-center/distributed-systems-observability)
+
+### Rate Limiting & Load Balancing
+- [How to Implement Load Balancer Rate Limiting](https://oneuptime.com/blog/post/2026-01-27-load-balancer-rate-limiting/view)
+- [Rate Limiting Fundamentals](https://blog.bytebytego.com/p/rate-limiting-fundamentals)
+- [Scale Your Live Streaming App for 1 Million Users: 2026](https://scalevista.com/blog/scaling-live-streaming-app/)
 
 ---
 
-*Pitfalls research for: Message Deletion in Streaming Chat Aggregation*
-*Researched: 2026-02-17*
+*Pitfalls research for: All-Chat Distributed Channel Sharding*
+*Researched: 2026-02-19*
+*Focus: Subsequent milestone adding load balancing to existing real-time messaging system*
