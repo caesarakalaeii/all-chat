@@ -38,13 +38,13 @@
 
 ### Twitch Load Balancing (CRITICAL)
 
-- [ ] **TWITCH-01**: Twitch listener queries shard coordinator for assigned channels on startup
-- [ ] **TWITCH-02**: Twitch listener connects to IRC only for assigned channels (not all channels)
-- [ ] **TWITCH-03**: Twitch listener supports multiple IRC connections when assigned >100 channels
-- [ ] **TWITCH-04**: Twitch listener stores IRC JOIN list state in ConnectionSnapshot for migration
-- [ ] **TWITCH-05**: Twitch listener gracefully parts IRC channels during migration (sends PART command)
-- [ ] **TWITCH-06**: System allows HPA to scale Twitch listener from 1 to 5 replicas successfully
-- [ ] **TWITCH-07**: All Twitch listener pods report ready status (fixes current 1/5 ready issue)
+- [x] **TWITCH-01**: Twitch listener queries shard coordinator for assigned channels on startup
+- [x] **TWITCH-02**: Twitch listener connects to IRC only for assigned channels (not all channels)
+- [x] **TWITCH-03**: Twitch listener supports multiple IRC connections when assigned >100 channels
+- [x] **TWITCH-04**: Twitch listener stores IRC JOIN list state in ConnectionSnapshot for migration
+- [x] **TWITCH-05**: Twitch listener gracefully parts IRC channels during migration (sends PART command)
+- [x] **TWITCH-06**: System allows HPA to scale Twitch listener from 1 to 5 replicas successfully
+- [x] **TWITCH-07**: All Twitch listener pods report ready status (fixes current 1/5 ready issue)
 
 ### Kick Load Balancing
 
@@ -138,13 +138,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIGRATE-04 | Phase 6 | Pending |
 | MIGRATE-05 | Phase 6 | Complete |
 | MIGRATE-06 | Phase 6 | Pending |
-| TWITCH-01 | Phase 6 | Pending |
-| TWITCH-02 | Phase 6 | Pending |
-| TWITCH-03 | Phase 6 | Pending |
-| TWITCH-04 | Phase 6 | Pending |
-| TWITCH-05 | Phase 6 | Pending |
-| TWITCH-06 | Phase 6 | Pending |
-| TWITCH-07 | Phase 6 | Pending |
+| TWITCH-01 | Phase 6 | Complete |
+| TWITCH-02 | Phase 6 | Complete |
+| TWITCH-03 | Phase 6 | Complete |
+| TWITCH-04 | Phase 6 | Complete |
+| TWITCH-05 | Phase 6 | Complete |
+| TWITCH-06 | Phase 6 | Complete |
+| TWITCH-07 | Phase 6 | Complete |
 | KICK-01 | Phase 6 | Pending |
 | KICK-02 | Phase 6 | Pending |
 | KICK-03 | Phase 6 | Pending |
