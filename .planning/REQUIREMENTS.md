@@ -1,110 +1,114 @@
-# Requirements: Message Deletion Support
+# Requirements: All-Chat Listener Load Balancing
 
-**Defined:** 2026-02-17
-**Core Value:** When a message is deleted on the streaming platform, it must be removed from connected overlays in real-time so streamers see an accurate representation of chat.
+**Defined:** 2026-02-19
+**Core Value:** Listener instances must efficiently distribute channel workload based on actual message volume, enabling cost-effective scaling and reliable service for both small and high-traffic streams.
 
-## v1 Requirements
+## Milestone v1.1 Requirements
 
-Requirements for initial release. Each maps to roadmap phases.
+### Core Sharding Infrastructure
 
-### Message ID Infrastructure
+- [ ] **SHARD-01**: System computes channel-to-pod assignment using consistent hashing with virtual nodes
+- [ ] **SHARD-02**: System stores channel assignments in Redis registry with O(1) lookup performance
+- [ ] **SHARD-03**: Listener pod queries assignment registry on startup to determine which channels to connect
+- [ ] **SHARD-04**: Listener pod publishes heartbeat to Redis every 10 seconds with pod ID and timestamp
+- [ ] **SHARD-05**: System detects pod failure when heartbeat missing for 30 seconds
+- [ ] **SHARD-06**: System redistributes channels from failed pod to healthy pods within 60 seconds
+- [ ] **SHARD-07**: System uses Kubernetes Lease API for coordinator leader election (not Redlock)
+- [ ] **SHARD-08**: System uses fencing tokens to prevent split-brain during leader failover
 
-- [x] **MSGID-01**: System preserves platform-native message IDs alongside internal UUIDs
-- [x] **MSGID-02**: Redis-based Message ID Registry maps platform IDs to internal UUIDs
-- [x] **MSGID-03**: Registry entries have 24-hour TTL to match message retention
-- [x] **MSGID-04**: Registry provides O(1) lookup for deletion event matching
-- [x] **MSGID-05**: Platform IDs flow through entire pipeline (Listener → Processor → Gateway)
+### Rebalancing & Coordination
 
-### Core Deletion Features
+- [ ] **REBAL-01**: System monitors per-pod message rate (messages/sec) every 30 seconds
+- [ ] **REBAL-02**: System calculates load imbalance ratio (max_load / avg_load)
+- [ ] **REBAL-03**: System triggers automatic rebalancing when imbalance ratio exceeds 0.5
+- [ ] **REBAL-04**: System identifies hot channels (channels with >3x average message rate)
+- [ ] **REBAL-05**: System reassigns hot channels from overloaded pods to underutilized pods
+- [ ] **REBAL-06**: System enforces 5-minute cooldown between rebalancing operations
+- [ ] **REBAL-07**: System limits rebalancing to maximum 20% of channels per operation
+- [ ] **REBAL-08**: Coordinator service extends existing source-manager with rebalancing logic
 
-- [ ] **DEL-01**: System detects single message deletion events from platforms
-- [ ] **DEL-02**: System detects user batch deletion events (timeout/ban)
-- [ ] **DEL-03**: System detects full chat clear events
-- [x] **DEL-04**: Deletion events normalized to unified schema across all platforms
-- [x] **DEL-05**: Deletion events propagate through existing Redis Streams → Pub/Sub pipeline
-- [x] **DEL-06**: Batch deletions use coalesced schema to prevent amplification (single event for multiple messages)
+### Channel Migration
 
-### Race Condition Handling
+- [ ] **MIGRATE-01**: System implements overlap migration pattern (new pod connects before old disconnects)
+- [ ] **MIGRATE-02**: New pod subscribes to channel and waits for first message before signaling ready
+- [ ] **MIGRATE-03**: Old pod receives migration signal and gracefully disconnects after 45 seconds
+- [ ] **MIGRATE-04**: System guarantees zero message loss during migration (no dropped messages)
+- [ ] **MIGRATE-05**: System publishes migration events to Redis Streams for observability
+- [ ] **MIGRATE-06**: System uses sequence numbers per channel to detect message gaps during migration
 
-- [x] **RACE-01**: System buffers deletion events for messages not yet received (60-second window)
-- [x] **RACE-02**: Deletion events processed after corresponding messages arrive
-- [x] **RACE-03**: Expired deletion events (no matching message after 60s) are discarded without error
+### Twitch Load Balancing (CRITICAL)
 
-### Twitch Integration
+- [ ] **TWITCH-01**: Twitch listener queries shard coordinator for assigned channels on startup
+- [ ] **TWITCH-02**: Twitch listener connects to IRC only for assigned channels (not all channels)
+- [ ] **TWITCH-03**: Twitch listener supports multiple IRC connections when assigned >100 channels
+- [ ] **TWITCH-04**: Twitch listener stores IRC JOIN list state in ConnectionSnapshot for migration
+- [ ] **TWITCH-05**: Twitch listener gracefully parts IRC channels during migration (sends PART command)
+- [ ] **TWITCH-06**: System allows HPA to scale Twitch listener from 1 to 5 replicas successfully
+- [ ] **TWITCH-07**: All Twitch listener pods report ready status (fixes current 1/5 ready issue)
 
-- [ ] **TWITCH-01**: Listener detects IRC CLEARMSG events (single message deletion)
-- [ ] **TWITCH-02**: Listener detects IRC CLEARCHAT with target-msg-id (user timeout/ban)
-- [ ] **TWITCH-03**: Listener detects IRC CLEARCHAT without target (full chat clear)
-- [ ] **TWITCH-04**: Twitch deletion events include target-msg-id for message matching
+### Kick Load Balancing
 
-### YouTube Integration
+- [ ] **KICK-01**: Kick listener queries shard coordinator for assigned channels on startup
+- [ ] **KICK-02**: Kick listener connects to Pusher WebSocket only for assigned channels
+- [ ] **KICK-03**: Kick listener stores Pusher subscription IDs in ConnectionSnapshot for migration
+- [ ] **KICK-04**: Kick listener gracefully unsubscribes from channels during migration
+- [ ] **KICK-05**: System allows HPA to scale Kick listener from 1 to 5 replicas successfully
 
-- [x] **YOUTUBE-01**: Listener polls for messageDeletedEvent message type
-- [x] **YOUTUBE-02**: YouTube deletion events processed within existing polling interval
-- [x] **YOUTUBE-03**: System handles 60-second polling lag gracefully (via deletion buffer)
+### TikTok Load Balancing
 
-### Kick Integration
+- [ ] **TIKTOK-01**: TikTok listener queries shard coordinator for assigned channels on startup
+- [ ] **TIKTOK-02**: TikTok listener connects via tiktok-live-connector only for assigned channels
+- [ ] **TIKTOK-03**: TikTok listener stores connection state in ConnectionSnapshot for migration
+- [ ] **TIKTOK-04**: TikTok listener handles connection state migration for unofficial library
+- [ ] **TIKTOK-05**: System allows HPA to scale TikTok listener from 1 to 3 replicas successfully
 
-- [x] **KICK-01**: Listener detects ChatMessageDeletedEvent via WebSocket
-- [x] **KICK-02**: Kick event structure validated in production environment
-- [x] **KICK-03**: Kick deletion events include message ID for matching
+### Observability & Metrics
 
-### TikTok Handling
+- [ ] **METRICS-01**: Each listener pod exposes Prometheus metrics at /metrics endpoint
+- [ ] **METRICS-02**: System tracks per-pod channel count as Gauge metric (shard_channel_count)
+- [ ] **METRICS-03**: System tracks per-pod message rate as Counter metric (shard_messages_total)
+- [ ] **METRICS-04**: System tracks rebalancing events as Counter metric (shard_rebalancing_total)
+- [ ] **METRICS-05**: System tracks migration success/failure as Counter metrics (shard_migration_success/failure)
+- [ ] **METRICS-06**: System tracks load imbalance ratio as Gauge metric (shard_imbalance_ratio)
+- [ ] **METRICS-07**: Grafana dashboard visualizes channel distribution across pods (heatmap)
+- [ ] **METRICS-08**: Grafana dashboard shows rebalancing timeline and migration events
+- [ ] **METRICS-09**: Prometheus alert triggers when imbalance ratio >0.7 for 10 minutes
+- [ ] **METRICS-10**: Prometheus alert triggers on split-brain detection (multiple leaders)
+- [ ] **METRICS-11**: Prometheus alert triggers on rebalancing thrashing (>3 rebalances in 15min)
 
-- [ ] **TIKTOK-01**: System documents TikTok deletion limitation (unsupported by unofficial library)
-- [ ] **TIKTOK-02**: TikTok messages handled gracefully (no deletion support, no errors)
+### Distributed Tracing
 
-### Frontend Integration
+- [ ] **TRACE-01**: System instruments channel assignment operations with OpenTelemetry spans
+- [ ] **TRACE-02**: System instruments migration operations with OpenTelemetry spans
+- [ ] **TRACE-03**: System instruments rebalancing operations with OpenTelemetry spans
+- [ ] **TRACE-04**: System propagates trace context through Redis Streams messages
+- [ ] **TRACE-05**: Jaeger UI shows end-to-end trace for channel migration (all phases)
+- [ ] **TRACE-06**: Jaeger UI shows trace for rebalancing decision (trigger → completion)
 
-- [x] **FRONTEND-01**: Frontend tracks platform message IDs in DOM elements
-- [x] **FRONTEND-02**: Frontend receives deletion events via WebSocket
-- [x] **FRONTEND-03**: Frontend removes messages immediately on deletion event (no animation)
-- [x] **FRONTEND-04**: Frontend handles single message deletion
-- [x] **FRONTEND-05**: Frontend handles batch deletion (timeout/ban)
-- [x] **FRONTEND-06**: Frontend handles full chat clear
+## Future Requirements (Deferred)
 
-### Reliability & Edge Cases
+### Cross-Region Load Balancing
+- **REGION-01**: Channel assignment considers pod region for latency optimization
+- **REGION-02**: Rebalancing prefers same-region migrations to minimize latency
 
-- [x] **REL-01**: Deletion events persisted for 1-minute replay window on reconnect
-- [x] **REL-02**: WebSocket reconnection triggers deletion event replay
-- [x] **REL-03**: System handles Redis Pub/Sub message loss gracefully (best-effort delivery acceptable)
-- [x] **REL-04**: Load testing validates batch deletion performance (1,000+ messages)
-- [x] **REL-05**: DOM update optimization prevents UI blocking during large deletions
+### Predictive Scaling
+- **PRED-01**: System learns stream schedules and pre-scales listeners before high-traffic events
+- **PRED-02**: System integrates with Twitch/YouTube APIs to detect upcoming high-traffic streams
 
-## v2 Requirements
-
-Deferred to future release. Tracked but not in current roadmap.
-
-### UX Enhancements
-
-- **UX-01**: Configurable deletion animation (instant vs 200ms fade)
-- **UX-02**: Scroll position preservation during deletion
-- **UX-03**: System messages for timeout/ban events (e.g., "User timed out for 10 minutes")
-
-### Advanced Features
-
-- **ADV-01**: Moderator ghost mode (view deleted messages)
-- **ADV-02**: 30-day deletion audit log in Redis
-- **ADV-03**: Batch delete by keyword feature
-- **ADV-04**: Deletion metrics for spam detection
-
-### TikTok Workaround
-
-- **TIKTOK-03**: Client-side TTL-based message removal as deletion alternative
+### Advanced HPA Integration
+- **HPA-01**: HPA uses custom metrics (channel count, messages/sec) instead of CPU
+- **HPA-02**: Prometheus Adapter exposes shard metrics for HPA consumption
 
 ## Out of Scope
 
-Explicitly excluded. Documented to prevent scope creep.
-
 | Feature | Reason |
 |---------|--------|
-| Message editing | Platforms don't universally support editing; different feature entirely |
-| Moderation context display | Focus on removal only, not reason/metadata (ban duration, mod name, etc.) |
-| Deletion undo/restoration | Not supported by platforms; adds significant complexity |
-| Deletion analytics/logging | Metrics can be added later; focus on core feature first |
-| Historical message deletion | Messages are ephemeral (Redis only); no database cleanup needed |
-| Cross-platform deletion | Deleting message on one platform doesn't delete on others (each platform independent) |
-| Moderator attribution | Showing which mod deleted message adds complexity, defer to v2 |
+| YouTube load balancing | Quota is bottleneck, not connections - keep existing leader election |
+| Manual channel pinning | All channels are rebalanceable for optimal load distribution |
+| Multi-tenancy isolation | Single Redis instance shared across pods - defer to future |
+| Cross-cluster sharding | Single Kubernetes cluster only for v1.1 |
+| Real-time rebalancing | 60-second migration window acceptable for chat aggregation |
+| Perfect load balance | Causes thrashing - accept 0.5 imbalance threshold |
 
 ## Traceability
 
@@ -112,49 +116,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MSGID-01 | Phase 1 | Complete |
-| MSGID-02 | Phase 1 | Complete |
-| MSGID-03 | Phase 1 | Complete |
-| MSGID-04 | Phase 1 | Complete |
-| MSGID-05 | Phase 1 | Complete |
-| DEL-01 | Phase 1 | Pending |
-| DEL-02 | Phase 1 | Pending |
-| DEL-03 | Phase 1 | Pending |
-| DEL-04 | Phase 1 | Complete |
-| DEL-05 | Phase 1 | Complete |
-| DEL-06 | Phase 1 | Complete |
-| RACE-01 | Phase 1 | Complete |
-| RACE-02 | Phase 1 | Complete |
-| RACE-03 | Phase 1 | Complete |
-| TWITCH-01 | Phase 1 | Pending |
-| TWITCH-02 | Phase 1 | Pending |
-| TWITCH-03 | Phase 1 | Pending |
-| TWITCH-04 | Phase 1 | Pending |
-| FRONTEND-01 | Phase 1 | Complete |
-| FRONTEND-02 | Phase 1 | Complete |
-| FRONTEND-03 | Phase 1 | Complete |
-| FRONTEND-04 | Phase 1 | Complete |
-| FRONTEND-05 | Phase 1 | Complete |
-| FRONTEND-06 | Phase 1 | Complete |
-| YOUTUBE-01 | Phase 2 | Complete |
-| YOUTUBE-02 | Phase 2 | Complete |
-| YOUTUBE-03 | Phase 2 | Complete |
-| KICK-01 | Phase 3 | Complete |
-| KICK-02 | Phase 3 | Complete |
-| KICK-03 | Phase 3 | Complete |
-| REL-01 | Phase 3 | Complete |
-| REL-02 | Phase 3 | Complete |
-| REL-03 | Phase 3 | Complete |
-| REL-04 | Phase 3 | Complete |
-| REL-05 | Phase 3 | Complete |
-| TIKTOK-01 | Phase 4 | Pending |
-| TIKTOK-02 | Phase 4 | Pending |
+| (To be populated by roadmapper) | | |
 
 **Coverage:**
-- v1 requirements: 37 total
-- Mapped to phases: 37
-- Unmapped: 0
+- v1.1 requirements: 50 total
+- Mapped to phases: (to be counted)
+- Unmapped: (to be counted)
 
 ---
-*Requirements defined: 2026-02-17*
-*Last updated: 2026-02-17 after roadmap creation*
+*Requirements defined: 2026-02-19*
+*Last updated: 2026-02-19 after initial definition*
