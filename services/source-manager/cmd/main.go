@@ -101,11 +101,17 @@ func main() {
 	// Initialize coordinator components
 	assignmentRegistry := coordination.NewAssignmentRegistry(redisClient)
 	assigner := coordination.NewAssigner([]string{}) // Empty initially, populated by reconcile
+
+	// Initialize heartbeat monitor
+	heartbeatMonitor := coordination.NewHeartbeatMonitor(redisClient, log)
+	log.Info("Initialized heartbeat monitor")
+
 	coordinator := coordination.NewCoordinator(
 		assignmentRegistry,
 		assigner,
 		repo,
 		redisClient,
+		heartbeatMonitor,
 		log,
 	)
 
