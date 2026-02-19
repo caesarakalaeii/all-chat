@@ -27,3 +27,16 @@ spec:
         target:
           type: Utilization
           averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0  # Immediate scale-up for testing migration protocol
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60
