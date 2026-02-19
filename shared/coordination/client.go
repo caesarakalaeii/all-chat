@@ -6,18 +6,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/caesar/all-chat/shared/auth"
 	"go.uber.org/zap"
 )
 
 // CoordinatorClient is an HTTP client for coordinator integration
 type CoordinatorClient struct {
-	baseURL    string
-	serviceJWT string
-	httpClient *http.Client
-	logger     *zap.Logger
+	baseURL       string
+	serviceSecret string
+	serviceJWT    string
+	serviceName   string
+	httpClient    *http.Client
+	logger        *zap.Logger
 }
 
 // Assignment represents a channel assignment from the coordinator
@@ -35,10 +39,29 @@ type HeartbeatRequest struct {
 }
 
 // NewCoordinatorClient creates a new coordinator client
-func NewCoordinatorClient(baseURL, serviceJWT string, logger *zap.Logger) *CoordinatorClient {
+func NewCoordinatorClient(baseURL, serviceSecret string, logger *zap.Logger) *CoordinatorClient {
+	// Determine service name from hostname (pod name)
+	hostname := os.Getenv("HOSTNAME")
+	serviceName := "listener" // default
+	if strings.HasPrefix(hostname, "twitch-listener") {
+		serviceName = "twitch-listener"
+	} else if strings.HasPrefix(hostname, "kick-listener") {
+		serviceName = "kick-listener"
+	} else if strings.HasPrefix(hostname, "tiktok-listener") {
+		serviceName = "tiktok-listener"
+	}
+
+	// Generate initial JWT (24 hour expiry)
+	jwt, err := auth.GenerateServiceJWT(serviceName, serviceSecret, 24*time.Hour)
+	if err != nil {
+		logger.Fatal("Failed to generate service JWT", zap.Error(err))
+	}
+
 	return &CoordinatorClient{
-		baseURL:    baseURL,
-		serviceJWT: serviceJWT,
+		baseURL:       baseURL,
+		serviceSecret: serviceSecret,
+		serviceJWT:    jwt,
+		serviceName:   serviceName,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
