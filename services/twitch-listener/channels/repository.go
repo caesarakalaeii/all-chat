@@ -12,6 +12,7 @@ import (
 type RepositoryInterface interface {
 	GetActiveChannels(ctx context.Context) ([]models.ChannelSource, error)
 	GetUniqueChannels(ctx context.Context) ([]string, error)
+	GetSourceIDsForChannels(ctx context.Context, channels []string) map[string]string
 	SetSourceActive(ctx context.Context, channelName string, isActive bool) error
 }
 
@@ -97,6 +98,38 @@ func (r *Repository) GetUniqueChannels(ctx context.Context) ([]string, error) {
 	}
 
 	return channels, nil
+}
+
+// GetSourceIDsForChannels returns a map of channel_name -> source_id (UUID)
+// Used to filter channels by coordinator assignments
+func (r *Repository) GetSourceIDsForChannels(ctx context.Context, channels []string) map[string]string {
+	if len(channels) == 0 {
+		return make(map[string]string)
+	}
+
+	query := `
+		SELECT DISTINCT channel_name, id
+		FROM overlay_chat_sources
+		WHERE platform = 'twitch'
+		  AND channel_name = ANY($1)
+	`
+
+	rows, err := r.db.Query(ctx, query, channels)
+	if err != nil {
+		return make(map[string]string)
+	}
+	defer rows.Close()
+
+	result := make(map[string]string)
+	for rows.Next() {
+		var channelName, sourceID string
+		if err := rows.Scan(&channelName, &sourceID); err != nil {
+			continue
+		}
+		result[channelName] = sourceID
+	}
+
+	return result
 }
 
 // SetSourceActive updates the is_active flag for all Twitch sources with the given channel name

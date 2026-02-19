@@ -14,6 +14,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-listener/handlers"
 	"github.com/caesar/all-chat/services/twitch-listener/irc"
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
+	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
@@ -100,6 +101,41 @@ func main() {
 	listenerMetrics := metrics.NewListenerMetrics("twitch", "twitch-listener")
 	log.Info("Initialized Prometheus metrics")
 
+	// Get Kubernetes pod name from HOSTNAME environment variable
+	podName := os.Getenv("HOSTNAME")
+	if podName == "" {
+		podName = "twitch-listener-unknown"
+		log.Warn("HOSTNAME not set, using default pod name", zap.String("pod_name", podName))
+	}
+
+	// Initialize coordinator client
+	coordinatorURL := getEnvOrDefault("COORDINATOR_URL", "http://source-manager:8088")
+	serviceJWT := os.Getenv("SERVICE_JWT_SECRET")
+	if serviceJWT == "" {
+		log.Fatal("SERVICE_JWT_SECRET is required for coordinator authentication")
+	}
+
+	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, log)
+	log.Info("Initialized coordinator client", zap.String("coordinator_url", coordinatorURL))
+
+	// Query assignments from coordinator (TWITCH-01)
+	// Per CONTEXT.md: Block indefinitely until coordinator responds
+	assignments, err := coordClient.QueryAssignments(ctx, podName)
+	if err != nil {
+		log.Fatal("Failed to query coordinator assignments", zap.Error(err))
+	}
+
+	log.Info("Received assignments from coordinator",
+		zap.Int("count", len(assignments)),
+		zap.String("pod_id", podName),
+	)
+
+	// Extract assigned source IDs into map for filtering
+	assignedSourceIDs := make(map[string]bool)
+	for _, a := range assignments {
+		assignedSourceIDs[a.SourceID] = true
+	}
+
 	// Initialize components
 	parser := irc.NewParser()
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
@@ -121,10 +157,10 @@ func main() {
 	var leaderCoord *sourcemanager.LeadershipCoordinator = nil
 	log.Info("Twitch Listener running without leadership coordination (IRC is stateless)")
 
-	// Initialize channel manager
+	// Initialize channel manager with assigned source IDs
 	channelRepo := channels.NewRepository(db)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, leaderCoord, log, listenerMetrics)
+	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, leaderCoord, assignedSourceIDs, log, listenerMetrics)
 
 	// Connect to Twitch IRC
 	if err := ircConn.Connect(ctx); err != nil {
@@ -138,6 +174,39 @@ func main() {
 	if err := channelMgr.Start(ctx); err != nil {
 		log.Fatal("Failed to start channel manager", zap.Error(err))
 	}
+
+	// Start migration subscriber (TWITCH-04, TWITCH-05)
+	migrationSub := coordination.NewMigrationSubscriber(
+		redisClient,
+		channelMgr.HandleMigrationEvent,
+		log,
+	)
+
+	go func() {
+		if err := migrationSub.Subscribe(ctx); err != nil {
+			log.Error("Migration subscriber error", zap.Error(err))
+		}
+	}()
+
+	log.Info("Started migration event subscriber")
+
+	// Start heartbeat publisher (TWITCH-06)
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := coordClient.PublishHeartbeat(ctx, podName); err != nil {
+					log.Warn("Failed to publish heartbeat", zap.Error(err))
+				}
+			}
+		}
+	}()
+
+	log.Info("Started heartbeat publisher", zap.Duration("interval", 10*time.Second))
 
 	// Set up HTTP server for health checks
 	if logLevel == "debug" {
