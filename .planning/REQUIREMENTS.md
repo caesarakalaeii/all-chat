@@ -48,11 +48,11 @@
 
 ### Kick Load Balancing
 
-- [ ] **KICK-01**: Kick listener queries shard coordinator for assigned channels on startup
-- [ ] **KICK-02**: Kick listener connects to Pusher WebSocket only for assigned channels
-- [ ] **KICK-03**: Kick listener stores Pusher subscription IDs in ConnectionSnapshot for migration
-- [ ] **KICK-04**: Kick listener gracefully unsubscribes from channels during migration
-- [ ] **KICK-05**: System allows HPA to scale Kick listener from 1 to 5 replicas successfully
+- [x] **KICK-01**: Kick listener queries shard coordinator for assigned channels on startup
+- [x] **KICK-02**: Kick listener connects to Pusher WebSocket only for assigned channels
+- [x] **KICK-03**: Kick listener stores Pusher subscription IDs in ConnectionSnapshot for migration
+- [x] **KICK-04**: Kick listener gracefully unsubscribes from channels during migration
+- [x] **KICK-05**: System allows HPA to scale Kick listener from 1 to 5 replicas successfully
 
 ### TikTok Load Balancing
 
@@ -145,11 +145,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TWITCH-05 | Phase 6 | Complete |
 | TWITCH-06 | Phase 6 | Complete |
 | TWITCH-07 | Phase 6 | Complete |
-| KICK-01 | Phase 6 | Pending |
-| KICK-02 | Phase 6 | Pending |
-| KICK-03 | Phase 6 | Pending |
-| KICK-04 | Phase 6 | Pending |
-| KICK-05 | Phase 6 | Pending |
+| KICK-01 | Phase 6 | Complete |
+| KICK-02 | Phase 6 | Complete |
+| KICK-03 | Phase 6 | Complete |
+| KICK-04 | Phase 6 | Complete |
+| KICK-05 | Phase 6 | Complete |
 | TIKTOK-01 | Phase 6 | Pending |
 | TIKTOK-02 | Phase 6 | Pending |
 | TIKTOK-03 | Phase 6 | Pending |
