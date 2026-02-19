@@ -19,12 +19,13 @@ import (
 
 // Coordinator manages leader election and channel assignment computation
 type Coordinator struct {
-	k8sClient   *kubernetes.Clientset
-	registry    *AssignmentRegistry
-	assigner    *Assigner
-	sourceRepo  *registry.Repository
-	redisClient *redis.Client
-	logger      *zap.Logger
+	k8sClient        *kubernetes.Clientset
+	registry         *AssignmentRegistry
+	assigner         *Assigner
+	sourceRepo       *registry.Repository
+	redisClient      *redis.Client
+	heartbeatMonitor *HeartbeatMonitor
+	logger           *zap.Logger
 
 	reconcileInterval time.Duration
 	stopCh            chan struct{}
@@ -36,6 +37,7 @@ func NewCoordinator(
 	assigner *Assigner,
 	sourceRepo *registry.Repository,
 	redisClient *redis.Client,
+	heartbeatMonitor *HeartbeatMonitor,
 	logger *zap.Logger,
 ) *Coordinator {
 	return &Coordinator{
@@ -43,6 +45,7 @@ func NewCoordinator(
 		assigner:          assigner,
 		sourceRepo:        sourceRepo,
 		redisClient:       redisClient,
+		heartbeatMonitor:  heartbeatMonitor,
 		logger:            logger,
 		reconcileInterval: 30 * time.Second, // Default: 30s per user constraint
 		stopCh:            make(chan struct{}),
@@ -151,22 +154,35 @@ func (c *Coordinator) reconcile(ctx context.Context) {
 func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	startTime := time.Now()
 
-	// Query active sources from source-manager registry
+	// Step 1: Detect failed pods via heartbeat monitoring
+	failedPods, err := c.heartbeatMonitor.GetFailedPods(ctx)
+	if err != nil {
+		c.logger.Error("Failed to detect failed pods", zap.Error(err))
+		// Continue with empty failed list - don't block reconciliation
+		failedPods = []string{}
+	} else if len(failedPods) > 0 {
+		c.logger.Info("Detected failed pods, triggering reassignment",
+			zap.Strings("failed_pods", failedPods),
+		)
+	}
+
+	// Step 2: Query active sources from source-manager registry
 	sources, err := c.sourceRepo.GetAllActiveSources(ctx)
 	if err != nil {
 		c.logger.Error("Failed to query active sources", zap.Error(err))
 		return fmt.Errorf("failed to query active sources: %w", err)
 	}
 
-	// Query active listener pods from Kubernetes API
-	pods, err := c.queryActiveListenerPods(ctx)
+	// Step 3: Query active listener pods from Kubernetes API
+	// Filter will exclude failed pods detected by heartbeat monitor
+	pods, err := c.getHealthyListenerPods(ctx, failedPods)
 	if err != nil {
-		c.logger.Error("Failed to query active listener pods", zap.Error(err))
-		return fmt.Errorf("failed to query active listener pods: %w", err)
+		c.logger.Error("Failed to query healthy listener pods", zap.Error(err))
+		return fmt.Errorf("failed to query healthy listener pods: %w", err)
 	}
 
 	if len(pods) == 0 {
-		c.logger.Warn("No active listener pods found, skipping assignment computation")
+		c.logger.Warn("No healthy listener pods available, skipping assignment computation")
 		return nil
 	}
 
@@ -176,15 +192,16 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 		podIDs = append(podIDs, pod.Name)
 	}
 
-	// Update assigner with current pod list
+	// Step 4: Update assigner with healthy pod list
 	c.assigner = NewAssigner(podIDs)
 
 	c.logger.Info("Computing assignments",
 		zap.Int("source_count", len(sources)),
 		zap.Int("pod_count", len(podIDs)),
+		zap.Int("failed_pods", len(failedPods)),
 	)
 
-	// Compute assignment for each source
+	// Step 5: Compute assignment for each source
 	assignmentCount := 0
 	errorCount := 0
 
@@ -215,18 +232,31 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 		assignmentCount++
 	}
 
+	// Step 6: Cleanup stale heartbeats (every cycle)
+	if err := c.heartbeatMonitor.CleanupStaleHeartbeats(ctx); err != nil {
+		c.logger.Error("Failed to cleanup stale heartbeats", zap.Error(err))
+	}
+
+	// Step 7: Remove orphaned assignments (every cycle)
+	if err := c.heartbeatMonitor.RemoveOrphanedAssignments(ctx, c.registry, c.sourceRepo); err != nil {
+		c.logger.Error("Failed to remove orphaned assignments", zap.Error(err))
+	}
+
 	duration := time.Since(startTime)
 	c.logger.Info("Assignment computation complete",
 		zap.Int("assignments_stored", assignmentCount),
 		zap.Int("errors", errorCount),
+		zap.Int("healthy_pods", len(podIDs)),
+		zap.Int("failed_pods", len(failedPods)),
 		zap.Duration("duration", duration),
 	)
 
 	return nil
 }
 
-// queryActiveListenerPods queries Kubernetes API for active listener pods
-func (c *Coordinator) queryActiveListenerPods(ctx context.Context) ([]corev1.Pod, error) {
+// getHealthyListenerPods queries Kubernetes API for active listener pods
+// and excludes pods that have failed heartbeat checks
+func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []string) ([]corev1.Pod, error) {
 	podNamespace := os.Getenv("POD_NAMESPACE")
 	if podNamespace == "" {
 		podNamespace = "allchat"
@@ -243,9 +273,23 @@ func (c *Coordinator) queryActiveListenerPods(ctx context.Context) ([]corev1.Pod
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
 
-	// Filter for Running and Ready pods
-	activePods := make([]corev1.Pod, 0)
+	// Build set of failed pod names for fast lookup
+	failedPodSet := make(map[string]bool)
+	for _, podID := range failedPods {
+		failedPodSet[podID] = true
+	}
+
+	// Filter for Running, Ready, and NOT failed pods
+	healthyPods := make([]corev1.Pod, 0)
 	for _, pod := range podList.Items {
+		// Skip if pod failed heartbeat check
+		if failedPodSet[pod.Name] {
+			c.logger.Debug("Excluding failed pod from assignment",
+				zap.String("pod_name", pod.Name),
+			)
+			continue
+		}
+
 		if pod.Status.Phase != corev1.PodRunning {
 			continue
 		}
@@ -260,16 +304,17 @@ func (c *Coordinator) queryActiveListenerPods(ctx context.Context) ([]corev1.Pod
 		}
 
 		if ready {
-			activePods = append(activePods, pod)
+			healthyPods = append(healthyPods, pod)
 		}
 	}
 
-	c.logger.Debug("Queried active listener pods",
+	c.logger.Debug("Queried healthy listener pods",
 		zap.Int("total_pods", len(podList.Items)),
-		zap.Int("active_pods", len(activePods)),
+		zap.Int("healthy_pods", len(healthyPods)),
+		zap.Int("excluded_failed", len(failedPods)),
 	)
 
-	return activePods, nil
+	return healthyPods, nil
 }
 
 // Stop gracefully stops the coordinator
