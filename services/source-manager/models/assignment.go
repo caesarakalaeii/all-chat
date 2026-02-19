@@ -9,3 +9,14 @@ type Assignment struct {
 	Timestamp time.Time `json:"timestamp"`  // When assignment was created
 	Version   int64     `json:"version"`    // Global version counter for fencing
 }
+
+// AssignmentResponse is the response format for assignment queries
+type AssignmentResponse struct {
+	Assignments []Assignment `json:"assignments"`
+	Count       int          `json:"count"`
+}
+
+// HeartbeatRequest is the request format for heartbeat publishing
+type HeartbeatRequest struct {
+	PodID string `json:"pod_id" binding:"required"`
+}
