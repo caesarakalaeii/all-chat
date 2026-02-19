@@ -90,6 +90,7 @@ func main() {
 
 	// Initialize metrics (available via /metrics endpoint)
 	_ = metrics.NewBusinessMetrics()
+	shardMetrics := metrics.NewShardMetrics()
 	log.Info("Initialized Prometheus metrics")
 
 	// Initialize components
@@ -112,6 +113,7 @@ func main() {
 		repo,
 		redisClient,
 		heartbeatMonitor,
+		shardMetrics,
 		log,
 	)
 
@@ -158,6 +160,16 @@ func main() {
 	protected.POST("/leadership/renew", sourceHandler.RenewLeadership)
 	protected.POST("/leadership/release", sourceHandler.ReleaseLeadership)
 	protected.GET("/leadership", sourceHandler.GetLeadershipStatus)
+
+	// Assignment handlers
+	assignmentHandler := handlers.NewAssignmentHandler(
+		assignmentRegistry,
+		heartbeatMonitor,
+		shardMetrics,
+		log,
+	)
+	protected.GET("/assignments", assignmentHandler.GetAssignments)
+	protected.POST("/heartbeat", assignmentHandler.PublishHeartbeat)
 
 	// Get port
 	port := getEnvOrDefault("PORT", "8088")
