@@ -366,7 +366,7 @@ func main() {
 	}()
 
 	// Start HTTP server for health checks and webhook endpoint
-	startHTTPServer(log, getEnv("PORT", "8090"), state, webhookHandler, db, redisClient)
+	startHTTPServer(log, getEnv("PORT", "8090"), state, webhookHandler, db, redisClient, tracingEnabled)
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
@@ -422,7 +422,7 @@ func releaseLeadership(ctx context.Context, client *redis.Client, instanceID str
 }
 
 // startHTTPServer starts the HTTP server for health checks and webhook endpoint
-func startHTTPServer(log *zap.Logger, port string, state *leaderState, webhookHandler *webhooks.Handler, db *pgxpool.Pool, redis *redis.Client) {
+func startHTTPServer(log *zap.Logger, port string, state *leaderState, webhookHandler *webhooks.Handler, db *pgxpool.Pool, redis *redis.Client, tracingEnabled bool) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
