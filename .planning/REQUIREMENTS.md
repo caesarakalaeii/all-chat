@@ -29,11 +29,11 @@
 
 ### Channel Migration
 
-- [ ] **MIGRATE-01**: System implements overlap migration pattern (new pod connects before old disconnects)
+- [x] **MIGRATE-01**: System implements overlap migration pattern (new pod connects before old disconnects)
 - [ ] **MIGRATE-02**: New pod subscribes to channel and waits for first message before signaling ready
 - [ ] **MIGRATE-03**: Old pod receives migration signal and gracefully disconnects after 45 seconds
 - [ ] **MIGRATE-04**: System guarantees zero message loss during migration (no dropped messages)
-- [ ] **MIGRATE-05**: System publishes migration events to Redis Streams for observability
+- [x] **MIGRATE-05**: System publishes migration events to Redis Streams for observability
 - [ ] **MIGRATE-06**: System uses sequence numbers per channel to detect message gaps during migration
 
 ### Twitch Load Balancing (CRITICAL)
@@ -132,11 +132,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REBAL-06 | Phase 7 | Pending |
 | REBAL-07 | Phase 7 | Pending |
 | REBAL-08 | Phase 5 | Complete |
-| MIGRATE-01 | Phase 6 | Pending |
+| MIGRATE-01 | Phase 6 | Complete |
 | MIGRATE-02 | Phase 6 | Pending |
 | MIGRATE-03 | Phase 6 | Pending |
 | MIGRATE-04 | Phase 6 | Pending |
-| MIGRATE-05 | Phase 6 | Pending |
+| MIGRATE-05 | Phase 6 | Complete |
 | MIGRATE-06 | Phase 6 | Pending |
 | TWITCH-01 | Phase 6 | Pending |
 | TWITCH-02 | Phase 6 | Pending |
