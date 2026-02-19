@@ -1,17 +1,17 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: twitch-listener
+  name: kick-listener
   namespace: allchat
   labels:
-    app: twitch-listener
+    app: kick-listener
     component: listener
-    platform: twitch
+    platform: kick
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: twitch-listener
+    name: kick-listener
   minReplicas: 1
   maxReplicas: 5
   metrics:

@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kick-listener
+  namespace: allchat
+  labels:
+    app: kick-listener
+    component: listener
+    platform: kick
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kick-listener
+  template:
+    metadata:
+      labels:
+        app: kick-listener
+        component: listener
+        platform: kick
+    spec:
+      containers:
+      - name: kick-listener
+        image: localhost:5000/allchat-kick-listener:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8089
+          name: http
+        env:
+        - name: PORT
+          value: "8089"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: LOG_LEVEL
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_PORT
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_NAME
+        - name: DATABASE_USER
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: DATABASE_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_PORT
+        - name: COORDINATOR_URL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: SOURCE_MANAGER_URL
+        - name: SERVICE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: SERVICE_JWT_SECRET
+        - name: SOURCE_MANAGER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: SOURCE_MANAGER_URL
+        - name: SOURCE_MANAGER_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: SERVICE_JWT_SECRET
+        - name: KICK_PUSHER_APP_KEY
+          value: "32cbd69e4b950bf97679"
+        - name: KICK_PUSHER_CLUSTER
+          value: "us2"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8089
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8089
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kick-listener
+  namespace: allchat
+  labels:
+    app: kick-listener
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8089
+    targetPort: 8089
+    protocol: TCP
+    name: http
+  selector:
+    app: kick-listener
