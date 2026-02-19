@@ -116,13 +116,74 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be populated by roadmapper) | | |
+| SHARD-01 | Phase 5 | Pending |
+| SHARD-02 | Phase 5 | Pending |
+| SHARD-03 | Phase 5 | Pending |
+| SHARD-04 | Phase 5 | Pending |
+| SHARD-05 | Phase 5 | Pending |
+| SHARD-06 | Phase 5 | Pending |
+| SHARD-07 | Phase 5 | Pending |
+| SHARD-08 | Phase 5 | Pending |
+| REBAL-01 | Phase 7 | Pending |
+| REBAL-02 | Phase 7 | Pending |
+| REBAL-03 | Phase 7 | Pending |
+| REBAL-04 | Phase 7 | Pending |
+| REBAL-05 | Phase 7 | Pending |
+| REBAL-06 | Phase 7 | Pending |
+| REBAL-07 | Phase 7 | Pending |
+| REBAL-08 | Phase 5 | Pending |
+| MIGRATE-01 | Phase 6 | Pending |
+| MIGRATE-02 | Phase 6 | Pending |
+| MIGRATE-03 | Phase 6 | Pending |
+| MIGRATE-04 | Phase 6 | Pending |
+| MIGRATE-05 | Phase 6 | Pending |
+| MIGRATE-06 | Phase 6 | Pending |
+| TWITCH-01 | Phase 6 | Pending |
+| TWITCH-02 | Phase 6 | Pending |
+| TWITCH-03 | Phase 6 | Pending |
+| TWITCH-04 | Phase 6 | Pending |
+| TWITCH-05 | Phase 6 | Pending |
+| TWITCH-06 | Phase 6 | Pending |
+| TWITCH-07 | Phase 6 | Pending |
+| KICK-01 | Phase 6 | Pending |
+| KICK-02 | Phase 6 | Pending |
+| KICK-03 | Phase 6 | Pending |
+| KICK-04 | Phase 6 | Pending |
+| KICK-05 | Phase 6 | Pending |
+| TIKTOK-01 | Phase 6 | Pending |
+| TIKTOK-02 | Phase 6 | Pending |
+| TIKTOK-03 | Phase 6 | Pending |
+| TIKTOK-04 | Phase 6 | Pending |
+| TIKTOK-05 | Phase 6 | Pending |
+| METRICS-01 | Phase 8 | Pending |
+| METRICS-02 | Phase 8 | Pending |
+| METRICS-03 | Phase 8 | Pending |
+| METRICS-04 | Phase 8 | Pending |
+| METRICS-05 | Phase 8 | Pending |
+| METRICS-06 | Phase 8 | Pending |
+| METRICS-07 | Phase 8 | Pending |
+| METRICS-08 | Phase 8 | Pending |
+| METRICS-09 | Phase 8 | Pending |
+| METRICS-10 | Phase 8 | Pending |
+| METRICS-11 | Phase 8 | Pending |
+| TRACE-01 | Phase 8 | Pending |
+| TRACE-02 | Phase 8 | Pending |
+| TRACE-03 | Phase 8 | Pending |
+| TRACE-04 | Phase 8 | Pending |
+| TRACE-05 | Phase 8 | Pending |
+| TRACE-06 | Phase 8 | Pending |
 
 **Coverage:**
-- v1.1 requirements: 50 total
-- Mapped to phases: (to be counted)
-- Unmapped: (to be counted)
+- v1.1 requirements: 56 total
+- Mapped to phases: 56 (100%)
+- Unmapped: 0
+
+**Phase Breakdown:**
+- Phase 5: 9 requirements (SHARD-01 to SHARD-08, REBAL-08)
+- Phase 6: 24 requirements (MIGRATE-01 to MIGRATE-06, TWITCH-01 to TWITCH-07, KICK-01 to KICK-05, TIKTOK-01 to TIKTOK-05)
+- Phase 7: 7 requirements (REBAL-01 to REBAL-07)
+- Phase 8: 17 requirements (METRICS-01 to METRICS-11, TRACE-01 to TRACE-06)
 
 ---
 *Requirements defined: 2026-02-19*
-*Last updated: 2026-02-19 after initial definition*
+*Last updated: 2026-02-19 after roadmap creation (100% coverage)*
