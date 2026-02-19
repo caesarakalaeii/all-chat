@@ -222,3 +222,45 @@ func (r *AssignmentRegistry) IncrementVersion() int64 {
 	r.version++
 	return r.version
 }
+
+// GetAllAssignments returns all assignments as a map of source_id -> pod_id
+//
+// O(N) scan operation - used for orphaned assignment cleanup
+func (r *AssignmentRegistry) GetAllAssignments(ctx context.Context) (map[string]string, error) {
+	assignments := make(map[string]string)
+
+	// Scan all assignment keys
+	iter := r.client.Scan(ctx, 0, assignmentKeyPrefix+"*", 0).Iterator()
+	for iter.Next(ctx) {
+		key := iter.Val()
+		sourceID := key[len(assignmentKeyPrefix):] // Extract source_id from key
+
+		assignment, err := r.GetAssignment(ctx, sourceID)
+		if err != nil {
+			continue // Skip if assignment no longer exists
+		}
+
+		assignments[sourceID] = assignment.PodID
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan all assignments: %w", err)
+	}
+
+	return assignments, nil
+}
+
+// DeleteAssignment deletes an assignment without knowing the pod_id
+//
+// Used for orphaned assignment cleanup. Queries assignment first to get pod_id,
+// then removes the assignment and decrements pod load.
+func (r *AssignmentRegistry) DeleteAssignment(ctx context.Context, sourceID string) error {
+	// First, get the assignment to find the pod_id
+	assignment, err := r.GetAssignment(ctx, sourceID)
+	if err != nil {
+		return fmt.Errorf("failed to get assignment for deletion: %w", err)
+	}
+
+	// Now remove the assignment using existing method
+	return r.RemoveAssignment(ctx, sourceID, assignment.PodID)
+}
