@@ -107,12 +107,17 @@ func main() {
 	heartbeatMonitor := coordination.NewHeartbeatMonitor(redisClient, log)
 	log.Info("Initialized heartbeat monitor")
 
+	// Initialize migration publisher
+	migrationPublisher := coordination.NewMigrationPublisher(redisClient, log)
+	log.Info("Initialized migration publisher")
+
 	coordinator := coordination.NewCoordinator(
 		assignmentRegistry,
 		assigner,
 		repo,
 		redisClient,
 		heartbeatMonitor,
+		migrationPublisher,
 		shardMetrics,
 		log,
 	)
