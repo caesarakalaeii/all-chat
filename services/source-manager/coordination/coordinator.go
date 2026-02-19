@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/caesar/all-chat/services/source-manager/models"
 	"github.com/caesar/all-chat/services/source-manager/registry"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
@@ -20,14 +21,15 @@ import (
 
 // Coordinator manages leader election and channel assignment computation
 type Coordinator struct {
-	k8sClient        *kubernetes.Clientset
-	registry         *AssignmentRegistry
-	assigner         *Assigner
-	sourceRepo       *registry.Repository
-	redisClient      *redis.Client
-	heartbeatMonitor *HeartbeatMonitor
-	metrics          *metrics.ShardMetrics
-	logger           *zap.Logger
+	k8sClient          *kubernetes.Clientset
+	registry           *AssignmentRegistry
+	assigner           *Assigner
+	sourceRepo         *registry.Repository
+	redisClient        *redis.Client
+	heartbeatMonitor   *HeartbeatMonitor
+	migrationPublisher *MigrationPublisher
+	metrics            *metrics.ShardMetrics
+	logger             *zap.Logger
 
 	reconcileInterval time.Duration
 	stopCh            chan struct{}
@@ -40,19 +42,21 @@ func NewCoordinator(
 	sourceRepo *registry.Repository,
 	redisClient *redis.Client,
 	heartbeatMonitor *HeartbeatMonitor,
+	migrationPublisher *MigrationPublisher,
 	shardMetrics *metrics.ShardMetrics,
 	logger *zap.Logger,
 ) *Coordinator {
 	return &Coordinator{
-		registry:          registry,
-		assigner:          assigner,
-		sourceRepo:        sourceRepo,
-		redisClient:       redisClient,
-		heartbeatMonitor:  heartbeatMonitor,
-		metrics:           shardMetrics,
-		logger:            logger,
-		reconcileInterval: 30 * time.Second, // Default: 30s per user constraint
-		stopCh:            make(chan struct{}),
+		registry:           registry,
+		assigner:           assigner,
+		sourceRepo:         sourceRepo,
+		redisClient:        redisClient,
+		heartbeatMonitor:   heartbeatMonitor,
+		migrationPublisher: migrationPublisher,
+		metrics:            shardMetrics,
+		logger:             logger,
+		reconcileInterval:  30 * time.Second, // Default: 30s per user constraint
+		stopCh:             make(chan struct{}),
 	}
 }
 
@@ -179,15 +183,8 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	// Update pod health metrics
 	c.metrics.FailedPods.Set(float64(len(failedPods)))
 
-	// Step 2: Query active sources from source-manager registry
-	sources, err := c.sourceRepo.GetAllActiveSources(ctx)
-	if err != nil {
-		c.logger.Error("Failed to query active sources", zap.Error(err))
-		return fmt.Errorf("failed to query active sources: %w", err)
-	}
-
-	// Step 3: Query active listener pods from Kubernetes API
-	// Filter will exclude failed pods detected by heartbeat monitor
+	// Step 1.5: Query active listener pods from Kubernetes API BEFORE triggering migrations
+	// We need healthy pod list to select migration targets
 	pods, err := c.getHealthyListenerPods(ctx, failedPods)
 	if err != nil {
 		c.logger.Error("Failed to query healthy listener pods", zap.Error(err))
@@ -210,8 +207,29 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	// Update healthy pod metrics
 	c.metrics.HealthyPods.Set(float64(len(podIDs)))
 
-	// Step 4: Update assigner with healthy pod list
+	// Update assigner with healthy pod list BEFORE triggering migrations
 	c.assigner = NewAssigner(podIDs)
+
+	// Step 2: Query active sources from source-manager registry (before migrations)
+	sources, err := c.sourceRepo.GetAllActiveSources(ctx)
+	if err != nil {
+		c.logger.Error("Failed to query active sources", zap.Error(err))
+		return fmt.Errorf("failed to query active sources: %w", err)
+	}
+
+	// Step 2.5: Build source lookup map for migration trigger
+	sourceMap := make(map[string]*models.ActiveSource)
+	for _, source := range sources {
+		sourceMap[source.ID] = source
+	}
+
+	// Step 2.6: Trigger migrations for failed pods (if any)
+	if len(failedPods) > 0 {
+		if err := c.triggerMigrationForFailedPods(ctx, failedPods, podIDs, sourceMap); err != nil {
+			c.logger.Error("Failed to trigger migrations for failed pods", zap.Error(err))
+			// Continue with normal reconciliation even if migrations fail
+		}
+	}
 
 	c.logger.Info("Computing assignments",
 		zap.Int("source_count", len(sources)),
@@ -342,4 +360,174 @@ func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []s
 func (c *Coordinator) Stop() {
 	c.logger.Info("Stopping coordinator")
 	close(c.stopCh)
+}
+
+// waitForMigrationConfirmation waits for a migration confirmation in Redis Streams (MIGRATE-03)
+func (c *Coordinator) waitForMigrationConfirmation(ctx context.Context, migrationID string, timeout time.Duration) error {
+	// Per CONTEXT.md: "If old pod doesn't send 'disconnected' confirmation within 60s timeout"
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	c.logger.Info("Waiting for migration confirmation",
+		zap.String("migration_id", migrationID),
+		zap.Duration("timeout", timeout),
+	)
+
+	startTime := time.Now()
+	lastID := "0" // Start from beginning of stream
+
+	// Poll Redis Streams migration:log for confirmation
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Error("Migration confirmation timeout",
+				zap.String("migration_id", migrationID),
+				zap.Duration("elapsed", time.Since(startTime)),
+			)
+			return fmt.Errorf("timeout waiting for confirmation")
+		default:
+			// Read from migration:log stream
+			result, err := c.redisClient.XRead(ctx, &redis.XReadArgs{
+				Streams: []string{"migration:log", lastID},
+				Count:   100,
+				Block:   1 * time.Second,
+			}).Result()
+
+			if err != nil && err != redis.Nil {
+				c.logger.Error("Failed to read migration:log stream",
+					zap.String("migration_id", migrationID),
+					zap.Error(err),
+				)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			// Parse messages and check for our migration_id with status="connected" or "failed"
+			for _, stream := range result {
+				for _, message := range stream.Messages {
+					msgMigrationID, _ := message.Values["migration_id"].(string)
+					msgStatus, _ := message.Values["status"].(string)
+
+					if msgMigrationID == migrationID {
+						if msgStatus == "connected" {
+							c.logger.Info("Migration confirmed successfully",
+								zap.String("migration_id", migrationID),
+								zap.Duration("elapsed", time.Since(startTime)),
+							)
+							return nil
+						} else if msgStatus == "failed" {
+							errMsg, _ := message.Values["error"].(string)
+							c.logger.Error("Migration failed",
+								zap.String("migration_id", migrationID),
+								zap.String("error", errMsg),
+							)
+							return fmt.Errorf("migration failed: %s", errMsg)
+						}
+					}
+
+					// Update lastID for next iteration
+					lastID = message.ID
+				}
+			}
+
+			time.Sleep(1 * time.Second)
+		}
+	}
+}
+
+// triggerMigrationForFailedPods triggers migrations for all channels assigned to failed pods
+func (c *Coordinator) triggerMigrationForFailedPods(ctx context.Context, failedPods []string, healthyPodIDs []string, sourceMap map[string]*models.ActiveSource) error {
+	if len(failedPods) == 0 {
+		return nil
+	}
+
+	c.logger.Info("Triggering migrations for failed pods",
+		zap.Strings("failed_pods", failedPods),
+		zap.Int("healthy_pods", len(healthyPodIDs)),
+	)
+
+	// For each failed pod
+	for _, failedPodID := range failedPods {
+		// Get channels assigned to failed pod
+		assignments, err := c.registry.GetAssignmentsForPod(ctx, failedPodID)
+		if err != nil {
+			c.logger.Error("Failed to get assignments for failed pod",
+				zap.String("failed_pod", failedPodID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		if len(assignments) == 0 {
+			c.logger.Debug("No assignments found for failed pod",
+				zap.String("failed_pod", failedPodID),
+			)
+			continue
+		}
+
+		c.logger.Info("Migrating channels from failed pod",
+			zap.String("failed_pod", failedPodID),
+			zap.Int("channel_count", len(assignments)),
+		)
+
+		// Trigger migration for each channel
+		for _, assignment := range assignments {
+			// Use bounded-load algorithm to select target pod
+			newPodID, err := c.assigner.AssignChannel(assignment.SourceID)
+			if err != nil {
+				c.logger.Error("Failed to select target pod for migration",
+					zap.String("source_id", assignment.SourceID),
+					zap.Error(err),
+				)
+				continue
+			}
+
+			// Get platform for source from sourceMap
+			platform := "unknown"
+			if source, ok := sourceMap[assignment.SourceID]; ok {
+				platform = source.Platform
+			}
+
+			event := &MigrationEvent{
+				MigrationID: fmt.Sprintf("migration-%d", time.Now().UnixNano()),
+				ChannelID:   assignment.SourceID,
+				Platform:    platform,
+				FromPod:     failedPodID,
+				ToPod:       newPodID,
+				Timestamp:   time.Now(),
+				Reason:      "pod_failure",
+			}
+
+			if err := c.migrationPublisher.PublishMigrationEvent(ctx, event); err != nil {
+				c.logger.Error("Failed to publish migration event",
+					zap.String("migration_id", event.MigrationID),
+					zap.String("channel_id", event.ChannelID),
+					zap.Error(err),
+				)
+				continue
+			}
+
+			// Wait for confirmation before updating registry (MIGRATE-03, MIGRATE-04)
+			// Per CONTEXT.md: "Old pod doesn't disconnect: Coordinator intervention - If old pod doesn't send 'disconnected' confirmation within 60s timeout"
+			if err := c.waitForMigrationConfirmation(ctx, event.MigrationID, 60*time.Second); err != nil {
+				c.logger.Error("Migration confirmation failed, forcing assignment update",
+					zap.String("migration_id", event.MigrationID),
+					zap.String("channel_id", event.ChannelID),
+					zap.Error(err),
+				)
+			}
+
+			// Update assignment registry
+			_, err = c.registry.StoreAssignment(ctx, assignment.SourceID, newPodID)
+			if err != nil {
+				c.logger.Error("Failed to update assignment after migration",
+					zap.String("source_id", assignment.SourceID),
+					zap.String("new_pod", newPodID),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+
+	return nil
 }
