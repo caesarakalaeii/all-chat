@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -43,13 +44,15 @@ type MigrationConfirmation struct {
 // MigrationPublisher publishes migration events to Redis Pub/Sub and Streams
 type MigrationPublisher struct {
 	redisClient *redis.Client
+	metrics     *metrics.ShardMetrics
 	logger      *zap.Logger
 }
 
 // NewMigrationPublisher creates a new migration publisher instance
-func NewMigrationPublisher(redisClient *redis.Client, logger *zap.Logger) *MigrationPublisher {
+func NewMigrationPublisher(redisClient *redis.Client, metrics *metrics.ShardMetrics, logger *zap.Logger) *MigrationPublisher {
 	return &MigrationPublisher{
 		redisClient: redisClient,
+		metrics:     metrics,
 		logger:      logger,
 	}
 }
@@ -57,6 +60,13 @@ func NewMigrationPublisher(redisClient *redis.Client, logger *zap.Logger) *Migra
 // PublishMigrationEvent publishes a migration event to both Redis Pub/Sub (for listener notification)
 // and Redis Streams (for observability and gap detection) (MIGRATE-02, MIGRATE-06)
 func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *MigrationEvent) error {
+	// Record migration duration
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start).Seconds()
+		m.metrics.MigrationDuration.Observe(duration)
+	}()
+
 	// Create parent span for the entire migration publish operation
 	tracer := otel.Tracer("source-manager")
 	ctx, span := tracer.Start(ctx, "publish-migration-event",
@@ -86,6 +96,7 @@ func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *M
 			zap.String("migration_id", event.MigrationID),
 			zap.Error(err),
 		)
+		m.metrics.MigrationTotal.WithLabelValues("failure", event.Reason).Inc()
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to marshal migration event")
 		return fmt.Errorf("failed to marshal migration event: %w", err)
@@ -102,6 +113,7 @@ func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *M
 			zap.String("platform", event.Platform),
 			zap.Error(err),
 		)
+		m.metrics.MigrationTotal.WithLabelValues("failure", event.Reason).Inc()
 		pubSpan.RecordError(err)
 		pubSpan.SetStatus(codes.Error, err.Error())
 		pubSpan.End()
@@ -137,6 +149,7 @@ func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *M
 			zap.String("platform", event.Platform),
 			zap.Error(err),
 		)
+		m.metrics.MigrationTotal.WithLabelValues("failure", event.Reason).Inc()
 		streamSpan.RecordError(err)
 		streamSpan.SetStatus(codes.Error, err.Error())
 		streamSpan.End()
@@ -146,6 +159,9 @@ func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *M
 	}
 	streamSpan.SetStatus(codes.Ok, "")
 	streamSpan.End()
+
+	// Record successful migration
+	m.metrics.MigrationTotal.WithLabelValues("success", event.Reason).Inc()
 
 	m.logger.Info("Published migration event",
 		zap.String("migration_id", event.MigrationID),

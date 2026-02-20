@@ -108,7 +108,7 @@ func main() {
 	log.Info("Initialized heartbeat monitor")
 
 	// Initialize migration publisher
-	migrationPublisher := coordination.NewMigrationPublisher(redisClient, log)
+	migrationPublisher := coordination.NewMigrationPublisher(redisClient, shardMetrics, log)
 	log.Info("Initialized migration publisher")
 
 	// Initialize load monitor (Phase 7)
