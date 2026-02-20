@@ -104,7 +104,7 @@ func main() {
 	assigner := coordination.NewAssigner([]string{}) // Empty initially, populated by reconcile
 
 	// Initialize heartbeat monitor
-	heartbeatMonitor := coordination.NewHeartbeatMonitor(redisClient, log)
+	heartbeatMonitor := coordination.NewHeartbeatMonitor(redisClient, log, shardMetrics)
 	log.Info("Initialized heartbeat monitor")
 
 	// Initialize migration publisher

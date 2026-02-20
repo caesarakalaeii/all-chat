@@ -34,8 +34,9 @@ func setupTestHeartbeatMonitor(t *testing.T) (*HeartbeatMonitor, *miniredis.Mini
 	// Create logger
 	logger := zap.NewNop()
 
-	// Create monitor
-	monitor := NewHeartbeatMonitor(client, logger)
+	// Use shared test metrics instance from load_monitor_test.go
+	// This avoids duplicate Prometheus registration errors
+	monitor := NewHeartbeatMonitor(client, logger, testShardMetrics)
 
 	return monitor, mr, client
 }
@@ -144,13 +145,13 @@ func TestCleanupStaleHeartbeats(t *testing.T) {
 	pod2 := "pod-2"
 	pod3 := "pod-3"
 
-	// pod1: 6 minutes old (should be removed)
-	// pod2: 4 minutes old (should be kept)
-	// pod3: 1 minute old (should be kept)
+	// pod1: 20 seconds old (should be removed - older than 15s timeout)
+	// pod2: 10 seconds old (should be kept - within 15s timeout)
+	// pod3: 5 seconds old (should be kept - within 15s timeout)
 	err := client.ZAdd(ctx, HeartbeatKey,
-		redis.Z{Score: float64(now - 360), Member: pod1}, // 6 min
-		redis.Z{Score: float64(now - 240), Member: pod2}, // 4 min
-		redis.Z{Score: float64(now - 60), Member: pod3},  // 1 min
+		redis.Z{Score: float64(now - 20), Member: pod1}, // 20 sec (stale)
+		redis.Z{Score: float64(now - 10), Member: pod2}, // 10 sec (fresh)
+		redis.Z{Score: float64(now - 5), Member: pod3},  // 5 sec (fresh)
 	).Err()
 	require.NoError(t, err)
 
@@ -163,12 +164,12 @@ func TestCleanupStaleHeartbeats(t *testing.T) {
 	err = monitor.CleanupStaleHeartbeats(ctx)
 	require.NoError(t, err)
 
-	// Verify only pod1 removed (6 minutes old)
+	// Verify only pod1 removed (20 seconds old - exceeds 15s HeartbeatTimeout)
 	remaining, err := client.ZRange(ctx, HeartbeatKey, 0, -1).Result()
 	require.NoError(t, err)
 
-	assert.ElementsMatch(t, []string{pod2, pod3}, remaining, "Only pods newer than 5 minutes should remain")
-	assert.NotContains(t, remaining, pod1, "Pod1 (6 min old) should be removed")
+	assert.ElementsMatch(t, []string{pod2, pod3}, remaining, "Only pods newer than HeartbeatTimeout (15s) should remain")
+	assert.NotContains(t, remaining, pod1, "Pod1 (20 sec old) should be removed")
 }
 
 func TestRemoveOrphanedAssignments(t *testing.T) {

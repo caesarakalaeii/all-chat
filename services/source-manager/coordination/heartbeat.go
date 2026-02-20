@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/source-manager/models"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -31,15 +32,17 @@ const (
 
 // HeartbeatMonitor manages pod heartbeat publishing and failure detection
 type HeartbeatMonitor struct {
-	client *redis.Client
-	logger *zap.Logger
+	client  *redis.Client
+	logger  *zap.Logger
+	metrics *metrics.ShardMetrics
 }
 
 // NewHeartbeatMonitor creates a new heartbeat monitor instance
-func NewHeartbeatMonitor(client *redis.Client, logger *zap.Logger) *HeartbeatMonitor {
+func NewHeartbeatMonitor(client *redis.Client, logger *zap.Logger, metrics *metrics.ShardMetrics) *HeartbeatMonitor {
 	return &HeartbeatMonitor{
-		client: client,
-		logger: logger,
+		client:  client,
+		logger:  logger,
+		metrics: metrics,
 	}
 }
 
@@ -115,10 +118,13 @@ func (h *HeartbeatMonitor) GetHealthyPods(ctx context.Context) ([]string, error)
 	return healthyPods, nil
 }
 
-// CleanupStaleHeartbeats removes heartbeats older than 5 minutes
+// CleanupStaleHeartbeats removes heartbeats older than HeartbeatTimeout (15 seconds)
 // Uses ZREMRANGEBYSCORE to delete old entries
+// Changed from 5min to 15s to eliminate ghost pods faster
 func (h *HeartbeatMonitor) CleanupStaleHeartbeats(ctx context.Context) error {
-	cutoff := time.Now().Add(-StaleHeartbeatCleanup).Unix()
+	// Use HeartbeatTimeout directly instead of StaleHeartbeatCleanup
+	// Pods detected as failed at 15s should be removed immediately, not kept for 5 minutes
+	cutoff := time.Now().Add(-HeartbeatTimeout).Unix()
 
 	removed, err := h.client.ZRemRangeByScore(ctx, HeartbeatKey, "-inf", fmt.Sprintf("%d", cutoff)).Result()
 	if err != nil {
@@ -127,10 +133,39 @@ func (h *HeartbeatMonitor) CleanupStaleHeartbeats(ctx context.Context) error {
 	}
 
 	if removed > 0 {
-		h.logger.Info("Cleaned up stale heartbeats", zap.Int64("removed", removed))
+		h.metrics.StaleHeartbeatsRemoved.Add(float64(removed))
+		h.logger.Info("Cleaned up stale heartbeats",
+			zap.Int64("removed", removed),
+			zap.Duration("timeout", HeartbeatTimeout),
+		)
 	}
 
 	return nil
+}
+
+// RemovePodHeartbeat explicitly removes a pod's heartbeat entry
+// Called when Kubernetes detects pod termination for immediate cleanup
+func (h *HeartbeatMonitor) RemovePodHeartbeat(ctx context.Context, podID string) error {
+	err := h.client.ZRem(ctx, HeartbeatKey, podID).Err()
+	if err != nil {
+		return fmt.Errorf("failed to remove pod heartbeat: %w", err)
+	}
+
+	h.logger.Info("Removed pod heartbeat entry",
+		zap.String("pod_id", podID),
+	)
+
+	return nil
+}
+
+// GetAllHeartbeatPods returns all pod IDs currently in heartbeat registry
+// Used for ghost pod detection (pods with heartbeats but not in K8s)
+func (h *HeartbeatMonitor) GetAllHeartbeatPods(ctx context.Context) ([]string, error) {
+	allPods, err := h.client.ZRange(ctx, HeartbeatKey, 0, -1).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all heartbeat pods: %w", err)
+	}
+	return allPods, nil
 }
 
 // RemoveOrphanedAssignments removes assignments for sources that no longer exist in DB
