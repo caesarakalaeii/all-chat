@@ -118,8 +118,19 @@ export default function PlatformStatusIndicators({ activePlatforms, platformStat
             statusClass = 'bg-red-500/20 opacity-100';
             tooltipText = `${platform.label} - Quota exceeded`;
           } else if (status.status === 'offline') {
-            statusClass = 'opacity-20 bg-gray-800/50';
-            tooltipText = `${platform.label} - Offline`;
+            // Check if offline is due to auth error
+            const isAuthError = status.error_message?.toLowerCase().includes('oauth') ||
+                               status.error_message?.toLowerCase().includes('token');
+
+            if (isAuthError) {
+              statusClass = 'bg-red-500/20 opacity-100 border border-red-500/50';
+              tooltipText = `${platform.label} - Auth Required`;
+            } else {
+              statusClass = 'opacity-20 bg-gray-800/50';
+              tooltipText = status.error_message
+                ? `${platform.label} - ${status.error_message}`
+                : `${platform.label} - Offline`;
+            }
           } else if (status.status === 'connected') {
             statusClass = 'bg-green-500/20 opacity-100';
             tooltipText = `${platform.label} - Connected`;
