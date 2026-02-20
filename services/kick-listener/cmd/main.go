@@ -21,6 +21,7 @@ import (
 	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	sharedmetrics "github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
@@ -92,6 +93,10 @@ func main() {
 	}
 
 	log.Info("Connected to Redis")
+
+	// Initialize shard metrics (available via /metrics endpoint)
+	shardMetrics := sharedmetrics.NewShardMetrics()
+	log.Info("Initialized Prometheus shard metrics")
 
 	// Initialize coordinator client and query assignments (KICK-01)
 	coordinatorURL := getEnvOrDefault("COORDINATOR_URL", "http://source-manager:8088")
@@ -195,6 +200,14 @@ func main() {
 	if err := channelMgr.Start(); err != nil {
 		log.Fatal("Failed to start channel manager", zap.Error(err))
 	}
+
+	// Record per-pod channel count metric (after filtering by coordinator assignments)
+	filteredCount := channelMgr.GetFilteredAssignmentCount()
+	shardMetrics.PodChannelCount.WithLabelValues(podName).Set(float64(filteredCount))
+	log.Info("Recorded channel count metric",
+		zap.String("pod_id", podName),
+		zap.Int("channel_count", filteredCount),
+	)
 
 	// Start migration subscriber (KICK-03, KICK-04)
 	migrationSub := coordination.NewMigrationSubscriber(
