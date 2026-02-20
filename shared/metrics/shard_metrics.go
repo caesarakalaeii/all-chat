@@ -24,6 +24,7 @@ type ShardMetrics struct {
 	PodLoadMax         prometheus.Gauge
 	PodLoadAvg         prometheus.Gauge
 	LoadImbalanceRatio prometheus.Gauge // max_load / avg_load
+	PodLoadScore       *prometheus.GaugeVec // Per-pod composite load scores
 
 	// Coordinator state
 	CoordinatorIsLeader  prometheus.Gauge
@@ -76,6 +77,12 @@ func NewShardMetrics() *ShardMetrics {
 			Name: "shard_imbalance_ratio",
 			Help: "Load imbalance ratio (max_load / avg_load)",
 		}),
+		PodLoadScore: promauto.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "shard_pod_load_score",
+			Help: "Per-pod composite load score (message_rate * 0.7 + channel_count * 0.3)",
+		},
+			[]string{"pod_id"},
+		),
 		CoordinatorIsLeader: promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "shard_coordinator_is_leader",
 			Help: "1 if this instance is coordinator leader, 0 otherwise",
