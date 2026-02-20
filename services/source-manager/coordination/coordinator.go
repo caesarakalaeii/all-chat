@@ -179,6 +179,10 @@ func (c *Coordinator) reconcile(ctx context.Context) {
 
 // computeAssignments queries active sources and listener pods, then computes assignments
 func (c *Coordinator) computeAssignments(ctx context.Context) error {
+	tracer := otel.Tracer("source-manager")
+	ctx, span := tracer.Start(ctx, "compute-assignments")
+	defer span.End()
+
 	startTime := time.Now()
 	defer func() {
 		c.metrics.ReconciliationCycles.Inc()
@@ -327,14 +331,29 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 		zap.Int("failed_pods", len(failedPods)),
 	)
 
+	span.SetAttributes(
+		attribute.Int("source_count", len(sources)),
+		attribute.Int("pod_count", len(podIDs)),
+		attribute.Int("failed_pods", len(failedPods)),
+	)
+
 	// Step 5: Compute assignment for each source
 	assignmentCount := 0
 	errorCount := 0
 
 	for _, source := range sources {
 		// Compute assignment using bounded-load consistent hashing
+		ctx, hashSpan := tracer.Start(ctx, "hash-channel",
+			trace.WithAttributes(
+				attribute.String("channel_id", source.ID),
+				attribute.String("platform", source.Platform),
+			),
+		)
 		podID, err := c.assigner.AssignChannel(source.ID)
 		if err != nil {
+			hashSpan.RecordError(err)
+			hashSpan.SetStatus(codes.Error, "failed to assign channel")
+			hashSpan.End()
 			c.logger.Error("Failed to assign channel",
 				zap.String("source_id", source.ID),
 				zap.Error(err),
@@ -343,10 +362,21 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 			errorCount++
 			continue // Continue processing other sources
 		}
+		hashSpan.SetAttributes(attribute.String("assigned_pod", podID))
+		hashSpan.End()
 
 		// Store assignment in Redis registry
+		ctx, updateSpan := tracer.Start(ctx, "update-assignment-registry",
+			trace.WithAttributes(
+				attribute.String("source_id", source.ID),
+				attribute.String("pod_id", podID),
+			),
+		)
 		_, err = c.registry.StoreAssignment(ctx, source.ID, podID)
 		if err != nil {
+			updateSpan.RecordError(err)
+			updateSpan.SetStatus(codes.Error, "failed to update registry")
+			updateSpan.End()
 			c.logger.Error("Failed to store assignment",
 				zap.String("source_id", source.ID),
 				zap.String("pod_id", podID),
@@ -356,6 +386,7 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 			errorCount++
 			continue // Continue processing other sources
 		}
+		updateSpan.End()
 
 		c.metrics.AssignmentsTotal.Inc()
 		assignmentCount++
@@ -379,6 +410,16 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 		zap.Int("failed_pods", len(failedPods)),
 		zap.Duration("duration", duration),
 	)
+
+	span.SetAttributes(
+		attribute.Int("assignments_stored", assignmentCount),
+		attribute.Int("errors", errorCount),
+	)
+	if errorCount > 0 {
+		span.SetStatus(codes.Error, fmt.Sprintf("%d assignment errors", errorCount))
+	} else {
+		span.SetStatus(codes.Ok, "")
+	}
 
 	return nil
 }
