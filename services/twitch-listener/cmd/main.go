@@ -160,7 +160,10 @@ func main() {
 	// Initialize channel manager with assigned source IDs
 	channelRepo := channels.NewRepository(db)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, leaderCoord, assignedSourceIDs, log, listenerMetrics)
+	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, leaderCoord, assignedSourceIDs, redisClient, podName, log, listenerMetrics)
+
+	// Wire firstMessageChan from manager to IRC connection for migration coordination
+	ircConn.SetFirstMessageChan(channelMgr.GetFirstMessageChan())
 
 	// Connect to Twitch IRC
 	if err := ircConn.Connect(ctx); err != nil {

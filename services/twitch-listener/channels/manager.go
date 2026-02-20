@@ -11,6 +11,7 @@ import (
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -50,6 +51,8 @@ type Manager struct {
 	ircClients       []JoinParterInterface        // Multiple IRC connections for >100 channels
 	migrationMu      sync.RWMutex                 // Protects migration state
 	firstMessageChan map[string]chan struct{}     // Per-channel first message signal
+	redisClient      *redis.Client                // Redis client for migration confirmations
+	podID            string                       // Pod ID for migration confirmations
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -58,13 +61,15 @@ type DBConnInterface interface {
 }
 
 // NewManager creates a new channel manager
-func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn DBConnInterface, leader *sourcemanager.LeadershipCoordinator, assignedSourceIDs map[string]bool, logger *zap.Logger, m *metrics.ListenerMetrics) *Manager {
+func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn DBConnInterface, leader *sourcemanager.LeadershipCoordinator, assignedSourceIDs map[string]bool, redisClient *redis.Client, podID string, logger *zap.Logger, m *metrics.ListenerMetrics) *Manager {
 	return &Manager{
 		repo:              repo,
 		joinParter:        joinParter,
 		dbConn:            dbConn,
 		leader:            leader,
 		assignedSourceIDs: assignedSourceIDs,
+		redisClient:       redisClient,
+		podID:             podID,
 		logger:            logger,
 		metrics:           m,
 		rateLimiter:       rate.NewLimiter(rate.Every(JoinRatePer/JoinRateLimit), JoinRateLimit),
@@ -74,6 +79,13 @@ func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn
 		syncTicker:        time.NewTicker(SyncInterval),
 		stopChan:          make(chan struct{}),
 	}
+}
+
+// GetFirstMessageChan returns the first message channel map for migration coordination
+func (m *Manager) GetFirstMessageChan() map[string]chan struct{} {
+	m.migrationMu.RLock()
+	defer m.migrationMu.RUnlock()
+	return m.firstMessageChan
 }
 
 // Start begins the periodic sync process and PostgreSQL LISTEN
@@ -528,9 +540,17 @@ func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
 	case <-firstMsgChan:
 		// Success! Connection confirmed
 		m.logger.Info("Migration successful (new pod)", zap.String("channel", channel))
+		// Publish confirmation to Redis Streams
+		if err := m.publishMigrationConfirmation(ctx, event.MigrationID, "connected", 0); err != nil {
+			m.logger.Error("Failed to publish migration success", zap.Error(err))
+		}
 	case <-ctx.Done():
 		// Timeout - connection failed
 		m.logger.Error("Migration timeout (new pod)", zap.String("channel", channel))
+		// Publish failure to Redis Streams
+		if err := m.publishMigrationConfirmation(context.Background(), event.MigrationID, "failed", 0); err != nil {
+			m.logger.Error("Failed to publish migration failure", zap.Error(err))
+		}
 	}
 
 	delete(m.firstMessageChan, channel)
@@ -552,6 +572,34 @@ func (m *Manager) handleMigrationAsOldPod(event *coordination.MigrationEvent) {
 	m.mu.Unlock()
 
 	m.logger.Info("Migration handoff complete (old pod)", zap.String("channel", channel))
+}
+
+// publishMigrationConfirmation publishes migration confirmation to Redis Streams
+func (m *Manager) publishMigrationConfirmation(ctx context.Context, migrationID, status string, sequenceNum int64) error {
+	event := map[string]interface{}{
+		"migration_id":    migrationID,
+		"status":          status, // "connected" or "failed"
+		"pod_id":          m.podID,
+		"timestamp":       time.Now().Unix(),
+		"sequence_number": sequenceNum,
+	}
+
+	_, err := m.redisClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: "migration:log",
+		Values: event,
+	}).Result()
+
+	if err != nil {
+		m.logger.Error("Failed to publish migration confirmation",
+			zap.String("migration_id", migrationID),
+			zap.Error(err))
+		return err
+	}
+
+	m.logger.Info("Published migration confirmation",
+		zap.String("migration_id", migrationID),
+		zap.String("status", status))
+	return nil
 }
 
 // getChannelForSourceID resolves a source ID to a channel name
