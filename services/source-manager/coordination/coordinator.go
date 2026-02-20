@@ -30,11 +30,13 @@ type Coordinator struct {
 	migrationPublisher *MigrationPublisher
 	loadMonitor        *LoadMonitor
 	rebalancer         *Rebalancer
+	throttler          *Throttler
 	metrics            *metrics.ShardMetrics
 	logger             *zap.Logger
 
-	reconcileInterval time.Duration
-	stopCh            chan struct{}
+	reconcileInterval             time.Duration
+	stopCh                        chan struct{}
+	incompleteRebalancingAttempts int // Counter for persistent imbalance
 }
 
 // NewCoordinator creates a new coordinator instance
@@ -47,22 +49,25 @@ func NewCoordinator(
 	migrationPublisher *MigrationPublisher,
 	loadMonitor *LoadMonitor,
 	rebalancer *Rebalancer,
+	throttler *Throttler,
 	shardMetrics *metrics.ShardMetrics,
 	logger *zap.Logger,
 ) *Coordinator {
 	return &Coordinator{
-		registry:           registry,
-		assigner:           assigner,
-		sourceRepo:         sourceRepo,
-		redisClient:        redisClient,
-		heartbeatMonitor:   heartbeatMonitor,
-		migrationPublisher: migrationPublisher,
-		loadMonitor:        loadMonitor,
-		rebalancer:         rebalancer,
-		metrics:            shardMetrics,
-		logger:             logger,
-		reconcileInterval:  30 * time.Second, // Default: 30s per user constraint
-		stopCh:             make(chan struct{}),
+		registry:                      registry,
+		assigner:                      assigner,
+		sourceRepo:                    sourceRepo,
+		redisClient:                   redisClient,
+		heartbeatMonitor:              heartbeatMonitor,
+		migrationPublisher:            migrationPublisher,
+		loadMonitor:                   loadMonitor,
+		rebalancer:                    rebalancer,
+		throttler:                     throttler,
+		metrics:                       shardMetrics,
+		logger:                        logger,
+		reconcileInterval:             30 * time.Second, // Default: 30s per user constraint
+		stopCh:                        make(chan struct{}),
+		incompleteRebalancingAttempts: 0,
 	}
 }
 
@@ -247,22 +252,45 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 			report := c.loadMonitor.CalculateImbalance(loads)
 
 			if report.ShouldRebalance {
+				// Check cooldown before triggering rebalancing
+				allowed, reason, err := c.throttler.CheckCooldown(ctx, report.ImbalanceRatio)
+				if err != nil {
+					c.logger.Error("Failed to check cooldown", zap.Error(err))
+				} else if !allowed {
+					c.logger.Info("Rebalancing skipped", zap.String("reason", reason))
+					return nil
+				}
+
 				c.logger.Info("Load imbalance detected, planning rebalancing",
 					zap.Float64("imbalance_ratio", report.ImbalanceRatio),
 					zap.Float64("max_message_rate", report.MaxMessageRate),
 					zap.String("reason", report.Reason),
+					zap.Int("incomplete_attempts", c.incompleteRebalancingAttempts),
 				)
 
-				// Plan rebalancing migrations
-				plans, err := c.rebalancer.PlanRebalancing(ctx, loads, report.AvgLoad)
+				// Plan rebalancing migrations (pass incomplete attempt count for hybrid strategy)
+				plans, err := c.rebalancer.PlanRebalancing(ctx, loads, report.AvgLoad, c.incompleteRebalancingAttempts)
 				if err != nil {
 					c.logger.Error("Failed to plan rebalancing", zap.Error(err))
 				} else {
-					// Execute migration plans (triggers are sufficient, no waiting yet)
-					c.executeRebalancingPlans(ctx, plans, sourceMap)
+					// Execute migration plans
+					err := c.executeRebalancingPlans(ctx, plans, sourceMap)
+					if err == nil {
+						// Record successful rebalancing
+						rebalanceID := fmt.Sprintf("rebalance-%d", time.Now().UnixNano())
+						c.throttler.RecordRebalancing(ctx, rebalanceID, report.ImbalanceRatio)
+
+						// Increment incomplete counter (will be reset if system becomes balanced)
+						c.incompleteRebalancingAttempts++
+					}
 				}
 			} else {
-				c.logger.Debug("No rebalancing needed", zap.String("reason", report.Reason))
+				// Reset incomplete counter when system is balanced
+				if c.incompleteRebalancingAttempts > 0 {
+					c.logger.Info("System balanced, resetting incomplete counter",
+						zap.Int("previous_attempts", c.incompleteRebalancingAttempts))
+					c.incompleteRebalancingAttempts = 0
+				}
 			}
 		}
 	}
@@ -384,10 +412,11 @@ func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []s
 
 // executeRebalancingPlans executes migration plans by publishing events and updating assignments
 // Uses Phase 6 migration infrastructure (PublishMigrationEvent)
-func (c *Coordinator) executeRebalancingPlans(ctx context.Context, plans []MigrationPlan, sourceMap map[string]*models.ActiveSource) {
+// Returns error if any plan fails to execute (for incomplete rebalancing tracking)
+func (c *Coordinator) executeRebalancingPlans(ctx context.Context, plans []MigrationPlan, sourceMap map[string]*models.ActiveSource) error {
 	if len(plans) == 0 {
 		c.logger.Debug("No rebalancing plans to execute")
-		return
+		return nil
 	}
 
 	c.logger.Info("Executing rebalancing plans", zap.Int("plan_count", len(plans)))
@@ -459,6 +488,8 @@ func (c *Coordinator) executeRebalancingPlans(ctx context.Context, plans []Migra
 	c.logger.Info("Rebalancing plans execution complete",
 		zap.Int("plans_executed", len(plans)),
 	)
+
+	return nil
 }
 
 // Stop gracefully stops the coordinator
