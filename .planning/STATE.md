@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-19)
 
 Milestone: v1.1 Listener Load Balancing
 Phase: 8 of 8 (Observability & Production Readiness)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: In Progress
-Last activity: 2026-02-20 — Completed 08-01-PLAN.md (Shard & Migration Metrics)
+Last activity: 2026-02-20 — Completed 08-02-PLAN.md (Configurable Sampling & Migration Tracing)
 
-Progress: [████████░░] 74% (v1.0 partial: 11/11 plans complete, v1.1: 26/31 plans complete)
+Progress: [████████░░] 77% (v1.0 partial: 11/11 plans complete, v1.1: 27/31 plans complete)
 
 ## Performance Metrics
 
 **Velocity (all phases):**
-- Total plans completed: 26
-- Average duration: 11.5 min
-- Total execution time: 5.12 hours
+- Total plans completed: 27
+- Average duration: 11.3 min
+- Total execution time: 5.19 hours
 
 **By Phase:**
 
@@ -34,7 +34,7 @@ Progress: [████████░░] 74% (v1.0 partial: 11/11 plans comple
 | 5. Sharding Infrastructure | 5 | 22 min | 4.4 min |
 | 6. Connection Management | 8 | 217 min | 27.1 min |
 | 7. Dynamic Rebalancing | 4 | 22 min | 5.5 min |
-| 8. Observability & Production | 1 | 4 min | 4.0 min |
+| 8. Observability & Production | 2 | 8 min | 4.0 min |
 
 **Recent Trend:**
 - Last 5 plans: 33.8 min average (includes 180 min deployment testing)
@@ -117,6 +117,9 @@ Recent decisions affecting current work:
 - [Phase 07 P04]: 30-second wait after scale-up detection allows jittered pods to fully start (0-30s jitter window)
 - [Phase 08]: Use [1,5,10,30,60,120]s buckets for migration duration histogram
 - [Phase 08]: Record pod channel count after channelMgr.Start() to capture filtered assignments
+- [Phase 08]: Default 100% sampling rate for initial production weeks (operators reduce to 10% after baseline)
+- [Phase 08]: Error always-on sampling via wrapper pattern (AlwaysSampleErrorsSampler wraps ParentBased sampler)
+- [Phase 08]: W3C Trace Context propagation through Redis Streams (traceparent/tracestate in message values)
 
 ### Pending Todos
 
