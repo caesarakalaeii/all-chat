@@ -115,10 +115,13 @@ Plans:
   3. Rebalancing enforces cooldown (5 minutes) and limits (max 20% channels per operation) to prevent thrashing
   4. HPA scale-up from 2 to 10 pods completes without Redis lock contention or YouTube quota exhaustion
   5. Staggered pod startup with jitter prevents thundering herd on topology changes
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 07-01: TBD (planning required)
+- [ ] 07-01-PLAN.md — Load monitoring + imbalance detection (composite load scores, threshold gating)
+- [ ] 07-02-PLAN.md — Proportional rebalancing algorithm (channel selection, 20% limit enforcement)
+- [ ] 07-03-PLAN.md — Cooldown + thrashing safeguards (5-min cooldown, escalation overrides)
+- [ ] 07-04-PLAN.md — HPA coordination + staggered startup (distributed locks, scale event detection, jitter)
 
 ### Phase 8: Observability & Production Readiness
 **Goal**: Comprehensive metrics, distributed tracing, Grafana dashboards, and alerting for production operations
@@ -146,9 +149,9 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 2. YouTube Integration | v1.0 | 2/2 | Complete | 2026-02-18 |
 | 3. Kick Integration + Edge Cases | v1.0 | 4/4 | Complete | 2026-02-18 |
 | 5. Sharding Infrastructure & Coordinator | v1.1 | 5/5 | Complete | 2026-02-19 |
-| 6. Connection Management & Migration | v1.1 | 7/8 | In progress | 2026-02-20 |
-| 7. Dynamic Rebalancing & HPA | v1.1 | 0/? | Not started | - |
+| 6. Connection Management & Migration | v1.1 | 8/8 | Complete | 2026-02-20 |
+| 7. Dynamic Rebalancing & HPA | v1.1 | 0/4 | Not started | - |
 | 8. Observability & Production Readiness | v1.1 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-02-20 after Phase 6 Plan 8 gap closure planning*
+*Last updated: 2026-02-20 after Phase 7 planning complete*
