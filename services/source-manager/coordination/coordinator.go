@@ -432,10 +432,10 @@ func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []s
 		podNamespace = "allchat"
 	}
 
-	// List pods with listener labels (twitch-listener, kick-listener, tiktok-listener)
+	// List pods with listener labels (twitch-listener, twitch-eventsub-listener, kick-listener, tiktok-listener)
 	// Filter by phase=Running and ready=true
 	listOptions := metav1.ListOptions{
-		LabelSelector: "app in (twitch-listener,kick-listener,tiktok-listener)",
+		LabelSelector: "app in (twitch-listener,twitch-eventsub-listener,kick-listener,tiktok-listener)",
 	}
 
 	podList, err := c.k8sClient.CoreV1().Pods(podNamespace).List(ctx, listOptions)
@@ -796,7 +796,7 @@ func (c *Coordinator) handleScaleDown(ctx context.Context, previousCount, curren
 
 	// Query Kubernetes API for pods with DeletionTimestamp set (terminating pods)
 	listOptions := metav1.ListOptions{
-		LabelSelector: "app in (twitch-listener,kick-listener,tiktok-listener)",
+		LabelSelector: "app in (twitch-listener,twitch-eventsub-listener,kick-listener,tiktok-listener)",
 	}
 
 	podList, err := c.k8sClient.CoreV1().Pods(podNamespace).List(ctx, listOptions)
