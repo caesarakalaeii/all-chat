@@ -223,7 +223,9 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	}
 
 	// Filter channels by coordinator assignments (TWITCH-02)
-	if m.assignedSourceIDs != nil && len(m.assignedSourceIDs) > 0 {
+	// Always filter when coordinator integration is enabled (assignedSourceIDs != nil)
+	// Even if empty map (0 assignments), should connect to 0 channels
+	if m.assignedSourceIDs != nil {
 		// Get all source IDs for these channels from database
 		sourceIDMap := m.repo.GetSourceIDsForChannels(ctx, desiredChannels)
 
