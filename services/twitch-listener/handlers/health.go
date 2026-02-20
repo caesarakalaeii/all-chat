@@ -79,15 +79,18 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 		}
 	}
 
-	// Check 4: Active channels match assignment count (all channels connected)
+	// Check 4: Active channels match filtered assignment count (all filtered channels connected)
+	// Use GetFilteredAssignmentCount() instead of GetAssignmentCount() to compare against
+	// the number of assigned sources that actually have database channels
 	activeChannelCount := h.chanMgr.GetActiveChannelCount()
+	filteredAssignmentCount := h.chanMgr.GetFilteredAssignmentCount()
 	checks["active_channels"] = activeChannelCount
-	if activeChannelCount < assignmentCount {
+	if activeChannelCount < filteredAssignmentCount {
 		ready = false
 		if reason == "" {
 			reason = "channels connecting"
 		}
-		checks["expected"] = assignmentCount
+		checks["expected"] = filteredAssignmentCount
 		checks["connected"] = activeChannelCount
 	}
 

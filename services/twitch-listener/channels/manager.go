@@ -46,9 +46,10 @@ type Manager struct {
 	stopChan         chan struct{}
 	wg               sync.WaitGroup
 	dbConn           DBConnInterface              // For PostgreSQL LISTEN
-	leader           *sourcemanager.LeadershipCoordinator
-	assignedSourceIDs map[string]bool             // From coordinator
-	ircClients       []JoinParterInterface        // Multiple IRC connections for >100 channels
+	leader                *sourcemanager.LeadershipCoordinator
+	assignedSourceIDs     map[string]bool             // From coordinator
+	filteredAssignmentCount int                         // Number of assigned sources that have database channels
+	ircClients            []JoinParterInterface        // Multiple IRC connections for >100 channels
 	migrationMu      sync.RWMutex                 // Protects migration state
 	firstMessageChan map[string]chan struct{}     // Per-channel first message signal
 	redisClient      *redis.Client                // Redis client for migration confirmations
@@ -237,6 +238,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	// Filter channels by coordinator assignments (TWITCH-02)
 	// Always filter when coordinator integration is enabled (assignedSourceIDs != nil)
 	// Even if empty map (0 assignments), should connect to 0 channels
+	filteredCount := len(desiredChannels) // Default: all channels
 	if m.assignedSourceIDs != nil {
 		// Get all source IDs for these channels from database
 		sourceIDMap := m.repo.GetSourceIDsForChannels(ctx, desiredChannels)
@@ -256,10 +258,14 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		)
 
 		desiredChannels = assignedChannels
+		filteredCount = len(assignedChannels) // Capture filtered count before lock
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Store filtered count for readiness probe
+	m.filteredAssignmentCount = filteredCount
 
 	// Convert to map for easier lookup
 	desiredMap := make(map[string]bool)
@@ -447,6 +453,14 @@ func (m *Manager) IsChannelActive(channel string) bool {
 // GetAssignmentCount returns the number of assigned sources
 func (m *Manager) GetAssignmentCount() int {
 	return len(m.assignedSourceIDs)
+}
+
+// GetFilteredAssignmentCount returns the number of assigned sources that have database channels
+// Used by readiness probe to check if all filtered assigned channels are active
+func (m *Manager) GetFilteredAssignmentCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.filteredAssignmentCount
 }
 
 // UpdateAssignedSourceIDs updates the assigned source IDs from coordinator
