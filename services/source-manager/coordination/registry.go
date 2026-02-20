@@ -188,11 +188,14 @@ func (r *AssignmentRegistry) RemoveAssignment(ctx context.Context, sourceID, pod
 // O(N) scan operation - use sparingly, primarily for debugging/monitoring
 func (r *AssignmentRegistry) GetAssignmentsForPod(ctx context.Context, podID string) ([]*models.Assignment, error) {
 	var assignments []*models.Assignment
+	scannedCount := 0
+	matchedCount := 0
 
 	// Scan all assignment keys
 	iter := r.client.Scan(ctx, 0, assignmentKeyPrefix+"*", 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
+		scannedCount++
 		sourceID := key[len(assignmentKeyPrefix):] // Extract source_id from key
 
 		assignment, err := r.GetAssignment(ctx, sourceID)
@@ -202,12 +205,16 @@ func (r *AssignmentRegistry) GetAssignmentsForPod(ctx context.Context, podID str
 
 		if assignment.PodID == podID {
 			assignments = append(assignments, assignment)
+			matchedCount++
 		}
 	}
 
 	if err := iter.Err(); err != nil {
 		return nil, fmt.Errorf("failed to scan assignments: %w", err)
 	}
+
+	// Temporary logging for debugging
+	fmt.Printf("[DEBUG] GetAssignmentsForPod: pod_id=%s scanned=%d matched=%d\n", podID, scannedCount, matchedCount)
 
 	return assignments, nil
 }

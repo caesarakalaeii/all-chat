@@ -66,7 +66,8 @@ func (h *AssignmentHandler) GetAssignments(c *gin.Context) {
 		assignments[i] = *ptr
 	}
 
-	h.logger.Debug("Queried assignments",
+	// Temporary DEBUG logging to diagnose assignment retrieval issue
+	h.logger.Info("Queried assignments for pod",
 		zap.String("pod_id", podID),
 		zap.Int("count", len(assignments)),
 	)
