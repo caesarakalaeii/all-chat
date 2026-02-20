@@ -497,15 +497,14 @@ func (c *Coordinator) triggerMigrationForFailedPods(ctx context.Context, failedP
 				continue
 			}
 
-			// Wait for confirmation before updating registry (MIGRATE-03, MIGRATE-04)
-			// Per CONTEXT.md: "Old pod doesn't disconnect: Coordinator intervention - If old pod doesn't send 'disconnected' confirmation within 60s timeout"
-			if err := c.waitForMigrationConfirmation(ctx, event.MigrationID, 60*time.Second); err != nil {
-				c.logger.Error("Migration confirmation failed, forcing assignment update",
-					zap.String("migration_id", event.MigrationID),
-					zap.String("channel_id", event.ChannelID),
-					zap.Error(err),
-				)
-			}
+			// For failed pods, skip confirmation wait (pod is already dead)
+			// Only wait for confirmation during live migrations (scale-up, rebalancing)
+			// This prevents blocking the reconciliation loop for dead pods
+			c.logger.Info("Skipping confirmation wait for failed pod migration",
+				zap.String("migration_id", event.MigrationID),
+				zap.String("from_pod", event.FromPod),
+				zap.String("reason", "pod_already_failed"),
+			)
 
 			// Update assignment registry
 			_, err = c.registry.StoreAssignment(ctx, assignment.SourceID, newPodID)
