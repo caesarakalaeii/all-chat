@@ -146,6 +146,21 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// Create WebSocket connection wrapper
 	wsConn := wsconn.NewConnection(conn, overlayID, userID, h.replayBuffer, h.logger)
 
+	// Activate all sources for this overlay (auto-activation on connect)
+	activatedCount, err := h.repo.ActivateSourcesForOverlay(ctx, overlayID)
+	if err != nil {
+		h.logger.Error("Failed to activate sources for overlay",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+		// Don't fail the connection - continue even if activation fails
+	} else if activatedCount > 0 {
+		h.logger.Info("Auto-activated sources for overlay",
+			zap.String("overlay_id", overlayID),
+			zap.Int("count", activatedCount),
+		)
+	}
+
 	// Subscribe to overlay's Redis Pub/Sub channel
 	// Use background context - subscription must outlive the HTTP request
 	if err := h.subscriber.Subscribe(context.Background(), overlayID); err != nil {
@@ -194,6 +209,24 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 			// Always clean up
 			h.wsManager.RemoveConnection(wsConn)
 			h.subscriber.Unsubscribe(context.Background(), overlayID)
+
+			// Deactivate sources if this is the last connection for this overlay
+			// Check connection count after removal
+			if h.wsManager.GetPoolSize(overlayID) == 0 {
+				deactivatedCount, err := h.repo.DeactivateSourcesForOverlay(context.Background(), overlayID)
+				if err != nil {
+					h.logger.Error("Failed to deactivate sources for overlay",
+						zap.String("overlay_id", overlayID),
+						zap.Error(err),
+					)
+				} else if deactivatedCount > 0 {
+					h.logger.Info("Auto-deactivated sources (last connection closed)",
+						zap.String("overlay_id", overlayID),
+						zap.Int("count", deactivatedCount),
+					)
+				}
+			}
+
 			h.logger.Info("WebSocket connection closed",
 				zap.String("overlay_id", overlayID),
 				zap.String("user_id", userID),
