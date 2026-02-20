@@ -329,20 +329,10 @@ func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []s
 			continue
 		}
 
-		if pod.Status.Phase != corev1.PodRunning {
-			continue
-		}
-
-		// Check if pod is ready
-		ready := false
-		for _, condition := range pod.Status.Conditions {
-			if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-				ready = true
-				break
-			}
-		}
-
-		if ready {
+		// Only require Running status - readiness depends on assignments (chicken-egg problem)
+		// Pod queries assignments on startup, coordinator assigns to Running pods,
+		// pod becomes Ready after connecting to assigned channels
+		if pod.Status.Phase == corev1.PodRunning {
 			healthyPods = append(healthyPods, pod)
 		}
 	}
