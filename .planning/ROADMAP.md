@@ -103,7 +103,7 @@ Plans:
 - [x] 06-05-PLAN.md — Migration observability + coordinator publisher (Redis Pub/Sub + Streams, migration triggers, confirmation wait)
 - [x] 06-06-PLAN.md — End-to-end migration testing (HPA scale tests, zero-loss validation, checkpoint for human verification)
 - [x] 06-07-PLAN.md — Gap closure: Fix migration confirmation publishing (wire firstMessageChan, implement Redis Streams publishing)
-- [ ] 06-08-PLAN.md — Gap closure: Fix readiness probe to use filtered assignment count (unblocks HPA scaling and migration confirmation testing)
+- [x] 06-08-PLAN.md — Gap closure: Fix readiness probe to use filtered assignment count (unblocks HPA scaling and migration confirmation testing)
 
 ### Phase 7: Dynamic Rebalancing & HPA Integration
 **Goal**: Automatic load-aware rebalancing with safeguards against thundering herd and quota exhaustion
