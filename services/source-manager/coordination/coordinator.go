@@ -37,6 +37,7 @@ type Coordinator struct {
 	reconcileInterval             time.Duration
 	stopCh                        chan struct{}
 	incompleteRebalancingAttempts int // Counter for persistent imbalance
+	previousPodCount              int // Track pod count changes for HPA detection
 }
 
 // NewCoordinator creates a new coordinator instance
@@ -68,6 +69,7 @@ func NewCoordinator(
 		reconcileInterval:             30 * time.Second, // Default: 30s per user constraint
 		stopCh:                        make(chan struct{}),
 		incompleteRebalancingAttempts: 0,
+		previousPodCount:              0,
 	}
 }
 
@@ -218,6 +220,13 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	// Update healthy pod metrics
 	c.metrics.HealthyPods.Set(float64(len(podIDs)))
 
+	// Step 1.6: Detect HPA scale events (Phase 7 - HPA Coordination)
+	currentPodCount := len(podIDs)
+	if c.previousPodCount > 0 && currentPodCount != c.previousPodCount {
+		c.detectScaleEvent(ctx, c.previousPodCount, currentPodCount)
+	}
+	c.previousPodCount = currentPodCount
+
 	// Update assigner with healthy pod list BEFORE triggering migrations
 	c.assigner = NewAssigner(podIDs)
 
@@ -261,7 +270,20 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 					return nil
 				}
 
-				c.logger.Info("Load imbalance detected, planning rebalancing",
+				// Try to acquire coordination lock (Phase 7 - HPA Coordination)
+				lock := NewCoordinationLock(c.redisClient, c.logger)
+				acquired, err := lock.AcquireLock(ctx, "rebalancing")
+				if err != nil {
+					c.logger.Error("Lock acquisition failed", zap.Error(err))
+					return fmt.Errorf("lock acquisition failed: %w", err)
+				}
+				if !acquired {
+					c.logger.Info("Rebalancing skipped - coordination lock held (likely HPA scale event)")
+					return nil
+				}
+				defer lock.ReleaseLock(ctx)
+
+				c.logger.Info("Load imbalance detected, planning rebalancing (lock acquired)",
 					zap.Float64("imbalance_ratio", report.ImbalanceRatio),
 					zap.Float64("max_message_rate", report.MaxMessageRate),
 					zap.String("reason", report.Reason),
@@ -665,4 +687,155 @@ func (c *Coordinator) triggerMigrationForFailedPods(ctx context.Context, failedP
 	}
 
 	return nil
+}
+
+// detectScaleEvent detects HPA scale-up and scale-down events based on pod count changes
+func (c *Coordinator) detectScaleEvent(ctx context.Context, previousCount, currentCount int) {
+	if currentCount > previousCount {
+		// HPA scale-up detected
+		c.logger.Info("HPA scale-up detected",
+			zap.Int("previous", previousCount),
+			zap.Int("current", currentCount),
+		)
+
+		// Wait 30 seconds for new pods to stabilize
+		// New pods will apply startup jitter (0-30s) before querying assignments
+		// This ensures they don't all hit coordinator simultaneously
+		time.Sleep(30 * time.Second)
+
+		// Trigger reconciliation (coordinator will recompute with new pods in next cycle)
+		c.logger.Info("Scale-up stabilization complete, will recompute assignments in next cycle")
+
+	} else if currentCount < previousCount {
+		// HPA scale-down detected
+		c.logger.Info("HPA scale-down detected",
+			zap.Int("previous", previousCount),
+			zap.Int("current", currentCount),
+		)
+
+		// Proactively migrate channels from terminating pods
+		c.handleScaleDown(ctx, previousCount, currentCount)
+	}
+}
+
+// handleScaleDown handles HPA scale-down by proactively migrating channels from terminating pods
+func (c *Coordinator) handleScaleDown(ctx context.Context, previousCount, currentCount int) {
+	// Acquire coordination lock for scale-down operation
+	lock := NewCoordinationLock(c.redisClient, c.logger)
+	acquired, err := lock.AcquireLock(ctx, "scale_down")
+	if err != nil {
+		c.logger.Error("Failed to acquire lock for scale-down", zap.Error(err))
+		return
+	}
+	if !acquired {
+		c.logger.Warn("Cannot acquire lock for scale-down migration (rebalancing in progress)")
+		return
+	}
+	defer lock.ReleaseLock(ctx)
+
+	// Get pod namespace
+	podNamespace := os.Getenv("POD_NAMESPACE")
+	if podNamespace == "" {
+		podNamespace = "allchat"
+	}
+
+	// Query Kubernetes API for pods with DeletionTimestamp set (terminating pods)
+	listOptions := metav1.ListOptions{
+		LabelSelector: "app in (twitch-listener,kick-listener,tiktok-listener)",
+	}
+
+	podList, err := c.k8sClient.CoreV1().Pods(podNamespace).List(ctx, listOptions)
+	if err != nil {
+		c.logger.Error("Failed to list pods for scale-down", zap.Error(err))
+		return
+	}
+
+	// Filter for terminating pods
+	terminatingPods := []corev1.Pod{}
+	for _, pod := range podList.Items {
+		if pod.DeletionTimestamp != nil {
+			terminatingPods = append(terminatingPods, pod)
+		}
+	}
+
+	if len(terminatingPods) == 0 {
+		c.logger.Info("No terminating pods found during scale-down")
+		return
+	}
+
+	c.logger.Info("Migrating channels from terminating pods",
+		zap.Int("terminating_pods", len(terminatingPods)),
+	)
+
+	// Migrate channels from each terminating pod
+	channelsMigrated := 0
+	for _, pod := range terminatingPods {
+		// Get channels assigned to terminating pod
+		assignments, err := c.registry.GetAssignmentsForPod(ctx, pod.Name)
+		if err != nil {
+			c.logger.Error("Failed to get assignments for terminating pod",
+				zap.String("pod", pod.Name),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		if len(assignments) == 0 {
+			c.logger.Debug("No assignments for terminating pod",
+				zap.String("pod", pod.Name),
+			)
+			continue
+		}
+
+		// Migrate each channel to a healthy pod
+		for _, assignment := range assignments {
+			// Use bounded-load algorithm to select new pod
+			newPodID, err := c.assigner.AssignChannel(assignment.SourceID)
+			if err != nil {
+				c.logger.Error("Failed to select target pod for scale-down migration",
+					zap.String("source_id", assignment.SourceID),
+					zap.Error(err),
+				)
+				continue
+			}
+
+			// Publish migration event
+			event := &MigrationEvent{
+				MigrationID: fmt.Sprintf("migration-%d", time.Now().UnixNano()),
+				ChannelID:   assignment.SourceID,
+				Platform:    "unknown", // Platform info not available in assignment
+				FromPod:     pod.Name,
+				ToPod:       newPodID,
+				Timestamp:   time.Now(),
+				Reason:      "scale_down",
+			}
+
+			if err := c.migrationPublisher.PublishMigrationEvent(ctx, event); err != nil {
+				c.logger.Error("Failed to publish scale-down migration event",
+					zap.String("migration_id", event.MigrationID),
+					zap.String("channel_id", event.ChannelID),
+					zap.Error(err),
+				)
+				continue
+			}
+
+			// Update assignment registry
+			_, err = c.registry.StoreAssignment(ctx, assignment.SourceID, newPodID)
+			if err != nil {
+				c.logger.Error("Failed to update assignment after scale-down",
+					zap.String("source_id", assignment.SourceID),
+					zap.String("new_pod", newPodID),
+					zap.Error(err),
+				)
+				continue
+			}
+
+			channelsMigrated++
+		}
+	}
+
+	c.logger.Info("Proactive scale-down migration complete",
+		zap.Int("pods", len(terminatingPods)),
+		zap.Int("channels", channelsMigrated),
+	)
 }
