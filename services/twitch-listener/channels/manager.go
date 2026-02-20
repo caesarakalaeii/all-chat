@@ -437,6 +437,14 @@ func (m *Manager) GetAssignmentCount() int {
 	return len(m.assignedSourceIDs)
 }
 
+// UpdateAssignedSourceIDs updates the assigned source IDs from coordinator
+// Thread-safe update with mutex protection
+func (m *Manager) UpdateAssignedSourceIDs(newAssignedIDs map[string]bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.assignedSourceIDs = newAssignedIDs
+}
+
 // joinChannelsMultipleConnections creates multiple IRC connections for >100 channels (TWITCH-03)
 // Per RESEARCH.md: Distribute channels evenly across connections (90 channels per connection, safe margin below 100)
 func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels []string) {
