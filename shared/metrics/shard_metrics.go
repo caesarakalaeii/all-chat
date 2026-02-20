@@ -36,6 +36,11 @@ type ShardMetrics struct {
 	RebalancingTotal             prometheus.Counter // Total rebalancing operations triggered
 	RebalancingCooldownOverrides prometheus.Counter // Escalation overrides
 	RebalancingThrashing         prometheus.Counter // Thrashing events detected
+
+	// Migration operations (Phase 8)
+	MigrationTotal    *prometheus.CounterVec // Total migrations by status and reason
+	MigrationDuration prometheus.Histogram   // Migration duration in seconds
+	PodChannelCount   *prometheus.GaugeVec   // Number of channels assigned to each pod
 }
 
 // NewShardMetrics creates and registers shard metrics
@@ -116,5 +121,22 @@ func NewShardMetrics() *ShardMetrics {
 			Name: "shard_rebalancing_thrashing_total",
 			Help: "Total number of thrashing events detected (>3 rebalances in 15min)",
 		}),
+		MigrationTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "shard_migration_total",
+			Help: "Total number of channel migrations",
+		},
+			[]string{"status", "reason"},
+		),
+		MigrationDuration: promauto.NewHistogram(prometheus.HistogramOpts{
+			Name:    "shard_migration_duration_seconds",
+			Help:    "Migration duration in seconds",
+			Buckets: []float64{1, 5, 10, 30, 60, 120},
+		}),
+		PodChannelCount: promauto.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "shard_channel_count",
+			Help: "Number of channels assigned to this pod",
+		},
+			[]string{"pod_id"},
+		),
 	}
 }
