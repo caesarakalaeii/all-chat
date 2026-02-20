@@ -244,19 +244,43 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	// Even if empty map (0 assignments), should connect to 0 channels
 	filteredCount := len(desiredChannels) // Default: all channels
 	if m.assignedSourceIDs != nil {
-		// Get all source IDs for these channels from database
-		// sourceIDMap := m.repo.GetSourceIDsForChannels(ctx, desiredChannels) // Not needed when filtering disabled
+		// Get UUID-to-channel-name mapping from database
+		sourceIDMap := m.repo.GetSourceIDsForChannels(ctx, desiredChannels)
 
-		// DISABLED: Coordinator filtering temporarily disabled to prevent message loss
-		// Per user requirement: "we want to NEVER lose a message - rather poll a channel twice than not at all"
-		// The coordinator integration is kept for monitoring but filtering is disabled
-		// TODO: Re-enable once assignment distribution is verified to be 100% accurate
-		m.logger.Info("Coordinator assignments received but filtering DISABLED for safety",
-			zap.Int("total_channels", len(desiredChannels)),
-			zap.Int("assigned_channels_ignored", len(m.assignedSourceIDs)),
-		)
+		// Build reverse map: UUID -> channel_name for filtering
+		uuidToChannelMap := make(map[string]string)
+		for channelName, uuid := range sourceIDMap {
+			uuidToChannelMap[uuid] = channelName
+		}
 
-		filteredCount = len(desiredChannels) // Use all channels, no filtering
+		// Filter to only assigned channels
+		filteredChannels := make([]string, 0, len(m.assignedSourceIDs))
+		for uuid := range m.assignedSourceIDs {
+			if channelName, ok := uuidToChannelMap[uuid]; ok {
+				filteredChannels = append(filteredChannels, channelName)
+			}
+		}
+
+		// CRITICAL: Verify 100% coverage before filtering
+		coverageComplete := m.verifyCoverageComplete(ctx, sourceIDMap)
+
+		if !coverageComplete {
+			// SAFETY: Coverage gaps detected, disable filtering
+			m.logger.Error("Coverage verification FAILED - filtering disabled for safety",
+				zap.Int("total_channels", len(desiredChannels)),
+				zap.Int("assigned_channels", len(filteredChannels)),
+				zap.Int("missing", len(desiredChannels)-len(filteredChannels)),
+			)
+			filteredCount = len(desiredChannels) // Use all channels
+		} else {
+			// Coverage verified - safe to filter
+			m.logger.Info("Coverage verified - filtering enabled",
+				zap.Int("total_sources", len(sourceIDMap)),
+				zap.Int("assigned_channels", len(filteredChannels)),
+			)
+			desiredChannels = filteredChannels
+			filteredCount = len(filteredChannels)
+		}
 	}
 
 	m.mu.Lock()
@@ -364,6 +388,51 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	)
 
 	return nil
+}
+
+// verifyCoverageComplete checks if all database sources have coordinator assignments
+// Returns false if any source lacks assignment (prevents message loss)
+func (m *Manager) verifyCoverageComplete(ctx context.Context, sourceIDMap map[string]string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	unassignedSources := make([]string, 0)
+	unassignedUUIDs := make([]string, 0)
+
+	for channelName, uuid := range sourceIDMap {
+		if !m.assignedSourceIDs[uuid] {
+			unassignedSources = append(unassignedSources, channelName)
+			unassignedUUIDs = append(unassignedUUIDs, uuid)
+		}
+	}
+
+	if len(unassignedSources) > 0 {
+		// Helper function for min
+		minInt := func(a, b int) int {
+			if a < b {
+				return a
+			}
+			return b
+		}
+
+		m.logger.Error("Coverage verification failed - unassigned sources detected",
+			zap.Int("unassigned_count", len(unassignedSources)),
+			zap.Strings("sample_channels", unassignedSources[:minInt(5, len(unassignedSources))]),
+			zap.Strings("sample_uuids", unassignedUUIDs[:minInt(5, len(unassignedUUIDs))]),
+		)
+
+		// Emit metric for alerting
+		m.metrics.RecordSourceEvent("twitch", "twitch-listener", "coverage_gap_detected")
+
+		return false
+	}
+
+	m.logger.Debug("Coverage verification passed",
+		zap.Int("total_sources", len(sourceIDMap)),
+		zap.String("pod_name", m.podID),
+	)
+
+	return true
 }
 
 // joinChannel joins a channel and tracks it
