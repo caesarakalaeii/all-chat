@@ -133,10 +133,13 @@ Plans:
   3. Prometheus alerts trigger on critical conditions (imbalance >0.7, split-brain, rebalancing thrashing)
   4. OpenTelemetry traces show end-to-end migration (all phases) and rebalancing decisions in Jaeger UI
   5. Simulated failure scenarios (split-brain, migration failure, quota exhaustion) can be diagnosed from metrics alone in <5 minutes
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 08-01: TBD (planning required)
+- [ ] 08-01-PLAN.md — Missing metrics + per-pod channel count (migration counters, PodChannelCount gauge)
+- [ ] 08-02-PLAN.md — Sampling configuration + migration tracing (environment-configurable, W3C Trace Context)
+- [ ] 08-03-PLAN.md — Rebalancing tracing + trace context propagation (load monitoring, assignment spans)
+- [ ] 08-04-PLAN.md — Grafana dashboard + Prometheus alerts (heatmaps, timelines, split-brain/imbalance alerts)
 
 ## Progress
 
@@ -150,8 +153,8 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 3. Kick Integration + Edge Cases | v1.0 | 4/4 | Complete | 2026-02-18 |
 | 5. Sharding Infrastructure & Coordinator | v1.1 | 5/5 | Complete | 2026-02-19 |
 | 6. Connection Management & Migration | v1.1 | 8/8 | Complete | 2026-02-20 |
-| 7. Dynamic Rebalancing & HPA | 4/4 | Complete   | 2026-02-20 | - |
-| 8. Observability & Production Readiness | v1.1 | 0/? | Not started | - |
+| 7. Dynamic Rebalancing & HPA | v1.1 | 4/4 | Complete   | 2026-02-20 |
+| 8. Observability & Production Readiness | v1.1 | 0/4 | Not started | - |
 
 ---
-*Last updated: 2026-02-20 after Phase 7 planning complete*
+*Last updated: 2026-02-20 after Phase 8 planning complete*
