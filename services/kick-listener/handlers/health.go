@@ -58,13 +58,16 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 		return
 	}
 
-	// Check 3: Active subscriptions match assignment count (all chatrooms subscribed)
+	// Check 3: Active subscriptions match filtered assignment count (all filtered chatrooms subscribed)
+	// Use GetFilteredAssignmentCount() instead of GetAssignmentCount() to compare against
+	// the number of assigned sources that actually have database channels
 	subscriptionCount := h.channelMgr.GetSubscriptionCount()
-	if subscriptionCount < assignmentCount {
+	filteredAssignmentCount := h.channelMgr.GetFilteredAssignmentCount()
+	if subscriptionCount < filteredAssignmentCount {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":      "not ready",
 			"reason":      "subscriptions connecting",
-			"expected":    assignmentCount,
+			"expected":    filteredAssignmentCount,
 			"subscribed":  subscriptionCount,
 		})
 		return
