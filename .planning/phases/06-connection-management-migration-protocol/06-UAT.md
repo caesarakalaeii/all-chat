@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 06-connection-management-migration-protocol
 source:
   - 06-01-SUMMARY.md
@@ -113,9 +113,16 @@ skipped: 2
   reason: "User reported: HPA configurations exist and pods scale, but new pods never become Ready due to readiness probe bug. Pods stuck at 0/1 Running with 'Readiness probe failed: HTTP probe failed with statuscode: 503'"
   severity: blocker
   test: 8
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Readiness probe compares active_channels (5) against raw assignmentCount (17) instead of filtered assigned_channels count. GetAssignmentCount() returns len(assignedSourceIDs) which includes all coordinator assignments, but only 5/17 source IDs have corresponding channels in database after filtering in SyncChannels()"
+  artifacts:
+    - path: "services/twitch-listener/handlers/health.go"
+      issue: "Line 85: readiness probe checks active_channels < assignmentCount using wrong metric"
+    - path: "services/twitch-listener/channels/manager.go"
+      issue: "Line 448-450: GetAssignmentCount() returns raw coordinator assignments, not filtered count"
+  missing:
+    - "Add GetFilteredAssignmentCount() method that returns count of source IDs that actually have database channels"
+    - "Update readiness probe to compare against filtered count instead of raw count"
+    - "Alternative: Track filtered assignment count during SyncChannels() for O(1) access"
   debug_session: ""
 
 - truth: "New pod publishes migration confirmation to Redis Streams after receiving first message on migrated channel"
@@ -123,7 +130,11 @@ skipped: 2
   reason: "User reported: Cannot test - readiness probe bug prevents new pods from becoming Ready, so coordinator never selects them as migration targets. Redis Streams contains only status:initiated events from coordinator, no status:connected or status:failed confirmations from listeners."
   severity: blocker
   test: 6
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Same as Test 8 - readiness probe bug prevents pods from becoming Ready, so coordinator's bounded-load algorithm never selects NotReady pods as migration targets. Migration confirmation code is present (06-07) but never executes."
+  artifacts:
+    - path: "services/twitch-listener/handlers/health.go"
+      issue: "Readiness probe bug cascades to prevent migration testing"
+  missing:
+    - "Fix readiness probe (same fix as Test 8)"
+    - "After fix: pods become Ready, coordinator selects them for migrations, confirmation code executes"
   debug_session: ""
