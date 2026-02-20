@@ -23,7 +23,7 @@
 - [x] **REBAL-03**: System triggers automatic rebalancing when imbalance ratio exceeds 0.5
 - [x] **REBAL-04**: System identifies hot channels (channels with >3x average message rate)
 - [x] **REBAL-05**: System reassigns hot channels from overloaded pods to underutilized pods
-- [ ] **REBAL-06**: System enforces 5-minute cooldown between rebalancing operations
+- [x] **REBAL-06**: System enforces 5-minute cooldown between rebalancing operations
 - [x] **REBAL-07**: System limits rebalancing to maximum 20% of channels per operation
 - [x] **REBAL-08**: Coordinator service extends existing source-manager with rebalancing logic
 
@@ -129,7 +129,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REBAL-03 | Phase 7 | Complete |
 | REBAL-04 | Phase 7 | Complete |
 | REBAL-05 | Phase 7 | Complete |
-| REBAL-06 | Phase 7 | Pending |
+| REBAL-06 | Phase 7 | Complete |
 | REBAL-07 | Phase 7 | Complete |
 | REBAL-08 | Phase 5 | Complete |
 | MIGRATE-01 | Phase 6 | Complete |
