@@ -93,7 +93,7 @@ Plans:
   3. Platform-specific connection state migrates correctly (Twitch IRC JOIN list, Kick Pusher subscription IDs, TikTok connection state)
   4. HPA can scale Twitch listener from 1 to 5 replicas with all pods reporting ready (fixes current 1/5 ready issue)
   5. Migration events publish to Redis Streams with sequence numbers for gap detection
-**Plans**: 7 plans
+**Plans**: 8 plans
 
 Plans:
 - [x] 06-01-PLAN.md — Shared migration infrastructure (coordinator client, Redis Pub/Sub subscriber, migration event models)
@@ -102,7 +102,8 @@ Plans:
 - [x] 06-04-PLAN.md — TikTok listener integration (TypeScript coordinator client, assignment filtering, migration, HPA 1-3 replicas)
 - [x] 06-05-PLAN.md — Migration observability + coordinator publisher (Redis Pub/Sub + Streams, migration triggers, confirmation wait)
 - [x] 06-06-PLAN.md — End-to-end migration testing (HPA scale tests, zero-loss validation, checkpoint for human verification)
-- [ ] 06-07-PLAN.md — Gap closure: Fix migration confirmation publishing (wire firstMessageChan, implement Redis Streams publishing)
+- [x] 06-07-PLAN.md — Gap closure: Fix migration confirmation publishing (wire firstMessageChan, implement Redis Streams publishing)
+- [ ] 06-08-PLAN.md — Gap closure: Fix readiness probe to use filtered assignment count (unblocks HPA scaling and migration confirmation testing)
 
 ### Phase 7: Dynamic Rebalancing & HPA Integration
 **Goal**: Automatic load-aware rebalancing with safeguards against thundering herd and quota exhaustion
@@ -145,9 +146,9 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 2. YouTube Integration | v1.0 | 2/2 | Complete | 2026-02-18 |
 | 3. Kick Integration + Edge Cases | v1.0 | 4/4 | Complete | 2026-02-18 |
 | 5. Sharding Infrastructure & Coordinator | v1.1 | 5/5 | Complete | 2026-02-19 |
-| 6. Connection Management & Migration | v1.1 | 6/6 | Complete | 2026-02-20 |
+| 6. Connection Management & Migration | v1.1 | 7/8 | In progress | 2026-02-20 |
 | 7. Dynamic Rebalancing & HPA | v1.1 | 0/? | Not started | - |
 | 8. Observability & Production Readiness | v1.1 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-02-20 after Phase 6 completion*
+*Last updated: 2026-02-20 after Phase 6 Plan 8 gap closure planning*
