@@ -77,7 +77,7 @@ func InitTracer(cfg Config, logger *zap.Logger) (func(context.Context) error, er
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(traceExporter),
 		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()), // Sample all traces in dev
+		sdktrace.WithSampler(createConfigurableSampler()), // Environment-configurable sampling
 	)
 
 	// Set global trace provider
