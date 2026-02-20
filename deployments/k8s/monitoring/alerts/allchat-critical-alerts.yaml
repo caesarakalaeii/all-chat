@@ -95,3 +95,55 @@ spec:
               2. Check processor logs: kubectl logs -n allchat -l app=message-processor
               3. Verify Redis connection pool
               4. Check for backpressure or rate limiting
+
+        # Shard Load Imbalance - Channel distribution unbalanced
+        - alert: ShardLoadImbalance
+          expr: shard_imbalance_ratio > 0.7
+          for: 10m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "Channel load imbalance detected (ratio {{ $value | humanize }})"
+            description: |
+              Load imbalance ratio has exceeded 0.7 for more than 10 minutes.
+              Current ratio: {{ $value | humanize }} (threshold: 0.7)
+
+              Impact: Some pods are handling significantly more channels than others,
+              leading to uneven resource usage and potential performance degradation.
+
+              Remediation Steps:
+              1. Check if rebalancing is in cooldown: kubectl logs -n allchat -l app=source-manager | grep "cooldown"
+              2. Verify rebalancing enabled: Check source-manager config for REBALANCING_ENABLED=true
+              3. Check load distribution: Open Grafana dashboard "Sharding & Rebalancing Overview" → Channel Distribution heatmap
+              4. Manually trigger rebalancing if needed: curl -X POST http://source-manager:8088/admin/rebalance
+              5. Check for pod failures: kubectl get pods -n allchat | grep -v Running
+
+              Auto-rebalancing should trigger automatically. Alert fires if rebalancing
+              fails or is stuck in cooldown during persistent imbalance.
+
+        # Shard Coordinator Split-Brain - Multiple leaders detected
+        - alert: ShardCoordinatorSplitBrain
+          expr: sum(shard_coordinator_is_leader) > 1
+          for: 1m
+          labels:
+            severity: critical
+            team: allchat
+          annotations:
+            summary: "Multiple coordinator leaders detected ({{ $value }} leaders)"
+            description: |
+              More than one source-manager pod believes it is the leader.
+              This is a CRITICAL split-brain condition that can cause conflicting assignments.
+
+              Impact: Multiple coordinators may assign same channel to different pods,
+              causing duplicate messages or migration conflicts.
+
+              IMMEDIATE ACTION REQUIRED:
+              1. Check all source-manager pods: kubectl get pods -n allchat -l app=source-manager
+              2. View leader election logs: kubectl logs -n allchat -l app=source-manager | grep "leader"
+              3. Check Kubernetes Lease: kubectl get lease -n allchat coordinator-leader
+              4. Restart all source-manager pods: kubectl rollout restart -n allchat deployment/source-manager
+              5. Verify single leader after restart: Check alert resolution + Prometheus metric
+
+              Root cause: Kubernetes Lease API clock skew or network partition.
+              This should resolve automatically via lease expiration (30s).
