@@ -29,6 +29,19 @@ type PodLoad struct {
 	LoadScore    float64 // composite weighted score
 }
 
+// ImbalanceReport contains load imbalance analysis results
+type ImbalanceReport struct {
+	MaxLoad            float64
+	MinLoad            float64
+	AvgLoad            float64
+	ImbalanceRatio     float64  // max_load / avg_load (standard formula)
+	MaxMessageRate     float64  // Highest message rate among all pods
+	OverloadedPods     []string // Pod IDs with load > avgLoad
+	UnderutilizedPods  []string // Pod IDs with load < avgLoad
+	ShouldRebalance    bool     // Trigger decision result
+	Reason             string   // Explanation for trigger decision
+}
+
 // prometheusQueryResult represents the Prometheus API response structure
 type prometheusQueryResult struct {
 	Status string `json:"status"`
@@ -211,4 +224,119 @@ func (m *LoadMonitor) getMessageRate(ctx context.Context, podID string) (float64
 	}
 
 	return messageRate, nil
+}
+
+// CalculateImbalance computes load distribution metrics and determines if rebalancing is needed
+// Uses dual-condition gating: triggers rebalancing when BOTH conditions met:
+// 1. Imbalance ratio (max_load / avg_load) exceeds 0.5
+// 2. Busiest pod exceeds 100 msg/sec minimum threshold
+// Rationale: Avoid unnecessary rebalancing when system is mostly idle, but remain responsive under load
+func (m *LoadMonitor) CalculateImbalance(loads []PodLoad) ImbalanceReport {
+	if len(loads) == 0 {
+		return ImbalanceReport{
+			ShouldRebalance: false,
+			Reason:          "no pods available",
+		}
+	}
+
+	// Handle single pod edge case
+	if len(loads) == 1 {
+		return ImbalanceReport{
+			MaxLoad:        loads[0].LoadScore,
+			MinLoad:        loads[0].LoadScore,
+			AvgLoad:        loads[0].LoadScore,
+			ImbalanceRatio: 1.0,
+			MaxMessageRate: loads[0].MessageRate,
+			ShouldRebalance: false,
+			Reason:          "single pod (no rebalancing possible)",
+		}
+	}
+
+	// Calculate max, min, avg load scores and max message rate
+	maxLoad := loads[0].LoadScore
+	minLoad := loads[0].LoadScore
+	totalLoad := 0.0
+	maxMsgRate := 0.0
+
+	for _, load := range loads {
+		if load.LoadScore > maxLoad {
+			maxLoad = load.LoadScore
+		}
+		if load.LoadScore < minLoad {
+			minLoad = load.LoadScore
+		}
+		if load.MessageRate > maxMsgRate {
+			maxMsgRate = load.MessageRate
+		}
+		totalLoad += load.LoadScore
+	}
+
+	avgLoad := totalLoad / float64(len(loads))
+
+	// Calculate imbalance ratio (standard formula: max / avg)
+	imbalanceRatio := 0.0
+	if avgLoad > 0 {
+		imbalanceRatio = maxLoad / avgLoad
+	}
+
+	// Identify overloaded and underutilized pods
+	overloaded := []string{}
+	underutilized := []string{}
+
+	for _, load := range loads {
+		if load.LoadScore > avgLoad {
+			overloaded = append(overloaded, load.PodID)
+		} else if load.LoadScore < avgLoad {
+			underutilized = append(underutilized, load.PodID)
+		}
+	}
+
+	report := ImbalanceReport{
+		MaxLoad:           maxLoad,
+		MinLoad:           minLoad,
+		AvgLoad:           avgLoad,
+		ImbalanceRatio:    imbalanceRatio,
+		MaxMessageRate:    maxMsgRate,
+		OverloadedPods:    overloaded,
+		UnderutilizedPods: underutilized,
+	}
+
+	// Update metrics
+	m.metrics.LoadImbalanceRatio.Set(imbalanceRatio)
+	m.metrics.PodLoadMax.Set(maxLoad)
+	m.metrics.PodLoadAvg.Set(avgLoad)
+
+	// Dual-condition gating per CONTEXT.md
+	const (
+		imbalanceThreshold = 0.5   // User constraint
+		minMessageThreshold = 100.0 // messages/sec (user constraint)
+	)
+
+	if imbalanceRatio > imbalanceThreshold && maxMsgRate > minMessageThreshold {
+		report.ShouldRebalance = true
+		report.Reason = fmt.Sprintf("imbalance detected (ratio=%.2f > %.2f, max_rate=%.2f > %.2f)",
+			imbalanceRatio, imbalanceThreshold, maxMsgRate, minMessageThreshold)
+	} else if imbalanceRatio <= imbalanceThreshold {
+		report.ShouldRebalance = false
+		report.Reason = fmt.Sprintf("imbalance_ratio=%.2f within threshold %.2f",
+			imbalanceRatio, imbalanceThreshold)
+	} else {
+		// imbalanceRatio > threshold BUT maxMsgRate <= threshold (idle)
+		report.ShouldRebalance = false
+		report.Reason = fmt.Sprintf("max_msg_rate=%.2f below threshold %.2f (system mostly idle)",
+			maxMsgRate, minMessageThreshold)
+	}
+
+	m.logger.Info("Load imbalance calculated",
+		zap.Float64("imbalance_ratio", imbalanceRatio),
+		zap.Float64("max_load", maxLoad),
+		zap.Float64("avg_load", avgLoad),
+		zap.Float64("max_msg_rate", maxMsgRate),
+		zap.Bool("should_rebalance", report.ShouldRebalance),
+		zap.String("reason", report.Reason),
+		zap.Int("overloaded_pods", len(overloaded)),
+		zap.Int("underutilized_pods", len(underutilized)),
+	)
+
+	return report
 }
