@@ -7,6 +7,11 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -19,6 +24,8 @@ type MigrationEvent struct {
 	ToPod       string    `json:"to_pod"`
 	Timestamp   time.Time `json:"timestamp"`
 	Reason      string    `json:"reason"` // "pod_failure", "scale_up", "rebalance"
+	TraceParent string    `json:"traceparent,omitempty"` // W3C Trace Context propagation
+	TraceState  string    `json:"tracestate,omitempty"`  // W3C Trace Context state
 }
 
 // MigrationConfirmation represents a migration confirmation event
@@ -50,6 +57,28 @@ func NewMigrationPublisher(redisClient *redis.Client, logger *zap.Logger) *Migra
 // PublishMigrationEvent publishes a migration event to both Redis Pub/Sub (for listener notification)
 // and Redis Streams (for observability and gap detection) (MIGRATE-02, MIGRATE-06)
 func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *MigrationEvent) error {
+	// Create parent span for the entire migration publish operation
+	tracer := otel.Tracer("source-manager")
+	ctx, span := tracer.Start(ctx, "publish-migration-event",
+		trace.WithAttributes(
+			attribute.String("migration_id", event.MigrationID),
+			attribute.String("channel_id", event.ChannelID),
+			attribute.String("platform", event.Platform),
+			attribute.String("from_pod", event.FromPod),
+			attribute.String("to_pod", event.ToPod),
+			attribute.String("reason", event.Reason),
+		),
+	)
+	defer span.End()
+
+	// Inject trace context into carrier for propagation through Redis
+	carrier := make(propagation.MapCarrier)
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+
+	// Add trace context to event for propagation
+	event.TraceParent = carrier.Get("traceparent")
+	event.TraceState = carrier.Get("tracestate")
+
 	// Marshal event to JSON
 	jsonPayload, err := json.Marshal(event)
 	if err != nil {
@@ -57,11 +86,14 @@ func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *M
 			zap.String("migration_id", event.MigrationID),
 			zap.Error(err),
 		)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to marshal migration event")
 		return fmt.Errorf("failed to marshal migration event: %w", err)
 	}
 
 	// Step 1: Publish to Redis Pub/Sub channel for immediate listener notification
 	// Per CONTEXT.md: "Coordinator publishes migration event to Redis Pub/Sub channel (5-20ms latency)"
+	ctx, pubSpan := tracer.Start(ctx, "redis-publish-notification")
 	err = m.redisClient.Publish(ctx, "migration:events", jsonPayload).Err()
 	if err != nil {
 		m.logger.Error("Failed to publish migration event to Pub/Sub",
@@ -70,11 +102,19 @@ func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *M
 			zap.String("platform", event.Platform),
 			zap.Error(err),
 		)
+		pubSpan.RecordError(err)
+		pubSpan.SetStatus(codes.Error, err.Error())
+		pubSpan.End()
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to publish migration event")
 		return fmt.Errorf("failed to publish to Pub/Sub: %w", err)
 	}
+	pubSpan.SetStatus(codes.Ok, "")
+	pubSpan.End()
 
 	// Step 2: Append to Redis Streams for observability (MIGRATE-06)
 	// Per MIGRATE-05: "System publishes migration events to Redis Streams for observability"
+	ctx, streamSpan := tracer.Start(ctx, "redis-stream-log")
 	err = m.redisClient.XAdd(ctx, &redis.XAddArgs{
 		Stream: "migration:log",
 		Values: map[string]interface{}{
@@ -86,6 +126,8 @@ func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *M
 			"timestamp":    event.Timestamp.Unix(),
 			"reason":       event.Reason,
 			"status":       "initiated",
+			"traceparent":  carrier.Get("traceparent"), // W3C Trace Context
+			"tracestate":   carrier.Get("tracestate"),
 		},
 	}).Err()
 	if err != nil {
@@ -95,8 +137,15 @@ func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *M
 			zap.String("platform", event.Platform),
 			zap.Error(err),
 		)
+		streamSpan.RecordError(err)
+		streamSpan.SetStatus(codes.Error, err.Error())
+		streamSpan.End()
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to log to streams")
 		return fmt.Errorf("failed to append to Streams: %w", err)
 	}
+	streamSpan.SetStatus(codes.Ok, "")
+	streamSpan.End()
 
 	m.logger.Info("Published migration event",
 		zap.String("migration_id", event.MigrationID),
@@ -107,6 +156,7 @@ func (m *MigrationPublisher) PublishMigrationEvent(ctx context.Context, event *M
 		zap.String("reason", event.Reason),
 	)
 
+	span.SetStatus(codes.Ok, "migration event published")
 	return nil
 }
 

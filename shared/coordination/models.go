@@ -13,6 +13,8 @@ type MigrationEvent struct {
 	ToPod       string    `json:"to_pod"`       // Kubernetes pod name (new pod)
 	Timestamp   time.Time `json:"timestamp"`    // Event creation time
 	Reason      string    `json:"reason"`       // "scale_up", "rebalancing", "pod_failure"
+	TraceParent string    `json:"traceparent,omitempty"` // W3C Trace Context propagation
+	TraceState  string    `json:"tracestate,omitempty"`  // W3C Trace Context state
 }
 
 // MigrationConfirmation represents a confirmation message from a listener
