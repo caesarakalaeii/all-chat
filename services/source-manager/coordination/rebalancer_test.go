@@ -267,6 +267,107 @@ func TestGetHotChannels(t *testing.T) {
 	assert.Contains(t, hotChannels, "channel-hot-2")
 }
 
+// TestIncompleteRebalancing_HybridStrategy validates that after 3 consecutive imbalance cycles,
+// the rebalancer escalates to hybrid strategy (proportional + hot channel migrations)
+func TestIncompleteRebalancing_HybridStrategy(t *testing.T) {
+	logger := zap.NewNop()
+
+	// Mock registry with channels on overloaded pod
+	// Use 10 channels total: 2 hot + 8 low to make math work
+	registry := &mockRegistry{
+		assignments: map[string][]*models.Assignment{
+			"pod-1": {
+				{SourceID: "channel-hot-1", PodID: "pod-1"},
+				{SourceID: "channel-hot-2", PodID: "pod-1"},
+				{SourceID: "channel-low-1", PodID: "pod-1"},
+				{SourceID: "channel-low-2", PodID: "pod-1"},
+				{SourceID: "channel-low-3", PodID: "pod-1"},
+				{SourceID: "channel-low-4", PodID: "pod-1"},
+				{SourceID: "channel-low-5", PodID: "pod-1"},
+				{SourceID: "channel-low-6", PodID: "pod-1"},
+				{SourceID: "channel-low-7", PodID: "pod-1"},
+				{SourceID: "channel-low-8", PodID: "pod-1"},
+			},
+		},
+	}
+
+	rebalancer := &Rebalancer{
+		registry:          registry,
+		maxMigrationRatio: 0.20, // 20%
+		logger:            logger,
+	}
+
+	// Mock channel loads: 2 hot channels + 8 low channels
+	// Average = (1000 + 900 + 10*8) / 10 = (1900 + 80) / 10 = 198
+	// 3x average = 594
+	// channel-hot-1 (1000) > 594 ✓ HOT
+	// channel-hot-2 (900) > 594 ✓ HOT
+	rebalancer.channelLoadsFunc = func(ctx context.Context, assignments []*models.Assignment) []ChannelLoad {
+		return []ChannelLoad{
+			{ChannelID: "channel-hot-1", MessageRate: 1000.0}, // Hot
+			{ChannelID: "channel-hot-2", MessageRate: 900.0},  // Hot
+			{ChannelID: "channel-low-1", MessageRate: 10.0},
+			{ChannelID: "channel-low-2", MessageRate: 10.0},
+			{ChannelID: "channel-low-3", MessageRate: 10.0},
+			{ChannelID: "channel-low-4", MessageRate: 10.0},
+			{ChannelID: "channel-low-5", MessageRate: 10.0},
+			{ChannelID: "channel-low-6", MessageRate: 10.0},
+			{ChannelID: "channel-low-7", MessageRate: 10.0},
+			{ChannelID: "channel-low-8", MessageRate: 10.0},
+		}
+	}
+
+	loads := []PodLoad{
+		{PodID: "pod-1", LoadScore: 100.0}, // overloaded
+		{PodID: "pod-2", LoadScore: 50.0},  // underutilized
+	}
+	avgLoad := 75.0
+
+	// Simulate 3 consecutive rebalancing attempts (incomplete)
+	// Attempt 0, 1, 2: proportional strategy only (20% of 10 = 2 low-traffic channels)
+	for attemptCount := 0; attemptCount < 3; attemptCount++ {
+		plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad, attemptCount)
+
+		assert.NoError(t, err)
+		assert.Len(t, plans, 1, "Expected 1 plan for attempt %d", attemptCount)
+
+		// Verify proportional strategy (low-traffic channels selected)
+		plan := plans[0]
+		assert.Equal(t, 2, plan.MigrationCount, "Expected 2 channel migrations (20%% of 10) for attempt %d", attemptCount)
+		// Channels should be lowest traffic (all low channels are rate 10.0, so any 2 are valid)
+	}
+
+	// Attempt 3: Hybrid strategy kicks in (proportional + hot channels)
+	plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad, 3)
+
+	assert.NoError(t, err)
+	assert.Len(t, plans, 2, "Expected 2 plans (proportional + hot channel)")
+
+	// First plan: proportional strategy (2 low-traffic channels, 20% of 10)
+	proportionalPlan := plans[0]
+	assert.Equal(t, "pod-1", proportionalPlan.SourcePod)
+	assert.Equal(t, "pod-2", proportionalPlan.TargetPod)
+	assert.Equal(t, 2, proportionalPlan.MigrationCount, "Proportional strategy: 20%% of 10 channels")
+	assert.Equal(t, 10, proportionalPlan.TotalChannels)
+
+	// Second plan: hot channel strategy (up to 2 hot channels, ignores 20% limit)
+	hotPlan := plans[1]
+	assert.Equal(t, "pod-1", hotPlan.SourcePod)
+	assert.Equal(t, "pod-2", hotPlan.TargetPod)
+	assert.LessOrEqual(t, hotPlan.MigrationCount, 2, "Hot strategy migrates max 2 channels")
+	assert.Greater(t, hotPlan.MigrationCount, 0, "Hot strategy should migrate at least 1 hot channel")
+
+	// Verify hot channels are selected (channel-hot-1 and/or channel-hot-2)
+	// Average = (1000 + 900 + 80) / 10 = 198, 3x = 594
+	// channel-hot-1 (1000) > 594 ✓, channel-hot-2 (900) > 594 ✓
+	for _, channelID := range hotPlan.Channels {
+		assert.Contains(t, []string{"channel-hot-1", "channel-hot-2"}, channelID, "Hot plan should contain hot channels")
+	}
+
+	// Verify we have both hot channels (since both qualify and max is 2)
+	assert.Len(t, hotPlan.Channels, 2, "Both hot channels should be migrated")
+}
+
 // mockRegistry is a mock implementation of AssignmentRegistryInterface for testing
 type mockRegistry struct {
 	assignments map[string][]*models.Assignment
