@@ -833,8 +833,8 @@ func (m *Manager) GetAssignmentCount() int {
 // UpdateAssignedSourceIDs updates the assigned source IDs from coordinator
 // Thread-safe update with mutex protection
 func (m *Manager) UpdateAssignedSourceIDs(newAssignedIDs map[string]bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.migrationMu.Lock()
+	defer m.migrationMu.Unlock()
 	m.assignedSourceIDs = newAssignedIDs
 }
 
