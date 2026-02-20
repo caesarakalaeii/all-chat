@@ -80,7 +80,8 @@ func NewRebalancer(
 // Uses proportional redistribution strategy: moves low-traffic channels first
 // Enforces 20% per-pod migration limit to prevent thrashing
 // Selects target pods via round-robin across underutilized pods
-func (r *Rebalancer) PlanRebalancing(ctx context.Context, loads []PodLoad, avgLoad float64) ([]MigrationPlan, error) {
+// If attemptCount >= 3, escalates to hybrid strategy (adds hot channel migrations)
+func (r *Rebalancer) PlanRebalancing(ctx context.Context, loads []PodLoad, avgLoad float64, attemptCount int) ([]MigrationPlan, error) {
 	r.logger.Info("Planning rebalancing",
 		zap.Int("pod_count", len(loads)),
 		zap.Float64("avg_load", avgLoad),
@@ -184,8 +185,24 @@ func (r *Rebalancer) PlanRebalancing(ctx context.Context, loads []PodLoad, avgLo
 		plans = append(plans, plan)
 	}
 
+	// Hybrid strategy escalation: if attemptCount >= 3, add hot channel migrations
+	// This handles persistent imbalance where proportional strategy alone is insufficient
+	if attemptCount >= 3 {
+		r.logger.Warn("Incomplete rebalancing detected, enabling hot channel migration",
+			zap.Int("attempt_count", attemptCount),
+		)
+
+		hotPlans := r.hotChannelStrategy(ctx, overloadedPods, underutilizedPods, avgLoad, targetIdx)
+		plans = append(plans, hotPlans...)
+
+		r.logger.Info("Added hot channel migrations to plans",
+			zap.Int("hot_channel_plans", len(hotPlans)),
+		)
+	}
+
 	r.logger.Info("Rebalancing plan complete",
 		zap.Int("migration_plans", len(plans)),
+		zap.Int("total_plans", len(plans)),
 	)
 
 	return plans, nil
@@ -296,4 +313,94 @@ func (r *Rebalancer) getHotChannels(channelLoads []ChannelLoad, avgRate float64)
 	}
 
 	return hotChannels
+}
+
+// hotChannelStrategy selects hot channels (>3x average message rate) from overloaded pods
+// Ignores 20% migration limit - this is the escalation strategy for persistent imbalance
+// Used when proportional strategy fails to resolve imbalance after 3 attempts
+func (r *Rebalancer) hotChannelStrategy(ctx context.Context, overloadedPods []PodLoad, underutilizedPods []PodLoad, avgLoad float64, startIdx int) []MigrationPlan {
+	if len(underutilizedPods) == 0 {
+		r.logger.Warn("No underutilized pods available for hot channel strategy")
+		return nil
+	}
+
+	var hotPlans []MigrationPlan
+	targetIdx := startIdx
+
+	for _, overloadedPod := range overloadedPods {
+		// Query all assigned channels
+		assignments, err := r.registry.GetAssignmentsForPod(ctx, overloadedPod.PodID)
+		if err != nil {
+			r.logger.Error("Failed to get assignments for overloaded pod (hot strategy)",
+				zap.String("pod_id", overloadedPod.PodID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		if len(assignments) == 0 {
+			continue
+		}
+
+		// Get per-channel message rates
+		channelLoads := r.channelLoadsFunc(ctx, assignments)
+
+		// Calculate average channel rate for this pod
+		var totalRate float64
+		for _, load := range channelLoads {
+			totalRate += load.MessageRate
+		}
+		avgChannelRate := totalRate / float64(len(channelLoads))
+
+		// Hot threshold: >3x average rate (per REBAL-04)
+		hotThreshold := avgChannelRate * 3.0
+
+		// Select hot channels (highest rate first)
+		sort.Slice(channelLoads, func(i, j int) bool {
+			return channelLoads[i].MessageRate > channelLoads[j].MessageRate
+		})
+
+		// Select top 1-2 hot channels per pod (ignoring 20% limit)
+		maxHotChannels := 2
+		hotChannels := make([]string, 0, maxHotChannels)
+
+		for i := 0; i < len(channelLoads) && len(hotChannels) < maxHotChannels; i++ {
+			if channelLoads[i].MessageRate > hotThreshold {
+				hotChannels = append(hotChannels, channelLoads[i].ChannelID)
+			}
+		}
+
+		if len(hotChannels) == 0 {
+			r.logger.Debug("No hot channels found on overloaded pod",
+				zap.String("pod_id", overloadedPod.PodID),
+				zap.Float64("hot_threshold", hotThreshold),
+			)
+			continue
+		}
+
+		// Round-robin target selection
+		targetPod := underutilizedPods[targetIdx%len(underutilizedPods)]
+		targetIdx++
+
+		// Build hot channel migration plan
+		plan := MigrationPlan{
+			SourcePod:      overloadedPod.PodID,
+			TargetPod:      targetPod.PodID,
+			Channels:       hotChannels,
+			TotalChannels:  len(assignments),
+			MigrationCount: len(hotChannels),
+		}
+
+		r.logger.Info("Planned hot channel migration",
+			zap.String("from_pod", plan.SourcePod),
+			zap.String("to_pod", plan.TargetPod),
+			zap.Int("hot_channels", len(hotChannels)),
+			zap.Int("total_channels", len(assignments)),
+			zap.Float64("hot_threshold", hotThreshold),
+		)
+
+		hotPlans = append(hotPlans, plan)
+	}
+
+	return hotPlans
 }
