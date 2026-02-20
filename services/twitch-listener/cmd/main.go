@@ -100,6 +100,7 @@ func main() {
 
 	// Initialize metrics (available via /metrics endpoint)
 	listenerMetrics := metrics.NewListenerMetrics("twitch", "twitch-listener")
+	shardMetrics := metrics.NewShardMetrics()
 	log.Info("Initialized Prometheus metrics")
 
 	// Get Kubernetes pod name from HOSTNAME environment variable
@@ -185,6 +186,14 @@ func main() {
 	if err := channelMgr.Start(ctx); err != nil {
 		log.Fatal("Failed to start channel manager", zap.Error(err))
 	}
+
+	// Record per-pod channel count metric (after filtering by coordinator assignments)
+	filteredCount := channelMgr.GetFilteredAssignmentCount()
+	shardMetrics.PodChannelCount.WithLabelValues(podName).Set(float64(filteredCount))
+	log.Info("Recorded channel count metric",
+		zap.String("pod_id", podName),
+		zap.Int("channel_count", filteredCount),
+	)
 
 	// Start migration subscriber (TWITCH-04, TWITCH-05)
 	migrationSub := coordination.NewMigrationSubscriber(
