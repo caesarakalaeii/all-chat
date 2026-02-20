@@ -67,14 +67,14 @@
 - [x] **METRICS-01**: Each listener pod exposes Prometheus metrics at /metrics endpoint
 - [x] **METRICS-02**: System tracks per-pod channel count as Gauge metric (shard_channel_count)
 - [x] **METRICS-03**: System tracks per-pod message rate as Counter metric (shard_messages_total)
-- [ ] **METRICS-04**: System tracks rebalancing events as Counter metric (shard_rebalancing_total)
+- [x] **METRICS-04**: System tracks rebalancing events as Counter metric (shard_rebalancing_total)
 - [x] **METRICS-05**: System tracks migration success/failure as Counter metrics (shard_migration_success/failure)
-- [ ] **METRICS-06**: System tracks load imbalance ratio as Gauge metric (shard_imbalance_ratio)
-- [ ] **METRICS-07**: Grafana dashboard visualizes channel distribution across pods (heatmap)
-- [ ] **METRICS-08**: Grafana dashboard shows rebalancing timeline and migration events
-- [ ] **METRICS-09**: Prometheus alert triggers when imbalance ratio >0.7 for 10 minutes
-- [ ] **METRICS-10**: Prometheus alert triggers on split-brain detection (multiple leaders)
-- [ ] **METRICS-11**: Prometheus alert triggers on rebalancing thrashing (>3 rebalances in 15min)
+- [x] **METRICS-06**: System tracks load imbalance ratio as Gauge metric (shard_imbalance_ratio)
+- [x] **METRICS-07**: Grafana dashboard visualizes channel distribution across pods (heatmap)
+- [x] **METRICS-08**: Grafana dashboard shows rebalancing timeline and migration events
+- [x] **METRICS-09**: Prometheus alert triggers when imbalance ratio >0.7 for 10 minutes
+- [x] **METRICS-10**: Prometheus alert triggers on split-brain detection (multiple leaders)
+- [x] **METRICS-11**: Prometheus alert triggers on rebalancing thrashing (>3 rebalances in 15min)
 
 ### Distributed Tracing
 
@@ -158,14 +158,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | METRICS-01 | Phase 8 | Complete |
 | METRICS-02 | Phase 8 | Complete |
 | METRICS-03 | Phase 8 | Complete |
-| METRICS-04 | Phase 8 | Pending |
+| METRICS-04 | Phase 8 | Complete |
 | METRICS-05 | Phase 8 | Complete |
-| METRICS-06 | Phase 8 | Pending |
-| METRICS-07 | Phase 8 | Pending |
-| METRICS-08 | Phase 8 | Pending |
-| METRICS-09 | Phase 8 | Pending |
-| METRICS-10 | Phase 8 | Pending |
-| METRICS-11 | Phase 8 | Pending |
+| METRICS-06 | Phase 8 | Complete |
+| METRICS-07 | Phase 8 | Complete |
+| METRICS-08 | Phase 8 | Complete |
+| METRICS-09 | Phase 8 | Complete |
+| METRICS-10 | Phase 8 | Complete |
+| METRICS-11 | Phase 8 | Complete |
 | TRACE-01 | Phase 8 | Complete |
 | TRACE-02 | Phase 8 | Complete |
 | TRACE-03 | Phase 8 | Complete |

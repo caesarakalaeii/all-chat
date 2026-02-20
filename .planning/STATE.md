@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-19)
 
 Milestone: v1.1 Listener Load Balancing
 Phase: 8 of 8 (Observability & Production Readiness)
-Plan: 3 of 4 in current phase
-Status: In Progress
-Last activity: 2026-02-20 — Completed 08-03-PLAN.md (Rebalancing & Assignment Tracing)
+Plan: 4 of 4 in current phase
+Status: Complete
+Last activity: 2026-02-20 — Completed 08-04-PLAN.md (Grafana Dashboards & Prometheus Alerts)
 
-Progress: [████████░░] 80% (v1.0 partial: 11/11 plans complete, v1.1: 28/31 plans complete)
+Progress: [██████████] 100% (v1.0 partial: 11/11 plans complete, v1.1: 31/31 plans complete)
 
 ## Performance Metrics
 
 **Velocity (all phases):**
-- Total plans completed: 28
-- Average duration: 10.9 min
-- Total execution time: 5.27 hours
+- Total plans completed: 29
+- Average duration: 10.3 min
+- Total execution time: 5.30 hours
 
 **By Phase:**
 
@@ -34,7 +34,7 @@ Progress: [████████░░] 80% (v1.0 partial: 11/11 plans comple
 | 5. Sharding Infrastructure | 5 | 22 min | 4.4 min |
 | 6. Connection Management | 8 | 217 min | 27.1 min |
 | 7. Dynamic Rebalancing | 4 | 22 min | 5.5 min |
-| 8. Observability & Production | 3 | 13 min | 4.3 min |
+| 8. Observability & Production | 4 | 15 min | 3.75 min |
 
 **Recent Trend:**
 - Last 5 plans: 33.8 min average (includes 180 min deployment testing)
@@ -65,6 +65,7 @@ Progress: [████████░░] 80% (v1.0 partial: 11/11 plans comple
 | Phase 08 P02 | 4 | 3 tasks | 7 files |
 | Phase 08 P03 | 5 | 3 tasks | 4 files |
 | Phase 08 P03 | 5 | 3 tasks | 4 files |
+| Phase 08 P04 | 2 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,8 @@ Recent decisions affecting current work:
 - [Phase 08]: Default 100% sampling rate for initial production weeks (operators reduce to 10% after baseline)
 - [Phase 08]: Error always-on sampling via wrapper pattern (AlwaysSampleErrorsSampler wraps ParentBased sampler)
 - [Phase 08]: W3C Trace Context propagation through Redis Streams (traceparent/tracestate in message values)
+- [Phase 08]: Two heatmaps for comprehensive distribution visibility (Pod×Platform for platform-specific imbalances, Pod×Time for rebalancing effectiveness)
+- [Phase 08]: At-a-glance imbalance ratio as primary dashboard metric for immediate visibility into system health
 
 ### Pending Todos
 
@@ -143,7 +146,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 08-01-PLAN.md (Shard & Migration Metrics)
+Stopped at: Completed 08-04-PLAN.md (Grafana Dashboards & Prometheus Alerts)
 Resume file: None
 
-**Next action:** Continue Phase 8 with Plan 02 (Health Check Enhancements) or Plan 04 (Grafana Dashboards).
+**Next action:** Phase 8 complete. All 31 plans in v1.1 milestone delivered. System is production-ready.
