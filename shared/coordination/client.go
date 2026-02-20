@@ -45,6 +45,8 @@ func NewCoordinatorClient(baseURL, serviceSecret string, logger *zap.Logger) *Co
 	serviceName := "listener" // default
 	if strings.HasPrefix(hostname, "twitch-listener") {
 		serviceName = "twitch-listener"
+	} else if strings.HasPrefix(hostname, "twitch-eventsub-listener") {
+		serviceName = "twitch-eventsub-listener"
 	} else if strings.HasPrefix(hostname, "kick-listener") {
 		serviceName = "kick-listener"
 	} else if strings.HasPrefix(hostname, "tiktok-listener") {
