@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/webhooks"
+	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
@@ -143,10 +145,55 @@ func main() {
 		log.Fatal("Failed to initialize token cipher", zap.Error(err))
 	}
 
+	// Get Kubernetes pod name from HOSTNAME environment variable
+	podName := os.Getenv("HOSTNAME")
+	if podName == "" {
+		podName = "twitch-eventsub-listener-unknown"
+		log.Warn("HOSTNAME not set, using default pod name", zap.String("pod_name", podName))
+	}
+
+	// Initialize coordinator client
+	coordinatorURL := getEnv("COORDINATOR_URL", "http://source-manager:8088")
+	serviceJWT := os.Getenv("SERVICE_JWT_SECRET")
+	if serviceJWT == "" {
+		log.Fatal("SERVICE_JWT_SECRET is required for coordinator authentication")
+	}
+
+	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, log)
+	log.Info("Initialized coordinator client", zap.String("coordinator_url", coordinatorURL))
+
+	// Staggered startup jitter to prevent thundering herd during HPA scale-up
+	jitter := time.Duration(rand.Intn(30)) * time.Second
+	log.Info("Applying startup jitter to prevent thundering herd",
+		zap.Duration("jitter", jitter),
+	)
+	time.Sleep(jitter)
+
+	// Query assignments from coordinator (EVENTSUB-01)
+	// Block indefinitely until coordinator responds
+	assignments, err := coordClient.QueryAssignments(ctx, podName)
+	if err != nil {
+		log.Fatal("Failed to query coordinator assignments", zap.Error(err))
+	}
+
+	log.Info("Received assignments from coordinator",
+		zap.Int("count", len(assignments)),
+		zap.String("pod_id", podName),
+	)
+
+	// Extract assigned source IDs into map for filtering
+	assignedSourceIDs := make(map[string]bool)
+	for _, a := range assignments {
+		assignedSourceIDs[a.SourceID] = true
+	}
+
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
 	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher)
+
+	// Set assigned source IDs for filtering
+	channelManager.SetAssignedSourceIDs(assignedSourceIDs, podName)
 
 	// Create webhook handler
 	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, streamPublisher, log)
@@ -364,6 +411,72 @@ func main() {
 			}
 		}
 	}()
+
+	// Start migration subscriber (EVENTSUB-04, EVENTSUB-05)
+	migrationSub := coordination.NewMigrationSubscriber(
+		redisClient,
+		channelManager.HandleMigrationEvent,
+		log,
+	)
+
+	go func() {
+		if err := migrationSub.Subscribe(ctx); err != nil {
+			log.Error("Migration subscriber error", zap.Error(err))
+		}
+	}()
+
+	log.Info("Started migration event subscriber")
+
+	// Start heartbeat publisher (EVENTSUB-06)
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-leaderCtx.Done():
+				return
+			case <-ticker.C:
+				if err := coordClient.PublishHeartbeat(ctx, podName); err != nil {
+					log.Warn("Failed to publish heartbeat", zap.Error(err))
+				}
+			}
+		}
+	}()
+
+	log.Info("Started heartbeat publisher", zap.Duration("interval", 10*time.Second))
+
+	// Start assignment refresh (re-query every 60 seconds to pick up dynamic changes)
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-leaderCtx.Done():
+				return
+			case <-ticker.C:
+				newAssignments, err := coordClient.QueryAssignments(ctx, podName)
+				if err != nil {
+					log.Warn("Failed to refresh assignments", zap.Error(err))
+					continue
+				}
+
+				// Update assignedSourceIDs map
+				newAssignedIDs := make(map[string]bool)
+				for _, a := range newAssignments {
+					newAssignedIDs[a.SourceID] = true
+				}
+
+				channelManager.UpdateAssignedSourceIDs(newAssignedIDs)
+
+				log.Info("Refreshed assignments from coordinator",
+					zap.Int("count", len(newAssignments)),
+					zap.String("pod_id", podName),
+				)
+			}
+		}
+	}()
+
+	log.Info("Started assignment refresh", zap.Duration("interval", 60*time.Second))
 
 	// Start HTTP server for health checks and webhook endpoint
 	startHTTPServer(log, getEnv("PORT", "8090"), state, webhookHandler, db, redisClient, tracingEnabled)

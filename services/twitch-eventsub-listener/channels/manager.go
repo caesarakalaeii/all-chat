@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -39,6 +40,11 @@ type Manager struct {
 	mu       sync.RWMutex
 	channels map[string]*Channel // broadcaster_id -> Channel
 
+	// Coordinator integration for sharding
+	assignedSourceIDs map[string]bool // source_id -> bool (assigned to this pod)
+	podName           string
+	assignmentMu      sync.RWMutex
+
 	stopChan chan struct{}
 	wg       sync.WaitGroup
 }
@@ -58,6 +64,33 @@ func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, c
 // SetSubscriptionCallback sets the callback for channel changes
 func (m *Manager) SetSubscriptionCallback(callback SubscriptionCallback) {
 	m.callback = callback
+}
+
+// SetAssignedSourceIDs sets the assigned source IDs for filtering (coordinator integration)
+func (m *Manager) SetAssignedSourceIDs(assignedSourceIDs map[string]bool, podName string) {
+	m.assignmentMu.Lock()
+	defer m.assignmentMu.Unlock()
+
+	m.assignedSourceIDs = assignedSourceIDs
+	m.podName = podName
+
+	m.logger.Info("Set assigned source IDs",
+		zap.Int("count", len(assignedSourceIDs)),
+		zap.String("pod_name", podName),
+	)
+}
+
+// UpdateAssignedSourceIDs updates the assigned source IDs (for dynamic assignment refresh)
+func (m *Manager) UpdateAssignedSourceIDs(assignedSourceIDs map[string]bool) {
+	m.assignmentMu.Lock()
+	defer m.assignmentMu.Unlock()
+
+	m.assignedSourceIDs = assignedSourceIDs
+
+	m.logger.Info("Updated assigned source IDs",
+		zap.Int("count", len(assignedSourceIDs)),
+		zap.String("pod_name", m.podName),
+	)
 }
 
 // Start begins periodic channel syncing
@@ -107,6 +140,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	// We need the broadcaster's OAuth token for EventSub subscriptions
 	query := `
 		SELECT DISTINCT
+			ocs.id,
 			ocs.channel_id,
 			ocs.overlay_id,
 			u.access_token,
@@ -130,12 +164,27 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	activeChannels := make(map[string]*Channel)
 
 	for rows.Next() {
-		var channelID, overlayID string
+		var sourceID, channelID, overlayID string
 		var accessToken *string
 		var tokenExpiresAt *time.Time
-		
-		if err := rows.Scan(&channelID, &overlayID, &accessToken, &tokenExpiresAt); err != nil {
+
+		if err := rows.Scan(&sourceID, &channelID, &overlayID, &accessToken, &tokenExpiresAt); err != nil {
 			m.logger.Warn("Failed to scan row", zap.Error(err))
+			continue
+		}
+
+		// Check if this source is assigned to this pod (coordinator integration)
+		m.assignmentMu.RLock()
+		isAssigned := m.assignedSourceIDs == nil || m.assignedSourceIDs[sourceID]
+		m.assignmentMu.RUnlock()
+
+		if !isAssigned {
+			// Source not assigned to this pod, skip
+			m.logger.Debug("Skipping source not assigned to this pod",
+				zap.String("source_id", sourceID),
+				zap.String("channel_id", channelID),
+				zap.String("pod_name", m.podName),
+			)
 			continue
 		}
 
@@ -271,4 +320,43 @@ func (m *Manager) decryptToken(encryptedToken string) (string, error) {
 		return encryptedToken, nil
 	}
 	return m.cipher.DecryptString(encryptedToken)
+}
+
+// HandleMigrationEvent handles migration events from Redis Pub/Sub (EVENTSUB-04, EVENTSUB-05)
+// Note: For EventSub, migrations are simpler than other listeners:
+//   - Only the leader creates/deletes subscriptions
+//   - Webhook events are received on all pods (stateless HTTP endpoint)
+//   - Migration is about subscription ownership, not active connections
+func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
+	// EventSub migrations don't require immediate action because:
+	// 1. Webhooks are stateless - all pods can receive events
+	// 2. Only leader creates/deletes subscriptions
+	// 3. Subscription ownership transfers via leader election, not migration events
+
+	// However, we still log the event for observability and metrics
+	m.logger.Info("Received migration event",
+		zap.String("migration_id", event.MigrationID),
+		zap.String("channel_id", event.ChannelID),
+		zap.String("platform", event.Platform),
+		zap.String("from_pod", event.FromPod),
+		zap.String("to_pod", event.ToPod),
+		zap.String("reason", event.Reason),
+	)
+
+	// If this pod is the target (to_pod), ensure we have the subscription in our next sync
+	m.assignmentMu.RLock()
+	podName := m.podName
+	m.assignmentMu.RUnlock()
+
+	if event.ToPod == podName {
+		m.logger.Info("Migration target is this pod, subscription will be created on next sync",
+			zap.String("migration_id", event.MigrationID),
+			zap.String("channel_id", event.ChannelID),
+		)
+	} else if event.FromPod == podName {
+		m.logger.Info("Migration source is this pod, subscription will be removed on next sync",
+			zap.String("migration_id", event.MigrationID),
+			zap.String("channel_id", event.ChannelID),
+		)
+	}
 }
