@@ -111,6 +111,15 @@ func main() {
 	migrationPublisher := coordination.NewMigrationPublisher(redisClient, log)
 	log.Info("Initialized migration publisher")
 
+	// Initialize load monitor (Phase 7)
+	prometheusURL := getEnvOrDefault("PROMETHEUS_URL", "http://prometheus:9090")
+	loadMonitor := coordination.NewLoadMonitor(redisClient, prometheusURL, shardMetrics, log)
+	log.Info("Initialized load monitor", zap.String("prometheus_url", prometheusURL))
+
+	// Initialize rebalancer (Phase 7)
+	rebalancer := coordination.NewRebalancer(assignmentRegistry, assigner, migrationPublisher, prometheusURL, log)
+	log.Info("Initialized rebalancer")
+
 	coordinator := coordination.NewCoordinator(
 		assignmentRegistry,
 		assigner,
@@ -118,6 +127,8 @@ func main() {
 		redisClient,
 		heartbeatMonitor,
 		migrationPublisher,
+		loadMonitor,
+		rebalancer,
 		shardMetrics,
 		log,
 	)

@@ -28,6 +28,8 @@ type Coordinator struct {
 	redisClient        *redis.Client
 	heartbeatMonitor   *HeartbeatMonitor
 	migrationPublisher *MigrationPublisher
+	loadMonitor        *LoadMonitor
+	rebalancer         *Rebalancer
 	metrics            *metrics.ShardMetrics
 	logger             *zap.Logger
 
@@ -43,6 +45,8 @@ func NewCoordinator(
 	redisClient *redis.Client,
 	heartbeatMonitor *HeartbeatMonitor,
 	migrationPublisher *MigrationPublisher,
+	loadMonitor *LoadMonitor,
+	rebalancer *Rebalancer,
 	shardMetrics *metrics.ShardMetrics,
 	logger *zap.Logger,
 ) *Coordinator {
@@ -53,6 +57,8 @@ func NewCoordinator(
 		redisClient:        redisClient,
 		heartbeatMonitor:   heartbeatMonitor,
 		migrationPublisher: migrationPublisher,
+		loadMonitor:        loadMonitor,
+		rebalancer:         rebalancer,
 		metrics:            shardMetrics,
 		logger:             logger,
 		reconcileInterval:  30 * time.Second, // Default: 30s per user constraint
@@ -231,6 +237,36 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 		}
 	}
 
+	// Step 2.7: Monitor pod loads and check for imbalance (Phase 7 - Dynamic Rebalancing)
+	if c.loadMonitor != nil && c.rebalancer != nil {
+		loads, err := c.loadMonitor.MonitorPodLoads(ctx, podIDs)
+		if err != nil {
+			c.logger.Error("Failed to monitor pod loads", zap.Error(err))
+			// Continue with normal reconciliation
+		} else {
+			report := c.loadMonitor.CalculateImbalance(loads)
+
+			if report.ShouldRebalance {
+				c.logger.Info("Load imbalance detected, planning rebalancing",
+					zap.Float64("imbalance_ratio", report.ImbalanceRatio),
+					zap.Float64("max_message_rate", report.MaxMessageRate),
+					zap.String("reason", report.Reason),
+				)
+
+				// Plan rebalancing migrations
+				plans, err := c.rebalancer.PlanRebalancing(ctx, loads, report.AvgLoad)
+				if err != nil {
+					c.logger.Error("Failed to plan rebalancing", zap.Error(err))
+				} else {
+					// Execute migration plans (triggers are sufficient, no waiting yet)
+					c.executeRebalancingPlans(ctx, plans, sourceMap)
+				}
+			} else {
+				c.logger.Debug("No rebalancing needed", zap.String("reason", report.Reason))
+			}
+		}
+	}
+
 	c.logger.Info("Computing assignments",
 		zap.Int("source_count", len(sources)),
 		zap.Int("pod_count", len(podIDs)),
@@ -344,6 +380,85 @@ func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []s
 	)
 
 	return healthyPods, nil
+}
+
+// executeRebalancingPlans executes migration plans by publishing events and updating assignments
+// Uses Phase 6 migration infrastructure (PublishMigrationEvent)
+func (c *Coordinator) executeRebalancingPlans(ctx context.Context, plans []MigrationPlan, sourceMap map[string]*models.ActiveSource) {
+	if len(plans) == 0 {
+		c.logger.Debug("No rebalancing plans to execute")
+		return
+	}
+
+	c.logger.Info("Executing rebalancing plans", zap.Int("plan_count", len(plans)))
+
+	for _, plan := range plans {
+		c.logger.Info("Executing rebalancing plan",
+			zap.String("from_pod", plan.SourcePod),
+			zap.String("to_pod", plan.TargetPod),
+			zap.Int("channel_count", len(plan.Channels)),
+		)
+
+		// For each channel in the plan
+		for _, channelID := range plan.Channels {
+			// Get platform from sourceMap (like triggerMigrationForFailedPods does)
+			platform := "unknown"
+			if source, ok := sourceMap[channelID]; ok {
+				platform = source.Platform
+			}
+
+			// Build migration event
+			event := &MigrationEvent{
+				MigrationID: fmt.Sprintf("migration-%d", time.Now().UnixNano()),
+				ChannelID:   channelID,
+				Platform:    platform,
+				FromPod:     plan.SourcePod,
+				ToPod:       plan.TargetPod,
+				Timestamp:   time.Now(),
+				Reason:      "rebalancing",
+			}
+
+			// Publish migration event (Phase 6 infrastructure)
+			if err := c.migrationPublisher.PublishMigrationEvent(ctx, event); err != nil {
+				c.logger.Error("Failed to publish rebalancing migration event",
+					zap.String("migration_id", event.MigrationID),
+					zap.String("channel_id", event.ChannelID),
+					zap.Error(err),
+				)
+				// Continue with remaining channels (partial rebalancing acceptable)
+				continue
+			}
+
+			// Update assignment registry
+			_, err := c.registry.StoreAssignment(ctx, channelID, plan.TargetPod)
+			if err != nil {
+				c.logger.Error("Failed to update assignment after rebalancing",
+					zap.String("channel_id", channelID),
+					zap.String("target_pod", plan.TargetPod),
+					zap.Error(err),
+				)
+				// Continue with remaining channels
+				continue
+			}
+
+			c.logger.Debug("Rebalancing migration event published",
+				zap.String("migration_id", event.MigrationID),
+				zap.String("channel_id", event.ChannelID),
+				zap.String("from_pod", plan.SourcePod),
+				zap.String("to_pod", plan.TargetPod),
+			)
+		}
+
+		c.logger.Info("Executed rebalancing plan",
+			zap.String("from_pod", plan.SourcePod),
+			zap.String("to_pod", plan.TargetPod),
+			zap.Int("channels_migrated", len(plan.Channels)),
+		)
+	}
+
+	c.logger.Info("Rebalancing plans execution complete",
+		zap.Int("plans_executed", len(plans)),
+	)
 }
 
 // Stop gracefully stops the coordinator
