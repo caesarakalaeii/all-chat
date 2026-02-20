@@ -173,20 +173,12 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			continue
 		}
 
-		// Check if this source is assigned to this pod (coordinator integration)
-		m.assignmentMu.RLock()
-		isAssigned := m.assignedSourceIDs == nil || m.assignedSourceIDs[sourceID]
-		m.assignmentMu.RUnlock()
-
-		if !isAssigned {
-			// Source not assigned to this pod, skip
-			m.logger.Debug("Skipping source not assigned to this pod",
-				zap.String("source_id", sourceID),
-				zap.String("channel_id", channelID),
-				zap.String("pod_name", m.podName),
-			)
-			continue
-		}
+		// Note: EventSub uses leader election - only the leader creates subscriptions for ALL Twitch sources
+		// We don't filter by coordinator assignments because:
+		// 1. Webhooks are stateless - all pods can receive events
+		// 2. Only the leader manages subscriptions (checked in callback)
+		// 3. This ensures consistent subscription coverage across all active channels
+		// The coordinator integration is used for pod health monitoring and migration notifications only
 
 		// channelID from database is the Twitch username (login)
 		// We need to resolve it to broadcaster_user_id via Twitch API
