@@ -160,3 +160,28 @@ spec:
               2. Review popular emotes not being cached
               3. Consider increasing cache size
               4. Monitor 7TV/BTTV/FFZ API response times
+
+        # Shard Rebalancing Thrashing - Too many rebalances
+        - alert: ShardRebalancingThrashing
+          expr: increase(shard_rebalancing_total[30m]) > 5
+          for: 5m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "Rebalancing thrashing detected ({{ $value }} rebalances in 30min)"
+            description: |
+              More than 5 rebalancing operations occurred in the last 30 minutes.
+              This indicates thrashing - repeated rebalancing without achieving stability.
+
+              Impact: Frequent migrations cause connection churn and potential message loss.
+
+              Remediation Steps:
+              1. Check rebalancing logs: kubectl logs -n allchat -l app=source-manager | grep "rebalancing"
+              2. Review recent migration failures: Check Grafana → Sharding Overview → Migration Events timeline
+              3. Verify load calculation accuracy: Check Prometheus for pod message rates
+              4. Increase cooldown duration: Set REBALANCING_COOLDOWN=10m (currently 5m)
+              5. Check for oscillating load: Review time-series graphs for stable vs fluctuating loads
+
+              Consider temporarily disabling auto-rebalancing if thrashing persists:
+              kubectl set env -n allchat deployment/source-manager REBALANCING_ENABLED=false
