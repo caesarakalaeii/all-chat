@@ -216,6 +216,39 @@ func main() {
 		}
 	}()
 
+	// Start assignment refresh (re-query every 60 seconds to pick up dynamic changes)
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				newAssignments, err := coordClient.QueryAssignments(ctx, podName)
+				if err != nil {
+					log.Warn("Failed to refresh assignments", zap.Error(err))
+					continue
+				}
+
+				// Update assignedSourceIDs map
+				newAssignedIDs := make(map[string]bool)
+				for _, a := range newAssignments {
+					newAssignedIDs[a.SourceID] = true
+				}
+
+				channelMgr.UpdateAssignedSourceIDs(newAssignedIDs)
+
+				log.Info("Refreshed assignments from coordinator",
+					zap.Int("count", len(newAssignments)),
+					zap.String("pod_id", podName),
+				)
+			}
+		}
+	}()
+
+	log.Info("Started assignment refresh", zap.Duration("interval", 60*time.Second))
+
 	// Handle reconnections
 	go handleReconnections(wsClient, channelMgr, log)
 
