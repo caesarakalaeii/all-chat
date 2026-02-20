@@ -41,6 +41,14 @@ type ShardMetrics struct {
 	MigrationTotal    *prometheus.CounterVec // Total migrations by status and reason
 	MigrationDuration prometheus.Histogram   // Migration duration in seconds
 	PodChannelCount   *prometheus.GaugeVec   // Number of channels assigned to each pod
+
+	// Coverage verification
+	CoverageGapsDetected prometheus.Counter
+	UnassignedSources    prometheus.Gauge
+
+	// Heartbeat cleanup
+	StaleHeartbeatsRemoved prometheus.Counter
+	GhostPodsDetected      prometheus.Counter
 }
 
 // NewShardMetrics creates and registers shard metrics
@@ -138,5 +146,21 @@ func NewShardMetrics() *ShardMetrics {
 		},
 			[]string{"pod_id"},
 		),
+		CoverageGapsDetected: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "shard_coverage_gaps_detected_total",
+			Help: "Total coverage verification failures (sources without assignments)",
+		}),
+		UnassignedSources: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "shard_unassigned_sources",
+			Help: "Current number of sources without coordinator assignments",
+		}),
+		StaleHeartbeatsRemoved: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "shard_stale_heartbeats_removed_total",
+			Help: "Total stale heartbeat entries removed from Redis",
+		}),
+		GhostPodsDetected: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "shard_ghost_pods_detected_total",
+			Help: "Pods with heartbeats but not found in Kubernetes API",
+		}),
 	}
 }

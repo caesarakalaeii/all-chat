@@ -474,6 +474,31 @@ func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []s
 		zap.Int("excluded_failed", len(failedPods)),
 	)
 
+	// Detect ghost pods: pods with heartbeats but not in K8s API
+	allHeartbeatPods, err := c.heartbeatMonitor.GetAllHeartbeatPods(ctx)
+	if err != nil {
+		c.logger.Warn("Failed to get heartbeat pods for ghost detection", zap.Error(err))
+	} else {
+		k8sPodSet := make(map[string]bool)
+		for _, pod := range healthyPods {
+			k8sPodSet[pod.Name] = true
+		}
+
+		ghostCount := 0
+		for _, podID := range allHeartbeatPods {
+			if !k8sPodSet[podID] {
+				ghostCount++
+			}
+		}
+
+		if ghostCount > 0 {
+			c.metrics.GhostPodsDetected.Add(float64(ghostCount))
+			c.logger.Warn("Ghost pods detected in heartbeat registry",
+				zap.Int("ghost_count", ghostCount),
+			)
+		}
+	}
+
 	return healthyPods, nil
 }
 
@@ -825,6 +850,14 @@ func (c *Coordinator) handleScaleDown(ctx context.Context, previousCount, curren
 	// Migrate channels from each terminating pod
 	channelsMigrated := 0
 	for _, pod := range terminatingPods {
+		// Immediately remove heartbeat entry for terminating pod
+		if err := c.heartbeatMonitor.RemovePodHeartbeat(ctx, pod.Name); err != nil {
+			c.logger.Warn("Failed to remove heartbeat for terminating pod",
+				zap.String("pod_id", pod.Name),
+				zap.Error(err),
+			)
+		}
+
 		// Get channels assigned to terminating pod
 		assignments, err := c.registry.GetAssignmentsForPod(ctx, pod.Name)
 		if err != nil {

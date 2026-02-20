@@ -145,6 +145,13 @@ func main() {
 		assignedSourceIDs[a.SourceID] = true
 	}
 
+	// Feature flag for coordinator filtering (allows instant rollback)
+	enableFiltering := getEnvOrDefault("ENABLE_COORDINATOR_FILTERING", "false") == "true"
+	if !enableFiltering {
+		log.Warn("Coordinator filtering DISABLED via ENABLE_COORDINATOR_FILTERING environment variable")
+		assignedSourceIDs = nil // Disable filtering - all channels will be processed
+	}
+
 	// Initialize components
 	parser := irc.NewParser()
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
