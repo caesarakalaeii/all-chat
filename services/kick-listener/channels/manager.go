@@ -60,9 +60,10 @@ type Manager struct {
 	podID       string        // Pod ID for migration confirmations
 
 	// Coordinator integration
-	assignedSourceIDs map[string]bool           // From coordinator
-	migrationMu       sync.RWMutex              // Protects migration state
-	firstMessageChan  map[int]chan struct{}     // Per-chatroom first message signal (key: chatroom ID)
+	assignedSourceIDs       map[string]bool           // From coordinator
+	filteredAssignmentCount int                       // Number of assigned sources that have database channels
+	migrationMu             sync.RWMutex              // Protects migration state
+	firstMessageChan        map[int]chan struct{}     // Per-chatroom first message signal (key: chatroom ID)
 
 	// Track active subscriptions
 	subscriptions map[string]*trackedChannel // key: channel_slug
@@ -309,6 +310,7 @@ func (m *Manager) syncChannels() error {
 	)
 
 	channels = assignedChannels
+	filteredCount := len(assignedChannels) // Capture filtered count before lock
 
 	plans := m.buildChannelPlans(channels)
 	m.ensureChatroomIDs(plans)
@@ -321,6 +323,9 @@ func (m *Manager) syncChannels() error {
 
 	m.subsMu.Lock()
 	defer m.subsMu.Unlock()
+
+	// Store filtered count for readiness probe
+	m.filteredAssignmentCount = filteredCount
 
 	// Unsubscribe from channels no longer active
 	for slug, ch := range m.subscriptions {
@@ -841,6 +846,14 @@ func (m *Manager) SignalFirstMessage(chatroomID int) {
 // GetAssignmentCount returns the number of assignments from coordinator (KICK-05)
 func (m *Manager) GetAssignmentCount() int {
 	return len(m.assignedSourceIDs)
+}
+
+// GetFilteredAssignmentCount returns the number of assigned sources that have database channels
+// Used by readiness probe to check if all filtered assigned sources are subscribed
+func (m *Manager) GetFilteredAssignmentCount() int {
+	m.subsMu.RLock()
+	defer m.subsMu.RUnlock()
+	return m.filteredAssignmentCount
 }
 
 // UpdateAssignedSourceIDs updates the assigned source IDs from coordinator
