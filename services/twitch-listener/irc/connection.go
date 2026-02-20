@@ -14,17 +14,18 @@ import (
 
 // ConnectionManager manages the Twitch IRC connection
 type ConnectionManager struct {
-	client      *twitch.Client
-	parser      *Parser
-	publisher   *publisher.StreamPublisher
-	registry    registry.MessageIDRegistry // Registry for message ID tracking
-	logger      *zap.Logger
-	metrics     *metrics.ListenerMetrics
-	connected   bool
-	connectedAt time.Time
-	mu          sync.RWMutex
-	stopChan    chan struct{}
-	wg          sync.WaitGroup
+	client           *twitch.Client
+	parser           *Parser
+	publisher        *publisher.StreamPublisher
+	registry         registry.MessageIDRegistry // Registry for message ID tracking
+	logger           *zap.Logger
+	metrics          *metrics.ListenerMetrics
+	connected        bool
+	connectedAt      time.Time
+	mu               sync.RWMutex
+	stopChan         chan struct{}
+	wg               sync.WaitGroup
+	firstMessageChan map[string]chan struct{} // Per-channel first message signal for migration
 }
 
 // Config holds the configuration for IRC connection
@@ -45,13 +46,14 @@ func NewConnectionManager(
 	client := twitch.NewClient(config.Username, config.OAuth)
 
 	cm := &ConnectionManager{
-		client:    client,
-		parser:    parser,
-		publisher: pub,
-		registry:  reg,
-		logger:    logger,
-		metrics:   m,
-		stopChan:  make(chan struct{}),
+		client:           client,
+		parser:           parser,
+		publisher:        pub,
+		registry:         reg,
+		logger:           logger,
+		metrics:          m,
+		stopChan:         make(chan struct{}),
+		firstMessageChan: make(map[string]chan struct{}),
 	}
 
 	// Set up message handler
@@ -137,6 +139,13 @@ func (cm *ConnectionManager) IsConnected() bool {
 	return cm.connected
 }
 
+// SetFirstMessageChan sets the first message channel map for migration coordination
+func (cm *ConnectionManager) SetFirstMessageChan(firstMessageChan map[string]chan struct{}) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.firstMessageChan = firstMessageChan
+}
+
 // handleConnect is called when connection is established
 func (cm *ConnectionManager) handleConnect() {
 	cm.mu.Lock()
@@ -214,6 +223,17 @@ func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage)
 		zap.String("username", rawMsg.Username),
 		zap.String("text", rawMsg.Text),
 	)
+
+	// Signal first message for migration confirmation
+	// Use non-blocking send to avoid deadlock if no migration is waiting
+	if cm.firstMessageChan != nil {
+		select {
+		case cm.firstMessageChan[message.Channel] <- struct{}{}:
+			cm.logger.Debug("Signaled first message for migration", zap.String("channel", message.Channel))
+		default:
+			// Channel not waiting or already signaled - this is normal
+		}
+	}
 }
 
 // handleUserNotice processes incoming USERNOTICE events from Twitch (subs, raids, bits, etc.)
