@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/source-manager/models"
@@ -238,6 +239,13 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	// Update assigner with healthy pod list BEFORE triggering migrations
 	c.assigner = NewAssigner(podIDs)
 
+	// Step 1.7: Group pods by platform for platform-aware assignment
+	podsByPlatform := groupPodsByPlatform(podIDs)
+	c.logger.Debug("Grouped pods by platform",
+		zap.Int("total_pods", len(podIDs)),
+		zap.Int("platforms", len(podsByPlatform)),
+	)
+
 	// Step 2: Query active sources from source-manager registry (before migrations)
 	sources, err := c.sourceRepo.GetAllActiveSources(ctx)
 	if err != nil {
@@ -337,11 +345,26 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 		attribute.Int("failed_pods", len(failedPods)),
 	)
 
-	// Step 5: Compute assignment for each source
+	// Step 5: Compute assignment for each source with platform filtering
 	assignmentCount := 0
 	errorCount := 0
+	skippedCount := 0
 
 	for _, source := range sources {
+		// Get pods that can handle this source's platform
+		platformPods, ok := podsByPlatform[source.Platform]
+		if !ok || len(platformPods) == 0 {
+			c.logger.Warn("No pods available for platform",
+				zap.String("platform", source.Platform),
+				zap.String("source_id", source.ID),
+			)
+			skippedCount++
+			continue
+		}
+
+		// Create platform-specific assigner
+		platformAssigner := NewAssigner(platformPods)
+
 		// Compute assignment using bounded-load consistent hashing
 		ctx, hashSpan := tracer.Start(ctx, "hash-channel",
 			trace.WithAttributes(
@@ -349,13 +372,14 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 				attribute.String("platform", source.Platform),
 			),
 		)
-		podID, err := c.assigner.AssignChannel(source.ID)
+		podID, err := platformAssigner.AssignChannel(source.ID)
 		if err != nil {
 			hashSpan.RecordError(err)
 			hashSpan.SetStatus(codes.Error, "failed to assign channel")
 			hashSpan.End()
 			c.logger.Error("Failed to assign channel",
 				zap.String("source_id", source.ID),
+				zap.String("platform", source.Platform),
 				zap.Error(err),
 			)
 			c.metrics.ReconciliationErrors.Inc()
@@ -406,6 +430,7 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	c.logger.Info("Assignment computation complete",
 		zap.Int("assignments_stored", assignmentCount),
 		zap.Int("errors", errorCount),
+		zap.Int("skipped_no_pods", skippedCount),
 		zap.Int("healthy_pods", len(podIDs)),
 		zap.Int("failed_pods", len(failedPods)),
 		zap.Duration("duration", duration),
@@ -424,6 +449,58 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	return nil
 }
 
+// groupPodsByPlatform groups pod IDs by the platform they handle
+// Platform is extracted from pod name (e.g., "twitch-listener-xxx" -> "twitch")
+// Maps platform strings to match database platform values:
+// - "twitch-listener" -> "twitch" (IRC)
+// - "twitch-eventsub-listener" -> "twitch-eventsub"
+// - "kick-listener" -> "kick"
+// - "tiktok-listener" -> "tiktok"
+// - "youtube-listener" -> "youtube"
+func groupPodsByPlatform(podIDs []string) map[string][]string {
+	grouped := make(map[string][]string)
+
+	for _, podID := range podIDs {
+		platform := extractPlatformFromPodName(podID)
+		if platform != "" {
+			grouped[platform] = append(grouped[platform], podID)
+		}
+	}
+
+	return grouped
+}
+
+// extractPlatformFromPodName extracts platform from Kubernetes pod name
+// Examples:
+//   - "twitch-listener-abc123-xyz" -> "twitch"
+//   - "twitch-eventsub-listener-def456-abc" -> "twitch-eventsub"
+//   - "kick-listener-ghi789-def" -> "kick"
+//   - "youtube-listener-jkl012-ghi" -> "youtube"
+func extractPlatformFromPodName(podName string) string {
+	// Extract app label from pod name (everything before the replicaset hash)
+	// Pod name format: {app}-{replicaset-hash}-{pod-hash}
+	// We need to handle multi-word app names like "twitch-eventsub-listener"
+
+	if strings.HasPrefix(podName, "twitch-eventsub-listener-") {
+		return "twitch-eventsub"
+	}
+	if strings.HasPrefix(podName, "twitch-listener-") {
+		return "twitch"
+	}
+	if strings.HasPrefix(podName, "kick-listener-") {
+		return "kick"
+	}
+	if strings.HasPrefix(podName, "tiktok-listener-") {
+		return "tiktok"
+	}
+	if strings.HasPrefix(podName, "youtube-listener-") {
+		return "youtube"
+	}
+
+	// Unknown pod name format
+	return ""
+}
+
 // getHealthyListenerPods queries Kubernetes API for active listener pods
 // and excludes pods that have failed heartbeat checks
 func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []string) ([]corev1.Pod, error) {
@@ -432,10 +509,10 @@ func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []s
 		podNamespace = "allchat"
 	}
 
-	// List pods with listener labels (twitch-listener, twitch-eventsub-listener, kick-listener, tiktok-listener)
+	// List pods with listener labels (twitch-listener, twitch-eventsub-listener, kick-listener, tiktok-listener, youtube-listener)
 	// Filter by phase=Running and ready=true
 	listOptions := metav1.ListOptions{
-		LabelSelector: "app in (twitch-listener,twitch-eventsub-listener,kick-listener,tiktok-listener)",
+		LabelSelector: "app in (twitch-listener,twitch-eventsub-listener,kick-listener,tiktok-listener,youtube-listener)",
 	}
 
 	podList, err := c.k8sClient.CoreV1().Pods(podNamespace).List(ctx, listOptions)
