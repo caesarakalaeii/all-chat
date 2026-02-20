@@ -31,6 +31,11 @@ type ShardMetrics struct {
 	ReconciliationCycles prometheus.Counter
 	ReconciliationErrors prometheus.Counter
 	OrphanedAssignments  prometheus.Gauge
+
+	// Rebalancing operations (Phase 7)
+	RebalancingTotal             prometheus.Counter // Total rebalancing operations triggered
+	RebalancingCooldownOverrides prometheus.Counter // Escalation overrides
+	RebalancingThrashing         prometheus.Counter // Thrashing events detected
 }
 
 // NewShardMetrics creates and registers shard metrics
@@ -98,6 +103,18 @@ func NewShardMetrics() *ShardMetrics {
 		OrphanedAssignments: promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "shard_orphaned_assignments",
 			Help: "Number of orphaned assignments detected",
+		}),
+		RebalancingTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "shard_rebalancing_total",
+			Help: "Total number of rebalancing operations triggered",
+		}),
+		RebalancingCooldownOverrides: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "shard_rebalancing_cooldown_overrides_total",
+			Help: "Total number of escalation overrides that broke cooldown",
+		}),
+		RebalancingThrashing: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "shard_rebalancing_thrashing_total",
+			Help: "Total number of thrashing events detected (>3 rebalances in 15min)",
 		}),
 	}
 }
