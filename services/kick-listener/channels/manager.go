@@ -17,6 +17,7 @@ import (
 	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -48,13 +49,15 @@ type WebSocketClient interface {
 
 // Manager manages Kick channel subscriptions
 type Manager struct {
-	repo       *Repository
-	wsClient   WebSocketClient
-	publisher  *publisher.StreamPublisher
-	logger     *zap.Logger
-	httpClient *http.Client
-	dbConn     DBConnInterface
-	leader     *sourcemanager.LeadershipCoordinator
+	repo        *Repository
+	wsClient    WebSocketClient
+	publisher   *publisher.StreamPublisher
+	logger      *zap.Logger
+	httpClient  *http.Client
+	dbConn      DBConnInterface
+	leader      *sourcemanager.LeadershipCoordinator
+	redisClient *redis.Client // Redis client for migration confirmations
+	podID       string        // Pod ID for migration confirmations
 
 	// Coordinator integration
 	assignedSourceIDs map[string]bool           // From coordinator
@@ -80,6 +83,8 @@ func NewManager(
 	dbConn DBConnInterface,
 	leader *sourcemanager.LeadershipCoordinator,
 	assignedSourceIDs map[string]bool,
+	redisClient *redis.Client,
+	podID string,
 	logger *zap.Logger,
 ) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -93,6 +98,8 @@ func NewManager(
 		dbConn:            dbConn,
 		leader:            leader,
 		assignedSourceIDs: assignedSourceIDs,
+		redisClient:       redisClient,
+		podID:             podID,
 		firstMessageChan:  make(map[int]chan struct{}),
 		subscriptions:     make(map[string]*trackedChannel),
 		chatroomIndex:     make(map[int]*trackedChannel),
@@ -787,28 +794,34 @@ func (m *Manager) getChannelSlugForSourceID(sourceID string) string {
 
 // publishMigrationConfirmation publishes a migration confirmation to Redis
 func (m *Manager) publishMigrationConfirmation(migrationID, status, errorMsg string) {
-	confirmation := coordination.MigrationConfirmation{
-		MigrationID: migrationID,
-		Status:      status,
-		PodID:       os.Getenv("HOSTNAME"),
-		Timestamp:   time.Now().UTC(),
-		Error:       errorMsg,
-	}
-
 	// Publish to Redis Streams for coordinator to consume
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Note: This would use publisher to send to a migration confirmation stream
-	// For now, log it (actual implementation would need Redis Streams publishing)
-	m.logger.Info("Publishing migration confirmation",
-		zap.String("migration_id", migrationID),
-		zap.String("status", status),
-		zap.String("error", errorMsg),
-	)
+	event := map[string]interface{}{
+		"migration_id":    migrationID,
+		"status":          status, // "connected" or "failed"
+		"pod_id":          m.podID,
+		"timestamp":       time.Now().Unix(),
+		"sequence_number": 0, // Not currently used for Kick
+		"error":           errorMsg,
+	}
 
-	_ = ctx // Suppress unused warning
-	_ = confirmation
+	_, err := m.redisClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: "migration:log",
+		Values: event,
+	}).Result()
+
+	if err != nil {
+		m.logger.Error("Failed to publish migration confirmation",
+			zap.String("migration_id", migrationID),
+			zap.Error(err))
+		return
+	}
+
+	m.logger.Info("Published migration confirmation",
+		zap.String("migration_id", migrationID),
+		zap.String("status", status))
 }
 
 // SignalFirstMessage should be called when a message is received for a chatroom
