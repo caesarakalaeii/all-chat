@@ -120,6 +120,10 @@ func main() {
 	rebalancer := coordination.NewRebalancer(assignmentRegistry, assigner, migrationPublisher, prometheusURL, log)
 	log.Info("Initialized rebalancer")
 
+	// Initialize throttler (Phase 7)
+	throttler := coordination.NewThrottler(redisClient, 5*time.Minute, shardMetrics, log)
+	log.Info("Initialized throttler", zap.Duration("cooldown_duration", 5*time.Minute))
+
 	coordinator := coordination.NewCoordinator(
 		assignmentRegistry,
 		assigner,
@@ -129,6 +133,7 @@ func main() {
 		migrationPublisher,
 		loadMonitor,
 		rebalancer,
+		throttler,
 		shardMetrics,
 		log,
 	)

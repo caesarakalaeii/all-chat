@@ -54,7 +54,7 @@ func TestPlanRebalancing_Proportional(t *testing.T) {
 	avgLoad := 75.0
 
 	// Plan rebalancing
-	plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad)
+	plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad, 0)
 
 	// Verify
 	assert.NoError(t, err)
@@ -144,7 +144,7 @@ func TestPlanRebalancing_20PercentLimit(t *testing.T) {
 			}
 			avgLoad := 75.0
 
-			plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad)
+			plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad, 0)
 
 			assert.NoError(t, err)
 			assert.Len(t, plans, 1)
@@ -198,7 +198,7 @@ func TestPlanRebalancing_RoundRobin(t *testing.T) {
 	}
 	avgLoad := 74.0
 
-	plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad)
+	plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad, 0)
 
 	assert.NoError(t, err)
 	assert.Len(t, plans, 3, "Should have 3 plans for 3 overloaded pods")
@@ -235,7 +235,7 @@ func TestPlanRebalancing_NoUnderutilized(t *testing.T) {
 	}
 	avgLoad := 80.0 // All pods above this
 
-	plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad)
+	plans, err := rebalancer.PlanRebalancing(context.Background(), loads, avgLoad, 0)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no underutilized pods")
