@@ -100,8 +100,8 @@ Plans:
 - [x] 06-02-PLAN.md — Twitch listener integration (startup query, heartbeat, multiple IRC connections, migration, readiness)
 - [x] 06-03-PLAN.md — Kick listener integration (startup query, heartbeat, Pusher subscription management, migration, readiness)
 - [x] 06-04-PLAN.md — TikTok listener integration (TypeScript coordinator client, assignment filtering, migration, HPA 1-3 replicas)
-- [ ] 06-05-PLAN.md — Migration observability + coordinator publisher (Redis Pub/Sub + Streams, migration triggers, confirmation wait)
-- [ ] 06-06-PLAN.md — End-to-end migration testing (HPA scale tests, zero-loss validation, checkpoint for human verification)
+- [x] 06-05-PLAN.md — Migration observability + coordinator publisher (Redis Pub/Sub + Streams, migration triggers, confirmation wait)
+- [x] 06-06-PLAN.md — End-to-end migration testing (HPA scale tests, zero-loss validation, checkpoint for human verification)
 
 ### Phase 7: Dynamic Rebalancing & HPA Integration
 **Goal**: Automatic load-aware rebalancing with safeguards against thundering herd and quota exhaustion
@@ -144,9 +144,9 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 2. YouTube Integration | v1.0 | 2/2 | Complete | 2026-02-18 |
 | 3. Kick Integration + Edge Cases | v1.0 | 4/4 | Complete | 2026-02-18 |
 | 5. Sharding Infrastructure & Coordinator | v1.1 | 5/5 | Complete | 2026-02-19 |
-| 6. Connection Management & Migration | v1.1 | 0/6 | Planning complete | - |
+| 6. Connection Management & Migration | v1.1 | 6/6 | Complete | 2026-02-20 |
 | 7. Dynamic Rebalancing & HPA | v1.1 | 0/? | Not started | - |
 | 8. Observability & Production Readiness | v1.1 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-02-19 after Phase 6 planning*
+*Last updated: 2026-02-20 after Phase 6 completion*

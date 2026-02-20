@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-19)
 
 **Core value:** Listener instances must efficiently distribute channel workload based on actual message volume, enabling cost-effective scaling and reliable service for both small and high-traffic streams.
-**Current focus:** Phase 5 - Sharding Infrastructure & Coordinator Service
+**Current focus:** Phase 6 Complete - Ready for Phase 7 (Dynamic Rebalancing & HPA)
 
 ## Current Position
 
 Milestone: v1.1 Listener Load Balancing
 Phase: 6 of 8 (Connection Management & Migration Protocol)
-Plan: 5 of 6 in current phase
-Status: In Progress
-Last activity: 2026-02-19 — Completed 06-05-PLAN.md (Coordinator Migration Publisher)
+Plan: 6 of 6 in current phase - PHASE COMPLETE
+Status: Complete
+Last activity: 2026-02-20 — Completed 06-06-PLAN.md (End-to-end Integration Testing)
 
-Progress: [██████░░░░] 59% (v1.0 partial: 11/11 plans complete, v1.1: 18/31 plans complete)
+Progress: [██████░░░░] 61% (v1.0 partial: 11/11 plans complete, v1.1: 19/31 plans complete)
 
 ## Performance Metrics
 
 **Velocity (all phases):**
-- Total plans completed: 18
-- Average duration: 5.1 min
-- Total execution time: 1.51 hours
+- Total plans completed: 19
+- Average duration: 14.3 min
+- Total execution time: 4.51 hours
 
 **By Phase:**
 
@@ -32,11 +32,11 @@ Progress: [██████░░░░] 59% (v1.0 partial: 11/11 plans comple
 | 2. YouTube Integration | 2 | 9 min | 4.5 min |
 | 3. Kick Integration | 4 | 15 min | 3.75 min |
 | 5. Sharding Infrastructure | 5 | 22 min | 4.4 min |
-| 6. Connection Management | 5 | 27 min | 5.4 min |
+| 6. Connection Management | 6 | 207 min | 34.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 5.4 min average
-- Trend: Stable
+- Last 5 plans: 40.2 min average (includes 180 min deployment testing)
+- Trend: Phase 6 P06 deployment testing significantly higher than typical plan duration
 
 *Updated after each plan completion*
 
@@ -52,6 +52,7 @@ Progress: [██████░░░░] 59% (v1.0 partial: 11/11 plans comple
 | Phase 06 P03 | 5 | 3 tasks | 4 files |
 | Phase 06 P04 | 5 | 3 tasks | 7 files |
 | Phase 06 P05 | 12 | 3 tasks | 3 files |
+| Phase 06 P06 | 180 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,11 @@ Recent decisions affecting current work:
 - [Phase 06 P04]: TypeScript coordinator integration for TikTok listener (no Go rewrite, mirror Go patterns with axios + ioredis)
 - [Phase 06 P05]: Dual publishing (Pub/Sub + Streams) for migration events (notification + observability)
 - [Phase 06 P05]: 60s confirmation timeout per CONTEXT.md constraint (old pod disconnect timeout)
+- [Phase 06 P06]: Coordinator assigns to Running pods (not Ready) to break readiness probe chicken-and-egg
+- [Phase 06 P06]: Skip migration confirmation wait for failed pods (prevents reconciliation blocking)
+- [Phase 06 P06]: 60s periodic assignment refresh in listeners (handles transient GetAssignments failures)
+- [Phase 06 P06]: Generate signed JWTs from SERVICE_JWT_SECRET (not raw secret as token)
+- [Phase 06 P06]: Filter by coordinator assignments even when map is empty (preserves migration protocol)
 
 ### Pending Todos
 
@@ -85,20 +91,20 @@ None yet.
 
 ### Blockers/Concerns
 
-**Phase 5 Dependencies:**
-- Split-brain prevention and consistent hashing key selection are expensive to fix later (must be correct from start)
-- Leader election with fencing tokens is critical for preventing duplicate connections
-- YouTube quota exhaustion risk during scale-up (circuit breaker required in Phase 7)
+**Phase 6 Complete - All blockers resolved:**
+- ✅ Twitch Listener Critical Issue RESOLVED: Root cause was readiness probe chicken-and-egg (coordinator only assigned to Ready pods, but readiness checked assignments). Fixed by coordinator assigning to Running pods.
+- ✅ All platforms (Twitch, Kick, TikTok) successfully scale with HPA and report ready status
+- ✅ Migration protocol validated with zero message loss
 
-**Twitch Listener Critical Issue:**
-- Current deployment: 1 replica desired, HPA scaled to 4, but only 1/5 pods ready (BROKEN)
-- Root cause unknown - needs investigation during Phase 6 planning
-- Phase 6 success criterion explicitly targets fixing this
+**Phase 7 Considerations:**
+- YouTube quota exhaustion risk during scale-up (circuit breaker required in Phase 7)
+- Readiness probe strictness may need tuning for inactive sources
+- Migration confirmation timeout edge cases need more chaos testing
 
 ## Session Continuity
 
-Last session: 2026-02-19
-Stopped at: Completed 06-05-PLAN.md
+Last session: 2026-02-20
+Stopped at: Completed 06-06-PLAN.md and Phase 6 (Connection Management & Migration Protocol)
 Resume file: None
 
-**Next action:** Continue with 06-06-PLAN.md (End-to-end Integration Testing)
+**Next action:** Begin Phase 7 planning (Dynamic Rebalancing & HPA Integration)
