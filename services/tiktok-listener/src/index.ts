@@ -195,6 +195,7 @@ class TikTokListenerService {
   private coordinatorClient?: CoordinatorClient;
   private migrationSubscriber?: MigrationSubscriber;
   private assignedSourceIDs: Map<string, boolean> = new Map(); // source_id -> true
+  private filteredAssignmentCount: number = 0; // Number of assigned sources that have database channels
   private heartbeatTimer?: NodeJS.Timeout;
   private firstMessageCallbacks: Map<string, () => void> = new Map(); // username -> callback
 
@@ -363,6 +364,7 @@ class TikTokListenerService {
             status: isReady ? 'ready' : 'not ready',
             active_streams: this.activeStreams.size,
             assigned_sources: this.assignedSourceIDs.size,
+            filtered_assignments: this.getFilteredAssignmentCount(),
             coordinator_enabled: true
           }));
         } else {
@@ -828,6 +830,14 @@ class TikTokListenerService {
         activeUsernames.set(username, overlayId);
       }
 
+      // Update filtered assignment count (for consistency with Go listeners)
+      // This represents the number of assigned sources that have database channels
+      if (this.coordinatorClient && this.assignedSourceIDs.size > 0) {
+        this.filteredAssignmentCount = activeUsernames.size;
+      } else {
+        this.filteredAssignmentCount = activeUsernames.size;
+      }
+
       logger.debug('Found TikTok sources for connected overlays', {
         source_count: activeUsernames.size,
         connected_overlays_count: connectedOverlays.length,
@@ -866,6 +876,14 @@ class TikTokListenerService {
     } catch (error) {
       logger.error('Failed to poll active streams', { error });
     }
+  }
+
+  /**
+   * Get filtered assignment count (number of assigned sources that have database channels)
+   * Used for consistency with Go listeners and observability
+   */
+  private getFilteredAssignmentCount(): number {
+    return this.filteredAssignmentCount;
   }
 
   private async connectToStream(username: string, overlayId: string): Promise<void> {
