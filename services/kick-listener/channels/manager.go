@@ -18,6 +18,10 @@ import (
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -647,6 +651,24 @@ func (m *Manager) GetOverlayTargetsForChatroom(chatroomID int) ([]OverlayTarget,
 
 // HandleMigrationEvent handles migration events from Redis Pub/Sub (KICK-03, KICK-04)
 func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
+	// Extract trace context from event (from Redis Streams message)
+	carrier := propagation.MapCarrier{
+		"traceparent": event.TraceParent,
+		"tracestate":  event.TraceState,
+	}
+	ctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+
+	tracer := otel.Tracer("kick-listener")
+	ctx, span := tracer.Start(ctx, "handle-migration",
+		trace.WithAttributes(
+			attribute.String("migration_id", event.MigrationID),
+			attribute.String("channel_id", event.ChannelID),
+			attribute.String("from_pod", event.FromPod),
+			attribute.String("to_pod", event.ToPod),
+		),
+	)
+	defer span.End()
+
 	m.migrationMu.Lock()
 	defer m.migrationMu.Unlock()
 
@@ -662,15 +684,15 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 
 	if event.ToPod == podName {
 		// New pod: subscribe and wait for first message (KICK-03)
-		m.handleMigrationAsNewPod(event)
+		m.handleMigrationAsNewPod(ctx, event)
 	} else if event.FromPod == podName {
 		// Old pod: unsubscribe after confirmation (KICK-04)
-		m.handleMigrationAsOldPod(event)
+		m.handleMigrationAsOldPod(ctx, event)
 	}
 }
 
 // handleMigrationAsNewPod handles migration when this pod is the new assignment target
-func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
+func (m *Manager) handleMigrationAsNewPod(ctx context.Context, event *coordination.MigrationEvent) {
 	// Per CONTEXT.md: "New pod waits for first message OR 30s timeout (whichever comes first)"
 	channelSlug := m.getChannelSlugForSourceID(event.ChannelID)
 	if channelSlug == "" {
@@ -705,7 +727,7 @@ func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
 	}
 
 	// Wait for first message or timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	select {
@@ -727,7 +749,7 @@ func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
 		m.chatroomIndex[chatroomID] = m.subscriptions[channelSlug]
 		m.subsMu.Unlock()
 
-	case <-ctx.Done():
+	case <-timeoutCtx.Done():
 		// Timeout - connection failed
 		m.publishMigrationConfirmation(event.MigrationID, "failed", "timeout waiting for first message")
 		m.logger.Error("Migration timeout (new pod)", zap.String("channel", channelSlug))
@@ -738,7 +760,7 @@ func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
 }
 
 // handleMigrationAsOldPod handles migration when this pod is losing the assignment
-func (m *Manager) handleMigrationAsOldPod(event *coordination.MigrationEvent) {
+func (m *Manager) handleMigrationAsOldPod(ctx context.Context, event *coordination.MigrationEvent) {
 	// Per CONTEXT.md: "Old pod disconnects immediately after seeing new pod's confirmation"
 	channelSlug := m.getChannelSlugForSourceID(event.ChannelID)
 	if channelSlug == "" {

@@ -12,6 +12,10 @@ import (
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -508,6 +512,24 @@ func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels 
 
 // HandleMigrationEvent handles migration events from Redis Pub/Sub (TWITCH-04, TWITCH-05)
 func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
+	// Extract trace context from event (from Redis Streams message)
+	carrier := propagation.MapCarrier{
+		"traceparent": event.TraceParent,
+		"tracestate":  event.TraceState,
+	}
+	ctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+
+	tracer := otel.Tracer("twitch-listener")
+	ctx, span := tracer.Start(ctx, "handle-migration",
+		trace.WithAttributes(
+			attribute.String("migration_id", event.MigrationID),
+			attribute.String("channel_id", event.ChannelID),
+			attribute.String("from_pod", event.FromPod),
+			attribute.String("to_pod", event.ToPod),
+		),
+	)
+	defer span.End()
+
 	m.migrationMu.Lock()
 	defer m.migrationMu.Unlock()
 
@@ -520,15 +542,15 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 
 	if event.ToPod == podName {
 		// New pod: connect and wait for first message (TWITCH-04)
-		m.handleMigrationAsNewPod(event)
+		m.handleMigrationAsNewPod(ctx, event)
 	} else if event.FromPod == podName {
 		// Old pod: disconnect after confirmation (TWITCH-05)
-		m.handleMigrationAsOldPod(event)
+		m.handleMigrationAsOldPod(ctx, event)
 	}
 }
 
 // handleMigrationAsNewPod handles migration as the new pod (TWITCH-04)
-func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
+func (m *Manager) handleMigrationAsNewPod(ctx context.Context, event *coordination.MigrationEvent) {
 	// Per CONTEXT.md: "New pod waits for first message OR 30s timeout (whichever comes first)"
 	channel := m.getChannelForSourceID(event.ChannelID)
 	if channel == "" {
@@ -547,7 +569,7 @@ func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
 	m.mu.Unlock()
 
 	// Wait for first message or timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	select {
@@ -558,7 +580,7 @@ func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
 		if err := m.publishMigrationConfirmation(ctx, event.MigrationID, "connected", 0); err != nil {
 			m.logger.Error("Failed to publish migration success", zap.Error(err))
 		}
-	case <-ctx.Done():
+	case <-timeoutCtx.Done():
 		// Timeout - connection failed
 		m.logger.Error("Migration timeout (new pod)", zap.String("channel", channel))
 		// Publish failure to Redis Streams
@@ -571,7 +593,7 @@ func (m *Manager) handleMigrationAsNewPod(event *coordination.MigrationEvent) {
 }
 
 // handleMigrationAsOldPod handles migration as the old pod (TWITCH-05)
-func (m *Manager) handleMigrationAsOldPod(event *coordination.MigrationEvent) {
+func (m *Manager) handleMigrationAsOldPod(ctx context.Context, event *coordination.MigrationEvent) {
 	// Per CONTEXT.md: "Old pod disconnects immediately after seeing new pod's confirmation"
 	channel := m.getChannelForSourceID(event.ChannelID)
 	if channel == "" {
