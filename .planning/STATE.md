@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-19)
 
 Milestone: v1.1 Listener Load Balancing
 Phase: 7 of 8 (Dynamic Rebalancing & HPA Integration)
-Plan: 3 of 4 in current phase
-Status: Active
-Last activity: 2026-02-20 — Completed 07-03-PLAN.md (Cooldown & Throttling Safeguards)
+Plan: 4 of 4 in current phase
+Status: Phase 7 Complete
+Last activity: 2026-02-20 — Completed 07-04-PLAN.md (HPA Coordination Lock & Startup Jitter)
 
-Progress: [██████░░░░] 68% (v1.0 partial: 11/11 plans complete, v1.1: 24/31 plans complete)
+Progress: [███████░░░] 71% (v1.0 partial: 11/11 plans complete, v1.1: 25/31 plans complete)
 
 ## Performance Metrics
 
 **Velocity (all phases):**
-- Total plans completed: 24
-- Average duration: 12.3 min
-- Total execution time: 4.98 hours
+- Total plans completed: 25
+- Average duration: 11.9 min
+- Total execution time: 5.05 hours
 
 **By Phase:**
 
@@ -33,7 +33,7 @@ Progress: [██████░░░░] 68% (v1.0 partial: 11/11 plans comple
 | 3. Kick Integration | 4 | 15 min | 3.75 min |
 | 5. Sharding Infrastructure | 5 | 22 min | 4.4 min |
 | 6. Connection Management | 8 | 217 min | 27.1 min |
-| 7. Dynamic Rebalancing | 3 | 18 min | 6.0 min |
+| 7. Dynamic Rebalancing | 4 | 22 min | 5.5 min |
 
 **Recent Trend:**
 - Last 5 plans: 33.8 min average (includes 180 min deployment testing)
@@ -59,6 +59,7 @@ Progress: [██████░░░░] 68% (v1.0 partial: 11/11 plans comple
 | Phase 07 P01 | 5 | 2 tasks | 3 files |
 | Phase 07 P02 | 4 | 2 tasks | 4 files |
 | Phase 07 P03 | 9 | 3 tasks | 7 files |
+| Phase 07 P04 | 4 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,10 @@ Recent decisions affecting current work:
 - [Phase 07]: Thrashing response: Alert-only (log error, enforce cooldown, let operators investigate)
 - [Phase 07]: Incomplete rebalancing counter increments after every rebalancing, resets when balanced
 - [Phase 07]: Hybrid strategy escalation after 3 attempts (proportional + hot channel migrations)
+- [Phase 07 P04]: 60-second coordination lock TTL for automatic failover (balances operation time vs recovery speed)
+- [Phase 07 P04]: Lua scripts for atomic lock release/extend with ownership verification (prevents releasing other operations' locks)
+- [Phase 07 P04]: 0-30 second startup jitter prevents thundering herd during HPA scale-up (spreads coordinator queries)
+- [Phase 07 P04]: 30-second wait after scale-up detection allows jittered pods to fully start (0-30s jitter window)
 
 ### Pending Todos
 
@@ -128,7 +133,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 07-02-PLAN.md (Proportional Channel Redistribution)
+Stopped at: Completed 07-04-PLAN.md (HPA Coordination Lock & Startup Jitter)
 Resume file: None
 
-**Next action:** Execute 07-03-PLAN.md (Cooldown & Throttling Safeguards)
+**Next action:** Phase 7 complete. Ready for Phase 8 (Observability & Monitoring) or Phase 7 verification/testing.
