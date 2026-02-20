@@ -173,7 +173,7 @@ func main() {
 	})
 
 	// Now initialize channel manager with the WebSocket client and assigned source IDs
-	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, leaderCoord, assignedSourceIDs, log)
+	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, leaderCoord, assignedSourceIDs, redisClient, podName, log)
 
 	// Connect to Kick Pusher WebSocket
 	if err := wsClient.Connect(); err != nil {
