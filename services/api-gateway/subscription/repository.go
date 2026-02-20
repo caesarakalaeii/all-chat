@@ -76,3 +76,41 @@ func (r *Repository) GetPublicOverlayByUsername(ctx context.Context, username st
 
 	return overlayID, nil
 }
+
+// ActivateSourcesForOverlay activates all sources for an overlay
+// This is called when a WebSocket connection is established
+func (r *Repository) ActivateSourcesForOverlay(ctx context.Context, overlayID string) (int, error) {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = true,
+		    updated_at = NOW()
+		WHERE overlay_id = $1
+		  AND is_active = false
+	`
+
+	result, err := r.db.Exec(ctx, query, overlayID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to activate sources: %w", err)
+	}
+
+	return int(result.RowsAffected()), nil
+}
+
+// DeactivateSourcesForOverlay deactivates all sources for an overlay
+// This is called when the last WebSocket connection for an overlay disconnects
+func (r *Repository) DeactivateSourcesForOverlay(ctx context.Context, overlayID string) (int, error) {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = false,
+		    updated_at = NOW()
+		WHERE overlay_id = $1
+		  AND is_active = true
+	`
+
+	result, err := r.db.Exec(ctx, query, overlayID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to deactivate sources: %w", err)
+	}
+
+	return int(result.RowsAffected()), nil
+}
