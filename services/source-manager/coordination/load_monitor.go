@@ -9,6 +9,10 @@ import (
 
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -88,14 +92,30 @@ func CalculateLoadScore(channelCount int, messageRate float64) float64 {
 // Returns PodLoad array with channel count, message rate, and composite load score
 // Gracefully degrades to channel count only if Prometheus unavailable
 func (m *LoadMonitor) MonitorPodLoads(ctx context.Context, podIDs []string) ([]PodLoad, error) {
+	tracer := otel.Tracer("source-manager")
+	ctx, span := tracer.Start(ctx, "monitor-pod-loads",
+		trace.WithAttributes(
+			attribute.Int("pod_count", len(podIDs)),
+		),
+	)
+	defer span.End()
+
 	loads := make([]PodLoad, 0, len(podIDs))
 
 	m.logger.Debug("Monitoring pod loads", zap.Int("pod_count", len(podIDs)))
 
 	for _, podID := range podIDs {
 		// Query channel count from Redis assignment registry
+		ctx, channelSpan := tracer.Start(ctx, "query-channel-count",
+			trace.WithAttributes(
+				attribute.String("pod_id", podID),
+			),
+		)
 		channelCount, err := m.getChannelCount(ctx, podID)
 		if err != nil {
+			channelSpan.RecordError(err)
+			channelSpan.SetStatus(codes.Error, "failed to get channel count")
+			channelSpan.End()
 			m.logger.Error("Failed to get channel count",
 				zap.String("pod_id", podID),
 				zap.Error(err),
@@ -103,16 +123,29 @@ func (m *LoadMonitor) MonitorPodLoads(ctx context.Context, podIDs []string) ([]P
 			// Continue processing remaining pods
 			continue
 		}
+		channelSpan.SetAttributes(attribute.Int("channel_count", channelCount))
+		channelSpan.End()
 
 		// Query message rate from Prometheus (last 30s average)
 		// Graceful degradation: default to 0 if Prometheus unavailable
+		ctx, rateSpan := tracer.Start(ctx, "query-message-rate",
+			trace.WithAttributes(
+				attribute.String("pod_id", podID),
+			),
+		)
 		messageRate, err := m.getMessageRate(ctx, podID)
 		if err != nil {
+			// Graceful degradation - don't fail span, just log
+			rateSpan.SetAttributes(attribute.Bool("prometheus_unavailable", true))
+			rateSpan.End()
 			m.logger.Warn("Failed to get message rate, using 0 (graceful degradation)",
 				zap.String("pod_id", podID),
 				zap.Error(err),
 			)
 			messageRate = 0
+		} else {
+			rateSpan.SetAttributes(attribute.Float64("message_rate", messageRate))
+			rateSpan.End()
 		}
 
 		// Calculate composite load score
@@ -140,6 +173,8 @@ func (m *LoadMonitor) MonitorPodLoads(ctx context.Context, podIDs []string) ([]P
 		zap.Int("pods_monitored", len(loads)),
 	)
 
+	span.SetAttributes(attribute.Int("pods_monitored", len(loads)))
+	span.SetStatus(codes.Ok, "")
 	return loads, nil
 }
 
@@ -232,7 +267,19 @@ func (m *LoadMonitor) getMessageRate(ctx context.Context, podID string) (float64
 // 2. Busiest pod exceeds 100 msg/sec minimum threshold
 // Rationale: Avoid unnecessary rebalancing when system is mostly idle, but remain responsive under load
 func (m *LoadMonitor) CalculateImbalance(loads []PodLoad) ImbalanceReport {
+	tracer := otel.Tracer("source-manager")
+	_, span := tracer.Start(context.Background(), "calculate-imbalance",
+		trace.WithAttributes(
+			attribute.Int("pod_count", len(loads)),
+		),
+	)
+	defer span.End()
+
 	if len(loads) == 0 {
+		span.SetAttributes(
+			attribute.Bool("should_rebalance", false),
+			attribute.String("reason", "no pods available"),
+		)
 		return ImbalanceReport{
 			ShouldRebalance: false,
 			Reason:          "no pods available",
@@ -241,6 +288,11 @@ func (m *LoadMonitor) CalculateImbalance(loads []PodLoad) ImbalanceReport {
 
 	// Handle single pod edge case
 	if len(loads) == 1 {
+		span.SetAttributes(
+			attribute.Float64("imbalance_ratio", 1.0),
+			attribute.Bool("should_rebalance", false),
+			attribute.String("reason", "single pod (no rebalancing possible)"),
+		)
 		return ImbalanceReport{
 			MaxLoad:        loads[0].LoadScore,
 			MinLoad:        loads[0].LoadScore,
@@ -326,6 +378,18 @@ func (m *LoadMonitor) CalculateImbalance(loads []PodLoad) ImbalanceReport {
 		report.Reason = fmt.Sprintf("max_msg_rate=%.2f below threshold %.2f (system mostly idle)",
 			maxMsgRate, minMessageThreshold)
 	}
+
+	// Set span attributes for observability
+	span.SetAttributes(
+		attribute.Float64("imbalance_ratio", report.ImbalanceRatio),
+		attribute.Bool("should_rebalance", report.ShouldRebalance),
+		attribute.String("reason", report.Reason),
+		attribute.Float64("max_load", maxLoad),
+		attribute.Float64("avg_load", avgLoad),
+		attribute.Float64("max_message_rate", maxMsgRate),
+		attribute.Int("overloaded_pods", len(overloaded)),
+		attribute.Int("underutilized_pods", len(underutilized)),
+	)
 
 	m.logger.Info("Load imbalance calculated",
 		zap.Float64("imbalance_ratio", imbalanceRatio),
