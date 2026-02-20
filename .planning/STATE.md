@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-19)
 
 Milestone: v1.1 Listener Load Balancing
 Phase: 6 of 8 (Connection Management & Migration Protocol)
-Plan: 7 of 7 in current phase - PHASE COMPLETE
+Plan: 8 of 8 in current phase - PHASE COMPLETE
 Status: Complete
-Last activity: 2026-02-20 — Completed 06-07-PLAN.md (Migration Confirmation Gap Closure)
+Last activity: 2026-02-20 — Completed 06-08-PLAN.md (Readiness Probe Bug Fix)
 
-Progress: [██████░░░░] 62% (v1.0 partial: 11/11 plans complete, v1.1: 20/31 plans complete)
+Progress: [██████░░░░] 64% (v1.0 partial: 11/11 plans complete, v1.1: 21/31 plans complete)
 
 ## Performance Metrics
 
 **Velocity (all phases):**
-- Total plans completed: 20
-- Average duration: 13.8 min
-- Total execution time: 4.63 hours
+- Total plans completed: 21
+- Average duration: 13.4 min
+- Total execution time: 4.68 hours
 
 **By Phase:**
 
@@ -32,11 +32,11 @@ Progress: [██████░░░░] 62% (v1.0 partial: 11/11 plans comple
 | 2. YouTube Integration | 2 | 9 min | 4.5 min |
 | 3. Kick Integration | 4 | 15 min | 3.75 min |
 | 5. Sharding Infrastructure | 5 | 22 min | 4.4 min |
-| 6. Connection Management | 7 | 214 min | 30.6 min |
+| 6. Connection Management | 8 | 217 min | 27.1 min |
 
 **Recent Trend:**
-- Last 5 plans: 42.2 min average (includes 180 min deployment testing)
-- Trend: Phase 6 P06 deployment testing significantly higher than typical plan duration (P07 gap closure returned to ~7 min normal)
+- Last 5 plans: 33.8 min average (includes 180 min deployment testing)
+- Trend: Phase 6 P06 deployment testing significantly higher than typical plan duration (P07/P08 gap closures returned to ~5 min normal)
 
 *Updated after each plan completion*
 
@@ -54,6 +54,7 @@ Progress: [██████░░░░] 62% (v1.0 partial: 11/11 plans comple
 | Phase 06 P05 | 12 | 3 tasks | 3 files |
 | Phase 06 P06 | 180 | 2 tasks | 7 files |
 | Phase 06 P07 | 7 | 3 tasks | 6 files |
+| Phase 06 P08 | 3 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,8 @@ Recent decisions affecting current work:
 - [Phase 06 P07]: Non-blocking channel send for Twitch first message signaling (prevents deadlock when no migration waiting)
 - [Phase 06 P07]: Callback pattern for TikTok first message detection (TypeScript idiomatic, simpler than event emitters)
 - [Phase 06 P07]: Sequence number always 0 for migration confirmations (gap detection deferred to future phase)
+- [Phase 06 P08]: Capture filtered count before lock acquisition (thread-safe field update pattern)
+- [Phase 06 P08]: Add filtered tracking to TikTok despite no bug (consistency across all listeners)
 
 ### Pending Todos
 
@@ -96,9 +99,10 @@ None yet.
 ### Blockers/Concerns
 
 **Phase 6 Complete - All blockers resolved:**
-- ✅ Twitch Listener Critical Issue RESOLVED: Root cause was readiness probe chicken-and-egg (coordinator only assigned to Ready pods, but readiness checked assignments). Fixed by coordinator assigning to Running pods.
+- ✅ Twitch/Kick Listener Critical Issue RESOLVED: Root cause was readiness probe comparing active channels against raw coordinator assignments instead of filtered count. Fixed by tracking filtered assignment count (assigned sources with database channels).
 - ✅ All platforms (Twitch, Kick, TikTok) successfully scale with HPA and report ready status
 - ✅ Migration protocol validated with zero message loss
+- ✅ Readiness probe bug fixed: Pods reach Ready state after connecting to all filtered assigned channels
 
 **Phase 7 Considerations:**
 - YouTube quota exhaustion risk during scale-up (circuit breaker required in Phase 7)
@@ -108,7 +112,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 06-07-PLAN.md (Migration Confirmation Gap Closure) - Phase 6 COMPLETE
+Stopped at: Completed 06-08-PLAN.md (Readiness Probe Bug Fix) - Phase 6 COMPLETE
 Resume file: None
 
 **Next action:** Begin Phase 7 planning (Dynamic Rebalancing & HPA Integration)
