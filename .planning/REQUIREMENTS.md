@@ -21,10 +21,10 @@
 - [x] **REBAL-01**: System monitors per-pod message rate (messages/sec) every 30 seconds
 - [x] **REBAL-02**: System calculates load imbalance ratio (max_load / avg_load)
 - [x] **REBAL-03**: System triggers automatic rebalancing when imbalance ratio exceeds 0.5
-- [ ] **REBAL-04**: System identifies hot channels (channels with >3x average message rate)
-- [ ] **REBAL-05**: System reassigns hot channels from overloaded pods to underutilized pods
+- [x] **REBAL-04**: System identifies hot channels (channels with >3x average message rate)
+- [x] **REBAL-05**: System reassigns hot channels from overloaded pods to underutilized pods
 - [ ] **REBAL-06**: System enforces 5-minute cooldown between rebalancing operations
-- [ ] **REBAL-07**: System limits rebalancing to maximum 20% of channels per operation
+- [x] **REBAL-07**: System limits rebalancing to maximum 20% of channels per operation
 - [x] **REBAL-08**: Coordinator service extends existing source-manager with rebalancing logic
 
 ### Channel Migration
@@ -127,10 +127,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REBAL-01 | Phase 7 | Complete |
 | REBAL-02 | Phase 7 | Complete |
 | REBAL-03 | Phase 7 | Complete |
-| REBAL-04 | Phase 7 | Pending |
-| REBAL-05 | Phase 7 | Pending |
+| REBAL-04 | Phase 7 | Complete |
+| REBAL-05 | Phase 7 | Complete |
 | REBAL-06 | Phase 7 | Pending |
-| REBAL-07 | Phase 7 | Pending |
+| REBAL-07 | Phase 7 | Complete |
 | REBAL-08 | Phase 5 | Complete |
 | MIGRATE-01 | Phase 6 | Complete |
 | MIGRATE-02 | Phase 6 | Complete |
