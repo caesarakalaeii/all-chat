@@ -282,6 +282,11 @@ class TikTokListenerService {
 
         this.coordinatorClient = new CoordinatorClient(COORDINATOR_URL, SERVICE_JWT_SECRET, logger);
 
+        // Staggered startup jitter to prevent thundering herd during HPA scale-up (Phase 7)
+        const jitterMs = Math.floor(Math.random() * 30000); // 0-30 seconds
+        logger.info('Applying startup jitter to prevent thundering herd', { jitterMs });
+        await new Promise(resolve => setTimeout(resolve, jitterMs));
+
         // Query assignments from coordinator (blocks indefinitely with backoff)
         const assignments = await this.coordinatorClient.queryAssignments(POD_NAME);
 
