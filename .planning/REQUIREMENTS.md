@@ -18,9 +18,9 @@
 
 ### Rebalancing & Coordination
 
-- [ ] **REBAL-01**: System monitors per-pod message rate (messages/sec) every 30 seconds
-- [ ] **REBAL-02**: System calculates load imbalance ratio (max_load / avg_load)
-- [ ] **REBAL-03**: System triggers automatic rebalancing when imbalance ratio exceeds 0.5
+- [x] **REBAL-01**: System monitors per-pod message rate (messages/sec) every 30 seconds
+- [x] **REBAL-02**: System calculates load imbalance ratio (max_load / avg_load)
+- [x] **REBAL-03**: System triggers automatic rebalancing when imbalance ratio exceeds 0.5
 - [ ] **REBAL-04**: System identifies hot channels (channels with >3x average message rate)
 - [ ] **REBAL-05**: System reassigns hot channels from overloaded pods to underutilized pods
 - [ ] **REBAL-06**: System enforces 5-minute cooldown between rebalancing operations
@@ -124,9 +124,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SHARD-06 | Phase 5 | Complete |
 | SHARD-07 | Phase 5 | Complete |
 | SHARD-08 | Phase 5 | Complete |
-| REBAL-01 | Phase 7 | Pending |
-| REBAL-02 | Phase 7 | Pending |
-| REBAL-03 | Phase 7 | Pending |
+| REBAL-01 | Phase 7 | Complete |
+| REBAL-02 | Phase 7 | Complete |
+| REBAL-03 | Phase 7 | Complete |
 | REBAL-04 | Phase 7 | Pending |
 | REBAL-05 | Phase 7 | Pending |
 | REBAL-06 | Phase 7 | Pending |
