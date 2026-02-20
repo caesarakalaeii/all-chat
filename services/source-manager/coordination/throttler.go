@@ -7,6 +7,9 @@ import (
 
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -62,11 +65,23 @@ func NewThrottler(
 //   - reason: human-readable reason for decision ("ok", "cooldown_active", "escalation_override", "thrashing_detected")
 //   - error: non-nil if Redis operation failed
 func (t *Throttler) CheckCooldown(ctx context.Context, currentRatio float64) (bool, string, error) {
+	tracer := otel.Tracer("source-manager")
+	ctx, span := tracer.Start(ctx, "check-cooldown",
+		trace.WithAttributes(
+			attribute.Float64("current_ratio", currentRatio),
+		),
+	)
+	defer span.End()
+
 	// Get last rebalancing timestamp
 	lastRebalance, err := t.redisClient.Get(ctx, rebalancingCooldownKey).Result()
 
 	if err == redis.Nil {
 		// No cooldown active - rebalancing allowed
+		span.SetAttributes(
+			attribute.Bool("in_cooldown", false),
+			attribute.String("decision", "ok"),
+		)
 		return true, "ok", nil
 	}
 
@@ -110,6 +125,11 @@ func (t *Throttler) CheckCooldown(ctx context.Context, currentRatio float64) (bo
 			// Increment escalation override metric
 			t.metrics.RebalancingCooldownOverrides.Inc()
 
+			span.SetAttributes(
+				attribute.Bool("in_cooldown", true),
+				attribute.String("decision", "escalation_override"),
+				attribute.Float64("ratio_increase", ratioIncrease),
+			)
 			return true, "escalation_override", nil
 		}
 
@@ -122,6 +142,11 @@ func (t *Throttler) CheckCooldown(ctx context.Context, currentRatio float64) (bo
 			zap.Duration("remaining", remaining),
 		)
 
+		span.SetAttributes(
+			attribute.Bool("in_cooldown", true),
+			attribute.String("decision", "blocked"),
+			attribute.Int("remaining_seconds", int(remaining.Seconds())),
+		)
 		return false, reason, nil
 	}
 
@@ -130,13 +155,26 @@ func (t *Throttler) CheckCooldown(ctx context.Context, currentRatio float64) (bo
 	if err != nil {
 		t.logger.Error("Failed to detect thrashing", zap.Error(err))
 		// Fail open - allow rebalancing
+		span.SetAttributes(
+			attribute.Bool("in_cooldown", false),
+			attribute.String("decision", "ok"),
+			attribute.Bool("thrashing_check_failed", true),
+		)
 		return true, "ok", err
 	}
 
 	if isThrashing {
+		span.SetAttributes(
+			attribute.Bool("in_cooldown", false),
+			attribute.String("decision", "thrashing_detected"),
+		)
 		return false, "thrashing_detected", nil
 	}
 
+	span.SetAttributes(
+		attribute.Bool("in_cooldown", false),
+		attribute.String("decision", "ok"),
+	)
 	return true, "ok", nil
 }
 

@@ -10,6 +10,10 @@ import (
 	"github.com/caesar/all-chat/services/source-manager/registry"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -436,8 +440,17 @@ func (c *Coordinator) getHealthyListenerPods(ctx context.Context, failedPods []s
 // Uses Phase 6 migration infrastructure (PublishMigrationEvent)
 // Returns error if any plan fails to execute (for incomplete rebalancing tracking)
 func (c *Coordinator) executeRebalancingPlans(ctx context.Context, plans []MigrationPlan, sourceMap map[string]*models.ActiveSource) error {
+	tracer := otel.Tracer("source-manager")
+	ctx, span := tracer.Start(ctx, "execute-rebalancing",
+		trace.WithAttributes(
+			attribute.Int("migration_count", len(plans)),
+		),
+	)
+	defer span.End()
+
 	if len(plans) == 0 {
 		c.logger.Debug("No rebalancing plans to execute")
+		span.SetStatus(codes.Ok, "no plans to execute")
 		return nil
 	}
 
@@ -511,6 +524,7 @@ func (c *Coordinator) executeRebalancingPlans(ctx context.Context, plans []Migra
 		zap.Int("plans_executed", len(plans)),
 	)
 
+	span.SetStatus(codes.Ok, "rebalancing executed")
 	return nil
 }
 

@@ -9,6 +9,10 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/source-manager/models"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -82,6 +86,15 @@ func NewRebalancer(
 // Selects target pods via round-robin across underutilized pods
 // If attemptCount >= 3, escalates to hybrid strategy (adds hot channel migrations)
 func (r *Rebalancer) PlanRebalancing(ctx context.Context, loads []PodLoad, avgLoad float64, attemptCount int) ([]MigrationPlan, error) {
+	tracer := otel.Tracer("source-manager")
+	ctx, span := tracer.Start(ctx, "plan-rebalancing",
+		trace.WithAttributes(
+			attribute.Float64("avg_load", avgLoad),
+			attribute.Int("attempt_count", attemptCount),
+		),
+	)
+	defer span.End()
+
 	r.logger.Info("Planning rebalancing",
 		zap.Int("pod_count", len(loads)),
 		zap.Float64("avg_load", avgLoad),
@@ -99,9 +112,15 @@ func (r *Rebalancer) PlanRebalancing(ctx context.Context, loads []PodLoad, avgLo
 		}
 	}
 
+	span.SetAttributes(
+		attribute.Int("overloaded_pods", len(overloadedPods)),
+		attribute.Int("underutilized_pods", len(underutilizedPods)),
+	)
+
 	// Validate underutilized pods available
 	if len(underutilizedPods) == 0 {
 		r.logger.Warn("No underutilized pods available for rebalancing")
+		span.SetStatus(codes.Error, "no underutilized pods available")
 		return nil, fmt.Errorf("no underutilized pods available")
 	}
 
@@ -139,6 +158,12 @@ func (r *Rebalancer) PlanRebalancing(ctx context.Context, loads []PodLoad, avgLo
 		}
 
 		// Get per-channel message rates
+		ctx, selectSpan := tracer.Start(ctx, "select-channels-to-migrate",
+			trace.WithAttributes(
+				attribute.String("pod_id", overloadedPod.PodID),
+				attribute.String("strategy", "proportional"),
+			),
+		)
 		channelLoads := r.channelLoadsFunc(ctx, assignments)
 
 		// Proportional strategy: Sort channels by message rate ascending (lowest traffic first)
@@ -158,6 +183,9 @@ func (r *Rebalancer) PlanRebalancing(ctx context.Context, loads []PodLoad, avgLo
 		for i := 0; i < maxMigrations && i < len(channelLoads); i++ {
 			channelsToMigrate = append(channelsToMigrate, channelLoads[i].ChannelID)
 		}
+
+		selectSpan.SetAttributes(attribute.Int("channels_selected", len(channelsToMigrate)))
+		selectSpan.End()
 
 		// Round-robin target selection
 		targetPod := underutilizedPods[targetIdx%len(underutilizedPods)]
@@ -204,6 +232,17 @@ func (r *Rebalancer) PlanRebalancing(ctx context.Context, loads []PodLoad, avgLo
 		zap.Int("migration_plans", len(plans)),
 		zap.Int("total_plans", len(plans)),
 	)
+
+	span.SetAttributes(
+		attribute.Int("migrations_planned", len(plans)),
+		attribute.String("strategy", func() string {
+			if attemptCount >= 3 {
+				return "hybrid"
+			}
+			return "proportional"
+		}()),
+	)
+	span.SetStatus(codes.Ok, "")
 
 	return plans, nil
 }
