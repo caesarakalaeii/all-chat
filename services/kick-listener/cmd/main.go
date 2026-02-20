@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -101,6 +102,13 @@ func main() {
 	}
 
 	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, log)
+
+	// Staggered startup jitter to prevent thundering herd during HPA scale-up (Phase 7)
+	jitter := time.Duration(rand.Intn(30)) * time.Second
+	log.Info("Applying startup jitter to prevent thundering herd",
+		zap.Duration("jitter", jitter),
+	)
+	time.Sleep(jitter)
 
 	// Query assignments from coordinator (blocks until response)
 	assignments, err := coordClient.QueryAssignments(ctx, podName)

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -117,6 +118,13 @@ func main() {
 
 	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, log)
 	log.Info("Initialized coordinator client", zap.String("coordinator_url", coordinatorURL))
+
+	// Staggered startup jitter to prevent thundering herd during HPA scale-up (Phase 7)
+	jitter := time.Duration(rand.Intn(30)) * time.Second
+	log.Info("Applying startup jitter to prevent thundering herd",
+		zap.Duration("jitter", jitter),
+	)
+	time.Sleep(jitter)
 
 	// Query assignments from coordinator (TWITCH-01)
 	// Per CONTEXT.md: Block indefinitely until coordinator responds
