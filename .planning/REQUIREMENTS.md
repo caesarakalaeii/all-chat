@@ -80,10 +80,10 @@
 
 - [x] **TRACE-01**: System instruments channel assignment operations with OpenTelemetry spans
 - [x] **TRACE-02**: System instruments migration operations with OpenTelemetry spans
-- [ ] **TRACE-03**: System instruments rebalancing operations with OpenTelemetry spans
+- [x] **TRACE-03**: System instruments rebalancing operations with OpenTelemetry spans
 - [x] **TRACE-04**: System propagates trace context through Redis Streams messages
-- [ ] **TRACE-05**: Jaeger UI shows end-to-end trace for channel migration (all phases)
-- [ ] **TRACE-06**: Jaeger UI shows trace for rebalancing decision (trigger → completion)
+- [x] **TRACE-05**: Jaeger UI shows end-to-end trace for channel migration (all phases)
+- [x] **TRACE-06**: Jaeger UI shows trace for rebalancing decision (trigger → completion)
 
 ## Future Requirements (Deferred)
 
@@ -168,7 +168,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | METRICS-11 | Phase 8 | Pending |
 | TRACE-01 | Phase 8 | Complete |
 | TRACE-02 | Phase 8 | Complete |
-| TRACE-03 | Phase 8 | Pending |
+| TRACE-03 | Phase 8 | Complete |
 | TRACE-04 | Phase 8 | Complete |
-| TRACE-05 | Phase 8 | Pending |
-| TRACE-06 | Phase 8 | Pending |
+| TRACE-05 | Phase 8 | Complete |
+| TRACE-06 | Phase 8 | Complete |
