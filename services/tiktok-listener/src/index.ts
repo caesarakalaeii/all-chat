@@ -196,6 +196,7 @@ class TikTokListenerService {
   private migrationSubscriber?: MigrationSubscriber;
   private assignedSourceIDs: Map<string, boolean> = new Map(); // source_id -> true
   private heartbeatTimer?: NodeJS.Timeout;
+  private firstMessageCallbacks: Map<string, () => void> = new Map(); // username -> callback
 
   constructor() {
     // Initialize Redis client
@@ -680,13 +681,38 @@ class TikTokListenerService {
       // Add to assigned source IDs
       this.assignedSourceIDs.set(event.channel_id, true);
 
-      // Connect to stream (will wait for first message via heartbeat monitor)
+      // Set up promise to wait for first message or timeout
+      const firstMessagePromise = new Promise<void>((resolve) => {
+        this.firstMessageCallbacks.set(username, () => {
+          this.firstMessageCallbacks.delete(username);
+          resolve();
+        });
+      });
+
+      // Connect to stream
       // Use placeholder overlay_id since we're connecting via migration
       await this.connectToStream(username, 'migration-' + event.migration_id);
 
-      logger.info('New pod: Successfully connected for migration', {
-        migration_id: event.migration_id,
-        username
+      // Wait for first message or timeout (30s per CONTEXT.md)
+      const timeout = setTimeout(() => {
+        const callback = this.firstMessageCallbacks.get(username);
+        if (callback) {
+          this.firstMessageCallbacks.delete(username);
+          logger.error('Migration timeout (new pod)', {
+            migration_id: event.migration_id,
+            username
+          });
+          this.publishMigrationConfirmation(event.migration_id, 'failed', 0);
+        }
+      }, 30000);
+
+      firstMessagePromise.then(() => {
+        clearTimeout(timeout);
+        logger.info('New pod: Successfully connected for migration', {
+          migration_id: event.migration_id,
+          username
+        });
+        this.publishMigrationConfirmation(event.migration_id, 'connected', 0);
       });
     }
 
@@ -706,6 +732,38 @@ class TikTokListenerService {
       logger.info('Old pod: Successfully disconnected for migration', {
         migration_id: event.migration_id,
         username
+      });
+    }
+  }
+
+  /**
+   * Publish migration confirmation to Redis Streams for coordinator to detect.
+   * Called by new pod after first message received or timeout.
+   */
+  private async publishMigrationConfirmation(
+    migrationId: string,
+    status: 'connected' | 'failed',
+    sequenceNum: number
+  ): Promise<void> {
+    try {
+      const event: Record<string, string> = {
+        migration_id: migrationId,
+        status: status,
+        pod_id: POD_NAME,
+        timestamp: Math.floor(Date.now() / 1000).toString(),
+        sequence_number: sequenceNum.toString()
+      };
+
+      await this.redis.xAdd('migration:log', '*', event);
+
+      logger.info('Published migration confirmation', {
+        migration_id: migrationId,
+        status: status
+      });
+    } catch (error) {
+      logger.error('Failed to publish migration confirmation', {
+        migration_id: migrationId,
+        error
       });
     }
   }
@@ -1013,6 +1071,12 @@ class TikTokListenerService {
     try {
       // Record message for heartbeat monitoring
       this.heartbeatMonitor.recordMessage(username);
+
+      // Signal first message for migration confirmation
+      const callback = this.firstMessageCallbacks.get(username);
+      if (callback) {
+        callback();
+      }
 
       // Extract TikTok's native message ID and timestamp
       const msgId = data.common?.msgId;
