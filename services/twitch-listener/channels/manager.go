@@ -245,24 +245,18 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	filteredCount := len(desiredChannels) // Default: all channels
 	if m.assignedSourceIDs != nil {
 		// Get all source IDs for these channels from database
-		sourceIDMap := m.repo.GetSourceIDsForChannels(ctx, desiredChannels)
+		// sourceIDMap := m.repo.GetSourceIDsForChannels(ctx, desiredChannels) // Not needed when filtering disabled
 
-		// Filter to only assigned channels
-		assignedChannels := make([]string, 0)
-		for _, ch := range desiredChannels {
-			sourceID := sourceIDMap[ch]
-			if m.assignedSourceIDs[sourceID] {
-				assignedChannels = append(assignedChannels, ch)
-			}
-		}
-
-		m.logger.Info("Filtered channels by coordinator assignments",
+		// DISABLED: Coordinator filtering temporarily disabled to prevent message loss
+		// Per user requirement: "we want to NEVER lose a message - rather poll a channel twice than not at all"
+		// The coordinator integration is kept for monitoring but filtering is disabled
+		// TODO: Re-enable once assignment distribution is verified to be 100% accurate
+		m.logger.Info("Coordinator assignments received but filtering DISABLED for safety",
 			zap.Int("total_channels", len(desiredChannels)),
-			zap.Int("assigned_channels", len(assignedChannels)),
+			zap.Int("assigned_channels_ignored", len(m.assignedSourceIDs)),
 		)
 
-		desiredChannels = assignedChannels
-		filteredCount = len(assignedChannels) // Capture filtered count before lock
+		filteredCount = len(desiredChannels) // Use all channels, no filtering
 	}
 
 	m.mu.Lock()
