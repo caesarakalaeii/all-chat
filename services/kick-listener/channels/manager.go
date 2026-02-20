@@ -830,6 +830,14 @@ func (m *Manager) GetAssignmentCount() int {
 	return len(m.assignedSourceIDs)
 }
 
+// UpdateAssignedSourceIDs updates the assigned source IDs from coordinator
+// Thread-safe update with mutex protection
+func (m *Manager) UpdateAssignedSourceIDs(newAssignedIDs map[string]bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.assignedSourceIDs = newAssignedIDs
+}
+
 // GetSubscriptionCount returns the number of active subscriptions (KICK-05)
 func (m *Manager) GetSubscriptionCount() int {
 	m.subsMu.RLock()
