@@ -17,7 +17,7 @@ type MockClient struct {
 	errors         []error
 	callCount      int
 	continuations  []string
-	pollIntervals  []int
+	pollIntervals  []time.Duration
 }
 
 func (m *MockClient) GetLiveChatReplay(ctx context.Context, continuation string) (*innertube.LiveChatResponse, error) {
@@ -50,11 +50,11 @@ func (m *MockClient) ExtractContinuation(resp *innertube.LiveChatResponse) strin
 	return ""
 }
 
-func (m *MockClient) GetPollInterval(resp *innertube.LiveChatResponse) int {
+func (m *MockClient) GetPollInterval(resp *innertube.LiveChatResponse) time.Duration {
 	if m.callCount-1 < len(m.pollIntervals) {
 		return m.pollIntervals[m.callCount-1]
 	}
-	return 2000
+	return 2 * time.Second
 }
 
 func TestNewPoller(t *testing.T) {
