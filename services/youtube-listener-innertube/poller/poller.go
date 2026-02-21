@@ -26,19 +26,22 @@ type MessageCallback func(messages []*innertube.RawChatMessage)
 //   - Fixed 2-second polling interval (not adaptive)
 //   - Exponential backoff for transient errors (2s → 60s max)
 //   - Fatal errors stop polling immediately
-//   - Graceful shutdown via context cancellation
+//   - Offline detection via empty continuation array
+//   - Graceful shutdown via context cancellation (5-second timeout)
 //
 // State transitions:
 //   - Active → Failed (fatal error)
-//   - Active → Offline (stream ended)
+//   - Active → Offline (stream ended, detected via DetectOffline)
 //   - Active → Active (transient error, backoff, resume)
 type Poller struct {
 	client          ClientInterface
 	continuation    string
 	channelID       string
+	videoID         string // Current video ID being polled
 	interval        time.Duration
 	backoff         *Backoff
 	state           *State
+	repository      *Repository // Redis repository for lifecycle operations
 	logger          *zap.Logger
 	logLevel        string // "debug" or "info"
 	messageCallback MessageCallback
@@ -56,6 +59,12 @@ type PollerOptions struct {
 
 	// LogLevel controls verbosity: "debug" or "info" (default: "info")
 	LogLevel string
+
+	// VideoID is the current video ID being polled (optional)
+	VideoID string
+
+	// Repository for lifecycle operations (optional, for offline detection)
+	Repository *Repository
 }
 
 // NewPoller creates a new polling loop manager
@@ -97,9 +106,11 @@ func NewPoller(
 		client:       client,
 		continuation: initialContinuation,
 		channelID:    channelID,
+		videoID:      opts.VideoID,
 		interval:     interval,
 		backoff:      NewBackoff(logger),
 		state:        NewState(),
+		repository:   opts.Repository,
 		logger:       logger,
 		logLevel:     logLevel,
 	}
@@ -133,16 +144,32 @@ func (p *Poller) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the polling loop
 //
-// Waits for the current poll to complete, then returns.
-// Blocks until polling goroutine exits (max ~2s for current poll).
+// Waits for the current poll to complete with a 5-second timeout.
+// If polling doesn't exit within timeout, returns immediately (force exit).
+// This ensures the 25-second Kubernetes termination deadline is respected.
 func (p *Poller) Stop() {
 	if p.cancel != nil {
 		p.cancel()
 	}
-	p.wg.Wait()
 
-	p.logger.Info("Poller stopped gracefully",
-		zap.String("final_state", string(p.state.GetState())))
+	// Wait for polling goroutine with timeout
+	done := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Graceful shutdown completed
+		p.logger.Info("Poller stopped gracefully",
+			zap.String("final_state", string(p.state.GetState())))
+	case <-time.After(5 * time.Second):
+		// Force exit after timeout
+		p.logger.Warn("Poller force exit after timeout",
+			zap.Duration("timeout", 5*time.Second),
+			zap.String("final_state", string(p.state.GetState())))
+	}
 }
 
 // GetState returns the current polling state
@@ -205,13 +232,47 @@ func (p *Poller) poll() {
 		return
 	}
 
+	// Offline detection: Check for empty continuation array (stream ended)
+	if DetectOffline(resp) {
+		p.logger.Info("Stream went offline (empty continuation)",
+			zap.String("channel_id", p.channelID),
+			zap.String("video_id", p.videoID))
+
+		p.state.SetState(StateOffline)
+		p.state.SetError(nil)
+
+		// Handle offline event: delete Redis mapping if repository available
+		if p.repository != nil && p.videoID != "" {
+			if err := HandleStreamOffline(p.ctx, p.channelID, p.videoID, p.repository, p.logger); err != nil {
+				p.logger.Debug("HandleStreamOffline completed",
+					zap.String("channel_id", p.channelID))
+			}
+		}
+
+		// Stop polling loop (context cancel)
+		if p.cancel != nil {
+			p.cancel()
+		}
+		return
+	}
+
 	// Extract continuation token for next poll
 	nextContinuation := p.client.ExtractContinuation(resp)
 	if nextContinuation == "" {
-		// No continuation token = stream ended
+		// No continuation token = stream ended (fallback detection)
 		p.logger.Info("Stream ended (no continuation token)")
 		p.state.SetState(StateOffline)
 		p.state.SetError(nil)
+
+		// Handle offline event
+		if p.repository != nil && p.videoID != "" {
+			_ = HandleStreamOffline(p.ctx, p.channelID, p.videoID, p.repository, p.logger)
+		}
+
+		// Stop polling loop
+		if p.cancel != nil {
+			p.cancel()
+		}
 		return
 	}
 
