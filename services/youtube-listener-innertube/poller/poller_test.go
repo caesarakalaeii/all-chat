@@ -107,10 +107,30 @@ func TestNewPoller(t *testing.T) {
 func TestPoller_SuccessfulPolling(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Mock client that returns 3 successful responses
+	// Mock client that returns 3 successful responses with valid continuations
 	client := &MockClient{
 		responses: []*innertube.LiveChatResponse{
-			{}, {}, {},
+			{
+				ContinuationContents: innertube.ContinuationContents{
+					LiveChatContinuation: innertube.LiveChatContinuation{
+						Continuations: []innertube.Continuation{{TimedContinuationData: &innertube.TimedContinuationData{Continuation: "token-1"}}},
+					},
+				},
+			},
+			{
+				ContinuationContents: innertube.ContinuationContents{
+					LiveChatContinuation: innertube.LiveChatContinuation{
+						Continuations: []innertube.Continuation{{TimedContinuationData: &innertube.TimedContinuationData{Continuation: "token-2"}}},
+					},
+				},
+			},
+			{
+				ContinuationContents: innertube.ContinuationContents{
+					LiveChatContinuation: innertube.LiveChatContinuation{
+						Continuations: []innertube.Continuation{{TimedContinuationData: &innertube.TimedContinuationData{Continuation: "token-3"}}},
+					},
+				},
+			},
 		},
 		errors: []error{nil, nil, nil},
 		continuations: []string{
@@ -164,7 +184,13 @@ func TestPoller_TransientError(t *testing.T) {
 	client := &MockClient{
 		responses: []*innertube.LiveChatResponse{
 			nil,
-			{},
+			{
+				ContinuationContents: innertube.ContinuationContents{
+					LiveChatContinuation: innertube.LiveChatContinuation{
+						Continuations: []innertube.Continuation{{TimedContinuationData: &innertube.TimedContinuationData{Continuation: "token-after-error"}}},
+					},
+				},
+			},
 		},
 		errors: []error{
 			transientErr,
