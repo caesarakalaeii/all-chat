@@ -1,114 +1,94 @@
-# Requirements: All-Chat Listener Load Balancing
+# Requirements: All-Chat InnerTube YouTube Listener
 
-**Defined:** 2026-02-19
-**Core Value:** Listener instances must efficiently distribute channel workload based on actual message volume, enabling cost-effective scaling and reliable service for both small and high-traffic streams.
+**Defined:** 2026-02-21
+**Core Value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing and auto-scaling.
 
-## Milestone v1.1 Requirements
+## v1.2 Requirements
 
-### Core Sharding Infrastructure
+Requirements for InnerTube YouTube listener (drop-in replacement for quota-limited official API listener).
 
-- [x] **SHARD-01**: System computes channel-to-pod assignment using consistent hashing with virtual nodes
-- [x] **SHARD-02**: System stores channel assignments in Redis registry with O(1) lookup performance
-- [x] **SHARD-03**: Listener pod queries assignment registry on startup to determine which channels to connect
-- [x] **SHARD-04**: Listener pod publishes heartbeat to Redis every 10 seconds with pod ID and timestamp
-- [x] **SHARD-05**: System detects pod failure when heartbeat missing for 15 seconds (user override from 30s - per CONTEXT.md for fast stream recovery)
-- [x] **SHARD-06**: System redistributes channels from failed pod to healthy pods within 60 seconds
-- [x] **SHARD-07**: System uses Kubernetes Lease API for coordinator leader election (not Redlock)
-- [x] **SHARD-08**: System uses fencing tokens to prevent split-brain during leader failover
+### Core Ingestion
 
-### Rebalancing & Coordination
+- [ ] **CORE-01**: Service can initialize masterchat client for live YouTube streams
+- [ ] **CORE-02**: Service can poll InnerTube API for live chat messages via masterchat
+- [ ] **CORE-03**: Service can normalize InnerTube message format to RawChatMessage schema
+- [ ] **CORE-04**: Service can publish RawChatMessage to Redis Stream (chat:raw)
+- [ ] **CORE-05**: Service exposes /health/live endpoint (always 200 OK)
+- [ ] **CORE-06**: Service exposes /health/ready endpoint (checks Redis connectivity)
 
-- [x] **REBAL-01**: System monitors per-pod message rate (messages/sec) every 30 seconds
-- [x] **REBAL-02**: System calculates load imbalance ratio (max_load / avg_load)
-- [x] **REBAL-03**: System triggers automatic rebalancing when imbalance ratio exceeds 0.5
-- [x] **REBAL-04**: System identifies hot channels (channels with >3x average message rate)
-- [x] **REBAL-05**: System reassigns hot channels from overloaded pods to underutilized pods
-- [x] **REBAL-06**: System enforces 5-minute cooldown between rebalancing operations
-- [x] **REBAL-07**: System limits rebalancing to maximum 20% of channels per operation
-- [x] **REBAL-08**: Coordinator service extends existing source-manager with rebalancing logic
+### Stream Management
 
-### Channel Migration
+- [ ] **STREAM-01**: Service can discover latest live stream video ID from channel ID
+- [ ] **STREAM-02**: Service can filter out premieres (only target "live" streams)
+- [ ] **STREAM-03**: Service can start monitoring a live stream on demand
+- [ ] **STREAM-04**: Service can stop monitoring a stream gracefully
+- [ ] **STREAM-05**: Service can detect when stream goes offline and stop polling
+- [ ] **STREAM-06**: Service can reconnect on network errors with exponential backoff
+- [ ] **STREAM-07**: Service can handle SIGTERM with graceful shutdown (cleanup connections, flush buffers)
 
-- [x] **MIGRATE-01**: System implements overlap migration pattern (new pod connects before old disconnects)
-- [x] **MIGRATE-02**: New pod subscribes to channel and waits for first message before signaling ready
-- [x] **MIGRATE-03**: Old pod receives migration signal and gracefully disconnects after 45 seconds
-- [x] **MIGRATE-04**: System guarantees zero message loss during migration (no dropped messages)
-- [x] **MIGRATE-05**: System publishes migration events to Redis Streams for observability
-- [x] **MIGRATE-06**: System uses sequence numbers per channel to detect message gaps during migration
+### Event Support
 
-### Twitch Load Balancing (CRITICAL)
+- [ ] **EVENT-01**: Service can parse regular chat messages from InnerTube
+- [ ] **EVENT-02**: Service can extract user metadata (username, avatar, badges)
+- [ ] **EVENT-03**: Service can parse Super Chat messages with amount and color
+- [ ] **EVENT-04**: Service can parse Super Sticker messages with sticker metadata
+- [ ] **EVENT-05**: Service can parse membership welcome messages
+- [ ] **EVENT-06**: Service can parse membership milestone messages
+- [ ] **EVENT-07**: Service can parse ticker events (pinned/highlighted messages)
 
-- [x] **TWITCH-01**: Twitch listener queries shard coordinator for assigned channels on startup
-- [x] **TWITCH-02**: Twitch listener connects to IRC only for assigned channels (not all channels)
-- [x] **TWITCH-03**: Twitch listener supports multiple IRC connections when assigned >100 channels
-- [x] **TWITCH-04**: Twitch listener stores IRC JOIN list state in ConnectionSnapshot for migration
-- [x] **TWITCH-05**: Twitch listener gracefully parts IRC channels during migration (sends PART command)
-- [x] **TWITCH-06**: System allows HPA to scale Twitch listener from 1 to 5 replicas successfully
-- [x] **TWITCH-07**: All Twitch listener pods report ready status (fixes current 1/5 ready issue)
+### Deletion Detection
 
-### Kick Load Balancing
+- [ ] **DEL-01**: Service can detect single message deletion events from InnerTube
+- [ ] **DEL-02**: Service can emit deletion event with EventType="message_deletion"
+- [ ] **DEL-03**: Service can detect batch deletion events (ban/timeout)
+- [ ] **DEL-04**: Service can emit batch deletion with deletion_type="batch" and ban metadata
+- [ ] **DEL-05**: Service can buffer deletion events to handle race conditions (deletion before original message)
 
-- [x] **KICK-01**: Kick listener queries shard coordinator for assigned channels on startup
-- [x] **KICK-02**: Kick listener connects to Pusher WebSocket only for assigned channels
-- [x] **KICK-03**: Kick listener stores Pusher subscription IDs in ConnectionSnapshot for migration
-- [x] **KICK-04**: Kick listener gracefully unsubscribes from channels during migration
-- [x] **KICK-05**: System allows HPA to scale Kick listener from 1 to 5 replicas successfully
+### Contract Validation
 
-### TikTok Load Balancing
+- [ ] **TEST-01**: Schema tests validate RawChatMessage JSON matches official listener output
+- [ ] **TEST-02**: Golden replay tests compare InnerTube vs official listener outputs
+- [ ] **TEST-03**: Lifecycle tests verify connection gating behavior
+- [ ] **TEST-04**: Lifecycle tests verify stream offline detection and cleanup
 
-- [x] **TIKTOK-01**: TikTok listener queries shard coordinator for assigned channels on startup
-- [x] **TIKTOK-02**: TikTok listener connects via tiktok-live-connector only for assigned channels
-- [x] **TIKTOK-03**: TikTok listener stores connection state in ConnectionSnapshot for migration
-- [x] **TIKTOK-04**: TikTok listener handles connection state migration for unofficial library
-- [x] **TIKTOK-05**: System allows HPA to scale TikTok listener from 1 to 3 replicas successfully
+### Production Readiness
 
-### Observability & Metrics
+- [ ] **PROD-01**: Service exposes Prometheus metrics endpoint (/metrics)
+- [ ] **PROD-02**: Service tracks messages/sec, errors, reconnections in metrics
+- [ ] **PROD-03**: README documents ToS disclosure (InnerTube is unofficial API)
+- [ ] **PROD-04**: Deployment guide explains Docker image swap process
+- [ ] **PROD-05**: Migration guide explains self-hoster transition from official listener
 
-- [x] **METRICS-01**: Each listener pod exposes Prometheus metrics at /metrics endpoint
-- [x] **METRICS-02**: System tracks per-pod channel count as Gauge metric (shard_channel_count)
-- [x] **METRICS-03**: System tracks per-pod message rate as Counter metric (shard_messages_total)
-- [x] **METRICS-04**: System tracks rebalancing events as Counter metric (shard_rebalancing_total)
-- [x] **METRICS-05**: System tracks migration success/failure as Counter metrics (shard_migration_success/failure)
-- [x] **METRICS-06**: System tracks load imbalance ratio as Gauge metric (shard_imbalance_ratio)
-- [x] **METRICS-07**: Grafana dashboard visualizes channel distribution across pods (heatmap)
-- [x] **METRICS-08**: Grafana dashboard shows rebalancing timeline and migration events
-- [x] **METRICS-09**: Prometheus alert triggers when imbalance ratio >0.7 for 10 minutes
-- [x] **METRICS-10**: Prometheus alert triggers on split-brain detection (multiple leaders)
-- [x] **METRICS-11**: Prometheus alert triggers on rebalancing thrashing (>3 rebalances in 15min)
+## Future Requirements
 
-### Distributed Tracing
+Deferred to future releases (v1.3+).
 
-- [x] **TRACE-01**: System instruments channel assignment operations with OpenTelemetry spans
-- [x] **TRACE-02**: System instruments migration operations with OpenTelemetry spans
-- [x] **TRACE-03**: System instruments rebalancing operations with OpenTelemetry spans
-- [x] **TRACE-04**: System propagates trace context through Redis Streams messages
-- [x] **TRACE-05**: Jaeger UI shows end-to-end trace for channel migration (all phases)
-- [x] **TRACE-06**: Jaeger UI shows trace for rebalancing decision (trigger → completion)
+### Advanced Deployment
 
-## Future Requirements (Deferred)
+- **DEPLOY-01**: Kubernetes manifests (Deployment, Service, ConfigMap)
+- **DEPLOY-02**: Canary deployment strategy (10%→50%→100% rollout)
+- **DEPLOY-03**: Automatic rollback on error rate spike (>5%)
+- **DEPLOY-04**: Cross-listener comparison tool for production validation
 
-### Cross-Region Load Balancing
-- **REGION-01**: Channel assignment considers pod region for latency optimization
-- **REGION-02**: Rebalancing prefers same-region migrations to minimize latency
+### Advanced Features
 
-### Predictive Scaling
-- **PRED-01**: System learns stream schedules and pre-scales listeners before high-traffic events
-- **PRED-02**: System integrates with Twitch/YouTube APIs to detect upcoming high-traffic streams
-
-### Advanced HPA Integration
-- **HPA-01**: HPA uses custom metrics (channel count, messages/sec) instead of CPU
-- **HPA-02**: Prometheus Adapter exposes shard metrics for HPA consumption
+- **ADV-01**: Leader election integration with source-manager (multi-pod coordination)
+- **ADV-02**: Load balancing support (hash-based sharding across pods)
+- **ADV-03**: Connection gating (stop polling when overlay disconnected)
+- **ADV-04**: Fast resume from Redis state (restore active streams on startup)
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| YouTube load balancing | Quota is bottleneck, not connections - keep existing leader election |
-| Manual channel pinning | All channels are rebalanceable for optimal load distribution |
-| Multi-tenancy isolation | Single Redis instance shared across pods - defer to future |
-| Cross-cluster sharding | Single Kubernetes cluster only for v1.1 |
-| Real-time rebalancing | 60-second migration window acceptable for chat aggregation |
-| Perfect load balance | Causes thrashing - accept 0.5 imbalance threshold |
+| Quota tracking database | InnerTube has no quotas - removes 5+ tables and state machine complexity |
+| OAuth token storage | InnerTube works unauthenticated - no token refresh needed |
+| YouTube API quota coordination | InnerTube bypasses quota system entirely |
+| Cross-service quota endpoints | /quota/record and YouTubeQuotaClient not needed |
+| Polls/Creator goals events | Unstable InnerTube schema (research PITFALLS.md) |
+| Viewer leaderboard rank | Low value, increases schema drift risk |
+| Sending messages to chat | Out of scope - listener is read-only |
+| Go language implementation | No mature Go InnerTube libraries exist (research STACK.md) |
 
 ## Traceability
 
@@ -116,59 +96,46 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHARD-01 | Phase 5 | Complete |
-| SHARD-02 | Phase 5 | Complete |
-| SHARD-03 | Phase 5 | Complete |
-| SHARD-04 | Phase 5 | Complete |
-| SHARD-05 | Phase 5 | Complete |
-| SHARD-06 | Phase 5 | Complete |
-| SHARD-07 | Phase 5 | Complete |
-| SHARD-08 | Phase 5 | Complete |
-| REBAL-01 | Phase 7 | Complete |
-| REBAL-02 | Phase 7 | Complete |
-| REBAL-03 | Phase 7 | Complete |
-| REBAL-04 | Phase 7 | Complete |
-| REBAL-05 | Phase 7 | Complete |
-| REBAL-06 | Phase 7 | Complete |
-| REBAL-07 | Phase 7 | Complete |
-| REBAL-08 | Phase 5 | Complete |
-| MIGRATE-01 | Phase 6 | Complete |
-| MIGRATE-02 | Phase 6 | Complete |
-| MIGRATE-03 | Phase 6 | Complete |
-| MIGRATE-04 | Phase 6 | Complete |
-| MIGRATE-05 | Phase 6 | Complete |
-| MIGRATE-06 | Phase 6 | Complete |
-| TWITCH-01 | Phase 6 | Complete |
-| TWITCH-02 | Phase 6 | Complete |
-| TWITCH-03 | Phase 6 | Complete |
-| TWITCH-04 | Phase 6 | Complete |
-| TWITCH-05 | Phase 6 | Complete |
-| TWITCH-06 | Phase 6 | Complete |
-| TWITCH-07 | Phase 6 | Complete |
-| KICK-01 | Phase 6 | Complete |
-| KICK-02 | Phase 6 | Complete |
-| KICK-03 | Phase 6 | Complete |
-| KICK-04 | Phase 6 | Complete |
-| KICK-05 | Phase 6 | Complete |
-| TIKTOK-01 | Phase 6 | Complete |
-| TIKTOK-02 | Phase 6 | Complete |
-| TIKTOK-03 | Phase 6 | Complete |
-| TIKTOK-04 | Phase 6 | Complete |
-| TIKTOK-05 | Phase 6 | Complete |
-| METRICS-01 | Phase 8 | Complete |
-| METRICS-02 | Phase 8 | Complete |
-| METRICS-03 | Phase 8 | Complete |
-| METRICS-04 | Phase 8 | Complete |
-| METRICS-05 | Phase 8 | Complete |
-| METRICS-06 | Phase 8 | Complete |
-| METRICS-07 | Phase 8 | Complete |
-| METRICS-08 | Phase 8 | Complete |
-| METRICS-09 | Phase 8 | Complete |
-| METRICS-10 | Phase 8 | Complete |
-| METRICS-11 | Phase 8 | Complete |
-| TRACE-01 | Phase 8 | Complete |
-| TRACE-02 | Phase 8 | Complete |
-| TRACE-03 | Phase 8 | Complete |
-| TRACE-04 | Phase 8 | Complete |
-| TRACE-05 | Phase 8 | Complete |
-| TRACE-06 | Phase 8 | Complete |
+| CORE-01 | TBD | Pending |
+| CORE-02 | TBD | Pending |
+| CORE-03 | TBD | Pending |
+| CORE-04 | TBD | Pending |
+| CORE-05 | TBD | Pending |
+| CORE-06 | TBD | Pending |
+| STREAM-01 | TBD | Pending |
+| STREAM-02 | TBD | Pending |
+| STREAM-03 | TBD | Pending |
+| STREAM-04 | TBD | Pending |
+| STREAM-05 | TBD | Pending |
+| STREAM-06 | TBD | Pending |
+| STREAM-07 | TBD | Pending |
+| EVENT-01 | TBD | Pending |
+| EVENT-02 | TBD | Pending |
+| EVENT-03 | TBD | Pending |
+| EVENT-04 | TBD | Pending |
+| EVENT-05 | TBD | Pending |
+| EVENT-06 | TBD | Pending |
+| EVENT-07 | TBD | Pending |
+| DEL-01 | TBD | Pending |
+| DEL-02 | TBD | Pending |
+| DEL-03 | TBD | Pending |
+| DEL-04 | TBD | Pending |
+| DEL-05 | TBD | Pending |
+| TEST-01 | TBD | Pending |
+| TEST-02 | TBD | Pending |
+| TEST-03 | TBD | Pending |
+| TEST-04 | TBD | Pending |
+| PROD-01 | TBD | Pending |
+| PROD-02 | TBD | Pending |
+| PROD-03 | TBD | Pending |
+| PROD-04 | TBD | Pending |
+| PROD-05 | TBD | Pending |
+
+**Coverage:**
+- v1.2 requirements: 35 total
+- Mapped to phases: 0 (roadmap not yet created)
+- Unmapped: 35 ⚠️
+
+---
+*Requirements defined: 2026-02-21*
+*Last updated: 2026-02-21 after initial definition*
