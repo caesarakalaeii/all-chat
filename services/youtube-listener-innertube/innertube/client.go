@@ -202,6 +202,12 @@ func (c *Client) GetPollInterval(resp *LiveChatResponse) time.Duration {
 	return 0
 }
 
+// IsInitialized returns true if the client is ready to make API calls
+// For PoC, this always returns true since the client is stateless
+func (c *Client) IsInitialized() bool {
+	return c != nil && c.httpClient != nil && c.apiKey != ""
+}
+
 // min returns the minimum of two integers
 func min(a, b int) int {
 	if a < b {
