@@ -1051,3 +1051,293 @@ func TestFormatColorFromInt(t *testing.T) {
 		})
 	}
 }
+
+// TestParseDeletionEvent tests deletion event parsing
+func TestParseDeletionEvent(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	t.Run("single deletion event", func(t *testing.T) {
+		actions := []ChatAction{
+			{
+				MarkChatItemAsDeletedAction: &MarkChatItemAsDeletedAction{
+					DeletedStateMessage: MessageContent{
+						Runs: []MessageRun{{Text: "[message deleted]"}},
+					},
+					TargetItemID:  "ChwKGkNNT3M4UF9BdTRvRENNeTQ5Z0FkaERaeFhBZw%3D%3D",
+					TimestampUsec: "1640000000000000",
+				},
+			},
+		}
+
+		messages, err := ParseMessages(actions, channelID)
+		if err != nil {
+			t.Fatalf("ParseMessages() error = %v", err)
+		}
+
+		if len(messages) != 1 {
+			t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+		}
+
+		msg := messages[0]
+		if msg.EventType != "message_deletion" {
+			t.Errorf("EventType = %v, want message_deletion", msg.EventType)
+		}
+		if msg.Platform != "youtube" {
+			t.Errorf("Platform = %v, want youtube", msg.Platform)
+		}
+		if msg.ChannelID != channelID {
+			t.Errorf("ChannelID = %v, want %v", msg.ChannelID, channelID)
+		}
+		if msg.Text != "" {
+			t.Errorf("Text = %v, want empty string", msg.Text)
+		}
+		if msg.UserID != "" {
+			t.Errorf("UserID = %v, want empty string (deletion events have no user)", msg.UserID)
+		}
+		if msg.Username != "" {
+			t.Errorf("Username = %v, want empty string (deletion events have no username)", msg.Username)
+		}
+		if msg.MessageID == "" {
+			t.Error("MessageID should be generated")
+		}
+
+		// Verify event data
+		if deletionType, ok := msg.EventData["deletion_type"].(string); !ok || deletionType != "single" {
+			t.Errorf("EventData[deletion_type] = %v, want 'single'", msg.EventData["deletion_type"])
+		}
+		if targetMsgID, ok := msg.EventData["target_msg_id"].(string); !ok || targetMsgID == "" {
+			t.Errorf("EventData[target_msg_id] = %v, want non-empty string", msg.EventData["target_msg_id"])
+		}
+		if targetMsgID, ok := msg.EventData["target_msg_id"].(string); ok {
+			if targetMsgID != "ChwKGkNNT3M4UF9BdTRvRENNeTQ5Z0FkaERaeFhBZw%3D%3D" {
+				t.Errorf("EventData[target_msg_id] = %v, want ChwKGkNNT3M4UF9BdTRvRENNeTQ5Z0FkaERaeFhBZw%%3D%%3D", targetMsgID)
+			}
+		}
+	})
+
+	t.Run("deletion event without timestamp", func(t *testing.T) {
+		actions := []ChatAction{
+			{
+				MarkChatItemAsDeletedAction: &MarkChatItemAsDeletedAction{
+					DeletedStateMessage: MessageContent{
+						Runs: []MessageRun{{Text: "[message deleted]"}},
+					},
+					TargetItemID: "test_item_id",
+				},
+			},
+		}
+
+		messages, err := ParseMessages(actions, channelID)
+		if err != nil {
+			t.Fatalf("ParseMessages() error = %v", err)
+		}
+
+		if len(messages) != 1 {
+			t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+		}
+
+		msg := messages[0]
+		if msg.Timestamp.IsZero() {
+			t.Error("Timestamp should be set (current time if not provided)")
+		}
+	})
+
+	t.Run("mixed events - regular messages and deletions", func(t *testing.T) {
+		actions := []ChatAction{
+			{
+				AddChatItemAction: &AddChatItemAction{
+					Item: ChatItem{
+						LiveChatTextMessageRenderer: &LiveChatTextMessageRenderer{
+							Message: MessageContent{
+								Runs: []MessageRun{{Text: "Message 1"}},
+							},
+							AuthorName:              SimpleText{SimpleText: "User1"},
+							AuthorExternalChannelID: "UC1",
+							TimestampUsec:           "1640000000000000",
+						},
+					},
+				},
+			},
+			{
+				AddChatItemAction: &AddChatItemAction{
+					Item: ChatItem{
+						LiveChatTextMessageRenderer: &LiveChatTextMessageRenderer{
+							Message: MessageContent{
+								Runs: []MessageRun{{Text: "Message 2"}},
+							},
+							AuthorName:              SimpleText{SimpleText: "User2"},
+							AuthorExternalChannelID: "UC2",
+							TimestampUsec:           "1640000001000000",
+						},
+					},
+				},
+			},
+			{
+				MarkChatItemAsDeletedAction: &MarkChatItemAsDeletedAction{
+					TargetItemID:  "deleted_1",
+					TimestampUsec: "1640000002000000",
+				},
+			},
+			{
+				AddChatItemAction: &AddChatItemAction{
+					Item: ChatItem{
+						LiveChatTextMessageRenderer: &LiveChatTextMessageRenderer{
+							Message: MessageContent{
+								Runs: []MessageRun{{Text: "Message 3"}},
+							},
+							AuthorName:              SimpleText{SimpleText: "User3"},
+							AuthorExternalChannelID: "UC3",
+							TimestampUsec:           "1640000003000000",
+						},
+					},
+				},
+			},
+			{
+				MarkChatItemAsDeletedAction: &MarkChatItemAsDeletedAction{
+					TargetItemID:  "deleted_2",
+					TimestampUsec: "1640000004000000",
+				},
+			},
+		}
+
+		messages, err := ParseMessages(actions, channelID)
+		if err != nil {
+			t.Fatalf("ParseMessages() error = %v", err)
+		}
+
+		if len(messages) != 5 {
+			t.Fatalf("ParseMessages() returned %d messages, want 5", len(messages))
+		}
+
+		// Verify message types
+		regularCount := 0
+		deletionCount := 0
+		for _, msg := range messages {
+			if msg.EventType == "message_deletion" {
+				deletionCount++
+			} else if msg.EventType == "" {
+				regularCount++
+			}
+		}
+
+		if regularCount != 3 {
+			t.Errorf("Regular messages = %d, want 3", regularCount)
+		}
+		if deletionCount != 2 {
+			t.Errorf("Deletion events = %d, want 2", deletionCount)
+		}
+	})
+}
+
+// TestDeletionEventSchemaMatch tests deletion event schema matches official listener
+func TestDeletionEventSchemaMatch(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	actions := []ChatAction{
+		{
+			MarkChatItemAsDeletedAction: &MarkChatItemAsDeletedAction{
+				TargetItemID:  "test_deleted_message_id",
+				TimestampUsec: "1640000000000000",
+			},
+		},
+	}
+
+	messages, err := ParseMessages(actions, channelID)
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+
+	msg := messages[0]
+
+	// Marshal to JSON
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("Failed to marshal deletion event: %v", err)
+	}
+
+	// Unmarshal back to verify structure
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(jsonData, &decoded); err != nil {
+		t.Fatalf("Failed to unmarshal JSON: %v", err)
+	}
+
+	// Verify required fields for deletion event
+	if eventType, ok := decoded["event_type"].(string); !ok || eventType != "message_deletion" {
+		t.Errorf("event_type = %v, want 'message_deletion'", decoded["event_type"])
+	}
+
+	if platform, ok := decoded["platform"].(string); !ok || platform != "youtube" {
+		t.Errorf("platform = %v, want 'youtube'", decoded["platform"])
+	}
+
+	// Verify event_data structure
+	eventData, ok := decoded["event_data"].(map[string]interface{})
+	if !ok {
+		t.Fatal("event_data should be a map")
+	}
+
+	if _, ok := eventData["target_msg_id"]; !ok {
+		t.Error("event_data should contain target_msg_id")
+	}
+
+	if deletionType, ok := eventData["deletion_type"].(string); !ok || deletionType != "single" {
+		t.Errorf("event_data.deletion_type = %v, want 'single'", eventData["deletion_type"])
+	}
+
+	// Verify deletion events have empty user fields
+	if userID, ok := decoded["user_id"].(string); !ok || userID != "" {
+		t.Errorf("user_id = %v, want empty string", decoded["user_id"])
+	}
+
+	if username, ok := decoded["username"].(string); !ok || username != "" {
+		t.Errorf("username = %v, want empty string", decoded["username"])
+	}
+
+	if text, ok := decoded["text"].(string); !ok || text != "" {
+		t.Errorf("text = %v, want empty string", decoded["text"])
+	}
+}
+
+// TestValidateRawMessage_DeletionEvent tests validation for deletion events
+func TestValidateRawMessage_DeletionEvent(t *testing.T) {
+	t.Run("valid deletion event", func(t *testing.T) {
+		msg := &RawChatMessage{
+			MessageID: "test-id",
+			Platform:  "youtube",
+			ChannelID: "UC_channel",
+			EventType: "message_deletion",
+			Timestamp: time.Now(),
+			Tags:      make(map[string]string),
+			EventData: map[string]interface{}{
+				"target_msg_id":  "deleted_id",
+				"deletion_type":  "single",
+			},
+		}
+
+		err := ValidateRawMessage(msg)
+		if err != nil {
+			t.Errorf("ValidateRawMessage() should pass for deletion event, got error: %v", err)
+		}
+	})
+
+	t.Run("deletion event without user fields (valid)", func(t *testing.T) {
+		msg := &RawChatMessage{
+			MessageID: "test-id",
+			Platform:  "youtube",
+			EventType: "message_deletion",
+			Timestamp: time.Now(),
+			UserID:    "", // Deletion events don't have user
+			Username:  "", // Deletion events don't have username
+			Text:      "", // Deletion events don't have text
+		}
+
+		err := ValidateRawMessage(msg)
+		if err != nil {
+			t.Errorf("ValidateRawMessage() should pass for deletion event without user fields, got error: %v", err)
+		}
+	})
+}

@@ -57,6 +57,17 @@ func ParseMessages(actions []ChatAction, channelID string) ([]*RawChatMessage, e
 			continue
 		}
 
+		// Handle deletion events
+		if action.MarkChatItemAsDeletedAction != nil {
+			delEvent, err := parseDeletionEvent(action.MarkChatItemAsDeletedAction, channelID)
+			if err != nil {
+				// Log error but continue processing other messages
+				continue
+			}
+			messages = append(messages, delEvent)
+			continue
+		}
+
 		// Extract the actual chat item for regular messages
 		var item *ChatItem
 		if action.AddChatItemAction != nil {
@@ -383,6 +394,44 @@ func (msg *RawChatMessage) ToJSON() ([]byte, error) {
 	return json.Marshal(msg)
 }
 
+// parseDeletionEvent converts a MarkChatItemAsDeletedAction to RawChatMessage
+func parseDeletionEvent(action *MarkChatItemAsDeletedAction, channelID string) (*RawChatMessage, error) {
+	// Extract deletion timestamp (use current time if not provided)
+	timestamp := time.Now().UTC()
+	if action.TimestampUsec != "" {
+		if ts, err := parseTimestampUsec(action.TimestampUsec); err == nil {
+			timestamp = ts
+		}
+	}
+
+	// Extract deleted message ID from TargetItemID
+	// This is the InnerTube internal ID (not the YouTube message ID)
+	deletedMessageID := action.TargetItemID
+	if deletedMessageID == "" {
+		return nil, fmt.Errorf("deletion event missing target item ID")
+	}
+
+	// Create deletion event message matching official listener schema
+	msg := &RawChatMessage{
+		MessageID: uuid.New().String(), // New ID for deletion event itself
+		Platform:  "youtube",
+		ChannelID: channelID,
+		StreamID:  "", // Populated by caller
+		UserID:    "", // Deletion events don't have a user (moderator action)
+		Username:  "", // No username for deletion events
+		Text:      "", // Deletion events have no text
+		Timestamp: timestamp,
+		Tags:      make(map[string]string),
+		EventType: "message_deletion",
+		EventData: map[string]interface{}{
+			"target_msg_id":  deletedMessageID, // Match official listener schema
+			"deletion_type":  "single",         // Single message deletion
+		},
+	}
+
+	return msg, nil
+}
+
 // ValidateRawMessage ensures the message conforms to the official youtube-listener schema
 // Critical fields must be non-empty, optional fields get sensible defaults
 func ValidateRawMessage(msg *RawChatMessage) error {
@@ -400,15 +449,20 @@ func ValidateRawMessage(msg *RawChatMessage) error {
 	if msg.Platform != "youtube" {
 		return fmt.Errorf("Platform must be 'youtube', got '%s'", msg.Platform)
 	}
-	if msg.UserID == "" {
-		return fmt.Errorf("UserID is required")
+
+	// Deletion events don't have UserID/Username - skip validation for them
+	if msg.EventType != "message_deletion" {
+		if msg.UserID == "" {
+			return fmt.Errorf("UserID is required")
+		}
+		if msg.Username == "" {
+			return fmt.Errorf("Username is required")
+		}
+		if msg.Text == "" && msg.EventType == "" {
+			return fmt.Errorf("Text is required for non-event messages")
+		}
 	}
-	if msg.Username == "" {
-		return fmt.Errorf("Username is required")
-	}
-	if msg.Text == "" && msg.EventType == "" {
-		return fmt.Errorf("Text is required for non-event messages")
-	}
+
 	if msg.Timestamp.IsZero() {
 		return fmt.Errorf("Timestamp is required")
 	}
