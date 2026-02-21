@@ -103,14 +103,18 @@ Plans:
 **Requirements**: STREAM-01, STREAM-02, STREAM-03, STREAM-04, STREAM-05, STREAM-06, STREAM-07, EVENT-03, EVENT-04, EVENT-05, EVENT-06, EVENT-07
 **Success Criteria** (what must be TRUE):
   1. Service can discover latest live stream from channel ID and filter out premieres
-  2. Service can start/stop monitoring streams via HTTP API (POST /streams/monitor, DELETE /streams/:id)
+  2. Service can start/stop monitoring streams via source-manager integration (no HTTP API)
   3. Service detects stream offline and stops polling automatically
   4. Service reconnects on network errors with exponential backoff (no crash on transient failures)
   5. Service handles SIGTERM gracefully (cleanup connections, flush Redis buffers within 25s)
   6. Service parses all event types (Super Chat, Super Sticker, memberships, milestones, tickers)
-**Plans**: TBD
+**Plans**: 4 plans
 
-Plans: TBD
+Plans:
+- [ ] 10-01-PLAN.md — Stream discovery (HTML parsing) and Redis persistence for channel→video mappings
+- [ ] 10-02-PLAN.md — Advanced event parsing (Super Chat, Super Sticker, memberships, milestones, tickers)
+- [ ] 10-03-PLAN.md — Source-manager integration with async discovery and leadership coordination
+- [ ] 10-04-PLAN.md — Production lifecycle (offline detection, auto-resume, graceful shutdown)
 
 ### Phase 11: Contract Validation
 **Goal**: Prove behavioral equivalence with official youtube-listener through comprehensive contract testing
@@ -166,11 +170,11 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 6. Connection Management & Migration | v1.1 | 8/8 | Complete | 2026-02-20 |
 | 7. Dynamic Rebalancing & HPA | v1.1 | 4/4 | Complete | 2026-02-20 |
 | 8. Observability & Production Readiness | v1.1 | 4/4 | Complete | 2026-02-20 |
-| 9. Core Ingestion PoC | v1.2 | 0/5 | Not started | - |
-| 10. Production Minimum | v1.2 | 0/TBD | Not started | - |
+| 9. Core Ingestion PoC | v1.2 | 5/5 | Complete | 2026-02-21 |
+| 10. Production Minimum | v1.2 | 0/4 | Not started | - |
 | 11. Contract Validation | v1.2 | 0/TBD | Not started | - |
 | 12. Production Rollout | v1.2 | 0/TBD | Not started | - |
 | 13. Feature Parity | v1.2 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-02-21 after Phase 9 gap closure planning*
+*Last updated: 2026-02-21 after Phase 10 planning*
