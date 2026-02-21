@@ -84,13 +84,16 @@
 **Depends on**: Nothing (first phase of v1.2)
 **Requirements**: CORE-01, CORE-02, CORE-03, CORE-04, CORE-05, CORE-06, EVENT-01, EVENT-02
 **Success Criteria** (what must be TRUE):
-  1. Service can poll live YouTube chat via masterchat and publish to Redis Streams (chat:raw)
+  1. Service can poll live YouTube chat via InnerTube and publish to Redis Streams (chat:raw)
   2. Message-processor consumes InnerTube messages without code changes (RawChatMessage contract maintained)
-  3. Health checks return correct status (/health/live always 200, /health/ready checks Redis)
+  3. Health checks return correct status (/health/live returns 200, /health/ready checks Redis)
   4. Messages contain user metadata (username, avatar, badges) in expected format
-**Plans**: TBD
+**Plans**: 3 plans
 
-Plans: TBD
+Plans:
+- [ ] 09-01-PLAN.md — InnerTube client and message parser with strict schema validation
+- [ ] 09-02-PLAN.md — Polling loop with continuation tokens and exponential backoff
+- [ ] 09-03-PLAN.md — Service integration with Redis publishing and health checks
 
 ### Phase 10: Production Minimum
 **Goal**: Enable dynamic stream management and production lifecycle behaviors
@@ -161,11 +164,11 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 6. Connection Management & Migration | v1.1 | 8/8 | Complete | 2026-02-20 |
 | 7. Dynamic Rebalancing & HPA | v1.1 | 4/4 | Complete | 2026-02-20 |
 | 8. Observability & Production Readiness | v1.1 | 4/4 | Complete | 2026-02-20 |
-| 9. Core Ingestion PoC | v1.2 | 0/TBD | Not started | - |
+| 9. Core Ingestion PoC | v1.2 | 0/3 | Not started | - |
 | 10. Production Minimum | v1.2 | 0/TBD | Not started | - |
 | 11. Contract Validation | v1.2 | 0/TBD | Not started | - |
 | 12. Production Rollout | v1.2 | 0/TBD | Not started | - |
 | 13. Feature Parity | v1.2 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-02-21 after v1.2 roadmap creation*
+*Last updated: 2026-02-21 after Phase 9 planning*
