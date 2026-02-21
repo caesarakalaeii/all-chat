@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +16,7 @@ type mockRedisHealthChecker struct {
 	shouldFail bool
 }
 
-func (m *mockRedisHealthChecker) Ping(ctx interface{}) error {
+func (m *mockRedisHealthChecker) Ping(ctx context.Context) error {
 	if m.shouldFail {
 		return errors.New("redis connection failed")
 	}
