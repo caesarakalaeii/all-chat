@@ -1,0 +1,250 @@
+# YouTube Listener InnerTube (PoC)
+
+**Status**: Phase 9 Proof of Concept (v1.2 Milestone)
+
+Drop-in replacement for the official YouTube Listener using the InnerTube API instead of YouTube Data API v3. This service eliminates OAuth complexity and quota limitations while maintaining 100% compatibility with the existing message-processor.
+
+## Purpose
+
+Validates InnerTube API viability as a replacement for the official YouTube Data API v3 by:
+
+1. **Eliminating OAuth**: No user authentication required (uses public InnerTube API)
+2. **Removing quota limits**: InnerTube is not subject to YouTube Data API quota restrictions
+3. **Maintaining compatibility**: Publishes to same Redis Streams key (`chat:raw`) with identical schema
+
+## Architecture
+
+```
+InnerTube Client (HTTP polling)
+  ↓ continuation-based requests
+Poller (2s fixed interval)
+  ↓ parse messages
+Redis Streams Publisher
+  ↓ XADD to chat:raw
+Message Processor (unchanged)
+  ↓ normalize + enrich
+Overlay WebSocket
+```
+
+**Key Components**:
+- **InnerTube Client**: HTTP client for `youtubei/v1/live_chat/get_live_chat_replay` endpoint
+- **Poller**: Continuation-based polling loop with exponential backoff (2s → 60s max)
+- **Publisher**: Redis Streams XADD with exact field mapping from official youtube-listener
+- **Health Handlers**: Liveness and readiness probes for Kubernetes
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `INITIAL_CONTINUATION` | **Yes** | - | Initial continuation token from stream HTML (manual extraction for PoC) |
+| `CHANNEL_ID` | **Yes** | - | YouTube channel ID for message attribution |
+| `LOG_LEVEL` | No | `info` | Log verbosity: `debug` or `info` |
+| `REDIS_HOST` | No | `localhost` | Redis hostname |
+| `REDIS_PORT` | No | `6379` | Redis port |
+| `HTTP_PORT` | No | `8080` | HTTP server port for health checks |
+
+## Running Locally
+
+### Prerequisites
+
+1. Redis running locally:
+   ```bash
+   docker run -d -p 6379:6379 redis:7-alpine
+   ```
+
+2. Extract continuation token manually:
+   - Visit a live YouTube stream
+   - Open browser DevTools → Network tab
+   - Filter for `get_live_chat_replay`
+   - Copy `continuation` value from request payload
+
+### Start Service
+
+```bash
+export INITIAL_CONTINUATION="<token_from_manual_extraction>"
+export CHANNEL_ID="UCxxxxxx"  # YouTube channel ID
+export LOG_LEVEL="debug"
+cd services/youtube-listener-innertube
+go run ./cmd/main.go
+```
+
+### Verify Operation
+
+**Health Checks**:
+```bash
+curl http://localhost:8080/health/live   # Should return 200 OK
+curl http://localhost:8080/health/ready  # Should return 200 when Redis connected
+```
+
+**Monitor Redis Streams**:
+```bash
+# Terminal 1: Watch for incoming messages
+redis-cli XREAD COUNT 10 STREAMS chat:raw 0
+
+# Should show messages with:
+# - platform: "youtube"
+# - message_id: UUID
+# - username: display name
+# - text: message content
+# - timestamp: RFC3339Nano format
+# - data: full JSON payload
+```
+
+## Health Checks
+
+### Liveness Probe (`/health/live`)
+- **Always returns 200 OK** (no deadlock detection in PoC)
+- Indicates service process is running
+- Future enhancement: detect deadlocks and return 500
+
+### Readiness Probe (`/health/ready`)
+- **Returns 200** when:
+  1. Redis connection is healthy (via `publisher.Ping()`)
+  2. InnerTube client is initialized
+- **Returns 503** when:
+  - Redis connection fails
+  - InnerTube client not initialized
+- Per user decision: "ready even if no stream actively monitored yet"
+
+### Status Endpoint (`/status`)
+- Debugging endpoint (not used by Kubernetes)
+- Returns poller state and service information
+
+## Contract Compatibility
+
+This service maintains **byte-for-byte compatibility** with the official youtube-listener:
+
+| Field | Format | Notes |
+|-------|--------|-------|
+| `stream` | `"chat:raw"` | Same Redis Streams key |
+| `platform` | `"youtube"` | Exact match |
+| `message_id` | UUID | Generated per message |
+| `channel_id` | YouTube channel ID | From `CHANNEL_ID` env var |
+| `user_id` | YouTube user channel ID | From `authorExternalChannelId` |
+| `username` | Display name | From `authorName` |
+| `text` | Message content | Concatenated text runs |
+| `timestamp` | RFC3339Nano | Parsed from `timestampUsec` |
+| `data` | Full JSON | Complete `RawChatMessage` struct |
+
+**No changes required** in message-processor or downstream services.
+
+## Known Limitations (PoC Scope)
+
+1. **Hardcoded API Key**: Uses extracted InnerTube API key (`AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8`)
+   - **Phase 10**: Dynamic extraction from stream HTML
+
+2. **Manual Continuation Token**: Requires manually extracting continuation token from browser
+   - **Phase 10**: Stream discovery via overlay-manager integration
+
+3. **Single Stream Only**: PoC monitors one stream at a time
+   - **Phase 10**: Multi-stream support via control plane
+
+4. **No Deletion Events**: Chat message deletions not implemented
+   - **Phase 13**: Deletion event handling (differentiator, not blocker)
+
+5. **Fixed Polling Interval**: 2-second interval (not adaptive)
+   - **User decision**: Keep fixed for PoC simplicity
+
+## Deployment
+
+### Docker Build
+
+```bash
+cd services/youtube-listener-innertube
+docker build -t youtube-listener-innertube:poc .
+```
+
+### Docker Run
+
+```bash
+docker run \
+  -e INITIAL_CONTINUATION="<token>" \
+  -e CHANNEL_ID="UCxxxxxx" \
+  -e REDIS_HOST="redis" \
+  -e LOG_LEVEL="debug" \
+  --network=host \
+  youtube-listener-innertube:poc
+```
+
+### Kubernetes (Future)
+
+Health checks configured for:
+- Liveness: `GET /health/live` every 10s
+- Readiness: `GET /health/ready` every 5s
+- Startup: `GET /health/ready` (initial delay 5s)
+
+## Graceful Shutdown
+
+The service handles `SIGTERM` and `SIGINT` signals gracefully:
+
+1. Stop accepting new polls (cancel poller context)
+2. Wait for current poll to complete (~2s max)
+3. Shutdown HTTP server with 25s timeout
+4. Exit cleanly
+
+**Kubernetes consideration**: Service completes shutdown in <25s, leaving 5s buffer before `SIGKILL` at 30s.
+
+## Testing
+
+### Unit Tests
+
+```bash
+cd services/youtube-listener-innertube
+go test ./publisher -v  # Redis publisher tests
+go test ./handlers -v   # Health check tests
+go test ./innertube -v  # Parser and client tests
+go test ./poller -v     # Polling loop tests
+```
+
+### Integration Test (Manual)
+
+See "Running Locally" section above for end-to-end validation.
+
+## Comparison with Official YouTube Listener
+
+| Feature | Official Listener | InnerTube Listener (PoC) |
+|---------|-------------------|--------------------------|
+| **Authentication** | OAuth 2.0 (complex) | None (public API) |
+| **Quota** | 10,000 units/day (limited) | Unlimited (not subject to API quotas) |
+| **Stream Discovery** | YouTube API search | Manual continuation (Phase 10: automated) |
+| **Message Schema** | RawChatMessage | **Identical** (drop-in compatible) |
+| **Deletion Events** | Supported | Not yet (Phase 13) |
+| **Multi-stream** | Yes | Not yet (Phase 10) |
+| **Rate Limiting** | Quota-based | IP-based (2s polling interval) |
+
+## Next Phases
+
+**Phase 10: Control Plane Integration**
+- Dynamic API key extraction from stream HTML
+- Stream discovery via overlay-manager
+- Multi-stream support with per-stream continuation tracking
+
+**Phase 11: Contract Testing**
+- Schema drift detection
+- Integration tests with message-processor
+- Validation against official youtube-listener output
+
+**Phase 12: Performance Optimization**
+- Batch publishing to Redis Streams
+- Adaptive polling intervals (respect InnerTube timeout hints)
+- Connection pooling and resource management
+
+**Phase 13: Deletion Events**
+- Parse `markChatItemAsDeletedAction` from InnerTube responses
+- Map `targetItemId` to message-processor registry
+- Publish deletion events to `chat:deletions` stream
+
+## References
+
+- [InnerTube API Research](../../.planning/phases/09-core-ingestion-poc/09-RESEARCH.md)
+- [Official YouTube Listener](../youtube-listener/README.md)
+- [Message Processor](../message-processor/README.md)
+- [Phase 9 Context](../../.planning/phases/09-core-ingestion-poc/09-CONTEXT.md)
+
+## Metrics (Prometheus)
+
+Health check endpoints expose basic service metrics:
+- `http_requests_total{endpoint="/health/live"}`
+- `http_requests_total{endpoint="/health/ready"}`
+
+Full Prometheus metrics integration in Phase 12.

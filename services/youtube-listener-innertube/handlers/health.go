@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,7 +10,7 @@ import (
 
 // RedisHealthChecker defines the interface for checking Redis connectivity
 type RedisHealthChecker interface {
-	Ping(ctx interface{}) error
+	Ping(ctx context.Context) error
 }
 
 // InnerTubeClientChecker defines the interface for checking InnerTube client initialization
