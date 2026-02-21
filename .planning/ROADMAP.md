@@ -88,12 +88,14 @@
   2. Message-processor consumes InnerTube messages without code changes (RawChatMessage contract maintained)
   3. Health checks return correct status (/health/live returns 200, /health/ready checks Redis)
   4. Messages contain user metadata (username, avatar, badges) in expected format
-**Plans**: 3 plans
+**Plans**: 5 plans
 
 Plans:
 - [ ] 09-01-PLAN.md — InnerTube client and message parser with strict schema validation
 - [ ] 09-02-PLAN.md — Polling loop with continuation tokens and exponential backoff
 - [ ] 09-03-PLAN.md — Service integration with Redis publishing and health checks
+- [ ] 09-04-PLAN.md — Fix health handler test mock signature (gap closure)
+- [ ] 09-05-PLAN.md — Fix backoff error classification and jitter (gap closure)
 
 ### Phase 10: Production Minimum
 **Goal**: Enable dynamic stream management and production lifecycle behaviors
@@ -164,11 +166,11 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 6. Connection Management & Migration | v1.1 | 8/8 | Complete | 2026-02-20 |
 | 7. Dynamic Rebalancing & HPA | v1.1 | 4/4 | Complete | 2026-02-20 |
 | 8. Observability & Production Readiness | v1.1 | 4/4 | Complete | 2026-02-20 |
-| 9. Core Ingestion PoC | v1.2 | 0/3 | Not started | - |
+| 9. Core Ingestion PoC | v1.2 | 0/5 | Not started | - |
 | 10. Production Minimum | v1.2 | 0/TBD | Not started | - |
 | 11. Contract Validation | v1.2 | 0/TBD | Not started | - |
 | 12. Production Rollout | v1.2 | 0/TBD | Not started | - |
 | 13. Feature Parity | v1.2 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-02-21 after Phase 9 planning*
+*Last updated: 2026-02-21 after Phase 9 gap closure planning*
