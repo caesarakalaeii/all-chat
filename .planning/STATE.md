@@ -5,16 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing and auto-scaling.
-**Current focus:** Between milestones — v1.1 complete, planning next milestone
+**Current focus:** Milestone v1.2 — InnerTube YouTube Listener (drop-in replacement)
 
 ## Current Position
 
-Milestone: v1.1 Listener Load Balancing — COMPLETE ✓
-Last milestone completed: 2026-02-21
-Status: Ready for next milestone planning
-Last activity: 2026-02-21 — Milestone v1.1 archived
+Milestone: v1.2 InnerTube YouTube Listener
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-21 — Milestone v1.2 started
 
-Progress: [██████████] 100% (v1.0 partial: 11/11 plans complete, v1.1: 31/31 plans complete)
+Progress: [░░░░░░░░░░] 0% (requirements not yet defined)
 
 ## Performance Metrics
 

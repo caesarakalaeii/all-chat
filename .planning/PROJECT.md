@@ -46,9 +46,19 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 
 ### Active
 
-<!-- Current scope — will be populated in next milestone -->
+<!-- Current scope for v1.2 milestone -->
 
-(Empty — awaiting next milestone planning)
+## Current Milestone: v1.2 InnerTube YouTube Listener
+
+**Goal:** Build drop-in replacement YouTube listener using InnerTube API to eliminate quota limitations while maintaining identical downstream behavior.
+
+**Target features:**
+- InnerTube-based stream discovery and chat ingestion
+- Drop-in replacement (identical Redis output contract with `RawChatMessage`)
+- All chat event types (messages, paid, memberships, deletions)
+- Single and batch deletion support (faster detection than official API)
+- Connection gating and fast resume (same lifecycle behavior)
+- Self-hoster UX (one Docker image choice: official OR innertube)
 
 ### Out of Scope
 
@@ -111,4 +121,4 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 | W3C Trace Context propagation through Redis | Standard propagation format, interoperable with observability tools | ✓ Good — 16 spans instrumented, trace context in Redis Streams |
 
 ---
-*Last updated: 2026-02-21 after v1.1 milestone completion*
+*Last updated: 2026-02-21 after v1.2 milestone initialization*
