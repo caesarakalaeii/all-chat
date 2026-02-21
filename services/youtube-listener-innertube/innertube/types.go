@@ -28,6 +28,7 @@ type ChatAction struct {
 	AddChatItemAction      *AddChatItemAction      `json:"addChatItemAction,omitempty"`
 	AddLiveChatTickerItem  *AddLiveChatTickerItem  `json:"addLiveChatTickerItemAction,omitempty"`
 	ReplayChatItemAction   *ReplayChatItemAction   `json:"replayChatItemAction,omitempty"`
+	MarkChatItemAsDeletedAction *MarkChatItemAsDeletedAction `json:"markChatItemAsDeletedAction,omitempty"`
 }
 
 // AddChatItemAction represents a new chat message being added
@@ -228,6 +229,13 @@ func IsTransientError(err error) bool {
 // IsFatalError returns true if the error is permanent
 func IsFatalError(err error) bool {
 	return ClassifyError(err) == ErrorTypeFatal
+}
+
+// MarkChatItemAsDeletedAction represents a message deletion event
+type MarkChatItemAsDeletedAction struct {
+	DeletedStateMessage MessageContent `json:"deletedStateMessage"`
+	TargetItemID        string         `json:"targetItemId"` // ID of the deleted message
+	TimestampUsec       string         `json:"timestampUsec,omitempty"`
 }
 
 // ParseTimestampUsec converts a timestampUsec string to time.Time
