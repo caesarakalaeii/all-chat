@@ -14,8 +14,11 @@ import (
 type ClientInterface interface {
 	GetLiveChatReplay(ctx context.Context, continuation string) (*innertube.LiveChatResponse, error)
 	ExtractContinuation(resp *innertube.LiveChatResponse) string
-	GetPollInterval(resp *innertube.LiveChatResponse) int
+	GetPollInterval(resp *innertube.LiveChatResponse) time.Duration
 }
+
+// MessageCallback is called with parsed messages after each successful poll
+type MessageCallback func(messages []*innertube.RawChatMessage)
 
 // Poller manages the continuation-based polling loop for InnerTube live chat
 //
@@ -30,14 +33,15 @@ type ClientInterface interface {
 //   - Active → Offline (stream ended)
 //   - Active → Active (transient error, backoff, resume)
 type Poller struct {
-	client       ClientInterface
-	continuation string
-	channelID    string
-	interval     time.Duration
-	backoff      *Backoff
-	state        *State
-	logger       *zap.Logger
-	logLevel     string // "debug" or "info"
+	client          ClientInterface
+	continuation    string
+	channelID       string
+	interval        time.Duration
+	backoff         *Backoff
+	state           *State
+	logger          *zap.Logger
+	logLevel        string // "debug" or "info"
+	messageCallback MessageCallback
 
 	// Graceful shutdown
 	ctx    context.Context
@@ -146,6 +150,12 @@ func (p *Poller) GetState() StreamState {
 	return p.state.GetState()
 }
 
+// SetMessageCallback sets the callback function to be called with parsed messages
+// This callback is invoked after each successful poll with any messages received
+func (p *Poller) SetMessageCallback(callback MessageCallback) {
+	p.messageCallback = callback
+}
+
 // pollingLoop is the main polling loop (runs in background goroutine)
 func (p *Poller) pollingLoop() {
 	defer p.wg.Done()
@@ -237,7 +247,10 @@ func (p *Poller) poll() {
 	p.state.UpdatePollTime()
 	p.backoff.Reset()
 
-	// TODO Phase 03: Publish messages to Redis Streams here
+	// Call message callback with parsed messages (if callback is set)
+	if p.messageCallback != nil && len(messages) > 0 {
+		p.messageCallback(messages)
+	}
 }
 
 // handleError processes errors from InnerTube API calls
