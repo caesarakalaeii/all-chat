@@ -194,8 +194,8 @@ func TestParseMessages(t *testing.T) {
 			wantCount: 1,
 			wantErr:   false,
 			validateMsg: func(t *testing.T, msg *RawChatMessage) {
-				if msg.EventType != "membership" {
-					t.Errorf("EventType = %v, want membership", msg.EventType)
+				if msg.EventType != "member_joined" {
+					t.Errorf("EventType = %v, want member_joined", msg.EventType)
 				}
 				if msg.Text != "Welcome to membership!" {
 					t.Errorf("Text = %v, want 'Welcome to membership!'", msg.Text)
@@ -222,11 +222,11 @@ func TestParseMessages(t *testing.T) {
 			wantCount: 1,
 			wantErr:   false,
 			validateMsg: func(t *testing.T, msg *RawChatMessage) {
-				if msg.EventType != "paid_sticker" {
-					t.Errorf("EventType = %v, want paid_sticker", msg.EventType)
+				if msg.EventType != "super_sticker" {
+					t.Errorf("EventType = %v, want super_sticker", msg.EventType)
 				}
-				if msg.Text != "[sticker]" {
-					t.Errorf("Text = %v, want '[sticker]'", msg.Text)
+				if msg.Text != "" {
+					t.Errorf("Text = %v, want empty string", msg.Text)
 				}
 			},
 		},
@@ -645,5 +645,409 @@ func TestSchemaCompatibility(t *testing.T) {
 	// Verify platform is "youtube"
 	if platform, ok := decoded["platform"].(string); !ok || platform != "youtube" {
 		t.Errorf("Platform = %v, want 'youtube'", decoded["platform"])
+	}
+}
+
+// TestSuperChatWithMetadata tests Super Chat parsing with rich metadata
+func TestSuperChatWithMetadata(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	actions := []ChatAction{
+		{
+			AddChatItemAction: &AddChatItemAction{
+				Item: ChatItem{
+					LiveChatPaidMessageRenderer: &LiveChatPaidMessageRenderer{
+						Message: MessageContent{
+							Runs: []MessageRun{{Text: "Great stream!"}},
+						},
+						AuthorName:              SimpleText{SimpleText: "BigDonor"},
+						AuthorExternalChannelID: "UC_donor",
+						TimestampUsec:           "1640000000000000",
+						PurchaseAmountText:      SimpleText{SimpleText: "$50.00"},
+						AmountMicros:            50000000,
+						HeaderBackgroundColor:   0x1e88e5, // Blue tier
+					},
+				},
+			},
+		},
+	}
+
+	messages, err := ParseMessages(actions, channelID)
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+
+	msg := messages[0]
+	if msg.EventType != "super_chat" {
+		t.Errorf("EventType = %v, want super_chat", msg.EventType)
+	}
+
+	// Verify amount
+	if amount, ok := msg.EventData["amount"].(string); !ok || amount != "$50.00" {
+		t.Errorf("EventData[amount] = %v, want '$50.00'", msg.EventData["amount"])
+	}
+
+	// Verify amount_micros
+	if amountMicros, ok := msg.EventData["amount_micros"].(int64); !ok || amountMicros != 50000000 {
+		t.Errorf("EventData[amount_micros] = %v, want 50000000", msg.EventData["amount_micros"])
+	}
+
+	// Verify color formatting
+	if color, ok := msg.EventData["color"].(string); !ok || color != "#1E88E5" {
+		t.Errorf("EventData[color] = %v, want '#1E88E5'", msg.EventData["color"])
+	}
+}
+
+// TestSuperChatNoMessage tests Super Chat without message text
+func TestSuperChatNoMessage(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	actions := []ChatAction{
+		{
+			AddChatItemAction: &AddChatItemAction{
+				Item: ChatItem{
+					LiveChatPaidMessageRenderer: &LiveChatPaidMessageRenderer{
+						AuthorName:              SimpleText{SimpleText: "ShyDonor"},
+						AuthorExternalChannelID: "UC_shy",
+						TimestampUsec:           "1640000000000000",
+						PurchaseAmountText:      SimpleText{SimpleText: "$5.00"},
+					},
+				},
+			},
+		},
+	}
+
+	messages, err := ParseMessages(actions, channelID)
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+
+	msg := messages[0]
+	if msg.Text != "" {
+		t.Errorf("Text = %v, want empty string for Super Chat without message", msg.Text)
+	}
+}
+
+// TestSuperStickerWithURL tests Super Sticker parsing with sticker URL extraction
+func TestSuperStickerWithURL(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	actions := []ChatAction{
+		{
+			AddChatItemAction: &AddChatItemAction{
+				Item: ChatItem{
+					LiveChatPaidStickerRenderer: &LiveChatPaidStickerRenderer{
+						AuthorName:              SimpleText{SimpleText: "StickerLover"},
+						AuthorExternalChannelID: "UC_sticker",
+						TimestampUsec:           "1640000000000000",
+						PurchaseAmountText:      SimpleText{SimpleText: "$2.00"},
+						AmountMicros:            2000000,
+						Sticker: StickerContent{
+							Thumbnails: Thumbnails{
+								Thumbnails: []Thumbnail{
+									{URL: "https://example.com/sticker.png", Width: 64, Height: 64},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	messages, err := ParseMessages(actions, channelID)
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+
+	msg := messages[0]
+	if msg.EventType != "super_sticker" {
+		t.Errorf("EventType = %v, want super_sticker", msg.EventType)
+	}
+
+	// Verify sticker URL
+	if stickerURL, ok := msg.EventData["sticker_url"].(string); !ok || stickerURL != "https://example.com/sticker.png" {
+		t.Errorf("EventData[sticker_url] = %v, want 'https://example.com/sticker.png'", msg.EventData["sticker_url"])
+	}
+
+	// Verify amount_micros
+	if amountMicros, ok := msg.EventData["amount_micros"].(int64); !ok || amountMicros != 2000000 {
+		t.Errorf("EventData[amount_micros] = %v, want 2000000", msg.EventData["amount_micros"])
+	}
+}
+
+// TestMembershipWelcome tests new member join parsing
+func TestMembershipWelcome(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	actions := []ChatAction{
+		{
+			AddChatItemAction: &AddChatItemAction{
+				Item: ChatItem{
+					LiveChatMembershipItemRenderer: &LiveChatMembershipItemRenderer{
+						HeaderSubtext: MessageContent{
+							Runs: []MessageRun{{Text: "Welcome to the club!"}},
+						},
+						AuthorName:              SimpleText{SimpleText: "NewMember"},
+						AuthorExternalChannelID: "UC_new",
+						TimestampUsec:           "1640000000000000",
+						AuthorBadges: []AuthorBadge{
+							{
+								LiveChatAuthorBadgeRenderer: LiveChatAuthorBadgeRenderer{
+									Tooltip: "New member",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	messages, err := ParseMessages(actions, channelID)
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+
+	msg := messages[0]
+	if msg.EventType != "member_joined" {
+		t.Errorf("EventType = %v, want member_joined", msg.EventType)
+	}
+
+	// Verify level name from badge
+	if levelName, ok := msg.EventData["level_name"].(string); !ok || levelName != "New member" {
+		t.Errorf("EventData[level_name] = %v, want 'New member'", msg.EventData["level_name"])
+	}
+}
+
+// TestMembershipMilestone tests membership milestone parsing with month extraction
+func TestMembershipMilestone(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	tests := []struct {
+		name         string
+		headerText   string
+		wantMonths   int
+		wantEventType string
+	}{
+		{
+			name:         "6 month milestone",
+			headerText:   "Member for 6 months",
+			wantMonths:   6,
+			wantEventType: "member_milestone",
+		},
+		{
+			name:         "1 month milestone",
+			headerText:   "Member for 1 month",
+			wantMonths:   1,
+			wantEventType: "member_milestone",
+		},
+		{
+			name:         "12 month milestone",
+			headerText:   "Member for 12 months",
+			wantMonths:   12,
+			wantEventType: "member_milestone",
+		},
+		{
+			name:         "welcome message (no milestone)",
+			headerText:   "Welcome to membership!",
+			wantMonths:   0,
+			wantEventType: "member_joined",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actions := []ChatAction{
+				{
+					AddChatItemAction: &AddChatItemAction{
+						Item: ChatItem{
+							LiveChatMembershipItemRenderer: &LiveChatMembershipItemRenderer{
+								HeaderSubtext: MessageContent{
+									Runs: []MessageRun{{Text: tt.headerText}},
+								},
+								AuthorName:              SimpleText{SimpleText: "LoyalMember"},
+								AuthorExternalChannelID: "UC_loyal",
+								TimestampUsec:           "1640000000000000",
+							},
+						},
+					},
+				},
+			}
+
+			messages, err := ParseMessages(actions, channelID)
+			if err != nil {
+				t.Fatalf("ParseMessages() error = %v", err)
+			}
+
+			if len(messages) != 1 {
+				t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+			}
+
+			msg := messages[0]
+			if msg.EventType != tt.wantEventType {
+				t.Errorf("EventType = %v, want %v", msg.EventType, tt.wantEventType)
+			}
+
+			if tt.wantMonths > 0 {
+				// Verify months extracted
+				if months, ok := msg.EventData["months"].(int); !ok || months != tt.wantMonths {
+					t.Errorf("EventData[months] = %v, want %v", msg.EventData["months"], tt.wantMonths)
+				}
+			} else {
+				// Should not have months field for welcome messages
+				if _, hasMonths := msg.EventData["months"]; hasMonths {
+					t.Errorf("EventData should not contain 'months' for welcome message")
+				}
+			}
+		})
+	}
+}
+
+// TestTickerEventSuperChat tests ticker event (pinned Super Chat)
+func TestTickerEventSuperChat(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	actions := []ChatAction{
+		{
+			AddLiveChatTickerItem: &AddLiveChatTickerItem{
+				Item: ChatItem{
+					LiveChatPaidMessageRenderer: &LiveChatPaidMessageRenderer{
+						Message: MessageContent{
+							Runs: []MessageRun{{Text: "Pinned message!"}},
+						},
+						AuthorName:              SimpleText{SimpleText: "Pinner"},
+						AuthorExternalChannelID: "UC_pinner",
+						TimestampUsec:           "1640000000000000",
+						PurchaseAmountText:      SimpleText{SimpleText: "$100.00"},
+						AmountMicros:            100000000,
+					},
+				},
+				DurationSec: 300, // 5 minutes
+			},
+		},
+	}
+
+	messages, err := ParseMessages(actions, channelID)
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+
+	msg := messages[0]
+	if msg.EventType != "super_chat" {
+		t.Errorf("EventType = %v, want super_chat", msg.EventType)
+	}
+
+	// Verify pinned flag
+	if pinned, ok := msg.EventData["pinned"].(bool); !ok || !pinned {
+		t.Errorf("EventData[pinned] = %v, want true", msg.EventData["pinned"])
+	}
+
+	// Verify ticker duration
+	if duration, ok := msg.EventData["ticker_duration_sec"].(int); !ok || duration != 300 {
+		t.Errorf("EventData[ticker_duration_sec] = %v, want 300", msg.EventData["ticker_duration_sec"])
+	}
+}
+
+// TestExtractMilestoneMonths tests the milestone month extraction function
+func TestExtractMilestoneMonths(t *testing.T) {
+	tests := []struct {
+		name  string
+		text  string
+		want  int
+	}{
+		{
+			name: "standard format",
+			text: "Member for 6 months",
+			want: 6,
+		},
+		{
+			name: "single month",
+			text: "Member for 1 month",
+			want: 1,
+		},
+		{
+			name: "large number",
+			text: "Member for 24 months",
+			want: 24,
+		},
+		{
+			name: "no months",
+			text: "Welcome to membership!",
+			want: 0,
+		},
+		{
+			name: "case insensitive",
+			text: "MEMBER FOR 12 MONTHS",
+			want: 12,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractMilestoneMonths(tt.text)
+			if got != tt.want {
+				t.Errorf("extractMilestoneMonths(%q) = %v, want %v", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestFormatColorFromInt tests color formatting
+func TestFormatColorFromInt(t *testing.T) {
+	tests := []struct {
+		name  string
+		color int
+		want  string
+	}{
+		{
+			name:  "blue tier",
+			color: 0x1e88e5,
+			want:  "#1E88E5",
+		},
+		{
+			name:  "red tier",
+			color: 0xe91e63,
+			want:  "#E91E63",
+		},
+		{
+			name:  "yellow tier",
+			color: 0xffeb3b,
+			want:  "#FFEB3B",
+		},
+		{
+			name:  "zero color",
+			color: 0,
+			want:  "#000000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatColorFromInt(tt.color)
+			if got != tt.want {
+				t.Errorf("formatColorFromInt(%#x) = %v, want %v", tt.color, got, tt.want)
+			}
+		})
 	}
 }
