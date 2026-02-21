@@ -125,9 +125,13 @@ Plans:
   2. Dual-listener integration test shows <0.1% mismatch rate on same live stream over 24 hours
   3. Lifecycle tests verify connection gating and stream offline detection match official behavior
   4. Deletion event tests validate single message deletion detection and emission
-**Plans**: TBD
+**Plans**: 4 plans in 1 wave (all independent)
 
-Plans: TBD
+Plans:
+- [ ] 11-01-PLAN.md — Golden file capture and schema validation infrastructure (TEST-01)
+- [ ] 11-02-PLAN.md — 24-hour dual-listener Kubernetes integration test (TEST-02)
+- [ ] 11-03-PLAN.md — Lifecycle behavior tests with testcontainers (TEST-03, TEST-04)
+- [ ] 11-04-PLAN.md — Deletion event detection and emission tests (DEL-01, DEL-02)
 
 ### Phase 12: Production Rollout
 **Goal**: Deploy to production with gradual canary rollout, monitoring, and automatic rollback
