@@ -1,6 +1,7 @@
 package innertube
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -255,6 +256,12 @@ func parseTimestampUsec(timestampUsec string) (time.Time, error) {
 	nsec := (usec % 1000000) * 1000
 
 	return time.Unix(sec, nsec).UTC(), nil
+}
+
+// ToJSON converts the RawChatMessage to JSON bytes
+// Used for publishing the full message payload to Redis Streams 'data' field
+func (msg *RawChatMessage) ToJSON() ([]byte, error) {
+	return json.Marshal(msg)
 }
 
 // ValidateRawMessage ensures the message conforms to the official youtube-listener schema
