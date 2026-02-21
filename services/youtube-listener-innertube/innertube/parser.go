@@ -44,12 +44,23 @@ func ParseMessages(actions []ChatAction, channelID string) ([]*RawChatMessage, e
 			continue
 		}
 
-		// Extract the actual chat item
+		// Handle ticker items specially (they contain pinned Super Chats/Stickers)
+		if action.AddLiveChatTickerItem != nil {
+			tickerMsg, err := parseTickerEvent(action.AddLiveChatTickerItem, channelID)
+			if err != nil {
+				// Log error but continue processing
+				continue
+			}
+			if tickerMsg != nil {
+				messages = append(messages, tickerMsg)
+			}
+			continue
+		}
+
+		// Extract the actual chat item for regular messages
 		var item *ChatItem
 		if action.AddChatItemAction != nil {
 			item = &action.AddChatItemAction.Item
-		} else if action.AddLiveChatTickerItem != nil {
-			item = &action.AddLiveChatTickerItem.Item
 		}
 
 		if item == nil {
@@ -137,6 +148,21 @@ func parsePaidMessage(renderer *LiveChatPaidMessageRenderer, channelID string) (
 		text = extractMessageText(renderer.Message)
 	}
 
+	// Build rich event data
+	eventData := map[string]interface{}{
+		"amount": renderer.PurchaseAmountText.SimpleText,
+	}
+
+	// Add amount in micros if available (for sorting by amount)
+	if renderer.AmountMicros > 0 {
+		eventData["amount_micros"] = renderer.AmountMicros
+	}
+
+	// Add color tier if available (for overlay styling)
+	if renderer.HeaderBackgroundColor != 0 {
+		eventData["color"] = formatColorFromInt(renderer.HeaderBackgroundColor)
+	}
+
 	msg := &RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "youtube",
@@ -147,11 +173,8 @@ func parsePaidMessage(renderer *LiveChatPaidMessageRenderer, channelID string) (
 		Text:      text,
 		Timestamp: timestamp,
 		Tags:      make(map[string]string),
-		// Event data deferred to Phase 13
 		EventType: "super_chat",
-		EventData: map[string]interface{}{
-			"amount": renderer.PurchaseAmountText.SimpleText,
-		},
+		EventData: eventData,
 	}
 
 	return msg, nil
@@ -170,6 +193,28 @@ func parseMembershipMessage(renderer *LiveChatMembershipItemRenderer, channelID 
 		text = extractMessageText(renderer.HeaderSubtext)
 	}
 
+	// Distinguish between welcome and milestone based on text content
+	eventType := "member_joined"
+	eventData := map[string]interface{}{
+		"level_name": "Member", // Default level name
+	}
+
+	// Check if this is a milestone (e.g., "Member for 6 months")
+	months := extractMilestoneMonths(text)
+	if months > 0 {
+		eventType = "member_milestone"
+		eventData["months"] = months
+	}
+
+	// Extract level name from badges if available
+	if len(renderer.AuthorBadges) > 0 {
+		badges := extractBadges(renderer.AuthorBadges)
+		if len(badges) > 0 {
+			// Use first badge as level name (typically the membership badge)
+			eventData["level_name"] = badges[0]
+		}
+	}
+
 	msg := &RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "youtube",
@@ -180,9 +225,8 @@ func parseMembershipMessage(renderer *LiveChatMembershipItemRenderer, channelID 
 		Text:      text,
 		Timestamp: timestamp,
 		Tags:      make(map[string]string),
-		// Event data deferred to Phase 13
-		EventType: "membership",
-		EventData: make(map[string]interface{}),
+		EventType: eventType,
+		EventData: eventData,
 	}
 
 	return msg, nil
@@ -195,6 +239,21 @@ func parsePaidSticker(renderer *LiveChatPaidStickerRenderer, channelID string) (
 		return nil, fmt.Errorf("parse timestamp: %w", err)
 	}
 
+	// Build rich event data
+	eventData := map[string]interface{}{
+		"amount": renderer.PurchaseAmountText.SimpleText,
+	}
+
+	// Add amount in micros if available
+	if renderer.AmountMicros > 0 {
+		eventData["amount_micros"] = renderer.AmountMicros
+	}
+
+	// Extract sticker URL from thumbnails
+	if len(renderer.Sticker.Thumbnails.Thumbnails) > 0 {
+		eventData["sticker_url"] = renderer.Sticker.Thumbnails.Thumbnails[0].URL
+	}
+
 	msg := &RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "youtube",
@@ -202,14 +261,45 @@ func parsePaidSticker(renderer *LiveChatPaidStickerRenderer, channelID string) (
 		StreamID:  "",
 		UserID:    renderer.AuthorExternalChannelID,
 		Username:  renderer.AuthorName.SimpleText,
-		Text:      "[sticker]", // Stickers have no text content
+		Text:      "", // Stickers have no text content (changed from "[sticker]" for consistency)
 		Timestamp: timestamp,
 		Tags:      make(map[string]string),
-		// Event data deferred to Phase 13
-		EventType: "paid_sticker",
-		EventData: map[string]interface{}{
-			"amount": renderer.PurchaseAmountText.SimpleText,
-		},
+		EventType: "super_sticker",
+		EventData: eventData,
+	}
+
+	return msg, nil
+}
+
+// parseTickerEvent converts a AddLiveChatTickerItem (pinned events) to RawChatMessage
+func parseTickerEvent(ticker *AddLiveChatTickerItem, channelID string) (*RawChatMessage, error) {
+	// Ticker wraps an underlying event (Super Chat or Super Sticker)
+	// Parse the underlying event first
+	var msg *RawChatMessage
+	var err error
+
+	item := &ticker.Item
+	if item.LiveChatPaidMessageRenderer != nil {
+		msg, err = parsePaidMessage(item.LiveChatPaidMessageRenderer, channelID)
+	} else if item.LiveChatPaidStickerRenderer != nil {
+		msg, err = parsePaidSticker(item.LiveChatPaidStickerRenderer, channelID)
+	} else {
+		// Ticker contains unsupported event type - skip
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("parse ticker underlying event: %w", err)
+	}
+
+	// Add ticker metadata to the event data
+	if msg.EventData == nil {
+		msg.EventData = make(map[string]interface{})
+	}
+	msg.EventData["pinned"] = true
+
+	if ticker.DurationSec > 0 {
+		msg.EventData["ticker_duration_sec"] = ticker.DurationSec
 	}
 
 	return msg, nil
@@ -238,6 +328,35 @@ func extractBadges(badges []AuthorBadge) []string {
 		}
 	}
 	return badgeTypes
+}
+
+// formatColorFromInt converts an integer color value to hex string
+func formatColorFromInt(color int) string {
+	return fmt.Sprintf("#%06X", color&0xFFFFFF)
+}
+
+// extractMilestoneMonths extracts the month count from milestone text
+// Example: "Member for 6 months" -> 6
+func extractMilestoneMonths(text string) int {
+	// Look for pattern: "Member for N month(s)" or similar variations
+	text = strings.ToLower(text)
+
+	// Try to find "N month" or "N months" patterns
+	if strings.Contains(text, "month") {
+		// Extract just the numeric part before "month"
+		parts := strings.Split(text, "month")
+		if len(parts) > 0 {
+			// Look for the last number before "month"
+			words := strings.Fields(parts[0])
+			for i := len(words) - 1; i >= 0; i-- {
+				if months, err := strconv.Atoi(words[i]); err == nil && months > 0 {
+					return months
+				}
+			}
+		}
+	}
+
+	return 0
 }
 
 // parseTimestampUsec converts a timestampUsec string to time.Time
