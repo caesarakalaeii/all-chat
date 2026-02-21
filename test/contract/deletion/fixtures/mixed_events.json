@@ -1,0 +1,142 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "message": {
+                  "runs": [
+                    {
+                      "text": "First message"
+                    }
+                  ]
+                },
+                "authorName": {
+                  "simpleText": "User1"
+                },
+                "authorExternalChannelId": "UC_user1",
+                "timestampUsec": "1640000000000000"
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "message": {
+                  "runs": [
+                    {
+                      "text": "Second message"
+                    }
+                  ]
+                },
+                "authorName": {
+                  "simpleText": "User2"
+                },
+                "authorExternalChannelId": "UC_user2",
+                "timestampUsec": "1640000001000000"
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "message": {
+                  "runs": [
+                    {
+                      "text": "Third message - will be deleted"
+                    }
+                  ]
+                },
+                "authorName": {
+                  "simpleText": "User3"
+                },
+                "authorExternalChannelId": "UC_user3",
+                "timestampUsec": "1640000002000000"
+              }
+            }
+          }
+        },
+        {
+          "markChatItemAsDeletedAction": {
+            "deletedStateMessage": {
+              "runs": [
+                {
+                  "text": "[message deleted]"
+                }
+              ]
+            },
+            "targetItemId": "deleted_message_1",
+            "timestampUsec": "1640000003000000"
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "message": {
+                  "runs": [
+                    {
+                      "text": "Fourth message"
+                    }
+                  ]
+                },
+                "authorName": {
+                  "simpleText": "User4"
+                },
+                "authorExternalChannelId": "UC_user4",
+                "timestampUsec": "1640000004000000"
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "message": {
+                  "runs": [
+                    {
+                      "text": "Fifth message - also deleted"
+                    }
+                  ]
+                },
+                "authorName": {
+                  "simpleText": "User5"
+                },
+                "authorExternalChannelId": "UC_user5",
+                "timestampUsec": "1640000005000000"
+              }
+            }
+          }
+        },
+        {
+          "markChatItemAsDeletedAction": {
+            "deletedStateMessage": {
+              "runs": [
+                {
+                  "text": "[message deleted]"
+                }
+              ]
+            },
+            "targetItemId": "deleted_message_2",
+            "timestampUsec": "1640000006000000"
+          }
+        }
+      ],
+      "continuations": [
+        {
+          "timedContinuationData": {
+            "timeoutDurationMillis": 5000,
+            "continuation": "test_continuation_token"
+          }
+        }
+      ]
+    }
+  }
+}

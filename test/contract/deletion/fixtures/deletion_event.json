@@ -1,0 +1,29 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "markChatItemAsDeletedAction": {
+            "deletedStateMessage": {
+              "runs": [
+                {
+                  "text": "[message deleted]"
+                }
+              ]
+            },
+            "targetItemId": "ChwKGkNNT3M4UF9BdTRvRENNeTQ5Z0FkaERaeFhBZw%3D%3D",
+            "timestampUsec": "1640000000000000"
+          }
+        }
+      ],
+      "continuations": [
+        {
+          "timedContinuationData": {
+            "timeoutDurationMillis": 5000,
+            "continuation": "test_continuation_token"
+          }
+        }
+      ]
+    }
+  }
+}
