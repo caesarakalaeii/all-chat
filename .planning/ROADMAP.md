@@ -73,7 +73,7 @@
 
 - [ ] **Phase 9: Core Ingestion PoC** - Validate InnerTube viability with basic message flow
 - [x] **Phase 10: Production Minimum** - Dynamic stream management and HTTP control plane (completed 2026-02-21)
-- [ ] **Phase 11: Contract Validation** - Prove behavioral equivalence with official listener
+- [x] **Phase 11: Contract Validation** - Prove behavioral equivalence with official listener (completed 2026-02-21)
 - [ ] **Phase 12: Production Rollout** - Canary deployment with monitoring and rollback
 - [ ] **Phase 13: Feature Parity** - Deletion events and advanced metrics
 
@@ -176,7 +176,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 8. Observability & Production Readiness | v1.1 | 4/4 | Complete | 2026-02-20 |
 | 9. Core Ingestion PoC | v1.2 | 5/5 | Complete | 2026-02-21 |
 | 10. Production Minimum | v1.2 | Complete    | 2026-02-21 | - |
-| 11. Contract Validation | v1.2 | 0/TBD | Not started | - |
+| 11. Contract Validation | v1.2 | Complete    | 2026-02-21 | - |
 | 12. Production Rollout | v1.2 | 0/TBD | Not started | - |
 | 13. Feature Parity | v1.2 | 0/TBD | Not started | - |
 
