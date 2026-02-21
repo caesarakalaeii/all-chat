@@ -1,407 +1,297 @@
 # Project Research Summary
 
-**Project:** All-Chat Listener Load Balancing
-**Domain:** Distributed Channel Sharding for Real-Time Messaging Microservices
-**Researched:** 2026-02-19
-**Confidence:** HIGH
+**Project:** InnerTube YouTube Listener (Quota-Free Alternative)
+**Domain:** Live Chat Ingestion Microservice
+**Researched:** 2026-02-21
+**Confidence:** MEDIUM
 
 ## Executive Summary
 
-Implementing distributed channel sharding for All-Chat listener services requires a hybrid consistent hashing architecture with load-aware rebalancing. Research reveals that modern production systems (Kafka, Elasticsearch, Kubernetes) have evolved from static hash-based distribution to volume-aware dynamic rebalancing with cooperative migration protocols. The recommended approach combines bounded-load consistent hashing for initial assignment with Redis-based coordination and graceful migration patterns to prevent message loss during rebalancing.
+This research addresses building a quota-free YouTube live chat listener using Google's undocumented InnerTube API as a drop-in replacement for the existing official API-based youtube-listener service. The recommended approach is a Node.js microservice using the masterchat library (@stu43005/masterchat v1.5.0), integrated via HTTP REST with existing Go services and publishing to Redis Streams using the identical RawChatMessage contract.
 
-The critical insight is that naive consistent hashing solves distribution but not the "celebrity problem" - a single high-traffic channel (xQc with 50k viewers) can overwhelm a pod. This requires bounded-load consistent hashing that limits any pod to 1.25x average load. The technology stack is minimal and proven: buraksezer/consistent for hashing, Redis sorted sets for assignment tracking, Prometheus for load metrics, and cooperative rebalancing inspired by Kafka's protocol. All libraries are production-tested and integrate seamlessly with All-Chat's existing infrastructure.
+The core trade-off is language heterogeneity (adding Node.js to a Go ecosystem) versus ecosystem maturity. No mature Go InnerTube libraries exist for live chat, while the JavaScript ecosystem has 3+ years of production-proven libraries. This heterogeneity is acceptable because All-Chat already uses multiple runtimes (Go services + React/Next.js frontend) and service-to-service HTTP integration is standard microservices practice.
 
-Key risks center on three failure modes: split-brain during channel assignment (causing duplicate connections), message loss during pod migration (requiring overlap migration), and thundering herd on HPA scale-up (exhausting YouTube quota). All three are preventable through proper leader election with fencing tokens, cooperative migration protocols, and staggered pod startup with rate limiting. The architecture must be designed correctly from Phase 1 - retrofitting split-brain prevention or overlap migration after production launch is prohibitively expensive.
+The primary risk is schema drift: InnerTube is an undocumented internal API that can change without notice, breaking message normalization. Mitigation requires contract testing, schema validation, graceful degradation, and canary deployments. Secondary risks include deletion event semantic mismatches and stream discovery edge cases. Success depends on maintaining behavioral equivalence with the official listener despite swapping the data source.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack additions are minimal and leverage proven production libraries. Core requirement is bounded-load consistent hashing to prevent hot spots, custom Prometheus metrics for load tracking, Redis sorted sets for assignment registry, and graceful migration patterns. All libraries are actively maintained and integrate with existing All-Chat infrastructure (Redis 7, Kubernetes, Prometheus).
+**Recommendation:** Node.js 20 LTS service with TypeScript, masterchat library, ioredis for Redis integration, and Express for HTTP control plane.
+
+**Rationale:** The InnerTube ecosystem is strongest in JavaScript (masterchat, YouTube.js) and Python (pytchat - archived). Masterchat provides 20+ action types, active maintenance (latest update April 2025), and production use by HolodexNet. The 3-year maturity advantage outweighs language consistency concerns. Go-Node.js HTTP integration matches existing All-Chat patterns (API Gateway WebSocket, service mesh).
 
 **Core technologies:**
-- **buraksezer/consistent v0.10.0+**: Bounded-load consistent hashing for channel-to-pod assignment. Implements Google Research algorithm preventing any pod from exceeding 1.25x average load. Production-used by OpenTelemetry and SeaweedFS despite last release in 2022. No breaking changes expected.
-- **prometheus/client_golang v1.23.2+**: Custom load metrics (messages/sec, channel count, connection health). Official Prometheus client already integrated with All-Chat Kubernetes via ServiceMonitor. Provides Gauge, Counter, and Histogram metric types.
-- **redis/go-redis/v9 v9.18.0+**: Assignment registry using sorted sets (O(log N) load queries) and hashes (O(1) channel lookups). Already in use by All-Chat, recent release Feb 2026, imported by 14,968 projects.
-- **gorilla/websocket v1.5.3+**: Graceful WebSocket migration during rebalancing. Already used by Kick listener and API Gateway. Essential for zero-message-loss migration through connection draining.
+- **Node.js 20 LTS + TypeScript 5.x**: Runtime with type safety, matches masterchat implementation, active LTS until 2026-10
+- **@stu43005/masterchat 1.5.0**: Most mature InnerTube live chat library, purpose-built for chat (not general YouTube API wrapper), handles 20+ action types including deletions
+- **ioredis 5.x**: Industry-standard Redis client with Streams + Pub/Sub support, superior TypeScript types vs node-redis
+- **Express 4.x**: HTTP server for health checks and control endpoints, simpler than Fastify, adequate for low-traffic control plane
 
-**Confidence:** HIGH - All technologies are production-standard, most already in All-Chat stack. Only new dependency is buraksezer/consistent (MEDIUM confidence due to minimal maintenance, but stable).
-
-**Critical anti-patterns to avoid:**
-- Jump Hash (no bounded load support, creates hot spots)
-- Redlock (Martin Kleppmann's critique - use Kubernetes Lease API instead)
-- Standard consistent hashing without virtual nodes (allows unbounded load imbalance)
+**Critical version note:** Use @stu43005/masterchat fork (npm published, April 2025 update) over original sigvt/masterchat (June 2022, stale) and HolodexNet fork (maintenance status unclear).
 
 ### Expected Features
 
-Production-grade distributed channel sharding systems balance three concerns: fair distribution (preventing hot partitions), operational resilience (handling failures gracefully), and observability (understanding system behavior). Research reveals a clear hierarchy: basic shard assignment is table stakes, dynamic rebalancing based on actual load is the differentiator, and complex predictive algorithms are over-engineering.
-
 **Must have (table stakes):**
-- Consistent hashing with virtual nodes (150-200 per pod) - prevents massive reshuffling on topology changes, only affected channels move
-- Quorum-based leader election - prevents split-brain where multiple pods claim same channels, requires >50% for leadership
-- Graceful shutdown with connection draining - prevents message loss when pods terminate, 45-60s grace period standard
-- Separate readiness vs liveness probes - readiness = "ready for channels", liveness = "still alive", failed readiness removes from rotation
-- Heartbeat-based membership tracking - 10s heartbeat interval with 30s timeout, detects failed pods and triggers rebalancing
-- Idempotent channel assignment - re-assigning channel to same pod must be safe, prevents duplicate connections during rebalancing
+- **Live chat ingestion**: Real-time message polling via masterchat async iterator API
+- **Message normalization**: Transform InnerTube responses to RawChatMessage JSON schema (exact match with official listener)
+- **Super Chat/membership detection**: Extract amounts, milestones, tier data from InnerTube actions
+- **Health checks**: K8s readiness/liveness probes (/health/live, /health/ready)
+- **Graceful shutdown**: Clean up masterchat connections, flush Redis buffer on SIGTERM
+- **Stream discovery**: Channel-to-video ID resolution (critical prerequisite for all features)
+- **Reconnection on error**: Retry with exponential backoff for network failures
 
-**Should have (competitive differentiators):**
-- Volume-based rebalancing - automatically detect "hot" channels (5000 msgs/min) and redistribute load, prevents single pod bottleneck
-- Cooperative rebalancing - only move channels that need to move, non-affected channels keep processing, reduces disruption by 80% vs stop-the-world
-- Weighted pod capacity - assign more channels to pods with more resources, useful for heterogeneous pod sizing
-- Rebalancing backoff with exponential delay - prevents rebalancing storms during outages (1s, 2s, 4s, 8s delays)
-- Metrics per shard - track messages/sec, CPU%, memory per assigned channel set, enables debugging "why is pod-3 overloaded?"
+**Should have (competitive advantages):**
+- **No quota limits**: Unlimited polling (vs official API 1M units/day cap)
+- **No OAuth required**: Simpler setup, no token refresh complexity
+- **Message deletion events**: Detect moderator deletions (markChatItemAsDeletedAction)
+- **Ban/timeout detection**: Detect user bans (markChatItemsByAuthorAsDeletedAction)
+- **Lower latency**: Configurable polling (1-5s) vs quota-constrained official API
 
-**Defer (v2+):**
-- Predictive load balancing with ML - adds complexity without benefit, 99% of systems don't need this, reactive rebalancing is sufficient
-- Automatic hot partition splitting - split single channel across multiple pods via sub-sharding, only needed if single channel exceeds pod capacity (rare)
-
-**Anti-features (explicitly not recommended):**
-- Perfect load balance enforcement - causes constant rebalancing thrash, accept imbalance <0.3 as healthy
-- Manual shard assignment UI - defeats automation purpose, creates human bottleneck
-- Synchronous rebalancing - single slow pod blocks entire rebalancing, use async with timeouts instead
+**Defer (explicitly avoid):**
+- **Quota tracking database**: InnerTube has no quotas - remove quota_usage table, state machine, adaptive polling
+- **OAuth token storage**: InnerTube works unauthenticated - remove youtube_oauth_tokens table, refresh logic
+- **Cross-service quota coordination**: Remove /quota/record endpoint and YouTubeQuotaClient from overlay-manager integration
 
 ### Architecture Approach
 
-The architecture adds a load balancing layer above existing listeners without changing the core message flow (Listener → Redis Streams → Message Processor → Redis Pub/Sub → Gateway). A new Shard Coordinator service implements consistent hashing and orchestrates rebalancing, storing assignments in Redis data structures (sorted sets for load queries, hashes for channel lookups). Listeners are enhanced to read assignments from Redis, report load metrics via heartbeat, and handle migration events through cooperative protocol.
+**Pattern:** Async iterator-based stream handlers with state machine lifecycle management. Each video ID gets dedicated StreamHandler with masterchat connection, message normalizer, and Redis publisher. HTTP API layer receives start/stop commands from Go services (overlay-manager). Stream Manager orchestrates multiple concurrent handlers with health monitoring.
 
 **Major components:**
+1. **HTTP API Layer (Express)**: Control plane endpoints (POST /streams/monitor, DELETE /streams/:id, GET /status) called by overlay-manager
+2. **Stream Manager**: Orchestrates Map<videoId, StreamHandler>, lifecycle management (start/stop/reconnect), health monitoring
+3. **Stream Handler**: Per-stream state machine (INITIALIZING → RUNNING → STOPPED → ERROR), manages masterchat connection, error recovery with exponential backoff
+4. **Masterchat Client**: Async iterator consuming InnerTube API (mc.iter()), filters 20+ action types
+5. **Message Normalizer**: Maps masterchat actions to RawChatMessage schema, generates UUIDs, formats timestamps, extracts tags
+6. **Redis Publisher (ioredis)**: XADD to chat:raw stream, connection pooling, retry logic
 
-1. **Shard Coordinator (NEW SERVICE)** - Runs consistent hashing ring calculation, computes channel-to-pod assignments, orchestrates rebalancing when topology changes or load imbalances detected, triggers migrations via Redis Streams. Extends existing source-manager which already has leader election via Redis locks.
-
-2. **Assignment Registry (NEW REDIS DATA STRUCTURES)** - Sorted set `assignments:load` for O(log N) load-based queries (find underloaded pods), hash `assignment:{channel_id}` for O(1) channel metadata lookups, hash `pod:{pod_id}:channels` for fast rebalancing decisions, stream `migrations:{platform}` for migration events with consumer groups.
-
-3. **Load Monitor (NEW COMPONENT IN EACH POD)** - Tracks per-pod metrics (channel count, message rate per 10s, memory usage), publishes to Redis every 10s with 30s TTL (pod considered dead if not refreshed), enables coordinator to detect failures and trigger rebalancing.
-
-4. **Enhanced Listener Pods (MODIFY EXISTING)** - Startup sequence: register with coordinator → query assignment registry → join assigned channels only → start load monitor. Migration handling: consume migration events from Redis Stream via XREADGROUP, gracefully PART channels when migration event received, ack completion.
-
-**Key architectural patterns:**
-- **Consistent hashing with virtual nodes**: 150 virtual nodes per pod for even distribution, O(1) lookup complexity, only K/N channels reassigned on topology changes
-- **Redis-based assignment registry**: Client-side sharding pattern, coordinator writes assignments, listeners poll every 30s, eventual consistency acceptable (30s delay for new channels)
-- **Cooperative rebalancing**: Kafka-style protocol, only migrate channels that must move, publish migration events to Redis Stream, source pods consume and gracefully disconnect, destination pods then connect
-- **Heartbeat-based failure detection**: Pods self-report health every 10s with 30s TTL, coordinator scans for missing heartbeats, triggers rebalancing on pod failure
-
-**Integration with existing architecture:**
-- Message flow unchanged: Listener → Redis Streams → Message Processor → Redis Pub/Sub → Gateway
-- Source Manager extended: publishes source changes to Shard Coordinator via webhook (new overlay added/removed)
-- YouTube listener unchanged: already has leader election via source-manager, sharding not applicable due to quota bottleneck
-- Database unchanged: overlay_chat_sources remains single source of truth, source-manager polls and notifies coordinator
+**Integration contract:** Output to Redis Streams chat:raw must be byte-for-byte identical to official youtube-listener for drop-in replacement. Message-processor consumes without code changes.
 
 ### Critical Pitfalls
 
-Research identified seven critical pitfalls with HIGH severity, all preventable through proper design in Phase 1-2. Recovery costs range from MEDIUM (overlap migration) to HIGH (rewrite for Redlock) to IMPOSSIBLE (YouTube quota exhaustion = 24h lockout).
+1. **RawChatMessage schema drift** - InnerTube field names/types differ from official API (authorExternalChannelId vs authorDetails.channelId, nested structures, optional fields). Silent data loss: blank usernames, missing badges, type assertion panics. **Mitigation:** Contract tests with golden files (Phase 2), JSON schema validation built-in (Phase 1), cross-listener comparison (Phase 3).
 
-1. **Split-brain during channel assignment** - Network partitions cause multiple pods to believe they own same channel, resulting in duplicate connections and duplicate message delivery. Avoid with: Kubernetes Lease API with proper TTLs, fencing tokens (monotonic counters), majority quorum for ownership decisions, platform-level duplicate detection. Warning signs: duplicate messages in overlays, sum(channels_per_pod) > total_active_channels. CRITICAL severity - causes duplicate API quota charges and rate limit bans.
+2. **Deletion event semantic mismatch** - InnerTube deletion IDs may not match YouTube API message IDs stored in message-processor registry. Race condition: deletions arrive faster than original messages (InnerTube WebSocket-like vs API polling). Orphaned messages remain visible, batch deletions send 50 individual events overwhelming processor. **Mitigation:** Store InnerTube itemId → messageId mapping in Redis (Phase 1), deletion buffer for race conditions (Phase 1), batch deletion detection (Phase 2).
 
-2. **Message loss during channel migration** - Old pod disconnects before new pod establishes connection, creating 1-10 second gap where messages aren't captured. IRC connections take 2-5s to establish (TCP → TLS → IRC JOIN). Avoid with: overlap migration (new pod connects BEFORE old pod disconnects), Redis Streams offset tracking, replay buffer in Message Processor (60s retention), dual-connection during migration for critical channels. Warning signs: users report missed messages during deployments, gaps in consumer group offsets. CRITICAL severity - violates product promise.
+3. **InnerTube API instability** - Undocumented internal API changes without warning. Field renames, nested structure changes, continuation token format changes cause parser failures mid-stream. No changelog, no versioning, discovered via user reports. **Mitigation:** Schema version detection (Phase 1), graceful degradation on missing fields (Phase 1), snapshot tests (Phase 2), canary deployment 10% rollout (Phase 3), community monitoring (ongoing).
 
-3. **Thundering herd on HPA scale-up** - When HPA adds 5 new pods simultaneously, all attempt rebalancing at once, causing Redis lock contention, platform rate limits (YouTube quota exhausted), cascading failures, election storms. Avoid with: startup jitter (sleep random 0 to pod_ordinal * 2), gradual rebalancing in batches (10 channels/sec), token bucket rate limiter via Redis, HPA scaleUp stabilization (60s window, max 2 pods/min). Warning signs: redis_lock_timeout errors during scale-up, platform 429 errors correlated with HPA events. CRITICAL severity - YouTube quota exhaustion affects all users for 24 hours.
+4. **Stream discovery edge cases** - Multiple concurrent streams, premieres vs live streams, unlisted streams. InnerTube may return different results than official API search.list. Listener connects to wrong stream, premiere countdowns mistaken for live chat. **Mitigation:** Stream filter contract matching official API behavior (Phase 1), premiere detection via upcomingEventData (Phase 1), multi-stream handling with viewer count sorting (Phase 1), cross-validation tests (Phase 2).
 
-4. **Inconsistent hashing key selection** - Poor key choice causes hot spots (all popular channels hash to same pod), migration churn (different components use different keys), state loss. Using overlayID instead of channelID causes channel to bounce between pods. Avoid with: always hash on channelID (or platform:channelID), 150-200 virtual nodes per pod, hot key detection using Count-Min Sketch, hash key validation in tests. Warning signs: highly variable load across pods, frequent migrations for same channel. MAJOR severity - degrades performance and causes cascading issues.
-
-5. **Platform-specific connection state not migrated** - Different platforms have different stateful requirements: IRC channels must be explicitly JOINed, YouTube polling offset (pageToken) resets causing duplicates/missed messages, Kick subscription IDs must match original connection. Avoid with: platform-specific ConnectionSnapshot interface (Capture/Restore), store snapshots in Redis with TTL, per-platform migration handlers, integration tests for mid-stream migration. Warning signs: message rate drops to zero after migration, duplicate messages appear, platform errors "Not in channel". CRITICAL severity - migration equals downtime without this.
-
-6. **Message ordering violations during rebalancing** - Channel temporarily has two producers (old pod + new pod), Redis Streams only provides ordering within single producer, messages arrive out-of-order at overlays. Avoid with: sequence numbers per channel, Message Processor validates sequence and buffers out-of-order messages, old pod stops publishing BEFORE new pod starts (brief gap acceptable), migration coordinator pattern for zero-gap. Warning signs: users report wrong message order during deployments, "sequence gap detected" in logs. MAJOR severity - confusing but not catastrophic.
-
-7. **Redlock anti-pattern for channel ownership** - Team uses Redlock believing it's safer than single-instance locks, actually adds complexity (3+ Redis instances), doesn't solve fundamental problems (clock skew causes false acquisitions), no fencing tokens (stale pod can act on expired lock), fails during network partitions. Avoid with: Kubernetes Lease API with fencing tokens, or single Redis with proper patterns (SET NX + PX, unique token, Lua delete script), monotonic counter for fencing. Warning signs: multiple Redis instances for locking, no fencing tokens, locks acquired by multiple pods. MAJOR severity - causes subtle split-brain under network partitions.
-
-**All-Chat specific warnings:**
-- **YouTube quota is non-negotiable**: Once exhausted, ALL users affected for 24h. Thundering herd during scale-up can exhaust quota in minutes. Use centralized quota tracking in Redis (existing quota-manager service), circuit breaker at 90% quota, pause YouTube connections during rebalancing.
-- **IRC connection limits (Twitch)**: ~50 channels per connection, limits total connections per IP. Each pod maintains 1 IRC connection and JOINs multiple channels. During migration, new pod JOINs BEFORE old pod PARTs (brief overlap acceptable, not duplicate connection).
-- **Emote service load**: More pods = more emote API calls (7TV, BTTV, FFZ have rate limits). Use centralized emote cache in Redis (shared across pods), 5 min TTL, only leader pod refreshes cache.
+5. **Rate limiting differences** - InnerTube uses IP-based rate limiting (not quota). Aggressive polling triggers 429/403, IP blocks. Default 1000ms continuation vs official API 2000-5000ms. **Mitigation:** Respect timeoutMs field from InnerTube (Phase 1), exponential backoff on rate limit errors (Phase 1), configurable MIN_POLLING_INTERVAL_MS override (Phase 1).
 
 ## Implications for Roadmap
 
-Based on research, recommended phase structure follows dependency graph: foundation (consistent hashing + Redis data structures) → coordinator service → listener integration → production hardening. Critical features must be implemented in Phase 1 (split-brain prevention, leader election) and Phase 2 (overlap migration, platform-specific state transfer) - these cannot be retrofitted after production launch.
+Based on research, suggested phase structure:
 
-### Phase 1: Sharding Infrastructure & Coordinator Service
-
-**Rationale:** Foundational components have no dependencies and must be correct from start. Split-brain prevention and consistent hashing key selection are expensive to fix later (require rewrites). Leader election with fencing tokens is critical for preventing duplicate connections. This phase delivers a working coordinator that can compute assignments, but listeners don't consume them yet.
-
-**Delivers:**
-- Consistent hashing library (buraksezer/consistent with bounded loads)
-- Shard Coordinator service (HTTP server, assignment computation, health checks)
-- Redis data structures (assignments hash, load tracking, active pods set, metrics with TTL)
-- Leader election via Kubernetes Lease API with fencing tokens
-- Assignment computation logic (consistent hash → Redis writes)
-- Basic observability (Prometheus metrics for assignment counts)
-
-**Addresses features:**
-- Consistent hashing with virtual nodes (table stakes)
-- Quorum-based leader election (table stakes)
-- Heartbeat-based membership tracking (table stakes)
-
-**Avoids pitfalls:**
-- Split-brain during channel assignment (implement fencing tokens, majority quorum)
-- Inconsistent hashing key selection (use channelID, 150 virtual nodes, document in ADR)
-- Redlock anti-pattern (use Kubernetes Lease API, not Redlock)
-
-**Stack elements:**
-- buraksezer/consistent v0.10.0 (new dependency)
-- prometheus/client_golang v1.23.2 (already in use)
-- redis/go-redis/v9 v9.18.0 (already in use)
-
-**Implementation notes:**
-- Coordinator is stateless (reads state from Redis)
-- Leader election scope: one leader computes assignments for all platforms
-- Hash key decision: platform:channelID for global uniqueness
-- Virtual nodes: 150 per pod (balance between distribution quality and memory)
-
-**Exit criteria:**
-- Coordinator can compute assignments for 1000 channels across 10 pods
-- Leader election recovers in <5s on pod failure
-- Chaos test: network partition between pods, verify only one pod computes assignments
-- Metrics show: sum(channels_per_pod) == total_active_channels (no duplicates)
-
-### Phase 2: Connection Management & Migration
-
-**Rationale:** Phase 1 computes assignments but listeners don't consume them. Phase 2 integrates listeners to read assignments and implements cooperative migration protocol. This is where message loss prevention happens - overlap migration must be built before production. Platform-specific state migration (YouTube pageToken, Kick subscription IDs) prevents silent failures.
+### Phase 1: Proof of Concept - Core Ingestion
+**Rationale:** Validate InnerTube viability before investing in production hardening. Manual video ID input bypasses stream discovery complexity. Focus on message flow: InnerTube → Redis → message-processor compatibility.
 
 **Delivers:**
-- Enhanced listener startup (register with coordinator → query assignments → join assigned channels)
-- Load monitor component (publish metrics every 10s with 30s TTL)
-- Migration handler (XREADGROUP consume migration events, graceful PART/disconnect)
-- Overlap migration protocol (new pod connects BEFORE old pod disconnects)
-- Platform-specific ConnectionSnapshot interface (Twitch JOIN list, YouTube pageToken, Kick subscription IDs)
-- Graceful shutdown (45-60s grace period, complete in-flight messages)
-- Separate readiness vs liveness probes
+- Node.js service with masterchat polling
+- Message normalization to RawChatMessage format
+- Redis Streams publishing (XADD chat:raw)
+- Basic health checks (/health/live, /health/ready)
+- Manual video ID configuration (hardcoded or env var)
 
-**Addresses features:**
-- Graceful shutdown with connection draining (table stakes)
-- Separate readiness/liveness probes (table stakes)
-- Idempotent channel assignment (table stakes)
-- Cooperative rebalancing (differentiator)
+**Addresses (from FEATURES.md):**
+- Live chat ingestion (core purpose)
+- Message normalization (table stakes)
+- Super Chat/membership detection (must have)
 
-**Avoids pitfalls:**
-- Message loss during channel migration (implement overlap migration, replay buffer)
-- Platform-specific connection state not migrated (ConnectionSnapshot interface per platform)
-- Message ordering violations (sequence numbers per channel, validate in Message Processor)
+**Avoids (from PITFALLS.md):**
+- Schema drift: Build JSON schema validation into normalizer from day 1
+- Rate limiting: Respect masterchat timeoutMs, implement exponential backoff
+- Deletion semantics: Defer deletion events to Phase 2 (simplify MVP)
 
-**Uses stack:**
-- gorilla/websocket v1.5.3+ (graceful WebSocket migration for Kick)
-- context package (cancellation propagation during graceful shutdown)
+**Validation criteria:**
+- Can receive live chat from known stream (hardcoded video ID)
+- Message-processor consumes InnerTube messages without code changes
+- Side-by-side comparison with official listener shows matching output
 
-**Implementation notes:**
-- Migration event stream: `shard:migrations:{platform}` with consumer groups
-- Overlap window: new pod waits for first message BEFORE old pod disconnects (verify receiving)
-- Platform handlers:
-  - Twitch: capture active JOIN list, replay on new connection
-  - YouTube: store last pageToken + timestamp, resume from that point
-  - Kick: store subscription IDs, re-subscribe with same IDs
-  - TikTok: similar to Kick (WebRTC-based)
-- Graceful shutdown: 10s preStop + 20s drain + 5s cleanup + 10s buffer = 45s total
-
-**Exit criteria:**
-- E2E test: migrate channel mid-stream, verify zero message loss
-- E2E test: verify message ordering preserved during migration
-- Load test: 1000 channels across 10 pods, migrate 100 channels, <1s gap per migration
-- Manual test: send SIGTERM to pod, verify continues processing for 20s, clean handoff
-
-### Phase 3: Scaling & Resilience
-
-**Rationale:** Phase 1-2 handle steady-state operation and single pod failures. Phase 3 adds safeguards for production scenarios: HPA scale-up, thundering herd prevention, automatic rebalancing triggers, volume-based rebalancing for hot channels. This phase tests under realistic load and chaos scenarios.
+### Phase 2: Production Minimum - Dynamic Streams
+**Rationale:** Add dynamic stream management and production hardening. Stream discovery is critical path - without it, service requires manual video ID updates. HTTP API enables overlay-manager integration.
 
 **Delivers:**
-- Automatic rebalancing triggers (pod added/removed, heartbeat timeout, load imbalance >0.5)
-- Staggered pod startup (jitter: sleep random 0 to pod_ordinal * 2)
-- Gradual rebalancing (assign channels in batches of 10/second, not all-at-once)
-- Rebalancing backoff (exponential: 1s, 2s, 4s, 8s, max 5 min)
-- Volume-based rebalancing (detect channels with >500 msgs/sec, redistribute load)
-- Token bucket rate limiter for platform APIs (shared across pods via Redis)
-- HPA configuration (stabilizationWindowSeconds: 60, max 2 pods/min)
-- All-Chat specific: YouTube quota circuit breaker (throttle at 90%, pause during rebalancing)
+- HTTP REST API (POST /streams/monitor, DELETE /streams/:id)
+- Stream discovery via external resolution (overlay-manager provides video ID)
+- Stream Manager with Map<videoId, StreamHandler>
+- Reconnection logic with exponential backoff
+- Graceful shutdown (SIGTERM handler, connection cleanup)
+- Status endpoint (/status showing active streams)
+- Structured logging (Winston JSON output, matches Go services)
 
-**Addresses features:**
-- Volume-based rebalancing (differentiator)
-- Rebalancing backoff (differentiator)
-- Weighted pod capacity (differentiator, if needed)
+**Addresses (from FEATURES.md):**
+- Stream discovery (critical gap from Phase 1)
+- Reconnection on error (table stakes)
+- Graceful shutdown (K8s requirement)
 
-**Avoids pitfalls:**
-- Thundering herd on HPA scale-up (startup jitter, gradual rebalancing, rate limiter, HPA limits)
-- YouTube quota exhaustion (centralized tracking, circuit breaker, pause during rebalancing)
+**Uses (from STACK.md):**
+- Express for HTTP server
+- ioredis with connection pooling
+- Winston for structured logging
 
-**Implementation notes:**
-- Rebalancing threshold: 0.5 imbalance ratio (any pod has >150% of average load)
-- Rebalancing cooldown: 5 minutes between rebalances
-- Volume threshold: 500 msgs/sec per channel triggers rebalancing
-- YouTube circuit breaker: at 90% quota, throttle polling rate globally, prioritize high-traffic channels
-- Emote cache: centralized in Redis with 5 min TTL, only leader refreshes
+**Implements (from ARCHITECTURE.md):**
+- HTTP API Layer
+- Stream Manager orchestrator
+- Stream Handler state machine (INITIALIZING → RUNNING → STOPPED → ERROR)
 
-**Exit criteria:**
-- Chaos test: HPA scale-up 2→10 pods, verify staggered startup, no lock contention
-- Load test: trigger volume-based rebalancing, verify hot channel redistributed in <60s
-- Quota test: approach YouTube 90% threshold, verify circuit breaker activates
-- Soak test: 24+ hours with 1000 channels, verify no memory leaks, stable load distribution
+**Avoids (from PITFALLS.md):**
+- Deletion race conditions: Implement InnerTube itemId → messageId mapping in Redis
+- Continuation token lifecycle: Store last continuation in Redis with TTL for fast resume
 
-### Phase 4: Observability & Production Readiness
+**Integration points:**
+- overlay-manager calls innertube-listener HTTP API
+- Docker Compose networking (service name as hostname)
+- SERVICE_SECRET authorization (matches existing pattern)
 
-**Rationale:** Phase 1-3 deliver functional sharding. Phase 4 ensures debuggability in production through comprehensive metrics, distributed tracing, and operational dashboards. Without observability, production issues are impossible to diagnose (blind to hot spots, migration failures, lock contention).
+### Phase 3: Contract Validation - Drop-In Testing
+**Rationale:** Prove behavioral equivalence with official listener before production rollout. Contract tests catch schema drift early. Golden replay tests ensure byte-for-byte compatibility. Dual-listener validation detects real-time mismatches.
 
 **Delivers:**
-- Comprehensive Prometheus metrics:
-  - Per-pod channel count distribution (detect hot spots)
-  - Rebalancing frequency, duration, success rate
-  - Channel migration events per platform
-  - Connection establishment time per platform
-  - Message gap duration during migrations
-  - Redis lock contention and wait time
-  - Leader election changes
-- Distributed tracing via OpenTelemetry (platform → listener → Redis → processor → gateway → overlay)
-- Grafana dashboards:
-  - Load distribution fairness (histogram of channels per pod)
-  - Rebalancing activity (migration events, duration)
-  - Health metrics (heartbeat failures, pod restarts)
-  - Performance (messages/sec per pod, CPU/memory)
-  - Failure modes (split-brain events, duplicate connections)
-- Alerting rules:
-  - Alert: max(channels_per_pod) > 2 * avg(channels_per_pod)
-  - Alert: migration_failure_rate > 5%
-  - Alert: p95(connection_time) > 10s
-  - Alert: leader_changes > 2 per hour
-  - Alert: sequence_gap_events > 0
-- Integration tests for all failure scenarios
-- Documentation (runbooks, troubleshooting guides)
+- Contract tests with golden files (100 diverse messages)
+- Schema snapshot tests (detect InnerTube changes)
+- Cross-listener comparison tests (same stream, both listeners)
+- Deletion event validation (single + batch)
+- Timestamp/badge/amount format validation
+- Integration test: innertube-listener → message-processor → UnifiedChatMessage
 
-**Addresses features:**
-- Metrics per shard (differentiator)
+**Addresses (from PITFALLS.md):**
+- Schema drift detection (golden replay tests)
+- Deletion semantic validation (comparison with official listener)
+- Stream discovery validation (dual-discovery comparison)
 
-**Avoids pitfalls:**
-- Observability gaps (comprehensive metrics prevent debugging blindness)
+**Testing strategy:**
+1. Capture 100 messages from official listener (testdata/official_golden/)
+2. Capture corresponding InnerTube responses (testdata/innertube_raw/)
+3. Golden replay test: Parse InnerTube → RawChatMessage → assert.JSONEq with golden
+4. Run both listeners on same live stream, compare output in real-time
+5. Measure mismatch rate (target < 0.1%)
 
-**Implementation notes:**
-- Metric cardinality: avoid per-channel labels (use per-pod aggregates)
-- Tracing sampling: 1% of messages (high-traffic overlays would overwhelm collector)
-- Dashboard refresh: 30s for load distribution, 5s for real-time migration events
-- Log retention: 7 days for debug logs, 30 days for error logs
+**Validation criteria:**
+- Contract tests pass for all message types (regular, Super Chat, membership, deletion)
+- Dual-listener mismatch rate < 0.1% over 1 week staging test
+- Message-processor integration test passes (no code changes)
 
-**Exit criteria:**
-- Can identify root cause of simulated failure scenarios from metrics alone in <5 min
-- Distributed trace shows end-to-end message latency from platform to overlay
-- All alerting rules tested with simulated failures
-- Runbooks cover: split-brain recovery, migration failure recovery, quota exhaustion
+### Phase 4: Production Rollout - Canary Deployment
+**Rationale:** InnerTube instability risk requires gradual rollout with automatic rollback. Canary deployment limits blast radius. Monitoring detects breaking changes early.
+
+**Delivers:**
+- Kubernetes deployment manifests (Deployment, Service, HPA)
+- Canary deployment config (10% → 50% → 100%)
+- Prometheus metrics (messages_total, streams_active, errors_total, parse_errors)
+- Sentry error tracking with InnerTube-specific tags
+- Automatic rollback on error spike (> 5% error rate)
+- Community monitoring alerts (GitHub issues for masterchat/YouTube.js)
+
+**Addresses (from PITFALLS.md):**
+- InnerTube breaking changes: Canary limits damage, rollback prevents outage
+- Schema changes: Metrics detect parse errors early
+- Rate limiting: Monitor 429/403 responses, adjust polling intervals
+
+**Rollout plan:**
+1. Week 1: Deploy to 10% of channels, monitor error rates
+2. Week 2: If error rate < 1%, scale to 50%
+3. Week 3: If error rate < 0.5%, scale to 100%
+4. Automatic rollback if error rate > 5% or mismatch rate > 1%
+
+**Observability:**
+- Grafana dashboard: message rate, active streams, error breakdown
+- Sentry alerts: schema parsing failures, rate limiting events
+- PagerDuty integration: automatic rollback triggers
+
+### Phase 5: Feature Parity - Deletion Events & Metrics
+**Rationale:** Deletion events and advanced features differentiate InnerTube listener. These are competitive advantages (message deletion not available in official API), not blockers.
+
+**Delivers:**
+- Deletion event publishing (markChatItemAsDeletedAction → Redis Pub/Sub)
+- Batch deletion detection (5+ deletions in 100ms → synthesized batch event)
+- Ban/timeout event publishing (markChatItemsByAuthorAsDeletedAction)
+- Prometheus metrics expansion (message_rate gauge, error breakdown by type)
+- Super sticker enrichment (full sticker metadata in event_data)
+- Membership milestone parsing (extract months/years from message)
+
+**Addresses (from FEATURES.md):**
+- Message deletion events (differentiator)
+- Ban/timeout detection (differentiator)
+- Advanced metrics (production monitoring)
+
+**Phase ordering rationale:**
+- Deletion events deferred until schema validation proven (Phase 3)
+- Metrics expansion after production rollout (Phase 4 provides baseline)
+- These features enhance but don't block core functionality
 
 ### Phase Ordering Rationale
 
-- **Phase 1 first**: Foundation must be correct (split-brain prevention, hash key selection). These are expensive to fix later.
-- **Phase 2 before Phase 3**: Must prevent message loss before scaling. Overlap migration is non-negotiable for production.
-- **Phase 3 before Phase 4**: Scaling scenarios inform observability requirements. Test under load to discover what metrics are critical.
-- **Phase 4 throughout**: Basic observability starts in Phase 1, comprehensive in Phase 4. Tracing and alerting are final polish.
+- **Dependencies:** Phase 1 validates InnerTube viability before building production features. Phase 2 adds dynamic stream management (prerequisite for real overlay use). Phase 3 proves contract compatibility before production. Phase 4 rolls out safely with monitoring.
 
-**Dependency chains:**
-- Overlap migration (Phase 2) requires cooperative rebalancing (Phase 2) requires migration events (Phase 1)
-- Volume-based rebalancing (Phase 3) requires metrics per shard (Phase 4) requires load monitor (Phase 2)
-- All phases require consistent hashing (Phase 1) and leader election (Phase 1)
+- **Risk mitigation:** Gradual rollout limits InnerTube instability blast radius. Contract testing in Phase 3 catches schema drift before production. Canary deployment (Phase 4) enables fast rollback on breaking changes.
 
-**Critical path:** Phase 1 (Coordinator) blocks everything. Phase 2 (Connection Management) blocks production launch. Phase 3 (Scaling) blocks autoscaling. Phase 4 (Observability) is polish but critical for operations.
+- **Architecture:** Phase 1 validates Redis contract (drop-in replacement). Phase 2 builds HTTP integration (matches overlay-manager pattern). Phase 3 tests message-processor compatibility (no code changes). Phase 4 integrates K8s (HPA, leader election via source-manager).
+
+- **Pitfall avoidance:** Schema validation built-in Phase 1 (prevents silent data loss). Deletion ID mapping Phase 2 (prevents orphaned messages). Golden replay tests Phase 3 (catches schema drift). Canary deployment Phase 4 (limits InnerTube breaking change damage).
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
 
-- **Phase 2: Platform-specific migration**: Each platform (Twitch IRC, YouTube polling, Kick WebSocket, TikTok WebRTC) has different connection state requirements. May need platform-specific research for:
-  - YouTube: pageToken continuation API, behavior during polling gaps
-  - Kick: Pusher subscription ID lifecycle, can IDs be reused?
-  - TikTok: Unofficial library stability, connection migration patterns
+- **Phase 2 (Stream Discovery):** Complex integration - how does overlay-manager resolve channel → video ID? Does it use official API (separate quota pool) or YouTube RSS (no auth, 5-15 min lag)? Need to design async flow to avoid circular dependency (listener needs video ID, overlay-manager needs stream ID from listener).
 
-- **Phase 3: YouTube quota optimization**: Circuit breaker implementation needs deeper research on:
-  - Google quota API (can we query remaining quota programmatically?)
-  - Polling rate throttling strategies (which channels to prioritize?)
-  - Quota increase request process (how long does approval take?)
+- **Phase 3 (Contract Testing):** Sparse documentation - InnerTube message deletion semantics not officially documented. Need to capture real deletion events from live streams, reverse-engineer itemId format. May require running test streams with moderator actions.
+
+- **Phase 5 (Deletion Events):** Niche domain - message deletion not documented in official API (no liveChatMessages.retract endpoint). Need to verify message-processor and API Gateway can handle deletion events (may require schema changes).
 
 Phases with standard patterns (skip research-phase):
 
-- **Phase 1: Consistent hashing**: Well-documented pattern, buraksezer/consistent library handles complexity
-- **Phase 2: Graceful shutdown**: Kubernetes termination lifecycle is standard, 45-60s grace period is industry norm
-- **Phase 3: HPA configuration**: Standard Kubernetes pattern, well-documented stabilization and rate limiting
-- **Phase 4: Observability**: Prometheus + Grafana + OpenTelemetry are established stack, reference dashboards exist
+- **Phase 1 (Core Ingestion):** Well-documented - masterchat library has production use cases (HolodexNet), async iterator pattern established. Node.js → Redis Streams via ioredis is standard pattern.
+
+- **Phase 4 (Production Rollout):** Established patterns - Kubernetes canary deployment well-documented. Prometheus metrics follow existing service patterns (youtube-listener has examples). Sentry integration matches current setup.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All technologies are production-proven, most already in All-Chat. Only new dependency (buraksezer/consistent) is stable despite minimal maintenance. No breaking changes expected. |
-| Features | MEDIUM-HIGH | Table stakes features have HIGH confidence (well-established patterns). Differentiators have MEDIUM confidence (observed in production systems like Kafka/Elasticsearch but implementation complexity varies). MVP recommendations have HIGH confidence. |
-| Architecture | HIGH | Patterns are verified with official docs, multiple credible sources, and industry standards (Kafka, Elasticsearch, Kubernetes). Redis-based coordination matches existing source-manager pattern. Integration points are well-defined. |
-| Pitfalls | MEDIUM-HIGH | Critical pitfalls have HIGH confidence (backed by production post-mortems and Martin Kleppmann's distributed systems research). Some pitfalls inferred from general distributed systems principles (MEDIUM confidence). Recovery strategies based on industry practices. |
+| Stack | HIGH | masterchat verified via npm package, GitHub activity, HolodexNet production use. Node.js 20 LTS + TypeScript + ioredis are industry-standard choices. Alternative options (Go native, pytchat Python) thoroughly evaluated and rejected with clear rationale. |
+| Features | HIGH | Feature requirements derived from existing youtube-listener codebase (RawChatMessage contract, quota tracking to remove, OAuth to remove). Differentiators confirmed via masterchat action types (deletion/ban events). MVP scope validated against message-processor expectations. |
+| Architecture | MEDIUM | Component boundaries follow existing All-Chat patterns (HTTP control plane, Redis Streams data plane, per-stream handlers). Integration points verified via Docker Compose networking docs. Uncertainty: source-manager leader election integration inferred from architecture but not verified in code. |
+| Pitfalls | MEDIUM | Schema drift risk confirmed by examining RawChatMessage contract + InnerTube library differences. Deletion semantics verified via official API parser code. InnerTube instability based on community reports (GitHub issues, HN discussion) but no official changelog exists. Stream discovery edge cases inferred from behavior patterns, require validation testing. |
 
-**Overall confidence:** HIGH
+**Overall confidence:** MEDIUM
 
-Research is comprehensive with extensive sourcing (40+ references across Stack, Features, Architecture, Pitfalls). All recommended technologies are production-tested and actively used by major systems (Kafka, Elasticsearch, OpenTelemetry, Kubernetes). Architecture patterns are industry-standard with clear documentation. Pitfalls are backed by production case studies and expert analysis (Martin Kleppmann on Redlock, Kafka's evolution to cooperative rebalancing).
+While stack choices and feature requirements are well-validated (HIGH confidence), architecture integration details and InnerTube-specific behavior have moderate uncertainty due to undocumented API and inferred patterns.
 
 ### Gaps to Address
 
-Areas where research was inconclusive or needs validation during implementation:
+- **Stream discovery implementation**: How overlay-manager resolves channel → video ID is unclear. Need to decide between Option A (overlay-manager uses official API), Option B (innertube-listener implements InnerTube browse API), or Option C (YouTube RSS feed). Recommend designing API contract first, implementation can be decided during Phase 2 planning.
 
-- **Platform API behavior during migration**: Research focused on general patterns. Need platform-specific validation for:
-  - YouTube: Does pageToken API tolerate gaps? What happens if polling stops for 60s?
-  - Kick: Can Pusher subscription IDs be reused across connections? What's the subscription ID lifecycle?
-  - TikTok: Unofficial library stability - can connections be migrated at all? May need connection pool instead.
-  - **Recommendation**: Implement ConnectionSnapshot interface in Phase 2, add integration tests per platform to validate migration behavior.
+- **Source-manager leader election integration**: Architecture assumes per-stream leader election to prevent duplicate ingestion across K8s replicas. Integration pattern inferred from existing youtube-listener but not verified. Need to review source-manager codebase during Phase 2 to confirm Redis lock protocol.
 
-- **Bounded-load consistent hashing performance at scale**: buraksezer/consistent is production-used but last release was 2022. Research shows O(1) lookup with O(P) add/remove (P = partition count), but no direct benchmarks for 1000+ channels.
-  - **Recommendation**: Add benchmarks in Phase 1 to validate performance at target scale (1000 channels, 10 pods). If performance degrades, consider alternatives (stathat/consistent with virtual nodes).
+- **Deletion event schema**: Exact mapping from InnerTube markChatItemAsDeletedAction to RawChatMessage event_data schema unknown. Official listener deletion handling not found in codebase search. May need to define new schema or confirm message-processor supports deletion events. Validate during Phase 3 contract testing.
 
-- **Redis single-instance bottleneck**: Research shows Redis single-node handles 100K ops/sec, All-Chat workload is ~100 ops/sec. Massive headroom, but no direct testing with sorted set queries under load.
-  - **Recommendation**: Load test in Phase 3 with 1000 channels, 10 pods, 10 rebalances/min. Verify Redis CPU stays <20%. If bottleneck appears, consider Redis Cluster.
+- **InnerTube schema versioning**: No official versioning exists. Recommend creating internal schema version detection based on field presence (e.g., "2024-schema" if continuationContents.liveChatContinuation exists). Document known schema patterns during Phase 1 implementation for future stability tracking.
 
-- **YouTube quota API programmatic queries**: Circuit breaker design assumes we can query remaining quota. Google Quota API documentation doesn't clearly state if this is possible.
-  - **Recommendation**: Research YouTube Quota API in Phase 3 planning. If not queryable, use estimation (track requests, calculate remaining based on 24h reset).
-
-- **Message ordering guarantees during overlap migration**: Research shows Redis Streams provides ordering within producer, but overlap migration temporarily creates two producers. Sequence numbers solve this, but requires Message Processor changes.
-  - **Recommendation**: Design sequence number system in Phase 2 planning. Add to message format early (difficult to add later). Alternative: old pod routes messages through new pod during overlap (complex).
+- **Rate limiting thresholds**: Exact IP-based rate limits unknown (not documented by YouTube). Community reports vary (1000ms polling works, sub-500ms triggers blocks). Recommend starting conservative (2000ms min interval) and A/B testing in Phase 4 canary to find safe threshold.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-
-**Stack research:**
-- [buraksezer/consistent GitHub](https://github.com/buraksezer/consistent) - v0.10.0, production use by OpenTelemetry and SeaweedFS
-- [prometheus/client_golang pkg.go.dev](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus) - v1.23.2 official client
-- [redis/go-redis pkg.go.dev](https://pkg.go.dev/github.com/redis/go-redis/v9) - v9.18.0 official client, 14,968 imports
-- [gorilla/websocket GitHub](https://github.com/gorilla/websocket) - v1.5.3+ graceful shutdown patterns
-- [Kubernetes HPA Documentation](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)
-
-**Architecture research:**
-- [Consistent Hashing Explained (Ably)](https://ably.com/blog/implementing-efficient-consistent-hashing)
-- [Ultimate Guide to Consistent Hashing (Toptal)](https://www.toptal.com/big-data/consistent-hashing)
-- [Redis Ring for Consistent Hashing](https://redis.uptrace.dev/guide/ring.html)
-- [Kafka Partition Rebalancing](https://oneuptime.com/blog/post/2026-02-02-kafka-partition-rebalancing/view)
-- [StatefulSet Management (Kubernetes)](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
-
-**Features research:**
-- [Kafka Cooperative Rebalancing (Confluent)](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb/)
-- [KIP-848 Consumer Rebalance Protocol](https://www.confluent.io/blog/kip-848-consumer-rebalance-protocol/)
-- [Google Cloud: Terminating with Grace](https://cloud.google.com/blog/products/containers-kubernetes/kubernetes-best-practices-terminating-with-grace)
-- [Google Cloud: Readiness and Liveness Probes](https://cloud.google.com/blog/products/containers-kubernetes/kubernetes-best-practices-setting-up-health-checks-with-readiness-and-liveness-probes)
-
-**Pitfalls research:**
-- [Martin Kleppmann: How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html) - Redlock critique
-- [Split-brain in Distributed Systems (DZone)](https://dzone.com/articles/split-brain-in-distributed-systems)
-- [Leader Election in Distributed Systems 2026](https://www.devahmedali.click/post/leader-election-in-distributed-systems-complete-guide)
-- [Migrate Stateful Workloads with Zero Downtime (Cast AI)](https://cast.ai/blog/how-to-migrate-stateful-workloads-on-kubernetes-with-zero-downtime/)
+- [masterchat npm package](https://www.npmjs.com/package/@stu43005/masterchat) - Version 1.5.0 confirmed, published April 2025
+- [masterchat documentation](https://github.com/sigvt/masterchat/blob/master/MANUAL.md) - Action types, async iterator API, error events
+- [All-Chat youtube-listener source](file:///home/moersener/Hobby/all-chat/services/youtube-listener/) - RawChatMessage contract, quota tracking, OAuth patterns
+- [All-Chat message-processor source](file:///home/moersener/Hobby/all-chat/services/message-processor/) - Normalization expectations, consumer patterns
+- [Docker Compose networking docs](https://forums.docker.com/t/cross-container-communication-via-http-post-request/54605) - Service-to-service HTTP patterns
 
 ### Secondary (MEDIUM confidence)
+- [pytchat GitHub](https://github.com/taizan-hokuto/pytchat) - Repository archived Jan 25, 2022 (3+ years unmaintained)
+- [innertube-go pkg.go.dev](https://pkg.go.dev/github.com/nezbut/innertube-go) - No live chat methods listed, v0.0.0 unstable
+- [YouTube.js GitHub](https://github.com/LuanRT/YouTube.js) - v16.0.1 active (Oct 2025), live chat support unclear from docs
+- [chat-downloader InnerTube implementation](https://github.com/xenova/chat-downloader/blob/master/chat_downloader/sites/youtube.py) - Production-grade parser with deletion handling (Python reference)
+- [YouTube IP ban behavior](https://multilogin.com/blog/youtube-ip-ban/) - IP-based rate limiting patterns (2026 guide)
+- [Contract testing with Pact](https://medium.com/@mohsenny/stop-breaking-my-api-a-practical-guide-to-contract-testing-with-pact-33858d113386) - Testing strategies applicable to drop-in replacement
 
-- [Consistent Hashing Guide by Senthil (Medium)](https://medium.com/@sent0hil/consistent-hashing-a-guide-go-implementation-fe3421ac3e8f)
-- [Data Sharding in Golang - Coding Explorations](https://www.codingexplorations.com/blog/data-sharding-in-golang-optimizing-performance-and-scalability)
-- [Hot Partition Balancing (Medium)](https://medium.com/ai-ml-interview-playbook/re-sharding-and-hot-partition-balancing-keeping-your-distributed-systems-healthy-at-scale-8eda61aaf9b2)
-- [Vimeo: Improving Load Balancing with Bounded Consistent Hashing](https://medium.com/vimeo-engineering-blog/improving-load-balancing-with-a-new-consistent-hashing-algorithm-9f1bd75709ed)
-- [Thundering Herd Problem (Encore)](https://encore.dev/blog/thundering-herd-problem)
-- [Message Ordering in Event-Driven Systems (OneUpTime)](https://oneuptime.com/blog/post/2026-01-24-message-ordering-event-driven/view)
-
-### Tertiary (LOW confidence, needs validation)
-
-- Community reports on Kick Pusher channel limits (varies by plan, not officially documented)
-- TikTok unofficial library stability (anecdotal reports suggest 10-20 concurrent streams)
-- Elasticsearch shard allocation patterns (referenced but not deeply researched for All-Chat use case)
+### Tertiary (LOW confidence)
+- [InnerTube stability discussion](https://news.ycombinator.com/item?id=31021611) - Community reports on YouTube.js reliability (HackerNews, needs validation)
+- [YouTube rate limiting discussion](https://github.com/jdepoix/youtube-transcript-api/issues/511) - Community reports of rate limiting (anecdotal)
+- [InnerTube transcript API changes](https://medium.com/@aqib-2/extract-youtube-transcripts-using-innertube-api-2025-javascript-guide-dc417b762f49) - Recent breaking changes (Medium article, single source)
 
 ---
-
-**Research completed:** 2026-02-19
-**Ready for roadmap:** YES
-
-**Recommended next steps:**
-1. Review SUMMARY.md with stakeholders to validate phase structure
-2. Create roadmap in `.planning/roadmap/ROADMAP.md` based on phase suggestions
-3. Begin Phase 1 planning with focus on leader election and consistent hashing implementation
-4. Schedule architecture review before Phase 2 to validate migration protocol design
-5. Plan chaos engineering tests for Phase 3 (network partitions, HPA scale-up, quota exhaustion)
+*Research completed: 2026-02-21*
+*Ready for roadmap: yes*

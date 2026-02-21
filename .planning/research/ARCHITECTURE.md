@@ -1,589 +1,821 @@
-# Architecture Research: Message Deletion Events
+# Architecture Research: InnerTube YouTube Listener Integration
 
-**Domain:** Streaming chat aggregation with deletion event handling
-**Researched:** 2026-02-17
+**Domain:** InnerTube-based YouTube Live Chat Listener for All-Chat
+**Researched:** 2026-02-21
 **Confidence:** HIGH
 
-## Standard Architecture
+## Integration Strategy
 
-### System Overview
+### Decision: Separate Service (Drop-In Replacement)
+
+**Recommendation:** Deploy InnerTube YouTube listener as a **separate, standalone service** that is a drop-in replacement for the existing official API-based youtube-listener.
+
+**Rationale:**
+1. **Self-Hoster Choice**: Users can choose official API (with quota limits) OR InnerTube (quota-free but unofficial)
+2. **Risk Isolation**: If YouTube breaks InnerTube API, official listener remains functional
+3. **Zero Architecture Changes**: Both publish identical Redis Stream messages
+4. **Deployment Flexibility**: Switch via image tag in Kubernetes deployment
+5. **Testing Safety**: Run both in parallel during migration, compare outputs
+
+**NOT Recommended:**
+- Single service with mode switch (more complexity, larger binary, shared failure modes)
+- Modifying existing youtube-listener (breaks single responsibility, complicates rollback)
+
+---
+
+## System Overview
+
+### InnerTube Listener in Existing Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Platform Listeners                       │
-│  Twitch IRC  │  YouTube API  │  Kick WebSocket  │  TikTok   │
-└──────────────┬──────────────┬──────────────┬────────────────┘
-               │              │              │
-               ▼              ▼              ▼
-         ┌──────────────────────────────────────┐
-         │  NEW: Message ID Tracking             │
-         │  • Assign platform msg ID → UUID      │
-         │  • Store in Redis (TTL 24h)          │
-         └───────────────┬──────────────────────┘
-                         │ publish raw messages + deletion events
-                         ▼
-                  ┌─────────────┐
-                  │ Redis Stream│ (chat:raw)
-                  │ XADD        │
-                  └──────┬──────┘
-                         │ XREADGROUP (consumer group)
-                         ▼
-              ┌──────────────────────┐
-              │ Message Processor     │
-              │ • Normalize format    │
-              │ • Enrich emotes       │
-              │ NEW: Handle deletions │
-              └──────────┬────────────┘
-                         │ publish enriched messages + deletion events
-                         ▼
-                  ┌─────────────┐
-                  │ Redis Pub/Sub│ (overlay:*)
-                  │ PUBLISH      │
-                  └──────┬──────┘
-                         │ SUBSCRIBE
-                         ▼
-              ┌──────────────────────┐
-              │  API Gateway          │
-              │  • WebSocket Hub      │
-              │  NEW: Track client    │
-              │         message IDs   │
-              └──────────┬────────────┘
-                         │ WebSocket broadcast
-                         ▼
-              ┌──────────────────────┐
-              │  Overlay (Frontend)   │
-              │  • React components   │
-              │  NEW: Remove deleted  │
-              │         messages      │
-              └───────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          EXISTING ARCHITECTURE                            │
+├──────────────────────────────────────────────────────────────────────────┤
+│  Platform Listeners (Microservices)                                       │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │   Twitch     │  │   YouTube    │  │     Kick     │  │   TikTok     │ │
+│  │  Listener    │  │   Listener   │  │   Listener   │  │   Listener   │ │
+│  │  (IRC)       │  │ (Official API)│  │  (Pusher WS) │  │ (Unofficial) │ │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘ │
+│         │                 │                 │                 │          │
+│         └─────────────────┴─────────────────┴─────────────────┘          │
+│                                  ↓                                        │
+│         Redis Streams: chat:raw (RawChatMessage format)                   │
+│                                  ↓                                        │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
+│  │            Message Processor (Consumer Group)                     │    │
+│  │  Normalize → Enrich (emotes) → Route (overlay mapping)           │    │
+│  └──────────────────────────────┬───────────────────────────────────┘    │
+│                                  ↓                                        │
+│         Redis Pub/Sub: overlay:{overlay_id}                               │
+│                                  ↓                                        │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
+│  │              API Gateway → WebSocket → Frontend                   │    │
+│  └──────────────────────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      NEW: INNERTUBE INTEGRATION                           │
+├──────────────────────────────────────────────────────────────────────────┤
+│  Self-Hoster Chooses ONE of:                                              │
+│                                                                            │
+│  Option A: youtube-listener (Official API)                                │
+│    ┌──────────────────────────────────────────────────────────┐          │
+│    │  - HTTP polling (liveChatMessages.list)                   │          │
+│    │  - OAuth 2.0 per user                                     │          │
+│    │  - Quota tracking (1,009,000 units/day)                   │          │
+│    │  - Leader election (per stream)                           │          │
+│    │  - PostgreSQL quota state                                 │          │
+│    └────────────────────────┬─────────────────────────────────┘          │
+│                             ↓                                             │
+│              Redis Streams: chat:raw (platform=youtube)                   │
+│                                                                            │
+│  Option B: youtube-innertube-listener (InnerTube API) ← NEW               │
+│    ┌──────────────────────────────────────────────────────────┐          │
+│    │  - InnerTube continuation token polling                   │          │
+│    │  - NO OAuth (uses YouTube web context)                    │          │
+│    │  - NO quota limits (unofficial API)                       │          │
+│    │  - Leader election (per stream, same pattern)             │          │
+│    │  - Rate limit awareness (avoid IP blocks)                 │          │
+│    └────────────────────────┬─────────────────────────────────┘          │
+│                             ↓                                             │
+│              Redis Streams: chat:raw (platform=youtube)                   │
+│                             ↓                                             │
+│                      IDENTICAL OUTPUT                                     │
+│  Both listeners produce same RawChatMessage schema                        │
+│  Message Processor cannot distinguish between them                        │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Component Responsibilities
+---
 
-| Component | Current Responsibility | New Deletion Responsibility |
-|-----------|------------------------|----------------------------|
-| **Platform Listeners** | Parse platform messages, publish to Redis Streams | Parse deletion events (CLEARMSG, retraction API responses), publish to same stream with event_type="deletion" |
-| **Message ID Registry** (NEW) | N/A | Map platform message IDs → internal UUIDs (Redis hash with 24h TTL) |
-| **Message Processor** | Normalize, enrich, route to overlays | Handle deletion events: lookup original message UUID, forward deletion to affected overlays |
-| **Redis Streams** | Durable queue for raw messages | Also queue deletion events (same stream, different event_type) |
-| **Redis Pub/Sub** | Low-latency broadcast of enriched messages | Also broadcast deletion events to overlay channels |
-| **API Gateway** | WebSocket management, message broadcast | Track which messages sent to which clients, forward deletions |
-| **Frontend Overlay** | Display messages with animations | Remove deleted messages from DOM, optional fade-out animation |
+## Component Responsibilities
+
+### New Service: youtube-innertube-listener
+
+| Component | Responsibility | Implementation |
+|-----------|----------------|----------------|
+| **InnerTube Client** | HTTP client for YouTube's private API | Go HTTP client with custom headers mimicking browser |
+| **Continuation Manager** | Obtain and refresh continuation tokens | Extract from initial page load, poll with continuation |
+| **Chat Poller** | Poll InnerTube endpoint for chat messages | HTTP POST to `/youtubei/v1/live_chat/get_live_chat` |
+| **Message Parser** | Parse InnerTube JSON response to RawChatMessage | Extract actions, map to unified schema |
+| **Rate Limiter** | Prevent IP blocks from aggressive polling | Configurable polling interval (default 1000-2000ms) |
+| **Leader Election Client** | Claim/renew leadership for streams | HTTP client to source-manager (same as official listener) |
+| **Redis Publisher** | Publish to chat:raw stream | Same XAdd pattern as all other listeners |
+| **Health Checks** | Kubernetes liveness/readiness | Same /health/live, /health/ready endpoints |
+
+### Reused Components (No Changes)
+
+| Component | Used By | Notes |
+|-----------|---------|-------|
+| **Source Manager** | Both listeners | Same leader election API, stream ID format |
+| **Message Processor** | Both listeners | Cannot distinguish source (same platform=youtube) |
+| **API Gateway** | Both listeners | No changes, subscribes to same Pub/Sub channels |
+| **Overlay Manager** | Both listeners | No changes, manages source configuration |
+| **PostgreSQL** | Both listeners | Same overlay_chat_sources table schema |
+| **Redis** | Both listeners | Same Streams (chat:raw) and leader locks |
+
+---
 
 ## Recommended Project Structure
 
-### Schema Changes
-
-**New Message ID Registry (Redis Hash)**:
-```
-Key: msg:ids:{platform}:{platform_msg_id}
-Value: {
-  "internal_id": "uuid-v4",
-  "overlay_ids": ["overlay-uuid-1", "overlay-uuid-2"],
-  "timestamp": "2026-02-17T10:00:00Z"
-}
-TTL: 86400 (24 hours)
-```
-
-**Extended RawChatMessage Model** (no changes needed, uses existing event_type field):
-```go
-type RawChatMessage struct {
-    MessageID   string            `json:"message_id"`    // Internal UUID
-    Platform    string            `json:"platform"`
-    // ... existing fields ...
-
-    // Event support (ALREADY EXISTS - reuse for deletions)
-    EventType   string                 `json:"event_type,omitempty"`   // "chat" | "deletion"
-    EventData   map[string]interface{} `json:"event_data,omitempty"`   // Deletion: {target_msg_id, deleted_by}
-}
-```
-
-**Extended UnifiedChatMessage Model** (no changes needed, uses existing Event field):
-```go
-type UnifiedChatMessage struct {
-    ID          string      `json:"id"`           // Internal UUID
-    OverlayID   string      `json:"overlay_id"`
-    // ... existing fields ...
-
-    // Event support (ALREADY EXISTS - reuse for deletions)
-    Event       *EventInfo  `json:"event,omitempty"`  // Type="deletion"
-}
-```
-
-**New Deletion Event Format**:
-```typescript
-interface DeletionEvent {
-  type: "deletion";
-  message_id: string;           // Internal UUID of deleted message
-  platform: string;             // "twitch" | "youtube" | "kick" | "tiktok"
-  deleted_by: string;           // User ID of moderator (if available)
-  timestamp: string;            // ISO 8601 deletion timestamp
-}
-```
-
-### File Structure
+### New Service Directory
 
 ```
 services/
-├── twitch-listener/
+├── youtube-listener/                # EXISTING (Official API)
+│   ├── cmd/main.go
+│   ├── oauth/                       # OAuth token management
+│   ├── polling/                     # Official API polling
+│   ├── quota/                       # Quota tracking
+│   └── ...
+│
+├── youtube-innertube-listener/      # NEW (InnerTube API)
+│   ├── cmd/
+│   │   └── main.go                  # Entry point (logger, Redis, HTTP server)
+│   ├── innertube/
+│   │   ├── client.go                # HTTP client with browser headers
+│   │   ├── continuation.go          # Continuation token extraction/refresh
+│   │   ├── models.go                # InnerTube API response structs
+│   │   └── parser.go                # Parse actions → RawChatMessage
+│   ├── polling/
+│   │   ├── poller.go                # Main polling loop per stream
+│   │   ├── manager.go               # Manages pollers (start/stop)
+│   │   └── rate_limiter.go          # Prevent aggressive polling
+│   ├── discovery/
+│   │   ├── stream_finder.go         # Find live streams for channels
+│   │   └── initial_data.go          # Extract chat context from page
+│   ├── leadership/
+│   │   └── client.go                # Source Manager HTTP client
+│   ├── publisher/
+│   │   └── redis.go                 # Publish to chat:raw stream
 │   ├── handlers/
-│   │   └── irc_handler.go            # Handle CLEARMSG/CLEARCHAT IRC messages
-│   ├── registry/                      # NEW
-│   │   └── message_id_registry.go    # Map Twitch msg-id → internal UUID
-│   └── publisher/
-│       └── redis.go                   # Publish deletion events to chat:raw
+│   │   └── health.go                # /health/live, /health/ready
+│   ├── models/
+│   │   └── message.go               # RawChatMessage (same as official)
+│   ├── go.mod
+│   ├── go.sum
+│   ├── Dockerfile                   # Multi-stage build (same pattern)
+│   └── README.md
 │
-├── youtube-listener/
-│   ├── handlers/
-│   │   └── message_handler.go        # Detect messageDeletededEvent in poll responses
-│   ├── registry/                      # NEW
-│   │   └── message_id_registry.go    # Map YouTube messageId → internal UUID
-│   └── publisher/
-│       └── redis.go                   # Publish deletion events to chat:raw
-│
-├── kick-listener/
-│   ├── handlers/
-│   │   └── websocket_handler.go      # Handle ChatMessageDeletedEvent
-│   ├── registry/                      # NEW
-│   │   └── message_id_registry.go    # Map Kick message ID → internal UUID
-│   └── publisher/
-│       └── redis.go                   # Publish deletion events to chat:raw
-│
-├── message-processor/
-│   ├── handlers/
-│   │   └── deletion_handler.go       # NEW: Process deletion events
-│   ├── normalizer/
-│   │   ├── deletion_normalizer.go    # NEW: Normalize platform deletion formats
-│   │   └── *_normalizer.go           # Updated: Track message IDs during normalization
-│   └── publisher/
-│       └── pubsub.go                  # Publish deletions to overlay:{id}
-│
-├── api-gateway/
-│   ├── websocket/
-│   │   ├── connection.go             # Track sent message IDs per connection
-│   │   ├── deletion_handler.go       # NEW: Forward deletions to WebSocket clients
-│   │   └── manager.go                # Updated: Handle deletion subscriptions
-│   └── models/
-│       └── ws_message.go             # Add deletion message type
-│
-└── overlay-frontend/
-    ├── components/
-    │   ├── ChatMessage.tsx           # Add deletion handler
-    │   └── ChatOverlay.tsx           # Track messages by ID, remove on deletion
-    └── hooks/
-        └── useWebSocket.ts           # Handle deletion events from WebSocket
+└── message-processor/               # UNCHANGED (works with both)
+    └── ...
 ```
 
 ### Structure Rationale
 
-- **registry/:** Separate package for message ID mapping (reusable across listeners)
-- **handlers/deletion_handler.go:** Dedicated handlers for deletion-specific logic (single responsibility)
-- **deletion_normalizer.go:** Platform-agnostic deletion format (follows existing normalizer pattern)
-- **No database changes:** Message IDs stored in Redis only (ephemeral, 24h TTL matches message lifecycle)
+- **innertube/**: Core InnerTube API integration (client, continuation, parsing)
+- **polling/**: Same responsibility as official listener's polling module
+- **discovery/**: Replaces OAuth-based stream discovery with page scraping
+- **leadership/**: Identical pattern to official listener (reuse interface if extracted to shared/)
+- **publisher/**: Identical Redis Streams publishing logic (reuse if extracted to shared/)
+- **handlers/**: Same health check endpoints for Kubernetes
+- **models/**: RawChatMessage schema MUST match official listener exactly
+
+---
 
 ## Architectural Patterns
 
-### Pattern 1: Message ID Registry (Redis Hash)
+### Pattern 1: Drop-In Replacement
 
-**What:** Map platform-specific message IDs to internal UUIDs for deletion matching
+**What:** Two services with identical external contracts (input: database sources, output: Redis Stream messages)
 
-**When to use:** When platform provides message ID in deletion event (Twitch CLEARMSG, YouTube retraction, Kick deletion)
+**When to use:** When migrating from risky/expensive service to alternative with same functionality
 
 **Trade-offs:**
-- **Pros:** Fast O(1) lookup, automatic expiration (TTL), no database schema changes
-- **Cons:** Lost on Redis restart (mitigated by 24h TTL matching message lifetime), memory overhead (~100 bytes per message)
+- **Pros:** Zero architecture changes, easy rollback, run both in parallel for validation
+- **Cons:** Code duplication (polling logic, message parsing, health checks)
 
 **Example:**
 ```go
-// services/twitch-listener/registry/message_id_registry.go
-type MessageIDRegistry struct {
-    redis *redis.Client
+// BOTH services publish identical messages to Redis Streams
+type RawChatMessage struct {
+    MessageID   string            `json:"message_id"`
+    Platform    string            `json:"platform"` // Always "youtube"
+    ChannelID   string            `json:"channel_id"`
+    StreamID    string            `json:"stream_id"`
+    UserID      string            `json:"user_id"`
+    Username    string            `json:"username"`
+    Text        string            `json:"text"`
+    Timestamp   time.Time         `json:"timestamp"`
+    Tags        map[string]string `json:"tags"`
 }
 
-func (r *MessageIDRegistry) Register(ctx context.Context, platformID, internalID string, overlayIDs []string) error {
-    key := fmt.Sprintf("msg:ids:twitch:%s", platformID)
-    data := map[string]interface{}{
-        "internal_id": internalID,
-        "overlay_ids": overlayIDs,
-        "timestamp": time.Now().Format(time.RFC3339),
+// Official Listener: Parses from YouTube Data API response
+func (p *OfficialPoller) parseMessage(apiMsg *youtube.LiveChatMessage) RawChatMessage {
+    return RawChatMessage{
+        Platform:  "youtube",
+        ChannelID: apiMsg.AuthorDetails.ChannelID,
+        // ... extract from official API fields
     }
-    pipe := r.redis.Pipeline()
-    pipe.HSet(ctx, key, data)
-    pipe.Expire(ctx, key, 24*time.Hour)
-    _, err := pipe.Exec(ctx)
-    return err
 }
 
-func (r *MessageIDRegistry) Lookup(ctx context.Context, platformID string) (string, []string, error) {
-    key := fmt.Sprintf("msg:ids:twitch:%s", platformID)
-    result, err := r.redis.HGetAll(ctx, key).Result()
-    if err != nil {
-        return "", nil, err
+// InnerTube Listener: Parses from InnerTube API response
+func (p *InnerTubePoller) parseMessage(action *AddChatItemAction) RawChatMessage {
+    return RawChatMessage{
+        Platform:  "youtube",
+        ChannelID: action.Item.LiveChatTextMessageRenderer.AuthorExternalChannelID,
+        // ... extract from InnerTube API fields
     }
-    return result["internal_id"], parseOverlayIDs(result["overlay_ids"]), nil
+}
+
+// Message Processor: Receives identical messages from EITHER listener
+func (mp *MessageProcessor) consumeRawMessages(ctx context.Context) {
+    streams, _ := mp.redis.XReadGroup(ctx, &redis.XReadGroupArgs{
+        Group:    "message-processors",
+        Consumer: "consumer-1",
+        Streams:  []string{"chat:raw", ">"},
+    }).Result()
+    // Cannot distinguish which listener published the message
 }
 ```
 
-### Pattern 2: Unified Event Stream (Same Redis Stream)
+### Pattern 2: Continuation-Based Polling
 
-**What:** Publish both chat messages and deletion events to the same Redis Stream (chat:raw)
+**What:** Use continuation tokens from InnerTube API to paginate through live chat messages
 
-**When to use:** When events share similar processing pipeline and delivery requirements
+**When to use:** YouTube InnerTube API requires continuation tokens for chat message pagination
 
 **Trade-offs:**
-- **Pros:** Single consumer group, simpler architecture, preserves message order
-- **Cons:** Message Processor must handle multiple event types (mitigated by event_type field)
+- **Pros:** Stateless polling (continuation token contains all state), lower overhead than OAuth
+- **Cons:** Continuation tokens can expire, initial token acquisition requires page scraping
 
 **Example:**
 ```go
-// services/twitch-listener/handlers/irc_handler.go
-func (h *IRCHandler) handleCLEARMSG(msg twitch.ClearMessage) {
-    // Lookup original message UUID
-    internalID, overlayIDs, err := h.registry.Lookup(ctx, msg.TargetMsgID)
-    if err != nil {
-        logger.Warn("Deletion for unknown message", zap.String("target_msg_id", msg.TargetMsgID))
-        return
+// innertube/continuation.go
+type ContinuationManager struct {
+    httpClient *http.Client
+}
+
+// Extract initial continuation token from live stream page
+func (cm *ContinuationManager) GetInitialContinuation(videoID string) (string, error) {
+    url := fmt.Sprintf("https://www.youtube.com/live_chat?v=%s", videoID)
+    resp, err := cm.httpClient.Get(url)
+    // Parse HTML → extract ytInitialData → liveChatRenderer.continuations[0].token
+    return extractContinuationFromHTML(resp.Body)
+}
+
+// Poll with continuation token
+func (cm *ContinuationManager) PollChat(continuation string) (*ChatResponse, string, error) {
+    payload := map[string]interface{}{
+        "context": cm.buildContext(),
+        "continuation": continuation,
     }
 
-    // Publish deletion event to Redis Stream
-    deletionEvent := models.RawChatMessage{
-        MessageID: uuid.New().String(),
-        Platform:  "twitch",
-        EventType: "deletion",
-        EventData: map[string]interface{}{
-            "target_internal_id": internalID,
-            "target_platform_id": msg.TargetMsgID,
-            "deleted_by": msg.Login,
-            "overlay_ids": overlayIDs,
-        },
-        Timestamp: time.Now(),
-    }
-    h.publisher.Publish(ctx, deletionEvent)
+    resp, err := cm.httpClient.Post(
+        "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
+        "application/json",
+        jsonPayload(payload),
+    )
+
+    chatResp := parseResponse(resp.Body)
+    nextContinuation := extractNextContinuation(chatResp)
+    return chatResp, nextContinuation, nil
 }
 ```
 
-### Pattern 3: Event-Driven Deletion Propagation
+### Pattern 3: Leader Election (Reused from Official Listener)
 
-**What:** Forward deletion events through existing message pipeline (Streams → Processor → Pub/Sub → Gateway → Client)
+**What:** Use Source Manager to coordinate which pod polls which stream (prevent duplicate API calls)
 
-**When to use:** When deletion latency requirements match message latency (<500ms P95)
+**When to use:** Multiple replicas of youtube-innertube-listener running (HPA scales 1-5 pods)
 
 **Trade-offs:**
-- **Pros:** Reuses existing infrastructure, no new communication channels, consistent latency
-- **Cons:** Deletions delayed by processing pipeline (acceptable for chat moderation use case)
+- **Pros:** Same pattern as official listener, proven in production, prevents duplicate polling
+- **Cons:** Adds HTTP overhead for claim/renew, requires Source Manager availability
 
 **Example:**
 ```go
-// services/message-processor/handlers/deletion_handler.go
-func (h *DeletionHandler) Process(ctx context.Context, rawMsg models.RawChatMessage) error {
-    targetID := rawMsg.EventData["target_internal_id"].(string)
-    overlayIDs := rawMsg.EventData["overlay_ids"].([]string)
+// leadership/client.go (IDENTICAL to official listener)
+type SourceManagerClient struct {
+    baseURL    string
+    secret     string
+    httpClient *http.Client
+}
 
-    // Create unified deletion event
-    deletion := models.UnifiedChatMessage{
-        ID:        rawMsg.MessageID,
-        Platform:  rawMsg.Platform,
-        Timestamp: rawMsg.Timestamp,
-        Event: &models.EventInfo{
-            Type: "deletion",
-            Metadata: map[string]interface{}{
-                "target_message_id": targetID,
-                "deleted_by": rawMsg.EventData["deleted_by"],
-            },
-        },
+func (c *SourceManagerClient) ClaimLeadership(streamID, consumerID string, ttl int) (bool, error) {
+    payload := map[string]interface{}{
+        "stream_id":   streamID,
+        "consumer_id": consumerID,
+        "ttl_seconds": ttl,
     }
 
-    // Publish to overlay-specific channels
-    for _, overlayID := range overlayIDs {
-        deletion.OverlayID = overlayID
-        h.publisher.Publish(ctx, fmt.Sprintf("overlay:%s", overlayID), deletion)
+    req, _ := http.NewRequest("POST", c.baseURL+"/leadership/claim", jsonPayload(payload))
+    req.Header.Set("Authorization", "Bearer "+c.secret)
+
+    resp, err := c.httpClient.Do(req)
+    return resp.StatusCode == 200, err
+}
+
+// polling/poller.go (uses leadership client)
+func (p *Poller) Start(ctx context.Context, streamID string) {
+    // Claim leadership before starting
+    claimed, _ := p.leaderClient.ClaimLeadership(streamID, p.podName, 60)
+    if !claimed {
+        return // Another pod is leader, enter standby
     }
-    return nil
+
+    // Renew leadership every 30s
+    go p.renewLeadership(ctx, streamID)
+
+    // Poll chat messages
+    continuation := p.getContinuation(streamID)
+    for {
+        messages, nextContinuation, _ := p.innertubeClient.PollChat(continuation)
+        p.publishMessages(messages)
+        continuation = nextContinuation
+        time.Sleep(p.pollingInterval)
+    }
 }
 ```
+
+---
 
 ## Data Flow
 
-### Request Flow: Message Creation → Deletion
+### InnerTube Listener Message Flow
 
 ```
-1. Platform Message Arrives
-   Twitch IRC: "PRIVMSG #channel :Hello world" (msg-id=abc-123-def)
-   ↓
-2. Listener: Register Message ID
-   Redis: SET msg:ids:twitch:abc-123-def {internal_id: uuid-v4, overlays: [overlay-1]} EX 86400
-   ↓
-3. Listener → Redis Streams
-   XADD chat:raw {message_id: uuid-v4, platform: "twitch", text: "Hello world", event_type: "chat"}
-   ↓
-4. Message Processor: Normalize + Enrich
-   (existing pipeline, no changes)
-   ↓
-5. Pub/Sub → Gateway → Client
-   WebSocket: {id: uuid-v4, text: "Hello world", ...}
-   Frontend: Display message with ID=uuid-v4
-   ↓
-   ────────────────────────────────────────────────────────────────
-6. Platform Deletion Event
-   Twitch IRC: "CLEARMSG #channel :Hello world" (target-msg-id=abc-123-def)
-   ↓
-7. Listener: Lookup Original Message
-   Redis: GET msg:ids:twitch:abc-123-def → {internal_id: uuid-v4, overlays: [overlay-1]}
-   ↓
-8. Listener → Redis Streams
-   XADD chat:raw {message_id: deletion-uuid, platform: "twitch", event_type: "deletion",
-                  event_data: {target_internal_id: uuid-v4, overlay_ids: [overlay-1]}}
-   ↓
-9. Message Processor: Handle Deletion
-   Normalize deletion event, no enrichment needed
-   ↓
-10. Pub/Sub → Gateway → Client
-    WebSocket: {event: {type: "deletion", metadata: {target_message_id: uuid-v4}}}
-    Frontend: Remove message ID=uuid-v4 from DOM
+1. Overlay Manager: User adds YouTube source
+       ↓
+   PostgreSQL: INSERT INTO overlay_chat_sources (platform=youtube, channel_id=UCxxxxx)
+       ↓
+   PostgreSQL NOTIFY: source_changes channel
+       ↓
+2. YouTube InnerTube Listener: Receives notification (via PostgreSQL LISTEN)
+       ↓
+   Discovery: Find live stream for channel UCxxxxx
+       ↓
+   InnerTube Client: GET https://www.youtube.com/channel/UCxxxxx/live
+       ↓
+   Parser: Extract video ID from page
+       ↓
+3. Leadership Client: Claim leadership for stream (video ID)
+       ↓
+   Source Manager: SET leader:stream:{video_id} = pod-abc123 EX 60
+       ↓ (if claimed)
+4. Continuation Manager: Get initial continuation token
+       ↓
+   InnerTube Client: GET https://www.youtube.com/live_chat?v={video_id}
+       ↓
+   Parser: Extract ytInitialData → continuations[0].token
+       ↓
+5. Poller: Start polling loop
+       ↓
+   InnerTube Client: POST /youtubei/v1/live_chat/get_live_chat
+       ↓ (every 1-2 seconds)
+   Response: { actions: [addChatItemAction, ...], continuations: [...] }
+       ↓
+6. Parser: Extract messages from actions
+       ↓
+   RawChatMessage: {platform: "youtube", channel_id: "UCxxxxx", ...}
+       ↓
+7. Redis Publisher: XADD chat:raw {message JSON}
+       ↓
+   ════════════════════════════════════════════════════════════
+   IDENTICAL TO OFFICIAL LISTENER FROM THIS POINT FORWARD
+   ════════════════════════════════════════════════════════════
+       ↓
+8. Message Processor: XREADGROUP chat:raw
+       ↓
+   Normalize → Enrich (emotes) → Route (overlay mapping)
+       ↓
+9. Redis Pub/Sub: PUBLISH overlay:{overlay_id} {enriched message}
+       ↓
+10. API Gateway: SUBSCRIBE overlay:{overlay_id}
+       ↓
+    WebSocket: Push to frontend overlays
 ```
 
 ### State Management
 
+**Stream State (Redis):**
 ```
-Message ID Registry (Redis Hash)
-    ↓ (register on message create)
-Platform Listener ←→ Redis Hash ← (lookup on deletion event)
-    ↓ (publish deletion to stream)
-Redis Streams (chat:raw)
-    ↓ (process deletion)
-Message Processor ←→ Deletion Handler → Pub/Sub
-    ↓ (forward to clients)
-API Gateway ←→ WebSocket Manager → Frontend
-    ↓ (remove from DOM)
-React State (message list) - message removed
+leader:stream:{video_id}              → "youtube-innertube-pod-abc123" (TTL: 60s)
+continuation:{video_id}                → "continuation_token_xyz" (TTL: 300s, optional cache)
+rate_limit:global                      → Request count in sliding window
 ```
 
-### Key Data Flows
+**Persistent State (PostgreSQL):**
+```
+overlay_chat_sources
+├── platform: "youtube"
+├── channel_id: "UCxxxxx"
+├── config: {"polling_interval_ms": 1500}  # InnerTube-specific config
+└── is_active: true
+```
 
-1. **Message ID Registration Flow:** Listener receives platform message → generates internal UUID → stores mapping in Redis (platform_id → internal_id + overlay_ids) → publishes to stream
-2. **Deletion Event Flow:** Listener receives deletion event → looks up internal UUID from platform message ID → publishes deletion event with internal UUID → Message Processor routes to affected overlays → Frontend removes message
+**No Quota State (vs Official Listener):**
+- InnerTube listener does NOT need youtube_quota_usage table
+- InnerTube listener does NOT need reserve-confirm-rollback pattern
+- InnerTube listener does NOT track API quota (no official quota applies)
 
-## Scaling Considerations
-
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| 0-1k messages/s | Single Redis instance, registry hash stores ~86K messages (24h * 1msg/s), ~8MB memory overhead |
-| 1k-10k messages/s | Redis Cluster, shard registry by platform+channel (consistent hashing), ~80MB memory overhead |
-| 10k+ messages/s | Separate Redis instance for message ID registry (dedicated memory allocation), consider shorter TTL (12h instead of 24h) |
-
-### Scaling Priorities
-
-1. **First bottleneck:** Message ID registry memory (at 10k msg/s, 24h retention = 864M entries × 100 bytes = ~86GB)
-   - **Fix:** Reduce TTL to 6 hours (messages rarely deleted after 6h), drops to ~21GB
-2. **Second bottleneck:** Redis Streams MAXLEN (deletion events add to stream length)
-   - **Fix:** Increase MAXLEN from 50K to 100K messages (accommodates 10% deletion rate)
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Database Storage for Message IDs
-
-**What people might do:** Store message ID mappings in PostgreSQL instead of Redis
-
-**Why it's wrong:**
-- **Performance:** Database query adds 5-20ms per deletion (vs <1ms for Redis hash lookup)
-- **Unnecessary durability:** Message IDs only needed for 24h (Redis TTL handles cleanup automatically)
-- **Schema bloat:** Would require new table, indices, and migrations for ephemeral data
-
-**Do this instead:** Use Redis hash with 24h TTL (matches message lifecycle)
-
-### Anti-Pattern 2: Separate Deletion Stream
-
-**What people might do:** Create dedicated Redis Stream for deletion events (e.g., chat:deletions)
-
-**Why it's wrong:**
-- **Ordering issues:** Deletion event might process before original message (race condition)
-- **Complexity:** Message Processor must consume from two streams, manage ordering
-- **Fan-out duplication:** Both streams need consumer groups, monitoring, backpressure handling
-
-**Do this instead:** Use same Redis Stream (chat:raw) with event_type field (preserves order)
-
-### Anti-Pattern 3: Synchronous Deletion Confirmation
-
-**What people might do:** Wait for deletion to propagate to all clients before ACK'ing deletion event
-
-**Why it's wrong:**
-- **Latency spike:** Blocks message processing pipeline waiting for WebSocket delivery
-- **Unnecessary guarantee:** Chat deletion is best-effort (acceptable if client offline/disconnected)
-- **Complexity:** Requires tracking per-client delivery state, timeout handling
-
-**Do this instead:** Fire-and-forget deletion (same model as existing message delivery)
+---
 
 ## Integration Points
 
-### External Services
+### Identical to Official Listener
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| Twitch IRC | Parse CLEARMSG/CLEARCHAT | target-msg-id maps to Twitch-provided msg-id tag on PRIVMSG |
-| YouTube API | Poll for messageDeletededEvent | YouTube provides deletedMessageId in response, poll-based (no WebSocket) |
-| Kick Pusher | Subscribe to ChatMessageDeletedEvent | Real-time WebSocket event with message_id field |
-| TikTok Live | Library provides deletion callback | Unofficial library, API unstable (low confidence) |
+| Integration | Pattern | Notes |
+|-------------|---------|-------|
+| **Redis Streams** | XADD chat:raw | Identical message schema (RawChatMessage) |
+| **Source Manager** | HTTP API (claim/renew/release) | Same leadership endpoints, stream ID format |
+| **PostgreSQL** | Read overlay_chat_sources | Same schema, platform="youtube" |
+| **Message Processor** | Consumer of chat:raw | Cannot distinguish InnerTube vs official |
+| **Health Checks** | /health/live, /health/ready | Same endpoints for Kubernetes |
+| **Metrics** | /metrics (Prometheus) | Same metrics format (counter, histogram, gauge) |
 
-### Internal Boundaries
+### Different from Official Listener
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Listener ↔ Redis | HSET (register), XADD (publish) | Message ID registry + event stream |
-| Processor ↔ Redis | XREADGROUP (consume), PUBLISH (forward) | Deletion handler reuses existing pipeline |
-| Gateway ↔ Frontend | WebSocket JSON | New message type: {event: {type: "deletion"}} |
+| Aspect | Official Listener | InnerTube Listener |
+|--------|-------------------|---------------------|
+| **Authentication** | OAuth 2.0 (per user) | None (uses browser context) |
+| **API Endpoint** | YouTube Data API v3 | InnerTube private API |
+| **Quota Tracking** | PostgreSQL youtube_quota_usage | Not needed (no quota limits) |
+| **Initial Discovery** | search.list API call (100 units) | Page scraping (0 quota) |
+| **Polling Mechanism** | liveChatMessages.list (5 units) | Continuation token (0 quota) |
+| **Rate Limiting** | API quota state machine | IP-based rate limiting (avoid blocks) |
+| **Config Schema** | YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET | INNERTUBE_POLLING_INTERVAL_MS |
 
-## Platform-Specific Deletion Formats
+---
 
-### Twitch IRC CLEARMSG
+## Deployment Strategy
 
-**Example:**
-```
-@login=baduser;room-id=12345;target-msg-id=abc-123-def;tmi-sent-ts=1642720582342 :tmi.twitch.tv CLEARMSG #channel :offensive message
-```
+### Kubernetes Deployment: Mutual Exclusivity
 
-**Fields:**
-- `target-msg-id`: Message ID to delete (maps to `id` tag from PRIVMSG)
-- `login`: Username of deleted message author
-- `room-id`: Channel ID
+**Self-hosters deploy ONE of these:**
 
-**Confidence:** HIGH - Official Twitch IRC documentation
-
-### Twitch IRC CLEARCHAT
-
-**Example:**
-```
-@ban-duration=600;room-id=12345;target-user-id=67890;tmi-sent-ts=1642720582342 :tmi.twitch.tv CLEARCHAT #channel :baduser
-```
-
-**Use case:** Deletes ALL messages from user (timeout/ban)
-
-**Implementation:** Loop through message ID registry, delete all entries where user_id=67890
-
-**Confidence:** HIGH - Official Twitch IRC documentation
-
-### YouTube API Message Retraction
-
-**Example Response:**
-```json
-{
-  "kind": "youtube#liveChatMessageListResponse",
-  "items": [
-    {
-      "kind": "youtube#liveChatMessage",
-      "id": "msg-456",
-      "snippet": {
-        "type": "messageDeletedEvent",
-        "messageDeletedDetails": {
-          "deletedMessageId": "msg-123"
-        }
-      }
-    }
-  ]
-}
-```
-
-**Fields:**
-- `deletedMessageId`: Message ID to delete
-- No information about who deleted (API limitation)
-
-**Confidence:** MEDIUM - Official YouTube API docs, but sparse examples
-
-### Kick Pusher WebSocket
-
-**Example:**
-```json
-{
-  "event": "App\\Events\\ChatMessageDeletedEvent",
-  "data": {
-    "message": {
-      "id": "msg-789",
-      "chatroom_id": 12345
-    }
-  }
-}
+#### Option A: Official API Listener (deployments/k8s/youtube-listener/deployment.yaml)
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: youtube-listener
+  namespace: allchat
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: youtube-listener
+      variant: official  # NEW label
+  template:
+    metadata:
+      labels:
+        app: youtube-listener
+        variant: official
+    spec:
+      containers:
+      - name: youtube-listener
+        image: allchat/youtube-listener:v1.2.0
+        env:
+        - name: YOUTUBE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: youtube-oauth
+              key: client_id
+        - name: YOUTUBE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: youtube-oauth
+              key: client_secret
+        # ... rest of config
 ```
 
-**Fields:**
-- `id`: Message ID to delete
-- `chatroom_id`: Channel ID
-- No information about moderator (unofficial API)
+#### Option B: InnerTube Listener (deployments/k8s/youtube-innertube-listener/deployment.yaml)
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: youtube-innertube-listener
+  namespace: allchat
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: youtube-listener          # SAME app label
+      variant: innertube              # Different variant
+  template:
+    metadata:
+      labels:
+        app: youtube-listener
+        variant: innertube
+    spec:
+      containers:
+      - name: youtube-innertube-listener
+        image: allchat/youtube-innertube-listener:v1.0.0
+        env:
+        - name: INNERTUBE_POLLING_INTERVAL_MS
+          value: "1500"
+        - name: INNERTUBE_USER_AGENT
+          value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)..."
+        # NO OAuth secrets needed
+        # ... rest of config
+```
 
-**Confidence:** LOW - Reverse-engineered, no official documentation
+**Deployment Instructions for Self-Hosters:**
+```bash
+# Choose ONE deployment method:
 
-### TikTok Live
+# Option A: Official API (requires OAuth setup)
+kubectl apply -f deployments/k8s/youtube-listener/
 
-**Status:** Library provides `onMessageDeleted` callback with message ID
+# Option B: InnerTube API (no OAuth, quota-free)
+kubectl apply -f deployments/k8s/youtube-innertube-listener/
 
-**Confidence:** LOW - Unofficial library (zerodytrash/TikTok-Live-Connector), API unstable
+# DO NOT deploy both simultaneously (will cause duplicate messages)
+```
 
-## Implementation Build Order
+### Docker Image Build
 
-### Phase 1: Foundation (Twitch Only)
-**Dependencies:** None (standalone feature)
+**Separate Images:**
+```dockerfile
+# services/youtube-innertube-listener/Dockerfile
+FROM golang:1.25-alpine AS builder
 
-**Components:**
-1. Message ID registry (Redis hash operations)
-2. Twitch Listener: Handle CLEARMSG, publish deletion events
-3. Message Processor: Deletion handler
-4. API Gateway: Forward deletions to WebSocket
-5. Frontend: Remove messages from DOM
+WORKDIR /build
+COPY shared /build/shared
+COPY services/youtube-innertube-listener /build/services/youtube-innertube-listener
 
-**Validation:** Moderator deletes message in Twitch chat → message removed from overlay within 500ms
+WORKDIR /build/services/youtube-innertube-listener
+RUN go mod download
+RUN CGO_ENABLED=0 GOOS=linux go build -o youtube-innertube-listener ./cmd
 
-**Estimated Effort:** 3-5 days
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates tzdata
+WORKDIR /app
+COPY --from=builder /build/services/youtube-innertube-listener/youtube-innertube-listener .
+EXPOSE 8089  # Different port from official (8086)
+CMD ["./youtube-innertube-listener"]
+```
 
-### Phase 2: YouTube Integration
-**Dependencies:** Phase 1 (reuses registry + processor)
+**Build Commands:**
+```bash
+# Build official listener
+docker build -t allchat/youtube-listener:v1.2.0 -f services/youtube-listener/Dockerfile .
 
-**Components:**
-1. YouTube Listener: Parse messageDeletededEvent
-2. Message ID registry: Add YouTube platform support
-3. Testing: Deletion during live stream
+# Build InnerTube listener
+docker build -t allchat/youtube-innertube-listener:v1.0.0 -f services/youtube-innertube-listener/Dockerfile .
+```
 
-**Validation:** Moderator deletes message in YouTube chat → message removed from overlay
+### Load Balancing Considerations
 
-**Estimated Effort:** 2-3 days
+**No Special Load Balancing Needed:**
+- InnerTube listener uses same leader election pattern as official listener
+- Source Manager already handles load distribution across replicas
+- HPA scales based on CPU/memory (same as all other listeners)
 
-### Phase 3: Kick + TikTok Integration
-**Dependencies:** Phase 1 (reuses registry + processor)
+**Leader Election Prevents Duplicate Polling:**
+```
+┌────────────────────────────────────────────────────────┐
+│  InnerTube Listener Replicas (HPA: 1-5 pods)          │
+├────────────────────────────────────────────────────────┤
+│                                                         │
+│  Pod 1: Leader for stream A, stream B                  │
+│         → Polls InnerTube API for A and B              │
+│                                                         │
+│  Pod 2: Leader for stream C                            │
+│         → Polls InnerTube API for C                    │
+│                                                         │
+│  Pod 3: Standby (no leadership)                        │
+│         → Monitors for leadership opportunities        │
+│                                                         │
+│  (If Pod 1 crashes, Pod 3 claims leadership for A+B)   │
+└────────────────────────────────────────────────────────┘
+                        ↓
+        Source Manager (Redis-based locks)
+                        ↓
+          leader:stream:video_abc → "pod-1"
+          leader:stream:video_xyz → "pod-1"
+          leader:stream:video_123 → "pod-2"
+```
 
-**Components:**
-1. Kick Listener: Handle ChatMessageDeletedEvent
-2. TikTok Listener: Subscribe to onMessageDeleted (if stable)
-3. Message ID registry: Add Kick/TikTok platform support
+---
 
-**Validation:** Deletions work across all 4 platforms
+## Scaling Considerations
 
-**Estimated Effort:** 2-3 days
+### Per-Replica Capacity
 
-### Phase 4: Advanced Features (Optional)
-**Dependencies:** Phases 1-3
+| Metric | Official Listener | InnerTube Listener |
+|--------|-------------------|---------------------|
+| **Streams/Pod** | ~50 concurrent streams | ~50-100 concurrent streams |
+| **CPU** | 200-500m (API parsing overhead) | 100-300m (simpler parsing) |
+| **Memory** | 256Mi-512Mi (OAuth tokens, quota state) | 128Mi-256Mi (no quota state) |
+| **Bottleneck** | API quota (1.009M units/day) | Rate limiting (avoid IP blocks) |
 
-**Components:**
-1. CLEARCHAT support (delete all messages from user)
-2. Deletion animations (fade-out instead of instant removal)
-3. Deletion history (audit log in database)
-4. Moderator attribution (display who deleted message)
+### Scaling Priorities
 
-**Estimated Effort:** 3-5 days
+1. **First bottleneck: Rate limiting (InnerTube)**
+   - **Symptom:** Polling fails with 429 Too Many Requests or IP blocks
+   - **Fix:** Increase polling interval from 1000ms to 1500-2000ms
+   - **Tuning:** Configure INNERTUBE_POLLING_INTERVAL_MS per deployment
+
+2. **Second bottleneck: CPU (message parsing)**
+   - **Symptom:** CPU >80% on listener pods
+   - **Fix:** Scale replicas (HPA increases from 3 → 5 → 10 pods)
+   - **Note:** Leader election distributes streams across replicas automatically
+
+3. **Third bottleneck: Redis Streams throughput**
+   - **Symptom:** chat:raw stream lag increases
+   - **Fix:** Scale Message Processor replicas (consumer group shares load)
+
+---
+
+## Anti-Patterns
+
+### Anti-Pattern 1: Combining Official and InnerTube in Single Service
+
+**What people might do:** Add InnerTube client to existing youtube-listener with a config flag
+
+**Why it's wrong:**
+- Larger binary (both OAuth and InnerTube dependencies)
+- More complex failure modes (OAuth token refresh can break InnerTube polling)
+- Harder to test (need to mock both APIs)
+- Violates single responsibility principle
+
+**Do this instead:** Separate services that share common interfaces (leadership, publisher)
+
+### Anti-Pattern 2: Running Both Listeners Simultaneously
+
+**What people might do:** Deploy both official and InnerTube listeners at same time
+
+**Why it's wrong:**
+- Duplicate messages published to Redis Streams (same platform=youtube)
+- Message Processor sees 2x messages for same chat
+- Users see duplicate messages in overlays
+- Wastes resources (both listeners polling same streams)
+
+**Do this instead:** Deploy ONE listener per environment, use feature flag at deployment level
+
+### Anti-Pattern 3: Aggressive Polling to "Reduce Latency"
+
+**What people might do:** Set INNERTUBE_POLLING_INTERVAL_MS=100 (10 polls/second)
+
+**Why it's wrong:**
+- YouTube will rate limit or block IP address
+- InnerTube API is not designed for sub-second polling
+- No latency benefit (chat messages batched by YouTube)
+- Wastes CPU and network bandwidth
+
+**Do this instead:** Use 1000-2000ms polling interval (same latency as official API polling)
+
+### Anti-Pattern 4: Ignoring Continuation Token Expiry
+
+**What people might do:** Cache continuation token indefinitely, reuse across restarts
+
+**Why it's wrong:**
+- Continuation tokens expire after 5-10 minutes of inactivity
+- Stale tokens return 400 Bad Request (requires re-fetching initial token)
+- Stream state changes (stream ends/restarts) invalidate tokens
+
+**Do this instead:** Always re-fetch initial continuation on stream start, handle 400 errors by re-initializing
+
+---
+
+## Suggested Build Order
+
+### Phase 1: Core InnerTube Client (Foundation)
+1. **innertube/client.go**: HTTP client with browser headers
+2. **innertube/models.go**: Response structs (actions, continuations)
+3. **innertube/continuation.go**: Extract initial continuation from page
+4. **innertube/parser.go**: Parse addChatItemAction → RawChatMessage
+5. **Tests**: Mock InnerTube API responses, verify parsing
+
+**Milestone:** Can fetch live chat messages for a hardcoded video ID
+
+### Phase 2: Polling & Publishing (Integration)
+6. **polling/poller.go**: Main polling loop (continuation → poll → parse → repeat)
+7. **publisher/redis.go**: Publish RawChatMessage to chat:raw stream
+8. **polling/rate_limiter.go**: Sliding window rate limiting
+9. **Tests**: Verify Redis Stream publishing, rate limiting
+
+**Milestone:** Publishes messages to Redis Streams, Message Processor consumes them
+
+### Phase 3: Leadership & Discovery (Scalability)
+10. **leadership/client.go**: Source Manager HTTP client (claim/renew/release)
+11. **discovery/stream_finder.go**: Find live streams for channels
+12. **polling/manager.go**: Start/stop pollers based on active sources
+13. **Tests**: Leader election, stream discovery
+
+**Milestone:** Multiple replicas coordinate via Source Manager, no duplicate polling
+
+### Phase 4: Production Readiness (Observability)
+14. **handlers/health.go**: /health/live, /health/ready endpoints
+15. **cmd/main.go**: Service initialization, graceful shutdown
+16. **Dockerfile**: Multi-stage build, optimized image
+17. **deployments/k8s/youtube-innertube-listener/**: Kubernetes manifests
+18. **README.md**: Documentation (setup, deployment, troubleshooting)
+
+**Milestone:** Production deployment, health checks pass, metrics exported
+
+### Phase 5: Validation & Migration (Safety)
+19. **Compare outputs**: Run both listeners in parallel, compare Redis Stream messages
+20. **Load testing**: Verify rate limiting prevents IP blocks
+21. **Failover testing**: Kill leader pod, verify standby takes over
+22. **Documentation**: Self-hoster migration guide (official → InnerTube)
+
+**Milestone:** Proven drop-in replacement, ready for self-hosters
+
+---
+
+## New vs Modified Components
+
+### New Components (youtube-innertube-listener service)
+
+| Component | Purpose | Files |
+|-----------|---------|-------|
+| **InnerTube Client** | HTTP client for private API | innertube/client.go, innertube/models.go |
+| **Continuation Manager** | Token extraction and refresh | innertube/continuation.go |
+| **InnerTube Parser** | Parse actions to RawChatMessage | innertube/parser.go |
+| **Rate Limiter** | Prevent IP blocks | polling/rate_limiter.go |
+| **Stream Finder** | Discover live streams | discovery/stream_finder.go |
+| **Poller** | Main polling loop | polling/poller.go |
+| **Poller Manager** | Start/stop pollers | polling/manager.go |
+| **Leadership Client** | Source Manager integration | leadership/client.go |
+| **Redis Publisher** | Publish to chat:raw | publisher/redis.go |
+| **Health Handlers** | Kubernetes probes | handlers/health.go |
+| **Main** | Service entry point | cmd/main.go |
+| **Dockerfile** | Container image | Dockerfile |
+| **K8s Manifests** | Deployment specs | deployments/k8s/youtube-innertube-listener/ |
+
+### Modified Components (Minimal Changes)
+
+| Component | Change | Reason |
+|-----------|--------|--------|
+| **None** | No changes to existing services | Drop-in replacement design |
+
+### Shared Components (Could Extract to shared/)
+
+| Component | Current Location | Shared Usage |
+|-----------|------------------|--------------|
+| **Leadership Client** | youtube-listener/leadership/ | Both listeners use Source Manager |
+| **Redis Publisher** | youtube-listener/publisher/ | All listeners publish to chat:raw |
+| **RawChatMessage Model** | youtube-listener/models/ | All listeners use same schema |
+
+**Recommendation for v2.0:** Extract leadership and publisher to shared/ module to avoid duplication.
+
+---
+
+## Deployment Workflow Comparison
+
+### Official Listener Deployment
+
+```bash
+# 1. Create OAuth credentials in Google Cloud Console
+# 2. Create Kubernetes secret
+kubectl create secret generic youtube-oauth \
+  --from-literal=client_id=xxx.apps.googleusercontent.com \
+  --from-literal=client_secret=GOCSPX-xxx \
+  -n allchat
+
+# 3. Deploy official listener
+kubectl apply -f deployments/k8s/youtube-listener/
+
+# 4. Users authenticate via OAuth flow
+# 5. Monitor quota usage
+kubectl exec -n allchat youtube-listener-abc123 -- \
+  wget -qO- http://localhost:8086/quota/status
+```
+
+### InnerTube Listener Deployment
+
+```bash
+# 1. NO OAuth setup needed (skip Google Cloud Console)
+
+# 2. Deploy InnerTube listener
+kubectl apply -f deployments/k8s/youtube-innertube-listener/
+
+# 3. NO user authentication needed (uses browser context)
+
+# 4. Monitor rate limiting (not quota)
+kubectl exec -n allchat youtube-innertube-listener-abc123 -- \
+  wget -qO- http://localhost:8089/status
+```
+
+**Simpler for self-hosters:** No OAuth credentials, no quota tracking, no Google Cloud Console setup.
+
+---
 
 ## Sources
 
-### Official Documentation
-- [Twitch IRC Concepts](https://dev.twitch.tv/docs/chat/irc/) - CLEARMSG/CLEARCHAT message formats
-- [Twitch IRC Tags](https://dev.twitch.tv/docs/irc/tags/) - target-msg-id tag specification
-- [YouTube Live Chat API](https://developers.google.com/youtube/v3/live/docs/liveChatMessages) - Message deletion endpoints
-- [YouTube Streaming Live Chat](https://developers.google.com/youtube/v3/live/streaming-live-chat) - Polling for deletion events
+**InnerTube API Research:**
+- [YouTube.js - JavaScript client for InnerTube](https://github.com/LuanRT/YouTube.js)
+- [innertube (Python) - Private InnerTube API client](https://github.com/tombulled/innertube)
+- [YTLiveChat (.NET) - InnerTube API for live chat](https://github.com/Agash/YTLiveChat)
+- [InnerTube unofficial documentation](https://github.com/davidzeng0/innertube)
 
-### Community Documentation
-- [gempir/go-twitch-irc](https://github.com/gempir/go-twitch-irc) - Go library supporting CLEARMSG parsing
-- [Kick API GitHub Issues](https://github.com/KickEngineering/KickDevDocs/issues/20) - Websocket-based events discussion
-- [TikTok-Live-Connector](https://github.com/zerodytrash/TikTok-Live-Connector) - Node.js library with deletion support
+**Quota Comparison:**
+- [YouTube API Quota: 10,000 Units/Day Breakdown](https://www.contentstats.io/blog/youtube-api-quota-tracking)
+- [Is the YouTube API Free? Costs, Limits](https://www.getphyllo.com/post/is-the-youtube-api-free-costs-limits-iv)
 
-### Existing Architecture
-- [ADR-0002: Redis Streams + Pub/Sub](../docs/adr/0002-redis-streams-pubsub.md) - Explains hybrid messaging architecture
-- [01-DATA-FLOW.md](../docs/architecture/01-DATA-FLOW.md) - Complete message pipeline documentation
+**All-Chat Architecture:**
+- services/youtube-listener/README.md (official listener implementation)
+- docs/architecture/01-DATA-FLOW.md (message flow architecture)
+- services/message-processor/README.md (consumer of chat:raw)
+- services/source-manager/README.md (leader election coordination)
+- docs/architecture/02-DEPLOYMENT.md (Kubernetes deployment patterns)
 
 ---
-*Architecture research for: Message deletion events in streaming chat aggregation*
-*Researched: 2026-02-17*
+
+*Architecture research for: InnerTube YouTube Listener Integration*
+*Researched: 2026-02-21*
+*Confidence: HIGH (verified existing architecture, WebSearch for InnerTube patterns)*
