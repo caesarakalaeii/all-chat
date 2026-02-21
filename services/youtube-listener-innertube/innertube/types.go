@@ -1,6 +1,7 @@
 package innertube
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -198,8 +199,9 @@ func ClassifyError(err error) ErrorType {
 		return ErrorTypeTransient
 	}
 
-	// HTTP status errors
-	if httpErr, ok := err.(*HTTPStatusError); ok {
+	// HTTP status errors (unwrap error chain if wrapped)
+	var httpErr *HTTPStatusError
+	if errors.As(err, &httpErr) {
 		switch httpErr.StatusCode {
 		case 401, 403, 404:
 			return ErrorTypeFatal // Unauthorized, forbidden, not found
