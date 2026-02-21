@@ -4,6 +4,7 @@
 
 - ✅ **v1.0 Message Deletion Support** — Phases 1-3 (partial, shipped 2026-02-18)
 - ✅ **v1.1 Listener Load Balancing** — Phases 5-8 (shipped 2026-02-21)
+- 🚧 **v1.2 InnerTube YouTube Listener** — Phases 9-13 (in progress)
 
 ## Phases
 
@@ -66,7 +67,90 @@
 
 </details>
 
+### 🚧 v1.2 InnerTube YouTube Listener (In Progress)
+
+**Milestone Goal:** Build quota-free YouTube listener using InnerTube API as drop-in replacement for official API listener, maintaining identical downstream behavior while eliminating quota limitations.
+
+- [ ] **Phase 9: Core Ingestion PoC** - Validate InnerTube viability with basic message flow
+- [ ] **Phase 10: Production Minimum** - Dynamic stream management and HTTP control plane
+- [ ] **Phase 11: Contract Validation** - Prove behavioral equivalence with official listener
+- [ ] **Phase 12: Production Rollout** - Canary deployment with monitoring and rollback
+- [ ] **Phase 13: Feature Parity** - Deletion events and advanced metrics
+
+## Phase Details
+
+### Phase 9: Core Ingestion PoC
+**Goal**: Validate InnerTube API viability by establishing basic message flow from InnerTube to Redis Streams
+**Depends on**: Nothing (first phase of v1.2)
+**Requirements**: CORE-01, CORE-02, CORE-03, CORE-04, CORE-05, CORE-06, EVENT-01, EVENT-02
+**Success Criteria** (what must be TRUE):
+  1. Service can poll live YouTube chat via masterchat and publish to Redis Streams (chat:raw)
+  2. Message-processor consumes InnerTube messages without code changes (RawChatMessage contract maintained)
+  3. Health checks return correct status (/health/live always 200, /health/ready checks Redis)
+  4. Messages contain user metadata (username, avatar, badges) in expected format
+**Plans**: TBD
+
+Plans: TBD
+
+### Phase 10: Production Minimum
+**Goal**: Enable dynamic stream management and production lifecycle behaviors
+**Depends on**: Phase 9
+**Requirements**: STREAM-01, STREAM-02, STREAM-03, STREAM-04, STREAM-05, STREAM-06, STREAM-07, EVENT-03, EVENT-04, EVENT-05, EVENT-06, EVENT-07
+**Success Criteria** (what must be TRUE):
+  1. Service can discover latest live stream from channel ID and filter out premieres
+  2. Service can start/stop monitoring streams via HTTP API (POST /streams/monitor, DELETE /streams/:id)
+  3. Service detects stream offline and stops polling automatically
+  4. Service reconnects on network errors with exponential backoff (no crash on transient failures)
+  5. Service handles SIGTERM gracefully (cleanup connections, flush Redis buffers within 25s)
+  6. Service parses all event types (Super Chat, Super Sticker, memberships, milestones, tickers)
+**Plans**: TBD
+
+Plans: TBD
+
+### Phase 11: Contract Validation
+**Goal**: Prove behavioral equivalence with official youtube-listener through comprehensive contract testing
+**Depends on**: Phase 10
+**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04, DEL-01, DEL-02
+**Success Criteria** (what must be TRUE):
+  1. Schema tests validate RawChatMessage JSON output matches official listener byte-for-byte (100+ golden file comparisons)
+  2. Dual-listener integration test shows <0.1% mismatch rate on same live stream over 24 hours
+  3. Lifecycle tests verify connection gating and stream offline detection match official behavior
+  4. Deletion event tests validate single message deletion detection and emission
+**Plans**: TBD
+
+Plans: TBD
+
+### Phase 12: Production Rollout
+**Goal**: Deploy to production with gradual canary rollout, monitoring, and automatic rollback
+**Depends on**: Phase 11
+**Requirements**: PROD-01, PROD-02, PROD-03, PROD-04, PROD-05
+**Success Criteria** (what must be TRUE):
+  1. Kubernetes manifests deployed with 10% traffic canary (2 pods innertube, 8 pods official)
+  2. Prometheus metrics track messages/sec, errors, reconnections with InnerTube-specific labels
+  3. Error rate monitoring triggers automatic rollback when >5% error rate detected
+  4. Documentation explains ToS disclosure (InnerTube unofficial API) and Docker image swap process
+  5. Canary promotes to 50% then 100% after error rate validation (<1% threshold)
+**Plans**: TBD
+
+Plans: TBD
+
+### Phase 13: Feature Parity
+**Goal**: Add deletion event detection and advanced metrics leveraging InnerTube advantages
+**Depends on**: Phase 12
+**Requirements**: DEL-03, DEL-04, DEL-05
+**Success Criteria** (what must be TRUE):
+  1. Service detects batch deletion events (ban/timeout) and emits with deletion_type="batch"
+  2. Service buffers deletion events to handle race conditions (deletion arrives before original message)
+  3. Metrics track message rate gauge (real-time messages/sec), error breakdown by type (parse, network, rate limit)
+  4. Batch deletion detector synthesizes single event from 5+ deletions in 100ms window
+**Plans**: TBD
+
+Plans: TBD
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -77,6 +161,11 @@
 | 6. Connection Management & Migration | v1.1 | 8/8 | Complete | 2026-02-20 |
 | 7. Dynamic Rebalancing & HPA | v1.1 | 4/4 | Complete | 2026-02-20 |
 | 8. Observability & Production Readiness | v1.1 | 4/4 | Complete | 2026-02-20 |
+| 9. Core Ingestion PoC | v1.2 | 0/TBD | Not started | - |
+| 10. Production Minimum | v1.2 | 0/TBD | Not started | - |
+| 11. Contract Validation | v1.2 | 0/TBD | Not started | - |
+| 12. Production Rollout | v1.2 | 0/TBD | Not started | - |
+| 13. Feature Parity | v1.2 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-02-21 after v1.1 milestone completion*
+*Last updated: 2026-02-21 after v1.2 roadmap creation*
