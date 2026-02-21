@@ -54,3 +54,13 @@
 
 ---
 *Last updated: 2026-02-19*
+
+## v1.1 Listener Load Balancing (Shipped: 2026-02-21)
+
+**Phases completed:** 7 phases, 32 plans, 29 tasks
+
+**Key accomplishments:**
+- (none recorded)
+
+---
+
