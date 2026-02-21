@@ -1,0 +1,211 @@
+package innertube
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"go.uber.org/zap"
+)
+
+const (
+	// InnerTubeEndpoint is the base URL for InnerTube live chat API
+	InnerTubeEndpoint = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat_replay"
+
+	// DefaultAPIKey is the public InnerTube API key extracted from research
+	// TODO: Phase 10 - Extract API key dynamically from stream HTML
+	DefaultAPIKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+
+	// DefaultClientVersion is the YouTube web client version
+	// Update periodically to match current YouTube web client
+	DefaultClientVersion = "2.20250221.00.00"
+
+	// DefaultTimeout for HTTP requests
+	DefaultTimeout = 10 * time.Second
+)
+
+// Client handles communication with the InnerTube API
+type Client struct {
+	httpClient *http.Client
+	apiKey     string
+	logger     *zap.Logger
+}
+
+// ClientOptions configures the InnerTube client
+type ClientOptions struct {
+	APIKey     string
+	Timeout    time.Duration
+	Logger     *zap.Logger
+}
+
+// NewClient creates a new InnerTube API client
+func NewClient(opts ClientOptions) *Client {
+	if opts.APIKey == "" {
+		opts.APIKey = DefaultAPIKey
+	}
+	if opts.Timeout == 0 {
+		opts.Timeout = DefaultTimeout
+	}
+	if opts.Logger == nil {
+		opts.Logger = zap.NewNop()
+	}
+
+	return &Client{
+		httpClient: &http.Client{
+			Timeout: opts.Timeout,
+		},
+		apiKey: opts.APIKey,
+		logger: opts.Logger,
+	}
+}
+
+// GetLiveChatReplay fetches live chat messages using a continuation token
+// This method works for both live streams and replays
+func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string) (*LiveChatResponse, error) {
+	if continuation == "" {
+		return nil, fmt.Errorf("continuation token is required")
+	}
+
+	// Construct InnerTube API URL with API key
+	url := fmt.Sprintf("%s?key=%s", InnerTubeEndpoint, c.apiKey)
+
+	// Build request payload matching InnerTube format
+	payload := map[string]interface{}{
+		"continuation": continuation,
+		"context": map[string]interface{}{
+			"client": map[string]interface{}{
+				"clientName":    "WEB",
+				"clientVersion": DefaultClientVersion,
+			},
+		},
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request payload: %w", err)
+	}
+
+	c.logger.Debug("InnerTube API request",
+		zap.String("url", url),
+		zap.String("continuation", continuation[:min(len(continuation), 50)]+"..."),
+	)
+
+	// Create HTTP request with context
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("create HTTP request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
+
+	// Execute request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body for error reporting
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	// Check HTTP status
+	if resp.StatusCode != http.StatusOK {
+		c.logger.Warn("InnerTube API error",
+			zap.Int("status_code", resp.StatusCode),
+			zap.String("body", string(body)),
+		)
+		return nil, &HTTPStatusError{
+			StatusCode: resp.StatusCode,
+			Body:       string(body),
+		}
+	}
+
+	// Parse JSON response
+	var chatResp LiveChatResponse
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		c.logger.Error("Failed to parse InnerTube response",
+			zap.Error(err),
+			zap.String("body_preview", string(body[:min(len(body), 200)])),
+		)
+		return nil, fmt.Errorf("decode JSON response: %w", err)
+	}
+
+	c.logger.Debug("InnerTube API response",
+		zap.Int("action_count", len(chatResp.ContinuationContents.LiveChatContinuation.Actions)),
+		zap.Int("continuation_count", len(chatResp.ContinuationContents.LiveChatContinuation.Continuations)),
+	)
+
+	return &chatResp, nil
+}
+
+// ExtractContinuation extracts the next continuation token from the response
+// Returns empty string if no continuation is available (end of stream)
+func (c *Client) ExtractContinuation(resp *LiveChatResponse) string {
+	if resp == nil {
+		return ""
+	}
+
+	continuations := resp.ContinuationContents.LiveChatContinuation.Continuations
+	if len(continuations) == 0 {
+		return ""
+	}
+
+	// Try each continuation type in priority order
+	for _, cont := range continuations {
+		if cont.TimedContinuationData != nil {
+			return cont.TimedContinuationData.Continuation
+		}
+		if cont.InvalidationContinuationData != nil {
+			return cont.InvalidationContinuationData.Continuation
+		}
+		if cont.LiveChatReplayContinuationData != nil {
+			return cont.LiveChatReplayContinuationData.Continuation
+		}
+	}
+
+	return ""
+}
+
+// GetPollInterval returns the recommended polling interval from the response
+// Returns 0 if no interval is specified
+func (c *Client) GetPollInterval(resp *LiveChatResponse) time.Duration {
+	if resp == nil {
+		return 0
+	}
+
+	continuations := resp.ContinuationContents.LiveChatContinuation.Continuations
+	if len(continuations) == 0 {
+		return 0
+	}
+
+	// Extract timeout from continuation data
+	for _, cont := range continuations {
+		if cont.TimedContinuationData != nil && cont.TimedContinuationData.TimeoutDurationMillis > 0 {
+			return time.Duration(cont.TimedContinuationData.TimeoutDurationMillis) * time.Millisecond
+		}
+		if cont.InvalidationContinuationData != nil && cont.InvalidationContinuationData.TimeoutDurationMillis > 0 {
+			return time.Duration(cont.InvalidationContinuationData.TimeoutDurationMillis) * time.Millisecond
+		}
+		if cont.LiveChatReplayContinuationData != nil && cont.LiveChatReplayContinuationData.TimeUntilLastMessageMsec > 0 {
+			return time.Duration(cont.LiveChatReplayContinuationData.TimeUntilLastMessageMsec) * time.Millisecond
+		}
+	}
+
+	return 0
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
