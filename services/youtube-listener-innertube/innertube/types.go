@@ -42,7 +42,8 @@ type ReplayChatItemAction struct {
 
 // AddLiveChatTickerItem represents ticker items (super chats, memberships)
 type AddLiveChatTickerItem struct {
-	Item ChatItem `json:"item"`
+	Item        ChatItem `json:"item"`
+	DurationSec int      `json:"durationSec,omitempty"` // Ticker display duration
 }
 
 // ChatItem can contain different message types
@@ -71,6 +72,8 @@ type LiveChatPaidMessageRenderer struct {
 	TimestampUsec        string         `json:"timestampUsec"`
 	AuthorPhoto          Thumbnails     `json:"authorPhoto,omitempty"`
 	PurchaseAmountText   SimpleText     `json:"purchaseAmountText"`
+	AmountMicros         int64          `json:"purchaseAmountMicros,omitempty"` // For sorting by amount
+	HeaderBackgroundColor int           `json:"headerBackgroundColor,omitempty"` // Color tier indicator
 }
 
 // LiveChatMembershipItemRenderer represents a membership/join message
@@ -91,6 +94,7 @@ type LiveChatPaidStickerRenderer struct {
 	AuthorPhoto          Thumbnails     `json:"authorPhoto,omitempty"`
 	PurchaseAmountText   SimpleText     `json:"purchaseAmountText"`
 	Sticker              StickerContent `json:"sticker,omitempty"`
+	AmountMicros         int64          `json:"purchaseAmountMicros,omitempty"` // For sorting by amount
 }
 
 // MessageContent represents the message text with runs (segments)
