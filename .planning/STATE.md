@@ -44,6 +44,7 @@ Progress: [███████░░░░░░░░░] 2/4 (50% of phase 1
 
 *Updated after each plan completion*
 | Phase 10-production-minimum P02 | 5 | 2 tasks | 2 files |
+| Phase 10 P01 | 6 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,8 @@ Recent decisions affecting v1.2:
 - Kubernetes Lease-based leader election for split-brain prevention
 - 70% message rate + 30% channel count composite load scoring
 - 5-minute cooldown and thrashing detection safeguards
+- [Phase 10-01]: HTML parsing for stream discovery (simpler than InnerTube browse API, sufficient for MVP)
+- [Phase 10-01]: 24-hour TTL for Redis channel→video mappings (auto-expire, force rediscovery)
 
 ### Pending Todos
 
@@ -88,7 +91,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Completed 10-02-PLAN.md (advanced event parsing with rich metadata)
-Resume file: .planning/phases/10-production-minimum/10-02-SUMMARY.md
+Stopped at: Completed 10-01-PLAN.md (stream discovery and Redis persistence)
+Resume file: .planning/phases/10-production-minimum/10-01-SUMMARY.md
 
-**Next action:** Continue Phase 10 - Plan 03 (stream lifecycle state machine) or Plan 04 (Redis publishing)
+**Next action:** Continue Phase 10 - Plans 03 and 04 already complete, ready for next phase
