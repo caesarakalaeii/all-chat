@@ -96,46 +96,53 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | TBD | Pending |
-| CORE-02 | TBD | Pending |
-| CORE-03 | TBD | Pending |
-| CORE-04 | TBD | Pending |
-| CORE-05 | TBD | Pending |
-| CORE-06 | TBD | Pending |
-| STREAM-01 | TBD | Pending |
-| STREAM-02 | TBD | Pending |
-| STREAM-03 | TBD | Pending |
-| STREAM-04 | TBD | Pending |
-| STREAM-05 | TBD | Pending |
-| STREAM-06 | TBD | Pending |
-| STREAM-07 | TBD | Pending |
-| EVENT-01 | TBD | Pending |
-| EVENT-02 | TBD | Pending |
-| EVENT-03 | TBD | Pending |
-| EVENT-04 | TBD | Pending |
-| EVENT-05 | TBD | Pending |
-| EVENT-06 | TBD | Pending |
-| EVENT-07 | TBD | Pending |
-| DEL-01 | TBD | Pending |
-| DEL-02 | TBD | Pending |
-| DEL-03 | TBD | Pending |
-| DEL-04 | TBD | Pending |
-| DEL-05 | TBD | Pending |
-| TEST-01 | TBD | Pending |
-| TEST-02 | TBD | Pending |
-| TEST-03 | TBD | Pending |
-| TEST-04 | TBD | Pending |
-| PROD-01 | TBD | Pending |
-| PROD-02 | TBD | Pending |
-| PROD-03 | TBD | Pending |
-| PROD-04 | TBD | Pending |
-| PROD-05 | TBD | Pending |
+| CORE-01 | Phase 9 | Pending |
+| CORE-02 | Phase 9 | Pending |
+| CORE-03 | Phase 9 | Pending |
+| CORE-04 | Phase 9 | Pending |
+| CORE-05 | Phase 9 | Pending |
+| CORE-06 | Phase 9 | Pending |
+| STREAM-01 | Phase 10 | Pending |
+| STREAM-02 | Phase 10 | Pending |
+| STREAM-03 | Phase 10 | Pending |
+| STREAM-04 | Phase 10 | Pending |
+| STREAM-05 | Phase 10 | Pending |
+| STREAM-06 | Phase 10 | Pending |
+| STREAM-07 | Phase 10 | Pending |
+| EVENT-01 | Phase 9 | Pending |
+| EVENT-02 | Phase 9 | Pending |
+| EVENT-03 | Phase 10 | Pending |
+| EVENT-04 | Phase 10 | Pending |
+| EVENT-05 | Phase 10 | Pending |
+| EVENT-06 | Phase 10 | Pending |
+| EVENT-07 | Phase 10 | Pending |
+| DEL-01 | Phase 11 | Pending |
+| DEL-02 | Phase 11 | Pending |
+| DEL-03 | Phase 13 | Pending |
+| DEL-04 | Phase 13 | Pending |
+| DEL-05 | Phase 13 | Pending |
+| TEST-01 | Phase 11 | Pending |
+| TEST-02 | Phase 11 | Pending |
+| TEST-03 | Phase 11 | Pending |
+| TEST-04 | Phase 11 | Pending |
+| PROD-01 | Phase 12 | Pending |
+| PROD-02 | Phase 12 | Pending |
+| PROD-03 | Phase 12 | Pending |
+| PROD-04 | Phase 12 | Pending |
+| PROD-05 | Phase 12 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 35 total
-- Mapped to phases: 0 (roadmap not yet created)
-- Unmapped: 35 ⚠️
+- Mapped to phases: 35 (100% coverage)
+- Unmapped: 0 ✓
+
+**Phase Distribution:**
+- Phase 9 (Core Ingestion PoC): 8 requirements
+- Phase 10 (Production Minimum): 12 requirements
+- Phase 11 (Contract Validation): 6 requirements
+- Phase 12 (Production Rollout): 5 requirements
+- Phase 13 (Feature Parity): 4 requirements
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-21 after initial definition*
+*Last updated: 2026-02-21 after roadmap creation*
