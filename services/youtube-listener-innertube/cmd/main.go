@@ -11,8 +11,9 @@ import (
 
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/handlers"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
-	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/publisher"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/streams"
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -25,27 +26,14 @@ func main() {
 	redisHost := getEnv("REDIS_HOST", "localhost")
 	redisPort := getEnv("REDIS_PORT", "6379")
 	httpPort := getEnv("HTTP_PORT", "8080")
-	initialContinuation := getEnv("INITIAL_CONTINUATION", "")
-	channelID := getEnv("CHANNEL_ID", "")
-
-	// Validate required environment variables
-	if initialContinuation == "" {
-		fmt.Fprintf(os.Stderr, "ERROR: INITIAL_CONTINUATION is required\n")
-		os.Exit(1)
-	}
-	if channelID == "" {
-		fmt.Fprintf(os.Stderr, "ERROR: CHANNEL_ID is required\n")
-		os.Exit(1)
-	}
 
 	// 2. Logger initialization
 	logger := newLogger("youtube-listener-innertube", logLevel)
 	defer logger.Sync()
 
-	logger.Info("Starting YouTube Listener InnerTube PoC",
-		zap.String("version", getEnv("APP_VERSION", "poc")),
+	logger.Info("Starting YouTube Listener InnerTube",
+		zap.String("version", getEnv("APP_VERSION", "dev")),
 		zap.String("log_level", logLevel),
-		zap.String("channel_id", channelID),
 	)
 
 	ctx := context.Background()
@@ -63,29 +51,55 @@ func main() {
 	logger.Info("Connected to Redis",
 		zap.String("addr", fmt.Sprintf("%s:%s", redisHost, redisPort)))
 
-	// 4. InnerTube client (hardcoded API key for PoC)
+	// 4. Initialize components
+	// InnerTube client (hardcoded API key for MVP)
 	innertubeClient := innertube.NewClient(innertube.ClientOptions{
 		APIKey:  innertube.DefaultAPIKey,
 		Timeout: 10 * time.Second,
 		Logger:  logger,
 	})
 
-	// 5. Publisher
+	// Discovery
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	discovery := innertube.NewDiscovery(httpClient, logger)
+
+	// Repository for Redis persistence
+	repository := streams.NewRepository(redisClient, logger)
+
+	// Publisher
 	streamPublisher := publisher.NewStreamPublisher(redisClient, logger)
 
-	// 6. Poller with message callback
-	pollerInstance := poller.NewPoller(
+	// Leadership coordinator for stream ownership
+	sourceManagerURL := getEnv("SOURCE_MANAGER_URL", "http://source-manager:8088")
+	sourceManagerSecret := getEnv("SOURCE_MANAGER_SECRET", "dev-service-secret")
+	var leaderCoord *sourcemanager.LeadershipCoordinator
+	if sourceManagerSecret == "" {
+		logger.Warn("SOURCE_MANAGER_SECRET not set; InnerTube listener will not coordinate leadership")
+	} else {
+		tokenSource := sourcemanager.NewSigningTokenSource("innertube", sourceManagerSecret, 15*time.Minute)
+		smClient, err := sourcemanager.NewClient(sourceManagerURL, tokenSource)
+		if err != nil {
+			logger.Fatal("Failed to initialize Source Manager client", zap.Error(err))
+		}
+		leaderCoord = sourcemanager.NewLeadershipCoordinator("innertube", smClient, 5*time.Second, logger)
+	}
+
+	// 5. Initialize and start stream manager
+	streamManager := streams.NewManager(
+		leaderCoord,
+		repository,
+		discovery,
+		streamPublisher,
 		innertubeClient,
-		initialContinuation,
-		channelID,
+		redisClient,
 		logger,
-		&poller.PollerOptions{
-			Interval: 2 * time.Second,
-			LogLevel: logLevel,
-		},
 	)
 
-	// 7. HTTP server with health checks
+	if err := streamManager.Start(ctx); err != nil {
+		logger.Fatal("Failed to start stream manager", zap.Error(err))
+	}
+
+	// 6. HTTP server with health checks
 	if logLevel == "debug" {
 		gin.SetMode(gin.DebugMode)
 	} else {
@@ -108,7 +122,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// 8. Start HTTP server in goroutine
+	// 7. Start HTTP server in goroutine
 	go func() {
 		logger.Info("HTTP server listening",
 			zap.String("port", httpPort))
@@ -118,41 +132,23 @@ func main() {
 		}
 	}()
 
-	// 9. Start poller with message handler callback
-	pollerCtx, pollerCancel := context.WithCancel(ctx)
-	defer pollerCancel()
-
-	// Set message callback to publish to Redis Streams
-	pollerInstance.SetMessageCallback(func(messages []*innertube.RawChatMessage) {
-		for _, msg := range messages {
-			if err := streamPublisher.Publish(pollerCtx, msg); err != nil {
-				logger.Error("Failed to publish message",
-					zap.String("message_id", msg.MessageID),
-					zap.Error(err))
-				// Continue processing other messages (don't crash on Redis error)
-			}
-		}
-	})
-
-	if err := pollerInstance.Start(pollerCtx); err != nil {
-		logger.Fatal("Failed to start poller", zap.Error(err))
-	}
-
-	// 10. Wait for interrupt signal for graceful shutdown
+	// 8. Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 	<-quit
 
 	logger.Info("Shutting down service...")
 
-	// Stop poller first
-	pollerInstance.Stop()
-	logger.Info("Poller stopped")
-
-	// Shutdown HTTP server with 25s timeout (Kubernetes sends SIGKILL at 30s)
+	// Create shutdown context with 25s timeout (Kubernetes sends SIGKILL at 30s)
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer shutdownCancel()
 
+	// Stop stream manager first
+	if err := streamManager.Shutdown(shutdownCtx); err != nil {
+		logger.Error("Stream manager shutdown error", zap.Error(err))
+	}
+
+	// Shutdown HTTP server
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("HTTP server forced shutdown", zap.Error(err))
 	}
@@ -179,7 +175,7 @@ func newLogger(serviceName, level string) *zap.Logger {
 	logger, err := config.Build(
 		zap.Fields(
 			zap.String("service", serviceName),
-			zap.String("version", getEnv("APP_VERSION", "poc")),
+			zap.String("version", getEnv("APP_VERSION", "dev")),
 		),
 	)
 	if err != nil {
