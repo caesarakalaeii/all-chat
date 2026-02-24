@@ -143,9 +143,12 @@ Plans:
   3. Error rate monitoring triggers automatic rollback when >5% error rate detected
   4. Documentation explains ToS disclosure (InnerTube unofficial API) and Docker image swap process
   5. Canary promotes to 50% then 100% after error rate validation (<1% threshold)
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
 
-Plans: TBD
+Plans:
+- [ ] 12-01-PLAN.md — Prometheus metrics implementation for InnerTube listener
+- [ ] 12-02-PLAN.md — Argo Rollouts manifests with AnalysisTemplate and canary strategy
+- [ ] 12-03-PLAN.md — Grafana dashboard, deployment runbook, and troubleshooting guide
 
 ### Phase 13: Feature Parity
 **Goal**: Add deletion event detection and advanced metrics leveraging InnerTube advantages
@@ -175,10 +178,10 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 7. Dynamic Rebalancing & HPA | v1.1 | 4/4 | Complete | 2026-02-20 |
 | 8. Observability & Production Readiness | v1.1 | 4/4 | Complete | 2026-02-20 |
 | 9. Core Ingestion PoC | v1.2 | 5/5 | Complete | 2026-02-21 |
-| 10. Production Minimum | v1.2 | Complete    | 2026-02-21 | - |
-| 11. Contract Validation | v1.2 | Complete    | 2026-02-21 | - |
-| 12. Production Rollout | v1.2 | 0/TBD | Not started | - |
+| 10. Production Minimum | v1.2 | 4/4 | Complete | 2026-02-21 |
+| 11. Contract Validation | v1.2 | 4/4 | Complete | 2026-02-21 |
+| 12. Production Rollout | v1.2 | 0/3 | Not started | - |
 | 13. Feature Parity | v1.2 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-02-21 after Phase 10 planning*
+*Last updated: 2026-02-24 after Phase 12 planning*
