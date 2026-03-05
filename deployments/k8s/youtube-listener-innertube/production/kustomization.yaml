@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: allchat
+
+resources:
+  - ../base
+
+images:
+  - name: allchat/youtube-listener-innertube
+    newTag: v1.2.0  # Updated by CI/CD
+
+patchesStrategicMerge:
+  - rollout-patch.yaml

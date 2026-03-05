@@ -1,0 +1,6 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: youtube-listener-innertube
+spec:
+  replicas: 10  # Production scale (10% = 1 pod, 50% = 5 pods)
