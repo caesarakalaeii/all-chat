@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"go.uber.org/zap"
 )
 
@@ -33,6 +34,7 @@ type Client struct {
 	httpClient *http.Client
 	apiKey     string
 	logger     *zap.Logger
+	metrics    *metrics.InnerTubeMetrics
 }
 
 // ClientOptions configures the InnerTube client
@@ -40,6 +42,7 @@ type ClientOptions struct {
 	APIKey     string
 	Timeout    time.Duration
 	Logger     *zap.Logger
+	Metrics    *metrics.InnerTubeMetrics
 }
 
 // NewClient creates a new InnerTube API client
@@ -58,8 +61,9 @@ func NewClient(opts ClientOptions) *Client {
 		httpClient: &http.Client{
 			Timeout: opts.Timeout,
 		},
-		apiKey: opts.APIKey,
-		logger: opts.Logger,
+		apiKey:  opts.APIKey,
+		logger:  opts.Logger,
+		metrics: opts.Metrics,
 	}
 }
 
@@ -103,9 +107,18 @@ func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string) (*L
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
 
+	// Track API request
+	if c.metrics != nil {
+		c.metrics.Requests.WithLabelValues(metrics.ServiceLabel).Inc()
+	}
+
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// Track HTTP error
+		if c.metrics != nil {
+			c.metrics.Errors.WithLabelValues(metrics.ServiceLabel, metrics.ErrorTypeHTTP).Inc()
+		}
 		return nil, fmt.Errorf("execute HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -113,11 +126,24 @@ func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string) (*L
 	// Read response body for error reporting
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		// Track parse error (failed to read body)
+		if c.metrics != nil {
+			c.metrics.Errors.WithLabelValues(metrics.ServiceLabel, metrics.ErrorTypeParse).Inc()
+		}
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
 
 	// Check HTTP status
 	if resp.StatusCode != http.StatusOK {
+		// Track specific error types based on status code
+		if c.metrics != nil {
+			if resp.StatusCode == http.StatusTooManyRequests {
+				c.metrics.Errors.WithLabelValues(metrics.ServiceLabel, metrics.ErrorTypeRateLimit).Inc()
+			} else {
+				c.metrics.Errors.WithLabelValues(metrics.ServiceLabel, metrics.ErrorTypeHTTP).Inc()
+			}
+		}
+
 		c.logger.Warn("InnerTube API error",
 			zap.Int("status_code", resp.StatusCode),
 			zap.String("body", string(body)),
@@ -131,6 +157,11 @@ func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string) (*L
 	// Parse JSON response
 	var chatResp LiveChatResponse
 	if err := json.Unmarshal(body, &chatResp); err != nil {
+		// Track parse error
+		if c.metrics != nil {
+			c.metrics.Errors.WithLabelValues(metrics.ServiceLabel, metrics.ErrorTypeParse).Inc()
+		}
+
 		c.logger.Error("Failed to parse InnerTube response",
 			zap.Error(err),
 			zap.String("body_preview", string(body[:min(len(body), 200)])),
