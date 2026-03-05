@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/deletion"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
@@ -46,14 +47,15 @@ type DiscoveryState struct {
 //   - Redis-cached channel→video mappings
 //   - Overlay connection lifecycle tracking
 type Manager struct {
-	leader      *sourcemanager.LeadershipCoordinator
-	repository  *Repository
-	discovery   *innertube.Discovery
-	publisher   *publisher.StreamPublisher
-	client      *innertube.Client
-	redisClient *redis.Client
-	logger      *zap.Logger
-	metrics     *metrics.InnerTubeMetrics
+	leader        *sourcemanager.LeadershipCoordinator
+	repository    *Repository
+	discovery     *innertube.Discovery
+	publisher     *publisher.StreamPublisher
+	client        *innertube.Client
+	redisClient   *redis.Client
+	logger        *zap.Logger
+	metrics       *metrics.InnerTubeMetrics
+	batchDetector *deletion.BatchDetector // Batch deletion detector for cleanup
 
 	mu               sync.RWMutex
 	activeStreams    map[string]*Stream         // videoID → stream state
@@ -76,6 +78,7 @@ func NewManager(
 	redisClient *redis.Client,
 	logger *zap.Logger,
 	m *metrics.InnerTubeMetrics,
+	batchDetector *deletion.BatchDetector,
 ) *Manager {
 	return &Manager{
 		leader:                   leader,
@@ -86,6 +89,7 @@ func NewManager(
 		redisClient:              redisClient,
 		logger:                   logger,
 		metrics:                  m,
+		batchDetector:            batchDetector,
 		activeStreams:            make(map[string]*Stream),
 		pollers:                  make(map[string]*poller.Poller),
 		discovering:              make(map[string]*DiscoveryState),
@@ -458,6 +462,16 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 					m.leader.Release(videoID)
 				}
 
+				// Cleanup batch detector state for this channel
+				if m.batchDetector != nil {
+					if err := m.batchDetector.Cleanup(channelID); err != nil {
+						m.logger.Warn("Failed to cleanup batch detector",
+							zap.String("channel_id", channelID),
+							zap.Error(err),
+						)
+					}
+				}
+
 				// Clear Redis cache to force rediscovery
 				ctx := context.Background()
 				if err := m.repository.DeleteChannelVideoMapping(ctx, channelID); err != nil {
@@ -482,11 +496,27 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, videoID string) {
 		zap.String("video_id", videoID),
 	)
 
+	// Get channel ID before deleting stream
+	var channelID string
+	if stream, exists := m.activeStreams[videoID]; exists {
+		channelID = stream.ChannelID
+	}
+
 	if p, exists := m.pollers[videoID]; exists {
 		p.Stop()
 		delete(m.pollers, videoID)
 	}
 	delete(m.activeStreams, videoID)
+
+	// Cleanup batch detector state for this channel
+	if channelID != "" && m.batchDetector != nil {
+		if err := m.batchDetector.Cleanup(channelID); err != nil {
+			m.logger.Warn("Failed to cleanup batch detector",
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+		}
+	}
 }
 
 // cleanupDiscoveryState removes discovery state after completion or cancellation
