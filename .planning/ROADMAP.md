@@ -157,11 +157,14 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Service detects batch deletion events (ban/timeout) and emits with deletion_type="batch"
   2. Service buffers deletion events to handle race conditions (deletion arrives before original message)
-  3. Metrics track message rate gauge (real-time messages/sec), error breakdown by type (parse, network, rate limit)
+  3. Metrics track per-channel message rate (1-minute rolling average via PromQL), error breakdown by type (http, parse, network, rate_limit, redis)
   4. Batch deletion detector synthesizes single event from 5+ deletions in 100ms window
-**Plans**: TBD
+**Plans**: 3 plans in 1 wave (all independent)
 
-Plans: TBD
+Plans:
+- [ ] 13-01-PLAN.md — Batch deletion detector with time-windowed aggregation
+- [ ] 13-02-PLAN.md — Deletion event buffer with circular buffer and 500ms delay
+- [ ] 13-03-PLAN.md — Advanced metrics with network error tracking and per-channel message rate
 
 ## Progress
 
@@ -180,8 +183,8 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 9. Core Ingestion PoC | v1.2 | 5/5 | Complete | 2026-02-21 |
 | 10. Production Minimum | v1.2 | 4/4 | Complete | 2026-02-21 |
 | 11. Contract Validation | v1.2 | 4/4 | Complete | 2026-02-21 |
-| 12. Production Rollout | v1.2 | 0/3 | Not started | - |
-| 13. Feature Parity | v1.2 | 0/TBD | Not started | - |
+| 12. Production Rollout | v1.2 | 3/3 | Complete | 2026-03-05 |
+| 13. Feature Parity | v1.2 | 0/3 | Not started | - |
 
 ---
-*Last updated: 2026-02-24 after Phase 12 planning*
+*Last updated: 2026-03-05 after Phase 13 planning*
