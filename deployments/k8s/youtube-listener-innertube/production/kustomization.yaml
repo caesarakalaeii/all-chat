@@ -10,5 +10,8 @@ images:
   - name: allchat/youtube-listener-innertube
     newTag: v1.2.0  # Updated by CI/CD
 
-patchesStrategicMerge:
-  - rollout-patch.yaml
+patches:
+  - path: rollout-patch.yaml
+    target:
+      kind: Rollout
+      name: youtube-listener-innertube
