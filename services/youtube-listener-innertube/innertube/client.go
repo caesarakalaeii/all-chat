@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
@@ -115,9 +116,10 @@ func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string) (*L
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		// Track HTTP error
+		// Classify and track network error
 		if c.metrics != nil {
-			c.metrics.Errors.WithLabelValues(metrics.ServiceLabel, metrics.ErrorTypeHTTP).Inc()
+			errorType := classifyNetworkError(err)
+			c.metrics.Errors.WithLabelValues(metrics.ServiceLabel, errorType).Inc()
 		}
 		return nil, fmt.Errorf("execute HTTP request: %w", err)
 	}
@@ -245,4 +247,43 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// classifyNetworkError determines if error is network-related
+// Returns ErrorTypeNetwork for DNS, connection, timeout, and TLS errors
+func classifyNetworkError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	// Check for common network errors
+	errStr := err.Error()
+
+	// DNS errors
+	if strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "dns") {
+		return metrics.ErrorTypeNetwork
+	}
+
+	// Connection errors
+	if strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "broken pipe") {
+		return metrics.ErrorTypeNetwork
+	}
+
+	// Timeout errors
+	if strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "deadline exceeded") {
+		return metrics.ErrorTypeNetwork
+	}
+
+	// TLS errors
+	if strings.Contains(errStr, "tls") ||
+		strings.Contains(errStr, "certificate") {
+		return metrics.ErrorTypeNetwork
+	}
+
+	// Default to network for unknown errors before HTTP call
+	return metrics.ErrorTypeNetwork
 }

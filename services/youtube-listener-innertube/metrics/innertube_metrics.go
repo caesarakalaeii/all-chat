@@ -103,6 +103,7 @@ const (
 	ErrorTypeParse     = "parse"      // JSON parsing errors
 	ErrorTypeRateLimit = "rate_limit" // Rate limiting (429)
 	ErrorTypeRedis     = "redis"      // Redis publish failures
+	ErrorTypeNetwork   = "network"    // Network errors (DNS, connection, timeout)
 )
 
 // ReconnectionReasons define standardized reason labels for reconnection tracking
