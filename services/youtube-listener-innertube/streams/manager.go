@@ -49,13 +49,14 @@ type DiscoveryState struct {
 type Manager struct {
 	leader        *sourcemanager.LeadershipCoordinator
 	repository    *Repository
-	discovery     *innertube.Discovery
-	publisher     *publisher.StreamPublisher
-	client        *innertube.Client
-	redisClient   *redis.Client
-	logger        *zap.Logger
-	metrics       *metrics.InnerTubeMetrics
-	batchDetector *deletion.BatchDetector // Batch deletion detector for cleanup
+	discovery      *innertube.Discovery
+	publisher      *publisher.StreamPublisher
+	client         *innertube.Client
+	redisClient    *redis.Client
+	logger         *zap.Logger
+	metrics        *metrics.InnerTubeMetrics
+	batchDetector  *deletion.BatchDetector  // Batch deletion detector for cleanup
+	deletionBuffer *deletion.DeletionBuffer // Deletion event buffer for cleanup
 
 	mu               sync.RWMutex
 	activeStreams    map[string]*Stream         // videoID → stream state
@@ -79,6 +80,7 @@ func NewManager(
 	logger *zap.Logger,
 	m *metrics.InnerTubeMetrics,
 	batchDetector *deletion.BatchDetector,
+	deletionBuffer *deletion.DeletionBuffer,
 ) *Manager {
 	return &Manager{
 		leader:                   leader,
@@ -90,6 +92,7 @@ func NewManager(
 		logger:                   logger,
 		metrics:                  m,
 		batchDetector:            batchDetector,
+		deletionBuffer:           deletionBuffer,
 		activeStreams:            make(map[string]*Stream),
 		pollers:                  make(map[string]*poller.Poller),
 		discovering:              make(map[string]*DiscoveryState),
@@ -472,6 +475,11 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 					}
 				}
 
+				// Cleanup deletion buffer for this channel (flush remaining events)
+				if m.deletionBuffer != nil {
+					m.deletionBuffer.Cleanup(channelID)
+				}
+
 				// Clear Redis cache to force rediscovery
 				ctx := context.Background()
 				if err := m.repository.DeleteChannelVideoMapping(ctx, channelID); err != nil {
@@ -516,6 +524,11 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, videoID string) {
 				zap.Error(err),
 			)
 		}
+	}
+
+	// Cleanup deletion buffer for this channel
+	if channelID != "" && m.deletionBuffer != nil {
+		m.deletionBuffer.Cleanup(channelID)
 	}
 }
 
