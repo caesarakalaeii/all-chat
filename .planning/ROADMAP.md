@@ -159,12 +159,14 @@ Plans:
   2. Service buffers deletion events to handle race conditions (deletion arrives before original message)
   3. Metrics track per-channel message rate (1-minute rolling average via PromQL), error breakdown by type (http, parse, network, rate_limit, redis)
   4. Batch deletion detector synthesizes single event from 5+ deletions in 100ms window
-**Plans**: 3 plans in 1 wave (all independent)
+**Plans**: 5 plans in 1 wave (3 original + 2 gap closure)
 
 Plans:
 - [ ] 13-01-PLAN.md — Batch deletion detector with time-windowed aggregation
 - [ ] 13-02-PLAN.md — Deletion event buffer with circular buffer and 500ms delay
 - [ ] 13-03-PLAN.md — Advanced metrics with network error tracking and per-channel message rate
+- [ ] 13-04-PLAN.md — Wire batch detection results to parser emission (gap closure)
+- [ ] 13-05-PLAN.md — Fix publisher test signature issues (gap closure)
 
 ## Progress
 
@@ -184,7 +186,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 10. Production Minimum | v1.2 | 4/4 | Complete | 2026-02-21 |
 | 11. Contract Validation | v1.2 | 4/4 | Complete | 2026-02-21 |
 | 12. Production Rollout | v1.2 | 3/3 | Complete | 2026-03-05 |
-| 13. Feature Parity | v1.2 | 0/3 | Not started | - |
+| 13. Feature Parity | v1.2 | 0/5 | Not started | - |
 
 ---
-*Last updated: 2026-03-05 after Phase 13 planning*
+*Last updated: 2026-03-05 after Phase 13 gap closure planning*
