@@ -1,0 +1,84 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: innertube-metrics-analysis
+  namespace: allchat
+  labels:
+    app: youtube-listener-innertube
+spec:
+  args:
+    - name: service-name
+    - name: baseline-service
+  metrics:
+    # Metric 1: Error Rate
+    # Promotion gate: <1% error rate
+    # Rollback trigger: >5% error rate
+    - name: error-rate
+      interval: 1m
+      count: 240  # 240 minutes = 4 hours of continuous analysis
+      successCondition: result < 0.01
+      failureCondition: result > 0.05
+      failureLimit: 3  # 3 consecutive failures trigger rollback
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(rate(youtube_listener_errors_total{service="{{args.service-name}}"}[5m]))
+            /
+            sum(rate(youtube_listener_requests_total{service="{{args.service-name}}"}[5m]))
+
+    # Metric 2: Message Rate Deviation
+    # Promotion gate: <5% deviation from baseline
+    # Rollback trigger: >20% deviation from baseline
+    - name: message-rate-deviation
+      interval: 1m
+      count: 240  # 240 minutes = 4 hours
+      successCondition: result < 0.05
+      failureCondition: result > 0.20
+      failureLimit: 5  # Allow some variance, rollback after 5 consecutive failures
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            abs(
+              sum(rate(youtube_listener_messages_published_total{service="{{args.service-name}}"}[5m]))
+              -
+              sum(rate(youtube_listener_messages_published_total{service="{{args.baseline-service}}"}[5m]))
+            )
+            /
+            sum(rate(youtube_listener_messages_published_total{service="{{args.baseline-service}}"}[5m]))
+
+    # Metric 3: Redis Publish Success Rate
+    # Promotion gate: >99% success rate
+    # Rollback trigger: <95% success rate (downstream failure)
+    - name: redis-publish-success
+      interval: 1m
+      count: 240  # 240 minutes = 4 hours
+      successCondition: result > 0.99
+      failureCondition: result < 0.95
+      failureLimit: 2  # Fast rollback on Redis issues
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(rate(youtube_listener_redis_publish_success_total{service="{{args.service-name}}"}[5m]))
+            /
+            sum(rate(youtube_listener_redis_publish_attempts_total{service="{{args.service-name}}"}[5m]))
+
+    # Metric 4: Pod Restart Rate
+    # Success: 0 restarts
+    # Rollback trigger: >2 restarts per minute (crashloop)
+    - name: pod-restart-rate
+      interval: 1m
+      count: 240  # 240 minutes = 4 hours
+      successCondition: result == 0
+      failureCondition: result > 2
+      failureLimit: 1  # Immediate rollback on crashloop
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(rate(kube_pod_container_status_restarts_total{
+              namespace="allchat",
+              pod=~"youtube-listener-innertube-.*"
+            }[5m])) * 60
