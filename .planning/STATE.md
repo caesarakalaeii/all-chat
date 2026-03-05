@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 Milestone: v1.2 InnerTube YouTube Listener
 Phase: 12 of 13 (Production Rollout)
-Plan: 1 of 3 complete
+Plan: 2 of 3 complete
 Status: In Progress
-Last activity: 2026-03-05 — Completed 12-01 (InnerTube Prometheus Metrics)
+Last activity: 2026-03-05 — Completed 12-03 (Grafana Dashboard and Deployment Documentation)
 
-Progress: [█████░░░░░░░░░░░] 1/3 (33% of phase 12 complete)
+Progress: [██████████░░░░░░] 2/3 (67% of phase 12 complete)
 
 ## Performance Metrics
 
 **Velocity (all milestones):**
-- Total plans completed: 41
+- Total plans completed: 42
 - Average duration: 9.3 min
-- Total execution time: 6.35 hours
+- Total execution time: 6.52 hours
 
 **By Phase:**
 
@@ -38,13 +38,14 @@ Progress: [█████░░░░░░░░░░░] 1/3 (33% of phase 1
 | 9. Core Ingestion PoC | 5 | 32 min | 6.4 min |
 | 10. Production Minimum | 4 | 31 min | 7.75 min |
 | 11. Contract Validation | 4 | 21 min | 5.25 min |
-| 12. Production Rollout | 1 | 14 min | 14.0 min |
+| 12. Production Rollout | 2 | 24 min | 12.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 8.0 min average
-- Trend: Phase 12 in progress - InnerTube metrics instrumentation (14 min)
+- Last 5 plans: 9.2 min average
+- Trend: Phase 12 in progress - Documentation and observability (10 min avg)
 
 *Updated after each plan completion*
+| Phase 12 P03 | 10 | 3 tasks | 4 files |
 | Phase 12 P01 | 14 | 3 tasks | 6 files |
 | Phase 11 P02 | 12 | 3 tasks | 11 files |
 | Phase 11 P04 | 6 | 3 tasks | 10 files |
@@ -72,6 +73,10 @@ Recent decisions affecting v1.2:
 - Metrics-based promotion not time-based (Phase 12-02: indefinite pause with 240-minute analysis window)
 - Native K8s traffic routing not service mesh (Phase 12-02: Argo Rollouts Service manipulation, no Istio dependency)
 - Kustomize base + overlay pattern (Phase 12-02: environment-specific replica count and image tags)
+- 8-panel dashboard layout (Phase 12-03: rollout status top, metric comparison middle, detailed diagnostics bottom)
+- Fix-in-place workflow preferred over abort-retry (Phase 12-03: keep rollout at current percentage, deploy fix, resume promotion)
+- ToS disclosure at top of README (Phase 12-03: InnerTube unofficial API warning, not user-facing)
+- 6 common troubleshooting issues (Phase 12-03: automatic rollback, stuck rollout, thundering herd, crashlooping, message deviation, fix-in-place failures)
 
 **v1.1 Context (still relevant):**
 - Hybrid hash-based + load-aware approach for predictable under normal load
@@ -104,7 +109,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Completed 12-01-PLAN.md (InnerTube Prometheus Metrics)
-Resume file: .planning/phases/12-production-rollout/12-01-SUMMARY.md
+Stopped at: Completed 12-03-PLAN.md (Grafana Dashboard and Deployment Documentation)
+Resume file: .planning/phases/12-production-rollout/12-03-SUMMARY.md
 
-**Next action:** Continue Phase 12 - Plan 02 (Argo Rollouts canary deployment manifests) to create Kubernetes manifests with ServiceMonitor and AnalysisTemplate for metrics-based promotion/rollback
+**Next action:** Phase 12 plan 02 appears to be missing/skipped. Review phase planning and either create 12-02 or proceed to next phase if phase 12 is actually complete.
