@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/publisher"
 	"github.com/caesar/all-chat/shared/sourcemanager"
@@ -52,6 +53,7 @@ type Manager struct {
 	client      *innertube.Client
 	redisClient *redis.Client
 	logger      *zap.Logger
+	metrics     *metrics.InnerTubeMetrics
 
 	mu               sync.RWMutex
 	activeStreams    map[string]*Stream         // videoID → stream state
@@ -73,6 +75,7 @@ func NewManager(
 	client *innertube.Client,
 	redisClient *redis.Client,
 	logger *zap.Logger,
+	m *metrics.InnerTubeMetrics,
 ) *Manager {
 	return &Manager{
 		leader:                   leader,
@@ -82,6 +85,7 @@ func NewManager(
 		client:                   client,
 		redisClient:              redisClient,
 		logger:                   logger,
+		metrics:                  m,
 		activeStreams:            make(map[string]*Stream),
 		pollers:                  make(map[string]*poller.Poller),
 		discovering:              make(map[string]*DiscoveryState),
@@ -379,6 +383,7 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		&poller.PollerOptions{
 			Interval: 2 * time.Second,
 			VideoID:  videoID,
+			Metrics:  m.metrics,
 		},
 	)
 
