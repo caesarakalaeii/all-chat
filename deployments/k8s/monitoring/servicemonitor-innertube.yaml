@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: youtube-listener-innertube
+  namespace: allchat
+  labels:
+    app: youtube-listener-innertube
+    prometheus: kube-prometheus  # Matches Prometheus selector
+spec:
+  selector:
+    matchLabels:
+      app: youtube-listener-innertube
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 1m  # Matches analysis interval
+      scrapeTimeout: 10s
