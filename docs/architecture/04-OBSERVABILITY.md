@@ -204,6 +204,64 @@ listener_api_calls_total{operation="search|videos|chat"} // API call counts
 listener_rate_limit_hits_total{limit_type}               // Quota warnings
 ```
 
+### InnerTube Listener Metrics
+
+#### Message Rate Tracking
+
+**Metric:** `youtube_listener_messages_published_total` (Counter)
+**Labels:** `service`, `channel_id`
+**Purpose:** Track per-channel message throughput
+
+**Use Cases:**
+- Identify stuck channels (rate = 0 for 5+ minutes)
+- Compare InnerTube vs official listener message rates (canary validation)
+- Capacity planning (messages/sec by channel)
+
+**PromQL Pattern (1-minute rolling average):**
+```promql
+rate(youtube_listener_messages_published_total{channel_id="XXX"}[1m])
+```
+
+**Why Counter not Gauge:** Prometheus best practice for rates. Counter tracks cumulative count, `rate()` calculates derivative server-side. Gauges require client-side rate calculation and are less accurate for rolling averages.
+
+#### Error Classification
+
+**Metric:** `youtube_listener_errors_total` (Counter)
+**Labels:** `service`, `error_type`
+**Error Types:**
+- `network`: DNS, connection, timeout, TLS errors
+- `http`: 4xx, 5xx HTTP status codes
+- `parse`: JSON unmarshaling failures
+- `rate_limit`: 429 rate limiting
+- `redis`: Redis publish failures
+
+**Diagnostic Workflow:**
+1. High error rate alert triggers
+2. Check error breakdown: `sum by (error_type) (rate(youtube_listener_errors_total[5m]))`
+3. If `network` errors: Check DNS, connectivity, firewall
+4. If `http` errors: Check InnerTube API status, credentials
+5. If `parse` errors: Check for InnerTube schema changes
+6. If `rate_limit` errors: Reduce poll frequency, add backoff
+7. If `redis` errors: Check Redis health, connection pool
+
+#### Deletion Buffer Observability
+
+**Metric:** `youtube_listener_deletion_buffer_overflows_total` (Counter)
+**Labels:** `service`, `channel_id`
+**Purpose:** Track deletion event buffer overflows (max 1000 events, FIFO drop)
+
+**Alert Threshold:** `rate(youtube_listener_deletion_buffer_overflows_total[5m]) > 0`
+
+**Overflow indicates:**
+- Mass ban/timeout event (>1000 deletions in 500ms window)
+- Possible spam attack or moderation action
+- Buffer may need size increase for high-volume channels
+
+**Mitigation:**
+- Increase `BATCH_DELETION_THRESHOLD` to reduce event granularity
+- Investigate channel for spam patterns
+- Consider dynamic buffer sizing in future (currently fixed 1000)
+
 #### Message Processor
 
 ```go

@@ -246,6 +246,92 @@ See "Running Locally" section above for end-to-end validation.
 - [Message Processor](../message-processor/README.md)
 - [Phase 9 Context](../../.planning/phases/09-core-ingestion-poc/09-CONTEXT.md)
 
+## Metrics
+
+InnerTube listener exposes Prometheus metrics on `/metrics` endpoint (port 8086).
+
+### Per-Channel Message Rate
+
+**1-minute rolling average (messages/sec):**
+```promql
+rate(youtube_listener_messages_published_total{service="youtube-listener-innertube-canary",channel_id="CHANNEL_ID"}[1m])
+```
+
+**All channels aggregated:**
+```promql
+sum(rate(youtube_listener_messages_published_total{service="youtube-listener-innertube-canary"}[1m]))
+```
+
+**Identify stuck channels (message rate = 0 for 5+ minutes):**
+```promql
+youtube_listener_messages_published_total{service="youtube-listener-innertube-canary"}
+  unless
+ignoring(channel_id) (
+  rate(youtube_listener_messages_published_total{service="youtube-listener-innertube-canary"}[5m]) > 0
+)
+```
+
+### Error Breakdown by Type
+
+**Error rate by type (errors/sec):**
+```promql
+sum by (error_type) (
+  rate(youtube_listener_errors_total{service="youtube-listener-innertube-canary"}[1m])
+)
+```
+
+**Network error rate:**
+```promql
+rate(youtube_listener_errors_total{service="youtube-listener-innertube-canary",error_type="network"}[1m])
+```
+
+**HTTP error rate:**
+```promql
+rate(youtube_listener_errors_total{service="youtube-listener-innertube-canary",error_type="http"}[1m])
+```
+
+**Parse error rate:**
+```promql
+rate(youtube_listener_errors_total{service="youtube-listener-innertube-canary",error_type="parse"}[1m])
+```
+
+**Error rate percentage (errors / total requests):**
+```promql
+sum(rate(youtube_listener_errors_total{service="youtube-listener-innertube-canary"}[5m]))
+/ sum(rate(youtube_listener_requests_total{service="youtube-listener-innertube-canary"}[5m]))
+* 100
+```
+
+### Deletion Buffer Metrics
+
+**Buffer overflow rate:**
+```promql
+rate(youtube_listener_deletion_buffer_overflows_total{service="youtube-listener-innertube-canary"}[5m])
+```
+
+**Channels experiencing overflows:**
+```promql
+sum by (channel_id) (
+  increase(youtube_listener_deletion_buffer_overflows_total{service="youtube-listener-innertube-canary"}[5m])
+) > 0
+```
+
+### Grafana Dashboard Queries
+
+For Grafana dashboards (Phase 12-03), use these queries:
+
+**Message Rate Panel (per channel):**
+- Query: `rate(youtube_listener_messages_published_total{service="youtube-listener-innertube-canary"}[1m])`
+- Legend: `{{channel_id}}`
+- Unit: messages/sec
+
+**Error Breakdown Panel (stacked area):**
+- Query: `sum by (error_type) (rate(youtube_listener_errors_total{service="youtube-listener-innertube-canary"}[1m]))`
+- Legend: `{{error_type}}`
+- Unit: errors/sec
+
+See `docs/architecture/04-OBSERVABILITY.md` for complete dashboard configuration.
+
 ## Monitoring
 
 - **Grafana Dashboard:** "YouTube Listener InnerTube Rollout"
