@@ -44,6 +44,16 @@ type RawChatMessage struct {
 	EventData map[string]interface{} `json:"event_data,omitempty"` // Event-specific payload
 }
 
+// GetMessageID returns the message ID (implements deletion.RawMessage interface)
+func (m *RawChatMessage) GetMessageID() string {
+	return m.MessageID
+}
+
+// GetChannelID returns the channel ID (implements deletion.RawMessage interface)
+func (m *RawChatMessage) GetChannelID() string {
+	return m.ChannelID
+}
+
 // ParseMessages converts InnerTube ChatAction objects to RawChatMessage format
 // Returns only valid messages - invalid messages are logged and skipped
 func ParseMessages(actions []ChatAction, channelID string) ([]*RawChatMessage, error) {
