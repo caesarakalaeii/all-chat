@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Milestone: v1.2 InnerTube YouTube Listener
-Phase: 11 of 13 (Contract Validation)
-Plan: 4 of 4 complete (All plans done)
-Status: Phase 11 Complete
-Last activity: 2026-02-21 — Completed 11-04 (deletion event detection and emission)
+Phase: 12 of 13 (Production Rollout)
+Plan: 2 of 3 complete
+Status: In Progress
+Last activity: 2026-03-05 — Completed 12-02 (Argo Rollouts canary deployment manifests)
 
-Progress: [████████████████] 4/4 (100% of phase 11 complete)
+Progress: [██████████░░░░░░] 2/3 (67% of phase 12 complete)
 
 ## Performance Metrics
 
 **Velocity (all milestones):**
-- Total plans completed: 40
-- Average duration: 9.5 min
-- Total execution time: 6.35 hours
+- Total plans completed: 42
+- Average duration: 9.2 min
+- Total execution time: 6.43 hours
 
 **By Phase:**
 
@@ -38,20 +38,21 @@ Progress: [████████████████] 4/4 (100% of phase 
 | 9. Core Ingestion PoC | 5 | 32 min | 6.4 min |
 | 10. Production Minimum | 4 | 31 min | 7.75 min |
 | 11. Contract Validation | 4 | 21 min | 5.25 min |
+| 12. Production Rollout | 2 | 8 min | 4.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 10.2 min average
-- Trend: Phase 11 complete - contract validation with comprehensive test coverage (avg 5.25 min)
+- Last 5 plans: 6.4 min average
+- Trend: Phase 12 in progress - production rollout preparation (metrics + manifests avg 4.0 min)
 
 *Updated after each plan completion*
+| Phase 12 P02 | 4 | 3 tasks | 7 files |
+| Phase 12 P01 | 4 | 2 tasks | 2 files |
 | Phase 11 P02 | 12 | 3 tasks | 11 files |
 | Phase 11 P04 | 6 | 3 tasks | 10 files |
 | Phase 11 P03 | 5 | 2 tasks | 6 files |
 | Phase 11 P01 | 5 | 3 tasks | 9 files |
 | Phase 10 P04 | 10 | 2 tasks | 6 files |
 | Phase 10-production-minimum P02 | 5 | 2 tasks | 2 files |
-| Phase 10 P01 | 6 | 2 tasks | 4 files |
-| Phase 11 P01 | 5 | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Recent decisions affecting v1.2:
 - Defer deletion events to Phase 13 (validate core flow first, deletions are differentiator not blocker)
 - Hardcoded InnerTube API key for PoC (Phase 10: dynamic extraction from stream HTML)
 - Event type naming follows official listener (Phase 10: super_chat, super_sticker, member_joined, member_milestone)
+- Metrics-based promotion not time-based (Phase 12-02: indefinite pause with 240-minute analysis window)
+- Native K8s traffic routing not service mesh (Phase 12-02: Argo Rollouts Service manipulation, no Istio dependency)
+- Kustomize base + overlay pattern (Phase 12-02: environment-specific replica count and image tags)
 
 **v1.1 Context (still relevant):**
 - Hybrid hash-based + load-aware approach for predictable under normal load
@@ -99,8 +103,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: Completed 11-02-PLAN.md (24-hour dual-listener integration test)
-Resume file: .planning/phases/11-contract-validation/11-02-SUMMARY.md
+Last session: 2026-03-05
+Stopped at: Completed 12-02-PLAN.md (Argo Rollouts canary deployment manifests)
+Resume file: .planning/phases/12-production-rollout/12-02-SUMMARY.md
 
-**Next action:** Phase 11 complete - all contract validation requirements satisfied (TEST-01, TEST-02, TEST-03, TEST-04, DEL-01, DEL-02). Ready for Phase 12 (Production Rollout - Canary Deployment)
+**Next action:** Continue Phase 12 - Plan 03 (pre-rollout validation checklist) or Plan 04 (execute canary deployment). Manifests ready for: kubectl apply -k deployments/k8s/youtube-listener-innertube/production/
