@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/deletion"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/handlers"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
@@ -43,6 +45,22 @@ func main() {
 	// 3. Initialize Prometheus metrics
 	innertubeMetrics := metrics.NewInnerTubeMetrics()
 	logger.Info("Initialized Prometheus metrics")
+
+	// 3.5. Initialize batch deletion detector
+	batchThresholdStr := getEnv("BATCH_DELETION_THRESHOLD", "5")
+	batchThreshold, err := strconv.Atoi(batchThresholdStr)
+	if err != nil {
+		logger.Warn("Invalid BATCH_DELETION_THRESHOLD, using default",
+			zap.String("value", batchThresholdStr),
+			zap.Error(err),
+		)
+		batchThreshold = 5
+	}
+	batchDetector := deletion.NewBatchDetector(batchThreshold, logger)
+	innertube.SetBatchDetector(batchDetector)
+	logger.Info("Initialized batch deletion detector",
+		zap.Int("threshold", batchThreshold),
+	)
 
 	// 4. Redis client
 	redisClient := redis.NewClient(&redis.Options{
@@ -101,6 +119,7 @@ func main() {
 		redisClient,
 		logger,
 		innertubeMetrics,
+		batchDetector,
 	)
 
 	if err := streamManager.Start(ctx); err != nil {

@@ -5,10 +5,26 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/deletion"
 	"github.com/google/uuid"
 )
+
+// Package-level batch detector for deletion event processing
+var (
+	batchDetector   *deletion.BatchDetector
+	batchDetectorMu sync.RWMutex
+)
+
+// SetBatchDetector configures the batch detector for deletion event processing
+// This should be called once during service initialization
+func SetBatchDetector(detector *deletion.BatchDetector) {
+	batchDetectorMu.Lock()
+	defer batchDetectorMu.Unlock()
+	batchDetector = detector
+}
 
 // RawChatMessage represents a raw chat message matching the official youtube-listener schema
 // This must remain byte-for-byte compatible with services/youtube-listener/models/raw_message.go
@@ -395,6 +411,7 @@ func (msg *RawChatMessage) ToJSON() ([]byte, error) {
 }
 
 // parseDeletionEvent converts a MarkChatItemAsDeletedAction to RawChatMessage
+// Uses package-level batch detector if configured for batch deletion detection
 func parseDeletionEvent(action *MarkChatItemAsDeletedAction, channelID string) (*RawChatMessage, error) {
 	// Extract deletion timestamp (use current time if not provided)
 	timestamp := time.Now().UTC()
@@ -411,6 +428,33 @@ func parseDeletionEvent(action *MarkChatItemAsDeletedAction, channelID string) (
 		return nil, fmt.Errorf("deletion event missing target item ID")
 	}
 
+	// Default deletion metadata (single deletion)
+	deletionType := "single"
+	var deletionCount *int
+	var reason *string
+
+	// If batch detector configured, add deletion for batch detection
+	batchDetectorMu.RLock()
+	detector := batchDetector
+	batchDetectorMu.RUnlock()
+
+	if detector != nil {
+		// Add deletion to detector for batch analysis
+		// Note: AddDeletion returns nil while buffering (window not yet closed)
+		// Actual batch detection happens in ticker goroutine after 100ms window
+		// For now, we just register the deletion - batch events will be emitted
+		// by the buffer in Plan 13-02
+		_, err := detector.AddDeletion(channelID, deletedMessageID, timestamp)
+		if err != nil {
+			// Log error but continue with single deletion event
+			// Batch detection is optional, don't fail message processing
+		}
+
+		// NOTE: In current implementation, we emit ALL deletions as "single"
+		// In Plan 13-02, the buffer will suppress these and emit batch events instead
+		// This ensures we have deletion events even before Plan 13-02 completes
+	}
+
 	// Create deletion event message matching official listener schema
 	msg := &RawChatMessage{
 		MessageID: uuid.New().String(), // New ID for deletion event itself
@@ -425,8 +469,16 @@ func parseDeletionEvent(action *MarkChatItemAsDeletedAction, channelID string) (
 		EventType: "message_deletion",
 		EventData: map[string]interface{}{
 			"target_msg_id":  deletedMessageID, // Match official listener schema
-			"deletion_type":  "single",         // Single message deletion
+			"deletion_type":  deletionType,
 		},
+	}
+
+	// Add batch metadata if applicable
+	if deletionCount != nil {
+		msg.EventData["deletion_count"] = *deletionCount
+	}
+	if reason != nil {
+		msg.EventData["reason"] = *reason
 	}
 
 	return msg, nil
