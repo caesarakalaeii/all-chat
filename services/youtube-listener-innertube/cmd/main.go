@@ -11,10 +11,12 @@ import (
 
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/handlers"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/publisher"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/streams"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -38,7 +40,11 @@ func main() {
 
 	ctx := context.Background()
 
-	// 3. Redis client
+	// 3. Initialize Prometheus metrics
+	innertubeMetrics := metrics.NewInnerTubeMetrics()
+	logger.Info("Initialized Prometheus metrics")
+
+	// 4. Redis client
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
 	})
@@ -51,12 +57,13 @@ func main() {
 	logger.Info("Connected to Redis",
 		zap.String("addr", fmt.Sprintf("%s:%s", redisHost, redisPort)))
 
-	// 4. Initialize components
+	// 5. Initialize components
 	// InnerTube client (hardcoded API key for MVP)
 	innertubeClient := innertube.NewClient(innertube.ClientOptions{
 		APIKey:  innertube.DefaultAPIKey,
 		Timeout: 10 * time.Second,
 		Logger:  logger,
+		Metrics: innertubeMetrics,
 	})
 
 	// Discovery
@@ -67,7 +74,7 @@ func main() {
 	repository := streams.NewRepository(redisClient, logger)
 
 	// Publisher
-	streamPublisher := publisher.NewStreamPublisher(redisClient, logger)
+	streamPublisher := publisher.NewStreamPublisher(redisClient, logger, innertubeMetrics)
 
 	// Leadership coordinator for stream ownership
 	sourceManagerURL := getEnv("SOURCE_MANAGER_URL", "http://source-manager:8088")
@@ -84,7 +91,7 @@ func main() {
 		leaderCoord = sourcemanager.NewLeadershipCoordinator("innertube", smClient, 5*time.Second, logger)
 	}
 
-	// 5. Initialize and start stream manager
+	// 6. Initialize and start stream manager
 	streamManager := streams.NewManager(
 		leaderCoord,
 		repository,
@@ -93,13 +100,14 @@ func main() {
 		innertubeClient,
 		redisClient,
 		logger,
+		innertubeMetrics,
 	)
 
 	if err := streamManager.Start(ctx); err != nil {
 		logger.Fatal("Failed to start stream manager", zap.Error(err))
 	}
 
-	// 6. HTTP server with health checks
+	// 7. HTTP server with metrics and health checks
 	if logLevel == "debug" {
 		gin.SetMode(gin.DebugMode)
 	} else {
@@ -108,6 +116,10 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Register Prometheus metrics endpoint (must be before health checks for canary monitoring)
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	logger.Info("Registered Prometheus /metrics endpoint")
 
 	healthHandler := handlers.NewHealthHandler(streamPublisher, innertubeClient, logger)
 	router.GET("/health/live", healthHandler.LivenessProbe)
@@ -122,17 +134,18 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// 7. Start HTTP server in goroutine
+	// 8. Start HTTP server in goroutine
 	go func() {
 		logger.Info("HTTP server listening",
-			zap.String("port", httpPort))
+			zap.String("port", httpPort),
+			zap.String("metrics_endpoint", "/metrics"))
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal("HTTP server failed", zap.Error(err))
 		}
 	}()
 
-	// 8. Wait for interrupt signal for graceful shutdown
+	// 9. Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 	<-quit
