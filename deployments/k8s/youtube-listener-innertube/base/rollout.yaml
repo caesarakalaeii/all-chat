@@ -1,0 +1,130 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: youtube-listener-innertube
+  namespace: allchat
+  labels:
+    app: youtube-listener-innertube
+    version: innertube
+spec:
+  replicas: 10
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: youtube-listener-innertube
+  template:
+    metadata:
+      labels:
+        app: youtube-listener-innertube
+        version: innertube
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: youtube-listener-innertube
+          image: allchat/youtube-listener-innertube:latest
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              value: "info"
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-config
+                  key: host
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-config
+                  key: port
+            - name: DATABASE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: host
+            - name: DATABASE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: port
+            - name: DATABASE_NAME
+              value: "allchat"
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+  strategy:
+    canary:
+      canaryService: youtube-listener-innertube-canary
+      stableService: youtube-listener-innertube-stable
+      trafficRouting:
+        managedRoutes:
+          - name: primary
+      steps:
+        # Step 1: Deploy canary at 10% traffic (1 pod out of 10)
+        - setWeight: 10
+        # Step 2: Pause indefinitely - analysis controls promotion
+        - pause: {}
+        # Step 3: Run metrics analysis at 10% traffic
+        - analysis:
+            templates:
+              - templateName: innertube-metrics-analysis
+            args:
+              - name: service-name
+                value: youtube-listener-innertube-canary
+              - name: baseline-service
+                value: youtube-listener
+        # Step 4: Promote to 50% traffic (5 pods out of 10)
+        - setWeight: 50
+        # Step 5: Pause indefinitely - analysis controls promotion
+        - pause: {}
+        # Step 6: Run metrics analysis at 50% traffic
+        - analysis:
+            templates:
+              - templateName: innertube-metrics-analysis
+            args:
+              - name: service-name
+                value: youtube-listener-innertube-canary
+              - name: baseline-service
+                value: youtube-listener
+        # Step 7: Full promotion (100% traffic)
+        - setWeight: 100
