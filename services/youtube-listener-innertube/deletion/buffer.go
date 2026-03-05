@@ -21,6 +21,11 @@ type Publisher interface {
 	Publish(ctx context.Context, msg RawMessage) error
 }
 
+// MetricsRecorder interface for recording buffer metrics
+type MetricsRecorder interface {
+	RecordOverflow(channelID string)
+}
+
 // DeletionBuffer manages per-channel deletion event buffering with 500ms delay
 type DeletionBuffer struct {
 	bufferDuration time.Duration
@@ -28,6 +33,7 @@ type DeletionBuffer struct {
 	flushInterval  time.Duration
 	channels       map[string]*channelBuffer
 	publisher      Publisher
+	metrics        MetricsRecorder
 	mu             sync.RWMutex
 	logger         *zap.Logger
 	ctx            context.Context
@@ -56,10 +62,16 @@ func NewDeletionBuffer(publisher Publisher, logger *zap.Logger) *DeletionBuffer 
 		flushInterval:  100 * time.Millisecond,
 		channels:       make(map[string]*channelBuffer),
 		publisher:      publisher,
+		metrics:        nil, // Can be set via SetMetrics
 		logger:         logger,
 		ctx:            ctx,
 		cancel:         cancel,
 	}
+}
+
+// SetMetrics sets the metrics recorder (allows initialization after construction)
+func (db *DeletionBuffer) SetMetrics(metrics MetricsRecorder) {
+	db.metrics = metrics
 }
 
 func (db *DeletionBuffer) Add(channelID string, deletionEvent RawMessage) error {
@@ -85,6 +97,10 @@ func (db *DeletionBuffer) Add(channelID string, deletionEvent RawMessage) error 
 			zap.String("channel_id", channelID),
 			zap.String("dropped_message_id", oldEvent.message.GetMessageID()),
 		)
+		// Track overflow metric
+		if db.metrics != nil {
+			db.metrics.RecordOverflow(channelID)
+		}
 	} else {
 		cb.count++
 	}
