@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -22,15 +23,17 @@ const (
 
 // StreamPublisher publishes raw chat messages to Redis Streams
 type StreamPublisher struct {
-	client *redis.Client
-	logger *zap.Logger
+	client  *redis.Client
+	logger  *zap.Logger
+	metrics *metrics.InnerTubeMetrics
 }
 
 // NewStreamPublisher creates a new Redis Streams publisher
-func NewStreamPublisher(client *redis.Client, logger *zap.Logger) *StreamPublisher {
+func NewStreamPublisher(client *redis.Client, logger *zap.Logger, m *metrics.InnerTubeMetrics) *StreamPublisher {
 	return &StreamPublisher{
-		client: client,
-		logger: logger,
+		client:  client,
+		logger:  logger,
+		metrics: m,
 	}
 }
 
@@ -65,8 +68,22 @@ func (p *StreamPublisher) Publish(ctx context.Context, msg *innertube.RawChatMes
 		Values: values,
 	}
 
+	// Track Redis publish attempt
+	if p.metrics != nil {
+		p.metrics.RedisPublishAttempts.WithLabelValues(metrics.ServiceLabel).Inc()
+	}
+
+	// Measure publish latency
+	start := time.Now()
 	streamID, err := p.client.XAdd(ctx, args).Result()
+	duration := time.Since(start)
+
 	if err != nil {
+		// Track Redis error
+		if p.metrics != nil {
+			p.metrics.Errors.WithLabelValues(metrics.ServiceLabel, metrics.ErrorTypeRedis).Inc()
+		}
+
 		// Log error but don't crash service (per user decision)
 		p.logger.Error("Failed to publish message to Redis Streams",
 			zap.String("stream", StreamKey),
@@ -74,6 +91,13 @@ func (p *StreamPublisher) Publish(ctx context.Context, msg *innertube.RawChatMes
 			zap.Error(err),
 		)
 		return fmt.Errorf("failed to publish to Redis Streams: %w", err)
+	}
+
+	// Track successful publish
+	if p.metrics != nil {
+		p.metrics.RedisPublishSuccess.WithLabelValues(metrics.ServiceLabel).Inc()
+		p.metrics.MessagesPublished.WithLabelValues(metrics.ServiceLabel, msg.ChannelID).Inc()
+		p.metrics.RedisPublishLatency.WithLabelValues(metrics.ServiceLabel).Observe(duration.Seconds())
 	}
 
 	// Debug-level logging for successful publishes (avoid spam at info level)

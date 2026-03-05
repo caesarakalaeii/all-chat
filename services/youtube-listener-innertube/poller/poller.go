@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 )
 
 // ClientInterface defines the methods needed from innertube.Client for testing
@@ -45,6 +46,7 @@ type Poller struct {
 	logger          *zap.Logger
 	logLevel        string // "debug" or "info"
 	messageCallback MessageCallback
+	metrics         *metrics.InnerTubeMetrics
 
 	// Graceful shutdown
 	ctx    context.Context
@@ -65,6 +67,9 @@ type PollerOptions struct {
 
 	// Repository for lifecycle operations (optional, for offline detection)
 	Repository *Repository
+
+	// Metrics for Prometheus instrumentation (optional)
+	Metrics *metrics.InnerTubeMetrics
 }
 
 // NewPoller creates a new polling loop manager
@@ -113,6 +118,7 @@ func NewPoller(
 		repository:   opts.Repository,
 		logger:       logger,
 		logLevel:     logLevel,
+		metrics:      opts.Metrics,
 	}
 }
 
@@ -339,6 +345,15 @@ func (p *Poller) handleError(err error) {
 			zap.String("channel_id", p.channelID))
 
 		p.state.SetError(err)
+
+		// Track reconnection attempt due to error
+		if p.metrics != nil {
+			p.metrics.Reconnections.WithLabelValues(
+				metrics.ServiceLabel,
+				p.channelID,
+				metrics.ReconnectionReasonError,
+			).Inc()
+		}
 
 		// Wait with exponential backoff
 		backoffErr := p.backoff.Wait(p.ctx, err)
