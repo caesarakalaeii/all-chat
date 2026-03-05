@@ -1,0 +1,603 @@
+{
+  "dashboard": {
+    "title": "YouTube Listener InnerTube Rollout",
+    "description": "Canary deployment monitoring with automatic promotion/rollback status",
+    "tags": ["youtube", "innertube", "canary", "rollout"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["10s", "30s", "1m", "5m"]
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": {
+            "text": "Prometheus",
+            "value": "Prometheus"
+          },
+          "hide": 0,
+          "includeAll": false,
+          "multi": false,
+          "options": [],
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "type": "datasource"
+        },
+        {
+          "name": "namespace",
+          "type": "constant",
+          "current": {
+            "value": "allchat",
+            "text": "allchat"
+          },
+          "hide": 0,
+          "includeAll": false,
+          "multi": false,
+          "options": [
+            {
+              "text": "allchat",
+              "value": "allchat",
+              "selected": true
+            }
+          ],
+          "skipUrlSync": false
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "Rollout Status",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "targets": [
+          {
+            "expr": "argo_rollouts_info{name=\"youtube-listener-innertube\", namespace=\"$namespace\"}",
+            "refId": "A",
+            "legendFormat": "{{phase}}"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "background",
+          "justifyMode": "center",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "Healthy": {
+                    "text": "Healthy",
+                    "color": "green"
+                  },
+                  "Progressing": {
+                    "text": "Progressing",
+                    "color": "blue"
+                  },
+                  "Paused": {
+                    "text": "Paused",
+                    "color": "yellow"
+                  },
+                  "Degraded": {
+                    "text": "Degraded",
+                    "color": "red"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "blue"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "type": "gauge",
+        "title": "Canary Weight",
+        "gridPos": {
+          "x": 6,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "targets": [
+          {
+            "expr": "argo_rollouts_canary_weight{name=\"youtube-listener-innertube\", namespace=\"$namespace\"}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": 0,
+                  "color": "green"
+                },
+                {
+                  "value": 10,
+                  "color": "yellow"
+                },
+                {
+                  "value": 50,
+                  "color": "orange"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "type": "table",
+        "title": "Analysis Run Status",
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 12,
+          "h": 4
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "targets": [
+          {
+            "expr": "argo_rollouts_analysis_run_info{rollout=\"youtube-listener-innertube\", namespace=\"$namespace\"}",
+            "refId": "A",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "displayName": "Time",
+              "desc": true
+            }
+          ]
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "phase"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 100
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "status"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 100
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "Successful": {
+                          "text": "Successful",
+                          "color": "green"
+                        },
+                        "Failed": {
+                          "text": "Failed",
+                          "color": "red"
+                        },
+                        "Running": {
+                          "text": "Running",
+                          "color": "blue"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "__name__": true,
+                "job": true,
+                "instance": true
+              },
+              "renameByName": {
+                "name": "Run Name",
+                "phase": "Phase",
+                "status": "Status",
+                "Time": "Start Time"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "type": "timeseries",
+        "title": "Error Rate Comparison",
+        "gridPos": {
+          "x": 0,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(youtube_listener_errors_total{service=\"youtube-listener-innertube-canary\"}[5m])) / sum(rate(youtube_listener_requests_total{service=\"youtube-listener-innertube-canary\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "InnerTube Canary"
+          },
+          {
+            "expr": "sum(rate(youtube_listener_errors_total{service=\"youtube-listener\"}[5m])) / sum(rate(youtube_listener_requests_total{service=\"youtube-listener\"}[5m]))",
+            "refId": "B",
+            "legendFormat": "Official Listener Baseline"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "drawStyle": "line",
+              "showPoints": "never"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 0.01,
+                  "color": "yellow"
+                },
+                {
+                  "value": 0.05,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "type": "timeseries",
+        "title": "Message Rate Comparison",
+        "gridPos": {
+          "x": 12,
+          "y": 4,
+          "w": 12,
+          "h": 6
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(youtube_listener_messages_published_total{service=\"youtube-listener-innertube-canary\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "InnerTube Canary"
+          },
+          {
+            "expr": "sum(rate(youtube_listener_messages_published_total{service=\"youtube-listener\"}[5m]))",
+            "refId": "B",
+            "legendFormat": "Official Listener Baseline"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "msg/s",
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "drawStyle": "line",
+              "showPoints": "never"
+            },
+            "thresholds": {
+              "mode": "percentage",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 5,
+                  "color": "yellow"
+                },
+                {
+                  "value": 20,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "type": "timeseries",
+        "title": "Redis Publish Success Rate",
+        "gridPos": {
+          "x": 0,
+          "y": 10,
+          "w": 6,
+          "h": 5
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(youtube_listener_redis_publish_success_total{service=\"youtube-listener-innertube-canary\"}[5m])) / sum(rate(youtube_listener_redis_publish_attempts_total{service=\"youtube-listener-innertube-canary\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "Success Rate"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0.9,
+            "max": 1.0,
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "drawStyle": "line",
+              "showPoints": "never"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "red"
+                },
+                {
+                  "value": 0.95,
+                  "color": "yellow"
+                },
+                {
+                  "value": 0.99,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "type": "timeseries",
+        "title": "Pod Restart Rate",
+        "gridPos": {
+          "x": 6,
+          "y": 10,
+          "w": 6,
+          "h": 5
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(kube_pod_container_status_restarts_total{namespace=\"$namespace\", pod=~\"youtube-listener-innertube-.*\"}[5m])) * 60",
+            "refId": "A",
+            "legendFormat": "Restarts per Minute"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "rpm",
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "drawStyle": "line",
+              "showPoints": "auto"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 0.1,
+                  "color": "yellow"
+                },
+                {
+                  "value": 2,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "type": "timeseries",
+        "title": "Reconnection Frequency",
+        "gridPos": {
+          "x": 12,
+          "y": 10,
+          "w": 12,
+          "h": 5
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(youtube_listener_reconnections_total{service=\"youtube-listener-innertube-canary\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "Reconnections per Second"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "rps",
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "drawStyle": "line",
+              "showPoints": "never"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 0.5,
+                  "color": "yellow"
+                },
+                {
+                  "value": 2,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [],
+    "liveNow": false,
+    "style": "dark"
+  },
+  "overwrite": true
+}
