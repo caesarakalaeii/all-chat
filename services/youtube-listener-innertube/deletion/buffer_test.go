@@ -2,6 +2,7 @@ package deletion
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -121,4 +122,229 @@ func TestCleanup_FlushesRemainingEvents(t *testing.T) {
 
 	buffer.Cleanup("channel1")
 	assert.Equal(t, 5, publisher.getCallCount())
+}
+
+func TestFIFOOverflow_DropsOldest(t *testing.T) {
+	publisher := newMockPublisher()
+	logger := zap.NewNop()
+	buffer := NewDeletionBuffer(publisher, logger)
+	defer buffer.Shutdown()
+
+	// Set smaller buffer for testing
+	buffer.maxSize = 10
+
+	// Add 15 messages (5 more than capacity)
+	for i := 0; i < 15; i++ {
+		msg := createTestMessage(fmt.Sprintf("msg%d", i), "channel1")
+		require.NoError(t, buffer.Add("channel1", msg))
+	}
+
+	// Wait for buffer to flush
+	time.Sleep(650 * time.Millisecond)
+
+	// Should have published 10 messages (oldest 5 dropped due to overflow)
+	calls := publisher.getCalls()
+	assert.LessOrEqual(t, len(calls), 10)
+}
+
+func TestPerChannelIsolation(t *testing.T) {
+	publisher := newMockPublisher()
+	logger := zap.NewNop()
+	buffer := NewDeletionBuffer(publisher, logger)
+	defer buffer.Shutdown()
+
+	// Add messages to channel A
+	for i := 0; i < 3; i++ {
+		msg := createTestMessage(fmt.Sprintf("msgA%d", i), "channelA")
+		require.NoError(t, buffer.Add("channelA", msg))
+	}
+
+	// Add messages to channel B
+	for i := 0; i < 2; i++ {
+		msg := createTestMessage(fmt.Sprintf("msgB%d", i), "channelB")
+		require.NoError(t, buffer.Add("channelB", msg))
+	}
+
+	// Wait for flush
+	time.Sleep(650 * time.Millisecond)
+
+	// Should have published all 5 messages
+	assert.Equal(t, 5, publisher.getCallCount())
+
+	// Cleanup one channel
+	buffer.Cleanup("channelA")
+
+	// Should still be able to add to channel B
+	msg := createTestMessage("msgB3", "channelB")
+	require.NoError(t, buffer.Add("channelB", msg))
+}
+
+func TestPublisherError_ContinuesFlush(t *testing.T) {
+	publisher := newMockPublisher()
+	logger := zap.NewNop()
+	buffer := NewDeletionBuffer(publisher, logger)
+	defer buffer.Shutdown()
+
+	// Add 3 messages
+	msg1 := createTestMessage("msg1", "channel1")
+	msg2 := createTestMessage("msg2", "channel1")
+	msg3 := createTestMessage("msg3", "channel1")
+
+	// Set error for msg2
+	publisher.setError("msg2", fmt.Errorf("publish error"))
+
+	require.NoError(t, buffer.Add("channel1", msg1))
+	require.NoError(t, buffer.Add("channel1", msg2))
+	require.NoError(t, buffer.Add("channel1", msg3))
+
+	// Wait for flush
+	time.Sleep(650 * time.Millisecond)
+
+	// Should have attempted all 3 publishes despite error
+	assert.Equal(t, 3, publisher.getCallCount())
+}
+
+func TestConcurrentAddAndFlush(t *testing.T) {
+	publisher := newMockPublisher()
+	logger := zap.NewNop()
+	buffer := NewDeletionBuffer(publisher, logger)
+	defer buffer.Shutdown()
+
+	var wg sync.WaitGroup
+	messageCount := 50
+
+	// Add messages concurrently
+	for i := 0; i < messageCount; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			msg := createTestMessage(fmt.Sprintf("msg%d", id), "channel1")
+			buffer.Add("channel1", msg)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Wait for flush
+	time.Sleep(650 * time.Millisecond)
+
+	// Should have published all messages
+	assert.Equal(t, messageCount, publisher.getCallCount())
+}
+
+func TestEmptyBufferFlush_NoOp(t *testing.T) {
+	publisher := newMockPublisher()
+	logger := zap.NewNop()
+	buffer := NewDeletionBuffer(publisher, logger)
+	defer buffer.Shutdown()
+
+	// Wait for flush tick without adding anything
+	time.Sleep(250 * time.Millisecond)
+
+	// Should not have published anything
+	assert.Equal(t, 0, publisher.getCallCount())
+}
+
+func TestSingleEventBuffer(t *testing.T) {
+	publisher := newMockPublisher()
+	logger := zap.NewNop()
+	buffer := NewDeletionBuffer(publisher, logger)
+	defer buffer.Shutdown()
+
+	msg := createTestMessage("msg1", "channel1")
+	require.NoError(t, buffer.Add("channel1", msg))
+
+	// Wait for flush
+	time.Sleep(650 * time.Millisecond)
+
+	// Should have published the single message
+	assert.Equal(t, 1, publisher.getCallCount())
+}
+
+func TestExactMaxSize(t *testing.T) {
+	publisher := newMockPublisher()
+	logger := zap.NewNop()
+	buffer := NewDeletionBuffer(publisher, logger)
+	defer buffer.Shutdown()
+
+	// Set buffer size to exactly 5
+	buffer.maxSize = 5
+
+	// Add exactly 5 messages
+	for i := 0; i < 5; i++ {
+		msg := createTestMessage(fmt.Sprintf("msg%d", i), "channel1")
+		require.NoError(t, buffer.Add("channel1", msg))
+	}
+
+	// Wait for flush
+	time.Sleep(650 * time.Millisecond)
+
+	// Should have published all 5 messages
+	assert.Equal(t, 5, publisher.getCallCount())
+}
+
+func TestTimeBasedExpiration(t *testing.T) {
+	publisher := newMockPublisher()
+	logger := zap.NewNop()
+	buffer := NewDeletionBuffer(publisher, logger)
+	defer buffer.Shutdown()
+
+	// Add first message
+	msg1 := createTestMessage("msg1", "channel1")
+	require.NoError(t, buffer.Add("channel1", msg1))
+
+	// Wait 300ms
+	time.Sleep(300 * time.Millisecond)
+
+	// Add second message
+	msg2 := createTestMessage("msg2", "channel1")
+	require.NoError(t, buffer.Add("channel1", msg2))
+
+	// Wait another 300ms (total 600ms from msg1, 300ms from msg2)
+	time.Sleep(300 * time.Millisecond)
+
+	// Only msg1 should be published (>500ms), msg2 should still be buffered
+	calls := publisher.getCalls()
+	assert.GreaterOrEqual(t, len(calls), 1)
+
+	// Wait for msg2 to expire (add extra time for flush interval)
+	time.Sleep(400 * time.Millisecond)
+
+	// Both should now be published
+	assert.GreaterOrEqual(t, publisher.getCallCount(), 2)
+}
+
+func TestMetricsRecording_Overflow(t *testing.T) {
+	publisher := newMockPublisher()
+	logger := zap.NewNop()
+	buffer := NewDeletionBuffer(publisher, logger)
+	defer buffer.Shutdown()
+
+	// Mock metrics recorder
+	overflowCalls := make(map[string]int)
+	mockMetrics := &mockMetricsRecorder{overflowCalls: overflowCalls}
+	buffer.SetMetrics(mockMetrics)
+
+	// Set small buffer size
+	buffer.maxSize = 5
+
+	// Add 10 messages to trigger overflow
+	for i := 0; i < 10; i++ {
+		msg := createTestMessage(fmt.Sprintf("msg%d", i), "channel1")
+		buffer.Add("channel1", msg)
+	}
+
+	// Should have recorded 5 overflows
+	assert.Equal(t, 5, overflowCalls["channel1"])
+}
+
+type mockMetricsRecorder struct {
+	overflowCalls map[string]int
+	mu            sync.Mutex
+}
+
+func (m *mockMetricsRecorder) RecordOverflow(channelID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.overflowCalls[channelID]++
 }

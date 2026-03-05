@@ -24,6 +24,31 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// publisherAdapter adapts StreamPublisher to deletion.Publisher interface
+type publisherAdapter struct {
+	publisher *publisher.StreamPublisher
+}
+
+func (a *publisherAdapter) Publish(ctx context.Context, msg deletion.RawMessage) error {
+	// Type assert to concrete RawChatMessage
+	rawMsg, ok := msg.(*innertube.RawChatMessage)
+	if !ok {
+		return fmt.Errorf("unexpected message type: %T", msg)
+	}
+	return a.publisher.Publish(ctx, rawMsg)
+}
+
+// metricsAdapter adapts InnerTubeMetrics to deletion.MetricsRecorder interface
+type metricsAdapter struct {
+	metrics *metrics.InnerTubeMetrics
+}
+
+func (a *metricsAdapter) RecordOverflow(channelID string) {
+	if a.metrics != nil {
+		a.metrics.DeletionBufferOverflows.WithLabelValues(metrics.ServiceLabel, channelID).Inc()
+	}
+}
+
 func main() {
 	// 1. Environment variables
 	logLevel := getEnv("LOG_LEVEL", "info")
@@ -92,7 +117,22 @@ func main() {
 	repository := streams.NewRepository(redisClient, logger)
 
 	// Publisher
-	streamPublisher := publisher.NewStreamPublisher(redisClient, logger, innertubeMetrics)
+	streamPublisher := publisher.NewStreamPublisher(redisClient, logger, innertubeMetrics, nil)
+
+	// Create publisher adapter for deletion buffer (adapts RawMessage to RawChatMessage)
+	bufferPublisher := &publisherAdapter{publisher: streamPublisher}
+
+	// Initialize deletion buffer with adapted publisher
+	deletionBuffer := deletion.NewDeletionBuffer(bufferPublisher, logger)
+
+	// Set metrics recorder
+	metricsRec := &metricsAdapter{metrics: innertubeMetrics}
+	deletionBuffer.SetMetrics(metricsRec)
+
+	streamPublisher.SetDeletionBuffer(deletionBuffer)
+	logger.Info("Initialized deletion event buffer",
+		zap.Duration("delay", 500*time.Millisecond),
+		zap.Int("max_size", 1000))
 
 	// Leadership coordinator for stream ownership
 	sourceManagerURL := getEnv("SOURCE_MANAGER_URL", "http://source-manager:8088")
@@ -120,6 +160,7 @@ func main() {
 		logger,
 		innertubeMetrics,
 		batchDetector,
+		deletionBuffer,
 	)
 
 	if err := streamManager.Start(ctx); err != nil {
@@ -179,6 +220,10 @@ func main() {
 	if err := streamManager.Shutdown(shutdownCtx); err != nil {
 		logger.Error("Stream manager shutdown error", zap.Error(err))
 	}
+
+	// Shutdown deletion buffer (flush all remaining events)
+	deletionBuffer.Shutdown()
+	logger.Info("Deletion buffer shutdown complete")
 
 	// Shutdown HTTP server
 	if err := srv.Shutdown(shutdownCtx); err != nil {

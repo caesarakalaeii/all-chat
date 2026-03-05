@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/deletion"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"github.com/redis/go-redis/v9"
@@ -23,24 +24,56 @@ const (
 
 // StreamPublisher publishes raw chat messages to Redis Streams
 type StreamPublisher struct {
-	client  *redis.Client
-	logger  *zap.Logger
-	metrics *metrics.InnerTubeMetrics
+	client         *redis.Client
+	logger         *zap.Logger
+	metrics        *metrics.InnerTubeMetrics
+	deletionBuffer *deletion.DeletionBuffer
 }
 
 // NewStreamPublisher creates a new Redis Streams publisher
-func NewStreamPublisher(client *redis.Client, logger *zap.Logger, m *metrics.InnerTubeMetrics) *StreamPublisher {
+func NewStreamPublisher(client *redis.Client, logger *zap.Logger, m *metrics.InnerTubeMetrics, deletionBuffer *deletion.DeletionBuffer) *StreamPublisher {
 	return &StreamPublisher{
-		client:  client,
-		logger:  logger,
-		metrics: m,
+		client:         client,
+		logger:         logger,
+		metrics:        m,
+		deletionBuffer: deletionBuffer,
 	}
+}
+
+// SetDeletionBuffer sets the deletion buffer (allows initialization after construction to avoid circular dependency)
+func (p *StreamPublisher) SetDeletionBuffer(deletionBuffer *deletion.DeletionBuffer) {
+	p.deletionBuffer = deletionBuffer
 }
 
 // Publish publishes a raw chat message to Redis Streams
 // Contract: Must publish with exact same XADD field mapping as official youtube-listener
 // to maintain drop-in compatibility with message-processor
 func (p *StreamPublisher) Publish(ctx context.Context, msg *innertube.RawChatMessage) error {
+	// Route deletion events through buffer (500ms delay)
+	if msg.EventType == "message_deletion" {
+		if p.deletionBuffer != nil {
+			if err := p.deletionBuffer.Add(msg.ChannelID, msg); err != nil {
+				p.logger.Error("Failed to buffer deletion event",
+					zap.String("channel_id", msg.ChannelID),
+					zap.String("message_id", msg.MessageID),
+					zap.Error(err),
+				)
+				// Fallback: publish immediately (degraded mode)
+				return p.publishToRedis(ctx, msg)
+			}
+			// Successfully buffered, will be published after 500ms
+			return nil
+		}
+		// No buffer configured, publish immediately
+		return p.publishToRedis(ctx, msg)
+	}
+
+	// Regular messages publish immediately (no delay)
+	return p.publishToRedis(ctx, msg)
+}
+
+// publishToRedis handles the actual Redis XADD operation
+func (p *StreamPublisher) publishToRedis(ctx context.Context, msg *innertube.RawChatMessage) error {
 	// Convert message to JSON for the 'data' field
 	jsonBytes, err := json.Marshal(msg)
 	if err != nil {

@@ -27,6 +27,10 @@ type InnerTubeMetrics struct {
 	// Reconnection tracking - for stability monitoring
 	// High reconnection rate indicates instability (potential rollback trigger)
 	Reconnections *prometheus.CounterVec // labels: service, channel_id, reason
+
+	// Deletion buffer tracking - for monitoring buffer overflow
+	// High overflow rate indicates message deletion storm or buffer too small
+	DeletionBufferOverflows *prometheus.CounterVec // labels: service, channel_id
 }
 
 // NewInnerTubeMetrics creates and registers InnerTube Prometheus metrics
@@ -89,6 +93,15 @@ func NewInnerTubeMetrics() *InnerTubeMetrics {
 				Help: "Total reconnection attempts by YouTube listener",
 			},
 			[]string{"service", "channel_id", "reason"},
+		),
+
+		// Deletion buffer metrics
+		DeletionBufferOverflows: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_listener_deletion_buffer_overflows_total",
+				Help: "Total deletion buffer overflows (oldest events dropped)",
+			},
+			[]string{"service", "channel_id"},
 		),
 	}
 }
