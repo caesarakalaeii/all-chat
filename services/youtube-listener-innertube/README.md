@@ -1,16 +1,25 @@
-# YouTube Listener InnerTube (PoC)
+# YouTube Listener InnerTube
 
-**Status**: Phase 9 Proof of Concept (v1.2 Milestone)
+> **⚠️ Terms of Service Disclosure:** This service uses the InnerTube API, which is an unofficial YouTube API not documented or supported by Google. Use of this API may violate YouTube's Terms of Service. This implementation is intended for personal use and small-scale deployments. For production use at scale, consider YouTube's official Data API with proper quota management.
+
+**Status**: Phase 12 - Production Rollout (v1.2 Milestone)
 
 Drop-in replacement for the official YouTube Listener using the InnerTube API instead of YouTube Data API v3. This service eliminates OAuth complexity and quota limitations while maintaining 100% compatibility with the existing message-processor.
 
-## Purpose
+## Overview
 
-Validates InnerTube API viability as a replacement for the official YouTube Data API v3 by:
+InnerTube-based YouTube chat listener that provides quota-free message ingestion as a drop-in replacement for the official API-based listener. Maintains identical RawChatMessage contract for seamless integration with message-processor.
 
-1. **Eliminating OAuth**: No user authentication required (uses public InnerTube API)
-2. **Removing quota limits**: InnerTube is not subject to YouTube Data API quota restrictions
-3. **Maintaining compatibility**: Publishes to same Redis Streams key (`chat:raw`) with identical schema
+## Key Differences from Official Listener
+
+| Feature | Official Listener | InnerTube Listener |
+|---------|-------------------|-------------------|
+| API | YouTube Data API v3 | InnerTube (unofficial) |
+| Quota Cost | 5 units/request | Zero |
+| Stream Discovery | Search API | HTML parsing |
+| Event Types | Standard | Standard + deletions (Phase 13) |
+| Rate Limiting | API quota limits | IP-based (undocumented) |
+| ToS Compliance | Official | Unofficial (use at own risk) |
 
 ## Architecture
 
@@ -147,28 +156,24 @@ This service maintains **byte-for-byte compatibility** with the official youtube
 
 ## Deployment
 
+See [ROLLOUT_GUIDE.md](../../docs/deployment/ROLLOUT_GUIDE.md) for canary deployment instructions.
+
 ### Docker Build
 
 ```bash
 cd services/youtube-listener-innertube
-docker build -t youtube-listener-innertube:poc .
+docker build -t youtube-listener-innertube:v1.2.0 .
 ```
 
-### Docker Run
+### Kubernetes Canary Rollout
+
+Deployed using Argo Rollouts with automatic promotion/rollback:
 
 ```bash
-docker run \
-  -e INITIAL_CONTINUATION="<token>" \
-  -e CHANNEL_ID="UCxxxxxx" \
-  -e REDIS_HOST="redis" \
-  -e LOG_LEVEL="debug" \
-  --network=host \
-  youtube-listener-innertube:poc
+kubectl apply -k deployments/k8s/youtube-listener-innertube/production/
 ```
 
-### Kubernetes (Future)
-
-Health checks configured for:
+Health checks:
 - Liveness: `GET /health/live` every 10s
 - Readiness: `GET /health/ready` every 5s
 - Startup: `GET /health/ready` (initial delay 5s)
@@ -241,10 +246,16 @@ See "Running Locally" section above for end-to-end validation.
 - [Message Processor](../message-processor/README.md)
 - [Phase 9 Context](../../.planning/phases/09-core-ingestion-poc/09-CONTEXT.md)
 
-## Metrics (Prometheus)
+## Monitoring
 
-Health check endpoints expose basic service metrics:
-- `http_requests_total{endpoint="/health/live"}`
-- `http_requests_total{endpoint="/health/ready"}`
+- **Grafana Dashboard:** "YouTube Listener InnerTube Rollout"
+- **Prometheus Metrics:** `/metrics` endpoint
+- **Key Metrics:**
+  - Error rate (comparison with official listener)
+  - Message rate (messages per second)
+  - Redis publish success rate
+  - Reconnection frequency
 
-Full Prometheus metrics integration in Phase 12.
+## Troubleshooting
+
+See [TROUBLESHOOTING_INNERTUBE.md](../../docs/deployment/TROUBLESHOOTING_INNERTUBE.md) for issue diagnosis and resolution.
