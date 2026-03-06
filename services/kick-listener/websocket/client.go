@@ -23,9 +23,11 @@ const (
 	pusherSubscriptionSucceeded = "pusher_internal:subscription_succeeded"
 	pusherUnsubscribe           = "pusher:unsubscribe"
 
-	// Kick chat event
-	kickChatMessageEvent     = "App\\Events\\ChatMessageSentEvent"
-	kickMessageDeletedEvent  = "App\\Events\\ChatMessageDeletedEvent"
+	// Kick chat events
+	kickChatMessageEvent       = "App\\Events\\ChatMessageSentEvent"
+	kickChatMessageEventAlt    = "App\\Events\\ChatMessageEvent" // Alternative event name
+	kickMessageDeletedEvent    = "App\\Events\\ChatMessageDeletedEvent"
+	kickMessageDeletedEventAlt = "App\\Events\\MessageDeletedEvent" // Alternative event name
 
 	// Kick channel format (chatrooms.<chatroom_id>.v2)
 	kickChannelFormat = "chatrooms.%d.v2"
@@ -663,10 +665,10 @@ func (c *Client) handleMessage(data []byte) {
 	case pusherError:
 		c.handlePusherError(msg.Data)
 
-	case kickChatMessageEvent:
+	case kickChatMessageEvent, kickChatMessageEventAlt:
 		c.handleChatMessage(msg.Channel, msg.Data)
 
-	case kickMessageDeletedEvent:
+	case kickMessageDeletedEvent, kickMessageDeletedEventAlt:
 		c.handleMessageDeleted(msg.Channel, msg.Data)
 
 	default:
