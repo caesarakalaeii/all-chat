@@ -8,6 +8,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { Logger } from '../types/logger.js';
 import { Assignment, AssignmentResponse, HeartbeatRequest } from './models.js';
+import { generateServiceJWT } from '../auth/jwt.js';
 
 /**
  * CoordinatorClient is an HTTP client for coordinator integration.
@@ -15,7 +16,9 @@ import { Assignment, AssignmentResponse, HeartbeatRequest } from './models.js';
  */
 export class CoordinatorClient {
   private baseURL: string;
+  private serviceSecret: string;
   private serviceJWT: string;
+  private serviceName: string;
   private httpClient: AxiosInstance;
   private logger: Logger;
 
@@ -23,13 +26,34 @@ export class CoordinatorClient {
    * Creates a new coordinator client.
    *
    * @param baseURL - Coordinator base URL (e.g., "http://source-manager:8088")
-   * @param serviceJWT - JWT for SERVICE_JWT_AUTH middleware authentication
+   * @param serviceSecret - Shared secret for generating service JWT tokens
    * @param logger - Logger instance
    */
-  constructor(baseURL: string, serviceJWT: string, logger: Logger) {
+  constructor(baseURL: string, serviceSecret: string, logger: Logger) {
     this.baseURL = baseURL;
-    this.serviceJWT = serviceJWT;
+    this.serviceSecret = serviceSecret;
     this.logger = logger;
+
+    // Determine service name from hostname (pod name)
+    const hostname = process.env.HOSTNAME || 'tiktok-listener';
+    this.serviceName = 'tiktok-listener'; // Default
+    if (hostname.startsWith('twitch-listener')) {
+      this.serviceName = 'twitch-listener';
+    } else if (hostname.startsWith('twitch-eventsub-listener')) {
+      this.serviceName = 'twitch-eventsub-listener';
+    } else if (hostname.startsWith('kick-listener')) {
+      this.serviceName = 'kick-listener';
+    } else if (hostname.startsWith('tiktok-listener')) {
+      this.serviceName = 'tiktok-listener';
+    }
+
+    // Generate service JWT (24 hour expiry, matching Go implementation)
+    this.serviceJWT = generateServiceJWT(this.serviceName, this.serviceSecret, 24 * 60 * 60 * 1000);
+
+    this.logger.info('Generated service JWT for coordinator authentication', {
+      service_name: this.serviceName,
+      hostname: hostname,
+    });
 
     this.httpClient = axios.create({
       baseURL: this.baseURL,
