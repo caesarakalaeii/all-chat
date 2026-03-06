@@ -450,19 +450,19 @@ func parseDeletionEvent(action *MarkChatItemAsDeletedAction, channelID string) (
 
 	if detector != nil {
 		// Add deletion to detector for batch analysis
-		// Note: AddDeletion returns nil while buffering (window not yet closed)
-		// Actual batch detection happens in ticker goroutine after 100ms window
-		// For now, we just register the deletion - batch events will be emitted
-		// by the buffer in Plan 13-02
-		_, err := detector.AddDeletion(channelID, deletedMessageID, timestamp)
+		// AddDeletion returns BatchResult immediately when threshold crossed
+		batchResult, err := detector.AddDeletion(channelID, deletedMessageID, timestamp)
 		if err != nil {
 			// Log error but continue with single deletion event
 			// Batch detection is optional, don't fail message processing
 		}
 
-		// NOTE: In current implementation, we emit ALL deletions as "single"
-		// In Plan 13-02, the buffer will suppress these and emit batch events instead
-		// This ensures we have deletion events even before Plan 13-02 completes
+		// Check if this deletion triggered batch detection
+		if batchResult != nil && batchResult.IsBatch {
+			deletionType = "batch"
+			deletionCount = &batchResult.Count
+			reason = &batchResult.Reason
+		}
 	}
 
 	// Create deletion event message matching official listener schema
