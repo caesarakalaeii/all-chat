@@ -111,6 +111,74 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 	return nil
 }
 
+// copyKickTokenForChannel copies the admin's Kick OAuth token to a new channel
+// This allows admins to add Kick channels manually without OAuth flow
+func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
+	// Step 1: Find the best Kick token for this admin
+	// Prefer non-expired tokens, then most recently updated
+	var existingToken struct {
+		AccessToken  string
+		RefreshToken string
+		TokenType    string
+		Expiry       string // Store as string to avoid timestamp parsing issues
+	}
+
+	query := `
+		SELECT access_token, refresh_token, token_type, expiry::text
+		FROM kick_oauth_tokens
+		WHERE user_id = $1
+		  AND expiry > NOW()  -- Only select non-expired tokens
+		ORDER BY expiry DESC  -- Prefer tokens that expire furthest in the future
+		LIMIT 1
+	`
+
+	err := h.db.QueryRow(ctx, query, adminUserID).Scan(
+		&existingToken.AccessToken,
+		&existingToken.RefreshToken,
+		&existingToken.TokenType,
+		&existingToken.Expiry,
+	)
+
+	if err != nil {
+		return fmt.Errorf("admin has no valid (non-expired) Kick OAuth token - please re-authorize Kick: %w", err)
+	}
+
+	// Step 2: Copy token to new channel_id (insert or update)
+	insertQuery := `
+		INSERT INTO kick_oauth_tokens (
+			user_id, channel_id, access_token, refresh_token,
+			token_type, expiry, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6::timestamp, NOW(), NOW())
+		ON CONFLICT (user_id, channel_id)
+		DO UPDATE SET
+			access_token = EXCLUDED.access_token,
+			refresh_token = EXCLUDED.refresh_token,
+			token_type = EXCLUDED.token_type,
+			expiry = EXCLUDED.expiry,
+			updated_at = NOW()
+	`
+
+	_, err = h.db.Exec(ctx, insertQuery,
+		adminUserID,
+		newChannelID,
+		existingToken.AccessToken,
+		existingToken.RefreshToken,
+		existingToken.TokenType,
+		existingToken.Expiry,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to copy Kick token: %w", err)
+	}
+
+	h.logger.Info("Copied Kick OAuth token for new channel",
+		zap.String("admin_user_id", adminUserID),
+		zap.String("new_channel_id", newChannelID),
+	)
+
+	return nil
+}
+
 // HandleListSources handles GET /:id/sources
 func (h *SourcesHandler) HandleListSources(c *gin.Context) {
 	// Get user ID from context
@@ -263,6 +331,26 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 			)
 		} else {
 			h.logger.Info("Successfully copied YouTube token for manual channel addition",
+				zap.String("user_id", userID.(string)),
+				zap.String("channel_id", channelID),
+			)
+		}
+	}
+
+	// CRITICAL: For Kick sources added manually, copy admin's OAuth token
+	// This allows admins to add Kick channels without OAuth flow
+	// The admin's token will be used to connect to the new channel
+	if req.Platform == "kick" && h.db != nil {
+		if err := h.copyKickTokenForChannel(c.Request.Context(), userID.(string), channelID); err != nil {
+			// Log error but don't fail the request - source was created successfully
+			// Admin will need to authenticate via OAuth if token copy fails
+			h.logger.Warn("Failed to copy Kick token for new channel",
+				zap.String("user_id", userID.(string)),
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+		} else {
+			h.logger.Info("Successfully copied Kick token for manual channel addition",
 				zap.String("user_id", userID.(string)),
 				zap.String("channel_id", channelID),
 			)
