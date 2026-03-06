@@ -37,7 +37,8 @@ func TestPublish_Success(t *testing.T) {
 		Addr: "localhost:6379",
 	})
 
-	publisher := NewStreamPublisher(client, logger)
+	// Use nil for metrics and deletionBuffer in tests that don't verify those behaviors
+	publisher := NewStreamPublisher(client, logger, nil, nil)
 
 	if publisher == nil {
 		t.Fatal("NewStreamPublisher returned nil")
@@ -74,7 +75,8 @@ func TestPing_Success(t *testing.T) {
 		Addr: "localhost:6379",
 	})
 
-	publisher := NewStreamPublisher(client, logger)
+	// Use nil for metrics and deletionBuffer in tests that don't verify those behaviors
+	publisher := NewStreamPublisher(client, logger, nil, nil)
 
 	ctx := context.Background()
 
@@ -100,7 +102,8 @@ func TestPublishBatch_EmptySlice(t *testing.T) {
 		Addr: "localhost:6379",
 	})
 
-	publisher := NewStreamPublisher(client, logger)
+	// Use nil for metrics and deletionBuffer in tests that don't verify those behaviors
+	publisher := NewStreamPublisher(client, logger, nil, nil)
 
 	ctx := context.Background()
 
