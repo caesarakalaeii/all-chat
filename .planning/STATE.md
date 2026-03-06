@@ -11,15 +11,16 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 Milestone: v1.2 InnerTube YouTube Listener
 Phase: 13 of 13 (Feature Parity)
-Plan: 2 of 4 complete
+Plan: 2 of 4 complete (plus gap closure 13-05)
 Status: In Progress
-Last activity: 2026-03-05 — Completed Phase 13 Plan 02 (Deletion Event Buffering)
+Last activity: 2026-03-06 — Completed Phase 13 Plan 05 (Publisher Test Suite Fix - Gap Closure)
 
 Progress: [████████░░░░░░░░] 2/4 (50% phase 13 complete)
 
 **Phase 13 Progress:**
 - ✓ Plan 01: Batch deletion detection
 - ✓ Plan 02: Deletion event buffering (500ms delay, FIFO overflow)
+- ✓ Plan 05: Publisher test suite fix (gap closure)
 - ⏳ Plan 03: Advanced metrics
 - ⏳ Plan 04: Live testing
 
@@ -88,6 +89,7 @@ Recent decisions affecting v1.2:
 - 500ms deletion buffer delay (Phase 13-02: race condition mitigation, ensures original message indexed first)
 - FIFO overflow strategy (Phase 13-02: drop oldest when buffer exceeds 1000 events, newest deletions more relevant)
 - Interface adapters for circular dependencies (Phase 13-02: publisherAdapter and metricsAdapter patterns)
+- Nil for unused test dependencies (Phase 13-05: pass nil for metrics/deletionBuffer in tests that don't verify those behaviors, keep tests focused)
 
 **v1.1 Context (still relevant):**
 - Hybrid hash-based + load-aware approach for predictable under normal load
@@ -119,8 +121,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05
-Stopped at: Completed Phase 13 Plan 02 (Deletion Event Buffering)
-Resume file: .planning/phases/13-feature-parity/13-02-SUMMARY.md
+Last session: 2026-03-06
+Stopped at: Completed Phase 13 Plan 05 (Publisher Test Suite Fix - Gap Closure)
+Resume file: .planning/phases/13-feature-parity/13-05-SUMMARY.md
 
-**Next action:** Phase 13 Plan 02 complete. Ready to proceed to Plan 03 (Advanced Metrics) or Plan 04 (Live Testing).
+**Next action:** Gap closure complete. Publisher tests restored. Ready to proceed to Plan 03 (Advanced Metrics) or Plan 04 (Live Testing).
