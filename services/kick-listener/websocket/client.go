@@ -526,6 +526,9 @@ func (c *Client) readPump() {
 			return
 		}
 
+		// Reset read deadline on every message (Pusher uses application-level ping/pong, not WebSocket frames)
+		conn.SetReadDeadline(time.Now().Add(pongWait))
+
 		c.handleMessage(message)
 	}
 }
