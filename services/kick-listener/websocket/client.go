@@ -32,7 +32,7 @@ const (
 
 	// Connection settings
 	writeWait      = 10 * time.Second
-	pongWait       = 60 * time.Second
+	pongWait       = 150 * time.Second // Must be > Pusher's activity_timeout (120s)
 	pingPeriod     = 30 * time.Second
 	maxMessageSize = 512 * 1024 // 512 KB
 
