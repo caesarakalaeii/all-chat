@@ -22,7 +22,8 @@ type PusherSubscribe struct {
 }
 
 type PusherSubscribeData struct {
-	Channel string `json:"channel"`
+	Channel string  `json:"channel"`
+	Auth    *string `json:"auth,omitempty"` // Required for private channels
 }
 
 // PusherUnsubscribe is used to unsubscribe from a channel

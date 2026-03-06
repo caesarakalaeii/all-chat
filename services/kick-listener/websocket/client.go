@@ -308,7 +308,31 @@ func (c *Client) Subscribe(chatroomID int) error {
 		return nil
 	}
 
-	return c.sendSubscribe(channel, chatroomID, false)
+	return c.sendSubscribe(channel, chatroomID, nil, false)
+}
+
+// SubscribeWithAuth subscribes to a Kick chatroom channel with authentication token
+func (c *Client) SubscribeWithAuth(chatroomID int, authToken string) error {
+	channel := c.formatChannelName(chatroomID)
+
+	c.channelsMu.Lock()
+	if _, exists := c.subscribedChannels[channel]; exists {
+		c.channelsMu.Unlock()
+		c.logger.Debug("Already subscribed to channel", zap.String("channel", channel))
+		return nil
+	}
+	c.subscribedChannels[channel] = chatroomID
+	c.channelsMu.Unlock()
+
+	if !c.isReady() {
+		c.logger.Debug("Connection not ready yet, deferring subscription",
+			zap.String("channel", channel),
+			zap.Int("chatroom_id", chatroomID),
+		)
+		return nil
+	}
+
+	return c.sendSubscribe(channel, chatroomID, &authToken, false)
 }
 
 // Unsubscribe unsubscribes from a Kick chatroom channel
@@ -342,6 +366,13 @@ func (c *Client) IsConnected() bool {
 	return c.connected
 }
 
+// GetSocketID returns the current Pusher socket ID (needed for channel auth)
+func (c *Client) GetSocketID() string {
+	c.connMu.RLock()
+	defer c.connMu.RUnlock()
+	return c.socketID
+}
+
 // formatChannelName returns a Kick chat channel string
 func (c *Client) formatChannelName(chatroomID int) string {
 	return fmt.Sprintf(kickChannelFormat, chatroomID)
@@ -354,11 +385,12 @@ func (c *Client) isReady() bool {
 	return c.connected && c.handshakeReady
 }
 
-func (c *Client) sendSubscribe(channel string, chatroomID int, resubscribe bool) error {
+func (c *Client) sendSubscribe(channel string, chatroomID int, authToken *string, resubscribe bool) error {
 	subscribeMsg := PusherSubscribe{
 		Event: pusherSubscribe,
 		Data: PusherSubscribeData{
 			Channel: channel,
+			Auth:    authToken,
 		},
 	}
 
@@ -420,7 +452,7 @@ func (c *Client) resubscribeAll() {
 	defer c.channelsMu.RUnlock()
 
 	for channel, chatroomID := range c.subscribedChannels {
-		if err := c.sendSubscribe(channel, chatroomID, true); err != nil {
+		if err := c.sendSubscribe(channel, chatroomID, nil, true); err != nil {
 			c.logger.Error("Failed to re-subscribe to channel",
 				zap.String("channel", channel),
 				zap.Int("chatroom_id", chatroomID),

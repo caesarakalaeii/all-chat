@@ -47,8 +47,10 @@ type DBConnInterface interface {
 // WebSocketClient interface for testing
 type WebSocketClient interface {
 	Subscribe(chatroomID int) error
+	SubscribeWithAuth(chatroomID int, authToken string) error
 	Unsubscribe(chatroomID int) error
 	IsConnected() bool
+	GetSocketID() string
 }
 
 // Manager manages Kick channel subscriptions
@@ -408,13 +410,33 @@ func (m *Manager) syncChannels() error {
 			zap.Int("overlay_consumers", len(desired.OverlayIDs)),
 		)
 
-		if err := m.wsClient.Subscribe(desired.ChatroomID); err != nil {
-			m.logger.Error("Failed to subscribe",
+		// Get Pusher auth token for private channel subscription
+		channelName := fmt.Sprintf("chatrooms.%d.v2", desired.ChatroomID)
+		authToken, err := m.getKickAuthToken(slug, channelName)
+		if err != nil {
+			m.logger.Warn("Failed to get auth token, trying without auth",
 				zap.String("channel", slug),
 				zap.Error(err),
 			)
-			m.releaseLeadership(slug)
-			continue
+			// Try subscribing without auth (fallback for public channels)
+			if err := m.wsClient.Subscribe(desired.ChatroomID); err != nil {
+				m.logger.Error("Failed to subscribe",
+					zap.String("channel", slug),
+					zap.Error(err),
+				)
+				m.releaseLeadership(slug)
+				continue
+			}
+		} else {
+			// Subscribe with auth token
+			if err := m.wsClient.SubscribeWithAuth(desired.ChatroomID, authToken); err != nil {
+				m.logger.Error("Failed to subscribe with auth",
+					zap.String("channel", slug),
+					zap.Error(err),
+				)
+				m.releaseLeadership(slug)
+				continue
+			}
 		}
 
 		m.subscriptions[slug] = desired
@@ -715,15 +737,35 @@ func (m *Manager) handleMigrationAsNewPod(ctx context.Context, event *coordinati
 	firstMsgChan := make(chan struct{}, 1)
 	m.firstMessageChan[chatroomID] = firstMsgChan
 
-	// Subscribe to chatroom (KICK-03)
-	if err := m.wsClient.Subscribe(chatroomID); err != nil {
-		m.logger.Error("Failed to subscribe during migration",
+	// Subscribe to chatroom with auth (KICK-03)
+	channelName := fmt.Sprintf("chatrooms.%d.v2", chatroomID)
+	authToken, err := m.getKickAuthToken(channelSlug, channelName)
+	if err != nil {
+		m.logger.Warn("Failed to get auth token for migration, trying without auth",
 			zap.String("channel", channelSlug),
 			zap.Error(err),
 		)
-		delete(m.firstMessageChan, chatroomID)
-		m.publishMigrationConfirmation(event.MigrationID, "failed", "subscribe failed")
-		return
+		// Fallback to no auth
+		if err := m.wsClient.Subscribe(chatroomID); err != nil {
+			m.logger.Error("Failed to subscribe during migration",
+				zap.String("channel", channelSlug),
+				zap.Error(err),
+			)
+			delete(m.firstMessageChan, chatroomID)
+			m.publishMigrationConfirmation(event.MigrationID, "failed", "subscribe failed")
+			return
+		}
+	} else {
+		// Subscribe with auth token
+		if err := m.wsClient.SubscribeWithAuth(chatroomID, authToken); err != nil {
+			m.logger.Error("Failed to subscribe with auth during migration",
+				zap.String("channel", channelSlug),
+				zap.Error(err),
+			)
+			delete(m.firstMessageChan, chatroomID)
+			m.publishMigrationConfirmation(event.MigrationID, "failed", "subscribe failed")
+			return
+		}
 	}
 
 	// Wait for first message or timeout
@@ -896,4 +938,74 @@ func (m *Manager) GetSubscriptionCount() int {
 // IsConnected returns true if WebSocket client is connected (KICK-05)
 func (m *Manager) IsConnected() bool {
 	return m.wsClient != nil && m.wsClient.IsConnected()
+}
+
+// getKickAuthToken calls Kick's /broadcasting/auth endpoint to get Pusher channel auth
+func (m *Manager) getKickAuthToken(channelSlug string, channelName string) (string, error) {
+	// Get socket_id from WebSocket client
+	socketID := m.wsClient.GetSocketID()
+	if socketID == "" {
+		return "", fmt.Errorf("no socket_id available (WebSocket not connected)")
+	}
+
+	// Get OAuth access token from database
+	var accessToken string
+	query := `
+		SELECT access_token
+		FROM kick_oauth_tokens
+		WHERE channel_id = $1
+		  AND expiry > NOW()
+		ORDER BY expiry DESC
+		LIMIT 1
+	`
+
+	pool := m.dbConn.GetPool().(*pgxpool.Pool)
+	err := pool.QueryRow(m.ctx, query, channelSlug).Scan(&accessToken)
+	if err != nil {
+		return "", fmt.Errorf("failed to get Kick OAuth token for %s: %w", channelSlug, err)
+	}
+
+	// Call Kick's /broadcasting/auth endpoint
+	authURL := "https://kick.com/broadcasting/auth"
+
+	req, err := http.NewRequest("POST", authURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create auth request: %w", err)
+	}
+
+	// Set form parameters
+	q := req.URL.Query()
+	q.Set("socket_id", socketID)
+	q.Set("channel_name", channelName)
+	req.URL.RawQuery = q.Encode()
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to call auth endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return "", fmt.Errorf("auth endpoint returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse auth response
+	var authResp struct {
+		Auth string `json:"auth"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
+		return "", fmt.Errorf("failed to parse auth response: %w", err)
+	}
+
+	m.logger.Debug("Got Pusher auth token",
+		zap.String("channel", channelSlug),
+		zap.String("socket_id", socketID),
+	)
+
+	return authResp.Auth, nil
 }
