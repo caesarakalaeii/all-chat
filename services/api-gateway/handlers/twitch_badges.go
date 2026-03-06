@@ -16,7 +16,9 @@ import (
 const (
 	twitchBadgeGlobalURL  = "https://api.twitch.tv/helix/chat/badges/global"
 	twitchBadgeChannelURL = "https://api.twitch.tv/helix/chat/badges"
+	twitchOAuthTokenURL   = "https://id.twitch.tv/oauth2/token"
 	badgeCacheTTL         = 15 * time.Minute
+	tokenRefreshBuffer    = 5 * time.Minute // Refresh token 5 minutes before expiry
 )
 
 type badgeCacheEntry struct {
@@ -61,23 +63,41 @@ type v1BadgeResponse struct {
 
 // TwitchBadgeHandler proxies badge requests through our API gateway.
 type TwitchBadgeHandler struct {
-	httpClient  *http.Client
-	log         *zap.Logger
-	cacheMux    sync.RWMutex
-	cache       map[string]badgeCacheEntry
-	clientID    string
-	accessToken string
+	httpClient   *http.Client
+	log          *zap.Logger
+	cacheMux     sync.RWMutex
+	cache        map[string]badgeCacheEntry
+	clientID     string
+	clientSecret string
+	tokenMux     sync.RWMutex
+	accessToken  string
+	tokenExpiry  time.Time
 }
 
 // NewTwitchBadgeHandler creates a new badge handler with sensible defaults.
-func NewTwitchBadgeHandler(log *zap.Logger, clientID, accessToken string) *TwitchBadgeHandler {
-	return &TwitchBadgeHandler{
-		httpClient:  &http.Client{Timeout: 10 * time.Second},
-		log:         log.Named("twitch-badges"),
-		cache:       make(map[string]badgeCacheEntry),
-		clientID:    clientID,
-		accessToken: accessToken,
+// If clientSecret is provided, it will automatically refresh the app access token.
+// If clientSecret is empty, it will use the provided accessToken without refresh.
+func NewTwitchBadgeHandler(log *zap.Logger, clientID, clientSecret string) *TwitchBadgeHandler {
+	handler := &TwitchBadgeHandler{
+		httpClient:   &http.Client{Timeout: 10 * time.Second},
+		log:          log.Named("twitch-badges"),
+		cache:        make(map[string]badgeCacheEntry),
+		clientID:     clientID,
+		clientSecret: clientSecret,
+		tokenExpiry:  time.Now(), // Force immediate refresh
 	}
+
+	// If client secret is provided, get initial app access token
+	if clientSecret != "" {
+		if err := handler.refreshAppAccessToken(); err != nil {
+			log.Warn("Failed to get initial Twitch app access token, will retry on first request",
+				zap.Error(err))
+		} else {
+			log.Info("Successfully obtained Twitch app access token for badge fetching")
+		}
+	}
+
+	return handler
 }
 
 // GetGlobalBadges proxies the Twitch global badge list.
@@ -115,13 +135,25 @@ func (h *TwitchBadgeHandler) getBadgePayload(url, cacheKey string) ([]byte, erro
 		return data, nil
 	}
 
+	// Ensure we have a valid token before making the request
+	if h.clientSecret != "" {
+		if err := h.ensureValidToken(); err != nil {
+			return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+		}
+	}
+
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Client-ID", h.clientID)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", h.accessToken))
+
+	h.tokenMux.RLock()
+	token := h.accessToken
+	h.tokenMux.RUnlock()
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -193,4 +225,66 @@ func (h *TwitchBadgeHandler) saveToCache(path string, data []byte) {
 		expires: time.Now().Add(badgeCacheTTL),
 	}
 	h.cacheMux.Unlock()
+}
+
+// ensureValidToken checks if the current token is valid and refreshes if needed
+func (h *TwitchBadgeHandler) ensureValidToken() error {
+	h.tokenMux.RLock()
+	needsRefresh := time.Now().Add(tokenRefreshBuffer).After(h.tokenExpiry)
+	h.tokenMux.RUnlock()
+
+	if needsRefresh {
+		return h.refreshAppAccessToken()
+	}
+	return nil
+}
+
+// refreshAppAccessToken obtains a new App Access Token using Client Credentials flow
+// https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#client-credentials-grant-flow
+func (h *TwitchBadgeHandler) refreshAppAccessToken() error {
+	h.log.Info("Refreshing Twitch app access token")
+
+	// Build OAuth request
+	url := fmt.Sprintf("%s?client_id=%s&client_secret=%s&grant_type=client_credentials",
+		twitchOAuthTokenURL, h.clientID, h.clientSecret)
+
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create token request: %w", err)
+	}
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute token request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("token request failed: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	// Parse token response
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"` // Seconds until expiry
+		TokenType   string `json:"token_type"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return fmt.Errorf("failed to parse token response: %w", err)
+	}
+
+	// Update token with write lock
+	h.tokenMux.Lock()
+	h.accessToken = tokenResp.AccessToken
+	h.tokenExpiry = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+	h.tokenMux.Unlock()
+
+	h.log.Info("Successfully refreshed Twitch app access token",
+		zap.Time("expires_at", h.tokenExpiry),
+		zap.Duration("valid_for", time.Until(h.tokenExpiry)),
+	)
+
+	return nil
 }

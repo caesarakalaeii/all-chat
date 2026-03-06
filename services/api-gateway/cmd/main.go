@@ -233,16 +233,21 @@ func main() {
 	}
 
 	// Get Twitch API credentials for badge fetching
+	// For automatic token refresh, use TWITCH_CLIENT_SECRET (recommended)
+	// Otherwise, provide TWITCH_ACCESS_TOKEN manually
 	twitchClientID := strings.TrimSpace(os.Getenv("TWITCH_CLIENT_ID"))
-	twitchAccessToken := strings.TrimSpace(os.Getenv("TWITCH_ACCESS_TOKEN"))
-	if twitchClientID == "" || twitchAccessToken == "" {
-		log.Fatal("TWITCH_CLIENT_ID and TWITCH_ACCESS_TOKEN environment variables are required")
+	twitchClientSecret := strings.TrimSpace(os.Getenv("TWITCH_CLIENT_SECRET"))
+	if twitchClientID == "" {
+		log.Fatal("TWITCH_CLIENT_ID environment variable is required")
+	}
+	if twitchClientSecret == "" {
+		log.Warn("TWITCH_CLIENT_SECRET not set - badge API will not auto-refresh tokens and may fail")
 	}
 
 	// Create handlers
 	proxyHandler := handlers.NewProxyHandler(registry)
 	healthHandler := handlers.NewHealthHandler(registry)
-	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchAccessToken)
+	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
 	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, jwtSecret, replayBuffer, log)
 
 	// Create viewer WebSocket handler (same origin policy as owner handler)
