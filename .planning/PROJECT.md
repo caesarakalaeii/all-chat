@@ -2,11 +2,11 @@
 
 ## What This Is
 
-All-Chat is a cloud-native platform that aggregates live chat messages from multiple streaming platforms (Twitch, YouTube, Kick, TikTok) and displays them in unified overlays for streamers. The platform now features intelligent load distribution with hybrid hash-based sharding and automatic rebalancing, enabling efficient horizontal scaling for high-volume streams while maintaining zero-message-loss guarantees.
+All-Chat is a cloud-native platform that aggregates live chat messages from multiple streaming platforms (Twitch, YouTube, Kick, TikTok) and displays them in unified overlays for streamers. The platform features intelligent load distribution with hybrid hash-based sharding, automatic rebalancing, and quota-free YouTube ingestion via InnerTube API.
 
 ## Core Value
 
-Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing and auto-scaling.
+Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
 ## Requirements
 
@@ -44,21 +44,23 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 - ✓ Kubernetes HPA integration (scale based on aggregate load) — v1.1
 - ✓ Load balancing observability (metrics, dashboards, alerts) — v1.1
 
+**InnerTube YouTube Listener (v1.2):**
+- ✓ InnerTube API integration (quota-free YouTube chat ingestion) — v1.2
+- ✓ Drop-in replacement architecture (RawChatMessage schema compatibility) — v1.2
+- ✓ All event types (messages, Super Chat, Super Sticker, memberships, deletions) — v1.2
+- ✓ Batch deletion detection (5+ deletions in 100ms time window) — v1.2
+- ✓ Deletion event buffering (500ms delay for race condition handling) — v1.2
+- ✓ Dynamic stream management (discovery, lifecycle, offline detection) — v1.2
+- ✓ Source-manager integration (leadership coordination) — v1.2
+- ✓ Contract validation infrastructure (golden files, dual-listener test) — v1.2
+- ✓ Production rollout infrastructure (Argo Rollouts, canary deployment) — v1.2
+- ✓ Advanced metrics (per-channel message rate, network error classification) — v1.2
+
 ### Active
 
-<!-- Current scope for v1.2 milestone -->
+<!-- Current scope — no active milestone -->
 
-## Current Milestone: v1.2 InnerTube YouTube Listener
-
-**Goal:** Build drop-in replacement YouTube listener using InnerTube API to eliminate quota limitations while maintaining identical downstream behavior.
-
-**Target features:**
-- InnerTube-based stream discovery and chat ingestion
-- Drop-in replacement (identical Redis output contract with `RawChatMessage`)
-- All chat event types (messages, paid, memberships, deletions)
-- Single and batch deletion support (faster detection than official API)
-- Connection gating and fast resume (same lifecycle behavior)
-- Self-hoster UX (one Docker image choice: official OR innertube)
+_No active milestone. Ready for `/gsd:new-milestone` to define next version._
 
 ### Out of Scope
 
@@ -67,18 +69,18 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 - Custom load metrics from user configuration — Message rate provides accurate signal
 - Channel affinity/pinning — Rebalancing flexibility more valuable than pinning
 - Multi-tenancy isolation — Single-tenant deployment model
-- YouTube load balancing — Quota is bottleneck, not connections (existing leader election sufficient)
+- Event suppression (emit 1 batch event vs N events) — Deferred to future (detection working, metadata provided)
+- Self-hoster migration guide — Canary deployment guide exists, standalone migration deferred
 
 ## Context
 
-**Current State (v1.1 shipped):**
-- 7 microservices deployed in Kubernetes (api-gateway, auth-service, emote-service, message-processor, overlay-manager, source-manager, token-refresh-service)
-- 4 listener services with load balancing (twitch-listener, kick-listener, tiktok-listener, youtube-listener)
-- Coordination code: 5,338 lines (bounded-load consistent hashing, migration protocol, rebalancing)
-- Shared infrastructure: 1,123 lines (metrics, distributed tracing)
-- 110 files changed in v1.1 (+30,501 lines, -253 lines)
+**Current State (v1.2 shipped):**
+- 7 core microservices deployed in Kubernetes (api-gateway, auth-service, emote-service, message-processor, overlay-manager, source-manager, token-refresh-service)
+- 5 listener services: 4 with load balancing (twitch-listener, kick-listener, tiktok-listener, youtube-listener) + 1 quota-free InnerTube listener (youtube-listener-innertube, ready for canary deployment)
+- InnerTube service: 8,684 LOC Go, 21 plans across 5 phases, 69 automated tests
+- Deployment infrastructure: Argo Rollouts manifests, Prometheus metrics, Grafana dashboards, comprehensive documentation
 
-**Load Balancing Implementation:**
+**Load Balancing Implementation (v1.1):**
 - **Coordinator:** Kubernetes Lease-based leader election, bounded-load consistent hashing (1.25x average limit)
 - **Migration:** Overlap protocol (new pod connects before old disconnects), zero-loss guarantee via first-message confirmation
 - **Rebalancing:** Composite load scoring (70% message rate + 30% channel count), automatic hot channel redistribution (>3x average rate)
@@ -86,22 +88,35 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 - **HPA:** Startup jitter (0-30s) prevents thundering herd, filtered assignment count for readiness probes
 - **Observability:** 16 distributed tracing spans, Grafana dashboards with Pod×Platform and Pod×Time heatmaps, Prometheus alerts
 
+**InnerTube Listener Architecture (v1.2):**
+- **API Integration:** InnerTube HTTP POST client eliminates YouTube API quota constraints (10,000 units/day → unlimited)
+- **Schema Compatibility:** RawChatMessage byte-for-byte compatible with official listener, zero downstream changes
+- **Event Support:** All chat types (regular messages, Super Chat, Super Sticker, membership events, tickers, deletions)
+- **Batch Detection:** Time-windowed aggregation (5+ deletions in 100ms) with reason classification (timeout vs ban)
+- **Deletion Buffer:** 500ms delay before emission handles race conditions (deletion arrives before original message)
+- **Lifecycle Management:** Stream discovery (HTML parsing), offline detection (empty continuations), auto-resume, graceful shutdown
+- **Testing:** 69 automated tests (contract validation, lifecycle behaviors, deletion events), 24-hour dual-listener test infrastructure
+
 **Technical Environment:**
 - Go 1.25.6 microservices with Standard Go Layout
 - Redis 7 (Streams for queuing, Pub/Sub for broadcast, assignment registry)
 - Kubernetes with CloudNativePG (PostgreSQL), HPA, Horizontal Pod Autoscaler
 - OpenTelemetry tracing, Prometheus metrics, Grafana dashboards
+- Argo Rollouts for canary deployments (InnerTube listener)
 
 **Known Issues / Technical Debt:**
-- None identified in v1.1 milestone audit
-- Human verification pending for: HPA scale-up behavior (cluster testing), Jaeger trace visualization, Grafana dashboard rendering
+- Health handler test mock signature needs fix (Phase 9 minor gap, non-blocking)
+- Self-hoster migration guide incomplete (canary deployment covered, standalone path deferred)
+- Event suppression architecture deferred (emits N events where 5th is tagged 'batch', not 1 batch event)
+- Argo Rollouts CRD not installed in cluster yet (prerequisite for InnerTube canary deployment)
+- Human verification pending: 24-hour dual-listener test, Grafana dashboard rendering, Kubernetes dry-run validation
 
 ## Constraints
 
 - **Tech Stack**: Go 1.25.6, existing microservices, Redis 7, Kubernetes — No new infrastructure dependencies
 - **Backward Compatibility**: Must not break existing message flow — Single-pod deployments still supported
 - **Zero Downtime**: Channel migration must be lossless — Enforced via overlap protocol and confirmation signaling
-- **Platform Connection Limits**: Respect platform rate limits and connection quotas — YouTube API quota especially
+- **Platform Connection Limits**: Respect platform rate limits and connection quotas — InnerTube bypasses YouTube quota
 - **Stateless Services**: Listeners remain stateless — All state in Redis, not in-memory
 
 ## Key Decisions
@@ -119,6 +134,13 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 | 20% per-operation migration limit | Balance between quick redistribution and system stability | ✓ Good — Minimum 1 channel enforced, proportional strategy |
 | Startup jitter (0-30s random delay) | Prevents thundering herd during HPA scale-up | ✓ Good — Applied across all listeners, prevents coordinator overload |
 | W3C Trace Context propagation through Redis | Standard propagation format, interoperable with observability tools | ✓ Good — 16 spans instrumented, trace context in Redis Streams |
+| **InnerTube API over official YouTube API** | Eliminates quota constraints (10,000 units/day bottleneck), faster deletion detection | ✓ Good — Quota-free unlimited access, drop-in replacement architecture proven |
+| **Drop-in replacement strategy (RawChatMessage compatibility)** | Zero downstream changes, maintains contract with message-processor | ✓ Good — Byte-for-byte schema match, contract validation tests pass |
+| **Batch deletion time-window aggregation (100ms)** | Balances detection speed with false positive risk | ✓ Good — Detects bans/timeouts reliably, 5+ threshold works well |
+| **Deletion buffer with 500ms delay** | Handles race condition (deletion arrives before original message) | ✓ Good — Buffering works, suppression architecture deferred to future |
+| **Argo Rollouts for canary deployment** | Automatic promotion/rollback based on Prometheus metrics | ✓ Good — Infrastructure ready, 10%→50%→100% progression with <1% error threshold |
+| **HTML parsing for stream discovery** | InnerTube browse endpoint unstable, HTML canonical link reliable | ✓ Good — Premiere filtering works, 15-minute timeout appropriate |
+| **Source-manager leadership coordination** | Reuse existing leader election, single source of truth for active streams | ✓ Good — Async discovery, Redis caching, graceful lifecycle management |
 
 ---
-*Last updated: 2026-02-21 after v1.2 milestone initialization*
+*Last updated: 2026-03-06 after v1.2 milestone completion*
