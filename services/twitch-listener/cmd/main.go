@@ -120,6 +120,10 @@ func main() {
 	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, log)
 	log.Info("Initialized coordinator client", zap.String("coordinator_url", coordinatorURL))
 
+	// Start JWT refresh to prevent token expiration (refreshes every 12 hours)
+	coordClient.StartJWTRefresh(ctx)
+	defer coordClient.StopJWTRefresh()
+
 	// Staggered startup jitter to prevent thundering herd during HPA scale-up (Phase 7)
 	jitter := time.Duration(rand.Intn(30)) * time.Second
 	log.Info("Applying startup jitter to prevent thundering herd",

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/shared/auth"
@@ -22,6 +23,8 @@ type CoordinatorClient struct {
 	serviceName   string
 	httpClient    *http.Client
 	logger        *zap.Logger
+	jwtMutex      sync.RWMutex // Protects serviceJWT during refresh
+	stopRefresh   chan struct{} // Signal to stop JWT refresh goroutine
 }
 
 // Assignment represents a channel assignment from the coordinator
@@ -59,6 +62,11 @@ func NewCoordinatorClient(baseURL, serviceSecret string, logger *zap.Logger) *Co
 		logger.Fatal("Failed to generate service JWT", zap.Error(err))
 	}
 
+	logger.Info("Generated initial service JWT for coordinator authentication",
+		zap.String("service_name", serviceName),
+		zap.Duration("expiry", 24*time.Hour),
+	)
+
 	return &CoordinatorClient{
 		baseURL:       baseURL,
 		serviceSecret: serviceSecret,
@@ -67,7 +75,8 @@ func NewCoordinatorClient(baseURL, serviceSecret string, logger *zap.Logger) *Co
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		logger: logger,
+		logger:      logger,
+		stopRefresh: make(chan struct{}),
 	}
 }
 
@@ -99,7 +108,10 @@ func (c *CoordinatorClient) QueryAssignments(ctx context.Context, podID string) 
 		}
 
 		// Add JWT authorization header for SERVICE_JWT_AUTH middleware
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.serviceJWT))
+		c.jwtMutex.RLock()
+		jwt := c.serviceJWT
+		c.jwtMutex.RUnlock()
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwt))
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
@@ -211,7 +223,10 @@ func (c *CoordinatorClient) PublishHeartbeat(ctx context.Context, podID string) 
 	}
 
 	// Add headers
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.serviceJWT))
+	c.jwtMutex.RLock()
+	jwt := c.serviceJWT
+	c.jwtMutex.RUnlock()
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwt))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -241,4 +256,66 @@ func (c *CoordinatorClient) PublishHeartbeat(ctx context.Context, podID string) 
 	)
 
 	return nil
+}
+
+// StartJWTRefresh starts a background goroutine to refresh the service JWT before expiration.
+// The JWT is refreshed at 50% of its TTL (12 hours for a 24-hour token) to ensure it never expires.
+//
+// Usage:
+//   client := NewCoordinatorClient(baseURL, secret, logger)
+//   client.StartJWTRefresh(ctx)
+//   defer client.StopJWTRefresh()
+func (c *CoordinatorClient) StartJWTRefresh(ctx context.Context) {
+	// JWT configuration
+	const jwtTTL = 24 * time.Hour
+	const refreshInterval = jwtTTL / 2 // Refresh at 50% of TTL (12 hours)
+
+	c.logger.Info("Starting JWT refresh background task",
+		zap.Duration("jwt_ttl", jwtTTL),
+		zap.Duration("refresh_interval", refreshInterval),
+	)
+
+	go func() {
+		ticker := time.NewTicker(refreshInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				c.logger.Info("JWT refresh stopped - context canceled")
+				return
+			case <-c.stopRefresh:
+				c.logger.Info("JWT refresh stopped - stop signal received")
+				return
+			case <-ticker.C:
+				c.refreshJWT(jwtTTL)
+			}
+		}
+	}()
+}
+
+// StopJWTRefresh stops the JWT refresh background task
+func (c *CoordinatorClient) StopJWTRefresh() {
+	close(c.stopRefresh)
+}
+
+// refreshJWT generates a new JWT token and updates the client
+func (c *CoordinatorClient) refreshJWT(ttl time.Duration) {
+	newJWT, err := auth.GenerateServiceJWT(c.serviceName, c.serviceSecret, ttl)
+	if err != nil {
+		c.logger.Error("Failed to refresh service JWT - will retry at next interval",
+			zap.Error(err),
+			zap.Duration("ttl", ttl),
+		)
+		return
+	}
+
+	c.jwtMutex.Lock()
+	c.serviceJWT = newJWT
+	c.jwtMutex.Unlock()
+
+	c.logger.Info("Successfully refreshed service JWT",
+		zap.String("service_name", c.serviceName),
+		zap.Duration("ttl", ttl),
+	)
 }
