@@ -56,7 +56,7 @@ func NewBatchDetector(threshold int, logger *zap.Logger) *BatchDetector {
 }
 
 // AddDeletion adds a deletion to the current window for the given channel
-// Returns nil while buffering, or BatchResult when window closes naturally
+// Returns BatchResult immediately if threshold crossed, nil otherwise
 // Caller must handle the result and emit events accordingly
 func (d *BatchDetector) AddDeletion(channelID, targetItemID string, timestamp time.Time) (*BatchResult, error) {
 	if channelID == "" {
@@ -89,22 +89,45 @@ func (d *BatchDetector) AddDeletion(channelID, targetItemID string, timestamp ti
 		targetItemID: targetItemID,
 		timestamp:    timestamp,
 	})
+
+	// Check if threshold crossed with this deletion
+	deletionCount := len(window.deletions)
 	window.mu.Unlock()
 
-	// Return nil to indicate buffering (caller waits for window to close)
+	// Return BatchResult immediately if threshold reached
+	if deletionCount >= d.threshold {
+		// Classify reason based on count
+		var reason string
+		if deletionCount >= 20 {
+			reason = "ban"
+		} else if deletionCount >= 5 {
+			reason = "timeout"
+		} else {
+			reason = "mod"
+		}
+
+		return &BatchResult{
+			IsBatch: true,
+			Count:   deletionCount,
+			Reason:  reason,
+		}, nil
+	}
+
+	// Below threshold, return nil
 	return nil, nil
 }
 
 // tickerLoop runs in a goroutine to process time windows at regular intervals
+// Used for window cleanup and final processing at window boundaries
 func (d *BatchDetector) tickerLoop(channelID string, window *channelWindow) {
 	for {
 		select {
 		case <-window.ticker.C:
-			// Window boundary reached, process buffered deletions
+			// Window boundary reached, reset for next window
+			// Note: AddDeletion now returns results immediately when threshold crossed
+			// Ticker is kept for window cleanup and edge case handling
 			result := d.processWindow(channelID)
 			if result != nil {
-				// TODO: In Plan 13-02, this will emit to buffer
-				// For now, just log the result
 				d.logger.Debug("Window processed",
 					zap.String("channel_id", channelID),
 					zap.Bool("is_batch", result.IsBatch),
