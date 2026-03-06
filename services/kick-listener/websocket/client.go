@@ -686,9 +686,21 @@ func (c *Client) handleMessage(data []byte) {
 // handleChatMessage processes a Kick chat message
 func (c *Client) handleChatMessage(channel string, data json.RawMessage) {
 	var chatMsg KickChatMessage
-	if err := json.Unmarshal(data, &chatMsg); err != nil {
-		c.logger.Error("Failed to unmarshal chat message", zap.Error(err))
-		return
+
+	// Pusher may send data as a JSON-encoded string, so try to unmarshal twice
+	var dataStr string
+	if err := json.Unmarshal(data, &dataStr); err == nil {
+		// Data is a string, unmarshal the string as JSON
+		if err := json.Unmarshal([]byte(dataStr), &chatMsg); err != nil {
+			c.logger.Error("Failed to unmarshal chat message from string", zap.Error(err))
+			return
+		}
+	} else {
+		// Data is already an object, unmarshal directly
+		if err := json.Unmarshal(data, &chatMsg); err != nil {
+			c.logger.Error("Failed to unmarshal chat message", zap.Error(err))
+			return
+		}
 	}
 
 	c.logger.Debug("Received chat message",
@@ -706,9 +718,21 @@ func (c *Client) handleChatMessage(channel string, data json.RawMessage) {
 // handleMessageDeleted processes a Kick message deletion event
 func (c *Client) handleMessageDeleted(channel string, data json.RawMessage) {
 	var deletedEvent KickMessageDeletedEvent
-	if err := json.Unmarshal(data, &deletedEvent); err != nil {
-		c.logger.Error("Failed to unmarshal deletion event", zap.Error(err))
-		return
+
+	// Pusher may send data as a JSON-encoded string, so try to unmarshal twice
+	var dataStr string
+	if err := json.Unmarshal(data, &dataStr); err == nil {
+		// Data is a string, unmarshal the string as JSON
+		if err := json.Unmarshal([]byte(dataStr), &deletedEvent); err != nil {
+			c.logger.Error("Failed to unmarshal deletion event from string", zap.Error(err))
+			return
+		}
+	} else {
+		// Data is already an object, unmarshal directly
+		if err := json.Unmarshal(data, &deletedEvent); err != nil {
+			c.logger.Error("Failed to unmarshal deletion event", zap.Error(err))
+			return
+		}
 	}
 
 	c.logger.Debug("Received message deletion",
