@@ -379,10 +379,17 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		zap.String("overlay_id", overlayID),
 	)
 
-	// TODO: Get initial continuation token
-	// For MVP, we'll need to implement continuation extraction from video page
-	// For now, use placeholder that will trigger offline detection quickly
-	initialContinuation := ""
+	// Get initial continuation token from video page
+	initialContinuation, err := m.discovery.GetInitialContinuation(ctx, videoID)
+	if err != nil {
+		m.logger.Error("Failed to get initial continuation token",
+			zap.String("video_id", videoID),
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		// Continue with empty continuation - poller will handle error gracefully
+		initialContinuation = ""
+	}
 
 	// Create and start poller
 	p := poller.NewPoller(
