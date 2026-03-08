@@ -142,13 +142,13 @@ func main() {
 	if sourceManagerSecret == "" {
 		logger.Warn("SOURCE_MANAGER_SECRET not set; InnerTube listener will not coordinate leadership")
 	} else {
-		tokenSource := sourcemanager.NewSigningTokenSource("innertube", sourceManagerSecret, 15*time.Minute)
+		tokenSource := sourcemanager.NewSigningTokenSource("youtube", sourceManagerSecret, 15*time.Minute)
 		var err error
 		smClient, err = sourcemanager.NewClient(sourceManagerURL, tokenSource)
 		if err != nil {
 			logger.Fatal("Failed to initialize Source Manager client", zap.Error(err))
 		}
-		leaderCoord = sourcemanager.NewLeadershipCoordinator("innertube", smClient, 5*time.Second, logger)
+		leaderCoord = sourcemanager.NewLeadershipCoordinator("youtube", smClient, 5*time.Second, logger)
 	}
 
 	// 6. Initialize and start stream manager
