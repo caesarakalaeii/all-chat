@@ -95,7 +95,7 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 		}
 	}
 
-	// Query all configured sources from overlay_chat_sources
+	// Query all configured sources from the PUBLIC overlay only
 	// Note: Return all configured sources regardless of is_active status
 	// so the extension can show the badge even when the streamer isn't live
 	query := `
@@ -106,7 +106,7 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 			ocs.is_active
 		FROM overlay_chat_sources ocs
 		INNER JOIN overlays o ON ocs.overlay_id = o.id
-		WHERE o.user_id = $1
+		WHERE o.user_id = $1 AND o.is_public = true
 		ORDER BY ocs.platform
 	`
 
