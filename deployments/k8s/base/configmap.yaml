@@ -5,11 +5,11 @@ metadata:
   namespace: allchat
 data:
   # Service URLs
-  AUTH_SERVICE_URL: http://auth-service:8081
-  OVERLAY_SERVICE_URL: http://overlay-manager:8082
-  EMOTE_SERVICE_URL: http://emote-service:8083
-  MESSAGE_PROCESSOR_URL: http://message-processor:8087
-  SOURCE_MANAGER_URL: http://source-manager:8088
+  AUTH_SERVICE_URL: http://auth-service.allchat.svc.cluster.local:8081
+  OVERLAY_SERVICE_URL: http://overlay-manager.allchat.svc.cluster.local:8082
+  EMOTE_SERVICE_URL: http://emote-service.allchat.svc.cluster.local:8083
+  MESSAGE_PROCESSOR_URL: http://message-processor.allchat.svc.cluster.local:8087
+  SOURCE_MANAGER_URL: http://source-manager.allchat.svc.cluster.local:8088
 
   # Database Configuration
   DATABASE_HOST: allchat-cluster-rw.allchat.svc.cluster.local
