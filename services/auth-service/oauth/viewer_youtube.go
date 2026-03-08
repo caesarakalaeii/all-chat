@@ -40,8 +40,14 @@ func NewViewerYouTubeOAuth(clientID, clientSecret, redirectURL string) *ViewerYo
 }
 
 // GetAuthURL generates the OAuth authorization URL
+// Uses "select_account" prompt to support incremental authorization.
+// This allows users to choose their account without forcing re-consent on every login,
+// which is required for Google OAuth verification.
 func (y *ViewerYouTubeOAuth) GetAuthURL(state string) string {
-	return y.config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+	return y.config.AuthCodeURL(state,
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("prompt", "select_account"),
+	)
 }
 
 // ExchangeCode exchanges authorization code for tokens
