@@ -519,11 +519,17 @@ func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, accessToken,
 		return "", fmt.Errorf("failed to decode search response: %w", err)
 	}
 
+	h.log.Info("YouTube Search API response",
+		zap.String("channel_id", channelID),
+		zap.Int("num_results", len(searchResult.Items)))
+
 	if len(searchResult.Items) == 0 {
-		return "", fmt.Errorf("streamer is not currently live on YouTube")
+		return "", fmt.Errorf("streamer is not currently live on YouTube (no live videos found for channel %s)", channelID)
 	}
 
 	videoID := searchResult.Items[0].ID.VideoID
+
+	h.log.Info("Found live video", zap.String("video_id", videoID))
 
 	// Step 2: Get video details to extract liveChatId
 	videoURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s", videoID)
