@@ -70,14 +70,24 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 		return "", fmt.Errorf("read response body: %w", err)
 	}
 
+	bodyStr := string(body)
+
 	// Extract canonical video ID using regex (more reliable than HTML parsing)
 	// Look for: <link rel="canonical" href="https://www.youtube.com/watch?v=VIDEO_ID">
-	canonicalRegex := regexp.MustCompile(`<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([a-zA-Z0-9_-]+)"`)
-	matches := canonicalRegex.FindStringSubmatch(string(body))
+	// Use flexible regex to handle attribute ordering and whitespace
+	canonicalRegex := regexp.MustCompile(`<link[^>]+rel="canonical"[^>]+href="https://www\.youtube\.com/watch\?v=([a-zA-Z0-9_-]+)"`)
+	matches := canonicalRegex.FindStringSubmatch(bodyStr)
+
+	// Try reverse attribute order if first didn't match
+	if len(matches) < 2 {
+		canonicalRegex = regexp.MustCompile(`<link[^>]+href="https://www\.youtube\.com/watch\?v=([a-zA-Z0-9_-]+)"[^>]+rel="canonical"`)
+		matches = canonicalRegex.FindStringSubmatch(bodyStr)
+	}
 
 	if len(matches) < 2 {
 		d.logger.Info("no live stream found",
 			zap.String("channel_id", channelID),
+			zap.Int("body_length", len(bodyStr)),
 		)
 		return "", fmt.Errorf("no live stream found for channel %s", channelID)
 	}
