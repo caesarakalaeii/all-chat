@@ -8,6 +8,18 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
+## Current Milestone: v1.3 Chat Overlay Sharing
+
+**Goal:** Enable streamers to share their aggregated chat with other streamers, unlocking collaborative streaming experiences as the platform's first premium feature.
+
+**Target features:**
+- Bidirectional overlay sharing with search by platform username
+- Flexible expiry options (this stream, time-based, unlimited)
+- Manual source configuration with immediate add-on-acceptance
+- Premium feature enforcement with admin testing overrides
+- Stream lifecycle detection for automatic expiry
+- Revocation with inactive source marking
+
 ## Requirements
 
 ### Validated
@@ -58,9 +70,24 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 
 ### Active
 
-<!-- Current scope — no active milestone -->
+<!-- Current scope: v1.3 Chat Overlay Sharing -->
 
-_No active milestone. Ready for `/gsd:new-milestone` to define next version._
+**Chat Overlay Sharing (v1.3):**
+- [ ] User can search for other users by platform username
+- [ ] User can send share request with selected overlay
+- [ ] User can view pending share requests in dashboard
+- [ ] User can accept share request, selecting overlay to share back and expiry option
+- [ ] Both users can immediately add shared overlay to an overlay on acceptance
+- [ ] Users can add shared overlays as sources to any overlay (like platform sources)
+- [ ] Shared overlay source delivers all messages from source overlay's chat sources
+- [ ] Display settings (CSS, events) apply from displaying overlay, not source
+- [ ] Share expires when either user's stream ends (if "this stream" selected)
+- [ ] Share expires after duration (if time-based selected)
+- [ ] Either user can revoke share at any time
+- [ ] Revoked/expired shares marked as inactive (not removed from config)
+- [ ] Premium enforcement blocks non-premium users from sharing
+- [ ] Admin can mark specific users as premium for testing
+- [ ] Stream lifecycle detection for Twitch (YouTube/TikTok already tracked, Kick to research)
 
 ### Out of Scope
 
@@ -143,4 +170,4 @@ _No active milestone. Ready for `/gsd:new-milestone` to define next version._
 | **Source-manager leadership coordination** | Reuse existing leader election, single source of truth for active streams | ✓ Good — Async discovery, Redis caching, graceful lifecycle management |
 
 ---
-*Last updated: 2026-03-06 after v1.2 milestone completion*
+*Last updated: 2026-03-08 after v1.3 milestone start*
