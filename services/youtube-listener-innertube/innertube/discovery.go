@@ -1,11 +1,12 @@
 package innertube
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 
 	"go.uber.org/zap"
 )
@@ -24,86 +25,80 @@ func NewDiscovery(httpClient *http.Client, logger *zap.Logger) *Discovery {
 	}
 }
 
-// DiscoverLiveStream discovers the live video ID for a given channel ID
-// Returns the video ID if a live stream is found, or an error if:
-// - No live stream exists
-// - The stream is a premiere (not live)
-// - Network or parsing errors occur
+// DiscoverLiveStream discovers the live video ID for a given channel ID using InnerTube Browse API
+// Returns the video ID if a live stream is found, or an error if none exists
 func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (string, error) {
 	d.logger.Info("discovering live stream",
 		zap.String("channel_id", channelID),
 	)
 
-	// Construct channel live URL
-	url := fmt.Sprintf("https://www.youtube.com/channel/%s/live", channelID)
+	// Use InnerTube Browse API to get channel's live tab content
+	url := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", DefaultAPIKey)
 
-	// Fetch channel page
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Build InnerTube Browse request for channel's live tab
+	payload := map[string]interface{}{
+		"context": map[string]interface{}{
+			"client": map[string]interface{}{
+				"clientName":    "WEB",
+				"clientVersion": DefaultClientVersion,
+			},
+		},
+		"browseId": channelID,
+		"params":   "EgdzdHJlYW1z8gYECgJ6AA%3D%3D", // "streams" tab encoded params
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal request payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonPayload))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
 
-	// Set comprehensive browser headers to avoid bot detection
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-	req.Header.Set("DNT", "1")
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Upgrade-Insecure-Requests", "1")
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Set("Sec-Fetch-User", "?1")
-	req.Header.Set("Cache-Control", "max-age=0")
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		d.logger.Error("failed to fetch channel page",
+		d.logger.Error("failed to fetch channel browse data",
 			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
-		return "", fmt.Errorf("fetch channel page: %w", err)
+		return "", fmt.Errorf("fetch channel browse data: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		d.logger.Error("unexpected status code",
+		d.logger.Error("unexpected status code from browse API",
 			zap.String("channel_id", channelID),
 			zap.Int("status_code", resp.StatusCode),
 		)
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Read HTML body
+	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read response body: %w", err)
 	}
 
-	bodyStr := string(body)
-
-	// Extract canonical video ID using regex (more reliable than HTML parsing)
-	// Look for: <link rel="canonical" href="https://www.youtube.com/watch?v=VIDEO_ID">
-	// Use flexible regex to handle attribute ordering and whitespace
-	canonicalRegex := regexp.MustCompile(`<link[^>]+rel="canonical"[^>]+href="https://www\.youtube\.com/watch\?v=([a-zA-Z0-9_-]+)"`)
-	matches := canonicalRegex.FindStringSubmatch(bodyStr)
-
-	// Try reverse attribute order if first didn't match
-	if len(matches) < 2 {
-		canonicalRegex = regexp.MustCompile(`<link[^>]+href="https://www\.youtube\.com/watch\?v=([a-zA-Z0-9_-]+)"[^>]+rel="canonical"`)
-		matches = canonicalRegex.FindStringSubmatch(bodyStr)
+	// Parse JSON response
+	var browseResponse map[string]interface{}
+	if err := json.Unmarshal(body, &browseResponse); err != nil {
+		return "", fmt.Errorf("parse browse response: %w", err)
 	}
 
-	if len(matches) < 2 {
+	// Extract video ID from browse response
+	// Look for richItemRenderer with videoId in the live tab
+	videoID := extractVideoIDFromBrowse(browseResponse)
+	if videoID == "" {
 		d.logger.Info("no live stream found",
 			zap.String("channel_id", channelID),
-			zap.Int("body_length", len(bodyStr)),
 		)
 		return "", fmt.Errorf("no live stream found for channel %s", channelID)
 	}
-
-	videoID := matches[1]
 
 	d.logger.Info("discovered live stream",
 		zap.String("channel_id", channelID),
@@ -113,3 +108,31 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 	return videoID, nil
 }
 
+// extractVideoIDFromBrowse recursively searches the InnerTube Browse API response for a video ID
+// Looks for richItemRenderer with videoId or videoRenderer with videoId in live tab
+func extractVideoIDFromBrowse(data interface{}) string {
+	switch v := data.(type) {
+	case map[string]interface{}:
+		// Check if this is a videoRenderer or richItemRenderer with videoId
+		if videoID, ok := v["videoId"].(string); ok && videoID != "" {
+			return videoID
+		}
+
+		// Recursively search all map values
+		for _, val := range v {
+			if videoID := extractVideoIDFromBrowse(val); videoID != "" {
+				return videoID
+			}
+		}
+
+	case []interface{}:
+		// Recursively search all array elements
+		for _, item := range v {
+			if videoID := extractVideoIDFromBrowse(item); videoID != "" {
+				return videoID
+			}
+		}
+	}
+
+	return ""
+}
