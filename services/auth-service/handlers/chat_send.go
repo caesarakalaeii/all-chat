@@ -12,6 +12,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
@@ -47,6 +48,7 @@ type ChatSendHandler struct {
 	log             *zap.Logger
 	viewerRepo      ViewerRepositoryInterface
 	userRepo        UserRepositoryInterface
+	db              *pgxpool.Pool
 	httpClient      *http.Client
 	clientID        string
 	twitchProvider  OAuthTokenRefresher
@@ -60,6 +62,7 @@ func NewChatSendHandler(
 	log *zap.Logger,
 	viewerRepo ViewerRepositoryInterface,
 	userRepo UserRepositoryInterface,
+	db *pgxpool.Pool,
 	clientID string,
 	twitchProvider OAuthTokenRefresher,
 	youtubeProvider OAuthTokenRefresher,
@@ -70,6 +73,7 @@ func NewChatSendHandler(
 		log:             log.Named("chat-send"),
 		viewerRepo:      viewerRepo,
 		userRepo:        userRepo,
+		db:              db,
 		httpClient:      &http.Client{Timeout: 10 * time.Second},
 		clientID:        clientID,
 		twitchProvider:  twitchProvider,
@@ -431,14 +435,17 @@ func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *model
 		return fmt.Errorf("failed to decrypt access token: %w", err)
 	}
 
-	// Get streamer's Google ID
-	if streamer.GoogleID == nil || *streamer.GoogleID == "" {
-		return fmt.Errorf("streamer has no YouTube account linked")
+	// Get the active YouTube channel ID from overlay_chat_sources
+	// This is more accurate than using the users.google_id because it reflects
+	// the currently active YouTube source, which may change when streamers switch channels
+	channelID, err := h.getActiveYouTubeChannelID(ctx, streamer.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get YouTube channel ID: %w", err)
 	}
 
 	// First, get the streamer's active livestream to find the liveChatId
 	// This requires querying the YouTube API for active broadcasts
-	liveChatID, err := h.getYouTubeLiveChatID(ctx, accessToken, *streamer.GoogleID)
+	liveChatID, err := h.getYouTubeLiveChatID(ctx, accessToken, channelID)
 	if err != nil {
 		return fmt.Errorf("failed to get live chat ID: %w", err)
 	}
@@ -568,6 +575,37 @@ func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, accessToken,
 	}
 
 	return videoResult.Items[0].LiveStreamingDetails.ActiveLiveChatID, nil
+}
+
+// getActiveYouTubeChannelID gets the channel ID of the active YouTube source for a streamer
+// This is retrieved from overlay_chat_sources rather than users.google_id because the
+// active channel may change when streamers switch between different YouTube channels
+func (h *ChatSendHandler) getActiveYouTubeChannelID(ctx context.Context, streamerUserID string) (string, error) {
+	query := `
+		SELECT ocs.channel_id
+		FROM overlay_chat_sources ocs
+		INNER JOIN overlays o ON ocs.overlay_id = o.id
+		WHERE o.user_id = $1
+		  AND ocs.platform = 'youtube'
+		  AND ocs.is_active = true
+		  AND o.is_public_for_viewers = true
+		LIMIT 1
+	`
+
+	var channelID string
+	err := h.db.QueryRow(ctx, query, streamerUserID).Scan(&channelID)
+	if err != nil {
+		h.log.Error("Failed to get active YouTube channel ID",
+			zap.Error(err),
+			zap.String("streamer_user_id", streamerUserID))
+		return "", fmt.Errorf("no active YouTube source found for streamer")
+	}
+
+	h.log.Info("Retrieved active YouTube channel ID",
+		zap.String("streamer_user_id", streamerUserID),
+		zap.String("channel_id", channelID))
+
+	return channelID, nil
 }
 
 // sendKickMessage sends a message to Kick chat using the Kick API
