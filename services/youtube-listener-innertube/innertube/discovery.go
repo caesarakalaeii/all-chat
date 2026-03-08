@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 
 	"go.uber.org/zap"
 )
@@ -135,4 +136,71 @@ func extractVideoIDFromBrowse(data interface{}) string {
 	}
 
 	return ""
+}
+
+// GetInitialContinuation fetches the initial continuation token for a live stream
+// Scrapes the video page HTML to extract the continuation token needed for polling
+func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) (string, error) {
+	d.logger.Info("fetching initial continuation token",
+		zap.String("video_id", videoID),
+	)
+
+	// Construct video URL
+	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+
+	// Set browser headers
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch video page: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	// Read HTML body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response body: %w", err)
+	}
+
+	bodyStr := string(body)
+
+	// Extract continuation token from ytInitialData
+	// Look for: "continuation":"TOKEN"
+	continuationRegex := regexp.MustCompile(`"continuation":"([^"]+)"`)
+	matches := continuationRegex.FindAllStringSubmatch(bodyStr, -1)
+
+	// Usually the first or second continuation is the live chat continuation
+	// Prefer longer tokens (live chat tokens are longer than regular continuations)
+	var bestToken string
+	for _, match := range matches {
+		if len(match) > 1 {
+			token := match[1]
+			if len(token) > len(bestToken) {
+				bestToken = token
+			}
+		}
+	}
+
+	if bestToken == "" {
+		return "", fmt.Errorf("no continuation token found in video page")
+	}
+
+	d.logger.Info("extracted initial continuation token",
+		zap.String("video_id", videoID),
+		zap.Int("token_length", len(bestToken)),
+	)
+
+	return bestToken, nil
 }
