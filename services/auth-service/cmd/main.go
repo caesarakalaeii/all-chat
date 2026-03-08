@@ -196,6 +196,7 @@ func main() {
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	debugHandler := handlers.NewDebugHandler(log, jwtSecret)
+	riscHandler := handlers.NewRISCHandler(log, db)
 
 	// Set Gin mode
 	if logLevel == "debug" {
@@ -222,6 +223,12 @@ func main() {
 
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// RISC (Cross-Account Protection) endpoints - Required for Google OAuth verification
+	// These endpoints receive security events from Google about user accounts
+	router.POST("/.well-known/risc-events", riscHandler.HandleSecurityEvent)
+	router.GET("/.well-known/risc-configuration", riscHandler.HandleConfigurationEndpoint)
+	router.GET("/.well-known/jwks.json", riscHandler.HandleJWKSEndpoint)
 
 	// Auth routes (no /auth prefix - API Gateway strips /api/v1/auth and forwards rest)
 	// Twitch OAuth legacy endpoints now route through the V2 handler for compatibility
