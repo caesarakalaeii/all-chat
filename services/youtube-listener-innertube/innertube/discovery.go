@@ -86,19 +86,20 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 	}
 
 	// Check if it's actually live (not a premiere)
+	// NOTE: og:video:type is often missing from YouTube's HTML now (client-side rendered)
+	// If canonical link exists on /live page, assume it's live unless meta says otherwise
 	isLive := checkIsLiveMeta(doc)
-	if !isLive {
-		d.logger.Info("stream is a premiere, not live",
+	if isLive {
+		d.logger.Info("discovered live stream (confirmed via og:video:type)",
 			zap.String("channel_id", channelID),
 			zap.String("video_id", videoID),
 		)
-		return "", fmt.Errorf("stream %s is a premiere, not live", videoID)
+	} else {
+		d.logger.Info("discovered live stream (og:video:type not found, assuming live)",
+			zap.String("channel_id", channelID),
+			zap.String("video_id", videoID),
+		)
 	}
-
-	d.logger.Info("discovered live stream",
-		zap.String("channel_id", channelID),
-		zap.String("video_id", videoID),
-	)
 
 	return videoID, nil
 }
