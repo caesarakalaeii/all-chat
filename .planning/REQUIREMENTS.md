@@ -73,13 +73,41 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be populated by roadmapper) | | |
+| SHARE-01 | Phase 14 | Pending |
+| SHARE-02 | Phase 14 | Pending |
+| SHARE-03 | Phase 14 | Pending |
+| SHARE-04 | Phase 15 | Pending |
+| SHARE-05 | Phase 15 | Pending |
+| SHARE-06 | Phase 18 | Pending |
+| SHARE-07 | Phase 18 | Pending |
+| SHARE-08 | Phase 15 | Pending |
+| SOURCE-01 | Phase 16 | Pending |
+| SOURCE-02 | Phase 16 | Pending |
+| SOURCE-03 | Phase 16 | Pending |
+| SOURCE-04 | Phase 17 | Pending |
+| SOURCE-05 | Phase 17 | Pending |
+| EXPIRY-01 | Phase 19 | Pending |
+| EXPIRY-02 | Phase 19 | Pending |
+| EXPIRY-03 | Phase 19 | Pending |
+| EXPIRY-04 | Phase 19 | Pending |
+| EXPIRY-05 | Phase 19 | Pending |
+| EXPIRY-06 | Phase 19 | Pending |
+| PREMIUM-01 | Phase 14 | Pending |
+| PREMIUM-02 | Phase 14 | Pending |
 
 **Coverage:**
 - v1.3 requirements: 21 total
-- Mapped to phases: (pending roadmap)
-- Unmapped: (pending roadmap)
+- Mapped to phases: 21/21 (100%)
+- Unmapped: None
+
+**Phase Distribution:**
+- Phase 14 (Foundation): 5 requirements
+- Phase 15 (Share Acceptance): 3 requirements
+- Phase 16 (Shared Overlay Sources): 3 requirements
+- Phase 17 (Message Routing): 2 requirements
+- Phase 18 (Revocation): 2 requirements
+- Phase 19 (Lifecycle & Expiry): 6 requirements
 
 ---
 *Requirements defined: 2026-03-08*
-*Last updated: 2026-03-08 after initial definition*
+*Last updated: 2026-03-08 after roadmap creation*

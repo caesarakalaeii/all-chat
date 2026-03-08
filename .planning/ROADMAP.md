@@ -5,6 +5,7 @@
 - ✅ **v1.0 Message Deletion Support** — Phases 1-3 (partial, shipped 2026-02-18)
 - ✅ **v1.1 Listener Load Balancing** — Phases 5-8 (shipped 2026-02-21)
 - ✅ **v1.2 InnerTube YouTube Listener** — Phases 9-13 (shipped 2026-03-06)
+- 🚧 **v1.3 Chat Overlay Sharing** — Phases 14-19 (in progress)
 
 ## Phases
 
@@ -109,6 +110,85 @@
 
 </details>
 
+### 🚧 v1.3 Chat Overlay Sharing (In Progress)
+
+**Milestone Goal:** Enable streamers to share their aggregated chat overlays with other streamers, unlocking collaborative streaming experiences as the platform's first premium feature.
+
+**Phase Numbering:**
+- Integer phases (14, 15, 16, etc.): Planned milestone work
+- Decimal phases (14.1, 14.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+#### Phase 14: Foundation
+**Goal**: Users can search for streamers and create share requests with premium enforcement
+**Depends on**: Nothing (first phase in v1.3)
+**Requirements**: SHARE-01, SHARE-02, SHARE-03, PREMIUM-01, PREMIUM-02
+**Success Criteria** (what must be TRUE):
+  1. User can search for other users by platform username (Twitch, YouTube, Kick, TikTok)
+  2. Premium users can send share requests selecting an overlay to share
+  3. Non-premium users are blocked from sending share requests (server-side enforcement)
+  4. Users can view list of pending incoming share requests in dashboard
+  5. Admin can mark specific users as premium for testing purposes
+**Plans**: TBD
+
+#### Phase 15: Share Acceptance
+**Goal**: Users can accept share requests, establishing bidirectional overlay access with cycle prevention
+**Depends on**: Phase 14
+**Requirements**: SHARE-04, SHARE-05, SHARE-08
+**Success Criteria** (what must be TRUE):
+  1. User can accept share request, choosing which overlay to share back and expiry option
+  2. Both users can optionally add shared overlay source immediately on acceptance
+  3. Share status indicators show active, expired, or revoked state in dashboard
+  4. System prevents circular share dependencies (cycle detection blocks acceptance)
+**Plans**: TBD
+
+#### Phase 16: Shared Overlay Sources
+**Goal**: Users can browse and add shared overlays as chat sources to their overlays
+**Depends on**: Phase 15
+**Requirements**: SOURCE-01, SOURCE-02, SOURCE-03
+**Success Criteria** (what must be TRUE):
+  1. "Shared Overlays" source type appears alongside platform sources (Twitch, YouTube, etc.)
+  2. User can browse list of available shared overlays when adding source
+  3. User can add shared overlay as source to any overlay via configuration UI
+  4. Shared overlay source persists in configuration like platform sources
+**Plans**: TBD
+
+#### Phase 17: Message Routing
+**Goal**: Messages from source overlay's aggregated chat are delivered to recipient's overlay with display settings isolation
+**Depends on**: Phase 16
+**Requirements**: SOURCE-04, SOURCE-05
+**Success Criteria** (what must be TRUE):
+  1. Messages from all sources in shared overlay appear in recipient's overlay in real-time
+  2. Recipient's display settings (CSS, event filters) apply to shared messages, not source overlay's settings
+  3. Shared messages are visually indistinguishable from platform source messages (unified rendering)
+  4. Message enrichment (emotes, badges) works for shared messages identically to platform messages
+**Plans**: TBD
+
+#### Phase 18: Revocation
+**Goal**: Users can revoke shares instantly with inactive source marking
+**Depends on**: Phase 17
+**Requirements**: SHARE-06, SHARE-07
+**Success Criteria** (what must be TRUE):
+  1. Either user can revoke share at any time from dashboard
+  2. Revoked shares stop delivering messages within 1 second (cache invalidation)
+  3. Revoked or expired shares are marked as inactive in overlay configuration (not deleted)
+  4. User can distinguish active vs inactive shared sources in overlay editor
+**Plans**: TBD
+
+#### Phase 19: Lifecycle & Expiry
+**Goal**: Shares auto-expire based on stream lifecycle or time duration
+**Depends on**: Phase 18
+**Requirements**: EXPIRY-01, EXPIRY-02, EXPIRY-03, EXPIRY-04, EXPIRY-05, EXPIRY-06
+**Success Criteria** (what must be TRUE):
+  1. User can choose expiry option when accepting: "This stream", "n hours", "Unlimited"
+  2. Share auto-expires when either user's stream ends (if "This stream" selected)
+  3. Share auto-expires after configured duration (if time-based selected)
+  4. Twitch stream lifecycle detected via Helix API polling
+  5. YouTube and TikTok stream lifecycle reuses existing listener detection (no new code needed)
+  6. Kick stream lifecycle detection implemented or gracefully disabled (per research outcome)
+**Plans**: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -125,6 +205,12 @@
 | 11. Contract Validation | v1.2 | 4/4 | Complete | 2026-02-21 |
 | 12. Production Rollout | v1.2 | 3/3 | Complete | 2026-03-05 |
 | 13. Feature Parity | v1.2 | 5/5 | Complete | 2026-03-06 |
+| 14. Foundation | v1.3 | 0/TBD | Not started | - |
+| 15. Share Acceptance | v1.3 | 0/TBD | Not started | - |
+| 16. Shared Overlay Sources | v1.3 | 0/TBD | Not started | - |
+| 17. Message Routing | v1.3 | 0/TBD | Not started | - |
+| 18. Revocation | v1.3 | 0/TBD | Not started | - |
+| 19. Lifecycle & Expiry | v1.3 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-06 after v1.2 milestone completion*
+*Last updated: 2026-03-08 after v1.3 roadmap creation*

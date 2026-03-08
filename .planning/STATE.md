@@ -5,23 +5,25 @@
 See: .planning/PROJECT.md (updated 2026-03-08)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** v1.3 Chat Overlay Sharing
+**Current focus:** Phase 14: Foundation (Chat Overlay Sharing)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-08 — Milestone v1.3 started
+Phase: 14 of 19 (Foundation)
+Plan: Ready to plan phase
+Status: Ready to plan
+Last activity: 2026-03-08 — Roadmap created for v1.3 Chat Overlay Sharing milestone
+
+Progress: [░░░░░░░░░░] 0% (v1.3)
 
 ## Performance Metrics
 
 **Velocity (all milestones):**
-- Total plans completed: 46
+- Total plans completed: 46 (v1.0-v1.2)
 - Average duration: 9.5 min
 - Total execution time: 7.23 hours
 
-**By Phase:**
+**By Phase (v1.0-v1.2):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
@@ -36,66 +38,35 @@ Last activity: 2026-03-08 — Milestone v1.3 started
 | 10. Production Minimum | 4 | 31 min | 7.75 min |
 | 11. Contract Validation | 4 | 21 min | 5.25 min |
 | 12. Production Rollout | 3 | 40 min | 13.3 min |
+| 13. Feature Parity | 5 | 40 min | 8.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 9.2 min average
-- Trend: Phase 12 in progress - Documentation and observability (10 min avg)
+- v1.2 average: 7.5 min/plan (phases 9-13)
+- v1.1 average: 15.3 min/plan (phases 5-8)
+- Trend: Stable velocity with occasional spikes for complex integration work
 
-*Updated after each plan completion*
-| Phase 13 P04 | 2 | 2 tasks | 2 files |
-| Phase 13 P02 | 12 | 2 tasks | 6 files |
-| Phase 12 P03 | 10 | 3 tasks | 4 files |
-| Phase 12 P01 | 14 | 3 tasks | 6 files |
-| Phase 11 P02 | 12 | 3 tasks | 11 files |
-| Phase 11 P04 | 6 | 3 tasks | 10 files |
-| Phase 11 P03 | 5 | 2 tasks | 6 files |
-| Phase 11 P01 | 5 | 3 tasks | 9 files |
-| Phase 10 P04 | 10 | 2 tasks | 6 files |
-| Phase 10-production-minimum P02 | 5 | 2 tasks | 2 files |
-| Phase 10 P01 | 6 | 2 tasks | 4 files |
-| Phase 13 P02 | 12 | 2 tasks | 6 files |
-| Phase 13 P04 | 2 | 2 tasks | 2 files |
+*Will update after v1.3 plan completions*
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting v1.2:
+Recent decisions affecting v1.3:
 
-**v1.2 Milestone Decisions:**
-- Go implementation for InnerTube listener (Phase 9: built custom HTTP client, no library dependency)
-- Drop-in replacement pattern (identical RawChatMessage Redis contract, zero message-processor changes)
-- Contract testing before production rollout (schema drift is silent killer per research)
-- Canary deployment 10%→50%→100% (InnerTube instability risk mitigation)
-- Defer deletion events to Phase 13 (validate core flow first, deletions are differentiator not blocker)
-- Hardcoded InnerTube API key for PoC (Phase 10: dynamic extraction from stream HTML)
-- Event type naming follows official listener (Phase 10: super_chat, super_sticker, member_joined, member_milestone)
-- Metrics-based promotion not time-based (Phase 12-02: indefinite pause with 240-minute analysis window)
-- Native K8s traffic routing not service mesh (Phase 12-02: Argo Rollouts Service manipulation, no Istio dependency)
-- Kustomize base + overlay pattern (Phase 12-02: environment-specific replica count and image tags)
-- 8-panel dashboard layout (Phase 12-03: rollout status top, metric comparison middle, detailed diagnostics bottom)
-- Fix-in-place workflow preferred over abort-retry (Phase 12-03: keep rollout at current percentage, deploy fix, resume promotion)
-- ToS disclosure at top of README (Phase 12-03: InnerTube unofficial API warning, not user-facing)
-- 6 common troubleshooting issues (Phase 12-03: automatic rollback, stuck rollout, thundering herd, crashlooping, message deviation, fix-in-place failures)
-- 500ms deletion buffer delay (Phase 13-02: race condition mitigation, ensures original message indexed first)
-- FIFO overflow strategy (Phase 13-02: drop oldest when buffer exceeds 1000 events, newest deletions more relevant)
-- Interface adapters for circular dependencies (Phase 13-02: publisherAdapter and metricsAdapter patterns)
-- Immediate batch result returns (Phase 13-04: AddDeletion returns BatchResult when threshold crossed, not ticker-based)
-- Parser-based batch emission (Phase 13-04: parser owns emission logic, detector provides metadata only)
-- Nil for unused test dependencies (Phase 13-05: pass nil for metrics/deletionBuffer in tests that don't verify those behaviors, keep tests focused)
+**v1.3 Architecture:**
+- New share-service for permission management + extend existing services for message delivery
+- Shared overlays treated as virtual platform sources (reuse activation patterns)
+- Premium enforcement is server-side at every API endpoint (prevents client bypass)
+- Permission model prohibits nested shares (1-layer depth maximum, prevents cascading)
+- Message fan-out happens at message-processor layer (avoid duplicate enrichment)
+- Bidirectional sharing model (both users share back, not unidirectional like Twitch)
 
-**v1.1 Context (still relevant):**
-- Hybrid hash-based + load-aware approach for predictable under normal load
-- Consistent hashing for channel assignment (CRC32, bounded-load 1.25x)
-- Redis for assignment registry (centralized state, atomic updates)
-- Kubernetes Lease-based leader election for split-brain prevention
-- 70% message rate + 30% channel count composite load scoring
-- 5-minute cooldown and thrashing detection safeguards
-- [Phase 10-01]: HTML parsing for stream discovery (simpler than InnerTube browse API, sufficient for MVP)
-- [Phase 10-01]: 24-hour TTL for Redis channel→video mappings (auto-expire, force rediscovery)
-- [Phase 10]: Offline detection via empty continuation array (Phase 10-04): InnerTube returns empty continuations when stream ends, more reliable than continuation token check
-- [Phase 10]: Auto-resume with exponential backoff 1m→10m (Phase 10-04): Enables 24/7 streamers seamless recovery without manual intervention
+**v1.2 Milestone (relevant patterns):**
+- Drop-in replacement pattern proven successful (RawChatMessage compatibility, zero downstream changes)
+- Contract testing before production (schema drift is silent killer)
+- Canary deployment with metrics-based promotion (10%→50%→100%)
+- Interface adapters for circular dependencies (publisherAdapter, metricsAdapter patterns)
 
 ### Pending Todos
 
@@ -103,22 +74,26 @@ None yet.
 
 ### Blockers/Concerns
 
-**v1.2 Research Flags:**
-- Stream discovery integration: How overlay-manager resolves channel→video ID unclear (may need Phase 10 research-phase)
-- Deletion event schema: InnerTube itemId mapping to message-processor registry unknown (validate in Phase 11/13)
-- Rate limiting thresholds: IP-based limits undocumented (start conservative 2000ms, A/B test in Phase 12)
+**Phase 19 dependency:**
+- Kick stream lifecycle detection research incomplete (unofficial API, webhook patterns unclear)
+- Mitigation: Research during Phase 19 planning, consider disabling "This stream" expiry for Kick if unreliable
 
-**v1.1 Complete - No active blockers:**
-- ✅ All platforms (Twitch, Kick, TikTok, YouTube) successfully scale with HPA
-- ✅ Migration protocol validated with zero message loss
-- ✅ Readiness probe bug resolved (filtered assignment count tracking)
+**Premium feature enforcement:**
+- First premium feature for All-Chat, sets pattern for future monetization
+- Server-side validation must be comprehensive (pitfall #1 from research: client-side bypass)
+- Admin override mechanism needed for testing before billing integration
+
+**Database schema considerations:**
+- ON DELETE RESTRICT for foreign keys (not CASCADE) to prevent data loss on user deletion
+- Application-level cascade logic needed for share cleanup
 
 ## Session Continuity
 
-Last session: 2026-03-06
-Stopped at: Completed Phase 13 Plan 04 (Wire Batch Detection to Emission Logic)
-Resume file: .planning/phases/13-feature-parity/13-04-SUMMARY.md
+Last session: 2026-03-08
+Stopped at: Roadmap created for v1.3, ready to plan Phase 14
+Resume file: None
 
-**Next action:** Phase 13 Plan 04 complete. Ready to proceed to Plan 03 (Advanced Metrics) - final plan in Phase 13.
+**Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
 
-**Next action:** Gap closure complete. Publisher tests restored. Ready to proceed to Plan 03 (Advanced Metrics) or Plan 04 (Live Testing).
+---
+*Last updated: 2026-03-08 after v1.3 roadmap creation*
