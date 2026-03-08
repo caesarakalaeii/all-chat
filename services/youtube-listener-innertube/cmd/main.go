@@ -138,11 +138,13 @@ func main() {
 	sourceManagerURL := getEnv("SOURCE_MANAGER_URL", "http://source-manager:8088")
 	sourceManagerSecret := getEnv("SOURCE_MANAGER_SECRET", "dev-service-secret")
 	var leaderCoord *sourcemanager.LeadershipCoordinator
+	var smClient *sourcemanager.Client
 	if sourceManagerSecret == "" {
 		logger.Warn("SOURCE_MANAGER_SECRET not set; InnerTube listener will not coordinate leadership")
 	} else {
 		tokenSource := sourcemanager.NewSigningTokenSource("innertube", sourceManagerSecret, 15*time.Minute)
-		smClient, err := sourcemanager.NewClient(sourceManagerURL, tokenSource)
+		var err error
+		smClient, err = sourcemanager.NewClient(sourceManagerURL, tokenSource)
 		if err != nil {
 			logger.Fatal("Failed to initialize Source Manager client", zap.Error(err))
 		}
@@ -152,6 +154,7 @@ func main() {
 	// 6. Initialize and start stream manager
 	streamManager := streams.NewManager(
 		leaderCoord,
+		smClient,
 		repository,
 		discovery,
 		streamPublisher,
