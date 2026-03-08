@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"regexp"
 
 	"go.uber.org/zap"
-	"golang.org/x/net/html"
 )
 
 // Discovery handles YouTube live stream discovery from channel pages
@@ -65,108 +64,31 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Parse HTML
+	// Read HTML body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read response body: %w", err)
 	}
 
-	doc, err := html.Parse(strings.NewReader(string(body)))
-	if err != nil {
-		return "", fmt.Errorf("parse HTML: %w", err)
-	}
+	// Extract canonical video ID using regex (more reliable than HTML parsing)
+	// Look for: <link rel="canonical" href="https://www.youtube.com/watch?v=VIDEO_ID">
+	canonicalRegex := regexp.MustCompile(`<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([a-zA-Z0-9_-]+)"`)
+	matches := canonicalRegex.FindStringSubmatch(string(body))
 
-	// Extract canonical video ID
-	videoID := extractCanonicalVideoID(doc)
-	if videoID == "" {
+	if len(matches) < 2 {
 		d.logger.Info("no live stream found",
 			zap.String("channel_id", channelID),
 		)
 		return "", fmt.Errorf("no live stream found for channel %s", channelID)
 	}
 
-	// Check if it's actually live (not a premiere)
-	// NOTE: og:video:type is often missing from YouTube's HTML now (client-side rendered)
-	// If canonical link exists on /live page, assume it's live unless meta says otherwise
-	isLive := checkIsLiveMeta(doc)
-	if isLive {
-		d.logger.Info("discovered live stream (confirmed via og:video:type)",
-			zap.String("channel_id", channelID),
-			zap.String("video_id", videoID),
-		)
-	} else {
-		d.logger.Info("discovered live stream (og:video:type not found, assuming live)",
-			zap.String("channel_id", channelID),
-			zap.String("video_id", videoID),
-		)
-	}
+	videoID := matches[1]
+
+	d.logger.Info("discovered live stream",
+		zap.String("channel_id", channelID),
+		zap.String("video_id", videoID),
+	)
 
 	return videoID, nil
 }
 
-// extractCanonicalVideoID extracts the video ID from the canonical link tag
-// Looks for: <link rel="canonical" href="https://www.youtube.com/watch?v=VIDEO_ID">
-func extractCanonicalVideoID(n *html.Node) string {
-	if n.Type == html.ElementNode && n.Data == "link" {
-		var rel, href string
-		for _, attr := range n.Attr {
-			switch attr.Key {
-			case "rel":
-				rel = attr.Val
-			case "href":
-				href = attr.Val
-			}
-		}
-
-		// Check if this is the canonical link
-		if rel == "canonical" && strings.Contains(href, "youtube.com/watch?v=") {
-			// Extract video ID from URL
-			parts := strings.Split(href, "?v=")
-			if len(parts) == 2 {
-				// Handle additional query parameters
-				videoID := strings.Split(parts[1], "&")[0]
-				return videoID
-			}
-		}
-	}
-
-	// Recursively search child nodes
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if videoID := extractCanonicalVideoID(c); videoID != "" {
-			return videoID
-		}
-	}
-
-	return ""
-}
-
-// checkIsLiveMeta checks if the og:video:type meta tag indicates a live stream
-// Looks for: <meta property="og:video:type" content="live">
-// Returns false for premieres (content="premiere") or missing tag
-func checkIsLiveMeta(n *html.Node) bool {
-	if n.Type == html.ElementNode && n.Data == "meta" {
-		var property, content string
-		for _, attr := range n.Attr {
-			switch attr.Key {
-			case "property":
-				property = attr.Val
-			case "content":
-				content = attr.Val
-			}
-		}
-
-		// Check if this is the og:video:type meta tag
-		if property == "og:video:type" {
-			return content == "live"
-		}
-	}
-
-	// Recursively search child nodes
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if checkIsLiveMeta(c) {
-			return true
-		}
-	}
-
-	return false
-}
