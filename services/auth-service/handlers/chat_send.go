@@ -487,43 +487,81 @@ func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *model
 
 // getYouTubeLiveChatID gets the live chat ID for a streamer's active broadcast
 func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, accessToken, channelID string) (string, error) {
-	// Query for active livestreams for this channel
-	url := fmt.Sprintf("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet&broadcastStatus=active&maxResults=1")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Step 1: Search for live videos on the channel
+	searchURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=%s&type=video&eventType=live&maxResults=1", channelID)
+	searchReq, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create search request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+	searchReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
-	resp, err := h.httpClient.Do(req)
+	searchResp, err := h.httpClient.Do(searchReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch broadcasts: %w", err)
+		return "", fmt.Errorf("failed to search for live videos: %w", err)
 	}
-	defer resp.Body.Close()
+	defer searchResp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", fmt.Errorf("youtube broadcasts API error: status=%d body=%s", resp.StatusCode, string(body))
+	if searchResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(searchResp.Body, 1024))
+		return "", fmt.Errorf("youtube search API error: status=%d body=%s", searchResp.StatusCode, string(body))
 	}
 
-	var result struct {
+	var searchResult struct {
 		Items []struct {
-			Snippet struct {
-				LiveChatID string `json:"liveChatId"`
-			} `json:"snippet"`
+			ID struct {
+				VideoID string `json:"videoId"`
+			} `json:"id"`
 		} `json:"items"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("failed to decode response: %w", err)
+	if err := json.NewDecoder(searchResp.Body).Decode(&searchResult); err != nil {
+		return "", fmt.Errorf("failed to decode search response: %w", err)
 	}
 
-	if len(result.Items) == 0 || result.Items[0].Snippet.LiveChatID == "" {
+	if len(searchResult.Items) == 0 {
 		return "", fmt.Errorf("streamer is not currently live on YouTube")
 	}
 
-	return result.Items[0].Snippet.LiveChatID, nil
+	videoID := searchResult.Items[0].ID.VideoID
+
+	// Step 2: Get video details to extract liveChatId
+	videoURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s", videoID)
+	videoReq, err := http.NewRequestWithContext(ctx, http.MethodGet, videoURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create video request: %w", err)
+	}
+
+	videoReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+	videoResp, err := h.httpClient.Do(videoReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch video details: %w", err)
+	}
+	defer videoResp.Body.Close()
+
+	if videoResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(videoResp.Body, 1024))
+		return "", fmt.Errorf("youtube videos API error: status=%d body=%s", videoResp.StatusCode, string(body))
+	}
+
+	var videoResult struct {
+		Items []struct {
+			LiveStreamingDetails struct {
+				ActiveLiveChatID string `json:"activeLiveChatId"`
+			} `json:"liveStreamingDetails"`
+		} `json:"items"`
+	}
+
+	if err := json.NewDecoder(videoResp.Body).Decode(&videoResult); err != nil {
+		return "", fmt.Errorf("failed to decode video response: %w", err)
+	}
+
+	if len(videoResult.Items) == 0 || videoResult.Items[0].LiveStreamingDetails.ActiveLiveChatID == "" {
+		return "", fmt.Errorf("no active live chat found for stream")
+	}
+
+	return videoResult.Items[0].LiveStreamingDetails.ActiveLiveChatID, nil
 }
 
 // sendKickMessage sends a message to Kick chat using the Kick API
