@@ -48,6 +48,7 @@ type DiscoveryState struct {
 //   - Overlay connection lifecycle tracking
 type Manager struct {
 	leader        *sourcemanager.LeadershipCoordinator
+	smClient      *sourcemanager.Client // Source manager client for querying active sources
 	repository    *Repository
 	discovery      *innertube.Discovery
 	publisher      *publisher.StreamPublisher
@@ -72,6 +73,7 @@ type Manager struct {
 // NewManager creates a new stream manager
 func NewManager(
 	leader *sourcemanager.LeadershipCoordinator,
+	smClient *sourcemanager.Client,
 	repository *Repository,
 	discovery *innertube.Discovery,
 	publisher *publisher.StreamPublisher,
@@ -84,6 +86,7 @@ func NewManager(
 ) *Manager {
 	return &Manager{
 		leader:                   leader,
+		smClient:                 smClient,
 		repository:               repository,
 		discovery:                discovery,
 		publisher:                publisher,
@@ -544,19 +547,73 @@ func (m *Manager) cleanupDiscoveryState(channelID string) {
 func (m *Manager) periodicSync(ctx context.Context) {
 	defer m.wg.Done()
 
+	// Perform initial sync immediately
+	m.syncSources(ctx)
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			// TODO: Query source-manager for active sources
-			// For now, this is a no-op placeholder
-			m.logger.Debug("Periodic sync tick (no-op for MVP)")
+			m.syncSources(ctx)
 		case <-m.stopChan:
 			return
 		case <-ctx.Done():
 			return
+		}
+	}
+}
+
+// syncSources queries source-manager for active YouTube sources and starts discovery
+func (m *Manager) syncSources(ctx context.Context) {
+	if m.smClient == nil {
+		m.logger.Debug("No source-manager client configured, skipping sync")
+		return
+	}
+
+	sources, err := m.smClient.GetSources(ctx, "youtube")
+	if err != nil {
+		m.logger.Error("Failed to query source-manager for YouTube sources",
+			zap.Error(err),
+		)
+		return
+	}
+
+	m.logger.Debug("Synced YouTube sources from source-manager",
+		zap.Int("source_count", len(sources)),
+	)
+
+	// Group sources by channel to handle multiple overlays for same channel
+	channelOverlays := make(map[string][]string)
+	for _, source := range sources {
+		if source.IsActive {
+			channelOverlays[source.ChannelID] = append(channelOverlays[source.ChannelID], source.OverlayID)
+		}
+	}
+
+	// For each channel, ensure we have a poller or discovery in progress
+	for channelID, overlayIDs := range channelOverlays {
+		m.mu.RLock()
+		// Check if we're already discovering or polling this channel
+		_, isDiscovering := m.discovering[channelID]
+		isPolling := false
+		for _, stream := range m.activeStreams {
+			if stream.ChannelID == channelID {
+				isPolling = true
+				break
+			}
+		}
+		m.mu.RUnlock()
+
+		if !isDiscovering && !isPolling {
+			// Start async discovery for this channel
+			m.logger.Info("Starting async discovery for new YouTube source",
+				zap.String("channel_id", channelID),
+				zap.Strings("overlay_ids", overlayIDs),
+			)
+			// Use first overlay ID for discovery (all overlays will get messages once polling starts)
+			m.startAsyncDiscovery(channelID, overlayIDs[0])
 		}
 	}
 }
