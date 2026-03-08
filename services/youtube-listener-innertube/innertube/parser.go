@@ -149,13 +149,19 @@ func parseTextMessage(renderer *LiveChatTextMessageRenderer, channelID string) (
 
 	text := extractMessageText(renderer.Message)
 
+	// Strip @ prefix from username if present (YouTube returns @username)
+	username := renderer.AuthorName.SimpleText
+	if len(username) > 0 && username[0] == '@' {
+		username = username[1:]
+	}
+
 	msg := &RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "youtube",
 		ChannelID: channelID,
 		StreamID:  "", // Not provided by InnerTube - set by control plane in Phase 10
 		UserID:    renderer.AuthorExternalChannelID,
-		Username:  renderer.AuthorName.SimpleText,
+		Username:  username,
 		Text:      text,
 		Timestamp: timestamp,
 		Tags:      make(map[string]string),
@@ -200,13 +206,19 @@ func parsePaidMessage(renderer *LiveChatPaidMessageRenderer, channelID string) (
 		eventData["color"] = formatColorFromInt(renderer.HeaderBackgroundColor)
 	}
 
+	// Strip @ prefix from username if present (YouTube returns @username)
+	username := renderer.AuthorName.SimpleText
+	if len(username) > 0 && username[0] == '@' {
+		username = username[1:]
+	}
+
 	msg := &RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "youtube",
 		ChannelID: channelID,
 		StreamID:  "",
 		UserID:    renderer.AuthorExternalChannelID,
-		Username:  renderer.AuthorName.SimpleText,
+		Username:  username,
 		Text:      text,
 		Timestamp: timestamp,
 		Tags:      make(map[string]string),
@@ -252,13 +264,19 @@ func parseMembershipMessage(renderer *LiveChatMembershipItemRenderer, channelID 
 		}
 	}
 
+	// Strip @ prefix from username if present (YouTube returns @username)
+	username := renderer.AuthorName.SimpleText
+	if len(username) > 0 && username[0] == '@' {
+		username = username[1:]
+	}
+
 	msg := &RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "youtube",
 		ChannelID: channelID,
 		StreamID:  "",
 		UserID:    renderer.AuthorExternalChannelID,
-		Username:  renderer.AuthorName.SimpleText,
+		Username:  username,
 		Text:      text,
 		Timestamp: timestamp,
 		Tags:      make(map[string]string),
@@ -291,13 +309,19 @@ func parsePaidSticker(renderer *LiveChatPaidStickerRenderer, channelID string) (
 		eventData["sticker_url"] = renderer.Sticker.Thumbnails.Thumbnails[0].URL
 	}
 
+	// Strip @ prefix from username if present (YouTube returns @username)
+	username := renderer.AuthorName.SimpleText
+	if len(username) > 0 && username[0] == '@' {
+		username = username[1:]
+	}
+
 	msg := &RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "youtube",
 		ChannelID: channelID,
 		StreamID:  "",
 		UserID:    renderer.AuthorExternalChannelID,
-		Username:  renderer.AuthorName.SimpleText,
+		Username:  username,
 		Text:      "", // Stickers have no text content (changed from "[sticker]" for consistency)
 		Timestamp: timestamp,
 		Tags:      make(map[string]string),
