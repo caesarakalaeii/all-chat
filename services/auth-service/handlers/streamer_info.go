@@ -106,7 +106,7 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 			ocs.is_active
 		FROM overlay_chat_sources ocs
 		INNER JOIN overlays o ON ocs.overlay_id = o.id
-		WHERE o.user_id = $1 AND o.is_public = true
+		WHERE o.user_id = $1 AND o.is_public_for_viewers = true
 		ORDER BY ocs.platform
 	`
 
