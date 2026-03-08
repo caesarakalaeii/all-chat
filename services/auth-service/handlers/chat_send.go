@@ -174,12 +174,20 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 	}
 
 	// Send message based on platform
+	h.log.Info("Sending message to platform",
+		zap.String("platform", session.Platform),
+		zap.String("streamer", streamerUser.Username),
+		zap.String("viewer_session_id", sessionID.String()))
+
 	var messageErr error
 	switch session.Platform {
 	case "twitch":
 		messageErr = h.sendTwitchMessage(ctx, session, streamerUser, req.Message)
 	case "youtube":
 		messageErr = h.sendYouTubeMessage(ctx, session, streamerUser, req.Message)
+		if messageErr != nil {
+			h.log.Error("Failed to send YouTube message", zap.Error(messageErr))
+		}
 	case "kick":
 		messageErr = h.sendKickMessage(ctx, session, streamerUser, req.Message)
 	case "tiktok":
