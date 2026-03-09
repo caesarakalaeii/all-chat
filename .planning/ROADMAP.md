@@ -133,10 +133,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 14-01-PLAN.md — Database schema and models (Wave 1)
-- [ ] 14-02-PLAN.md — User search and share request creation (Wave 2)
-- [ ] 14-03-PLAN.md — Premium enforcement and admin controls (Wave 2)
-- [ ] 14-04-PLAN.md — Dashboard UI and background expiry job (Wave 3)
+- [x] 14-01-PLAN.md — Database schema and models (Wave 1)
+- [x] 14-02-PLAN.md — User search and share request creation (Wave 2)
+- [x] 14-03-PLAN.md — Premium enforcement and admin controls (Wave 2)
+- [x] 14-04-PLAN.md — Dashboard UI and background expiry job (Wave 3)
 
 #### Phase 15: Share Acceptance
 **Goal**: Users can accept share requests, establishing bidirectional overlay access with cycle prevention
@@ -147,7 +147,12 @@ Plans:
   2. Both users can optionally add shared overlay source immediately on acceptance
   3. Share status indicators show active, expired, or revoked state in dashboard
   4. System prevents circular share dependencies (cycle detection blocks acceptance)
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
+
+Plans:
+- [ ] 15-01-PLAN.md — Acceptance backend with cycle detection (Wave 1)
+- [ ] 15-02-PLAN.md — Acceptance UI with modal forms (Wave 1)
+- [ ] 15-03-PLAN.md — Sender notifications and deduplication (Wave 2)
 
 #### Phase 16: Shared Overlay Sources
 **Goal**: Users can browse and add shared overlays as chat sources to their overlays
@@ -211,12 +216,12 @@ Plans:
 | 11. Contract Validation | v1.2 | 4/4 | Complete | 2026-02-21 |
 | 12. Production Rollout | v1.2 | 3/3 | Complete | 2026-03-05 |
 | 13. Feature Parity | v1.2 | 5/5 | Complete | 2026-03-06 |
-| 14. Foundation | 4/4 | Complete    | 2026-03-09 | - |
-| 15. Share Acceptance | v1.3 | 0/TBD | Not started | - |
+| 14. Foundation | v1.3 | 4/4 | Complete | 2026-03-09 |
+| 15. Share Acceptance | v1.3 | 0/3 | Not started | - |
 | 16. Shared Overlay Sources | v1.3 | 0/TBD | Not started | - |
 | 17. Message Routing | v1.3 | 0/TBD | Not started | - |
 | 18. Revocation | v1.3 | 0/TBD | Not started | - |
 | 19. Lifecycle & Expiry | v1.3 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-09 after Phase 14 planning*
+*Last updated: 2026-03-09 after Phase 15 planning*
