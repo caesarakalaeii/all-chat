@@ -24,22 +24,24 @@ func TestDiscoverLiveStream_NetworkError(t *testing.T) {
 	}
 }
 
-func TestExtractLiveChatContinuationFromNext(t *testing.T) {
+func TestExtractLiveChatContinuation(t *testing.T) {
 	tests := []struct {
 		name     string
-		data     interface{}
+		data     map[string]interface{}
 		expected string
 	}{
 		{
 			name: "finds continuation in liveChatRenderer with reloadContinuationData",
 			data: map[string]interface{}{
-				"engagementPanels": []interface{}{
-					map[string]interface{}{
-						"liveChatRenderer": map[string]interface{}{
-							"continuations": []interface{}{
-								map[string]interface{}{
-									"reloadContinuationData": map[string]interface{}{
-										"continuation": "test_token_123",
+				"contents": map[string]interface{}{
+					"twoColumnWatchNextResults": map[string]interface{}{
+						"conversationBar": map[string]interface{}{
+							"liveChatRenderer": map[string]interface{}{
+								"continuations": []interface{}{
+									map[string]interface{}{
+										"reloadContinuationData": map[string]interface{}{
+											"continuation": "test_token_123",
+										},
 									},
 								},
 							},
@@ -50,14 +52,16 @@ func TestExtractLiveChatContinuationFromNext(t *testing.T) {
 			expected: "test_token_123",
 		},
 		{
-			name: "finds continuation with timedContinuationData",
+			name: "finds continuation via fallback recursive search",
 			data: map[string]interface{}{
-				"liveChatRenderer": map[string]interface{}{
-					"continuations": []interface{}{
-						map[string]interface{}{
-							"timedContinuationData": map[string]interface{}{
-								"continuation":          "timed_token_456",
-								"timeoutDurationMillis": float64(5000),
+				"someKey": map[string]interface{}{
+					"liveChatRenderer": map[string]interface{}{
+						"continuations": []interface{}{
+							map[string]interface{}{
+								"timedContinuationData": map[string]interface{}{
+									"continuation":          "timed_token_456",
+									"timeoutDurationMillis": float64(5000),
+								},
 							},
 						},
 					},
@@ -70,16 +74,11 @@ func TestExtractLiveChatContinuationFromNext(t *testing.T) {
 			data:     map[string]interface{}{"someOtherKey": "value"},
 			expected: "",
 		},
-		{
-			name:     "returns empty string for nil",
-			data:     nil,
-			expected: "",
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractLiveChatContinuationFromNext(tt.data)
+			result := extractLiveChatContinuation(tt.data)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
 			}

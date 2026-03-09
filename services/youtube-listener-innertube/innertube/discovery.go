@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 
 	"go.uber.org/zap"
 )
@@ -25,17 +26,16 @@ func NewDiscovery(httpClient *http.Client, logger *zap.Logger) *Discovery {
 	}
 }
 
-// DiscoverLiveStream discovers the live video ID for a given channel ID using InnerTube Browse API
-// Returns the video ID if a live stream is found, or an error if none exists
+// DiscoverLiveStream discovers the live video ID for a given channel ID.
+// Uses the InnerTube Browse API to list recent streams, then verifies liveness
+// via the player API to avoid returning ended/upcoming streams.
 func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (string, error) {
 	d.logger.Info("discovering live stream",
 		zap.String("channel_id", channelID),
 	)
 
-	// Use InnerTube Browse API to get channel's live tab content
-	url := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", DefaultAPIKey)
-
-	// Build InnerTube Browse request for channel's live tab
+	// Use InnerTube Browse API to get channel's streams tab
+	browseURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", DefaultAPIKey)
 	payload := map[string]interface{}{
 		"context": map[string]interface{}{
 			"client": map[string]interface{}{
@@ -44,7 +44,7 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 			},
 		},
 		"browseId": channelID,
-		"params":   "EgdzdHJlYW1z8gYECgJ6AA%3D%3D", // "streams" tab encoded params
+		"params":   "EgdzdHJlYW1z8gYECgJ6AA%3D%3D", // "streams" tab
 	}
 
 	jsonPayload, err := json.Marshal(payload)
@@ -52,101 +52,64 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 		return "", fmt.Errorf("marshal request payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonPayload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, browseURL, bytes.NewReader(jsonPayload))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		d.logger.Error("failed to fetch channel browse data",
-			zap.String("channel_id", channelID),
-			zap.Error(err),
-		)
 		return "", fmt.Errorf("fetch channel browse data: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		d.logger.Error("unexpected status code from browse API",
-			zap.String("channel_id", channelID),
-			zap.Int("status_code", resp.StatusCode),
-		)
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read response body: %w", err)
 	}
 
-	// Parse JSON response
 	var browseResponse map[string]interface{}
 	if err := json.Unmarshal(body, &browseResponse); err != nil {
 		return "", fmt.Errorf("parse browse response: %w", err)
 	}
 
-	// Extract video ID from browse response
-	// Look for richItemRenderer with videoId in the live tab
-	videoID := extractVideoIDFromBrowse(browseResponse)
-	if videoID == "" {
-		d.logger.Info("no live stream found",
-			zap.String("channel_id", channelID),
-		)
-		return "", fmt.Errorf("no live stream found for channel %s", channelID)
+	// Collect all video IDs from the streams tab (may include ended streams)
+	videoIDs := collectVideoIDsFromBrowse(browseResponse)
+	if len(videoIDs) == 0 {
+		return "", fmt.Errorf("no streams found for channel %s", channelID)
 	}
 
-	d.logger.Info("discovered live stream",
-		zap.String("channel_id", channelID),
-		zap.String("video_id", videoID),
-	)
-
-	return videoID, nil
-}
-
-// extractVideoIDFromBrowse recursively searches the InnerTube Browse API response for a video ID
-// Looks for richItemRenderer with videoId or videoRenderer with videoId in live tab
-func extractVideoIDFromBrowse(data interface{}) string {
-	switch v := data.(type) {
-	case map[string]interface{}:
-		// Check if this is a videoRenderer or richItemRenderer with videoId
-		if videoID, ok := v["videoId"].(string); ok && videoID != "" {
-			return videoID
+	// Verify liveness for each video - return the first actually-live one
+	for _, videoID := range videoIDs {
+		isLive, err := d.checkIsLive(ctx, videoID)
+		if err != nil {
+			d.logger.Debug("failed to check liveness",
+				zap.String("video_id", videoID),
+				zap.Error(err),
+			)
+			continue
 		}
-
-		// Recursively search all map values
-		for _, val := range v {
-			if videoID := extractVideoIDFromBrowse(val); videoID != "" {
-				return videoID
-			}
-		}
-
-	case []interface{}:
-		// Recursively search all array elements
-		for _, item := range v {
-			if videoID := extractVideoIDFromBrowse(item); videoID != "" {
-				return videoID
-			}
+		if isLive {
+			d.logger.Info("discovered live stream",
+				zap.String("channel_id", channelID),
+				zap.String("video_id", videoID),
+			)
+			return videoID, nil
 		}
 	}
 
-	return ""
+	return "", fmt.Errorf("no live stream found for channel %s", channelID)
 }
 
-// GetInitialContinuation fetches the initial continuation token for a live stream
-// Uses the InnerTube /next API to get the live chat continuation token for a video
-func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) (string, error) {
-	d.logger.Info("fetching initial continuation token",
-		zap.String("video_id", videoID),
-	)
-
-	// Use InnerTube /next API to get video metadata including live chat continuation
-	url := fmt.Sprintf("https://www.youtube.com/youtubei/v1/next?key=%s", DefaultAPIKey)
-
+// checkIsLive verifies whether a video is currently live using the InnerTube player API
+func (d *Discovery) checkIsLive(ctx context.Context, videoID string) (bool, error) {
+	playerURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/player?key=%s", DefaultAPIKey)
 	payload := map[string]interface{}{
 		"context": map[string]interface{}{
 			"client": map[string]interface{}{
@@ -159,29 +122,94 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("marshal request payload: %w", err)
+		return false, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonPayload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, playerURL, bytes.NewReader(jsonPayload))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return false, err
 	}
-
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Origin", "https://www.youtube.com")
-	req.Header.Set("Referer", fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("fetch next API: %w", err)
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+
+	var playerResp map[string]interface{}
+	if err := json.Unmarshal(body, &playerResp); err != nil {
+		return false, err
+	}
+
+	videoDetails, _ := playerResp["videoDetails"].(map[string]interface{})
+	isLive, _ := videoDetails["isLive"].(bool)
+	return isLive, nil
+}
+
+// collectVideoIDsFromBrowse recursively collects all unique video IDs from a browse response.
+// Returns up to 5 IDs to check for liveness (avoiding deep recursion on large responses).
+func collectVideoIDsFromBrowse(data interface{}) []string {
+	seen := map[string]struct{}{}
+	var ids []string
+	var collect func(interface{})
+	collect = func(data interface{}) {
+		if len(ids) >= 5 {
+			return
+		}
+		switch v := data.(type) {
+		case map[string]interface{}:
+			if videoID, ok := v["videoId"].(string); ok && videoID != "" {
+				if _, exists := seen[videoID]; !exists {
+					seen[videoID] = struct{}{}
+					ids = append(ids, videoID)
+				}
+			}
+			for _, val := range v {
+				collect(val)
+			}
+		case []interface{}:
+			for _, item := range v {
+				collect(item)
+			}
+		}
+	}
+	collect(data)
+	return ids
+}
+
+// GetInitialContinuation fetches the initial continuation token for a live stream.
+// Scrapes the watch page HTML to extract the liveChatRenderer continuation token,
+// which is the correct token for use with the get_live_chat InnerTube endpoint.
+func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) (string, error) {
+	d.logger.Info("fetching initial continuation token",
+		zap.String("video_id", videoID),
+	)
+
+	watchURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, watchURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Cookie", "CONSENT=YES+cb; PREF=hl=en&gl=US")
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch watch page: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code from next API: %d", resp.StatusCode)
+		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -189,20 +217,25 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 		return "", fmt.Errorf("read response body: %w", err)
 	}
 
-	// Parse JSON response and extract continuation token recursively
-	var nextResponse map[string]interface{}
-	if err := json.Unmarshal(body, &nextResponse); err != nil {
-		return "", fmt.Errorf("parse next API response: %w", err)
+	// Extract the ytInitialData JSON embedded in the page script
+	initDataRe := regexp.MustCompile(`(?:var\s+)?ytInitialData\s*=\s*(\{.+?\});\s*(?:var\s|</script>)`)
+	match := initDataRe.FindSubmatch(body)
+	if match == nil {
+		return "", fmt.Errorf("ytInitialData not found in watch page for video %s", videoID)
 	}
 
-	// Extract continuation token from the nested response structure
-	// Live chat continuation is nested under engagementPanels → liveChatRenderer
-	token := extractLiveChatContinuationFromNext(nextResponse)
+	var pageData map[string]interface{}
+	if err := json.Unmarshal(match[1], &pageData); err != nil {
+		return "", fmt.Errorf("parse ytInitialData: %w", err)
+	}
+
+	// The live chat continuation is inside conversationBar.liveChatRenderer.continuations
+	token := extractLiveChatContinuation(pageData)
 	if token == "" {
-		return "", fmt.Errorf("no live chat continuation token found in next API response for video %s", videoID)
+		return "", fmt.Errorf("no live chat continuation found in watch page for video %s (stream may have ended)", videoID)
 	}
 
-	d.logger.Info("extracted initial continuation token via next API",
+	d.logger.Info("extracted initial continuation token from watch page",
 		zap.String("video_id", videoID),
 		zap.Int("token_length", len(token)),
 	)
@@ -210,75 +243,98 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 	return token, nil
 }
 
-// extractLiveChatContinuationFromNext extracts the live chat continuation token
-// from the InnerTube /next API response. The token is nested inside engagementPanels
-// under a liveChatRenderer with a continuationData.continuation field.
-func extractLiveChatContinuationFromNext(data interface{}) string {
+// extractLiveChatContinuation finds the live chat continuation token inside ytInitialData.
+// It's located at: contents.twoColumnWatchNextResults.conversationBar.liveChatRenderer.continuations
+func extractLiveChatContinuation(data map[string]interface{}) string {
+	// Walk the known path first
+	if token := walkPath(data,
+		"contents", "twoColumnWatchNextResults", "conversationBar",
+		"liveChatRenderer",
+	); token != "" {
+		return token
+	}
+	// Fall back to recursive search for liveChatRenderer anywhere in the page
+	return searchLiveChatRenderer(data)
+}
+
+// walkPath navigates a nested map following the given keys, then extracts
+// the continuation token from a liveChatRenderer at the final key.
+func walkPath(data map[string]interface{}, keys ...string) string {
+	current := interface{}(data)
+	for i, key := range keys {
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return ""
+		}
+		val, ok := m[key]
+		if !ok {
+			return ""
+		}
+		if i == len(keys)-1 {
+			// Last key should be the liveChatRenderer
+			return extractContinuationFromLiveChatRenderer(val)
+		}
+		current = val
+	}
+	return ""
+}
+
+// searchLiveChatRenderer recursively searches for liveChatRenderer in any map
+func searchLiveChatRenderer(data interface{}) string {
 	switch v := data.(type) {
 	case map[string]interface{}:
-		// Check for continuation inside liveChatRenderer
-		if _, hasLiveChatRenderer := v["liveChatRenderer"]; hasLiveChatRenderer {
-			if token := extractContinuationFromRenderer(v["liveChatRenderer"]); token != "" {
+		if renderer, ok := v["liveChatRenderer"]; ok {
+			if token := extractContinuationFromLiveChatRenderer(renderer); token != "" {
 				return token
 			}
 		}
-
-		// Recursively search all values
 		for _, val := range v {
-			if token := extractLiveChatContinuationFromNext(val); token != "" {
+			if token := searchLiveChatRenderer(val); token != "" {
 				return token
 			}
 		}
-
 	case []interface{}:
 		for _, item := range v {
-			if token := extractLiveChatContinuationFromNext(item); token != "" {
+			if token := searchLiveChatRenderer(item); token != "" {
 				return token
 			}
 		}
 	}
-
 	return ""
 }
 
-// extractContinuationFromRenderer extracts the continuation token from a liveChatRenderer object
-func extractContinuationFromRenderer(renderer interface{}) string {
+// extractContinuationFromLiveChatRenderer extracts the continuation token
+// from a liveChatRenderer object's continuations array.
+func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 	m, ok := renderer.(map[string]interface{})
 	if !ok {
 		return ""
 	}
-
-	// Look for header.liveChatHeaderRenderer.viewSelector.sortFilterSubMenuRenderer.subMenuItems
-	// or continuations array directly
 	continuations, ok := m["continuations"].([]interface{})
 	if !ok {
 		return ""
 	}
-
 	for _, cont := range continuations {
 		contMap, ok := cont.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		// Try reloadContinuationData first (most common for live streams)
+		// reloadContinuationData is the standard for initial live chat fetch
 		if reload, ok := contMap["reloadContinuationData"].(map[string]interface{}); ok {
 			if token, ok := reload["continuation"].(string); ok && token != "" {
 				return token
 			}
 		}
-		// Try timedContinuationData
 		if timed, ok := contMap["timedContinuationData"].(map[string]interface{}); ok {
 			if token, ok := timed["continuation"].(string); ok && token != "" {
 				return token
 			}
 		}
-		// Try invalidationContinuationData
-		if invalid, ok := contMap["invalidationContinuationData"].(map[string]interface{}); ok {
-			if token, ok := invalid["continuation"].(string); ok && token != "" {
+		if inv, ok := contMap["invalidationContinuationData"].(map[string]interface{}); ok {
+			if token, ok := inv["continuation"].(string); ok && token != "" {
 				return token
 			}
 		}
 	}
-
 	return ""
 }
