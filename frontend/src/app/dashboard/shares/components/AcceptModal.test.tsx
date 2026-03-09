@@ -1,15 +1,269 @@
-import { describe, it, expect } from 'vitest';
+/**
+ * AcceptModal Component Tests
+ *
+ * Tests for the share request acceptance modal with form validation.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { AcceptModal } from './AcceptModal';
+import { sharesApi } from '@/lib/api/shares';
+import { overlaysApi } from '@/lib/api/overlays';
+import type { ShareRequest } from '@/lib/types/share';
+import type { Overlay } from '@/lib/types/overlay';
+
+// Mock APIs
+vi.mock('@/lib/api/shares');
+vi.mock('@/lib/api/overlays');
+vi.mock('react-hot-toast', () => ({
+  default: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+const mockRequest: ShareRequest = {
+  id: 'share-123',
+  sender_user_id: 'user-456',
+  sender_overlay_id: 'overlay-789',
+  recipient_user_id: 'user-current',
+  status: 'pending',
+  created_at: '2026-03-09T12:00:00Z',
+  expires_at: '2026-03-16T12:00:00Z',
+  sender: {
+    id: 'user-456',
+    username: 'streamer123',
+    display_name: 'Streamer 123',
+    profile_image_url: 'https://example.com/avatar.png',
+  },
+  overlay_sources: [
+    { platform: 'twitch', channel_name: 'channel1' },
+    { platform: 'youtube', channel_name: 'channel2' },
+  ],
+};
+
+const mockOverlays: Overlay[] = [
+  {
+    id: 'overlay-1',
+    user_id: 'user-current',
+    name: 'My Gaming Overlay',
+    is_active: true,
+    is_public_for_viewers: false,
+    created_at: '2026-03-01T12:00:00Z',
+    updated_at: '2026-03-01T12:00:00Z',
+  },
+  {
+    id: 'overlay-2',
+    user_id: 'user-current',
+    name: 'My IRL Overlay',
+    is_active: false,
+    is_public_for_viewers: false,
+    created_at: '2026-03-02T12:00:00Z',
+    updated_at: '2026-03-02T12:00:00Z',
+  },
+];
 
 describe('AcceptModal', () => {
-  it.skip('renders with overlay dropdown and expiry options', () => {
-    // Wave 0 stub - implement in Wave 1
+  const mockOnClose = vi.fn();
+  const mockOnAccepted = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(overlaysApi.list).mockResolvedValue(mockOverlays);
   });
 
-  it.skip('validates custom hours range (1-168)', () => {
-    // Wave 0 stub - implement in Wave 1
+  // Test 1: Modal displays sender name and platform badges
+  it('renders sender name and platform badges', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+      />
+    );
+
+    // Check sender name in title
+    expect(screen.getByText(/Streamer 123 wants to share with you/i)).toBeInTheDocument();
+
+    // Wait for overlays to load
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
   });
 
-  it.skip('calls onAccepted with sender_overlay_id on success', () => {
-    // Wave 0 stub - implement in Wave 1
+  // Test 2: Overlay dropdown populates with user's overlays
+  it('fetches and displays user overlays in dropdown', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+      />
+    );
+
+    await waitFor(() => {
+      expect(overlaysApi.list).toHaveBeenCalled();
+    });
+
+    // Check dropdown contains overlays
+    const select = screen.getByRole('combobox');
+    expect(select).toBeInTheDocument();
+
+    // Check options are present (checking in the document)
+    await waitFor(() => {
+      expect(screen.getByText('My Gaming Overlay')).toBeInTheDocument();
+      expect(screen.getByText('My IRL Overlay')).toBeInTheDocument();
+    });
+  });
+
+  // Test 3: "This stream" expiry option is pre-selected by default
+  it('defaults to "This stream" expiry option', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    // Find the "This stream" radio button and check it's selected
+    const thisStreamRadio = screen.getByLabelText(/This stream/i) as HTMLInputElement;
+    expect(thisStreamRadio).toBeChecked();
+  });
+
+  // Test 4: Custom duration shows inline error when value < 1 or > 168
+  it('validates custom hours input (boundary cases)', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    // Select custom duration option
+    const customRadio = screen.getByLabelText(/Custom duration/i);
+    fireEvent.click(customRadio);
+
+    // Get the hours input
+    const hoursInput = screen.getByPlaceholderText(/hours/i) || screen.getByRole('spinbutton');
+
+    // Test: 0 hours (invalid)
+    fireEvent.change(hoursInput, { target: { value: '0' } });
+    await waitFor(() => {
+      expect(screen.getByText(/Must be between 1 and 168 hours/i)).toBeInTheDocument();
+    });
+
+    // Test: 169 hours (invalid)
+    fireEvent.change(hoursInput, { target: { value: '169' } });
+    await waitFor(() => {
+      expect(screen.getByText(/Must be between 1 and 168 hours/i)).toBeInTheDocument();
+    });
+
+    // Test: 1 hour (valid)
+    fireEvent.change(hoursInput, { target: { value: '1' } });
+    await waitFor(() => {
+      expect(screen.queryByText(/Must be between 1 and 168 hours/i)).not.toBeInTheDocument();
+    });
+
+    // Test: 168 hours (valid)
+    fireEvent.change(hoursInput, { target: { value: '168' } });
+    await waitFor(() => {
+      expect(screen.queryByText(/Must be between 1 and 168 hours/i)).not.toBeInTheDocument();
+    });
+  });
+
+  // Test 5: Accept button disabled when validation fails
+  it('disables Accept button when validation fails', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    // Select custom duration option
+    const customRadio = screen.getByLabelText(/Custom duration/i);
+    fireEvent.click(customRadio);
+
+    const hoursInput = screen.getByPlaceholderText(/hours/i) || screen.getByRole('spinbutton');
+    const acceptButton = screen.getByRole('button', { name: /Accept/i });
+
+    // Invalid value: button should be disabled
+    fireEvent.change(hoursInput, { target: { value: '0' } });
+    await waitFor(() => {
+      expect(acceptButton).toBeDisabled();
+    });
+
+    // Valid value: button should be enabled
+    fireEvent.change(hoursInput, { target: { value: '24' } });
+    await waitFor(() => {
+      expect(acceptButton).not.toBeDisabled();
+    });
+  });
+
+  // Test 6: Calls onAccepted with sender_overlay_id on success
+  it('calls onAccepted callback on successful acceptance', async () => {
+    const mockResponse = {
+      share: { ...mockRequest, status: 'accepted' as const },
+      sender_overlay_id: 'overlay-789',
+    };
+    vi.mocked(sharesApi.acceptRequest).mockResolvedValue(mockResponse);
+
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    // Click Accept button
+    const acceptButton = screen.getByRole('button', { name: /Accept/i });
+    fireEvent.click(acceptButton);
+
+    await waitFor(() => {
+      expect(sharesApi.acceptRequest).toHaveBeenCalledWith(
+        'share-123',
+        'overlay-1', // First overlay auto-selected
+        'this_stream',
+        undefined
+      );
+      expect(mockOnAccepted).toHaveBeenCalledWith('overlay-789');
+    });
+  });
+
+  // Test 7: Shows error when no overlays exist
+  it('shows error message when user has no overlays', async () => {
+    vi.mocked(overlaysApi.list).mockResolvedValue([]);
+
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Create an overlay first to accept shares/i)).toBeInTheDocument();
+    });
   });
 });
