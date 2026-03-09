@@ -2,27 +2,18 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-21)
+See: .planning/PROJECT.md (updated 2026-03-09)
 
-**Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing and auto-scaling.
-**Current focus:** v1.2 InnerTube YouTube Listener
+**Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
+**Current focus:** v1.3 Frontend Redesign
 
 ## Current Position
 
-Milestone: v1.2 InnerTube YouTube Listener
-Phase: 13 of 13 (Feature Parity)
-Plan: 3 of 4 complete (plus gap closure 13-05)
-Status: In Progress
-Last activity: 2026-03-06 — Completed Phase 13 Plan 04 (Wire Batch Detection to Emission Logic)
-
-Progress: [████████████░░░░] 3/4 (75% phase 13 complete)
-
-**Phase 13 Progress:**
-- ✓ Plan 01: Batch deletion detection
-- ✓ Plan 02: Deletion event buffering (500ms delay, FIFO overflow)
-- ✓ Plan 04: Wire batch detection to emission logic (gap closure)
-- ✓ Plan 05: Publisher test suite fix (gap closure)
-- ⏳ Plan 03: Advanced metrics
+Milestone: v1.3 Frontend Redesign
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-09 — Milestone v1.3 started
 
 ## Performance Metrics
 

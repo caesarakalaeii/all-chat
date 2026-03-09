@@ -8,6 +8,18 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
+## Current Milestone: v1.3 Frontend Redesign
+
+**Goal:** Transform the frontend from generic Tailwind defaults to a professional, streaming-focused design system with comprehensive component library and enforceable style rules.
+
+**Target features:**
+- Complete design system (StreamElements Modern aesthetic)
+- shadcn/ui component library integration
+- All pages redesigned (landing, dashboard, editor, settings, admin)
+- Full design token system with theming support
+- LLM-enforceable style guidelines
+- Overlay marketplace CSS migration guide
+
 ## Requirements
 
 ### Validated
@@ -58,9 +70,33 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 
 ### Active
 
-<!-- Current scope — no active milestone -->
+<!-- Current scope: v1.3 Frontend Redesign -->
 
-_No active milestone. Ready for `/gsd:new-milestone` to define next version._
+**Design System Foundation:**
+- [ ] Design tokens (colors, spacing, typography, shadows)
+- [ ] Tailwind configuration aligned with design system
+- [ ] CSS variable system for theming
+- [ ] shadcn/ui component library integration and customization
+
+**Component Library:**
+- [ ] Core UI primitives (Button, Card, Input, Badge, Modal, etc.)
+- [ ] Replace existing components with shadcn/ui versions
+- [ ] Preserve overlay-specific components (event styling, animations)
+- [ ] Component documentation and usage guidelines
+
+**Page Redesigns:**
+- [ ] Landing page (hero, features, platform login)
+- [ ] Dashboard (overlay grid, create/edit actions)
+- [ ] Overlay editor (source management, configuration)
+- [ ] Overlay preview (live chat view)
+- [ ] Settings page (account management)
+- [ ] Admin pages (users, overlays, sources, viewers)
+
+**Enforcement & Migration:**
+- [ ] ESLint rules for design system compliance
+- [ ] Pre-commit hooks for style validation
+- [ ] Marketplace CSS migration guide (class name changes)
+- [ ] LLM agent guidelines and examples
 
 ### Out of Scope
 
