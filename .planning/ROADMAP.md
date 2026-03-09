@@ -3,8 +3,9 @@
 ## Milestones
 
 - ✅ **v1.0 Message Deletion Support** — Phases 1-3 (partial, shipped 2026-02-18)
-- ✅ **v1.1 Listener Load Balancing** — Phases 5-8 (shipped 2026-02-21)
-- ✅ **v1.2 InnerTube YouTube Listener** — Phases 9-13 (shipped 2026-03-06)
+- ✅ **v1.1 Listener Load Balancing** — Phases 4-10 (shipped 2026-02-21)
+- ✅ **v1.2 InnerTube YouTube Listener** — Phases 11-22 (shipped 2026-03-06)
+- 🚧 **v1.3 Frontend Redesign** — Phases 23-26 (in progress)
 
 ## Phases
 
@@ -28,31 +29,29 @@
 
 **Note**: Phase 4 (TikTok Integration) was deferred, ending v1.0 at 80% completion.
 
-**Archive**: [v1.0 details](milestones/) (if archived)
-
 </details>
 
 <details>
-<summary>✅ v1.1 Listener Load Balancing (Phases 5-8) — SHIPPED 2026-02-21</summary>
+<summary>✅ v1.1 Listener Load Balancing (Phases 4-10) — SHIPPED 2026-02-21</summary>
 
 **Milestone Goal:** Implement hybrid hash-based sharding with load-aware rebalancing for all listener services, enabling cost-effective scaling and reliable service for high-volume streams.
 
-### Phase 5: Sharding Infrastructure & Coordinator Service
+### Phase 4: Sharding Infrastructure & Coordinator Service
 **Goal**: Production-ready consistent hashing and coordinator service with split-brain prevention
 **Plans**: 5/5 complete
 **Status**: Complete (2026-02-19)
 
-### Phase 6: Connection Management & Migration Protocol
+### Phase 5: Connection Management & Migration Protocol
 **Goal**: All platform listeners integrate with coordinator and support graceful zero-loss channel migration
 **Plans**: 8/8 complete
 **Status**: Complete (2026-02-20)
 
-### Phase 7: Dynamic Rebalancing & HPA Integration
+### Phase 6: Dynamic Rebalancing & HPA Integration
 **Goal**: Automatic load-aware rebalancing with safeguards against thundering herd and quota exhaustion
 **Plans**: 4/4 complete
 **Status**: Complete (2026-02-20)
 
-### Phase 8: Observability & Production Readiness
+### Phase 7: Observability & Production Readiness
 **Goal**: Comprehensive metrics, distributed tracing, Grafana dashboards, and alerting for production operations
 **Plans**: 4/4 complete
 **Status**: Complete (2026-02-20)
@@ -68,31 +67,31 @@
 </details>
 
 <details>
-<summary>✅ v1.2 InnerTube YouTube Listener (Phases 9-13) — SHIPPED 2026-03-06</summary>
+<summary>✅ v1.2 InnerTube YouTube Listener (Phases 11-22) — SHIPPED 2026-03-06</summary>
 
 **Milestone Goal:** Build quota-free YouTube listener using InnerTube API as drop-in replacement for official API listener, maintaining identical downstream behavior while eliminating quota limitations.
 
-### Phase 9: Core Ingestion PoC
+### Phase 11: Core Ingestion PoC
 **Goal**: Validate InnerTube API viability by establishing basic message flow from InnerTube to Redis Streams
 **Plans**: 5/5 complete
 **Status**: Complete (2026-02-21)
 
-### Phase 10: Production Minimum
+### Phase 12: Production Minimum
 **Goal**: Enable dynamic stream management and production lifecycle behaviors
 **Plans**: 4/4 complete
 **Status**: Complete (2026-02-21)
 
-### Phase 11: Contract Validation
+### Phase 13: Contract Validation
 **Goal**: Prove behavioral equivalence with official youtube-listener through comprehensive contract testing
 **Plans**: 4/4 complete
 **Status**: Complete (2026-02-21)
 
-### Phase 12: Production Rollout
+### Phase 14: Production Rollout
 **Goal**: Deploy to production with gradual canary rollout, monitoring, and automatic rollback
 **Plans**: 3/3 complete
 **Status**: Complete (2026-03-05)
 
-### Phase 13: Feature Parity
+### Phase 15: Feature Parity
 **Goal**: Add deletion event detection and advanced metrics leveraging InnerTube advantages
 **Plans**: 5/5 complete
 **Status**: Complete (2026-03-06)
@@ -109,22 +108,100 @@
 
 </details>
 
+### 🚧 v1.3 Frontend Redesign (In Progress)
+
+**Milestone Goal:** Transform frontend from generic Tailwind defaults to professional streaming-focused design system with comprehensive component library and enforceable style rules.
+
+- [ ] **Phase 23: Design Token System & Foundation** - Establish design tokens, Tailwind v4 configuration, and overlay CSS stability contract
+- [ ] **Phase 24: Component Library Setup** - shadcn/ui integration with custom theming and performance budgets
+- [ ] **Phase 25: Page Migration & Split-view Preview** - Redesign all pages with new design system plus live preview feature
+- [ ] **Phase 26: Enforcement & Quality Gates** - ESLint rules, pre-commit hooks, CI/CD quality gates, and marketplace migration guide
+
+## Phase Details
+
+### Phase 23: Design Token System & Foundation
+**Goal**: Design token system established as foundation for consistent styling across all UI
+**Depends on**: Nothing (first phase of v1.3)
+**Requirements**: FOUND-01, FOUND-02, FOUND-03, FOUND-04, FOUND-05, FOUND-06
+**Success Criteria** (what must be TRUE):
+  1. Design tokens defined using Tailwind v4 @theme directive with three-layer hierarchy (base → semantic → component)
+  2. Platform colors accessible via static mapping object (no dynamic class construction breaking JIT compilation)
+  3. Overlay marketplace CSS classes documented as stable public API (events.css stability contract exists)
+  4. Tailwind v4 gradient classes migrated (bg-gradient-to-* → bg-linear-to-*) with visual regression validation
+  5. CSS cascade layers defined (@layer base, design-system, marketplace-themes, user-overrides) preventing specificity conflicts
+**Plans**: TBD
+
+Plans:
+- [ ] 23-01: TBD
+
+### Phase 24: Component Library Setup & Customization
+**Goal**: shadcn/ui component library integrated and customized with design system tokens
+**Depends on**: Phase 23
+**Requirements**: COMP-01, COMP-02, COMP-03, COMP-04, COMP-05, COMP-06, COMP-07, COMP-08, COMP-09
+**Success Criteria** (what must be TRUE):
+  1. shadcn/ui core primitives installed and themed with slate color scale (Button, Card, Input, Badge, Dialog, Toast)
+  2. Component variants implemented using CVA for consistent pattern application
+  3. Smooth micro-interactions added to components (hover scale, shadow transitions for premium feel)
+  4. Platform-color coded components created for multi-platform UI elements (badges, borders, status indicators)
+  5. Performance budget established and monitored (<16ms message render time, <100KB bundle size increase)
+  6. All !important declarations removed from events.css and replaced with CSS cascade layer architecture
+**Plans**: TBD
+
+Plans:
+- [ ] 24-01: TBD
+
+### Phase 25: Page Migration & Split-view Preview
+**Goal**: All application pages redesigned with new design system, plus split-view live preview feature implemented
+**Depends on**: Phase 24
+**Requirements**: PAGE-01, PAGE-02, PAGE-03, PAGE-04, PAGE-05, PAGE-06, PAGE-07, PAGE-08, PAGE-09, PAGE-10, FEAT-01, FEAT-02, FEAT-03, FEAT-04
+**Success Criteria** (what must be TRUE):
+  1. Landing page redesigned with gradient hero, platform login buttons, and feature cards
+  2. Dashboard redesigned with overlay grid, hover states, empty states, and creation workflows
+  3. Overlay editor redesigned with platform-color coded source management cards
+  4. Split-view layout implemented (editor configuration side-by-side with live preview, responsive stacking on mobile)
+  5. Settings and admin pages redesigned for visual consistency across all authenticated pages
+  6. Responsive layouts validated across all breakpoints (375px mobile, 768px tablet, 1920px desktop)
+  7. WCAG 2.1 AA accessibility compliance achieved (keyboard navigation, focus states, axe-core passing)
+  8. Loading states and empty states implemented with illustrations and clear CTAs
+  9. Overlay preview CSS preserved unchanged (marketplace theme compatibility maintained)
+**Plans**: TBD
+
+Plans:
+- [ ] 25-01: TBD
+
+### Phase 26: Enforcement & Quality Gates
+**Goal**: Design system compliance automated through tooling, preventing regression and ensuring marketplace compatibility
+**Depends on**: Phase 25
+**Requirements**: ENFORCE-01, ENFORCE-02, ENFORCE-03, ENFORCE-04, ENFORCE-05, ENFORCE-06, ENFORCE-07, ENFORCE-08, ENFORCE-09, ENFORCE-10
+**Success Criteria** (what must be TRUE):
+  1. ESLint plugin for Tailwind configured with design system rules (no gray-*, focus-visible required, no string concat in className)
+  2. Prettier plugin installed and configured for consistent Tailwind class ordering
+  3. Pre-commit hooks implemented with Husky (lint + format on changed files, blocking violations)
+  4. CI/CD quality gates block PRs with ESLint errors or bundle size increases >20KB without justification
+  5. Visual regression test suite implemented (screenshot diffing across all pages detecting unintended changes)
+  6. Marketplace CSS migration guide created documenting class name changes and providing upgrade path
+  7. Performance monitoring configured validating message render time <16ms at 20 msg/sec load
+  8. Accessibility testing automated (axe-core in CI/CD pipeline)
+  9. Bundle size baseline established with webpack-bundle-analyzer
+**Plans**: TBD
+
+Plans:
+- [ ] 26-01: TBD
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 23 → 24 → 25 → 26
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Foundation + Twitch | v1.0 | 5/5 | Complete | 2026-02-18 |
-| 2. YouTube Integration | v1.0 | 2/2 | Complete | 2026-02-18 |
-| 3. Kick Integration + Edge Cases | v1.0 | 4/4 | Complete | 2026-02-18 |
-| 5. Sharding Infrastructure & Coordinator | v1.1 | 5/5 | Complete | 2026-02-19 |
-| 6. Connection Management & Migration | v1.1 | 8/8 | Complete | 2026-02-20 |
-| 7. Dynamic Rebalancing & HPA | v1.1 | 4/4 | Complete | 2026-02-20 |
-| 8. Observability & Production Readiness | v1.1 | 4/4 | Complete | 2026-02-20 |
-| 9. Core Ingestion PoC | v1.2 | 5/5 | Complete | 2026-02-21 |
-| 10. Production Minimum | v1.2 | 4/4 | Complete | 2026-02-21 |
-| 11. Contract Validation | v1.2 | 4/4 | Complete | 2026-02-21 |
-| 12. Production Rollout | v1.2 | 3/3 | Complete | 2026-03-05 |
-| 13. Feature Parity | v1.2 | 5/5 | Complete | 2026-03-06 |
+| 1-3 | v1.0 | 11/11 | Complete | 2026-02-18 |
+| 4-10 | v1.1 | 21/21 | Complete | 2026-02-21 |
+| 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
+| 23. Design Token System & Foundation | v1.3 | 0/? | Not started | - |
+| 24. Component Library Setup | v1.3 | 0/? | Not started | - |
+| 25. Page Migration & Split-view Preview | v1.3 | 0/? | Not started | - |
+| 26. Enforcement & Quality Gates | v1.3 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-03-06 after v1.2 milestone completion*
+*Last updated: 2026-03-09 after v1.3 roadmap creation*

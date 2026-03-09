@@ -104,45 +104,45 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | Phase 1 | Pending |
-| FOUND-02 | Phase 1 | Pending |
-| FOUND-03 | Phase 1 | Pending |
-| FOUND-04 | Phase 1 | Pending |
-| FOUND-05 | Phase 1 | Pending |
-| FOUND-06 | Phase 1 | Pending |
-| COMP-01 | Phase 2 | Pending |
-| COMP-02 | Phase 2 | Pending |
-| COMP-03 | Phase 2 | Pending |
-| COMP-04 | Phase 2 | Pending |
-| COMP-05 | Phase 2 | Pending |
-| COMP-06 | Phase 2 | Pending |
-| COMP-07 | Phase 2 | Pending |
-| COMP-08 | Phase 2 | Pending |
-| COMP-09 | Phase 2 | Pending |
-| PAGE-01 | Phase 3 | Pending |
-| PAGE-02 | Phase 3 | Pending |
-| PAGE-03 | Phase 3 | Pending |
-| PAGE-04 | Phase 3 | Pending |
-| PAGE-05 | Phase 3 | Pending |
-| PAGE-06 | Phase 3 | Pending |
-| PAGE-07 | Phase 3 | Pending |
-| PAGE-08 | Phase 3 | Pending |
-| PAGE-09 | Phase 3 | Pending |
-| PAGE-10 | Phase 3 | Pending |
-| FEAT-01 | Phase 3 | Pending |
-| FEAT-02 | Phase 3 | Pending |
-| FEAT-03 | Phase 3 | Pending |
-| FEAT-04 | Phase 3 | Pending |
-| ENFORCE-01 | Phase 4 | Pending |
-| ENFORCE-02 | Phase 4 | Pending |
-| ENFORCE-03 | Phase 4 | Pending |
-| ENFORCE-04 | Phase 4 | Pending |
-| ENFORCE-05 | Phase 4 | Pending |
-| ENFORCE-06 | Phase 4 | Pending |
-| ENFORCE-07 | Phase 4 | Pending |
-| ENFORCE-08 | Phase 4 | Pending |
-| ENFORCE-09 | Phase 4 | Pending |
-| ENFORCE-10 | Phase 4 | Pending |
+| FOUND-01 | Phase 23 | Pending |
+| FOUND-02 | Phase 23 | Pending |
+| FOUND-03 | Phase 23 | Pending |
+| FOUND-04 | Phase 23 | Pending |
+| FOUND-05 | Phase 23 | Pending |
+| FOUND-06 | Phase 23 | Pending |
+| COMP-01 | Phase 24 | Pending |
+| COMP-02 | Phase 24 | Pending |
+| COMP-03 | Phase 24 | Pending |
+| COMP-04 | Phase 24 | Pending |
+| COMP-05 | Phase 24 | Pending |
+| COMP-06 | Phase 24 | Pending |
+| COMP-07 | Phase 24 | Pending |
+| COMP-08 | Phase 24 | Pending |
+| COMP-09 | Phase 24 | Pending |
+| PAGE-01 | Phase 25 | Pending |
+| PAGE-02 | Phase 25 | Pending |
+| PAGE-03 | Phase 25 | Pending |
+| PAGE-04 | Phase 25 | Pending |
+| PAGE-05 | Phase 25 | Pending |
+| PAGE-06 | Phase 25 | Pending |
+| PAGE-07 | Phase 25 | Pending |
+| PAGE-08 | Phase 25 | Pending |
+| PAGE-09 | Phase 25 | Pending |
+| PAGE-10 | Phase 25 | Pending |
+| FEAT-01 | Phase 25 | Pending |
+| FEAT-02 | Phase 25 | Pending |
+| FEAT-03 | Phase 25 | Pending |
+| FEAT-04 | Phase 25 | Pending |
+| ENFORCE-01 | Phase 26 | Pending |
+| ENFORCE-02 | Phase 26 | Pending |
+| ENFORCE-03 | Phase 26 | Pending |
+| ENFORCE-04 | Phase 26 | Pending |
+| ENFORCE-05 | Phase 26 | Pending |
+| ENFORCE-06 | Phase 26 | Pending |
+| ENFORCE-07 | Phase 26 | Pending |
+| ENFORCE-08 | Phase 26 | Pending |
+| ENFORCE-09 | Phase 26 | Pending |
+| ENFORCE-10 | Phase 26 | Pending |
 
 **Coverage:**
 - v1.3 requirements: 39 total
@@ -151,4 +151,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-09*
-*Last updated: 2026-03-09 after initial definition*
+*Last updated: 2026-03-09 after roadmap creation (phase numbers updated 23-26)*
