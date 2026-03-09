@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
-	"time"
 
 	"go.uber.org/zap"
 )
@@ -189,68 +187,44 @@ func collectVideoIDsFromBrowse(data interface{}) []string {
 }
 
 // GetInitialContinuation fetches the initial continuation token for a live stream.
-// Scrapes the watch page HTML to extract the liveChatRenderer continuation token,
-// which is the correct token for use with the get_live_chat InnerTube endpoint.
+// Uses the InnerTube /next API (JSON, no HTML scraping, no rate limiting).
+// The token is found at: contents.twoColumnWatchNextResults.conversationBar.liveChatRenderer
+// Only returns a token when the stream is currently live (liveChatRenderer only present for live streams).
 func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) (string, error) {
 	d.logger.Info("fetching initial continuation token",
 		zap.String("video_id", videoID),
 	)
 
-	watchURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, watchURL, nil)
+	nextURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/next?key=%s", DefaultAPIKey)
+	payload := map[string]interface{}{
+		"context": map[string]interface{}{
+			"client": map[string]interface{}{
+				"clientName":    "WEB",
+				"clientVersion": DefaultClientVersion,
+			},
+		},
+		"videoId": videoID,
+	}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, nextURL, bytes.NewReader(jsonPayload))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Cookie", "CONSENT=YES+cb; PREF=hl=en&gl=US")
 
-	// Retry loop for 429 rate limiting — YouTube rate-limits concurrent watch page requests.
-	// Retry up to 5 times with increasing delays (10s, 20s, 30s, 45s, 60s).
-	retryDelays := []time.Duration{10 * time.Second, 20 * time.Second, 30 * time.Second, 45 * time.Second, 60 * time.Second}
-	var resp *http.Response
-	for attempt := 0; ; attempt++ {
-		var doErr error
-		resp, doErr = d.httpClient.Do(req)
-		if doErr != nil {
-			return "", fmt.Errorf("fetch watch page: %w", doErr)
-		}
-
-		if resp.StatusCode != http.StatusTooManyRequests {
-			break // success or non-retryable error
-		}
-
-		resp.Body.Close()
-		if attempt >= len(retryDelays) {
-			return "", fmt.Errorf("unexpected status code: %d (rate limited, exhausted retries)", resp.StatusCode)
-		}
-
-		delay := retryDelays[attempt]
-		d.logger.Warn("rate limited fetching watch page, retrying after delay",
-			zap.String("video_id", videoID),
-			zap.Duration("delay", delay),
-			zap.Int("attempt", attempt+1),
-		)
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-time.After(delay):
-		}
-
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, watchURL, nil)
-		if err != nil {
-			return "", fmt.Errorf("create retry request: %w", err)
-		}
-		req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-		req.Header.Set("Cookie", "CONSENT=YES+cb; PREF=hl=en&gl=US")
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch next API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return "", fmt.Errorf("unexpected status code from next API: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -258,31 +232,42 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 		return "", fmt.Errorf("read response body: %w", err)
 	}
 
-	// Extract the ytInitialData JSON embedded in the page script
-	initDataRe := regexp.MustCompile(`(?:var\s+)?ytInitialData\s*=\s*(\{.+?\});\s*(?:var\s|</script>)`)
-	match := initDataRe.FindSubmatch(body)
-	if match == nil {
-		return "", fmt.Errorf("ytInitialData not found in watch page for video %s", videoID)
+	var nextData map[string]interface{}
+	if err := json.Unmarshal(body, &nextData); err != nil {
+		return "", fmt.Errorf("parse next API response: %w", err)
 	}
 
-	var pageData map[string]interface{}
-	if err := json.Unmarshal(match[1], &pageData); err != nil {
-		return "", fmt.Errorf("parse ytInitialData: %w", err)
-	}
-
-	// The live chat continuation is inside conversationBar.liveChatRenderer.continuations
-	// Only accept tokens from live streams (isReplay absent or false); replay tokens are rejected by get_live_chat
-	token := extractLiveChatContinuation(pageData)
+	// Walk the known path to the liveChatRenderer
+	token := extractContinuationFromNextAPI(nextData)
 	if token == "" {
-		return "", fmt.Errorf("no live chat continuation found in watch page for video %s (stream may have ended)", videoID)
+		return "", fmt.Errorf("no live chat continuation found in next API for video %s (stream may have ended)", videoID)
 	}
 
-	d.logger.Info("extracted initial continuation token from watch page",
+	d.logger.Info("extracted initial continuation token from next API",
 		zap.String("video_id", videoID),
 		zap.Int("token_length", len(token)),
 	)
 
 	return token, nil
+}
+
+// extractContinuationFromNextAPI extracts the live chat continuation token from
+// the InnerTube /next API response. For live streams, it's at:
+// contents.twoColumnWatchNextResults.conversationBar.liveChatRenderer.continuations[].reloadContinuationData.continuation
+func extractContinuationFromNextAPI(data map[string]interface{}) string {
+	// Walk the known path
+	contents, _ := data["contents"].(map[string]interface{})
+	twoCol, _ := contents["twoColumnWatchNextResults"].(map[string]interface{})
+	bar, _ := twoCol["conversationBar"].(map[string]interface{})
+	renderer, _ := bar["liveChatRenderer"].(map[string]interface{})
+	if renderer == nil {
+		return ""
+	}
+	// isReplay=true means stream ended; its tokens are rejected by get_live_chat
+	if isReplay, _ := renderer["isReplay"].(bool); isReplay {
+		return ""
+	}
+	return extractContinuationFromLiveChatRenderer(renderer)
 }
 
 // extractLiveChatContinuation finds the live chat continuation token inside ytInitialData.
