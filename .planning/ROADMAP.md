@@ -147,8 +147,9 @@ Plans:
   2. Both users can optionally add shared overlay source immediately on acceptance
   3. Share status indicators show active, expired, or revoked state in dashboard
   4. System prevents circular share dependencies (cycle detection blocks acceptance)
-**Plans**: 3 plans in 2 waves
+**Plans**: 4 plans in 3 waves
 
+- [ ] 15-00-PLAN.md — Test stubs for Nyquist compliance (Wave 0)
 Plans:
 - [ ] 15-01-PLAN.md — Acceptance backend with cycle detection (Wave 1)
 - [ ] 15-02-PLAN.md — Acceptance UI with modal forms (Wave 1)
