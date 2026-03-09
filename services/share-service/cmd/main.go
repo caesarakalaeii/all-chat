@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/share-service/handlers"
+	"github.com/caesar/all-chat/services/share-service/jobs"
 	localMiddleware "github.com/caesar/all-chat/services/share-service/middleware"
 	"github.com/caesar/all-chat/services/share-service/repository"
 	"github.com/caesar/all-chat/shared/database"
@@ -66,6 +67,10 @@ func main() {
 	premiumRepo := repository.NewPremiumRepository(dbPool, log)
 	userSearchRepo := repository.NewUserSearchRepository(dbPool, log)
 	shareRepo := repository.NewShareRepository(dbPool, log)
+
+	// Initialize and start expiry job
+	expiryJob := jobs.NewExpiryJob(shareRepo, log)
+	expiryJob.Start(context.Background())
 
 	// Initialize handlers
 	adminHandler := handlers.NewAdminHandler(premiumRepo, log)
@@ -167,6 +172,10 @@ func main() {
 	<-quit
 
 	log.Info("Shutting down server...")
+
+	// CRITICAL: Stop expiry job BEFORE server shutdown
+	// This ensures current expiry operation can complete
+	expiryJob.Stop()
 
 	// Graceful shutdown with 25-second timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
