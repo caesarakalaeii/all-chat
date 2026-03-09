@@ -218,7 +218,7 @@ Plans:
 | 12. Production Rollout | v1.2 | 3/3 | Complete | 2026-03-05 |
 | 13. Feature Parity | v1.2 | 5/5 | Complete | 2026-03-06 |
 | 14. Foundation | v1.3 | 4/4 | Complete | 2026-03-09 |
-| 15. Share Acceptance | v1.3 | 0/3 | Not started | - |
+| 15. Share Acceptance | 1/4 | In Progress|  | - |
 | 16. Shared Overlay Sources | v1.3 | 0/TBD | Not started | - |
 | 17. Message Routing | v1.3 | 0/TBD | Not started | - |
 | 18. Revocation | v1.3 | 0/TBD | Not started | - |
