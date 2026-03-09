@@ -130,7 +130,9 @@ func main() {
 
 		// Share requests - GET doesn't need premium check
 		// User decision from RESEARCH.md Pitfall #5: Non-premium users can VIEW but cannot CREATE/ACCEPT
-		api.GET("/shares/incoming", shareHandler.ListIncoming) // No premium middleware
+		api.GET("/shares/incoming", shareHandler.ListIncoming)                  // No premium middleware
+		api.GET("/shares/unseen-acceptances", shareHandler.GetUnseenAcceptances) // No premium - all senders can see
+		api.POST("/shares/:id/mark-seen", shareHandler.MarkAcceptanceSeen)      // No premium - all senders can mark seen
 
 		// Premium-only routes (create and accept share requests)
 		premiumRoutes := api.Group("")

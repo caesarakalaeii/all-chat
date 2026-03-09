@@ -13,6 +13,8 @@ export interface ShareRequest {
   created_at: string;
   responded_at?: string;
   expires_at: string;
+  has_seen_acceptance?: boolean; // Phase 15-03: Tracks if sender has seen acceptance notification
+  sender_display_name?: string;  // Phase 15-03: Recipient's display name for unseen acceptances
   // Populated by JOIN in future (Phase 15)
   sender?: {
     id: string;

@@ -4,15 +4,19 @@ import { useEffect, useState } from 'react';
 import { sharesApi } from '@/lib/api/shares';
 import { ShareRequest } from '@/lib/types/share';
 import { ShareRequestCard } from './components/ShareRequestCard';
+import { AddSourceModal } from './components/AddSourceModal';
 import toast from 'react-hot-toast';
 
 export default function ShareRequestsPage() {
   const [requests, setRequests] = useState<ShareRequest[]>([]);
   const [filter, setFilter] = useState<'pending' | 'history'>('pending');
   const [loading, setLoading] = useState(true);
+  const [unseenAcceptances, setUnseenAcceptances] = useState<ShareRequest[]>([]);
+  const [showUnseenPrompt, setShowUnseenPrompt] = useState(false);
 
   useEffect(() => {
     fetchRequests();
+    checkUnseenAcceptances();
   }, []);
 
   async function fetchRequests() {
@@ -27,6 +31,52 @@ export default function ShareRequestsPage() {
       setLoading(false);
     }
   }
+
+  async function checkUnseenAcceptances() {
+    try {
+      const unseen = await sharesApi.getUnseenAcceptances();
+      if (unseen.length > 0) {
+        setUnseenAcceptances(unseen);
+        setShowUnseenPrompt(true);
+      }
+    } catch (error) {
+      console.error('Failed to check unseen acceptances:', error);
+      // Fail silently - this is a secondary feature
+    }
+  }
+
+  const handleCloseUnseenPrompt = async () => {
+    if (unseenAcceptances.length > 0) {
+      try {
+        await sharesApi.markAcceptanceSeen(unseenAcceptances[0].id);
+        // Remove the first acceptance and continue
+        const remaining = unseenAcceptances.slice(1);
+        setUnseenAcceptances(remaining);
+        if (remaining.length === 0) {
+          setShowUnseenPrompt(false);
+        }
+      } catch (error) {
+        console.error('Failed to mark acceptance seen:', error);
+        toast.error('Failed to update notification status');
+      }
+    }
+  }
+
+  const handleAddedSource = async () => {
+    if (unseenAcceptances.length > 0) {
+      try {
+        await sharesApi.markAcceptanceSeen(unseenAcceptances[0].id);
+        const remaining = unseenAcceptances.slice(1);
+        setUnseenAcceptances(remaining);
+        if (remaining.length === 0) {
+          setShowUnseenPrompt(false);
+        }
+      } catch (error) {
+        console.error('Failed to mark acceptance seen:', error);
+        toast.error('Failed to update notification status');
+      }
+    }
+  };
 
   // Filter: Pending vs History tabs
   const displayRequests = requests.filter(r => {
@@ -44,6 +94,16 @@ export default function ShareRequestsPage() {
 
   return (
     <div className="px-4 py-6">
+      {/* Add Source Modal for unseen acceptances */}
+      {showUnseenPrompt && unseenAcceptances.length > 0 && (
+        <AddSourceModal
+          senderName={unseenAcceptances[0].sender_display_name || 'Unknown User'}
+          senderOverlayId={unseenAcceptances[0].sender_overlay_id}
+          onClose={handleCloseUnseenPrompt}
+          onAdded={handleAddedSource}
+        />
+      )}
+
       <h1 className="text-2xl font-bold mb-6">Share Requests</h1>
 
       {/* Tab Filters */}

@@ -57,4 +57,19 @@ export const sharesApi = {
       expiry_hours: expiryHours,
     });
   },
+
+  /**
+   * Get unseen acceptances for the current user (sender who hasn't seen acceptance notification)
+   */
+  async getUnseenAcceptances(): Promise<ShareRequest[]> {
+    const response = await apiClient.get<{ requests: ShareRequest[] }>('/api/v1/shares/unseen-acceptances');
+    return response.requests || [];
+  },
+
+  /**
+   * Mark a share request acceptance as seen by the sender
+   */
+  async markAcceptanceSeen(shareId: string): Promise<void> {
+    await apiClient.post(`/api/v1/shares/${shareId}/mark-seen`, {});
+  },
 };

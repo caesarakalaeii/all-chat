@@ -421,3 +421,32 @@ func (h *ShareHandler) RejectRequest(c *gin.Context) {
 		"status": "rejected",
 	})
 }
+
+// GetUnseenAcceptances handles GET /api/v1/shares/unseen-acceptances
+func (h *ShareHandler) GetUnseenAcceptances(c *gin.Context) {
+	userID := c.GetString("user_id")
+	ctx := c.Request.Context()
+
+	requests, err := h.shareRepo.GetUnseenAcceptances(ctx, userID)
+	if err != nil {
+		h.logger.Error("Failed to get unseen acceptances", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"requests": requests})
+}
+
+// MarkAcceptanceSeen handles POST /api/v1/shares/:id/mark-seen
+func (h *ShareHandler) MarkAcceptanceSeen(c *gin.Context) {
+	shareID := c.Param("id")
+	ctx := c.Request.Context()
+
+	if err := h.shareRepo.MarkAcceptanceSeen(ctx, shareID); err != nil {
+		h.logger.Error("Failed to mark acceptance seen", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "marked"})
+}

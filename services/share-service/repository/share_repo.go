@@ -283,3 +283,69 @@ func (r *ShareRepository) GetAcceptedSharesByRecipient(ctx context.Context, user
 
 	return shares, nil
 }
+
+// GetUnseenAcceptances returns accepted share requests where user is sender and has_seen_acceptance = false
+// Includes recipient_display_name from users table (the accepting user's name)
+func (r *ShareRepository) GetUnseenAcceptances(ctx context.Context, senderUserID string) ([]models.ShareRequest, error) {
+	query := `
+		SELECT sr.id, sr.sender_user_id, sr.sender_overlay_id, sr.recipient_user_id,
+		       sr.status, sr.created_at, sr.responded_at, sr.expires_at, sr.has_seen_acceptance,
+		       u.display_name as sender_display_name
+		FROM share_requests sr
+		JOIN users u ON u.id = sr.recipient_user_id
+		WHERE sr.sender_user_id = $1
+		  AND sr.status = $2
+		  AND sr.has_seen_acceptance = false
+		ORDER BY sr.responded_at DESC
+	`
+
+	rows, err := r.db.Query(ctx, query, senderUserID, models.StatusAccepted)
+	if err != nil {
+		r.logger.Error("Failed to get unseen acceptances",
+			zap.String("sender_user_id", senderUserID),
+			zap.Error(err))
+		return nil, fmt.Errorf("failed to get unseen acceptances: %w", err)
+	}
+	defer rows.Close()
+
+	var requests []models.ShareRequest
+	for rows.Next() {
+		var req models.ShareRequest
+		err := rows.Scan(&req.ID, &req.SenderUserID, &req.SenderOverlayID, &req.RecipientUserID,
+			&req.Status, &req.CreatedAt, &req.RespondedAt, &req.ExpiresAt, &req.HasSeenAcceptance,
+			&req.SenderDisplayName)
+		if err != nil {
+			r.logger.Error("Failed to scan share request", zap.Error(err))
+			continue
+		}
+		requests = append(requests, req)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Error iterating unseen acceptances", zap.Error(err))
+		return nil, fmt.Errorf("failed to iterate results: %w", err)
+	}
+
+	r.logger.Debug("Retrieved unseen acceptances",
+		zap.String("sender_user_id", senderUserID),
+		zap.Int("count", len(requests)))
+
+	return requests, nil
+}
+
+// MarkAcceptanceSeen sets has_seen_acceptance = true for share request
+func (r *ShareRepository) MarkAcceptanceSeen(ctx context.Context, id string) error {
+	query := `UPDATE share_requests SET has_seen_acceptance = true WHERE id = $1`
+	_, err := r.db.Exec(ctx, query, id)
+	if err != nil {
+		r.logger.Error("Failed to mark acceptance seen",
+			zap.String("id", id),
+			zap.Error(err))
+		return fmt.Errorf("failed to mark acceptance seen: %w", err)
+	}
+
+	r.logger.Debug("Marked acceptance seen",
+		zap.String("id", id))
+
+	return nil
+}
