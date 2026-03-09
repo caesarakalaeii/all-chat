@@ -220,3 +220,22 @@ func (r *ShareRepository) ListByOverlay(ctx context.Context, overlayID string) (
 
 	return requests, nil
 }
+
+// ExpirePendingRequests marks pending requests with expired dates as 'expired'
+// Returns the number of requests that were expired
+func (r *ShareRepository) ExpirePendingRequests(ctx context.Context) (int, error) {
+	query := `
+		UPDATE share_requests
+		SET status = $1, responded_at = NOW()
+		WHERE status = $2 AND expires_at < NOW()
+	`
+
+	result, err := r.db.Exec(ctx, query, models.StatusExpired, models.StatusPending)
+	if err != nil {
+		r.logger.Error("Failed to expire pending requests", zap.Error(err))
+		return 0, fmt.Errorf("failed to expire requests: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	return int(rowsAffected), nil
+}
