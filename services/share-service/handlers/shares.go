@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/caesar/all-chat/services/share-service/models"
 	"github.com/caesar/all-chat/services/share-service/repository"
@@ -314,11 +317,55 @@ func (h *ShareHandler) AcceptShareRequest(c *gin.Context) {
 		zap.String("recipient_overlay_id", req.RecipientOverlayID),
 		zap.String("expiry_option", req.ExpiryOption))
 
+	// Send WebSocket notification to sender (fire-and-forget)
+	go func() {
+		notificationCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		h.notifyShareAccepted(notificationCtx, shareRequest.SenderUserID, requestID, req.RecipientOverlayID)
+	}()
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":            "accepted",
 		"sender_overlay_id": shareRequest.SenderOverlayID, // For add-source prompt
 		"share_request":     shareRequest,
 	})
+}
+
+// notifyShareAccepted sends WebSocket notification to sender via API Gateway
+func (h *ShareHandler) notifyShareAccepted(ctx context.Context, senderUserID, shareID, recipientOverlayID string) {
+	// Call API Gateway WebSocket endpoint to broadcast to sender
+	// POST http://api-gateway:8080/internal/ws/notify
+	// Body: {"user_id": senderUserID, "type": "share_accepted", "data": {"share_id": shareID, "recipient_overlay_id": recipientOverlayID}}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	payload := map[string]interface{}{
+		"user_id": senderUserID,
+		"type":    "share_accepted",
+		"data": map[string]string{
+			"share_id":             shareID,
+			"recipient_overlay_id": recipientOverlayID,
+		},
+	}
+
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequestWithContext(ctx, "POST", "http://api-gateway:8080/internal/ws/notify", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		h.logger.Error("Failed to send WebSocket notification", zap.Error(err))
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		h.logger.Error("WebSocket notification failed", zap.Int("status", resp.StatusCode))
+	} else {
+		h.logger.Info("WebSocket notification sent to sender",
+			zap.String("sender_user_id", senderUserID),
+			zap.String("share_id", shareID))
+	}
 }
 
 // AcceptRequest handles POST /api/v1/shares/:id/accept (legacy - kept for backward compatibility)

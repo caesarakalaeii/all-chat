@@ -433,6 +433,13 @@ func main() {
 		protectedAPI.GET("/admin/sources", proxyHandler.ForwardRequest)         // -> overlay-manager
 	}
 
+	// Internal routes (service-to-service, no auth for MVP - rely on network isolation)
+	// TODO: Add service-to-service auth for production
+	internal := router.Group("/internal")
+	{
+		internal.POST("/ws/notify", wsHandler.NotifyUser)
+	}
+
 	// Get port from environment
 	port := getEnvOrDefault("PORT", "8080")
 

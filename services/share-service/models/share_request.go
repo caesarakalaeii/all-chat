@@ -8,14 +8,16 @@ import (
 
 // ShareRequest represents a request to share an overlay between two users
 type ShareRequest struct {
-	ID              string     `json:"id" db:"id"`
-	SenderUserID    string     `json:"sender_user_id" db:"sender_user_id"`
-	SenderOverlayID string     `json:"sender_overlay_id" db:"sender_overlay_id"`
-	RecipientUserID string     `json:"recipient_user_id" db:"recipient_user_id"`
-	Status          string     `json:"status" db:"status"` // pending, accepted, rejected, expired
-	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
-	RespondedAt     *time.Time `json:"responded_at,omitempty" db:"responded_at"`
-	ExpiresAt       time.Time  `json:"expires_at" db:"expires_at"`
+	ID                 string     `json:"id" db:"id"`
+	SenderUserID       string     `json:"sender_user_id" db:"sender_user_id"`
+	SenderOverlayID    string     `json:"sender_overlay_id" db:"sender_overlay_id"`
+	RecipientUserID    string     `json:"recipient_user_id" db:"recipient_user_id"`
+	Status             string     `json:"status" db:"status"` // pending, accepted, rejected, expired
+	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
+	RespondedAt        *time.Time `json:"responded_at,omitempty" db:"responded_at"`
+	ExpiresAt          time.Time  `json:"expires_at" db:"expires_at"`
+	HasSeenAcceptance  bool       `json:"has_seen_acceptance" db:"has_seen_acceptance"`
+	SenderDisplayName  string     `json:"sender_display_name,omitempty" db:"sender_display_name"` // Join with users table
 }
 
 // Valid status constants
