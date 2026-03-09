@@ -37,8 +37,8 @@ Requirements for chat overlay sharing feature. Each maps to roadmap phases.
 
 ### Premium & Admin
 
-- [ ] **PREMIUM-01**: Non-premium users blocked from creating or accepting shares
-- [ ] **PREMIUM-02**: Admin can mark specific users as premium for testing purposes
+- [x] **PREMIUM-01**: Non-premium users blocked from creating or accepting shares
+- [x] **PREMIUM-02**: Admin can mark specific users as premium for testing purposes
 
 ## Future Requirements
 
@@ -92,8 +92,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXPIRY-04 | Phase 19 | Pending |
 | EXPIRY-05 | Phase 19 | Pending |
 | EXPIRY-06 | Phase 19 | Pending |
-| PREMIUM-01 | Phase 14 | Pending |
-| PREMIUM-02 | Phase 14 | Pending |
+| PREMIUM-01 | Phase 14 | Complete |
+| PREMIUM-02 | Phase 14 | Complete |
 
 **Coverage:**
 - v1.3 requirements: 21 total
