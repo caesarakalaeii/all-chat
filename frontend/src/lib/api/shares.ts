@@ -41,4 +41,20 @@ export const sharesApi = {
     const response = await apiClient.get<{ requests: ShareRequest[] }>(url);
     return response.requests || [];
   },
+
+  /**
+   * Accept a share request
+   */
+  async acceptRequest(
+    shareId: string,
+    recipientOverlayId: string,
+    expiryOption: 'this_stream' | 'custom' | 'unlimited',
+    expiryHours?: number
+  ): Promise<{ share: ShareRequest; sender_overlay_id: string }> {
+    return apiClient.post(`/api/v1/shares/${shareId}/accept`, {
+      recipient_overlay_id: recipientOverlayId,
+      expiry_option: expiryOption,
+      expiry_hours: expiryHours,
+    });
+  },
 };

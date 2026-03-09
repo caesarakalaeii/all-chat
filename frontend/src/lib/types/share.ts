@@ -9,7 +9,7 @@ export interface ShareRequest {
   sender_user_id: string;
   sender_overlay_id: string;
   recipient_user_id: string;
-  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  status: 'pending' | 'accepted' | 'rejected' | 'expired' | 'revoked';
   created_at: string;
   responded_at?: string;
   expires_at: string;
