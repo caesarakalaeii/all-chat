@@ -3,6 +3,7 @@ package streams
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -394,7 +395,7 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		zap.String("overlay_id", overlayID),
 	)
 
-	// Get initial continuation token from InnerTube next API
+	// Get initial continuation token from watch page
 	initialContinuation, err := m.discovery.GetInitialContinuation(ctx, videoID)
 	if err != nil {
 		m.logger.Error("Failed to get initial continuation token",
@@ -402,9 +403,17 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
-		// Release leadership so another attempt can try later
 		if m.leader != nil {
 			m.leader.Release(videoID)
+		}
+		// If the stream has ended (isReplay or no liveChatRenderer), clear the Redis
+		// cache so discovery will find the new live stream instead of retrying the ended one.
+		// For transient errors (429, network), keep the cache so we retry the same video.
+		errStr := err.Error()
+		if strings.Contains(errStr, "stream may have ended") || strings.Contains(errStr, "isReplay") {
+			if delErr := m.repository.DeleteChannelVideoMapping(ctx, channelID); delErr != nil {
+				m.logger.Warn("Failed to clear stale video mapping", zap.Error(delErr))
+			}
 		}
 		return fmt.Errorf("get initial continuation: %w", err)
 	}
