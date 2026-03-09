@@ -1,186 +1,228 @@
-# Feature Landscape
+# Feature Research
 
-**Domain:** YouTube Live Chat Listener (InnerTube-based)
-**Researched:** 2026-02-21
+**Domain:** Frontend UI/UX Design System for Streaming Platform
+**Researched:** 2026-03-09
+**Confidence:** HIGH
 
-## Table Stakes
+## Feature Landscape
 
-Features users expect. Missing = product feels incomplete.
+### Table Stakes (Users Expect These)
+
+Features users assume exist. Missing these = product feels incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **Stream discovery** | Must find latest live stream for a channel | Medium | InnerTube uses `browse` endpoint with channel ID. No search quota costs. Filter live streams from browse results. |
-| **Regular chat messages** | Core functionality - text messages from viewers | Low | InnerTube returns `liveChatTextMessageRenderer` with message, author, timestamp, badges |
-| **Super Chat events** | Monetization events must be captured | Low | InnerTube provides `liveChatPaidMessageRenderer` with amount, currency, tier, message |
-| **Super Sticker events** | Monetization events must be captured | Low | InnerTube provides `liveChatPaidStickerRenderer` with sticker metadata, amount |
-| **Membership events** | New memberships, milestones, gifts | Medium | InnerTube supports new sponsor, milestone chat, gift purchase renderers |
-| **Single message deletion** | Moderator actions must reflect in overlay | Medium | InnerTube sends `markChatItemAsDeletedAction` with target message ID |
-| **Batch deletion (ban)** | User bans must remove all their messages | Medium | InnerTube sends `markChatItemsByAuthorAsDeletedAction` with author ID |
-| **Continuation tokens** | Resume streaming without missing messages | Low | InnerTube provides continuation token in response, used in next request |
-| **User metadata** | Display name, badges, profile image, verified status | Low | Included in InnerTube message renderers (`authorBadges`, `authorPhoto`, etc.) |
-| **Emote parsing** | YouTube custom emotes (membership emotes) | Medium | InnerTube provides emoji metadata in message `runs` (image URL, alt text, custom emoji flag) |
-| **Live/offline detection** | Know when stream ends | Low | InnerTube returns `offlineAt` timestamp or error when stream ends |
-| **Connection gating** | Stop streaming when overlay disconnected (quota efficiency) | Low | Already implemented in official listener, reuse pattern |
+| Design token system (colors, spacing, typography) | Foundation for consistent theming across all pages | MEDIUM | Tailwind v4 @theme directive, CSS variables, three-layer hierarchy (base → semantic → component) |
+| Component library with shadcn/ui | Modern React apps expect accessible, customizable UI primitives | MEDIUM | 70+ components available, Radix UI foundation, copy-paste architecture |
+| Responsive layouts (mobile-first) | Streaming tools accessed from multiple devices | LOW | Already using Tailwind breakpoints, need systematic mobile/tablet/desktop patterns |
+| Dark theme optimized for creators | Streaming tools are dark by default (StreamElements, OBS, etc.) | LOW | Already dark (gray palette), needs refinement to slate for warmth |
+| Platform branding (Twitch purple, YouTube red, etc.) | Users expect platform colors for badges, status indicators | LOW | Already implemented, needs consistency in usage patterns |
+| Accessible focus states and keyboard navigation | Professional tools must meet WCAG AA standards | LOW | Add ring-2 ring-blue-500/20 to all interactive elements |
+| Consistent spacing and typography scale | Prevents visual inconsistency, makes UI feel polished | LOW | Even spacing (gap-4, gap-6), Inter font already loaded |
+| Loading states and skeletons | Users expect feedback during data fetching | LOW | Already has spinners, needs skeleton screens for cards |
+| Toast notifications for actions | Feedback for create/delete/update operations | LOW | Already implemented inline, needs shadcn/ui toast/sonner |
 
-## Differentiators
+### Differentiators (Competitive Advantage)
 
-Features that set product apart. Not expected, but valued.
+Features that set the product apart. Not required, but valuable.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Zero quota consumption** | Unlimited polling, no YouTube API quota limits | HIGH VALUE | InnerTube has no quota (unofficial API). Official listener limited to 1,009,000 units/day. |
-| **Faster deletion detection** | Real-time deletion events vs polling delay | MEDIUM VALUE | InnerTube sends deletions immediately in stream. Official API requires polling every 2-5s to detect. |
-| **Lower polling latency** | Faster message delivery to overlay | MEDIUM VALUE | InnerTube continuation timeout can be lower (sub-second possible). Official API enforces `pollingIntervalMillis` (2-5s). |
-| **No OAuth required** | Simpler setup, no token management | HIGH VALUE | InnerTube works without authentication. Official listener requires OAuth per streamer. |
-| **Ticker events** | Paid message ticker announcements | LOW VALUE | InnerTube provides `addLiveChatTickerItemAction` for ticker items. Nice-to-have, not critical. |
-| **Viewer leaderboard rank** | Top contributor crown tags (#1, #2, #3) | LOW VALUE | InnerTube exposes YouTube points ranking. Community feature, not essential. |
+| Split-view live preview (editor + preview) | Immediate visual feedback (like Claude Code Desktop 2026 feature) | MEDIUM | Configuration on left, sticky preview on right, real-time WebSocket updates |
+| Smooth micro-interactions (hover, scale, shadow) | Makes UI feel premium vs generic Tailwind templates | LOW | transition-all duration-200, hover:scale-[1.02], shadow depth progression |
+| Gradient CTAs (purple → blue) | Distinctive brand identity, stands out from competitors | LOW | Use only for primary actions (Create Overlay, Save), not overused |
+| Platform-color coded sections | Visual hierarchy for multi-platform chat sources | LOW | border-l-4 border-l-{platform}-500 accents on cards |
+| Animated empty states with illustrations | Engaging first-time user experience | LOW | Already has emoji-based empty states, could enhance with SVG illustrations |
+| Click-to-edit inline patterns | Reduces friction for overlay name/description editing | MEDIUM | Inline contenteditable or input fields with save/cancel |
+| Drag-and-drop source reordering | Intuitive priority management for chat sources | MEDIUM | React DnD or dnd-kit library, visual drop zones |
+| Command palette (Cmd+K) | Power user feature for quick navigation | MEDIUM | cmdk library (shadcn/ui command component), search overlays/sources/settings |
 
-## Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
-Features to explicitly NOT build.
+Features that seem good but create problems.
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Sending messages** | Requires authentication, out of scope, increases complexity | READ ONLY - InnerTube listener only consumes chat, never sends |
-| **Polls/Creator goals** | Unstable InnerTube schema, not core chat functionality | Defer to future phase if user demand emerges |
-| **Historical chat replay** | Different API endpoint, separate use case | Stream live chat only. Replay is separate feature. |
-| **Multiple stream tracking per channel** | Complexity, edge case (official listener tracks latest only) | Track latest live stream only (drop-in replacement behavior) |
-| **Quota tracking** | InnerTube has no quota | Remove quota tracking entirely (simplification over official listener) |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Light theme toggle | "Users want choice" | Doubles maintenance burden, streaming tools are dark by default | Focus on perfecting dark theme (StreamElements doesn't offer light mode) |
+| Heavy animations (parallax, complex transitions) | "Make it feel modern" | Performance issues in OBS browser sources, distracts from content | Subtle micro-interactions (scale, shadow), CSS transforms only |
+| Customizable everything (colors, fonts, sizes) | "Give users control" | Destroys design consistency, creates support burden | Provide 2-3 preset themes maximum, enforce design system |
+| Real-time collaboration editing | "Like Figma for overlays" | Complex infrastructure, unclear user need, adds latency | Single-user ownership, share preview URLs for feedback |
+| Marketplace-style component browsing | "Like Storybook showcase" | Premature for v1.3, unclear if users want custom components vs templates | Focus on solid base components, defer marketplace to v2+ |
+| Per-component animation customization | "Let users animate everything" | Creates jarring UX, CSS complexity in browser sources | Provide sensible defaults, defer custom animations to CSS class overrides |
 
 ## Feature Dependencies
 
 ```
-Stream discovery → Live chat streaming (need stream/video ID to fetch chat)
-Continuation tokens → Resume streaming (prevents message loss on reconnect)
-Connection gating → Stop streaming (prevents wasted resources when overlay offline)
-User metadata → Message rendering (overlay needs display name, badges, avatar)
-Single deletion → Batch deletion (both use same removal mechanism in overlay)
+Design Token System
+    └──requires──> Tailwind v4 Configuration
+                       └──requires──> CSS Variable Setup
+
+shadcn/ui Component Library
+    └──requires──> Radix UI Package (unified)
+    └──requires──> Design Token System (for theming)
+
+Page Redesigns
+    └──requires──> Component Library
+    └──requires──> Design Token System
+
+Split-view Live Preview
+    └──requires──> Responsive Layout System
+    └──requires──> WebSocket Connection (already exists)
+
+Command Palette
+    └──requires──> Component Library (shadcn/ui command)
+    └──enhances──> Navigation UX
+
+Drag-and-Drop Reordering
+    └──requires──> Component Library
+    └──enhances──> Source Management UX
+
+ESLint + Pre-commit Hooks
+    └──requires──> Design Token System (enforce token usage)
+    └──prevents──> Design System Violations
 ```
 
-## MVP Recommendation
+### Dependency Notes
 
-**Phase 1: Core parity (drop-in replacement)**
-Prioritize:
-1. Stream discovery (find latest live stream for channel)
-2. Live chat streaming with continuation tokens
-3. Regular messages, Super Chat, Super Sticker, membership events
-4. Single + batch deletion events
-5. User metadata (name, badges, avatar, verified)
-6. Live/offline detection
-7. Connection gating (stop when overlay disconnected)
+- **Design Token System requires Tailwind v4:** New @theme directive approach (CSS-first vs JS config)
+- **shadcn/ui requires unified Radix UI package:** February 2026 update consolidates @radix-ui/react-* packages
+- **Page Redesigns require Component Library:** Can't redesign without standardized components
+- **Split-view preview enhances Editor UX:** Already have preview page, needs simultaneous view
+- **Command Palette enhances Navigation:** Not blocking, but valuable for power users
+- **ESLint prevents design drift:** Critical for long-term maintenance, enforces token usage
 
-**Phase 2: Differentiators (beyond official listener)**
-8. YouTube custom emotes (membership emotes in message runs)
-9. Ticker events (nice-to-have)
+## MVP Definition
 
-Defer:
-- **Polls/Creator goals**: Unstable schema, not core functionality
-- **Viewer leaderboard rank**: Low value, community feature
-- **Sending messages**: Out of scope (read-only listener)
+### Launch With (v1.3)
 
-## Complexity Assessment
+Minimum viable product — what's needed to validate the redesign.
 
-### Low Complexity (1-2 days)
-- Regular chat messages (straightforward InnerTube renderer parsing)
-- Super Chat/Sticker events (similar to regular messages)
-- Continuation tokens (provided by InnerTube, just pass through)
-- User metadata (included in renderers)
-- Live/offline detection (check `offlineAt` field)
-- Connection gating (reuse official listener pattern)
+- [x] **Design Token System** — Foundation for all other work (colors, spacing, typography, shadows)
+- [x] **Tailwind v4 Configuration** — @theme directive, CSS variables, semantic naming
+- [x] **shadcn/ui Component Library** — Core primitives (Button, Card, Input, Badge, Dialog, Toast)
+- [ ] **Landing Page Redesign** — First impression, gradient hero, platform login buttons
+- [ ] **Dashboard Redesign** — Overlay grid with hover states, empty states, create button
+- [ ] **Overlay Editor Redesign** — Source management cards, platform-color coding, notifications
+- [ ] **Settings Page Redesign** — Account management, profile display, logout
+- [ ] **ESLint Rules for Design System** — Enforce token usage (no arbitrary values, no gray-* classes)
+- [ ] **Pre-commit Hooks** — Prettier + ESLint, validate design system compliance
 
-### Medium Complexity (3-5 days)
-- **Stream discovery** (find live stream from channel browse results, filter logic)
-- Membership events (multiple renderer types: new sponsor, milestone, gift, received)
-- Single message deletion (match `targetItemId` to message ID, remove from overlay)
-- Batch deletion (find all messages from author, remove)
-- YouTube custom emotes (parse message `runs`, extract emoji metadata)
+### Add After Validation (v1.x)
 
-### High Complexity (5-10 days)
-- **InnerTube protocol reverse engineering** (no official docs, must inspect network traffic)
-- **Stability handling** (InnerTube schema can change without notice)
-- **Error handling** (undocumented error codes, must infer from responses)
+Features to add once core redesign is working.
 
-## Drop-In Replacement Feature Parity Checklist
+- [ ] **Split-view Live Preview** — Trigger: Users request side-by-side editing (HIGH value, MEDIUM complexity)
+- [ ] **Command Palette (Cmd+K)** — Trigger: 50+ overlays average per user (power user feature)
+- [ ] **Drag-and-Drop Source Reordering** — Trigger: Users ask "How do I prioritize sources?" (UX enhancement)
+- [ ] **Admin Page Redesigns** — Trigger: After user-facing pages complete (lower priority)
+- [ ] **Storybook Documentation** — Trigger: Multiple developers contributing (onboarding tool)
+- [ ] **Animation Library Integration** — Trigger: Need complex animations (Framer Motion for UI, defer GSAP to overlay marketplace)
 
-Can InnerTube match official listener behavior exactly?
+### Future Consideration (v2+)
 
-| Official Listener Feature | InnerTube Equivalent | Parity Status | Notes |
-|---------------------------|----------------------|---------------|-------|
-| OAuth-based stream discovery | Browse endpoint (no auth) | ✅ YES | InnerTube `browse` returns live streams, no quota cost |
-| Poll live chat (5 units/poll) | Continuation-based streaming | ✅ YES (BETTER) | Zero quota, no polling cost |
-| Regular messages | `liveChatTextMessageRenderer` | ✅ YES | Direct mapping |
-| Super Chat | `liveChatPaidMessageRenderer` | ✅ YES | Amount, currency, tier, message |
-| Super Sticker | `liveChatPaidStickerRenderer` | ✅ YES | Sticker metadata, amount |
-| New membership | `liveChatSponsorshipsGiftPurchaseAnnouncementRenderer` | ✅ YES | New sponsor event |
-| Membership milestone | `liveChatMembershipItemRenderer` | ✅ YES | Milestone months |
-| Membership gifts | `liveChatSponsorshipsGiftPurchaseAnnouncementRenderer` | ✅ YES | Gift count, level |
-| Single deletion | `markChatItemAsDeletedAction` | ✅ YES | Target message ID |
-| Batch deletion (ban) | `markChatItemsByAuthorAsDeletedAction` | ✅ YES | Target author ID |
-| User badges | `authorBadges` in renderer | ✅ YES | Moderator, verified, owner, member |
-| Profile image | `authorPhoto` in renderer | ✅ YES | Avatar URL |
-| Polling interval | Continuation timeout | ✅ YES (BETTER) | InnerTube can be faster (sub-second) |
-| Live/offline detection | `offlineAt` timestamp | ✅ YES | Stream end notification |
-| Quota tracking | N/A (no quota) | ✅ YES (SIMPLER) | Remove quota tracking code |
-| Connection gating | Reuse pattern | ✅ YES | Stop when overlay disconnected |
-| Token refresh | N/A (no auth) | ✅ YES (SIMPLER) | Remove OAuth token management |
+Features to defer until product-market fit is established.
 
-**Verdict:** InnerTube can provide **100% feature parity** with official listener, with **improvements** in quota elimination, deletion latency, and setup simplicity.
+- [ ] **Theme Presets (2-3 options)** — Why defer: Perfect single theme first, then variants
+- [ ] **Component Marketplace** — Why defer: Users need core functionality before customization
+- [ ] **Advanced Animations (GSAP)** — Why defer: Focus on OBS browser source compatibility first
+- [ ] **Accessibility Audit Tool** — Why defer: Manual WCAG AA compliance sufficient for v1.3
+- [ ] **Design System Documentation Site** — Why defer: DESIGN_SYSTEM.md + inline docs sufficient initially
 
-## Key Risks
+## Feature Prioritization Matrix
 
-### Stability Risk: HIGH
-- InnerTube is **unofficial, undocumented** API
-- YouTube can change schema **without notice** (breaking changes possible)
-- No SLA, no support, no version guarantees
-- **Mitigation**: Robust error handling, schema validation, fallback to official listener on breakage
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Design Token System | HIGH | MEDIUM | P1 |
+| shadcn/ui Component Library | HIGH | MEDIUM | P1 |
+| Landing Page Redesign | HIGH | LOW | P1 |
+| Dashboard Redesign | HIGH | LOW | P1 |
+| Overlay Editor Redesign | HIGH | MEDIUM | P1 |
+| Settings Page Redesign | MEDIUM | LOW | P1 |
+| ESLint + Pre-commit Hooks | HIGH | LOW | P1 |
+| Split-view Live Preview | HIGH | MEDIUM | P2 |
+| Command Palette | MEDIUM | MEDIUM | P2 |
+| Drag-and-Drop Reordering | MEDIUM | MEDIUM | P2 |
+| Admin Page Redesigns | LOW | LOW | P2 |
+| Storybook Documentation | LOW | MEDIUM | P2 |
+| Animation Library (Framer Motion) | MEDIUM | LOW | P2 |
+| Theme Presets | LOW | MEDIUM | P3 |
+| Component Marketplace | LOW | HIGH | P3 |
+| GSAP Integration | LOW | MEDIUM | P3 |
 
-### Rate Limiting Risk: MEDIUM
-- InnerTube has "request limits" but "so high you'll likely never hit them" (source: GitHub discussions)
-- No documented rate limits, must discover empirically
-- **Mitigation**: Implement exponential backoff, monitor for rate limit errors
+**Priority key:**
+- P1: Must have for v1.3 launch (table stakes + core redesigns)
+- P2: Should have, add when possible (enhances UX, not blocking)
+- P3: Nice to have, future consideration (after product-market fit)
 
-### Detection Risk: LOW-MEDIUM
-- YouTube could detect/block InnerTube usage from non-browser clients
-- No evidence of widespread blocking (libraries actively used in 2026)
-- **Mitigation**: User-Agent spoofing, request header matching browser behavior
+## Competitor Feature Analysis
 
-### Go Library Availability Risk: HIGH
-- **Most InnerTube libraries are JavaScript/Python** (.NET, Python dominate)
-- **Go library found: `github.com/nezbut/innertube-go`** but **does NOT support live chat**
-- **Go library found: `github.com/abhinavxd/youtube-live-chat-downloader/v2`** (Go-specific live chat)
-- **Mitigation**: Evaluate `youtube-live-chat-downloader` or implement InnerTube protocol directly
+| Feature | StreamElements | OBS Studio | All-Chat (Target) |
+|---------|----------------|------------|-------------------|
+| Design System | Polished dark theme, consistent spacing, platform colors | Basic gray UI, functional but dated | StreamElements Modern aesthetic (slate backgrounds, gradient CTAs) |
+| Component Library | Custom React components, not open | Qt widgets (C++) | shadcn/ui + Radix UI (accessible, customizable, copy-paste) |
+| Live Preview | Separate preview window, not side-by-side | Browser source preview in scene | Split-view with sticky preview (like Claude Code Desktop 2026) |
+| Theme Customization | Single dark theme (no toggle) | Basic Qt theming | Single optimized dark theme (focus on perfecting one) |
+| Empty States | Text-based, minimal | No empty states | Emoji + illustrations, engaging |
+| Micro-interactions | Smooth hover states, shadow depth | Minimal hover feedback | Scale + shadow progression, transition-all duration-200 |
+| Platform Branding | Color-coded badges, borders | Not applicable | Platform-color coded sections (border-l-4 accents) |
+| Accessibility | WCAG AA compliant | Basic keyboard nav | WCAG AA focus rings, keyboard nav, semantic HTML |
+| Responsive Design | Desktop-first (creator tool) | Desktop only | Mobile-first (creators check from phones) |
+| Command Palette | No | No | Planned for P2 (power user differentiator) |
 
-## Dependencies on Existing Features
+### Competitive Advantages
 
-| Existing Feature | InnerTube Reuse | Modification Required |
-|------------------|-----------------|----------------------|
-| Message normalization (message-processor) | ✅ Reuse | None - same `RawChatMessage` schema |
-| Redis Streams publishing | ✅ Reuse | None - same `chat:raw` stream |
-| Connection gating pattern | ✅ Reuse | Port from official listener poller |
-| Leader election (source-manager) | ✅ Reuse | None - same leader election pattern |
-| Health checks | ✅ Reuse | None - same `/health/live` and `/health/ready` |
-| Metrics (Prometheus) | ✅ Reuse | Remove quota metrics, add InnerTube-specific |
-| Database schema | ⚠️ Partial | Remove `youtube_quota_usage`, `youtube_oauth_tokens` tables |
-| OAuth manager | ❌ Remove | InnerTube requires no authentication |
-| Quota tracker | ❌ Remove | InnerTube has no quota |
+**vs StreamElements:**
+- Open source component library (shadcn/ui) vs proprietary
+- Split-view live preview (immediate feedback loop)
+- Mobile-responsive (check overlays from phone)
+- Command palette for power users (faster navigation)
+
+**vs OBS Studio:**
+- Modern web UI vs desktop Qt (more accessible, no install)
+- Real-time WebSocket updates (no refresh needed)
+- Platform-specific color coding (visual hierarchy)
+- Accessible by default (Radix UI primitives)
+
+**All-Chat Unique Value:**
+- Multi-platform chat aggregation (not just UI, but core functionality)
+- Design system optimized for streaming tools (dark, platform-aware, functional)
+- Gradient CTAs (distinctive brand identity)
+- Focus on table stakes done exceptionally well (not feature bloat)
 
 ## Sources
 
-### High Confidence (Official Documentation)
-- [YouTube Live Streaming API - LiveChatMessages](https://developers.google.com/youtube/v3/live/docs/liveChatMessages)
-- [YouTube API Quota Calculator](https://developers.google.com/youtube/v3/determine_quota_cost)
+**Design Systems & Best Practices:**
+- [Design Tokens That Scale in 2026 (Tailwind v4 + CSS Variables)](https://www.maviklabs.com/blog/design-tokens-tailwind-v4-2026) — Three-layer token hierarchy (base → semantic → component)
+- [shadcn/ui February 2026 - Unified Radix UI Package](https://ui.shadcn.com/docs/changelog/2026-02-radix-ui) — Cleaner package.json, single radix-ui dependency
+- [Tailwind CSS v4 2026: Migration Best Practices](https://www.digitalapplied.com/blog/tailwind-css-v4-2026-migration-best-practices) — @theme directive, CSS-first configuration
+- [CSS Variables Guide: Design Tokens & Theming](https://www.frontendtools.tech/blog/css-variables-guide-design-tokens-theming-2025) — Runtime theme switching without rebuild
 
-### Medium Confidence (Verified Libraries)
-- [YTLiveChat (C#/.NET InnerTube library)](https://github.com/Agash/YTLiveChat)
-- [YouTube.js (JavaScript InnerTube library)](https://github.com/LuanRT/YouTube.js)
-- [innertube-go (Go InnerTube library - no live chat)](https://pkg.go.dev/github.com/nezbut/innertube-go)
-- [youtube-live-chat-downloader (Go live chat library)](https://pkg.go.dev/github.com/abhinavxd/youtube-live-chat-downloader/v2)
+**Streaming Tool UI Patterns:**
+- [StreamElements Features - Overlays](https://streamelements.com/features/overlays) — Cloud-based overlay editor, pre-configured widgets
+- [Dashboard Builder Guide 2026: No-Code, AI, Best Practices](https://www.weweb.io/blog/dashboard-builder-guide-no-code-ai-best-practices) — Real-time dashboards, interactivity patterns
+- [Twitch Creator Dashboard Guide](https://explore.st-aug.edu/exp/unlock-your-streaming-success-master-the-twitch-creator-dashboard-like-a-pro) — Scheduler, moderator dashboards, analytics
 
-### Medium Confidence (Community Research)
-- [YouTube API Quota Breakdown 2026](https://www.contentstats.io/blog/youtube-api-quota-tracking)
-- [YouTube API Quota Exceeded Fix 2026](https://getlate.dev/blog/youtube-api-limits-how-to-calculate-api-usage-cost-and-fix-exceeded-api-quota)
-- [VTuber LiveChat Dataset (InnerTube moderation events)](https://repopython.com/r/holodata/vtuber-livechat-dataset)
+**Component Libraries & Documentation:**
+- [shadcn/ui CLI v4 (March 2026)](https://ui.shadcn.com/docs/changelog/2026-03-cli-v4) — Registry:base for entire design systems, preset feature
+- [Storybook: Frontend workshop for UI development](https://storybook.js.org/) — Component documentation, live code examples
+- [Top Storybook Documentation Examples](https://www.supernova.io/blog/top-storybook-documentation-examples-and-the-lessons-you-can-learn) — BBC, Guardian, Financial Times design systems
 
-### Low Confidence (GitHub Issues, Discussions)
-- [Retract Message Issue #263](https://github.com/youtube/api-samples/issues/263)
-- [Parse LiveChat Parameters Issue #192](https://github.com/Tyrrrz/YoutubeExplode/issues/192)
+**Animation & Performance:**
+- [Comparing the best React animation libraries for 2026](https://blog.logrocket.com/best-react-animation-libraries/) — Framer Motion (85KB, great DX), GSAP (78KB, pro-grade performance)
+- [Framer Motion: Complete React & Next.js Guide 2026](https://inhaq.com/blog/framer-motion-complete-guide-react-nextjs-developers) — 60FPS default, excellent React integration
+- [OBS Browser Source Overlay CSS Animation Patterns](https://github.com/carlosromanxyz/carlosromanxyz-obs-studio) — Pure HTML/Tailwind overlays, zero build step
+
+**Enforcement & Tooling:**
+- [ESLint Plugin Tailwind CSS](https://tessl.io/registry/tessl/npm-eslint-plugin-tailwindcss/2.0.0/files/docs/index.md) — classnames-order, no-contradicting-classname, no-custom-classname rules
+- [Pre-commit Hooks Guide for 2025-2026](https://gatlenculp.medium.com/effortless-code-quality-the-ultimate-pre-commit-hooks-guide-for-2025-57ca501d9835) — Prettier, Stylelint, CSSLint integration
+- [Create a Pre-commit Git Hook for JavaScript/TypeScript](https://plainenglish.io/blog/create-a-pre-commit-git-hook-to-check-and-fix-your-javascript-typescript-code-automatically) — Automatic formatting and linting
+
+**Live Preview Patterns:**
+- [Live Preview Panel with Click-to-Edit for Claude Code](https://github.com/slopus/happy/issues/802) — February 2026 feature, click UI element to edit
+- [XAML Live Preview - Visual Studio](https://learn.microsoft.com/en-us/visualstudio/xaml-tools/xaml-live-preview) — Hot reload, real-time changes
+- [UltraEdit Live Preview](https://wiki.ultraedit.com/Live_preview) — Split-view HTML/Markdown preview
+
+---
+*Feature research for: All-Chat Frontend Redesign (v1.3)*
+*Researched: 2026-03-09*
+*Confidence: HIGH — Based on current design system spec, existing codebase analysis, and 2026 UI/UX best practices*
