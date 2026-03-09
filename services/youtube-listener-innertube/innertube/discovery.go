@@ -206,34 +206,48 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Cookie", "CONSENT=YES+cb; PREF=hl=en&gl=US")
 
-	resp, err := d.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("fetch watch page: %w", err)
-	}
-	defer resp.Body.Close()
+	// Retry loop for 429 rate limiting — YouTube rate-limits concurrent watch page requests.
+	// Retry up to 5 times with increasing delays (10s, 20s, 30s, 45s, 60s).
+	retryDelays := []time.Duration{10 * time.Second, 20 * time.Second, 30 * time.Second, 45 * time.Second, 60 * time.Second}
+	var resp *http.Response
+	for attempt := 0; ; attempt++ {
+		var doErr error
+		resp, doErr = d.httpClient.Do(req)
+		if doErr != nil {
+			return "", fmt.Errorf("fetch watch page: %w", doErr)
+		}
 
-	if resp.StatusCode == http.StatusTooManyRequests {
-		// Rate limited — wait and retry once before giving up
+		if resp.StatusCode != http.StatusTooManyRequests {
+			break // success or non-retryable error
+		}
+
+		resp.Body.Close()
+		if attempt >= len(retryDelays) {
+			return "", fmt.Errorf("unexpected status code: %d (rate limited, exhausted retries)", resp.StatusCode)
+		}
+
+		delay := retryDelays[attempt]
 		d.logger.Warn("rate limited fetching watch page, retrying after delay",
 			zap.String("video_id", videoID),
+			zap.Duration("delay", delay),
+			zap.Int("attempt", attempt+1),
 		)
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
-		case <-time.After(10 * time.Second):
+		case <-time.After(delay):
 		}
-		resp.Body.Close()
-		req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, watchURL, nil)
-		req2.Header.Set("User-Agent", req.Header.Get("User-Agent"))
-		req2.Header.Set("Accept", req.Header.Get("Accept"))
-		req2.Header.Set("Accept-Language", req.Header.Get("Accept-Language"))
-		req2.Header.Set("Cookie", req.Header.Get("Cookie"))
-		resp, err = d.httpClient.Do(req2)
+
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, watchURL, nil)
 		if err != nil {
-			return "", fmt.Errorf("fetch watch page (retry): %w", err)
+			return "", fmt.Errorf("create retry request: %w", err)
 		}
-		defer resp.Body.Close()
+		req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		req.Header.Set("Cookie", "CONSENT=YES+cb; PREF=hl=en&gl=US")
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
