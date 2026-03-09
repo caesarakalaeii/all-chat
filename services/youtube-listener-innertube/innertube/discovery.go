@@ -85,72 +85,30 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 		return "", fmt.Errorf("no streams found for channel %s", channelID)
 	}
 
-	// Verify liveness for each video - return the first actually-live one
+	// Verify liveness for each video by checking the watch page for a liveChatRenderer.
+	// The player API is unreliable for restricted/members-only channels (returns UNPLAYABLE).
+	// The presence of liveChatRenderer in the watch page's ytInitialData is the definitive
+	// indicator that a stream is currently live and has an active chat.
 	for _, videoID := range videoIDs {
-		isLive, err := d.checkIsLive(ctx, videoID)
+		token, err := d.GetInitialContinuation(ctx, videoID)
 		if err != nil {
-			d.logger.Debug("failed to check liveness",
+			d.logger.Debug("video not live (no live chat found)",
 				zap.String("video_id", videoID),
 				zap.Error(err),
 			)
 			continue
 		}
-		if isLive {
-			d.logger.Info("discovered live stream",
-				zap.String("channel_id", channelID),
-				zap.String("video_id", videoID),
-			)
-			return videoID, nil
-		}
+		d.logger.Info("discovered live stream",
+			zap.String("channel_id", channelID),
+			zap.String("video_id", videoID),
+		)
+		// Return both videoID and token so startPoller doesn't need to re-fetch
+		// Store the token in cache for the manager to use
+		_ = token // token will be re-fetched by startPoller; discovery just confirms liveness
+		return videoID, nil
 	}
 
 	return "", fmt.Errorf("no live stream found for channel %s", channelID)
-}
-
-// checkIsLive verifies whether a video is currently live using the InnerTube player API
-func (d *Discovery) checkIsLive(ctx context.Context, videoID string) (bool, error) {
-	playerURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/player?key=%s", DefaultAPIKey)
-	payload := map[string]interface{}{
-		"context": map[string]interface{}{
-			"client": map[string]interface{}{
-				"clientName":    "WEB",
-				"clientVersion": DefaultClientVersion,
-			},
-		},
-		"videoId": videoID,
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return false, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, playerURL, bytes.NewReader(jsonPayload))
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-
-	resp, err := d.httpClient.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, err
-	}
-
-	var playerResp map[string]interface{}
-	if err := json.Unmarshal(body, &playerResp); err != nil {
-		return false, err
-	}
-
-	videoDetails, _ := playerResp["videoDetails"].(map[string]interface{})
-	isLive, _ := videoDetails["isLive"].(bool)
-	return isLive, nil
 }
 
 // collectVideoIDsFromBrowse recursively collects all unique video IDs from a browse response.
