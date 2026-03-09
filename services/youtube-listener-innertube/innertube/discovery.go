@@ -188,6 +188,7 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 	}
 
 	// The live chat continuation is inside conversationBar.liveChatRenderer.continuations
+	// Only accept tokens from live streams (isReplay absent or false); replay tokens are rejected by get_live_chat
 	token := extractLiveChatContinuation(pageData)
 	if token == "" {
 		return "", fmt.Errorf("no live chat continuation found in watch page for video %s (stream may have ended)", videoID)
@@ -229,7 +230,11 @@ func walkPath(data map[string]interface{}, keys ...string) string {
 			return ""
 		}
 		if i == len(keys)-1 {
-			// Last key should be the liveChatRenderer
+			// Last key should be the liveChatRenderer - skip if it's a replay
+			rendererMap, _ := val.(map[string]interface{})
+			if isReplay, _ := rendererMap["isReplay"].(bool); isReplay {
+				return ""
+			}
 			return extractContinuationFromLiveChatRenderer(val)
 		}
 		current = val
@@ -237,11 +242,17 @@ func walkPath(data map[string]interface{}, keys ...string) string {
 	return ""
 }
 
-// searchLiveChatRenderer recursively searches for liveChatRenderer in any map
+// searchLiveChatRenderer recursively searches for liveChatRenderer in any map.
+// Skips renderers with isReplay=true (chat replay for ended streams uses a different API).
 func searchLiveChatRenderer(data interface{}) string {
 	switch v := data.(type) {
 	case map[string]interface{}:
 		if renderer, ok := v["liveChatRenderer"]; ok {
+			rendererMap, _ := renderer.(map[string]interface{})
+			// Skip replay chat - its tokens are rejected by get_live_chat endpoint
+			if isReplay, _ := rendererMap["isReplay"].(bool); isReplay {
+				return ""
+			}
 			if token := extractContinuationFromLiveChatRenderer(renderer); token != "" {
 				return token
 			}
