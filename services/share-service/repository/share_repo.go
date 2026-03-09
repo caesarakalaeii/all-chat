@@ -239,3 +239,47 @@ func (r *ShareRepository) ExpirePendingRequests(ctx context.Context) (int, error
 	rowsAffected := result.RowsAffected()
 	return int(rowsAffected), nil
 }
+
+// GetAcceptedSharesByRecipient returns accepted shares where recipient_user_id = userID
+// This represents "who does this user share TO" (outgoing edges in share graph for cycle detection)
+func (r *ShareRepository) GetAcceptedSharesByRecipient(ctx context.Context, userID string) ([]models.ShareRequest, error) {
+	query := `
+		SELECT id, sender_user_id, sender_overlay_id, recipient_user_id,
+		       status, created_at, responded_at, expires_at
+		FROM share_requests
+		WHERE recipient_user_id = $1 AND status = $2
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.Query(ctx, query, userID, models.StatusAccepted)
+	if err != nil {
+		r.logger.Error("Failed to get accepted shares by recipient",
+			zap.String("user_id", userID),
+			zap.Error(err))
+		return nil, fmt.Errorf("failed to get accepted shares: %w", err)
+	}
+	defer rows.Close()
+
+	var shares []models.ShareRequest
+	for rows.Next() {
+		var share models.ShareRequest
+		if err := rows.Scan(&share.ID, &share.SenderUserID, &share.SenderOverlayID,
+			&share.RecipientUserID, &share.Status, &share.CreatedAt,
+			&share.RespondedAt, &share.ExpiresAt); err != nil {
+			r.logger.Error("Failed to scan share request", zap.Error(err))
+			continue
+		}
+		shares = append(shares, share)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Error iterating accepted shares", zap.Error(err))
+		return nil, fmt.Errorf("failed to iterate results: %w", err)
+	}
+
+	r.logger.Debug("Retrieved accepted shares by recipient",
+		zap.String("user_id", userID),
+		zap.Int("count", len(shares)))
+
+	return shares, nil
+}
