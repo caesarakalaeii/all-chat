@@ -11,6 +11,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/publisher"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/status"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -56,8 +57,9 @@ type Manager struct {
 	redisClient    *redis.Client
 	logger         *zap.Logger
 	metrics        *metrics.InnerTubeMetrics
-	batchDetector  *deletion.BatchDetector  // Batch deletion detector for cleanup
-	deletionBuffer *deletion.DeletionBuffer // Deletion event buffer for cleanup
+	statusPublisher *status.Publisher
+	batchDetector   *deletion.BatchDetector  // Batch deletion detector for cleanup
+	deletionBuffer  *deletion.DeletionBuffer // Deletion event buffer for cleanup
 
 	mu               sync.RWMutex
 	activeStreams    map[string]*Stream         // videoID → stream state
@@ -94,6 +96,7 @@ func NewManager(
 		redisClient:              redisClient,
 		logger:                   logger,
 		metrics:                  m,
+		statusPublisher:          status.NewPublisher(redisClient, logger),
 		batchDetector:            batchDetector,
 		deletionBuffer:           deletionBuffer,
 		activeStreams:            make(map[string]*Stream),
@@ -330,6 +333,15 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			zap.Int("attempt", state.Attempts),
 		)
 
+		// Notify overlay: channel is reconnecting (no live stream found yet)
+		nextRetry := time.Now().Add(backoffDuration)
+		m.statusPublisher.Publish(ctx, status.Message{
+			Platform:    "youtube",
+			ChannelID:   state.ChannelID,
+			Status:      "reconnecting",
+			NextRetryAt: &nextRetry,
+		})
+
 		// Wait with backoff or context cancellation
 		timer := time.NewTimer(backoffDuration)
 		select {
@@ -440,6 +452,13 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 	m.activeStreams[videoID] = stream
 	m.pollers[videoID] = p
 
+	// Notify overlay: channel is now connected
+	m.statusPublisher.Publish(context.Background(), status.Message{
+		Platform:  "youtube",
+		ChannelID: channelID,
+		Status:    "connected",
+	})
+
 	return nil
 }
 
@@ -504,6 +523,13 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 						zap.Error(err),
 					)
 				}
+
+				// Notify overlay: channel is now offline
+				m.statusPublisher.Publish(ctx, status.Message{
+					Platform:  "youtube",
+					ChannelID: channelID,
+					Status:    "offline",
+				})
 			}
 			break
 		}
@@ -545,6 +571,15 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, videoID string) {
 	// Cleanup deletion buffer for this channel
 	if channelID != "" && m.deletionBuffer != nil {
 		m.deletionBuffer.Cleanup(channelID)
+	}
+
+	// Notify overlay: channel is offline (leadership lost, other instance takes over)
+	if channelID != "" {
+		m.statusPublisher.Publish(ctx, status.Message{
+			Platform:  "youtube",
+			ChannelID: channelID,
+			Status:    "offline",
+		})
 	}
 }
 
