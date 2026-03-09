@@ -1,6 +1,12 @@
+'use client';
+
+import { useState } from 'react';
 import { ShareRequest } from '@/lib/types/share';
 import { formatDistanceToNow } from 'date-fns';
 import { PlatformBadge } from './PlatformBadge';
+import { StatusBadge } from './StatusBadge';
+import { AcceptModal } from './AcceptModal';
+import { AddSourceModal } from './AddSourceModal';
 
 interface ShareRequestCardProps {
   request: ShareRequest;
@@ -8,6 +14,10 @@ interface ShareRequestCardProps {
 }
 
 export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
+  const [acceptedShare, setAcceptedShare] = useState<{ senderName: string; senderOverlayId: string } | null>(null);
+
   return (
     <div className="bg-white rounded-lg shadow hover:shadow-md transition-shadow p-4">
       {/* User info */}
@@ -59,17 +69,14 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
         <div className="mt-3 flex gap-2">
           <button
             className="flex-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            onClick={() => {
-              // Phase 15: Accept action
-              console.log('Accept not implemented yet (Phase 15)');
-            }}
+            onClick={() => setShowAcceptModal(true)}
           >
             Accept
           </button>
           <button
             className="flex-1 px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
             onClick={() => {
-              // Phase 15: Reject action
+              // Phase 15: Reject action (implement in future plan)
               console.log('Reject not implemented yet (Phase 15)');
             }}
           >
@@ -77,21 +84,40 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
           </button>
         </div>
       )}
+
+      {/* AcceptModal */}
+      {showAcceptModal && (
+        <AcceptModal
+          request={request}
+          onClose={() => setShowAcceptModal(false)}
+          onAccepted={(senderOverlayId) => {
+            setAcceptedShare({
+              senderName: request.sender?.display_name || 'User',
+              senderOverlayId,
+            });
+            setShowAcceptModal(false);
+            setShowAddSourceModal(true);
+          }}
+        />
+      )}
+
+      {/* AddSourceModal */}
+      {showAddSourceModal && acceptedShare && (
+        <AddSourceModal
+          senderName={acceptedShare.senderName}
+          senderOverlayId={acceptedShare.senderOverlayId}
+          onClose={() => {
+            setShowAddSourceModal(false);
+            setAcceptedShare(null);
+            onUpdate();
+          }}
+          onAdded={() => {
+            setShowAddSourceModal(false);
+            setAcceptedShare(null);
+            onUpdate();
+          }}
+        />
+      )}
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const colors = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    accepted: 'bg-green-100 text-green-800',
-    rejected: 'bg-red-100 text-red-800',
-    expired: 'bg-gray-100 text-gray-800',
-  };
-
-  return (
-    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${colors[status as keyof typeof colors]}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
   );
 }
