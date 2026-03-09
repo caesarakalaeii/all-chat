@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -165,6 +166,29 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 		return "", fmt.Errorf("fetch watch page: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		// Rate limited — wait and retry once before giving up
+		d.logger.Warn("rate limited fetching watch page, retrying after delay",
+			zap.String("video_id", videoID),
+		)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+		resp.Body.Close()
+		req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, watchURL, nil)
+		req2.Header.Set("User-Agent", req.Header.Get("User-Agent"))
+		req2.Header.Set("Accept", req.Header.Get("Accept"))
+		req2.Header.Set("Accept-Language", req.Header.Get("Accept-Language"))
+		req2.Header.Set("Cookie", req.Header.Get("Cookie"))
+		resp, err = d.httpClient.Do(req2)
+		if err != nil {
+			return "", fmt.Errorf("fetch watch page (retry): %w", err)
+		}
+		defer resp.Body.Close()
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
