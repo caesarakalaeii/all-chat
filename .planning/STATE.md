@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: In execution
-stopped_at: Completed 14-02-PLAN.md
-last_updated: "2026-03-09T17:40:40.990Z"
-last_activity: 2026-03-09 — Completed plan 14-01 (Database Schema and Models)
+stopped_at: Completed 14-04-PLAN.md
+last_updated: "2026-03-09T17:51:33.497Z"
+last_activity: 2026-03-09 — Completed plan 14-02 (User Search and Share Request API)
 progress:
   total_phases: 18
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 36
-  completed_plans: 35
-  percent: 92
+  completed_plans: 36
+  percent: 97
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 ## Current Position
 
 Phase: 14 of 19 (Foundation)
-Plan: 3 of 4
-Status: In execution
-Last activity: 2026-03-09 — Completed plan 14-02 (User Search and Share Request API)
+Plan: 4 of 4
+Status: Phase complete
+Last activity: 2026-03-09 — Completed plan 14-04 (Dashboard and Expiry)
 
-Progress: [██████████] 97% (v1.3)
+Progress: [██████████] 100% (v1.3)
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [██████████] 97% (v1.3)
 | Phase 14 P01 | 3 | 2 tasks | 6 files |
 | Phase 14 P03 | 3 | 3 tasks | 6 files |
 | Phase 14 P02 | 8 | 4 tasks | 5 files |
+| Phase 14 P04 | 4 | 5 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,8 @@ Recent decisions affecting v1.3:
 - [Phase 14]: No caching for premium status checks (query database on every request for MVP simplicity)
 - [Phase 14]: Use LOWER() function for case-insensitive search to leverage functional index from migration 028
 - [Phase 14]: Premium enforcement at middleware layer for share creation prevents client bypass
+- [Phase 14-04]: Expiry job runs every 5 minutes with immediate execution on start to clean up stale requests
+- [Phase 14-04]: Card-based dashboard with tab filtering (Pending/History) reuses admin pages pattern
 
 ### Pending Todos
 
@@ -112,8 +115,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-09T17:40:40.987Z
-Stopped at: Completed 14-02-PLAN.md
+Last session: 2026-03-09T17:51:33.495Z
+Stopped at: Completed 14-04-PLAN.md
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
