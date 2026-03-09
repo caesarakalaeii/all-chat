@@ -202,13 +202,15 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
 		)
 		// Start poller with cached video ID
 		if err := m.startPoller(ctx, channelID, cachedVideoID, overlayID); err != nil {
-			m.logger.Error("Failed to start poller with cached video ID",
+			m.logger.Error("Failed to start poller with cached video ID, falling back to discovery",
 				zap.String("channel_id", channelID),
 				zap.String("video_id", cachedVideoID),
 				zap.Error(err),
 			)
+			// Fall through to async discovery below
+		} else {
+			return
 		}
-		return
 	}
 
 	// No cache hit, start async discovery
@@ -302,15 +304,16 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 
 			// Start poller
 			if err := m.startPoller(ctx, state.ChannelID, videoID, state.OverlayID); err != nil {
-				m.logger.Error("Failed to start poller after discovery",
+				m.logger.Error("Failed to start poller after discovery, will retry",
 					zap.String("channel_id", state.ChannelID),
 					zap.String("video_id", videoID),
 					zap.Error(err),
 				)
+				// Fall through to backoff and retry the whole discovery+poller process
+			} else {
+				m.cleanupDiscoveryState(state.ChannelID)
+				return
 			}
-
-			m.cleanupDiscoveryState(state.ChannelID)
-			return
 		}
 
 		// Discovery failed, apply backoff
@@ -379,7 +382,7 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		zap.String("overlay_id", overlayID),
 	)
 
-	// Get initial continuation token from video page
+	// Get initial continuation token from InnerTube next API
 	initialContinuation, err := m.discovery.GetInitialContinuation(ctx, videoID)
 	if err != nil {
 		m.logger.Error("Failed to get initial continuation token",
@@ -387,8 +390,11 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
-		// Continue with empty continuation - poller will handle error gracefully
-		initialContinuation = ""
+		// Release leadership so another attempt can try later
+		if m.leader != nil {
+			m.leader.Release(videoID)
+		}
+		return fmt.Errorf("get initial continuation: %w", err)
 	}
 
 	// Create and start poller

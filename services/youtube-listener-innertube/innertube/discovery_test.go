@@ -2,84 +2,13 @@ package innertube
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"go.uber.org/zap"
-	"golang.org/x/net/html"
 )
-
-func TestDiscoverLiveStream_Success(t *testing.T) {
-	// Mock HTTP server with successful live stream response
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request
-		if !strings.Contains(r.URL.Path, "/channel/") || !strings.HasSuffix(r.URL.Path, "/live") {
-			t.Errorf("unexpected request path: %s", r.URL.Path)
-		}
-
-		// Return HTML with canonical link and live meta tag
-		html := `<!DOCTYPE html>
-<html>
-<head>
-    <link rel="canonical" href="https://www.youtube.com/watch?v=test_video_123">
-    <meta property="og:video:type" content="live">
-</head>
-<body>
-</body>
-</html>`
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(html))
-	}))
-	defer server.Close()
-
-	// We need to adjust the test since we can't easily override the YouTube URL
-	// Instead, let's test the helper functions directly and do an integration test
-	t.Skip("Integration test - requires URL override capability")
-}
-
-func TestDiscoverLiveStream_Premiere(t *testing.T) {
-	// Mock HTTP server with premiere response (not live)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Return HTML with canonical link but premiere meta tag
-		html := `<!DOCTYPE html>
-<html>
-<head>
-    <link rel="canonical" href="https://www.youtube.com/watch?v=premiere_video_456">
-    <meta property="og:video:type" content="premiere">
-</head>
-<body>
-</body>
-</html>`
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(html))
-	}))
-	defer server.Close()
-
-	t.Skip("Integration test - requires URL override capability")
-}
-
-func TestDiscoverLiveStream_NoStream(t *testing.T) {
-	// Mock HTTP server with no live stream
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Return HTML without canonical link
-		html := `<!DOCTYPE html>
-<html>
-<head>
-    <title>Channel Page</title>
-</head>
-<body>
-    <p>No live stream currently</p>
-</body>
-</html>`
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(html))
-	}))
-	defer server.Close()
-
-	t.Skip("Integration test - requires URL override capability")
-}
 
 func TestDiscoverLiveStream_NetworkError(t *testing.T) {
 	// Create discovery with no server (will cause network error)
@@ -95,48 +24,62 @@ func TestDiscoverLiveStream_NetworkError(t *testing.T) {
 	}
 }
 
-// Test helper functions directly
-func TestExtractCanonicalVideoID(t *testing.T) {
+func TestExtractLiveChatContinuationFromNext(t *testing.T) {
 	tests := []struct {
 		name     string
-		html     string
+		data     interface{}
 		expected string
 	}{
 		{
-			name: "valid canonical link",
-			html: `<html><head><link rel="canonical" href="https://www.youtube.com/watch?v=test_video_123"></head></html>`,
-			expected: "test_video_123",
+			name: "finds continuation in liveChatRenderer with reloadContinuationData",
+			data: map[string]interface{}{
+				"engagementPanels": []interface{}{
+					map[string]interface{}{
+						"liveChatRenderer": map[string]interface{}{
+							"continuations": []interface{}{
+								map[string]interface{}{
+									"reloadContinuationData": map[string]interface{}{
+										"continuation": "test_token_123",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: "test_token_123",
 		},
 		{
-			name: "canonical link with extra params",
-			html: `<html><head><link rel="canonical" href="https://www.youtube.com/watch?v=abc123&feature=share"></head></html>`,
-			expected: "abc123",
+			name: "finds continuation with timedContinuationData",
+			data: map[string]interface{}{
+				"liveChatRenderer": map[string]interface{}{
+					"continuations": []interface{}{
+						map[string]interface{}{
+							"timedContinuationData": map[string]interface{}{
+								"continuation":          "timed_token_456",
+								"timeoutDurationMillis": float64(5000),
+							},
+						},
+					},
+				},
+			},
+			expected: "timed_token_456",
 		},
 		{
-			name: "no canonical link",
-			html: `<html><head><title>No link</title></head></html>`,
+			name:     "returns empty string when no liveChatRenderer",
+			data:     map[string]interface{}{"someOtherKey": "value"},
 			expected: "",
 		},
 		{
-			name: "wrong rel attribute",
-			html: `<html><head><link rel="alternate" href="https://www.youtube.com/watch?v=wrong"></head></html>`,
-			expected: "",
-		},
-		{
-			name: "non-youtube canonical",
-			html: `<html><head><link rel="canonical" href="https://example.com/page"></head></html>`,
+			name:     "returns empty string for nil",
+			data:     nil,
 			expected: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc, err := html.Parse(strings.NewReader(tt.html))
-			if err != nil {
-				t.Fatalf("failed to parse HTML: %v", err)
-			}
-
-			result := extractCanonicalVideoID(doc)
+			result := extractLiveChatContinuationFromNext(tt.data)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
 			}
@@ -144,50 +87,74 @@ func TestExtractCanonicalVideoID(t *testing.T) {
 	}
 }
 
-func TestCheckIsLiveMeta(t *testing.T) {
-	tests := []struct {
-		name     string
-		html     string
-		expected bool
-	}{
-		{
-			name: "live stream",
-			html: `<html><head><meta property="og:video:type" content="live"></head></html>`,
-			expected: true,
-		},
-		{
-			name: "premiere",
-			html: `<html><head><meta property="og:video:type" content="premiere"></head></html>`,
-			expected: false,
-		},
-		{
-			name: "no meta tag",
-			html: `<html><head><title>No meta</title></head></html>`,
-			expected: false,
-		},
-		{
-			name: "wrong property",
-			html: `<html><head><meta property="og:title" content="live"></head></html>`,
-			expected: false,
-		},
-		{
-			name: "video type but not live",
-			html: `<html><head><meta property="og:video:type" content="video"></head></html>`,
-			expected: false,
-		},
-	}
+func TestGetInitialContinuation_Success(t *testing.T) {
+	// Mock server returning a valid /next API response with live chat continuation
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]interface{}{
+			"engagementPanels": []interface{}{
+				map[string]interface{}{
+					"engagementPanelSectionListRenderer": map[string]interface{}{
+						"content": map[string]interface{}{
+							"liveChatRenderer": map[string]interface{}{
+								"continuations": []interface{}{
+									map[string]interface{}{
+										"reloadContinuationData": map[string]interface{}{
+											"continuation": "initial_token_abc",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			doc, err := html.Parse(strings.NewReader(tt.html))
-			if err != nil {
-				t.Fatalf("failed to parse HTML: %v", err)
-			}
+	t.Skip("Integration test - requires URL override capability in Discovery")
+}
 
-			result := checkIsLiveMeta(doc)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, result)
-			}
-		})
+func TestGetInitialContinuation_NoToken(t *testing.T) {
+	// Mock server returning response without continuation token
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]interface{}{
+			"videoDetails": map[string]interface{}{
+				"videoId": "test123",
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	t.Skip("Integration test - requires URL override capability in Discovery")
+}
+
+func TestDiscoverLiveStream_Success(t *testing.T) {
+	t.Skip("Integration test - requires URL override capability")
+}
+
+func TestDiscoverLiveStream_NoStream(t *testing.T) {
+	t.Skip("Integration test - requires URL override capability")
+}
+
+func TestDiscoverLiveStream_NotFound(t *testing.T) {
+	// Mock server returning 404
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	logger := zap.NewNop()
+	discovery := NewDiscovery(server.Client(), logger)
+
+	ctx := context.Background()
+	_, err := discovery.DiscoverLiveStream(ctx, "UCtest")
+
+	if err == nil {
+		t.Error("expected error for 404, got nil")
 	}
 }
