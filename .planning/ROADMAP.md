@@ -130,7 +130,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Non-premium users are blocked from sending share requests (server-side enforcement)
   4. Users can view list of pending incoming share requests in dashboard
   5. Admin can mark specific users as premium for testing purposes
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 14-01-PLAN.md — Database schema and models (Wave 1)
+- [ ] 14-02-PLAN.md — User search and share request creation (Wave 2)
+- [ ] 14-03-PLAN.md — Premium enforcement and admin controls (Wave 2)
+- [ ] 14-04-PLAN.md — Dashboard UI and background expiry job (Wave 3)
 
 #### Phase 15: Share Acceptance
 **Goal**: Users can accept share requests, establishing bidirectional overlay access with cycle prevention
@@ -205,7 +211,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 11. Contract Validation | v1.2 | 4/4 | Complete | 2026-02-21 |
 | 12. Production Rollout | v1.2 | 3/3 | Complete | 2026-03-05 |
 | 13. Feature Parity | v1.2 | 5/5 | Complete | 2026-03-06 |
-| 14. Foundation | v1.3 | 0/TBD | Not started | - |
+| 14. Foundation | v1.3 | 0/4 | Not started | - |
 | 15. Share Acceptance | v1.3 | 0/TBD | Not started | - |
 | 16. Shared Overlay Sources | v1.3 | 0/TBD | Not started | - |
 | 17. Message Routing | v1.3 | 0/TBD | Not started | - |
@@ -213,4 +219,4 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 19. Lifecycle & Expiry | v1.3 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-08 after v1.3 roadmap creation*
+*Last updated: 2026-03-09 after Phase 14 planning*
