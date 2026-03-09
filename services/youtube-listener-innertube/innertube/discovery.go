@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 
 	"go.uber.org/zap"
 )
@@ -139,68 +138,147 @@ func extractVideoIDFromBrowse(data interface{}) string {
 }
 
 // GetInitialContinuation fetches the initial continuation token for a live stream
-// Scrapes the video page HTML to extract the continuation token needed for polling
+// Uses the InnerTube /next API to get the live chat continuation token for a video
 func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) (string, error) {
 	d.logger.Info("fetching initial continuation token",
 		zap.String("video_id", videoID),
 	)
 
-	// Construct video URL
-	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+	// Use InnerTube /next API to get video metadata including live chat continuation
+	url := fmt.Sprintf("https://www.youtube.com/youtubei/v1/next?key=%s", DefaultAPIKey)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	payload := map[string]interface{}{
+		"context": map[string]interface{}{
+			"client": map[string]interface{}{
+				"clientName":    "WEB",
+				"clientVersion": DefaultClientVersion,
+			},
+		},
+		"videoId": videoID,
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal request payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonPayload))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
 
-	// Set browser headers
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Origin", "https://www.youtube.com")
+	req.Header.Set("Referer", fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID))
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("fetch video page: %w", err)
+		return "", fmt.Errorf("fetch next API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return "", fmt.Errorf("unexpected status code from next API: %d", resp.StatusCode)
 	}
 
-	// Read HTML body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read response body: %w", err)
 	}
 
-	bodyStr := string(body)
+	// Parse JSON response and extract continuation token recursively
+	var nextResponse map[string]interface{}
+	if err := json.Unmarshal(body, &nextResponse); err != nil {
+		return "", fmt.Errorf("parse next API response: %w", err)
+	}
 
-	// Extract continuation token from ytInitialData
-	// Look for: "continuation":"TOKEN"
-	continuationRegex := regexp.MustCompile(`"continuation":"([^"]+)"`)
-	matches := continuationRegex.FindAllStringSubmatch(bodyStr, -1)
+	// Extract continuation token from the nested response structure
+	// Live chat continuation is nested under engagementPanels → liveChatRenderer
+	token := extractLiveChatContinuationFromNext(nextResponse)
+	if token == "" {
+		return "", fmt.Errorf("no live chat continuation token found in next API response for video %s", videoID)
+	}
 
-	// Usually the first or second continuation is the live chat continuation
-	// Prefer longer tokens (live chat tokens are longer than regular continuations)
-	var bestToken string
-	for _, match := range matches {
-		if len(match) > 1 {
-			token := match[1]
-			if len(token) > len(bestToken) {
-				bestToken = token
+	d.logger.Info("extracted initial continuation token via next API",
+		zap.String("video_id", videoID),
+		zap.Int("token_length", len(token)),
+	)
+
+	return token, nil
+}
+
+// extractLiveChatContinuationFromNext extracts the live chat continuation token
+// from the InnerTube /next API response. The token is nested inside engagementPanels
+// under a liveChatRenderer with a continuationData.continuation field.
+func extractLiveChatContinuationFromNext(data interface{}) string {
+	switch v := data.(type) {
+	case map[string]interface{}:
+		// Check for continuation inside liveChatRenderer
+		if _, hasLiveChatRenderer := v["liveChatRenderer"]; hasLiveChatRenderer {
+			if token := extractContinuationFromRenderer(v["liveChatRenderer"]); token != "" {
+				return token
+			}
+		}
+
+		// Recursively search all values
+		for _, val := range v {
+			if token := extractLiveChatContinuationFromNext(val); token != "" {
+				return token
+			}
+		}
+
+	case []interface{}:
+		for _, item := range v {
+			if token := extractLiveChatContinuationFromNext(item); token != "" {
+				return token
 			}
 		}
 	}
 
-	if bestToken == "" {
-		return "", fmt.Errorf("no continuation token found in video page")
+	return ""
+}
+
+// extractContinuationFromRenderer extracts the continuation token from a liveChatRenderer object
+func extractContinuationFromRenderer(renderer interface{}) string {
+	m, ok := renderer.(map[string]interface{})
+	if !ok {
+		return ""
 	}
 
-	d.logger.Info("extracted initial continuation token",
-		zap.String("video_id", videoID),
-		zap.Int("token_length", len(bestToken)),
-	)
+	// Look for header.liveChatHeaderRenderer.viewSelector.sortFilterSubMenuRenderer.subMenuItems
+	// or continuations array directly
+	continuations, ok := m["continuations"].([]interface{})
+	if !ok {
+		return ""
+	}
 
-	return bestToken, nil
+	for _, cont := range continuations {
+		contMap, ok := cont.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		// Try reloadContinuationData first (most common for live streams)
+		if reload, ok := contMap["reloadContinuationData"].(map[string]interface{}); ok {
+			if token, ok := reload["continuation"].(string); ok && token != "" {
+				return token
+			}
+		}
+		// Try timedContinuationData
+		if timed, ok := contMap["timedContinuationData"].(map[string]interface{}); ok {
+			if token, ok := timed["continuation"].(string); ok && token != "" {
+				return token
+			}
+		}
+		// Try invalidationContinuationData
+		if invalid, ok := contMap["invalidationContinuationData"].(map[string]interface{}); ok {
+			if token, ok := invalid["continuation"].(string); ok && token != "" {
+				return token
+			}
+		}
+	}
+
+	return ""
 }
