@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/share-service/cycles"
 	"github.com/caesar/all-chat/services/share-service/handlers"
 	"github.com/caesar/all-chat/services/share-service/jobs"
 	localMiddleware "github.com/caesar/all-chat/services/share-service/middleware"
@@ -68,6 +69,9 @@ func main() {
 	userSearchRepo := repository.NewUserSearchRepository(dbPool, log)
 	shareRepo := repository.NewShareRepository(dbPool, log)
 
+	// Initialize cycle detector
+	cycleDetector := cycles.NewCycleDetector(shareRepo)
+
 	// Initialize and start expiry job
 	expiryJob := jobs.NewExpiryJob(shareRepo, log)
 	expiryJob.Start(context.Background())
@@ -75,7 +79,7 @@ func main() {
 	// Initialize handlers
 	adminHandler := handlers.NewAdminHandler(premiumRepo, log)
 	searchHandler := handlers.NewSearchHandler(userSearchRepo, log)
-	shareHandler := handlers.NewShareHandler(shareRepo, userSearchRepo, dbPool, log)
+	shareHandler := handlers.NewShareHandler(shareRepo, userSearchRepo, dbPool, log, cycleDetector)
 
 	// Setup Gin router
 	if config.GinMode == "release" {

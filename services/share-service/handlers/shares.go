@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/caesar/all-chat/services/share-service/models"
@@ -11,12 +12,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// CycleDetector interface for cycle detection
+type CycleDetector interface {
+	HasCycle(ctx context.Context, fromUserID, toUserID string) (bool, error)
+}
+
 // ShareHandler handles share request operations
 type ShareHandler struct {
-	shareRepo *repository.ShareRepository
-	userRepo  *repository.UserSearchRepository
-	db        *pgxpool.Pool
-	logger    *zap.Logger
+	shareRepo     *repository.ShareRepository
+	userRepo      *repository.UserSearchRepository
+	db            *pgxpool.Pool
+	logger        *zap.Logger
+	cycleDetector CycleDetector
 }
 
 // NewShareHandler creates a new share handler
@@ -25,12 +32,14 @@ func NewShareHandler(
 	userRepo *repository.UserSearchRepository,
 	db *pgxpool.Pool,
 	logger *zap.Logger,
+	cycleDetector CycleDetector,
 ) *ShareHandler {
 	return &ShareHandler{
-		shareRepo: shareRepo,
-		userRepo:  userRepo,
-		db:        db,
-		logger:    logger,
+		shareRepo:     shareRepo,
+		userRepo:      userRepo,
+		db:            db,
+		logger:        logger,
+		cycleDetector: cycleDetector,
 	}
 }
 
@@ -156,16 +165,79 @@ func (h *ShareHandler) ListIncoming(c *gin.Context) {
 	})
 }
 
-// AcceptRequest handles POST /api/v1/shares/:id/accept
-func (h *ShareHandler) AcceptRequest(c *gin.Context) {
+// AcceptShareRequest handles POST /api/v1/shares/:id/accept with cycle detection
+func (h *ShareHandler) AcceptShareRequest(c *gin.Context) {
 	requestID := c.Param("id")
 	userID := c.GetString("user_id")
 
-	// Verify the request exists and is for this user
-	shareRequest, err := h.shareRepo.GetByID(c.Request.Context(), requestID)
+	// Request body validation
+	type AcceptShareRequest struct {
+		RecipientOverlayID string `json:"recipient_overlay_id" binding:"required"`
+		ExpiryOption       string `json:"expiry_option" binding:"required"` // "this_stream", "custom", "unlimited"
+		ExpiryHours        *int   `json:"expiry_hours,omitempty"`           // Required if expiry_option = "custom"
+	}
+
+	var req AcceptShareRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "recipient_overlay_id and expiry_option required",
+		})
+		return
+	}
+
+	// Validate custom expiry hours (1-168 hours range)
+	if req.ExpiryOption == "custom" {
+		if req.ExpiryHours == nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "expiry_hours required when expiry_option is custom",
+			})
+			return
+		}
+		if *req.ExpiryHours < 1 || *req.ExpiryHours > 168 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "expiry_hours must be between 1 and 168",
+			})
+			return
+		}
+	}
+
+	// Start database transaction
+	tx, err := h.db.Begin(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "share request not found",
+		h.logger.Error("Failed to start transaction", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to process request",
+		})
+		return
+	}
+	defer tx.Rollback(c.Request.Context())
+
+	// Get share request with SELECT FOR UPDATE to prevent race conditions
+	query := `
+		SELECT id, sender_user_id, sender_overlay_id, recipient_user_id,
+		       status, created_at, responded_at, expires_at
+		FROM share_requests
+		WHERE id = $1
+		FOR UPDATE
+	`
+
+	var shareRequest models.ShareRequest
+	err = tx.QueryRow(c.Request.Context(), query, requestID).Scan(
+		&shareRequest.ID, &shareRequest.SenderUserID, &shareRequest.SenderOverlayID,
+		&shareRequest.RecipientUserID, &shareRequest.Status, &shareRequest.CreatedAt,
+		&shareRequest.RespondedAt, &shareRequest.ExpiresAt,
+	)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "share request not found",
+			})
+			return
+		}
+		h.logger.Error("Failed to get share request", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to process request",
 		})
 		return
 	}
@@ -180,16 +252,55 @@ func (h *ShareHandler) AcceptRequest(c *gin.Context) {
 
 	// Verify request is pending
 	if !shareRequest.IsPending() {
-		c.JSON(http.StatusBadRequest, gin.H{
+		c.JSON(http.StatusConflict, gin.H{
 			"error": "share request is not pending",
 		})
 		return
 	}
 
-	// Update status to accepted
-	err = h.shareRepo.UpdateStatus(c.Request.Context(), requestID, models.StatusAccepted)
+	// Check for cycles using cycle detector
+	hasCycle, err := h.cycleDetector.HasCycle(c.Request.Context(), shareRequest.SenderUserID, shareRequest.RecipientUserID)
 	if err != nil {
-		h.logger.Error("Failed to accept share request", zap.Error(err))
+		h.logger.Error("Failed to check for cycles", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to validate acceptance",
+		})
+		return
+	}
+
+	if hasCycle {
+		h.logger.Warn("Cycle detected, blocking acceptance",
+			zap.String("sender_user_id", shareRequest.SenderUserID),
+			zap.String("recipient_user_id", shareRequest.RecipientUserID))
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "Cannot accept: This would create a circular share dependency. If you share back, messages would loop infinitely between overlays.",
+		})
+		return
+	}
+
+	// Update share status to accepted
+	updateQuery := `
+		UPDATE share_requests
+		SET status = $1, responded_at = NOW()
+		WHERE id = $2
+		RETURNING status, responded_at
+	`
+
+	err = tx.QueryRow(c.Request.Context(), updateQuery, models.StatusAccepted, requestID).Scan(
+		&shareRequest.Status, &shareRequest.RespondedAt,
+	)
+
+	if err != nil {
+		h.logger.Error("Failed to update share request status", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to accept request",
+		})
+		return
+	}
+
+	// Commit transaction
+	if err := tx.Commit(c.Request.Context()); err != nil {
+		h.logger.Error("Failed to commit transaction", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to accept request",
 		})
@@ -198,11 +309,21 @@ func (h *ShareHandler) AcceptRequest(c *gin.Context) {
 
 	h.logger.Info("Share request accepted",
 		zap.String("request_id", requestID),
-		zap.String("user_id", userID))
+		zap.String("user_id", userID),
+		zap.String("sender_overlay_id", shareRequest.SenderOverlayID),
+		zap.String("recipient_overlay_id", req.RecipientOverlayID),
+		zap.String("expiry_option", req.ExpiryOption))
 
 	c.JSON(http.StatusOK, gin.H{
-		"status": "accepted",
+		"status":            "accepted",
+		"sender_overlay_id": shareRequest.SenderOverlayID, // For add-source prompt
+		"share_request":     shareRequest,
 	})
+}
+
+// AcceptRequest handles POST /api/v1/shares/:id/accept (legacy - kept for backward compatibility)
+func (h *ShareHandler) AcceptRequest(c *gin.Context) {
+	h.AcceptShareRequest(c)
 }
 
 // RejectRequest handles POST /api/v1/shares/:id/reject
