@@ -9,8 +9,8 @@ Requirements for chat overlay sharing feature. Each maps to roadmap phases.
 
 ### Share Management
 
-- [ ] **SHARE-01**: User can search for other users by platform username (Twitch, YouTube, Kick, TikTok)
-- [ ] **SHARE-02**: User can send share request selecting an overlay to share
+- [x] **SHARE-01**: User can search for other users by platform username (Twitch, YouTube, Kick, TikTok)
+- [x] **SHARE-02**: User can send share request selecting an overlay to share
 - [ ] **SHARE-03**: User can view pending incoming share requests in dashboard
 - [ ] **SHARE-04**: User can accept share request, choosing overlay to share back and expiry option
 - [ ] **SHARE-05**: On acceptance, both users can optionally add shared source to an overlay immediately
@@ -73,8 +73,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHARE-01 | Phase 14 | Pending |
-| SHARE-02 | Phase 14 | Pending |
+| SHARE-01 | Phase 14 | Complete |
+| SHARE-02 | Phase 14 | Complete |
 | SHARE-03 | Phase 14 | Pending |
 | SHARE-04 | Phase 15 | Pending |
 | SHARE-05 | Phase 15 | Pending |
