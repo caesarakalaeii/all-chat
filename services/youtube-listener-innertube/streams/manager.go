@@ -3,6 +3,7 @@ package streams
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -195,6 +196,11 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
 	m.channelConnectedOverlays[channelID][overlayID] = struct{}{}
 
 	m.mu.Unlock()
+
+	// Jitter to avoid thundering-herd on YouTube watch page when many channels start simultaneously
+	// (e.g. pod restart with 20+ channels). Random 0-5s spread reduces 429 rate limiting.
+	jitter := time.Duration(rand.Intn(5000)) * time.Millisecond
+	time.Sleep(jitter)
 
 	// Check Redis cache first
 	ctx := context.Background()
