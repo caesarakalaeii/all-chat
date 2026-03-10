@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: "Checkpoint: 18-04 Task 3 human-verify — awaiting end-to-end revocation feature verification"
-last_updated: "2026-03-10T19:22:35.049Z"
+stopped_at: Completed 18-revocation-04 (Overlay Editor Revocation UI) — Phase 18 complete, v1.3 milestone complete
+last_updated: "2026-03-10T21:56:44.000Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
@@ -134,6 +134,7 @@ Recent decisions affecting v1.3:
 - [Phase 18-revocation]: Cast sr.id to text (sr.id::text = ocs.channel_id) rather than channel_id to uuid — avoids uuid cast errors for non-uuid channel_ids (twitch/youtube/kick) in LEFT JOIN ON clauses
 - [Phase 18-revocation]: Revoke button placed below StatusBadge on accepted cards; onRevoked triggers onUpdate() for re-fetch without page reload
 - [Phase 18-04]: WS connection in overlay editor uses /ws/overlay/{id} endpoint for share_revoked notifications; Revoke button gated on isActiveSharedOverlay, Remove button always present
+- [Phase 18-04]: ActivateSourcesForOverlay must filter shared_overlay sources where share_request.status IN (revoked, expired) — prevents revocation bypass on WS reconnect (found during verification)
 
 ### Pending Todos
 
@@ -156,8 +157,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T19:22:35.047Z
-Stopped at: Checkpoint: 18-04 Task 3 human-verify — awaiting end-to-end revocation feature verification
+Last session: 2026-03-10T21:56:43.998Z
+Stopped at: Completed 18-revocation-04 (Overlay Editor Revocation UI) — Phase 18 complete, v1.3 milestone complete
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
