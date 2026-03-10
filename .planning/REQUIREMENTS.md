@@ -14,8 +14,8 @@ Requirements for chat overlay sharing feature. Each maps to roadmap phases.
 - [x] **SHARE-03**: User can view pending incoming share requests in dashboard
 - [x] **SHARE-04**: User can accept share request, choosing overlay to share back and expiry option
 - [ ] **SHARE-05**: On acceptance, both users can optionally add shared source to an overlay immediately
-- [ ] **SHARE-06**: Either user can revoke share at any time
-- [ ] **SHARE-07**: Revoked or expired shares are marked as inactive (not deleted from config)
+- [x] **SHARE-06**: Either user can revoke share at any time
+- [x] **SHARE-07**: Revoked or expired shares are marked as inactive (not deleted from config)
 - [x] **SHARE-08**: Share status indicators show active, expired, or revoked state
 
 ### Shared Overlay Sources
@@ -78,8 +78,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SHARE-03 | Phase 14 | Complete |
 | SHARE-04 | Phase 15 | Complete |
 | SHARE-05 | Phase 15 | Pending |
-| SHARE-06 | Phase 18 | Pending |
-| SHARE-07 | Phase 18 | Pending |
+| SHARE-06 | Phase 18 | Complete |
+| SHARE-07 | Phase 18 | Complete |
 | SHARE-08 | Phase 15 | Complete |
 | SOURCE-01 | Phase 16 | Complete |
 | SOURCE-02 | Phase 16 | Complete |
