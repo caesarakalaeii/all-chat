@@ -112,6 +112,35 @@ services:
       - frontend-dev
     restart: unless-stopped
 
+  # Share Service - Share request management
+  share-service:
+    build:
+      context: .
+      dockerfile: services/share-service/Dockerfile
+    container_name: allchat-frontend-share
+    environment:
+      PORT: "8090"
+      LOG_LEVEL: "debug"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: dev_password_123
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JWT_SECRET: frontend-dev-secret-12345
+      API_GATEWAY_URL: http://api-gateway:8080
+    ports:
+      - "8090:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - frontend-dev
+    restart: unless-stopped
+
   # API Gateway - WebSocket and HTTP routing
   api-gateway:
     build:
@@ -124,6 +153,7 @@ services:
       AUTH_SERVICE_URL: ""  # Disable auth for frontend testing
       OVERLAY_SERVICE_URL: http://overlay-manager:8082
       EMOTE_SERVICE_URL: ""  # Disable emote service
+      SHARE_SERVICE_URL: http://share-service:8090
       DATABASE_HOST: postgres
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
