@@ -135,16 +135,18 @@ Plans:
 - [ ] 23-01: TBD
 
 ### Phase 24: Component Library Setup & Customization
-**Goal**: shadcn/ui component library integrated and customized with design system tokens
+**Goal**: @base-ui/react + shadcn CLI component library integrated, customized with design system tokens, and documented in Storybook
 **Depends on**: Phase 23
+**Tooling**: @base-ui/react (primitives), shadcn CLI (scaffolding), CVA (variants), Storybook 10 (docs + a11y testing)
 **Requirements**: COMP-01, COMP-02, COMP-03, COMP-04, COMP-05, COMP-06, COMP-07, COMP-08, COMP-09
 **Success Criteria** (what must be TRUE):
-  1. shadcn/ui core primitives installed and themed with slate color scale (Button, Card, Input, Badge, Dialog, Toast)
+  1. Core components built on @base-ui/react primitives, themed with slate design tokens (Button already done — Card, Input, Badge, Dialog, Toast remaining)
   2. Component variants implemented using CVA for consistent pattern application
-  3. Smooth micro-interactions added to components (hover scale, shadow transitions for premium feel)
+  3. Smooth micro-interactions added (hover scale, shadow transitions) and verified visually in Storybook
   4. Platform-color coded components created for multi-platform UI elements (badges, borders, status indicators)
-  5. Performance budget established and monitored (<16ms message render time, <100KB bundle size increase)
-  6. All !important declarations removed from events.css and replaced with CSS cascade layer architecture
+  5. Storybook story exists for every component, a11y addon shows zero violations in 'error' mode
+  6. Performance budget established and monitored (<16ms message render time, <100KB bundle increase)
+  7. All !important declarations removed from events.css and replaced with CSS cascade layer architecture
 **Plans**: TBD
 
 Plans:
@@ -153,6 +155,7 @@ Plans:
 ### Phase 25: Page Migration & Split-view Preview
 **Goal**: All application pages redesigned with new design system, plus split-view live preview feature implemented
 **Depends on**: Phase 24
+**Tooling**: `make frontend-dev` (minimal backend for fast iteration), Storybook a11y addon (accessibility validation), Chromatic (visual regression)
 **Requirements**: PAGE-01, PAGE-02, PAGE-03, PAGE-04, PAGE-05, PAGE-06, PAGE-07, PAGE-08, PAGE-09, PAGE-10, FEAT-01, FEAT-02, FEAT-03, FEAT-04
 **Success Criteria** (what must be TRUE):
   1. Landing page redesigned with gradient hero, platform login buttons, and feature cards
@@ -161,7 +164,7 @@ Plans:
   4. Split-view layout implemented (editor configuration side-by-side with live preview, responsive stacking on mobile)
   5. Settings and admin pages redesigned for visual consistency across all authenticated pages
   6. Responsive layouts validated across all breakpoints (375px mobile, 768px tablet, 1920px desktop)
-  7. WCAG 2.1 AA accessibility compliance achieved (keyboard navigation, focus states, axe-core passing)
+  7. WCAG 2.1 AA accessibility compliance achieved (keyboard navigation, focus states, Storybook a11y addon passing in 'error' mode)
   8. Loading states and empty states implemented with illustrations and clear CTAs
   9. Overlay preview CSS preserved unchanged (marketplace theme compatibility maintained)
 **Plans**: TBD
@@ -172,17 +175,18 @@ Plans:
 ### Phase 26: Enforcement & Quality Gates
 **Goal**: Design system compliance automated through tooling, preventing regression and ensuring marketplace compatibility
 **Depends on**: Phase 25
+**Tooling**: ESLint + Prettier (already in package.json), Husky (pre-commit), Chromatic (visual regression — already installed via @chromatic-com/storybook), Storybook a11y addon set to 'error' mode (already installed)
 **Requirements**: ENFORCE-01, ENFORCE-02, ENFORCE-03, ENFORCE-04, ENFORCE-05, ENFORCE-06, ENFORCE-07, ENFORCE-08, ENFORCE-09, ENFORCE-10
 **Success Criteria** (what must be TRUE):
   1. ESLint plugin for Tailwind configured with design system rules (no gray-*, focus-visible required, no string concat in className)
   2. Prettier plugin installed and configured for consistent Tailwind class ordering
-  3. Pre-commit hooks implemented with Husky (lint + format on changed files, blocking violations)
+  3. Pre-commit hooks configured with Husky (lint + format on changed files, blocking violations)
   4. CI/CD quality gates block PRs with ESLint errors or bundle size increases >20KB without justification
-  5. Visual regression test suite implemented (screenshot diffing across all pages detecting unintended changes)
+  5. Chromatic visual regression configured in CI (Storybook stories snapshot all components, PRs fail on unreviewed changes)
   6. Marketplace CSS migration guide created documenting class name changes and providing upgrade path
   7. Performance monitoring configured validating message render time <16ms at 20 msg/sec load
-  8. Accessibility testing automated (axe-core in CI/CD pipeline)
-  9. Bundle size baseline established with webpack-bundle-analyzer
+  8. Storybook a11y addon set to 'error' mode (currently 'todo') — CI fails on a11y violations
+  9. Bundle size baseline established (Next.js built-in bundle analyzer)
 **Plans**: TBD
 
 Plans:

@@ -635,24 +635,23 @@ focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
 
 ---
 
-## Component Library Integration
+## Component Library
 
-### Recommended: shadcn/ui
+### Architecture: @base-ui/react + shadcn CLI
 
-**Why:**
-- Matches our design system (Tailwind + Radix UI)
-- Copy-paste components (not npm dependency)
-- Fully customizable
-- Accessible by default
+**Primitives**: `@base-ui/react` (already installed) — unstyled, accessible components from the MUI team
+**Scaffolding**: `shadcn` CLI — generates component files wired to @base-ui/react
+**Variants**: `class-variance-authority` (CVA) — type-safe variant patterns
+**Docs + Testing**: Storybook 10 (`npm run storybook`) — every component must have a story
 
-**Install:**
+**Why @base-ui/react over Radix UI:**
+- More modern API, built on floating-ui
+- Native data-slot attributes (design system friendly)
+- Same accessible-first philosophy
+- Already installed and used in `components/ui/button.tsx`
+
+**Add components:**
 ```bash
-npx shadcn@latest init
-```
-
-**Components to add first:**
-```bash
-npx shadcn@latest add button
 npx shadcn@latest add card
 npx shadcn@latest add input
 npx shadcn@latest add dialog
@@ -661,10 +660,19 @@ npx shadcn@latest add select
 npx shadcn@latest add toast
 ```
 
-**Customize** (edit `components/ui/*.tsx` to match our colors):
-- Change colors from zinc → slate
-- Adjust rounded-md → rounded-lg/xl
-- Update shadows to match our system
+**Every component must have a Storybook story:**
+```bash
+# Start Storybook
+npm run storybook
+# Opens at http://localhost:6006
+```
+
+Story file template: `src/stories/ComponentName.stories.ts`
+
+### Accessibility Gate
+
+Storybook a11y addon is installed. Currently set to `'todo'` mode in `.storybook/preview.ts`.
+During Phase 26, this is changed to `'error'` mode — **zero a11y violations allowed.**
 
 ---
 
@@ -676,23 +684,33 @@ When implementing UI changes, **validate against these rules:**
 □ Colors: Only slate-900/850/800 backgrounds (not gray)
 □ Text: slate-50 (headings), slate-400 (body)
 □ Spacing: Even numbers only (gap-4, gap-6, not gap-5)
-□ Buttons: rounded-lg, py-2.5 px-6, shadow-md
+□ Buttons: Use <Button> from @/components/ui/button (not raw <button>)
 □ Cards: rounded-xl, p-6, shadow-lg, border
 □ Icons: Lucide React, size={20} default
 □ Transitions: transition-all duration-200
 □ Hover: shadow-xl + scale-[1.02]
-□ Focus: ring-2 ring-blue-500/20
+□ Focus: ring-2 ring-blue-500/20 (handled by @base-ui/react primitives)
 □ Platform colors: badges/borders only (not backgrounds)
 □ Typography: Inter font, text-base default
 □ Responsive: Mobile-first, md:, lg: breakpoints
-□ Accessibility: Focus rings, WCAG AA contrast
+□ Accessibility: Use @base-ui/react primitives (handles ARIA), verify in Storybook a11y tab
+□ New component? → Add Storybook story in src/stories/
+□ No dynamic className construction (use platformColors mapping object)
 ```
 
 **Before committing:**
-1. Run through checklist above
-2. Test mobile (375px), tablet (768px), desktop (1280px)
-3. Verify focus states with Tab key
-4. Check contrast with browser DevTools
+1. Run checklist above
+2. Open Storybook (`npm run storybook`) and check a11y tab for new components
+3. Test mobile (375px), tablet (768px), desktop (1280px)
+4. Run `npm run lint` — zero ESLint errors
+
+**Development workflow for page changes:**
+```bash
+make frontend-dev    # Start minimal backend (postgres, redis, gateway, overlay-manager, message-processor)
+make frontend-seed   # Create test overlay and sources
+make frontend-messages # Generate mock chat messages
+cd frontend && npm run dev  # Start frontend at localhost:3000
+```
 
 ---
 
