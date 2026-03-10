@@ -196,14 +196,15 @@ Plans:
   2. Revoked shares stop delivering messages within 1 second (cache invalidation)
   3. Revoked or expired shares are marked as inactive in overlay configuration (not deleted)
   4. User can distinguish active vs inactive shared sources in overlay editor
-**Plans**: 5 plans in 3 waves
+  5. User B sees a real-time notification in the overlay editor when their share is revoked
+**Plans**: 5 plans in 4 waves
 
 Plans:
 - [ ] 18-00-PLAN.md — Test stubs for Nyquist compliance (Wave 0)
 - [ ] 18-01-PLAN.md — Migration 033 + RevokeShareRequest handler + notifyShareRevoked + gateway route (Wave 1)
 - [ ] 18-02-PLAN.md — overlay-manager ChatSource share_status JOIN (Wave 1, parallel)
 - [ ] 18-03-PLAN.md — RevocationConfirmModal + ShareRequestCard Revoke button + dashboard History fix (Wave 2)
-- [ ] 18-04-PLAN.md — Overlay editor inactive source rendering + human verification checkpoint (Wave 2, parallel)
+- [ ] 18-04-PLAN.md — Overlay editor inactive source rendering + share_revoked WS handler + human verification checkpoint (Wave 3)
 
 #### Phase 19: Lifecycle & Expiry
 **Goal**: Shares auto-expire based on stream lifecycle or time duration
@@ -242,4 +243,4 @@ Plans:
 | 19. Lifecycle & Expiry | v1.3 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-10 after Phase 18 planning*
+*Last updated: 2026-03-10 after Phase 18 plan revision*
