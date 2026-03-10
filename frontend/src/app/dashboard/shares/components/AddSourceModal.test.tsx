@@ -153,4 +153,49 @@ describe('AddSourceModal', () => {
       expect(mockOnAdded).not.toHaveBeenCalled();
     });
   });
+
+  // Test 5: Add button calls overlaysApi.addSource with shared_overlay platform
+  // RED state (Wave 0): handleAdd uses console.log, NOT overlaysApi.addSource → FAILS
+  // GREEN state (Wave 1+): handleAdd calls overlaysApi.addSource → PASSES
+  it('calls overlaysApi.addSource with shared_overlay platform when Add clicked', async () => {
+    vi.mocked(overlaysApi.addSource).mockResolvedValue({
+      id: 'source-new',
+      overlay_id: 'overlay-1',
+      platform: 'shared_overlay',
+      channel_id: 'sender-overlay-uuid',
+      channel_name: "xqc's overlay",
+      auth_required: false,
+      config: {},
+      is_active: false,
+      created_at: '2026-03-10T12:00:00Z',
+      updated_at: '2026-03-10T12:00:00Z',
+    });
+
+    render(
+      <AddSourceModal
+        senderName="xqc"
+        senderOverlayId="sender-overlay-uuid"
+        onClose={mockOnClose}
+        onAdded={mockOnAdded}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    // Click Add button
+    const addButton = screen.getByRole('button', { name: /Add/i });
+    fireEvent.click(addButton);
+
+    await waitFor(() => {
+      // At Wave 0: handleAdd calls console.log, NOT overlaysApi.addSource → assertion FAILS RED
+      // At Wave 1+: handleAdd calls overlaysApi.addSource with correct args → PASSES GREEN
+      expect(overlaysApi.addSource).toHaveBeenCalledWith('overlay-1', {
+        platform: 'shared_overlay',
+        channel_id: 'sender-overlay-uuid',
+        channel_name: "xqc's overlay",
+      });
+    });
+  });
 });
