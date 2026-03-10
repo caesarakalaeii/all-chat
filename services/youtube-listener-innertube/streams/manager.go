@@ -3,6 +3,8 @@ package streams
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/publisher"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/status"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -56,8 +59,9 @@ type Manager struct {
 	redisClient    *redis.Client
 	logger         *zap.Logger
 	metrics        *metrics.InnerTubeMetrics
-	batchDetector  *deletion.BatchDetector  // Batch deletion detector for cleanup
-	deletionBuffer *deletion.DeletionBuffer // Deletion event buffer for cleanup
+	statusPublisher *status.Publisher
+	batchDetector   *deletion.BatchDetector  // Batch deletion detector for cleanup
+	deletionBuffer  *deletion.DeletionBuffer // Deletion event buffer for cleanup
 
 	mu               sync.RWMutex
 	activeStreams    map[string]*Stream         // videoID → stream state
@@ -94,6 +98,7 @@ func NewManager(
 		redisClient:              redisClient,
 		logger:                   logger,
 		metrics:                  m,
+		statusPublisher:          status.NewPublisher(redisClient, logger),
 		batchDetector:            batchDetector,
 		deletionBuffer:           deletionBuffer,
 		activeStreams:            make(map[string]*Stream),
@@ -192,6 +197,11 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
 
 	m.mu.Unlock()
 
+	// Jitter to avoid thundering-herd on YouTube watch page when many channels start simultaneously
+	// (e.g. pod restart with 20+ channels). Random 0-5s spread reduces 429 rate limiting.
+	jitter := time.Duration(rand.Intn(5000)) * time.Millisecond
+	time.Sleep(jitter)
+
 	// Check Redis cache first
 	ctx := context.Background()
 	cachedVideoID, err := m.repository.GetChannelVideoMapping(ctx, channelID)
@@ -202,13 +212,15 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
 		)
 		// Start poller with cached video ID
 		if err := m.startPoller(ctx, channelID, cachedVideoID, overlayID); err != nil {
-			m.logger.Error("Failed to start poller with cached video ID",
+			m.logger.Error("Failed to start poller with cached video ID, falling back to discovery",
 				zap.String("channel_id", channelID),
 				zap.String("video_id", cachedVideoID),
 				zap.Error(err),
 			)
+			// Fall through to async discovery below
+		} else {
+			return
 		}
-		return
 	}
 
 	// No cache hit, start async discovery
@@ -302,15 +314,16 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 
 			// Start poller
 			if err := m.startPoller(ctx, state.ChannelID, videoID, state.OverlayID); err != nil {
-				m.logger.Error("Failed to start poller after discovery",
+				m.logger.Error("Failed to start poller after discovery, will retry",
 					zap.String("channel_id", state.ChannelID),
 					zap.String("video_id", videoID),
 					zap.Error(err),
 				)
+				// Fall through to backoff and retry the whole discovery+poller process
+			} else {
+				m.cleanupDiscoveryState(state.ChannelID)
+				return
 			}
-
-			m.cleanupDiscoveryState(state.ChannelID)
-			return
 		}
 
 		// Discovery failed, apply backoff
@@ -326,6 +339,15 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			zap.Duration("backoff", backoffDuration),
 			zap.Int("attempt", state.Attempts),
 		)
+
+		// Notify overlay: channel is reconnecting (no live stream found yet)
+		nextRetry := time.Now().Add(backoffDuration)
+		m.statusPublisher.Publish(ctx, status.Message{
+			Platform:    "youtube",
+			ChannelID:   state.ChannelID,
+			Status:      "reconnecting",
+			NextRetryAt: &nextRetry,
+		})
 
 		// Wait with backoff or context cancellation
 		timer := time.NewTimer(backoffDuration)
@@ -379,7 +401,7 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		zap.String("overlay_id", overlayID),
 	)
 
-	// Get initial continuation token from video page
+	// Get initial continuation token from watch page
 	initialContinuation, err := m.discovery.GetInitialContinuation(ctx, videoID)
 	if err != nil {
 		m.logger.Error("Failed to get initial continuation token",
@@ -387,8 +409,19 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
-		// Continue with empty continuation - poller will handle error gracefully
-		initialContinuation = ""
+		if m.leader != nil {
+			m.leader.Release(videoID)
+		}
+		// If the stream has ended (isReplay or no liveChatRenderer), clear the Redis
+		// cache so discovery will find the new live stream instead of retrying the ended one.
+		// For transient errors (429, network), keep the cache so we retry the same video.
+		errStr := err.Error()
+		if strings.Contains(errStr, "stream may have ended") || strings.Contains(errStr, "isReplay") {
+			if delErr := m.repository.DeleteChannelVideoMapping(ctx, channelID); delErr != nil {
+				m.logger.Warn("Failed to clear stale video mapping", zap.Error(delErr))
+			}
+		}
+		return fmt.Errorf("get initial continuation: %w", err)
 	}
 
 	// Create and start poller
@@ -433,6 +466,13 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 	}
 	m.activeStreams[videoID] = stream
 	m.pollers[videoID] = p
+
+	// Notify overlay: channel is now connected
+	m.statusPublisher.Publish(context.Background(), status.Message{
+		Platform:  "youtube",
+		ChannelID: channelID,
+		Status:    "connected",
+	})
 
 	return nil
 }
@@ -498,6 +538,13 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 						zap.Error(err),
 					)
 				}
+
+				// Notify overlay: channel is now offline
+				m.statusPublisher.Publish(ctx, status.Message{
+					Platform:  "youtube",
+					ChannelID: channelID,
+					Status:    "offline",
+				})
 			}
 			break
 		}
@@ -539,6 +586,15 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, videoID string) {
 	// Cleanup deletion buffer for this channel
 	if channelID != "" && m.deletionBuffer != nil {
 		m.deletionBuffer.Cleanup(channelID)
+	}
+
+	// Notify overlay: channel is offline (leadership lost, other instance takes over)
+	if channelID != "" {
+		m.statusPublisher.Publish(ctx, status.Message{
+			Platform:  "youtube",
+			ChannelID: channelID,
+			Status:    "offline",
+		})
 	}
 }
 
