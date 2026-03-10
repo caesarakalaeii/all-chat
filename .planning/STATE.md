@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: Completed 18-revocation-03 (Dashboard Revocation UI)
-last_updated: "2026-03-10T19:19:17.498Z"
+stopped_at: "Checkpoint: 18-04 Task 3 human-verify — awaiting end-to-end revocation feature verification"
+last_updated: "2026-03-10T19:22:35.049Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 51
-  completed_plans: 50
+  completed_plans: 51
   percent: 93
 ---
 
@@ -80,6 +80,7 @@ Progress: [█████████░] 93% (v1.3)
 | Phase 18-revocation P01 | 4 | 2 tasks | 7 files |
 | Phase 18-revocation P02 | 12 | 1 tasks | 3 files |
 | Phase 18-revocation P03 | 2 | 3 tasks | 6 files |
+| Phase 18-revocation P04 | 7 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,7 @@ Recent decisions affecting v1.3:
 - [Phase 18-revocation]: [Phase 18-01]: Revoke route is non-premium (alongside mark-seen): revoking an active share should always be allowed
 - [Phase 18-revocation]: Cast sr.id to text (sr.id::text = ocs.channel_id) rather than channel_id to uuid — avoids uuid cast errors for non-uuid channel_ids (twitch/youtube/kick) in LEFT JOIN ON clauses
 - [Phase 18-revocation]: Revoke button placed below StatusBadge on accepted cards; onRevoked triggers onUpdate() for re-fetch without page reload
+- [Phase 18-04]: WS connection in overlay editor uses /ws/overlay/{id} endpoint for share_revoked notifications; Revoke button gated on isActiveSharedOverlay, Remove button always present
 
 ### Pending Todos
 
@@ -154,8 +156,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T19:19:17.496Z
-Stopped at: Completed 18-revocation-03 (Dashboard Revocation UI)
+Last session: 2026-03-10T19:22:35.047Z
+Stopped at: Checkpoint: 18-04 Task 3 human-verify — awaiting end-to-end revocation feature verification
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
