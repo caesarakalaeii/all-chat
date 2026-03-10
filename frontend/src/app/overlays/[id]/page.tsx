@@ -86,6 +86,45 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     loadData();
   }, [id, token, router]);
 
+  // WebSocket listener for share_revoked notifications (User B real-time update)
+  useEffect(() => {
+    if (!token || !id) return;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/overlay/${id}?token=${token}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      try {
+        const envelope = JSON.parse(event.data);
+        if (envelope.type === 'share_revoked') {
+          const revokerUsername = envelope.data?.revoked_by_username || 'someone';
+          setNotification({
+            type: 'error',
+            message: `Your share with ${revokerUsername} was revoked`
+          });
+          setTimeout(() => setNotification(null), 5000);
+          // Refresh sources so revoked rows grey out immediately
+          overlaysApi.getSources(id).then(setSources).catch(console.error);
+        }
+        // Ignore chat_message and other overlay events — this WS is for notifications only
+      } catch {
+        // Ignore parse errors
+      }
+    };
+
+    ws.onerror = () => {
+      // Non-fatal: notification WS failure does not break the editor
+      console.warn('[OverlayEditor] Notification WS error');
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+  }, [id, token]);
+
   // Handle OAuth callback redirects
   useEffect(() => {
     const sourceAdded = searchParams.get('source_added');
