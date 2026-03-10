@@ -411,6 +411,17 @@ func main() {
 		// Internal API routes (protected - used by other services)
 		protectedAPI.POST("/internal/overlays/:id/sources/auto", proxyHandler.ForwardRequest)
 
+		// Share service routes (all protected - require JWT auth)
+		protectedAPI.GET("/users/search", proxyHandler.ForwardRequest)                    // -> share-service
+		protectedAPI.GET("/shares/incoming", proxyHandler.ForwardRequest)                 // -> share-service
+		protectedAPI.GET("/shares/accepted", proxyHandler.ForwardRequest)                 // -> share-service (Phase 16)
+		protectedAPI.GET("/shares/unseen-acceptances", proxyHandler.ForwardRequest)       // -> share-service
+		protectedAPI.POST("/shares", proxyHandler.ForwardRequest)                         // -> share-service
+		protectedAPI.POST("/shares/:id/accept", proxyHandler.ForwardRequest)              // -> share-service
+		protectedAPI.POST("/shares/:id/reject", proxyHandler.ForwardRequest)              // -> share-service
+		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)           // -> share-service
+		protectedAPI.POST("/admin/users/:id/premium", proxyHandler.ForwardRequest)        // -> share-service
+
 		// Admin routes (protected - TODO: add admin role check)
 		protectedAPI.GET("/admin/users", proxyHandler.ForwardRequest)           // -> auth-service
 		protectedAPI.GET("/admin/users/:id", proxyHandler.ForwardRequest)       // -> auth-service
