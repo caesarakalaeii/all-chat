@@ -1,10 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import React from 'react'
 
-// Placeholder until frontend/src/components/ui/card.tsx is created in Plan 02
-function Card({ children, className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div data-slot="card" className={className} {...props}>{children}</div>
-}
+import { Card } from '@/components/ui/card'
 
 const meta = {
   title: 'UI/Card',
@@ -17,4 +14,10 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = { args: { children: 'Card content' } }
-export const Interactive: Story = { args: { children: 'Hover me', className: 'hover:scale-[1.02] transition-all' } }
+export const Interactive: Story = { args: { children: 'Hover me', interactive: true } }
+export const WithContent: Story = {
+  args: {
+    children: React.createElement('div', { className: 'p-6' }, 'Card with padding'),
+    interactive: false,
+  },
+}

@@ -1,10 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
-import React from 'react'
 
-// Placeholder until frontend/src/components/ui/input.tsx is created in Plan 02
-function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input data-slot="input" className={className} {...props} />
-}
+import { Input } from '@/components/ui/input'
 
 const meta = {
   title: 'UI/Input',
@@ -18,4 +14,5 @@ type Story = StoryObj<typeof meta>
 
 export const Default: Story = { args: {} }
 export const Disabled: Story = { args: { disabled: true } }
-export const WithPlaceholder: Story = { args: { placeholder: 'Enter text...' } }
+export const WithPlaceholder: Story = { args: { placeholder: 'Search...' } }
+export const Small: Story = { args: { size: 'sm' } }

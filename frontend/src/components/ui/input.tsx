@@ -20,11 +20,9 @@ const inputVariants = cva(
   }
 )
 
-function Input({
-  className,
-  size,
-  ...props
-}: InputPrimitive.Props & VariantProps<typeof inputVariants>) {
+type InputProps = Omit<InputPrimitive.Props, "size"> & VariantProps<typeof inputVariants>
+
+function Input({ className, size, ...props }: InputProps) {
   return (
     <InputPrimitive
       data-slot="input"
