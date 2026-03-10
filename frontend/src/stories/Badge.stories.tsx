@@ -1,23 +1,41 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import React from 'react'
+import { PlatformBadge, Badge } from '@/components/ui/badge'
+import type { Platform } from '@/lib/platform-colors'
 
-// Placeholder until frontend/src/components/ui/badge.tsx is created in Plan 02
-function Badge({ children, className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {
-  return <span data-slot="badge" className={className} {...props}>{children}</span>
-}
-
-const meta = {
-  title: 'UI/Badge',
-  component: Badge,
+const platformMeta = {
+  title: 'UI/PlatformBadge',
+  component: PlatformBadge,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
-} satisfies Meta<typeof Badge>
+} satisfies Meta<typeof PlatformBadge>
 
-export default meta
-type Story = StoryObj<typeof meta>
+export default platformMeta
+type Story = StoryObj<typeof platformMeta>
 
-export const Default: Story = { args: { children: 'Badge' } }
-export const Twitch: Story = { args: { children: 'Twitch', className: 'bg-[var(--color-twitch)] text-[var(--color-twitch-text)]' } }
-export const YouTube: Story = { args: { children: 'YouTube', className: 'bg-[var(--color-youtube)] text-[var(--color-youtube-text)]' } }
-export const Kick: Story = { args: { children: 'Kick', className: 'bg-[var(--color-kick)] text-[var(--color-kick-text)]' } }
-export const TikTok: Story = { args: { children: 'TikTok', className: 'bg-[var(--color-tiktok)] text-[var(--color-tiktok-text)]' } }
+export const Twitch: Story = { args: { platform: 'twitch' } }
+export const YouTube: Story = { args: { platform: 'youtube' } }
+export const Kick: Story = { args: { platform: 'kick' } }
+export const TikTok: Story = { args: { platform: 'tiktok' } }
+export const TwitchSmall: Story = { args: { platform: 'twitch', size: 'sm' }, name: 'Twitch (sm)' }
+export const AllPlatforms: Story = {
+  render: () => React.createElement('div', { className: 'flex gap-2' },
+    React.createElement(PlatformBadge, { platform: 'twitch' as Platform }),
+    React.createElement(PlatformBadge, { platform: 'youtube' as Platform }),
+    React.createElement(PlatformBadge, { platform: 'kick' as Platform }),
+    React.createElement(PlatformBadge, { platform: 'tiktok' as Platform }),
+  )
+}
+export const AllPlatformsSmall: Story = {
+  render: () => React.createElement('div', { className: 'flex gap-2' },
+    React.createElement(PlatformBadge, { platform: 'twitch' as Platform, size: 'sm' }),
+    React.createElement(PlatformBadge, { platform: 'youtube' as Platform, size: 'sm' }),
+    React.createElement(PlatformBadge, { platform: 'kick' as Platform, size: 'sm' }),
+    React.createElement(PlatformBadge, { platform: 'tiktok' as Platform, size: 'sm' }),
+  ),
+  name: 'All Platforms (sm)',
+}
+export const GenericBadge: Story = {
+  render: () => React.createElement(Badge, null, 'Generic Badge'),
+  name: 'Generic Badge',
+}
