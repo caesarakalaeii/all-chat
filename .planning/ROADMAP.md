@@ -225,7 +225,7 @@ Plans:
 | 13. Feature Parity | v1.2 | 5/5 | Complete | 2026-03-06 |
 | 14. Foundation | v1.3 | 4/4 | Complete | 2026-03-09 |
 | 15. Share Acceptance | v1.3 | 4/4 | Complete | 2026-03-09 |
-| 16. Shared Overlay Sources | 3/4 | In Progress|  | - |
+| 16. Shared Overlay Sources | 4/4 | Complete   | 2026-03-10 | - |
 | 17. Message Routing | v1.3 | 0/TBD | Not started | - |
 | 18. Revocation | v1.3 | 0/TBD | Not started | - |
 | 19. Lifecycle & Expiry | v1.3 | 0/TBD | Not started | - |
