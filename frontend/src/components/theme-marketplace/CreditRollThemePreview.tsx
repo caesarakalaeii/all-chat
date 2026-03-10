@@ -100,7 +100,7 @@ export default function CreditRollThemePreview({ css, themeId = 'preview' }: Cre
       <style dangerouslySetInnerHTML={{ __html: scopedCss }} />
 
       {/* Credit roll preview container */}
-      <div className="min-h-full overflow-y-auto p-4 bg-gradient-to-b from-gray-900 to-black">
+      <div className="min-h-full overflow-y-auto p-4 bg-linear-to-b from-gray-900 to-black">
         {/* Header */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold text-white mb-2">

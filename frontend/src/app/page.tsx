@@ -74,7 +74,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
+    <div className="min-h-screen bg-linear-to-br from-purple-900 via-blue-900 to-indigo-900">
       <div className="container mx-auto px-4 py-20">
         <div className="text-center">
           {/* Hero Section */}
@@ -193,7 +193,7 @@ export default function LandingPage() {
           </div>
 
           {/* Browser Extension CTA */}
-          <div className="mt-16 p-8 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-2xl backdrop-blur-sm border border-purple-500/30">
+          <div className="mt-16 p-8 bg-linear-to-r from-purple-600/20 to-blue-600/20 rounded-2xl backdrop-blur-sm border border-purple-500/30">
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="text-center md:text-left">
                 <h3 className="text-2xl font-bold text-white mb-2">All-Chat Browser Extension</h3>
