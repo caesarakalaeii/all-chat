@@ -16,6 +16,7 @@ import './globals.css';
 import '@/styles/events.css';
 import CookieBanner from '@/components/CookieBanner';
 import ImpersonationBanner from '@/components/ImpersonationBanner';
+import { ToastProvider } from '@/components/ui/toast';
 import { cn } from "@/lib/utils";
 
 const barlow = Barlow({
@@ -46,9 +47,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn(barlow.variable, dmMono.variable)}>
       <body>
-        <ImpersonationBanner />
-        {children}
-        <CookieBanner />
+        <ToastProvider>
+          <ImpersonationBanner />
+          {children}
+          <CookieBanner />
+        </ToastProvider>
       </body>
     </html>
   );
