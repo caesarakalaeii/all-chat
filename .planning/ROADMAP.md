@@ -164,7 +164,13 @@ Plans:
   2. User can browse list of available shared overlays when adding source
   3. User can add shared overlay as source to any overlay via configuration UI
   4. Shared overlay source persists in configuration like platform sources
-**Plans**: TBD
+**Plans**: 4 plans in 3 waves
+
+Plans:
+- [ ] 16-00-PLAN.md — Test stubs for Nyquist compliance (Wave 0)
+- [ ] 16-01-PLAN.md — Migration 032 + shared_overlay platform type + TypeScript types (Wave 1)
+- [ ] 16-02-PLAN.md — GetAcceptedShares endpoint + api-gateway route fix + frontend API (Wave 1)
+- [ ] 16-03-PLAN.md — HandleAddSource validation + AddSourceModal wiring + overlay editor UI (Wave 2)
 
 #### Phase 17: Message Routing
 **Goal**: Messages from source overlay's aggregated chat are delivered to recipient's overlay with display settings isolation
@@ -218,11 +224,11 @@ Plans:
 | 12. Production Rollout | v1.2 | 3/3 | Complete | 2026-03-05 |
 | 13. Feature Parity | v1.2 | 5/5 | Complete | 2026-03-06 |
 | 14. Foundation | v1.3 | 4/4 | Complete | 2026-03-09 |
-| 15. Share Acceptance | 4/4 | Complete   | 2026-03-09 | - |
-| 16. Shared Overlay Sources | v1.3 | 0/TBD | Not started | - |
+| 15. Share Acceptance | v1.3 | 4/4 | Complete | 2026-03-09 |
+| 16. Shared Overlay Sources | v1.3 | 0/4 | Not started | - |
 | 17. Message Routing | v1.3 | 0/TBD | Not started | - |
 | 18. Revocation | v1.3 | 0/TBD | Not started | - |
 | 19. Lifecycle & Expiry | v1.3 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-09 after Phase 15 planning*
+*Last updated: 2026-03-10 after Phase 16 planning*
