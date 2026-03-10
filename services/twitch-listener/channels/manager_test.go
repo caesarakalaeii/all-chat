@@ -93,6 +93,15 @@ func (m *MockRepository) SetSourceActive(ctx context.Context, channelName string
 	return nil
 }
 
+func (m *MockRepository) GetSourceIDsForChannels(ctx context.Context, channels []string) map[string]string {
+	// Return a simple map for testing - channel name maps to itself as source ID
+	result := make(map[string]string)
+	for _, ch := range channels {
+		result[ch] = ch + "-source-id"
+	}
+	return result
+}
+
 func TestManager_SyncChannels_InitialJoin(t *testing.T) {
 	ctx := context.Background()
 	logger := zaptest.NewLogger(t)
@@ -102,7 +111,7 @@ func TestManager_SyncChannels_InitialJoin(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, nil, nil, logger, nil)
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
 
 	err := manager.SyncChannels(ctx)
 	require.NoError(t, err)
@@ -130,7 +139,7 @@ func TestManager_SyncChannels_PartRemovedChannels(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, nil, nil, logger, nil)
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
 
 	// Initial sync
 	err := manager.SyncChannels(ctx)
@@ -164,7 +173,7 @@ func TestManager_SyncChannels_JoinNewChannels(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, nil, nil, logger, nil)
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
 
 	// Initial sync
 	err := manager.SyncChannels(ctx)
@@ -198,7 +207,7 @@ func TestManager_SyncChannels_NoChanges(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, nil, nil, logger, nil)
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
 
 	// Initial sync
 	err := manager.SyncChannels(ctx)
@@ -225,7 +234,7 @@ func TestManager_SyncChannels_EmptyChannels(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, nil, nil, logger, nil)
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
 
 	err := manager.SyncChannels(ctx)
 	require.NoError(t, err)
@@ -254,7 +263,7 @@ func TestManager_RateLimiting(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, nil, nil, logger, nil)
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
 
 	start := time.Now()
 	err := manager.SyncChannels(ctx)
@@ -279,7 +288,7 @@ func TestManager_GetActiveChannels(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, nil, nil, logger, nil)
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
 
 	err := manager.SyncChannels(ctx)
 	require.NoError(t, err)
@@ -302,7 +311,7 @@ func TestManager_StartStop(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, nil, nil, logger, nil)
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
 
 	// Start manager
 	err := manager.Start(ctx)
@@ -327,7 +336,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 	}
 
 	mockJP := NewMockJoinParter()
-	manager := NewManager(repo, mockJP, nil, nil, logger, nil)
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
 
 	err := manager.SyncChannels(ctx)
 	require.NoError(t, err)
