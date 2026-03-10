@@ -15,6 +15,17 @@ export default defineConfig({
   test: {
     projects: [
       {
+        // Unit tests project (non-browser, fast)
+        test: {
+          name: 'unit',
+          environment: 'node',
+          include: ['src/**/__tests__/**/*.test.ts', 'src/**/__tests__/**/*.test.tsx'],
+          alias: {
+            '@': path.join(dirname, 'src'),
+          },
+        },
+      },
+      {
         extends: true,
         plugins: [
           // The plugin will run tests for the stories defined in your Storybook config
