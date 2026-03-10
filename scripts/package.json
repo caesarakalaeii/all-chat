@@ -1,0 +1,9 @@
+{
+  "name": "allchat-scripts",
+  "version": "1.0.0",
+  "description": "Helper scripts for All-Chat development",
+  "private": true,
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}

@@ -1,4 +1,4 @@
-.PHONY: help build test clean docker-up docker-down migrate deps
+.PHONY: help build test clean docker-up docker-down migrate deps frontend-dev
 
 # Default target
 help:
@@ -15,6 +15,15 @@ help:
 	@echo "  make docker-down   - Stop all services"
 	@echo "  make docker-logs   - View logs"
 	@echo "  make docker-restart - Restart all services"
+	@echo ""
+	@echo "Frontend Development:"
+	@echo "  make frontend-quick      - Quick start (all-in-one: start + seed + verify)"
+	@echo "  make frontend-dev        - Start minimal backend for frontend dev"
+	@echo "  make frontend-down       - Stop frontend dev environment"
+	@echo "  make frontend-seed       - Seed test data"
+	@echo "  make frontend-messages   - Generate test messages"
+	@echo "  make frontend-verify     - Verify frontend setup is working"
+	@echo "  make frontend-reset      - Reset frontend dev environment"
 	@echo ""
 	@echo "Database:"
 	@echo "  make migrate       - Run database migrations"
@@ -164,3 +173,49 @@ migrate-down:
 run-auth:
 	@echo "Running auth-service locally..."
 	cd services/auth-service && go run ./cmd
+
+# Frontend development environment
+frontend-quick:
+	@echo "Running complete frontend setup..."
+	@./scripts/quick-start-frontend.sh
+
+frontend-dev:
+	@echo "Starting minimal backend for frontend development..."
+	docker-compose -f docker-compose.frontend.yml up -d
+	@echo ""
+	@echo "Waiting for services to be healthy..."
+	@sleep 10
+	@echo ""
+	@echo "Services started! Next steps:"
+	@echo "  1. Seed test data: make frontend-seed"
+	@echo "  2. Generate messages: make frontend-messages"
+	@echo "  3. Start frontend: cd frontend && npm run dev"
+	@echo ""
+	@echo "View logs: docker-compose -f docker-compose.frontend.yml logs -f"
+
+frontend-down:
+	@echo "Stopping frontend dev environment..."
+	docker-compose -f docker-compose.frontend.yml down
+
+frontend-seed:
+	@echo "Seeding test data..."
+	@./scripts/seed-test-data.sh
+
+frontend-messages:
+	@echo "Starting message generator..."
+	@echo "Press Ctrl+C to stop"
+	@./scripts/generate-test-messages.sh
+
+frontend-verify:
+	@echo "Verifying frontend development environment..."
+	@./scripts/verify-frontend-setup.sh
+
+frontend-reset:
+	@echo "Resetting frontend dev environment..."
+	docker-compose -f docker-compose.frontend.yml down -v
+	@echo "Starting fresh..."
+	@$(MAKE) frontend-dev
+	@sleep 10
+	@$(MAKE) frontend-seed
+	@echo ""
+	@echo "Environment reset complete!"

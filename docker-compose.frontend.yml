@@ -1,0 +1,158 @@
+version: '3.9'
+
+# Frontend Development Environment
+# Minimal services needed for frontend testing and development
+# Usage: docker-compose -f docker-compose.frontend.yml up
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: allchat-frontend-postgres
+    environment:
+      POSTGRES_DB: allchat
+      POSTGRES_USER: allchat
+      POSTGRES_PASSWORD: dev_password_123
+    ports:
+      - "5432:5432"
+    volumes:
+      - frontend_postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U allchat"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - frontend-dev
+
+  # Redis for pub/sub and streams
+  redis:
+    image: redis:7-alpine
+    container_name: allchat-frontend-redis
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - frontend_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - frontend-dev
+
+  # Overlay Manager - CRUD operations
+  overlay-manager:
+    build:
+      context: .
+      dockerfile: services/overlay-manager/Dockerfile
+    container_name: allchat-frontend-overlay
+    environment:
+      PORT: "8082"
+      LOG_LEVEL: "debug"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: dev_password_123
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JWT_SECRET: frontend-dev-secret-12345
+      MESSAGE_PROCESSOR_URL: http://message-processor:8087
+      MESSAGE_PROCESSOR_API_KEY: dev-frontend-key
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - frontend-dev
+    restart: unless-stopped
+
+  # Message Processor - Normalize and enrich messages
+  message-processor:
+    build:
+      context: .
+      dockerfile: services/message-processor/Dockerfile
+    container_name: allchat-frontend-processor
+    environment:
+      PORT: "8087"
+      LOG_LEVEL: "debug"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: dev_password_123
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      EMOTE_SERVICE_URL: ""  # Disable emote enrichment for frontend testing
+      MOCK_MESSAGE_API_KEY: dev-frontend-key
+      MESSAGE_AGE_CUTOFF_SECONDS: "600"  # 10 minutes for testing
+    ports:
+      - "8087:8087"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - frontend-dev
+    restart: unless-stopped
+
+  # API Gateway - WebSocket and HTTP routing
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: allchat-frontend-gateway
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: "debug"
+      AUTH_SERVICE_URL: ""  # Disable auth for frontend testing
+      OVERLAY_SERVICE_URL: http://overlay-manager:8082
+      EMOTE_SERVICE_URL: ""  # Disable emote service
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: dev_password_123
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JWT_SECRET: frontend-dev-secret-12345
+      CORS_ORIGIN: "*"  # Allow all origins for frontend dev
+      WEBSOCKET_ALLOWED_ORIGINS: "*"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      overlay-manager:
+        condition: service_started
+      message-processor:
+        condition: service_started
+    networks:
+      - frontend-dev
+    restart: unless-stopped
+
+volumes:
+  frontend_postgres_data:
+    driver: local
+  frontend_redis_data:
+    driver: local
+
+networks:
+  frontend-dev:
+    driver: bridge
