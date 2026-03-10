@@ -20,7 +20,7 @@ Requirements for chat overlay sharing feature. Each maps to roadmap phases.
 
 ### Shared Overlay Sources
 
-- [ ] **SOURCE-01**: New "Shared Overlays" source type available alongside platform sources
+- [x] **SOURCE-01**: New "Shared Overlays" source type available alongside platform sources
 - [ ] **SOURCE-02**: User can browse list of available shared overlays when adding source
 - [ ] **SOURCE-03**: User can add shared overlay as source to any overlay
 - [ ] **SOURCE-04**: Messages from source overlay's aggregated chat delivered to recipient's overlay
@@ -81,7 +81,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SHARE-06 | Phase 18 | Pending |
 | SHARE-07 | Phase 18 | Pending |
 | SHARE-08 | Phase 15 | Complete |
-| SOURCE-01 | Phase 16 | Pending |
+| SOURCE-01 | Phase 16 | Complete |
 | SOURCE-02 | Phase 16 | Pending |
 | SOURCE-03 | Phase 16 | Pending |
 | SOURCE-04 | Phase 17 | Pending |
