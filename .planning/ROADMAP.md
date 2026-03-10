@@ -129,10 +129,12 @@
   3. Overlay marketplace CSS classes documented as stable public API (events.css stability contract exists)
   4. Tailwind v4 gradient classes migrated (bg-gradient-to-* → bg-linear-to-*) with visual regression validation
   5. CSS cascade layers defined (@layer base, design-system, marketplace-themes, user-overrides) preventing specificity conflicts
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 23-01: TBD
+- [ ] 23-01-PLAN.md — globals.css clean-slate rewrite: design tokens (three-tier @theme), cascade layer order, Barlow + DM Mono fonts
+- [ ] 23-02-PLAN.md — Static platform color map + gradient migration (bg-gradient-to-* → bg-linear-to-*)
+- [ ] 23-03-PLAN.md — events.css cascade layer migration + EVENTS_CSS_API.md stability contract
 
 ### Phase 24: Component Library Setup & Customization
 **Goal**: @base-ui/react + shadcn CLI component library integrated, customized with design system tokens, and documented in Storybook
@@ -202,7 +204,7 @@ Phases execute in numeric order: 23 → 24 → 25 → 26
 | 1-3 | v1.0 | 11/11 | Complete | 2026-02-18 |
 | 4-10 | v1.1 | 21/21 | Complete | 2026-02-21 |
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
-| 23. Design Token System & Foundation | v1.3 | 0/? | Not started | - |
+| 23. Design Token System & Foundation | v1.3 | 0/3 | Not started | - |
 | 24. Component Library Setup | v1.3 | 0/? | Not started | - |
 | 25. Page Migration & Split-view Preview | v1.3 | 0/? | Not started | - |
 | 26. Enforcement & Quality Gates | v1.3 | 0/? | Not started | - |
