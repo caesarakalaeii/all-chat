@@ -55,7 +55,7 @@ export interface FilterSettings {
 export interface ChatSource {
   id: string;
   overlay_id: string;
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok';
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'shared_overlay';
   channel_id: string;
   channel_name?: string;
   config?: Record<string, unknown>;
@@ -76,7 +76,7 @@ export interface UpdateOverlayRequest {
 }
 
 export interface AddSourceRequest {
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok';
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'shared_overlay';
   channel_id: string;
   config?: Record<string, unknown>;
 }
