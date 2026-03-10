@@ -38,7 +38,7 @@ func TestNewManager(t *testing.T) {
 	logger := zap.NewNop()
 	store := &MockTokenStore{}
 
-	manager := NewManager("client-id", "client-secret", "http://localhost/callback", store, logger)
+	manager := NewManager("client-id", "client-secret", "http://localhost/callback", false, store, logger)
 
 	assert.NotNil(t, manager)
 	assert.NotNil(t, manager.config)
@@ -52,7 +52,7 @@ func TestGetAuthURL(t *testing.T) {
 	logger := zap.NewNop()
 	store := &MockTokenStore{}
 
-	manager := NewManager("client-id", "client-secret", "http://localhost/callback", store, logger)
+	manager := NewManager("client-id", "client-secret", "http://localhost/callback", false, store, logger)
 
 	authURL := manager.GetAuthURL("test-state")
 
@@ -75,7 +75,7 @@ func TestGetToken_ValidToken(t *testing.T) {
 
 	store.On("GetToken", mock.Anything, "user-123", "channel-456").Return(validToken, nil)
 
-	manager := NewManager("client-id", "client-secret", "http://localhost/callback", store, logger)
+	manager := NewManager("client-id", "client-secret", "http://localhost/callback", false, store, logger)
 
 	token, err := manager.GetToken(context.Background(), "user-123", "channel-456")
 
@@ -103,7 +103,7 @@ func TestGetToken_ExpiredToken_ShouldRefresh(t *testing.T) {
 	// Note: In real test, we'd need to mock the OAuth2 token source
 	// For now, this test documents the expected behavior
 
-	manager := NewManager("client-id", "client-secret", "http://localhost/callback", store, logger)
+	manager := NewManager("client-id", "client-secret", "http://localhost/callback", false, store, logger)
 
 	// Call should succeed because oauth2.TokenSource returns the cached token for tests
 	refreshedToken, err := manager.GetToken(context.Background(), "user-123", "channel-456")
@@ -125,7 +125,7 @@ func TestSaveToken(t *testing.T) {
 
 	store.On("SaveToken", mock.Anything, "user-123", "channel-456", token).Return(nil)
 
-	manager := NewManager("client-id", "client-secret", "http://localhost/callback", store, logger)
+	manager := NewManager("client-id", "client-secret", "http://localhost/callback", false, store, logger)
 
 	err := manager.SaveToken(context.Background(), "user-123", "channel-456", token)
 
