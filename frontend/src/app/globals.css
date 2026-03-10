@@ -19,8 +19,10 @@
      TIER 1: BASE TOKENS (raw palette)
      -------------------------------------------------- */
 
-  /* Platform colors — brand-exact hex values */
-  --color-twitch:  #9146FF;
+  /* Platform colors — WCAG AA-accessible on dark backgrounds (#020204)
+     Twitch: #A37BFF (lightened from brand #9146FF for 4.5:1 contrast)
+     Others already pass: YouTube #FF4444, Kick #53FC18, TikTok #69C9D0 */
+  --color-twitch:  #A37BFF;
   --color-youtube: #FF4444;
   --color-kick:    #53FC18;
   --color-tiktok:  #69C9D0;

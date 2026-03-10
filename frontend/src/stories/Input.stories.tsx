@@ -12,7 +12,7 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-export const Default: Story = { args: {} }
-export const Disabled: Story = { args: { disabled: true } }
+export const Default: Story = { args: { 'aria-label': 'Text input' } }
+export const Disabled: Story = { args: { disabled: true, 'aria-label': 'Disabled input' } }
 export const WithPlaceholder: Story = { args: { placeholder: 'Search...' } }
-export const Small: Story = { args: { size: 'sm' } }
+export const Small: Story = { args: { size: 'sm', 'aria-label': 'Small input' } }
