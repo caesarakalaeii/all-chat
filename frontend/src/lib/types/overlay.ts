@@ -61,6 +61,8 @@ export interface ChatSource {
   config?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  is_active: boolean;
+  share_status?: 'accepted' | 'revoked' | 'expired';  // Only present for shared_overlay sources
 }
 
 export interface CreateOverlayRequest {

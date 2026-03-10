@@ -100,6 +100,7 @@ describe('AddSourceModal', () => {
       overlay_id: 'overlay-1',
       platform: 'twitch',
       channel_id: 'overlay-789',
+      is_active: true,
       created_at: '2026-03-09T12:00:00Z',
       updated_at: '2026-03-09T12:00:00Z',
     });
@@ -164,7 +165,6 @@ describe('AddSourceModal', () => {
       platform: 'shared_overlay',
       channel_id: 'sender-overlay-uuid',
       channel_name: "xqc's overlay",
-      auth_required: false,
       config: {},
       is_active: false,
       created_at: '2026-03-10T12:00:00Z',

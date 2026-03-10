@@ -83,4 +83,11 @@ export const sharesApi = {
     );
     return response.shares || [];
   },
+
+  /**
+   * Revoke an active share (either participant can call)
+   */
+  async revokeShare(shareId: string): Promise<void> {
+    await apiClient.post(`/api/v1/shares/${shareId}/revoke`, {});
+  },
 };
