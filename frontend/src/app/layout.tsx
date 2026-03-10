@@ -11,16 +11,26 @@
  */
 
 import type { Metadata } from 'next';
-import { Inter, Geist } from 'next/font/google';
+import { Barlow, DM_Mono } from 'next/font/google';
 import './globals.css';
 import '@/styles/events.css';
 import CookieBanner from '@/components/CookieBanner';
 import ImpersonationBanner from '@/components/ImpersonationBanner';
 import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const barlow = Barlow({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-barlow',
+  display: 'swap',
+});
 
-const inter = Inter({ subsets: ['latin'] });
+const dmMono = DM_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-dm-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'All-Chat - Multi-Platform Chat Aggregation',
@@ -34,8 +44,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body className={inter.className}>
+    <html lang="en" className={cn(barlow.variable, dmMono.variable)}>
+      <body>
         <ImpersonationBanner />
         {children}
         <CookieBanner />
