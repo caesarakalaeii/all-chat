@@ -24,7 +24,7 @@ Requirements for chat overlay sharing feature. Each maps to roadmap phases.
 - [x] **SOURCE-02**: User can browse list of available shared overlays when adding source
 - [x] **SOURCE-03**: User can add shared overlay as source to any overlay
 - [x] **SOURCE-04**: Messages from source overlay's aggregated chat delivered to recipient's overlay
-- [ ] **SOURCE-05**: Display settings (CSS, events) from recipient's overlay apply, not source overlay's
+- [x] **SOURCE-05**: Display settings (CSS, events) from recipient's overlay apply, not source overlay's
 
 ### Expiry & Lifecycle
 
@@ -85,7 +85,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SOURCE-02 | Phase 16 | Complete |
 | SOURCE-03 | Phase 16 | Complete |
 | SOURCE-04 | Phase 17 | Complete |
-| SOURCE-05 | Phase 17 | Pending |
+| SOURCE-05 | Phase 17 | Complete |
 | EXPIRY-01 | Phase 19 | Pending |
 | EXPIRY-02 | Phase 19 | Pending |
 | EXPIRY-03 | Phase 19 | Pending |

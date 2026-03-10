@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: Completed 17-00-PLAN.md
-last_updated: "2026-03-10T17:40:59.803Z"
+stopped_at: Completed 17-01-PLAN.md
+last_updated: "2026-03-10T17:44:18.575Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 46
-  completed_plans: 45
+  completed_plans: 46
   percent: 93
 ---
 
@@ -75,6 +75,7 @@ Progress: [█████████░] 93% (v1.3)
 | Phase 16-shared-overlay-sources P00 | 3 | 2 tasks | 2 files |
 | Phase 16-shared-overlay-sources P03 | 8 | 2 tasks | 5 files |
 | Phase 17-message-routing P00 | 4 | 2 tasks | 2 files |
+| Phase 17-message-routing P01 | 3 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,8 @@ Recent decisions affecting v1.3:
 - [Phase 17-message-routing]: Stub-based router tests (no pgxmock): message-processor go.mod lacks pgxmock/testcontainers; in-process overlayFinderStub with map lookup suffices for Wave 0 RED scaffolding
 - [Phase 17-message-routing]: productionQueryHasUnion=false sentinel: asserts Wave 1 must add UNION branch; clean RED failure with descriptive message
 - [Phase 17-message-routing]: t.Skip for is_active=true test: nil-db guard returns 403 before createFunc fires; DB dependency deferred to Wave 1 integration test
+- [Phase 17-message-routing]: UNION (not UNION ALL) for message fan-out deduplication: overlays appearing in both direct and shared branches returned exactly once
+- [Phase 17-message-routing]: IsActive: req.Platform == 'shared_overlay' expression: shared_overlay sources are immediately active at creation (share already accepted); other platforms activated by listeners
 
 ### Pending Todos
 
@@ -142,8 +145,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T17:40:59.801Z
-Stopped at: Completed 17-00-PLAN.md
+Last session: 2026-03-10T17:44:12.904Z
+Stopped at: Completed 17-01-PLAN.md
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
