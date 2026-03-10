@@ -20,7 +20,9 @@ import { use, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { overlaysApi } from '@/lib/api/overlays';
+import { sharesApi } from '@/lib/api/shares';
 import type { Overlay, ChatSource } from '@/lib/types/overlay';
+import type { AcceptedShare } from '@/lib/types/share';
 import { BetaWarning } from '@/components/BetaWarning';
 
 export default function OverlayEditorPage({ params }: { params: Promise<{ id: string }> }) {
@@ -40,6 +42,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [newSourceChannel, setNewSourceChannel] = useState('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | null>(null);
+  const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([]);
 
   // Load overlay and sources
   useEffect(() => {
@@ -60,6 +63,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         } catch (sourcesError) {
           console.warn('Sources endpoint not available yet, starting with empty sources');
           setSources([]);
+        }
+
+        // Load accepted shares for Shared Overlays section — non-critical
+        try {
+          const sharesData = await sharesApi.getAcceptedShares();
+          setAcceptedShares(sharesData);
+        } catch {
+          // Non-critical — overlay editor works without shared overlays
         }
       } catch (error) {
         console.error('Failed to load overlay:', error);
@@ -244,6 +255,31 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setNotification({
         type: 'error',
         message: 'Failed to add TikTok source. Please try again.'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleAddSharedOverlay = async (share: AcceptedShare) => {
+    try {
+      await overlaysApi.addSource(id, {
+        platform: 'shared_overlay',
+        channel_id: share.sender_overlay_id,
+        channel_name: `${share.sender_display_name}'s overlay`,
+      });
+      const updatedSources = await overlaysApi.getSources(id);
+      setSources(updatedSources);
+      setShowAddSource(false);
+      setNotification({
+        type: 'success',
+        message: `Added ${share.sender_display_name}'s overlay!`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } catch (error) {
+      console.error('Failed to add shared overlay:', error);
+      setNotification({
+        type: 'error',
+        message: 'Failed to add shared overlay source. Please try again.',
       });
       setTimeout(() => setNotification(null), 5000);
     }
@@ -601,6 +637,25 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   </div>
                 )}
               </div>
+
+              {/* Shared Overlays section — only shown if user has accepted shares */}
+              {acceptedShares.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-600">
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">Shared Overlays</h4>
+                  <div className="space-y-2">
+                    {acceptedShares.map((share) => (
+                      <button
+                        key={share.share_id}
+                        onClick={() => handleAddSharedOverlay(share)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-sm bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 rounded border border-purple-700/50 transition-colors"
+                      >
+                        <span>{share.sender_display_name}&apos;s overlay</span>
+                        <span className="text-xs text-purple-400">+ Add</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Divider */}
               <div className="relative my-6">

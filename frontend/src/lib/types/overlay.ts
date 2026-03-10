@@ -78,6 +78,7 @@ export interface UpdateOverlayRequest {
 export interface AddSourceRequest {
   platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'shared_overlay';
   channel_id: string;
+  channel_name?: string;
   config?: Record<string, unknown>;
 }
 

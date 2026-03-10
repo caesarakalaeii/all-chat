@@ -52,18 +52,11 @@ export function AddSourceModal({ senderName, senderOverlayId, onClose, onAdded }
     try {
       setLoading(true);
 
-      // Phase 16 will implement this endpoint
-      // For now, just log and close modal
-      console.log('Adding shared overlay source:', {
-        overlayId: selectedOverlay,
-        sharedOverlayId: senderOverlayId,
+      await overlaysApi.addSource(selectedOverlay, {
+        platform: 'shared_overlay',
+        channel_id: senderOverlayId,
+        channel_name: `${senderName}'s overlay`,
       });
-
-      // TODO Phase 16: Uncomment when endpoint exists
-      // await overlaysApi.addSource(selectedOverlay, {
-      //   type: 'shared_overlay',
-      //   shared_overlay_id: senderOverlayId,
-      // });
 
       toast.success(`Added ${senderName}'s overlay!`);
 
@@ -73,7 +66,7 @@ export function AddSourceModal({ senderName, senderOverlayId, onClose, onAdded }
       onClose();
     } catch (err: any) {
       console.error('Failed to add shared overlay:', err);
-      toast.error('Failed to add shared overlay');
+      toast.error(err?.message || 'Failed to add shared overlay');
     } finally {
       setLoading(false);
     }
