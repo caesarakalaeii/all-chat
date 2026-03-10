@@ -34,3 +34,15 @@ export interface UserSearchResult {
   display_name: string;
   profile_image_url: string;
 }
+
+/**
+ * Accepted share detail — returned by GET /api/v1/shares/accepted
+ * Represents a shared overlay the current user (recipient) can add as a source.
+ */
+export interface AcceptedShare {
+  share_id: string;
+  sender_overlay_id: string;
+  sender_overlay_name: string;
+  sender_display_name: string;
+  share_status: string;
+}

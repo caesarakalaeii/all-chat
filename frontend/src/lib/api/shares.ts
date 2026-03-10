@@ -6,7 +6,7 @@
  */
 
 import { apiClient } from './client';
-import type { ShareRequest, UserSearchResult } from '../types/share';
+import type { ShareRequest, UserSearchResult, AcceptedShare } from '../types/share';
 
 export const sharesApi = {
   /**
@@ -71,5 +71,16 @@ export const sharesApi = {
    */
   async markAcceptanceSeen(shareId: string): Promise<void> {
     await apiClient.post(`/api/v1/shares/${shareId}/mark-seen`, {});
+  },
+
+  /**
+   * Get accepted shares where the current user is the recipient.
+   * These are the shared overlays the user can add as a source to their own overlays.
+   */
+  async getAcceptedShares(): Promise<AcceptedShare[]> {
+    const response = await apiClient.get<{ shares: AcceptedShare[] }>(
+      '/api/v1/shares/accepted'
+    );
+    return response.shares || [];
   },
 };
