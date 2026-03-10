@@ -19,6 +19,7 @@ export const Kick: Story = { args: { platform: 'kick' } }
 export const TikTok: Story = { args: { platform: 'tiktok' } }
 export const TwitchSmall: Story = { args: { platform: 'twitch', size: 'sm' }, name: 'Twitch (sm)' }
 export const AllPlatforms: Story = {
+  args: { platform: 'twitch' },
   render: () => React.createElement('div', { className: 'flex gap-2' },
     React.createElement(PlatformBadge, { platform: 'twitch' as Platform }),
     React.createElement(PlatformBadge, { platform: 'youtube' as Platform }),
@@ -27,6 +28,7 @@ export const AllPlatforms: Story = {
   )
 }
 export const AllPlatformsSmall: Story = {
+  args: { platform: 'twitch', size: 'sm' },
   render: () => React.createElement('div', { className: 'flex gap-2' },
     React.createElement(PlatformBadge, { platform: 'twitch' as Platform, size: 'sm' }),
     React.createElement(PlatformBadge, { platform: 'youtube' as Platform, size: 'sm' }),
@@ -36,6 +38,7 @@ export const AllPlatformsSmall: Story = {
   name: 'All Platforms (sm)',
 }
 export const GenericBadge: Story = {
+  args: { platform: 'twitch' },
   render: () => React.createElement(Badge, null, 'Generic Badge'),
   name: 'Generic Badge',
 }
