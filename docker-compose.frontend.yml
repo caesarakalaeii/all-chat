@@ -17,7 +17,7 @@ services:
       - "5432:5432"
     volumes:
       - frontend_postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
+      - ./migrations/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U allchat"]
       interval: 5s
@@ -67,6 +67,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       JWT_SECRET: frontend-dev-secret-12345
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
       MESSAGE_PROCESSOR_URL: http://message-processor:8087
       MESSAGE_PROCESSOR_API_KEY: dev-frontend-key
     ports:
@@ -130,6 +132,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       JWT_SECRET: frontend-dev-secret-12345
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
       CORS_ORIGIN: "*"  # Allow all origins for frontend dev
       WEBSOCKET_ALLOWED_ORIGINS: "*"
     ports:
