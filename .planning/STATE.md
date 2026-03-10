@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: Completed 16-01-PLAN.md
-last_updated: "2026-03-10T16:20:18.109Z"
+stopped_at: Completed 16-00-PLAN.md
+last_updated: "2026-03-10T16:22:24.575Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
   completed_phases: 9
   total_plans: 44
-  completed_plans: 41
+  completed_plans: 43
   percent: 93
 ---
 
@@ -71,6 +71,8 @@ Progress: [█████████░] 93% (v1.3)
 | Phase 15 P02 | 6 | 3 tasks | 10 files |
 | Phase 15 P03 | 530 | 3 tasks | 15 files |
 | Phase 16 P01 | 2 | 2 tasks | 5 files |
+| Phase 16 P02 | 3 | 3 tasks | 6 files |
+| Phase 16-shared-overlay-sources P00 | 3 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -107,6 +109,10 @@ Recent decisions affecting v1.3:
 - [Phase 15]: WebSocket notification via internal endpoint (fire-and-forget, 5s timeout)
 - [Phase 15]: Overlay-specific deduplication with 5s TTL (prevents Twitch Shared Chat overlap)
 - [Phase 16-01]: shared_overlay uses is_enabled=TRUE, requires_oauth=FALSE; recipient_overlay_id is nullable FK with ON DELETE SET NULL for bidirectional sharing
+- [Phase 16]: AcceptedShareDetail is a separate struct from ShareRequest — it's a read-only JOIN projection for UI-enriched queries, not a base model mutation
+- [Phase 16]: [Phase 16-02]: No premium check on GET /shares/accepted — viewing available sources is informational (read-only), premium only gates create/accept mutations
+- [Phase 16-shared-overlay-sources]: shares_accepted_test.go already GREEN from 15-03 — GetAcceptedShares already implemented, no compile-error RED gate needed
+- [Phase 16-shared-overlay-sources]: RED test for shared_overlay uses HTTP status assertion (403 vs 201) rather than compile error for cleaner readable RED state
 
 ### Pending Todos
 
@@ -129,8 +135,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T16:20:18.107Z
-Stopped at: Completed 16-01-PLAN.md
+Last session: 2026-03-10T16:22:19.203Z
+Stopped at: Completed 16-00-PLAN.md
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
