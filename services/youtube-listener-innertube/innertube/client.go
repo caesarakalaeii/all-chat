@@ -16,7 +16,7 @@ import (
 
 const (
 	// InnerTubeEndpoint is the base URL for InnerTube live chat API
-	InnerTubeEndpoint = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat_replay"
+	InnerTubeEndpoint = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat"
 
 	// DefaultAPIKey is the public InnerTube API key extracted from research
 	// TODO: Phase 10 - Extract API key dynamically from stream HTML
@@ -69,7 +69,7 @@ func NewClient(opts ClientOptions) *Client {
 }
 
 // GetLiveChatReplay fetches live chat messages using a continuation token
-// This method works for both live streams and replays
+// For live streams, this uses the get_live_chat endpoint
 func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string) (*LiveChatResponse, error) {
 	if continuation == "" {
 		return nil, fmt.Errorf("continuation token is required")
