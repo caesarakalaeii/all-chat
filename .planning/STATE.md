@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: Phase 17 context gathered
-last_updated: "2026-03-10T17:16:39.315Z"
+stopped_at: Completed 17-00-PLAN.md
+last_updated: "2026-03-10T17:40:59.803Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
   completed_phases: 10
-  total_plans: 44
-  completed_plans: 44
+  total_plans: 46
+  completed_plans: 45
   percent: 93
 ---
 
@@ -74,6 +74,7 @@ Progress: [█████████░] 93% (v1.3)
 | Phase 16 P02 | 3 | 3 tasks | 6 files |
 | Phase 16-shared-overlay-sources P00 | 3 | 2 tasks | 2 files |
 | Phase 16-shared-overlay-sources P03 | 8 | 2 tasks | 5 files |
+| Phase 17-message-routing P00 | 4 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,9 @@ Recent decisions affecting v1.3:
 - [Phase 16-shared-overlay-sources]: RED test for shared_overlay uses HTTP status assertion (403 vs 201) rather than compile error for cleaner readable RED state
 - [Phase 16-shared-overlay-sources]: Nil DB guard in shared_overlay branch returns 403 — unit tests work without real DB
 - [Phase 16-shared-overlay-sources]: channel_name added to AddSourceRequest interface (was missing from type definition, backend already accepted it)
+- [Phase 17-message-routing]: Stub-based router tests (no pgxmock): message-processor go.mod lacks pgxmock/testcontainers; in-process overlayFinderStub with map lookup suffices for Wave 0 RED scaffolding
+- [Phase 17-message-routing]: productionQueryHasUnion=false sentinel: asserts Wave 1 must add UNION branch; clean RED failure with descriptive message
+- [Phase 17-message-routing]: t.Skip for is_active=true test: nil-db guard returns 403 before createFunc fires; DB dependency deferred to Wave 1 integration test
 
 ### Pending Todos
 
@@ -138,9 +142,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T17:16:39.313Z
-Stopped at: Phase 17 context gathered
-Resume file: .planning/phases/17-message-routing/17-CONTEXT.md
+Last session: 2026-03-10T17:40:59.801Z
+Stopped at: Completed 17-00-PLAN.md
+Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
 
