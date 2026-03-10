@@ -1,30 +1,23 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import React from 'react'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 
-// Placeholder until frontend/src/components/ui/dialog.tsx is created in Plan 03
-function Dialog({ children, className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div data-slot="dialog" className={className} {...props}>{children}</div>
-}
-
-function DialogDemo() {
+// Storybook: need a wrapper with useState for controlled open state
+function DialogDemo({ size }: { size?: 'sm' | 'default' | 'lg' }) {
   const [open, setOpen] = React.useState(false)
   return (
-    <div>
-      <button onClick={() => setOpen(true)} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-        Open Dialog
-      </button>
-      {open && (
-        <Dialog style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: 'var(--color-surface, #1a1a1a)', padding: '24px', borderRadius: '8px', minWidth: '300px' }}>
-            <h2 style={{ margin: '0 0 16px' }}>Dialog Title</h2>
-            <p style={{ margin: '0 0 16px' }}>Dialog content goes here.</p>
-            <button onClick={() => setOpen(false)} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-              Close
-            </button>
-          </div>
-        </Dialog>
-      )}
-    </div>
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger render={<Button variant="outline">Open Dialog</Button>} />
+      <DialogContent size={size}>
+        <DialogTitle>Dialog Title</DialogTitle>
+        <DialogDescription>Dialog description and content goes here.</DialogDescription>
+        <div className="mt-4 flex gap-2 justify-end">
+          <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={() => setOpen(false)}>Confirm</Button>
+        </div>
+      </DialogContent>
+    </Dialog.Root>
   )
 }
 
@@ -38,5 +31,6 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-export const Default: Story = { args: {} }
-export const WithContent: Story = { args: {} }
+export const Default: Story = {}
+export const Small: Story = { args: { size: 'sm' } }
+export const Large: Story = { args: { size: 'lg' } }

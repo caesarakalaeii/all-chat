@@ -1,45 +1,46 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import React from 'react'
+import { cn } from '@/lib/utils'
+import { X } from 'lucide-react'
 
-// Placeholder until frontend/src/components/ui/toast.tsx is created in Plan 03
-function Toast({ children, className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+// Static visual representation of a toast for Storybook.
+// The actual @base-ui/react/toast requires a live Provider context which is
+// complex to set up in Storybook decorators. This previews the visual appearance
+// for COMP-01/02. Runtime behavior (stacking, dismiss timers) is tested in-app.
+function ToastPreview({ title, description, type }: {
+  title: string
+  description?: string
+  type: 'success' | 'error' | 'info'
+}) {
+  const borderClass = type === 'success' ? 'border-l-kick' : type === 'error' ? 'border-l-destructive' : 'border-l-ring'
   return (
-    <div
-      data-slot="toast"
-      className={className}
-      style={{ padding: '12px 16px', borderRadius: '6px', minWidth: '280px', display: 'flex', alignItems: 'center', gap: '8px' }}
-      {...props}
-    >
-      {children}
+    <div className={cn(
+      "bg-surface-2 border border-border rounded-xl px-4 py-3 shadow-xl min-w-[280px]",
+      "border-l-4", borderClass
+    )}>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-text">{title}</p>
+          {description && <p className="text-xs text-text-sub mt-0.5">{description}</p>}
+        </div>
+        <button className="text-text-sub hover:text-text transition-colors" aria-label="Close">
+          <X className="size-4" />
+        </button>
+      </div>
     </div>
   )
 }
 
 const meta = {
   title: 'UI/Toast',
-  component: Toast,
+  component: ToastPreview,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
-} satisfies Meta<typeof Toast>
+} satisfies Meta<typeof ToastPreview>
 
 export default meta
 type Story = StoryObj<typeof meta>
 
-export const Success: Story = {
-  args: {
-    children: 'Operation successful!',
-    style: { background: '#166534', color: '#dcfce7' },
-  },
-}
-export const Error: Story = {
-  args: {
-    children: 'Something went wrong.',
-    style: { background: '#991b1b', color: '#fee2e2' },
-  },
-}
-export const Info: Story = {
-  args: {
-    children: 'Here is some information.',
-    style: { background: '#1e3a5f', color: '#dbeafe' },
-  },
-}
+export const Success: Story = { args: { title: 'Overlay saved', type: 'success' } }
+export const Error: Story = { args: { title: 'Connection failed', description: 'Check your API credentials', type: 'error' } }
+export const Info: Story = { args: { title: 'Syncing sources...', type: 'info' } }
