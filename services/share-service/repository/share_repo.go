@@ -333,6 +333,50 @@ func (r *ShareRepository) GetUnseenAcceptances(ctx context.Context, senderUserID
 	return requests, nil
 }
 
+// AcceptedShareDetail contains the accepted share info needed for the "add source" UI
+type AcceptedShareDetail struct {
+	ShareID           string `json:"share_id"`
+	SenderOverlayID   string `json:"sender_overlay_id"`
+	SenderOverlayName string `json:"sender_overlay_name"`
+	SenderDisplayName string `json:"sender_display_name"`
+	ShareStatus       string `json:"share_status"`
+}
+
+// GetAcceptedShareDetails returns accepted shares where the current user is recipient,
+// joined with overlay name and sender display name for the add-source UI.
+func (r *ShareRepository) GetAcceptedShareDetails(ctx context.Context, recipientUserID string) ([]*AcceptedShareDetail, error) {
+	query := `
+		SELECT
+			sr.id AS share_id,
+			sr.sender_overlay_id,
+			o.name AS sender_overlay_name,
+			u.display_name AS sender_display_name,
+			sr.status AS share_status
+		FROM share_requests sr
+		JOIN overlays o ON o.id = sr.sender_overlay_id
+		JOIN users u ON u.id = sr.sender_user_id
+		WHERE sr.recipient_user_id = $1
+		  AND sr.status = 'accepted'
+		ORDER BY sr.created_at DESC
+	`
+	rows, err := r.db.Query(ctx, query, recipientUserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query accepted shares: %w", err)
+	}
+	defer rows.Close()
+
+	details := make([]*AcceptedShareDetail, 0)
+	for rows.Next() {
+		var d AcceptedShareDetail
+		if err := rows.Scan(&d.ShareID, &d.SenderOverlayID, &d.SenderOverlayName,
+			&d.SenderDisplayName, &d.ShareStatus); err != nil {
+			return nil, fmt.Errorf("failed to scan accepted share: %w", err)
+		}
+		details = append(details, &d)
+	}
+	return details, rows.Err()
+}
+
 // MarkAcceptanceSeen sets has_seen_acceptance = true for share request
 func (r *ShareRepository) MarkAcceptanceSeen(ctx context.Context, id string) error {
 	query := `UPDATE share_requests SET has_seen_acceptance = true WHERE id = $1`

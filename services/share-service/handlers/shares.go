@@ -437,6 +437,22 @@ func (h *ShareHandler) GetUnseenAcceptances(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"requests": requests})
 }
 
+// GetAcceptedShares handles GET /api/v1/shares/accepted
+// Returns accepted shares where the current user is the recipient (they can add these as sources).
+// No premium check: viewing available sources is informational.
+func (h *ShareHandler) GetAcceptedShares(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	shares, err := h.shareRepo.GetAcceptedShareDetails(c.Request.Context(), userID)
+	if err != nil {
+		h.logger.Error("Failed to get accepted shares", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch accepted shares"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"shares": shares})
+}
+
 // MarkAcceptanceSeen handles POST /api/v1/shares/:id/mark-seen
 func (h *ShareHandler) MarkAcceptanceSeen(c *gin.Context) {
 	shareID := c.Param("id")
