@@ -12,7 +12,7 @@ Requirements for Frontend Redesign milestone. Each maps to roadmap phases.
 - [x] **FOUND-01**: Design token system established with Tailwind v4 @theme directive (colors, spacing, typography, shadows)
 - [x] **FOUND-02**: Three-layer token hierarchy implemented (base → semantic → component)
 - [x] **FOUND-03**: Static platform color mapping object created (no dynamic class construction)
-- [ ] **FOUND-04**: Overlay CSS stability contract documented (events.css classes as public API)
+- [x] **FOUND-04**: Overlay CSS stability contract documented (events.css classes as public API)
 - [x] **FOUND-05**: Tailwind v4 gradient codemod executed (bg-gradient-to-* → bg-linear-to-*)
 - [x] **FOUND-06**: CSS cascade layers defined (@layer base, design-system, marketplace-themes, user-overrides)
 
@@ -107,7 +107,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FOUND-01 | Phase 23 | Complete |
 | FOUND-02 | Phase 23 | Complete |
 | FOUND-03 | Phase 23 | Complete |
-| FOUND-04 | Phase 23 | Pending |
+| FOUND-04 | Phase 23 | Complete |
 | FOUND-05 | Phase 23 | Complete |
 | FOUND-06 | Phase 23 | Complete |
 | COMP-01 | Phase 24 | Pending |

@@ -132,9 +132,9 @@
 **Plans**: 3 plans
 
 Plans:
-- [ ] 23-01-PLAN.md — globals.css clean-slate rewrite: design tokens (three-tier @theme), cascade layer order, Barlow + DM Mono fonts
-- [ ] 23-02-PLAN.md — Static platform color map + gradient migration (bg-gradient-to-* → bg-linear-to-*)
-- [ ] 23-03-PLAN.md — events.css cascade layer migration + EVENTS_CSS_API.md stability contract
+- [x] 23-01-PLAN.md — globals.css clean-slate rewrite: design tokens (three-tier @theme), cascade layer order, Barlow + DM Mono fonts
+- [x] 23-02-PLAN.md — Static platform color map + gradient migration (bg-gradient-to-* → bg-linear-to-*)
+- [x] 23-03-PLAN.md — events.css cascade layer migration + EVENTS_CSS_API.md stability contract
 
 ### Phase 24: Component Library Setup & Customization
 **Goal**: @base-ui/react + shadcn CLI component library integrated, customized with design system tokens, and documented in Storybook
