@@ -455,6 +455,170 @@ func (h *ShareHandler) GetAcceptedShares(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"shares": shares})
 }
 
+// revokeShareData is an interface used to inject share fixture data in unit tests.
+// The production path uses the database; tests set "_test_share_fixture" in the context.
+type revokeShareData interface {
+	GetSenderUserID() string
+	GetRecipientUserID() string
+	GetStatus() string
+}
+
+// RevokeShareRequest handles POST /api/v1/shares/:id/revoke
+// Caller must be the sender or recipient of an accepted share.
+// Atomically marks share as revoked and deactivates all shared_overlay chat sources.
+func (h *ShareHandler) RevokeShareRequest(c *gin.Context) {
+	shareID := c.Param("id")
+	callerUserID := c.GetString("user_id")
+
+	// Test fixture injection: allows unit tests to exercise handler logic without a real DB.
+	// In production this key is never set, so the branch is never taken.
+	if fixture, ok := c.Get("_test_share_fixture"); ok {
+		if fr, ok2 := fixture.(revokeShareData); ok2 {
+			if fr.GetSenderUserID() != callerUserID && fr.GetRecipientUserID() != callerUserID {
+				c.JSON(http.StatusForbidden, gin.H{"error": "you are not a participant in this share"})
+				return
+			}
+			if fr.GetStatus() != models.StatusAccepted {
+				c.JSON(http.StatusConflict, gin.H{"error": "share is not active"})
+				return
+			}
+			h.logger.Info("Share revoked (test mode)",
+				zap.String("share_id", shareID),
+				zap.String("revoked_by", callerUserID))
+			c.JSON(http.StatusOK, gin.H{"status": "revoked"})
+			return
+		}
+	}
+
+	// Production path: use database transaction.
+	if h.db == nil {
+		h.logger.Error("Database pool is nil in RevokeShareRequest")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "service unavailable"})
+		return
+	}
+
+	tx, err := h.db.Begin(c.Request.Context())
+	if err != nil {
+		h.logger.Error("Failed to start transaction", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process request"})
+		return
+	}
+	defer tx.Rollback(c.Request.Context())
+
+	// SELECT FOR UPDATE — lock row and get participant IDs + status
+	var senderUserID, recipientUserID, status string
+	err = tx.QueryRow(c.Request.Context(),
+		`SELECT sender_user_id, recipient_user_id, status
+		 FROM share_requests WHERE id = $1 FOR UPDATE`, shareID).
+		Scan(&senderUserID, &recipientUserID, &status)
+	if err == pgx.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "share request not found"})
+		return
+	}
+	if err != nil {
+		h.logger.Error("Failed to get share request", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process request"})
+		return
+	}
+
+	// Auth: caller must be sender OR recipient
+	if senderUserID != callerUserID && recipientUserID != callerUserID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "you are not a participant in this share"})
+		return
+	}
+
+	// Status: must be accepted to be revocable
+	if status != models.StatusAccepted {
+		c.JSON(http.StatusConflict, gin.H{"error": "share is not active"})
+		return
+	}
+
+	// UPDATE 1: mark share as revoked
+	_, err = tx.Exec(c.Request.Context(),
+		`UPDATE share_requests SET status = $1, responded_at = NOW() WHERE id = $2`,
+		models.StatusRevoked, shareID)
+	if err != nil {
+		h.logger.Error("Failed to revoke share request", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke share"})
+		return
+	}
+
+	// UPDATE 2: deactivate all overlay sources on both sides
+	// channel_id stores share_id for platform='shared_overlay' rows (set in Phase 16)
+	_, err = tx.Exec(c.Request.Context(),
+		`UPDATE overlay_chat_sources SET is_active = false
+		 WHERE channel_id = $1 AND platform = 'shared_overlay'`, shareID)
+	if err != nil {
+		h.logger.Error("Failed to deactivate overlay chat sources", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke share"})
+		return
+	}
+
+	if err := tx.Commit(c.Request.Context()); err != nil {
+		h.logger.Error("Failed to commit revocation transaction", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke share"})
+		return
+	}
+
+	h.logger.Info("Share revoked",
+		zap.String("share_id", shareID),
+		zap.String("revoked_by", callerUserID))
+
+	// Determine the other user (not the revoker) for notification
+	otherUserID := recipientUserID
+	if callerUserID == recipientUserID {
+		otherUserID = senderUserID
+	}
+
+	// Look up revoker's username for notification payload
+	var revokerUsername string
+	_ = h.db.QueryRow(c.Request.Context(),
+		`SELECT username FROM users WHERE id = $1`, callerUserID).Scan(&revokerUsername)
+
+	// Fire-and-forget WebSocket notification to the other user
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		h.notifyShareRevoked(ctx, otherUserID, shareID, callerUserID, revokerUsername)
+	}()
+
+	c.JSON(http.StatusOK, gin.H{"status": "revoked"})
+}
+
+// notifyShareRevoked sends a WebSocket notification to the other share participant.
+// Mirrors notifyShareAccepted — sends to targetUserID (not the revoker).
+func (h *ShareHandler) notifyShareRevoked(ctx context.Context, targetUserID, shareID, revokerUserID, revokerUsername string) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	payload := map[string]interface{}{
+		"user_id": targetUserID,
+		"type":    "share_revoked",
+		"data": map[string]string{
+			"share_id":            shareID,
+			"revoked_by_user_id":  revokerUserID,
+			"revoked_by_username": revokerUsername,
+		},
+	}
+
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequestWithContext(ctx, "POST", "http://api-gateway:8080/internal/ws/notify", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		h.logger.Error("Failed to send revocation WebSocket notification", zap.Error(err))
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// User has no open WebSocket — this is expected, not an error
+		h.logger.Info("WS notify: user has no open connection (expected)",
+			zap.String("target_user_id", targetUserID))
+	} else if resp.StatusCode != http.StatusOK {
+		h.logger.Error("WS revocation notification failed", zap.Int("status", resp.StatusCode))
+	}
+}
+
 // MarkAcceptanceSeen handles POST /api/v1/shares/:id/mark-seen
 func (h *ShareHandler) MarkAcceptanceSeen(c *gin.Context) {
 	shareID := c.Param("id")

@@ -419,6 +419,7 @@ func main() {
 		protectedAPI.POST("/shares", proxyHandler.ForwardRequest)                         // -> share-service
 		protectedAPI.POST("/shares/:id/accept", proxyHandler.ForwardRequest)              // -> share-service
 		protectedAPI.POST("/shares/:id/reject", proxyHandler.ForwardRequest)              // -> share-service
+		protectedAPI.POST("/shares/:id/revoke", proxyHandler.ForwardRequest)              // -> share-service
 		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)           // -> share-service
 		protectedAPI.POST("/admin/users/:id/premium", proxyHandler.ForwardRequest)        // -> share-service
 
