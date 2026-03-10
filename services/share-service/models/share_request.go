@@ -12,7 +12,7 @@ type ShareRequest struct {
 	SenderUserID       string     `json:"sender_user_id" db:"sender_user_id"`
 	SenderOverlayID    string     `json:"sender_overlay_id" db:"sender_overlay_id"`
 	RecipientUserID    string     `json:"recipient_user_id" db:"recipient_user_id"`
-	Status             string     `json:"status" db:"status"` // pending, accepted, rejected, expired
+	Status             string     `json:"status" db:"status"` // pending, accepted, rejected, expired, revoked
 	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
 	RespondedAt        *time.Time `json:"responded_at,omitempty" db:"responded_at"`
 	ExpiresAt          time.Time  `json:"expires_at" db:"expires_at"`
@@ -26,6 +26,7 @@ const (
 	StatusAccepted = "accepted"
 	StatusRejected = "rejected"
 	StatusExpired  = "expired"
+	StatusRevoked  = "revoked"
 )
 
 // Common validation errors
@@ -57,6 +58,7 @@ func (s *ShareRequest) Validate() error {
 		StatusAccepted: true,
 		StatusRejected: true,
 		StatusExpired:  true,
+		StatusRevoked:  true,
 	}
 	if !validStatuses[s.Status] {
 		return fmt.Errorf("%w: %s", ErrInvalidStatus, s.Status)
