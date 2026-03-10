@@ -81,7 +81,7 @@ export default function ShareRequestsPage() {
   // Filter: Pending vs History tabs
   const displayRequests = requests.filter(r => {
     if (filter === 'pending') return r.status === 'pending';
-    return ['accepted', 'rejected', 'expired'].includes(r.status);
+    return ['accepted', 'rejected', 'expired', 'revoked'].includes(r.status);
   });
 
   // Sort: Most recent first

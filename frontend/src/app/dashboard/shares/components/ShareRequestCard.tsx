@@ -7,6 +7,7 @@ import { PlatformBadge } from './PlatformBadge';
 import { StatusBadge } from './StatusBadge';
 import { AcceptModal } from './AcceptModal';
 import { AddSourceModal } from './AddSourceModal';
+import { RevocationConfirmModal } from './RevocationConfirmModal';
 
 interface ShareRequestCardProps {
   request: ShareRequest;
@@ -16,6 +17,7 @@ interface ShareRequestCardProps {
 export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
+  const [showRevokeModal, setShowRevokeModal] = useState(false);
   const [acceptedShare, setAcceptedShare] = useState<{ senderName: string; senderOverlayId: string } | null>(null);
 
   return (
@@ -62,6 +64,14 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
       {/* Status indicator */}
       <div className="mt-3 pt-3 border-t">
         <StatusBadge status={request.status} />
+        {request.status === 'accepted' && (
+          <button
+            className="mt-2 w-full px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+            onClick={() => setShowRevokeModal(true)}
+          >
+            Revoke
+          </button>
+        )}
       </div>
 
       {/* Action buttons (for pending requests) */}
@@ -97,6 +107,19 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
             });
             setShowAcceptModal(false);
             setShowAddSourceModal(true);
+          }}
+        />
+      )}
+
+      {/* RevocationConfirmModal */}
+      {showRevokeModal && (
+        <RevocationConfirmModal
+          partnerName={request.sender?.display_name || 'User'}
+          shareId={request.id}
+          onClose={() => setShowRevokeModal(false)}
+          onRevoked={() => {
+            setShowRevokeModal(false);
+            onUpdate();
           }}
         />
       )}
