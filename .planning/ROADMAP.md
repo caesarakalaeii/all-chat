@@ -149,10 +149,14 @@ Plans:
   5. Storybook story exists for every component, a11y addon shows zero violations in 'error' mode
   6. Performance budget established and monitored (<16ms message render time, <100KB bundle increase)
   7. All !important declarations removed from events.css and replaced with CSS cascade layer architecture
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 24-01: TBD
+- [ ] 24-01-PLAN.md — Storybook infrastructure: globals.css import in preview.ts, story stubs for all six components
+- [ ] 24-02-PLAN.md — Card (micro-interactions), Input, Skeleton components + Button gradient variant
+- [ ] 24-03-PLAN.md — PlatformBadge component with glow dot + COMP-09 verification
+- [ ] 24-04-PLAN.md — Dialog (frosted backdrop) + Toast system + wire ToastProvider into root layout
+- [ ] 24-05-PLAN.md — A11y error mode gate, performance budget measurement, human visual verify
 
 ### Phase 25: Page Migration & Split-view Preview
 **Goal**: All application pages redesigned with new design system, plus split-view live preview feature implemented
