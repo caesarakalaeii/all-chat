@@ -289,6 +289,41 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		}
 	}
 
+	// For shared_overlay, validate the caller has an accepted share granting access to this overlay.
+	// Uses a direct DB query against share_requests (same DB, no cross-service call needed).
+	if req.Platform == "shared_overlay" {
+		if h.db == nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "no accepted share relationship for this overlay",
+			})
+			return
+		}
+
+		var shareCount int
+		dbErr := h.db.QueryRow(c.Request.Context(),
+			`SELECT COUNT(*) FROM share_requests
+			 WHERE sender_overlay_id = $1
+			   AND recipient_user_id = $2
+			   AND status = 'accepted'`,
+			channelID, userID.(string),
+		).Scan(&shareCount)
+		if dbErr != nil || shareCount == 0 {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "no accepted share relationship for this overlay",
+			})
+			return
+		}
+
+		// Fetch overlay name to use as channel_name (not the raw UUID)
+		var overlayName string
+		if nameErr := h.db.QueryRow(c.Request.Context(),
+			`SELECT name FROM overlays WHERE id = $1`, channelID,
+		).Scan(&overlayName); nameErr == nil {
+			channelName = overlayName
+		}
+		// If fetch fails, channelName retains the fallback value (channel_id) — acceptable
+	}
+
 	var channelHandle *string
 	if req.ChannelHandle != "" {
 		channelHandle = &req.ChannelHandle

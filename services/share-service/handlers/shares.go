@@ -281,15 +281,17 @@ func (h *ShareHandler) AcceptShareRequest(c *gin.Context) {
 		return
 	}
 
-	// Update share status to accepted
+	// Update share status to accepted, persisting recipient_overlay_id for future source lookups
 	updateQuery := `
 		UPDATE share_requests
-		SET status = $1, responded_at = NOW()
+		SET status = $1,
+		    responded_at = NOW(),
+		    recipient_overlay_id = $3
 		WHERE id = $2
 		RETURNING status, responded_at
 	`
 
-	err = tx.QueryRow(c.Request.Context(), updateQuery, models.StatusAccepted, requestID).Scan(
+	err = tx.QueryRow(c.Request.Context(), updateQuery, models.StatusAccepted, requestID, req.RecipientOverlayID).Scan(
 		&shareRequest.Status, &shareRequest.RespondedAt,
 	)
 
