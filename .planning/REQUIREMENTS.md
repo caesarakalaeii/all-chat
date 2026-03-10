@@ -26,7 +26,7 @@ Requirements for Frontend Redesign milestone. Each maps to roadmap phases.
 - [x] **COMP-06**: Platform-color coded components created (badges, borders, status indicators)
 - [x] **COMP-07**: Animated loading states and skeletons implemented
 - [ ] **COMP-08**: Performance budget established (<16ms message render, <100KB bundle increase)
-- [ ] **COMP-09**: All !important removed from events.css (replaced with cascade layers)
+- [x] **COMP-09**: All !important removed from events.css (replaced with cascade layers)
 
 ### Page Redesigns
 
@@ -118,7 +118,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMP-06 | Phase 24 | Complete |
 | COMP-07 | Phase 24 | Complete |
 | COMP-08 | Phase 24 | Pending |
-| COMP-09 | Phase 24 | Pending |
+| COMP-09 | Phase 24 | Complete |
 | PAGE-01 | Phase 25 | Pending |
 | PAGE-02 | Phase 25 | Pending |
 | PAGE-03 | Phase 25 | Pending |
