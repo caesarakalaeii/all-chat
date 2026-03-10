@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: Completed 18-revocation-00 (RED test stubs for RevokeShareRequest)
-last_updated: "2026-03-10T19:02:26.779Z"
+stopped_at: Completed 18-revocation-01 (RevokeShareRequest endpoint)
+last_updated: "2026-03-10T19:08:40.157Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
   completed_phases: 11
   total_plans: 51
-  completed_plans: 47
+  completed_plans: 48
   percent: 93
 ---
 
@@ -77,6 +77,7 @@ Progress: [█████████░] 93% (v1.3)
 | Phase 17-message-routing P00 | 4 | 2 tasks | 2 files |
 | Phase 17-message-routing P01 | 3 | 2 tasks | 3 files |
 | Phase 18-revocation P00 | 1 | 1 tasks | 1 files |
+| Phase 18-revocation P01 | 4 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,8 @@ Recent decisions affecting v1.3:
 - [Phase 17-message-routing]: UNION (not UNION ALL) for message fan-out deduplication: overlays appearing in both direct and shared branches returned exactly once
 - [Phase 17-message-routing]: IsActive: req.Platform == 'shared_overlay' expression: shared_overlay sources are immediately active at creation (share already accepted); other platforms activated by listeners
 - [Phase 18-revocation]: Compile-error RED gate via handler.RevokeShareRequest (undefined) satisfies Nyquist without t.Skip
+- [Phase 18-revocation]: revokeShareData interface for test fixture injection: avoids pgxmock/testcontainers while fully exercising handler auth+status logic
+- [Phase 18-revocation]: [Phase 18-01]: Revoke route is non-premium (alongside mark-seen): revoking an active share should always be allowed
 
 ### Pending Todos
 
@@ -147,8 +150,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T19:02:26.777Z
-Stopped at: Completed 18-revocation-00 (RED test stubs for RevokeShareRequest)
+Last session: 2026-03-10T19:08:40.155Z
+Stopped at: Completed 18-revocation-01 (RevokeShareRequest endpoint)
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase

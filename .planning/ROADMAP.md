@@ -239,7 +239,7 @@ Plans:
 | 15. Share Acceptance | v1.3 | 4/4 | Complete | 2026-03-09 |
 | 16. Shared Overlay Sources | v1.3 | 4/4 | Complete | 2026-03-10 |
 | 17. Message Routing | v1.3 | 2/2 | Complete | 2026-03-10 |
-| 18. Revocation | 1/5 | In Progress|  | - |
+| 18. Revocation | 2/5 | In Progress|  | - |
 | 19. Lifecycle & Expiry | v1.3 | 0/TBD | Not started | - |
 
 ---
