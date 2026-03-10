@@ -337,7 +337,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		ChannelHandle: channelHandle,
 		AuthRequired:  req.Platform == "youtube", // YouTube requires OAuth
 		Config:        make(map[string]interface{}),
-		IsActive:      false, // Will be set to true by listeners when they connect
+		IsActive:      req.Platform == "shared_overlay", // shared_overlay is immediately active (share already accepted); other platforms activated by listeners
 	}
 
 	// Validate
