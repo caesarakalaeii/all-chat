@@ -22,7 +22,7 @@ Requirements for Frontend Redesign milestone. Each maps to roadmap phases.
 - [x] **COMP-02**: Components customized with design tokens (slate scale, not zinc)
 - [x] **COMP-03**: Component variant patterns implemented with CVA
 - [x] **COMP-04**: Smooth micro-interactions added (hover scale + shadow transitions)
-- [ ] **COMP-05**: Gradient CTAs implemented (purple → blue gradient for primary actions)
+- [x] **COMP-05**: Gradient CTAs implemented (purple → blue gradient for primary actions)
 - [x] **COMP-06**: Platform-color coded components created (badges, borders, status indicators)
 - [x] **COMP-07**: Animated loading states and skeletons implemented
 - [ ] **COMP-08**: Performance budget established (<16ms message render, <100KB bundle increase)
@@ -114,7 +114,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMP-02 | Phase 24 | Complete |
 | COMP-03 | Phase 24 | Complete |
 | COMP-04 | Phase 24 | Complete |
-| COMP-05 | Phase 24 | Pending |
+| COMP-05 | Phase 24 | Complete |
 | COMP-06 | Phase 24 | Complete |
 | COMP-07 | Phase 24 | Complete |
 | COMP-08 | Phase 24 | Pending |
