@@ -7,6 +7,10 @@
 
 # Test binary, built with `go test -c`
 *.test
+*-test
+
+# Test artifacts
+test/contract/schema/capture
 
 # Output of the go coverage tool
 *.out
@@ -59,6 +63,13 @@ Thumbs.db
 # Documentation clones / references
 .docs/
 
+# Font files (too large for git)
+docs/overlay-themes/custom-fonts/
+*.ttf
+*.otf
+*.woff
+*.woff2
+
 # Node modules (for frontend)
 node_modules/
 /web/node_modules/
@@ -102,3 +113,16 @@ CHECKPOINT.md
 
 # MCP configuration (may contain secrets)
 .mcp.json
+
+# Screenshots and images (keep in docs/ only)
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+
+# Temporary status/tracing documentation
+/*_COMPLETE.md
+/*_STATUS.md
+/*_FIX_*.md
+TRACING_IMPLEMENTATION_STATUS.md
+DISTRIBUTED_TRACING_COMPLETE.md

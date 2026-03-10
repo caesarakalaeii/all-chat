@@ -22,17 +22,28 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 ## Quick Start
 
 ```bash
-# Development environment
+# Full development environment (all services)
 make docker-up         # Start postgres, redis, all services
 make test              # Run tests
 make migrate-up        # Apply database migrations
 
+# Frontend-only development (minimal backend)
+make frontend-dev      # Start postgres, redis, gateway, overlay-manager, message-processor
+make frontend-seed     # Create test overlay and chat sources
+make frontend-messages # Generate mock chat messages
+cd frontend && npm run dev  # Start frontend
+
 # Access services
 # - API Gateway: http://localhost:8080
-# - Overlays: http://localhost:3000 (frontend)
+# - Frontend: http://localhost:3000
 ```
 
 **First Time Setup**: See [GETTING_STARTED.md](./GETTING_STARTED.md) for complete onboarding guide.
+
+**Frontend Development**: See [FRONTEND_QUICK_START.md](./FRONTEND_QUICK_START.md) for minimal backend setup (30 seconds).
+  - **All-in-one**: `make frontend-quick` (starts services, seeds data, verifies setup)
+  - **Full docs**: [FRONTEND_DEV_SETUP.md](./FRONTEND_DEV_SETUP.md)
+  - **File index**: [FRONTEND_FILES_INDEX.md](./FRONTEND_FILES_INDEX.md)
 
 ---
 
