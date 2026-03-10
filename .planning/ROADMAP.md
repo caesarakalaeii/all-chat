@@ -181,7 +181,11 @@ Plans:
   2. Recipient's display settings (CSS, event filters) apply to shared messages, not source overlay's settings
   3. Shared messages are visually indistinguishable from platform source messages (unified rendering)
   4. Message enrichment (emotes, badges) works for shared messages identically to platform messages
-**Plans**: TBD
+**Plans**: 2 plans in 2 waves
+
+Plans:
+- [ ] 17-00-PLAN.md — Test stubs for Nyquist compliance (Wave 0)
+- [ ] 17-01-PLAN.md — SQL UNION fan-out in overlay_router + is_active fix in HandleAddSource (Wave 1)
 
 #### Phase 18: Revocation
 **Goal**: Users can revoke shares instantly with inactive source marking
@@ -226,9 +230,9 @@ Plans:
 | 14. Foundation | v1.3 | 4/4 | Complete | 2026-03-09 |
 | 15. Share Acceptance | v1.3 | 4/4 | Complete | 2026-03-09 |
 | 16. Shared Overlay Sources | 4/4 | Complete    | 2026-03-10 | - |
-| 17. Message Routing | v1.3 | 0/TBD | Not started | - |
+| 17. Message Routing | v1.3 | 0/2 | Not started | - |
 | 18. Revocation | v1.3 | 0/TBD | Not started | - |
 | 19. Lifecycle & Expiry | v1.3 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-10 after Phase 16 planning*
+*Last updated: 2026-03-10 after Phase 17 planning*
