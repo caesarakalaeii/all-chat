@@ -137,4 +137,19 @@
   .animate-slide-up {
     animation: slide-up 0.4s ease-out;
   }
+
+  .logo-ring {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--color-twitch), var(--color-tiktok), var(--color-twitch));
+    animation: ring-spin 12s linear infinite;
+    box-shadow: 0 0 12px oklch(from var(--color-twitch) l c h / 0.4);
+  }
+}
+
+/* @keyframes ring-spin — kept at document scope (outside @layer) per Phase 23-03 decision:
+   animation names are globally scoped regardless of cascade layer context */
+@keyframes ring-spin {
+  to { transform: rotate(360deg); }
 }
