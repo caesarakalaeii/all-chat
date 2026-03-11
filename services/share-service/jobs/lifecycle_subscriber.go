@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/share-service/repository"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -13,7 +14,7 @@ import (
 // StreamEndEvent is the payload published to Redis "lifecycle:stream_end"
 type StreamEndEvent struct {
 	Platform      string    `json:"platform"`
-	UserID        string    `json:"user_id"`        // all-chat user UUID (may be "" for YouTube/TikTok — resolved in Plan 03)
+	UserID        string    `json:"user_id"`        // all-chat user UUID (may be "" for YouTube/TikTok — resolved via google_id)
 	BroadcasterID string    `json:"broadcaster_id"` // platform-specific ID
 	Timestamp     time.Time `json:"timestamp"`
 }
@@ -22,15 +23,16 @@ type StreamEndEvent struct {
 type LifecycleSubscriber struct {
 	repo   *repository.ShareRepository
 	redis  *redis.Client
+	db     *pgxpool.Pool // for google_id → user_id lookup (YouTube)
 	logger *zap.SugaredLogger
-	// db field intentionally omitted in Wave 2 — added in Plan 03 for google_id lookup
 }
 
 // NewLifecycleSubscriber creates a new lifecycle subscriber.
-func NewLifecycleSubscriber(repo *repository.ShareRepository, rdb *redis.Client, logger *zap.SugaredLogger) *LifecycleSubscriber {
+func NewLifecycleSubscriber(repo *repository.ShareRepository, rdb *redis.Client, db *pgxpool.Pool, logger *zap.SugaredLogger) *LifecycleSubscriber {
 	return &LifecycleSubscriber{
 		repo:   repo,
 		redis:  rdb,
+		db:     db,
 		logger: logger,
 	}
 }
@@ -87,14 +89,25 @@ func (ls *LifecycleSubscriber) debounceExpire(ctx context.Context, event StreamE
 	case <-time.After(60 * time.Second):
 	}
 
-	if event.UserID == "" {
-		ls.logger.Warnw("Cannot expire shares: empty user_id (platform lookup not yet wired)",
+	userID := event.UserID
+	if userID == "" && event.Platform == "youtube" && ls.db != nil {
+		// Resolve google_id (YouTube channel_id) to all-chat user_id
+		if err := ls.db.QueryRow(ctx,
+			"SELECT id FROM users WHERE google_id = $1", event.BroadcasterID).Scan(&userID); err != nil {
+			ls.logger.Warnw("No user found for YouTube channel",
+				"channel_id", event.BroadcasterID)
+			return
+		}
+	}
+
+	if userID == "" {
+		ls.logger.Warnw("Cannot expire shares: empty user_id and no lookup available",
 			"platform", event.Platform,
 			"broadcaster_id", event.BroadcasterID)
 		return
 	}
 
-	ls.expireThisStreamShares(ctx, event.UserID)
+	ls.expireThisStreamShares(ctx, userID)
 }
 
 // expireThisStreamShares expires all this_stream accepted shares for the given user.

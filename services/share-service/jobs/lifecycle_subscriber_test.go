@@ -16,7 +16,7 @@ func TestLifecycleSubscriber_StreamEnd(t *testing.T) {
 	log, _ := zap.NewDevelopment()
 
 	// Verify construction with nil args succeeds (nil-safe for unit testing)
-	ls := NewLifecycleSubscriber(nil, nil, log.Sugar())
+	ls := NewLifecycleSubscriber(nil, nil, nil, log.Sugar())
 	require.NotNil(t, ls)
 
 	// Verify StreamEndEvent marshaling

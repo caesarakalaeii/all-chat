@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -95,8 +96,8 @@ func TestHandleStreamOffline_DeletesMapping(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, videoID, cachedVideoID)
 
-	// Execute: Handle stream offline
-	err = HandleStreamOffline(ctx, channelID, videoID, repo, logger)
+	// Execute: Handle stream offline (nil publisher — no lifecycle publish in integration test)
+	err = HandleStreamOffline(ctx, channelID, videoID, repo, nil, logger)
 	assert.Error(t, err, "HandleStreamOffline should return error to signal polling stop")
 	assert.Contains(t, err.Error(), "stream offline")
 
@@ -216,15 +217,39 @@ func (m *mockInnerTubeClient) GetPollInterval(resp *innertube.LiveChatResponse) 
 }
 
 // TestHandleStreamOffline_PublishesLifecycleEvent verifies that HandleStreamOffline
-// publishes to the Redis "lifecycle:stream_end" channel (EXPIRY-05).
-// Wave 0: RED stub — publish call does not exist yet.
+// publishes a JSON payload to Redis lifecycle:stream_end (EXPIRY-05).
 func TestHandleStreamOffline_PublishesLifecycleEvent(t *testing.T) {
-	// RED: HandleStreamOffline does not accept a redis publisher parameter yet.
-	// Compile error gates Wave 3 implementation.
-	// This stub documents the expected behavior; full assertion in Wave 3.
-	t.Log("Wave 0 RED stub: HandleStreamOffline must publish to lifecycle:stream_end")
-	// When Wave 3 adds publisher parameter, this test will be expanded.
-	// For now, confirm the current signature compiles:
-	_ = HandleStreamOffline // function must exist (it does); publisher extension is the RED gate
-	t.Skip("Wave 0: RED gate — publisher parameter not yet added to HandleStreamOffline")
+	type capturedPublish struct {
+		channel string
+		message string
+	}
+	var captured *capturedPublish
+
+	mock := &mockLifecyclePublisher{
+		publishFn: func(channel, message string) {
+			captured = &capturedPublish{channel: channel, message: message}
+		},
+	}
+
+	repo := &Repository{client: nil, logger: zap.NewNop()}
+	// repo.DeleteChannelVideoMapping will fail with nil client — that's OK (non-fatal)
+	err := HandleStreamOffline(context.Background(), "UC_channel_123", "video_456", repo, mock, zap.NewNop())
+	assert.Error(t, err) // returns "stream offline" error
+
+	require.NotNil(t, captured, "expected lifecycle event to be published")
+	assert.Equal(t, "lifecycle:stream_end", captured.channel)
+	assert.Contains(t, captured.message, "UC_channel_123")
+	assert.Contains(t, captured.message, "youtube")
+}
+
+// mockLifecyclePublisher implements LifecyclePublisher for testing.
+type mockLifecyclePublisher struct {
+	publishFn func(channel, message string)
+}
+
+func (m *mockLifecyclePublisher) Publish(ctx context.Context, channel string, message interface{}) *redis.IntCmd {
+	if m.publishFn != nil {
+		m.publishFn(channel, fmt.Sprintf("%v", message))
+	}
+	return redis.NewIntCmd(ctx)
 }

@@ -95,7 +95,7 @@ func main() {
 	expiryJob.Start(context.Background())
 
 	// Start lifecycle subscriber for stream-end expiry (EXPIRY-03)
-	lifecycleSub := jobs.NewLifecycleSubscriber(shareRepo, redisClientForJobs, log.Sugar())
+	lifecycleSub := jobs.NewLifecycleSubscriber(shareRepo, redisClientForJobs, dbPool, log.Sugar())
 	lifecycleSub.Start(context.Background())
 
 	// Initialize handlers

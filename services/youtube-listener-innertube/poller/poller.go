@@ -42,7 +42,8 @@ type Poller struct {
 	interval        time.Duration
 	backoff         *Backoff
 	state           *State
-	repository      *Repository // Redis repository for lifecycle operations
+	repository      *Repository        // Redis repository for lifecycle operations
+	publisher       LifecyclePublisher // Optional: publishes stream end events
 	logger          *zap.Logger
 	logLevel        string // "debug" or "info"
 	messageCallback MessageCallback
@@ -67,6 +68,9 @@ type PollerOptions struct {
 
 	// Repository for lifecycle operations (optional, for offline detection)
 	Repository *Repository
+
+	// Publisher for lifecycle events (optional, for stream end notifications)
+	Publisher LifecyclePublisher
 
 	// Metrics for Prometheus instrumentation (optional)
 	Metrics *metrics.InnerTubeMetrics
@@ -116,6 +120,7 @@ func NewPoller(
 		backoff:      NewBackoff(logger),
 		state:        NewState(),
 		repository:   opts.Repository,
+		publisher:    opts.Publisher,
 		logger:       logger,
 		logLevel:     logLevel,
 		metrics:      opts.Metrics,
@@ -249,7 +254,7 @@ func (p *Poller) poll() {
 
 		// Handle offline event: delete Redis mapping if repository available
 		if p.repository != nil && p.videoID != "" {
-			if err := HandleStreamOffline(p.ctx, p.channelID, p.videoID, p.repository, p.logger); err != nil {
+			if err := HandleStreamOffline(p.ctx, p.channelID, p.videoID, p.repository, p.publisher, p.logger); err != nil {
 				p.logger.Debug("HandleStreamOffline completed",
 					zap.String("channel_id", p.channelID))
 			}
@@ -272,7 +277,7 @@ func (p *Poller) poll() {
 
 		// Handle offline event
 		if p.repository != nil && p.videoID != "" {
-			_ = HandleStreamOffline(p.ctx, p.channelID, p.videoID, p.repository, p.logger)
+			_ = HandleStreamOffline(p.ctx, p.channelID, p.videoID, p.repository, p.publisher, p.logger)
 		}
 
 		// Stop polling loop
