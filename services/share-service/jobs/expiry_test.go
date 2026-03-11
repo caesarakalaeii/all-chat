@@ -164,13 +164,11 @@ func TestExpiryJob_OnlyExpiresPending(t *testing.T) {
 
 // TestExpiryJob_TimedAcceptedShares verifies that accepted shares with a
 // past share_expires_at are expired by the job (EXPIRY-04).
-// Wave 0: RED stub — ExpireTimedAcceptedShares does not exist yet.
 func TestExpiryJob_TimedAcceptedShares(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
-	// RED: repo.ExpireTimedAcceptedShares does not exist yet.
-	// This test will fail to compile until Wave 1 adds the method.
+
 	dbPool, err := database.NewPostgresPool(getTestDatabaseURL())
 	if err != nil {
 		t.Skipf("Skipping test: database not available: %v", err)
@@ -180,7 +178,29 @@ func TestExpiryJob_TimedAcceptedShares(t *testing.T) {
 	log := logger.NewLogger("test", "error")
 	repo := repository.NewShareRepository(dbPool, log)
 
+	// Insert accepted share with expired share_expires_at
+	var shareID string
+	err = dbPool.QueryRow(context.Background(), `
+		INSERT INTO share_requests
+		  (sender_user_id, sender_overlay_id, recipient_user_id, status,
+		   created_at, expires_at, expiry_option, share_expires_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW()+INTERVAL '7 days', 'custom', NOW()-INTERVAL '1 hour')
+		RETURNING id
+	`, "test-sender-timed", "test-overlay-timed", "test-recipient-timed",
+		models.StatusAccepted).Scan(&shareID)
+	require.NoError(t, err)
+	defer func() {
+		_, _ = dbPool.Exec(context.Background(), "DELETE FROM share_requests WHERE id = $1", shareID)
+	}()
+
 	count, err := repo.ExpireTimedAcceptedShares(context.Background())
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, count, 0)
+	assert.GreaterOrEqual(t, count, 1)
+
+	// Verify status changed to expired
+	var status string
+	err = dbPool.QueryRow(context.Background(),
+		"SELECT status FROM share_requests WHERE id = $1", shareID).Scan(&status)
+	require.NoError(t, err)
+	assert.Equal(t, models.StatusExpired, status)
 }

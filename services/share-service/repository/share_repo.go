@@ -377,6 +377,85 @@ func (r *ShareRepository) GetAcceptedShareDetails(ctx context.Context, recipient
 	return details, rows.Err()
 }
 
+// ExpireAcceptedShare atomically sets a single accepted share to 'expired' and deactivates
+// its overlay_chat_sources entries. Mirrors RevokeShareRequest pattern.
+// Idempotent: if the share is not in 'accepted' state, this is a no-op.
+func (r *ShareRepository) ExpireAcceptedShare(ctx context.Context, shareID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(ctx,
+		`UPDATE share_requests SET status = $1, responded_at = NOW()
+		 WHERE id = $2 AND status = $3`,
+		models.StatusExpired, shareID, models.StatusAccepted)
+	if err != nil {
+		return fmt.Errorf("failed to expire share: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return nil // Already expired or not found — idempotent
+	}
+
+	_, err = tx.Exec(ctx,
+		`UPDATE overlay_chat_sources SET is_active = false
+		 WHERE channel_id = $1 AND platform = 'shared_overlay'`,
+		shareID)
+	if err != nil {
+		return fmt.Errorf("failed to deactivate sources: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ExpireTimedAcceptedShares expires accepted shares whose share_expires_at has passed.
+// Uses a transaction per share to atomically deactivate overlay_chat_sources.
+// Returns the count of shares expired.
+func (r *ShareRepository) ExpireTimedAcceptedShares(ctx context.Context) (int, error) {
+	// Find IDs of expired accepted shares with custom time-based expiry
+	rows, err := r.db.Query(ctx, `
+		SELECT id FROM share_requests
+		WHERE status = $1
+		  AND expiry_option = 'custom'
+		  AND share_expires_at IS NOT NULL
+		  AND share_expires_at < NOW()
+	`, models.StatusAccepted)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query expired shares: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			r.logger.Error("Failed to scan share ID", zap.Error(err))
+			continue
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("failed to iterate share IDs: %w", err)
+	}
+
+	count := 0
+	for _, id := range ids {
+		if err := r.ExpireAcceptedShare(ctx, id); err != nil {
+			r.logger.Error("Failed to expire timed share",
+				zap.String("share_id", id),
+				zap.Error(err))
+			continue
+		}
+		count++
+	}
+
+	if count > 0 {
+		r.logger.Info("Expired timed accepted shares", zap.Int("count", count))
+	}
+	return count, nil
+}
+
 // MarkAcceptanceSeen sets has_seen_acceptance = true for share request
 func (r *ShareRepository) MarkAcceptanceSeen(ctx context.Context, id string) error {
 	query := `UPDATE share_requests SET has_seen_acceptance = true WHERE id = $1`

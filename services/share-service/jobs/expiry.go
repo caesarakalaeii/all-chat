@@ -55,22 +55,27 @@ func (j *ExpiryJob) Stop() {
 	j.done <- true
 }
 
-// expireOldRequests calls the repository to expire pending requests
+// expireOldRequests calls the repository to expire pending requests and timed accepted shares
 func (j *ExpiryJob) expireOldRequests(ctx context.Context) {
 	// Add timeout to prevent indefinite blocking
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	// Expire pending requests past 7-day acceptance window
 	count, err := j.repo.ExpirePendingRequests(ctx)
 	if err != nil {
-		j.logger.Error("Failed to expire requests", zap.Error(err))
-		return
+		j.logger.Error("Failed to expire pending requests", zap.Error(err))
+	} else if count > 0 {
+		j.logger.Info("Expired pending share requests", zap.Int("count", count))
+	} else {
+		j.logger.Debug("No pending requests to expire")
 	}
 
-	if count > 0 {
-		j.logger.Info("Expired share requests",
-			zap.Int("count", count))
-	} else {
-		j.logger.Debug("No requests to expire")
+	// Expire accepted shares past their custom time-based expiry
+	timedCount, err := j.repo.ExpireTimedAcceptedShares(ctx)
+	if err != nil {
+		j.logger.Error("Failed to expire timed accepted shares", zap.Error(err))
+	} else if timedCount > 0 {
+		j.logger.Info("Expired timed accepted shares", zap.Int("count", timedCount))
 	}
 }
