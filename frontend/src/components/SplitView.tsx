@@ -70,7 +70,7 @@ export function SplitView({
       {/* Preview panel */}
       <div className="flex-1 overflow-hidden bg-bg min-h-[300px] md:min-h-0">
         <iframe
-          src={`/overlays/${overlayId}/preview`}
+          src={`/overlays/${overlayId}/preview/embed`}
           className="w-full h-full border-0"
           title="Overlay live preview"
           sandbox="allow-scripts allow-same-origin"
