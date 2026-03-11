@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Frontend Redesign
 status: executing
-stopped_at: "Completed 25-06-PLAN.md: Admin layout dark theme migration"
-last_updated: "2026-03-11T19:45:33.369Z"
+stopped_at: "Completed 25-07-PLAN.md: Admin sub-pages dark theme migration"
+last_updated: "2026-03-11T19:53:22.775Z"
 last_activity: 2026-03-10 — 23-03 events.css cascade layer migration complete, human visual verification approved
 progress:
   total_phases: 16
   completed_phases: 8
   total_plans: 44
-  completed_plans: 42
+  completed_plans: 43
   percent: 97
 ---
 
@@ -68,6 +68,7 @@ v1.3 is frontend-focused (React, Tailwind, design system) vs backend microservic
 | Phase 25-page-migration-split-view-preview P02 | 12 | 2 tasks | 3 files |
 | Phase 25-page-migration-split-view-preview P05 | 15 | 2 tasks | 4 files |
 | Phase 25-page-migration-split-view-preview P06 | 3 | 2 tasks | 4 files |
+| Phase 25-page-migration-split-view-preview P07 | 5 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,9 @@ Recent decisions affecting v1.3 work:
 - [Phase 25]: [Phase 25-05]: isDragging stored in useRef (not useState) in SplitView — pointermove fires constantly, setState would trigger continuous re-renders
 - [Phase 25-06]: AdminNav created as separate component (not AppNav reuse) — admin has distinct 5-link sub-nav plus Admin breadcrumb label
 - [Phase 25-06]: admin/layout.tsx converted from 'use client' to server component — ProtectedRoute and AdminNav are client components, Next.js handles import correctly
+- [Phase 25-07]: [Phase 25-07]: BanModal replaced with inline Dialog.Root — eliminates light-mode modal, simplifies component tree
+- [Phase 25-07]: [Phase 25-07]: viewers/page.tsx embedded nav removed — redundant with admin/layout.tsx AdminNav from Plan 06
+- [Phase 25-07]: [Phase 25-07]: getPlatformColor() helpers removed from admin pages — PlatformBadge handles platform coloring with design tokens
 
 ### Pending Todos
 
@@ -131,8 +135,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T19:45:33.365Z
-Stopped at: Completed 25-06-PLAN.md: Admin layout dark theme migration
+Last session: 2026-03-11T19:53:22.770Z
+Stopped at: Completed 25-07-PLAN.md: Admin sub-pages dark theme migration
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 24` to plan Phase 24 (Component Library Setup & Customization)
