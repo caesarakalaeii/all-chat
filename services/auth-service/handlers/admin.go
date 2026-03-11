@@ -53,6 +53,7 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		TwitchID        *string `json:"twitch_id"`
 		YouTubeID       *string `json:"youtube_id"`
 		KickID          *string `json:"kick_id"`
+		IsPremium       bool    `json:"is_premium"`
 		IsBanned        bool    `json:"is_banned"`
 		BannedAt        *string `json:"banned_at,omitempty"`
 		BannedReason    *string `json:"banned_reason,omitempty"`
@@ -77,6 +78,7 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 			TwitchID:        user.TwitchID,
 			YouTubeID:       user.GoogleID,
 			KickID:          user.KickID,
+			IsPremium:       user.IsPremium,
 			IsBanned:        user.IsBanned,
 			BannedAt:        bannedAt,
 			BannedReason:    user.BannedReason,
