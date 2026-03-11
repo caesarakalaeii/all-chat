@@ -33,7 +33,7 @@ Requirements for chat overlay sharing feature. Each maps to roadmap phases.
 - [x] **EXPIRY-03**: Share auto-expires when either user's stream ends (if "This stream" selected)
 - [x] **EXPIRY-04**: Time-based expiry checked via background job every 5 minutes
 - [x] **EXPIRY-05**: YouTube and TikTok lifecycle already tracked (reuse existing detection)
-- [ ] **EXPIRY-06**: Kick stream lifecycle detection researched (defer implementation if complex)
+- [x] **EXPIRY-06**: Kick stream lifecycle detection researched (defer implementation if complex)
 
 ### Premium & Admin
 
@@ -91,7 +91,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXPIRY-03 | Phase 19 | Complete |
 | EXPIRY-04 | Phase 19 | Complete |
 | EXPIRY-05 | Phase 19 | Complete |
-| EXPIRY-06 | Phase 19 | Pending |
+| EXPIRY-06 | Phase 19 | Complete |
 | PREMIUM-01 | Phase 14 | Complete |
 | PREMIUM-02 | Phase 14 | Complete |
 

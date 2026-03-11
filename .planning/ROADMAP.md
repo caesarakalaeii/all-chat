@@ -246,7 +246,7 @@ Plans:
 | 16. Shared Overlay Sources | v1.3 | 4/4 | Complete | 2026-03-10 |
 | 17. Message Routing | v1.3 | 2/2 | Complete | 2026-03-10 |
 | 18. Revocation | v1.3 | 5/5 | Complete | 2026-03-10 |
-| 19. Lifecycle & Expiry | 3/4 | In Progress|  | - |
+| 19. Lifecycle & Expiry | 4/4 | Complete   | 2026-03-11 | - |
 
 ---
 *Last updated: 2026-03-11 after Phase 19 planning*

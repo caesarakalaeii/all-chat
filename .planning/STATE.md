@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: Completed 19-lifecycle-expiry-02 (Twitch stream.offline EventSub + LifecycleSubscriber)
-last_updated: "2026-03-11T17:56:57.780Z"
+stopped_at: "Completed 19-lifecycle-expiry-03 (Multi-platform stream end detection) — checkpoint:human-verify pending"
+last_updated: "2026-03-11T18:04:34.368Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 55
-  completed_plans: 54
+  completed_plans: 55
   percent: 93
 ---
 
@@ -84,6 +84,7 @@ Progress: [█████████░] 93% (v1.3)
 | Phase 19-lifecycle-expiry P00 | 8 | 2 tasks | 7 files |
 | Phase 19-lifecycle-expiry P01 | 2 | 2 tasks | 6 files |
 | Phase 19-lifecycle-expiry P02 | 525609 | 2 tasks | 8 files |
+| Phase 19 P03 | 6 | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,8 @@ Recent decisions affecting v1.3:
 - [Phase 19-lifecycle-expiry]: Handler.db field on webhooks.Handler for twitch_id -> user_id lookup without threading db through routeEvent chain
 - [Phase 19-lifecycle-expiry]: 60s debounce in LifecycleSubscriber.debounceExpire prevents phantom expiry on Twitch stream restart or category change
 - [Phase 19-lifecycle-expiry]: Redis ping failure in share-service is non-fatal: lifecycle events disabled but service continues
+- [Phase 19-lifecycle-expiry]: YouTube nil guard added to Repository.DeleteChannelVideoMapping to prevent panic with nil redis client in unit tests
+- [Phase 19-lifecycle-expiry]: TikTok stream_end publish placed in disconnected handler in index.ts (live→offline transition), not in LiveStreamPoller polling cycle (which only handles offline→live)
 
 ### Pending Todos
 
@@ -169,8 +172,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T17:56:52.700Z
-Stopped at: Completed 19-lifecycle-expiry-02 (Twitch stream.offline EventSub + LifecycleSubscriber)
+Last session: 2026-03-11T18:04:34.366Z
+Stopped at: Completed 19-lifecycle-expiry-03 (Multi-platform stream end detection) — checkpoint:human-verify pending
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
