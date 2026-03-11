@@ -313,6 +313,24 @@ function AddSourceForm({
   const [tiktokUsername, setTiktokUsername] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [adminPlatform, setAdminPlatform] = useState('twitch')
+
+  // Fetch the OAuth auth_url from the backend (with Authorization header),
+  // then redirect the browser to it — same pattern as the login flow.
+  const startOAuth = async (endpoint: string) => {
+    try {
+      const res = await fetch(endpoint, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (data.auth_url) {
+        window.location.href = data.auth_url
+      } else {
+        console.error('No auth_url returned', data)
+      }
+    } catch (err) {
+      console.error('Failed to initiate OAuth', err)
+    }
+  }
   const [adminChannelId, setAdminChannelId] = useState('')
   const [isAdminAdding, setIsAdminAdding] = useState(false)
 
@@ -333,10 +351,10 @@ function AddSourceForm({
     <div className="space-y-3">
       <p className="text-xs text-text-sub">Add a platform via OAuth or enter a TikTok username directly.</p>
 
-      {/* OAuth buttons — token passed as query param since browser redirects can't set headers */}
+      {/* OAuth buttons — fetch auth_url then redirect, same pattern as login */}
       <div className="grid grid-cols-1 gap-2">
         <button
-          onClick={() => { window.location.href = `/api/v1/auth/twitch/add-source/${overlayId}?token=${token}` }}
+          onClick={() => startOAuth(`/api/v1/auth/twitch/add-source/${overlayId}`)}
           className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg bg-twitch text-white text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
         >
           <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
@@ -357,7 +375,7 @@ function AddSourceForm({
         </button>
 
         <button
-          onClick={() => { window.location.href = `/api/v1/auth/kick/add-source/${overlayId}?token=${token}` }}
+          onClick={() => startOAuth(`/api/v1/auth/kick/add-source/${overlayId}`)}
           className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-bg text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           style={{ backgroundColor: 'var(--color-kick)' }}
         >
@@ -1285,9 +1303,17 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         <BetaWarning
           platform={showBetaWarning}
           onCancel={() => setShowBetaWarning(null)}
-          onContinue={() => {
+          onContinue={async () => {
             setShowBetaWarning(null)
-            window.location.href = `/api/v1/auth/youtube/add-source/${id}?token=${token}`
+            try {
+              const res = await fetch(`/api/v1/auth/youtube/add-source/${id}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              })
+              const data = await res.json()
+              if (data.auth_url) window.location.href = data.auth_url
+            } catch (err) {
+              toastManager.add({ title: 'Failed to start YouTube OAuth', type: 'error' })
+            }
           }}
         />
       )}
