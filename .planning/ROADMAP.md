@@ -114,7 +114,7 @@
 
 - [x] **Phase 23: Design Token System & Foundation** - Establish design tokens, Tailwind v4 configuration, and overlay CSS stability contract (completed 2026-03-10)
 - [x] **Phase 24: Component Library Setup** - shadcn/ui integration with custom theming and performance budgets (completed 2026-03-10)
-- [ ] **Phase 25: Page Migration & Split-view Preview** - Redesign all pages with new design system plus live preview feature
+- [x] **Phase 25: Page Migration & Split-view Preview** - Redesign all pages with new design system plus live preview feature (completed 2026-03-11)
 - [ ] **Phase 26: Enforcement & Quality Gates** - ESLint rules, pre-commit hooks, CI/CD quality gates, and marketplace migration guide
 
 ## Phase Details
@@ -217,7 +217,7 @@ Phases execute in numeric order: 23 → 24 → 25 → 26
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23. Design Token System & Foundation | 3/3 | Complete    | 2026-03-10 | - |
 | 24. Component Library Setup | 5/5 | Complete   | 2026-03-11 | - |
-| 25. Page Migration & Split-view Preview | 7/8 | In Progress|  | - |
+| 25. Page Migration & Split-view Preview | 8/8 | Complete   | 2026-03-11 | - |
 | 26. Enforcement & Quality Gates | v1.3 | 0/? | Not started | - |
 
 ---
