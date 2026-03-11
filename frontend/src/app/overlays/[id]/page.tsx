@@ -292,52 +292,141 @@ function SourceListSkeleton() {
   )
 }
 
-function AddSourceForm({ onAdd }: { onAdd: (platform: string, channelId: string) => void }) {
-  const [platform, setPlatform] = useState('twitch')
-  const [channelId, setChannelId] = useState('')
+// Platform source buttons — OAuth redirect for Twitch/YouTube/Kick,
+// text input for TikTok (no OAuth required).
+// Admins also get a manual channel ID form for any platform.
+function AddSourceForm({
+  overlayId,
+  onAddTikTok,
+  onYouTubeClick,
+  onAddManual,
+  isAdmin = false,
+}: {
+  overlayId: string
+  onAddTikTok: (username: string) => void
+  onYouTubeClick: () => void
+  onAddManual?: (platform: string, channelId: string) => void
+  isAdmin?: boolean
+}) {
+  const [tiktokUsername, setTiktokUsername] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+  const [adminPlatform, setAdminPlatform] = useState('twitch')
+  const [adminChannelId, setAdminChannelId] = useState('')
+  const [isAdminAdding, setIsAdminAdding] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleTikTokSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!channelId.trim()) return
+    const username = tiktokUsername.trim().replace(/^@/, '')
+    if (!username) return
     setIsAdding(true)
     try {
-      await onAdd(platform, channelId.trim())
-      setChannelId('')
+      await onAddTikTok(username)
+      setTiktokUsername('')
     } finally {
       setIsAdding(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="flex gap-2">
-        <select
-          value={platform}
-          onChange={e => setPlatform(e.target.value)}
-          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch"
-          aria-label="Platform"
+    <div className="space-y-3">
+      <p className="text-xs text-text-sub">Add a platform via OAuth or enter a TikTok username directly.</p>
+
+      {/* OAuth buttons */}
+      <div className="grid grid-cols-1 gap-2">
+        <button
+          onClick={() => { window.location.href = `/api/v1/auth/twitch/add-source/${overlayId}` }}
+          className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg bg-twitch text-white text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
         >
-          <option value="twitch">Twitch</option>
-          <option value="youtube">YouTube</option>
-          <option value="kick">Kick</option>
-          <option value="tiktok">TikTok</option>
-        </select>
-        <Input
-          value={channelId}
-          onChange={e => setChannelId(e.target.value)}
-          placeholder="Channel ID or username"
-          className="flex-1"
-        />
+          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#FFFFFF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
+          </svg>
+          Connect Twitch
+        </button>
+
+        <button
+          onClick={onYouTubeClick}
+          className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-white text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          style={{ backgroundColor: '#FF0000', '--tw-ring-color': '#FF0000' } as React.CSSProperties}
+        >
+          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#FFFFFF" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+          </svg>
+          Connect YouTube
+        </button>
+
+        <button
+          onClick={() => { window.location.href = `/api/v1/auth/kick/add-source/${overlayId}` }}
+          className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-bg text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          style={{ backgroundColor: 'var(--color-kick)' }}
+        >
+          <svg className="w-4 h-4 shrink-0" viewBox="0 0 512 512" aria-hidden="true">
+            <path fill="currentColor" d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z" />
+          </svg>
+          Connect Kick
+        </button>
       </div>
-      <Button
-        type="submit"
-        disabled={isAdding || !channelId.trim()}
-        className="w-full"
-      >
-        {isAdding ? <Skeleton className="h-4 w-20" /> : 'Add Source'}
-      </Button>
-    </form>
+
+      {/* TikTok — username only, no OAuth */}
+      <form onSubmit={handleTikTokSubmit} className="pt-1 border-t border-border">
+        <p className="text-xs text-text-sub mb-2">TikTok (enter username)</p>
+        <div className="flex gap-2">
+          <Input
+            value={tiktokUsername}
+            onChange={e => setTiktokUsername(e.target.value)}
+            placeholder="@username"
+            className="flex-1"
+          />
+          <Button type="submit" disabled={isAdding || !tiktokUsername.trim()} size="sm">
+            Add
+          </Button>
+        </div>
+      </form>
+
+      {/* Admin manual entry — any platform, any channel ID */}
+      {isAdmin && onAddManual && (
+        <details className="pt-1 border-t border-border">
+          <summary className="text-xs text-text-sub cursor-pointer select-none hover:text-text py-1">
+            Admin: manual channel ID
+          </summary>
+          <form
+            className="mt-2 space-y-2"
+            onSubmit={async e => {
+              e.preventDefault()
+              if (!adminChannelId.trim()) return
+              setIsAdminAdding(true)
+              try {
+                await onAddManual(adminPlatform, adminChannelId.trim())
+                setAdminChannelId('')
+              } finally {
+                setIsAdminAdding(false)
+              }
+            }}
+          >
+            <div className="flex gap-2">
+              <select
+                value={adminPlatform}
+                onChange={e => setAdminPlatform(e.target.value)}
+                className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+              >
+                <option value="twitch">Twitch</option>
+                <option value="youtube">YouTube</option>
+                <option value="kick">Kick</option>
+                <option value="tiktok">TikTok</option>
+              </select>
+              <Input
+                value={adminChannelId}
+                onChange={e => setAdminChannelId(e.target.value)}
+                placeholder="Channel ID or username"
+                className="flex-1 text-xs"
+              />
+            </div>
+            <Button type="submit" disabled={isAdminAdding || !adminChannelId.trim()} size="sm" variant="outline" className="w-full">
+              {isAdminAdding ? 'Adding…' : 'Add manually'}
+            </Button>
+          </form>
+        </details>
+      )}
+    </div>
   )
 }
 
@@ -347,7 +436,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const { id } = use(params)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { token } = useAuthStore()
+  const { token, user } = useAuthStore()
 
   // --- Overlay / sources state ---
   const [overlay, setOverlay] = useState<Overlay | null>(null)
@@ -516,15 +605,24 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  async function handleAddSource(platform: string, channelId: string) {
-    if (platform === 'youtube') {
-      setShowBetaWarning('youtube')
-      return
+  async function handleAddTikTokSource(username: string) {
+    try {
+      const source = await overlaysApi.addSource(id, {
+        platform: 'tiktok',
+        channel_id: username,
+      })
+      setSources(prev => [...prev, source])
+      toastManager.add({ title: 'TikTok source added', type: 'success' })
+    } catch {
+      toastManager.add({
+        title: 'Failed to add TikTok source',
+        description: 'Check the username and try again.',
+        type: 'error',
+      })
     }
-    await doAddSource(platform, channelId)
   }
 
-  async function doAddSource(platform: string, channelId: string) {
+  async function handleAddManual(platform: string, channelId: string) {
     try {
       const source = await overlaysApi.addSource(id, {
         platform: platform as ChatSource['platform'],
@@ -828,8 +926,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               </div>
             )}
 
-            {/* Add source form */}
-            <AddSourceForm onAdd={handleAddSource} />
+            {/* Add source */}
+            <AddSourceForm
+              overlayId={id}
+              onAddTikTok={handleAddTikTokSource}
+              onYouTubeClick={() => setShowBetaWarning('youtube')}
+              onAddManual={handleAddManual}
+              isAdmin={user?.is_admin === true}
+            />
           </section>
 
           {/* 4. Customization section */}
