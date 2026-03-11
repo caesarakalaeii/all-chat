@@ -19,15 +19,42 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-// FindOverlaysForMessage finds all overlays that should receive this message
+// FindOverlaysForMessage finds all overlays that should receive this message.
+// It uses a UNION to include both direct platform sources and recipient overlays
+// that have subscribed to a sender overlay via a shared_overlay source.
 func (r *Repository) FindOverlaysForMessage(ctx context.Context, platform, channelID string) ([]models.OverlayTarget, error) {
 	query := `
+		-- Direct platform sources (overlays that have this platform/channel directly)
 		SELECT DISTINCT o.id, o.user_id
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
+		  AND ocs.is_active = true
 		  AND ocs.platform = $1
 		  AND ocs.channel_id = $2
+
+		UNION
+
+		-- Shared overlay fan-out: recipient overlays that subscribed to sender overlay
+		SELECT DISTINCT o.id, o.user_id
+		FROM overlays o
+		JOIN overlay_chat_sources ocs
+		    ON o.id = ocs.overlay_id
+		    AND ocs.platform = 'shared_overlay'
+		    AND ocs.is_active = true
+		JOIN share_requests sr
+		    ON sr.sender_overlay_id = ocs.channel_id
+		    AND sr.status = 'accepted'
+		WHERE o.is_active = true
+		  AND sr.sender_overlay_id IN (
+		      SELECT o2.id
+		      FROM overlays o2
+		      JOIN overlay_chat_sources ocs2 ON o2.id = ocs2.overlay_id
+		      WHERE o2.is_active = true
+		        AND ocs2.is_active = true
+		        AND ocs2.platform = $1
+		        AND ocs2.channel_id = $2
+		  )
 	`
 
 	rows, err := r.db.Query(ctx, query, platform, channelID)

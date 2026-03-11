@@ -351,69 +351,80 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 	skippedCount := 0
 
 	for _, source := range sources {
-		// Get pods that can handle this source's platform
-		platformPods, ok := podsByPlatform[source.Platform]
-		if !ok || len(platformPods) == 0 {
-			c.logger.Warn("No pods available for platform",
-				zap.String("platform", source.Platform),
-				zap.String("source_id", source.ID),
-			)
-			skippedCount++
-			continue
+		// For Twitch sources, we need to assign to both IRC (chat) and EventSub (events) listeners
+		platformsToAssign := []string{source.Platform}
+		if source.Platform == "twitch" {
+			platformsToAssign = append(platformsToAssign, "twitch-eventsub")
 		}
 
-		// Create platform-specific assigner
-		platformAssigner := NewAssigner(platformPods)
+		for _, platform := range platformsToAssign {
+			// Get pods that can handle this platform
+			platformPods, ok := podsByPlatform[platform]
+			if !ok || len(platformPods) == 0 {
+				c.logger.Warn("No pods available for platform",
+					zap.String("platform", platform),
+					zap.String("source_platform", source.Platform),
+					zap.String("source_id", source.ID),
+				)
+				skippedCount++
+				continue
+			}
 
-		// Compute assignment using bounded-load consistent hashing
-		ctx, hashSpan := tracer.Start(ctx, "hash-channel",
-			trace.WithAttributes(
-				attribute.String("channel_id", source.ID),
-				attribute.String("platform", source.Platform),
-			),
-		)
-		podID, err := platformAssigner.AssignChannel(source.ID)
-		if err != nil {
-			hashSpan.RecordError(err)
-			hashSpan.SetStatus(codes.Error, "failed to assign channel")
+			// Create platform-specific assigner
+			platformAssigner := NewAssigner(platformPods)
+
+			// Compute assignment using bounded-load consistent hashing
+			ctx, hashSpan := tracer.Start(ctx, "hash-channel",
+				trace.WithAttributes(
+					attribute.String("channel_id", source.ID),
+					attribute.String("platform", platform),
+					attribute.String("source_platform", source.Platform),
+				),
+			)
+			podID, err := platformAssigner.AssignChannel(source.ID)
+			if err != nil {
+				hashSpan.RecordError(err)
+				hashSpan.SetStatus(codes.Error, "failed to assign channel")
+				hashSpan.End()
+				c.logger.Error("Failed to assign channel",
+					zap.String("source_id", source.ID),
+					zap.String("platform", platform),
+					zap.String("source_platform", source.Platform),
+					zap.Error(err),
+				)
+				c.metrics.ReconciliationErrors.Inc()
+				errorCount++
+				continue // Continue processing other sources
+			}
+			hashSpan.SetAttributes(attribute.String("assigned_pod", podID))
 			hashSpan.End()
-			c.logger.Error("Failed to assign channel",
-				zap.String("source_id", source.ID),
-				zap.String("platform", source.Platform),
-				zap.Error(err),
-			)
-			c.metrics.ReconciliationErrors.Inc()
-			errorCount++
-			continue // Continue processing other sources
-		}
-		hashSpan.SetAttributes(attribute.String("assigned_pod", podID))
-		hashSpan.End()
 
-		// Store assignment in Redis registry
-		ctx, updateSpan := tracer.Start(ctx, "update-assignment-registry",
-			trace.WithAttributes(
-				attribute.String("source_id", source.ID),
-				attribute.String("pod_id", podID),
-			),
-		)
-		_, err = c.registry.StoreAssignment(ctx, source.ID, podID)
-		if err != nil {
-			updateSpan.RecordError(err)
-			updateSpan.SetStatus(codes.Error, "failed to update registry")
+			// Store assignment in Redis registry
+			ctx, updateSpan := tracer.Start(ctx, "update-assignment-registry",
+				trace.WithAttributes(
+					attribute.String("source_id", source.ID),
+					attribute.String("pod_id", podID),
+				),
+			)
+			_, err = c.registry.StoreAssignment(ctx, source.ID, podID)
+			if err != nil {
+				updateSpan.RecordError(err)
+				updateSpan.SetStatus(codes.Error, "failed to update registry")
+				updateSpan.End()
+				c.logger.Error("Failed to store assignment",
+					zap.String("source_id", source.ID),
+					zap.String("pod_id", podID),
+					zap.Error(err),
+				)
+				c.metrics.ReconciliationErrors.Inc()
+				errorCount++
+				continue // Continue processing other sources
+			}
 			updateSpan.End()
-			c.logger.Error("Failed to store assignment",
-				zap.String("source_id", source.ID),
-				zap.String("pod_id", podID),
-				zap.Error(err),
-			)
-			c.metrics.ReconciliationErrors.Inc()
-			errorCount++
-			continue // Continue processing other sources
-		}
-		updateSpan.End()
 
-		c.metrics.AssignmentsTotal.Inc()
-		assignmentCount++
+			c.metrics.AssignmentsTotal.Inc()
+			assignmentCount++
+		}
 	}
 
 	// Step 6: Cleanup stale heartbeats (every cycle)

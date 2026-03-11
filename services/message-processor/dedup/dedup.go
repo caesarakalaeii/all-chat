@@ -99,3 +99,39 @@ func (d *Deduplicator) Clear(ctx context.Context, platform, channelID, userID, t
 
 	return d.client.Del(ctx, key).Err()
 }
+
+// IsDuplicateForOverlay checks if message is duplicate for specific overlay
+// Includes overlayID in fingerprint to isolate deduplication per overlay
+func (d *Deduplicator) IsDuplicateForOverlay(ctx context.Context, overlayID, platform, channelID, messageID, userID, text string, timestamp time.Time) (bool, error) {
+	fingerprint := d.createFingerprintWithOverlay(overlayID, platform, channelID, messageID, userID, text, timestamp)
+
+	key := fmt.Sprintf("%s:%s", dedupPrefix, fingerprint)
+
+	// SetNX returns true if key was set (not duplicate), false if key exists (duplicate)
+	wasSet, err := d.client.SetNX(ctx, key, "1", 5*time.Second).Result()
+	if err != nil {
+		d.logger.Error("Redis SetNX failed, failing open", zap.Error(err))
+		return false, nil // Fail open - allow message through on error
+	}
+
+	return !wasSet, nil // If wasSet is false, key existed = duplicate
+}
+
+func (d *Deduplicator) createFingerprintWithOverlay(overlayID, platform, channelID, messageID, userID, text string, timestamp time.Time) string {
+	// Truncate timestamp to second for time window
+	truncatedTime := timestamp.Truncate(time.Second).Unix()
+
+	// Include platform-specific message ID if available (empty string if not)
+	message := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d", overlayID, platform, channelID, messageID, userID, text, truncatedTime)
+
+	hash := sha256.Sum256([]byte(message))
+	return hex.EncodeToString(hash[:])
+}
+
+// ClearForOverlay removes a message from the deduplication cache for a specific overlay (for testing/debugging)
+func (d *Deduplicator) ClearForOverlay(ctx context.Context, overlayID, platform, channelID, messageID, userID, text string, timestamp time.Time) error {
+	fingerprint := d.createFingerprintWithOverlay(overlayID, platform, channelID, messageID, userID, text, timestamp)
+	key := fmt.Sprintf("%s:%s", dedupPrefix, fingerprint)
+
+	return d.client.Del(ctx, key).Err()
+}
