@@ -377,6 +377,35 @@ func (r *ShareRepository) GetAcceptedShareDetails(ctx context.Context, recipient
 	return details, rows.Err()
 }
 
+// GetThisStreamShares returns accepted shares with expiry_option='this_stream'
+// where the given user is either sender or recipient.
+func (r *ShareRepository) GetThisStreamShares(ctx context.Context, userID string) ([]models.ShareRequest, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, sender_user_id, sender_overlay_id, recipient_user_id,
+		       status, created_at, responded_at, expires_at
+		FROM share_requests
+		WHERE status = $1
+		  AND expiry_option = 'this_stream'
+		  AND (sender_user_id = $2 OR recipient_user_id = $2)
+	`, models.StatusAccepted, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query this_stream shares: %w", err)
+	}
+	defer rows.Close()
+
+	var shares []models.ShareRequest
+	for rows.Next() {
+		var s models.ShareRequest
+		if err := rows.Scan(&s.ID, &s.SenderUserID, &s.SenderOverlayID, &s.RecipientUserID,
+			&s.Status, &s.CreatedAt, &s.RespondedAt, &s.ExpiresAt); err != nil {
+			r.logger.Error("Failed to scan share", zap.Error(err))
+			continue
+		}
+		shares = append(shares, s)
+	}
+	return shares, rows.Err()
+}
+
 // ExpireAcceptedShare atomically sets a single accepted share to 'expired' and deactivates
 // its overlay_chat_sources entries. Mirrors RevokeShareRequest pattern.
 // Idempotent: if the share is not in 'accepted' state, this is a no-op.

@@ -19,6 +19,7 @@ import (
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -64,6 +65,23 @@ func main() {
 
 	log.Info("Connected to PostgreSQL successfully")
 
+	// Connect to Redis
+	redisHost := getEnv("REDIS_HOST", "localhost")
+	redisPort := getEnv("REDIS_PORT", "6379")
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+	})
+
+	var redisClientForJobs *redis.Client
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		log.Warn("Failed to connect to Redis (lifecycle events disabled)", zap.Error(err))
+		redisClient.Close()
+	} else {
+		log.Info("Connected to Redis")
+		redisClientForJobs = redisClient
+		defer redisClient.Close()
+	}
+
 	// Initialize repositories
 	premiumRepo := repository.NewPremiumRepository(dbPool, log)
 	userSearchRepo := repository.NewUserSearchRepository(dbPool, log)
@@ -75,6 +93,10 @@ func main() {
 	// Initialize and start expiry job
 	expiryJob := jobs.NewExpiryJob(shareRepo, log)
 	expiryJob.Start(context.Background())
+
+	// Start lifecycle subscriber for stream-end expiry (EXPIRY-03)
+	lifecycleSub := jobs.NewLifecycleSubscriber(shareRepo, redisClientForJobs, log.Sugar())
+	lifecycleSub.Start(context.Background())
 
 	// Initialize handlers
 	adminHandler := handlers.NewAdminHandler(premiumRepo, log)
