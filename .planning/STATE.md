@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: "Completed 19-lifecycle-expiry-03 (Multi-platform stream end detection) — checkpoint:human-verify pending"
-last_updated: "2026-03-11T18:04:34.368Z"
+stopped_at: Completed 19-lifecycle-expiry-03 (Multi-platform stream end detection) — human verified
+last_updated: "2026-03-11T19:52:48.303Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
@@ -150,6 +150,7 @@ Recent decisions affecting v1.3:
 - [Phase 19-lifecycle-expiry]: Redis ping failure in share-service is non-fatal: lifecycle events disabled but service continues
 - [Phase 19-lifecycle-expiry]: YouTube nil guard added to Repository.DeleteChannelVideoMapping to prevent panic with nil redis client in unit tests
 - [Phase 19-lifecycle-expiry]: TikTok stream_end publish placed in disconnected handler in index.ts (live→offline transition), not in LiveStreamPoller polling cycle (which only handles offline→live)
+- [Phase 19-lifecycle-expiry]: overlay_sources must be fetched in ListIncoming (not just share row) — senderPlatform is always undefined without the JOIN; found during Playwright verification (b60e071)
 
 ### Pending Todos
 
@@ -172,8 +173,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T18:04:34.366Z
-Stopped at: Completed 19-lifecycle-expiry-03 (Multi-platform stream end detection) — checkpoint:human-verify pending
+Last session: 2026-03-11T19:52:41.361Z
+Stopped at: Completed 19-lifecycle-expiry-03 (Multi-platform stream end detection) — human verified
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase

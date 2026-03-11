@@ -27,6 +27,9 @@ key_files:
     - services/tiktok-listener/src/index.ts
     - frontend/src/app/dashboard/shares/components/AcceptModal.tsx
     - frontend/src/app/dashboard/shares/components/AcceptModal.test.tsx
+    - services/share-service/models/share.go
+    - services/share-service/repository/shares.go
+    - frontend/src/app/dashboard/shares/components/ShareRequestCard.tsx
 decisions:
   - key: youtube-null-client-guard
     summary: "Added nil guard to Repository.DeleteChannelVideoMapping to prevent panic in unit tests with nil redis client"
@@ -34,11 +37,13 @@ decisions:
     summary: "TikTok stream_end publish placed in index.ts disconnected handler (live→offline transition) using livePoller.publishStreamEnd, not in the poller polling cycle (which only handles offline→live)"
   - key: tiktok-redis-publisher-interface
     summary: "RedisPublisher interface defined in poller.ts accepts both ioredis and node-redis client shapes via duck typing"
+  - key: overlay-sources-in-list-incoming
+    summary: "overlay_sources must be fetched alongside share requests in ListIncoming — without them senderPlatform is always undefined in UI; fixed by listOverlaySources JOIN in repository"
 metrics:
-  duration: 6 min
+  duration: 8 min
   completed_date: "2026-03-11"
-  tasks_completed: 2
-  files_changed: 10
+  tasks_completed: 3
+  files_changed: 13
 ---
 
 # Phase 19 Plan 03: Multi-Platform Stream End Detection Summary
@@ -112,9 +117,22 @@ frontend: vitest AcceptModal.test.tsx → 12/12 tests pass
 - The correct publish point is the `disconnected` event handler in `index.ts` where the actual live→offline transition occurs.
 - Resolution: Added `publishStreamEnd` to `LiveStreamPoller` as specified, called from `index.ts` disconnected handler via `this.livePoller.publishStreamEnd(username)`. This follows the plan's interface spec while placing the call at the architecturally correct point.
 
-## Checkpoint Status
+## Post-Checkpoint Fix (b60e071)
 
-Task 3 (human-verify) reached — automation complete, awaiting human verification.
+During human verification via Playwright, `senderPlatform` was always `undefined` in the real UI because `overlay_sources` was never returned by the backend `ListIncoming` endpoint.
+
+**Root cause:** `ShareRequest` model lacked an `OverlaySources` field. The `ListIncoming` repository query only fetched the share row, not its associated sources.
+
+**Fix applied:**
+- `OverlaySource` model + `OverlaySources []OverlaySource` field added to `ShareRequest` (share-service models)
+- `listOverlaySources(ctx, tx, shareID)` helper added to repository; called inside `ListIncoming` loop
+- `ShareRequestCard.tsx`: derives `senderPlatform` from `request.overlay_sources?.[0]?.platform` and passes it to `AcceptModal`
+
+**Verified by Playwright:** Kick platform badge shown, "This stream" disabled, "Unlimited" checked by default.
+
+## Task 3: Human Verification — APPROVED
+
+Playwright confirmed all acceptance criteria met. Plan complete.
 
 ## Self-Check: PASSED
 
@@ -133,3 +151,4 @@ Files created/modified:
 Commits:
 - [x] 436d399 — Task 1: YouTube HandleStreamOffline + 4-arg LifecycleSubscriber
 - [x] c7c72b9 — Task 2: TikTok stream_end + AcceptModal Kick disable
+- [x] b60e071 — Post-checkpoint fix: overlay_sources wired into ListIncoming + ShareRequestCard passes senderPlatform
