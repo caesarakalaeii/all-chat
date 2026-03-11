@@ -11,21 +11,25 @@ import (
 // JWTAuth returns a gin middleware that validates JWT tokens
 func JWTAuth(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get token from Authorization header
+		// Get token from Authorization header, falling back to ?token= query param
+		// for browser redirect flows (e.g. OAuth add-source redirects).
+		var tokenString string
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		if authHeader != "" {
+			t := strings.TrimPrefix(authHeader, "Bearer ")
+			if t == authHeader {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "Invalid authorization header format",
+				})
+				c.Abort()
+				return
+			}
+			tokenString = t
+		} else if q := c.Query("token"); q != "" {
+			tokenString = q
+		} else {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Authorization header required",
-			})
-			c.Abort()
-			return
-		}
-
-		// Remove "Bearer " prefix
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid authorization header format",
 			})
 			c.Abort()
 			return

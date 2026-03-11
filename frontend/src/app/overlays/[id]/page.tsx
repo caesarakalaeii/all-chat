@@ -297,12 +297,14 @@ function SourceListSkeleton() {
 // Admins also get a manual channel ID form for any platform.
 function AddSourceForm({
   overlayId,
+  token,
   onAddTikTok,
   onYouTubeClick,
   onAddManual,
   isAdmin = false,
 }: {
   overlayId: string
+  token: string
   onAddTikTok: (username: string) => void
   onYouTubeClick: () => void
   onAddManual?: (platform: string, channelId: string) => void
@@ -331,10 +333,10 @@ function AddSourceForm({
     <div className="space-y-3">
       <p className="text-xs text-text-sub">Add a platform via OAuth or enter a TikTok username directly.</p>
 
-      {/* OAuth buttons */}
+      {/* OAuth buttons — token passed as query param since browser redirects can't set headers */}
       <div className="grid grid-cols-1 gap-2">
         <button
-          onClick={() => { window.location.href = `/api/v1/auth/twitch/add-source/${overlayId}` }}
+          onClick={() => { window.location.href = `/api/v1/auth/twitch/add-source/${overlayId}?token=${token}` }}
           className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg bg-twitch text-white text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
         >
           <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
@@ -355,7 +357,7 @@ function AddSourceForm({
         </button>
 
         <button
-          onClick={() => { window.location.href = `/api/v1/auth/kick/add-source/${overlayId}` }}
+          onClick={() => { window.location.href = `/api/v1/auth/kick/add-source/${overlayId}?token=${token}` }}
           className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-bg text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           style={{ backgroundColor: 'var(--color-kick)' }}
         >
@@ -929,6 +931,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             {/* Add source */}
             <AddSourceForm
               overlayId={id}
+              token={token ?? ''}
               onAddTikTok={handleAddTikTokSource}
               onYouTubeClick={() => setShowBetaWarning('youtube')}
               onAddManual={handleAddManual}
@@ -1284,7 +1287,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           onCancel={() => setShowBetaWarning(null)}
           onContinue={() => {
             setShowBetaWarning(null)
-            window.location.href = `/api/v1/auth/youtube/add-source/${id}`
+            window.location.href = `/api/v1/auth/youtube/add-source/${id}?token=${token}`
           }}
         />
       )}
