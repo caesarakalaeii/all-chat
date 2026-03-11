@@ -70,7 +70,7 @@ is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
 func (r *UserRepository) GetByTwitchID(ctx context.Context, twitchID string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, is_banned, banned_at, banned_reason, banned_by,
+           is_admin, is_premium, is_banned, banned_at, banned_reason, banned_by,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE twitch_id = $1
@@ -91,7 +91,7 @@ WHERE twitch_id = $1
 func (r *UserRepository) GetByGoogleID(ctx context.Context, googleID string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, is_banned, banned_at, banned_reason, banned_by,
+           is_admin, is_premium, is_banned, banned_at, banned_reason, banned_by,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE google_id = $1
@@ -112,7 +112,7 @@ WHERE google_id = $1
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, is_banned, banned_at, banned_reason, banned_by,
+           is_admin, is_premium, is_banned, banned_at, banned_reason, banned_by,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE id = $1
@@ -133,7 +133,7 @@ WHERE id = $1
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, is_banned, banned_at, banned_reason, banned_by,
+           is_admin, is_premium, is_banned, banned_at, banned_reason, banned_by,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE LOWER(username) = LOWER($1)
@@ -235,7 +235,7 @@ WHERE id = $1
 func (r *UserRepository) GetByKickID(ctx context.Context, kickID string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, is_banned, banned_at, banned_reason, banned_by,
+           is_admin, is_premium, is_banned, banned_at, banned_reason, banned_by,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE kick_id = $1
@@ -313,7 +313,7 @@ func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 
 	err := row.Scan(
 		&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName,
-		&user.ProfileImageURL, &user.IsAdmin, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
+		&user.ProfileImageURL, &user.IsAdmin, &user.IsPremium, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
 		&encryptedAccessToken, &encryptedRefreshToken,
 		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
 	)
@@ -352,7 +352,7 @@ func (r *UserRepository) decryptToken(token string) (string, error) {
 func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, is_banned, banned_at, banned_reason, banned_by,
+           is_admin, is_premium, is_banned, banned_at, banned_reason, banned_by,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 ORDER BY created_at DESC
@@ -384,7 +384,7 @@ ORDER BY created_at DESC
 func (r *UserRepository) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, is_banned, banned_at, banned_reason, banned_by,
+           is_admin, is_premium, is_banned, banned_at, banned_reason, banned_by,
            access_token, refresh_token, token_expires_at, created_at, updated_at
 FROM users
 WHERE id = $1
@@ -409,7 +409,7 @@ func (r *UserRepository) scanUserFromRows(rows pgx.Rows) (*models.User, error) {
 	err := rows.Scan(
 		&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider,
 		&user.Username, &user.DisplayName, &user.ProfileImageURL,
-		&user.IsAdmin, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
+		&user.IsAdmin, &user.IsPremium, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
 		&encryptedAccessToken, &encryptedRefreshToken,
 		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
 	)

@@ -13,6 +13,7 @@ type User struct {
 	DisplayName     string    `json:"display_name"`
 	ProfileImageURL string     `json:"profile_image_url"`
 	IsAdmin         bool       `json:"is_admin"`                  // Admin role for access control
+	IsPremium       bool       `json:"is_premium"`                // Premium feature access
 	IsBanned        bool       `json:"is_banned"`                 // Ban status
 	BannedAt        *time.Time `json:"banned_at,omitempty"`       // When user was banned
 	BannedReason    *string    `json:"banned_reason,omitempty"`   // Reason for ban
