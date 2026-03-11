@@ -217,7 +217,7 @@ Phases execute in numeric order: 23 → 24 → 25 → 26
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23. Design Token System & Foundation | 3/3 | Complete    | 2026-03-10 | - |
 | 24. Component Library Setup | 5/5 | Complete   | 2026-03-11 | - |
-| 25. Page Migration & Split-view Preview | 3/8 | In Progress|  | - |
+| 25. Page Migration & Split-view Preview | 4/8 | In Progress|  | - |
 | 26. Enforcement & Quality Gates | v1.3 | 0/? | Not started | - |
 
 ---
