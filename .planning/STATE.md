@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: "Completed 19-lifecycle-expiry-00 (Nyquist compliance: Migration 034 + RED test stubs)"
-last_updated: "2026-03-11T17:47:23.862Z"
+stopped_at: Completed 19-lifecycle-expiry-01 (AcceptShareRequest expiry persistence + ExpiryJob + ExpireTimedAcceptedShares)
+last_updated: "2026-03-11T17:51:19.756Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
   completed_phases: 12
   total_plans: 55
-  completed_plans: 52
+  completed_plans: 53
   percent: 93
 ---
 
@@ -82,6 +82,7 @@ Progress: [█████████░] 93% (v1.3)
 | Phase 18-revocation P03 | 2 | 3 tasks | 6 files |
 | Phase 18-revocation P04 | 7 | 2 tasks | 1 files |
 | Phase 19-lifecycle-expiry P00 | 8 | 2 tasks | 7 files |
+| Phase 19-lifecycle-expiry P01 | 2 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -139,6 +140,9 @@ Recent decisions affecting v1.3:
 - [Phase 19-lifecycle-expiry]: Migration 034 uses separate share_expires_at column (not expires_at which is the 7-day acceptance window for pending requests)
 - [Phase 19-lifecycle-expiry]: Partial index on (share_expires_at, status) WHERE status='accepted' AND share_expires_at IS NOT NULL for efficient expiry job queries
 - [Phase 19-lifecycle-expiry]: YouTube lifecycle t.Skip stub (not compile error) — HandleStreamOffline already exists; publisher param extension is the Wave 3 RED gate
+- [Phase 19-lifecycle-expiry]: AcceptShareRequest computes shareExpiresAt only for custom option; unlimited/this_stream leave share_expires_at NULL
+- [Phase 19-lifecycle-expiry]: ExpireAcceptedShare is idempotent: RowsAffected==0 returns nil (share already expired or not found)
+- [Phase 19-lifecycle-expiry]: ExpireTimedAcceptedShares closes rows cursor before per-share expiry loop to avoid holding open cursor during nested transactions
 
 ### Pending Todos
 
@@ -161,8 +165,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T17:47:23.860Z
-Stopped at: Completed 19-lifecycle-expiry-00 (Nyquist compliance: Migration 034 + RED test stubs)
+Last session: 2026-03-11T17:51:19.755Z
+Stopped at: Completed 19-lifecycle-expiry-01 (AcceptShareRequest expiry persistence + ExpiryJob + ExpireTimedAcceptedShares)
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
