@@ -30,14 +30,14 @@ Requirements for Frontend Redesign milestone. Each maps to roadmap phases.
 
 ### Page Redesigns
 
-- [ ] **PAGE-01**: Landing page redesigned (hero with gradient CTAs, platform login buttons, feature cards)
-- [ ] **PAGE-02**: Dashboard redesigned (overlay grid with hover states, create button, empty states)
-- [ ] **PAGE-03**: Overlay editor redesigned (source management cards with platform-color coding)
+- [x] **PAGE-01**: Landing page redesigned (hero with gradient CTAs, platform login buttons, feature cards)
+- [x] **PAGE-02**: Dashboard redesigned (overlay grid with hover states, create button, empty states)
+- [x] **PAGE-03**: Overlay editor redesigned (source management cards with platform-color coding)
 - [ ] **PAGE-04**: Overlay preview maintained (existing CSS unchanged for marketplace compatibility)
-- [ ] **PAGE-05**: Settings page redesigned (account management, profile display)
-- [ ] **PAGE-06**: Admin pages redesigned (users, overlays, sources, viewers - visual consistency)
-- [ ] **PAGE-07**: Responsive layouts validated across breakpoints (375px, 768px, 1920px)
-- [ ] **PAGE-08**: Accessibility compliance achieved (WCAG 2.1 AA, keyboard navigation, focus states)
+- [x] **PAGE-05**: Settings page redesigned (account management, profile display)
+- [x] **PAGE-06**: Admin pages redesigned (users, overlays, sources, viewers - visual consistency)
+- [x] **PAGE-07**: Responsive layouts validated across breakpoints (375px, 768px, 1920px)
+- [x] **PAGE-08**: Accessibility compliance achieved (WCAG 2.1 AA, keyboard navigation, focus states)
 - [ ] **PAGE-09**: Loading states implemented for all data fetching scenarios
 - [ ] **PAGE-10**: Empty states implemented with illustrations and clear CTAs
 
@@ -119,14 +119,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMP-07 | Phase 24 | Complete |
 | COMP-08 | Phase 24 | Complete |
 | COMP-09 | Phase 24 | Complete |
-| PAGE-01 | Phase 25 | Pending |
-| PAGE-02 | Phase 25 | Pending |
-| PAGE-03 | Phase 25 | Pending |
+| PAGE-01 | Phase 25 | Complete |
+| PAGE-02 | Phase 25 | Complete |
+| PAGE-03 | Phase 25 | Complete |
 | PAGE-04 | Phase 25 | Pending |
-| PAGE-05 | Phase 25 | Pending |
-| PAGE-06 | Phase 25 | Pending |
-| PAGE-07 | Phase 25 | Pending |
-| PAGE-08 | Phase 25 | Pending |
+| PAGE-05 | Phase 25 | Complete |
+| PAGE-06 | Phase 25 | Complete |
+| PAGE-07 | Phase 25 | Complete |
+| PAGE-08 | Phase 25 | Complete |
 | PAGE-09 | Phase 25 | Pending |
 | PAGE-10 | Phase 25 | Pending |
 | FEAT-01 | Phase 25 | Pending |

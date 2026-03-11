@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Frontend Redesign
 status: executing
-stopped_at: Phase 25 context gathered
-last_updated: "2026-03-11T17:54:25.972Z"
+stopped_at: "Completed 25-01-PLAN.md: AppNav component and story stubs"
+last_updated: "2026-03-11T18:24:40.413Z"
 last_activity: 2026-03-10 — 23-03 events.css cascade layer migration complete, human visual verification approved
 progress:
   total_phases: 16
   completed_phases: 8
-  total_plans: 36
-  completed_plans: 36
+  total_plans: 44
+  completed_plans: 37
   percent: 97
 ---
 
@@ -62,6 +62,7 @@ v1.3 is frontend-focused (React, Tailwind, design system) vs backend microservic
 | Phase 24-component-library-setup-customization P03 | 5 | 2 tasks | 2 files |
 | Phase 24-component-library-setup-customization P04 | 4 | 3 tasks | 6 files |
 | Phase 24-component-library-setup-customization P05 | 10 | 2 tasks | 6 files |
+| Phase 25-page-migration-split-view-preview P01 | 7 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Recent decisions affecting v1.3 work:
 - [Phase 24-05]: Platform color tokens must target ≥4.5:1 contrast against dark background (#020204) when used as text
 - [Phase 24-05]: Storybook a11y in error mode: stories must include aria-label when no placeholder present on inputs
 - [Phase 24-05]: Toast border colors use defined @theme tokens: border-l-youtube (red) for error, border-l-tiktok (teal) for info — border-l-destructive and border-l-ring are not in the custom token system
+- [Phase 25-01]: @keyframes ring-spin kept at document scope outside @layer; .logo-ring class in @layer design-system — per Phase 23-03 decision
+- [Phase 25-01]: Story stubs use inline placeholder components — wave-0 test infrastructure pattern from Phase 24
 
 ### Pending Todos
 
@@ -110,8 +113,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T17:54:25.967Z
-Stopped at: Phase 25 context gathered
-Resume file: .planning/phases/25-page-migration-split-view-preview/25-CONTEXT.md
+Last session: 2026-03-11T18:24:40.409Z
+Stopped at: Completed 25-01-PLAN.md: AppNav component and story stubs
+Resume file: None
 
 **Next action:** `/gsd:plan-phase 24` to plan Phase 24 (Component Library Setup & Customization)
