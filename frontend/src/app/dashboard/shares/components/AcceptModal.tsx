@@ -18,16 +18,26 @@ interface AcceptModalProps {
   request: ShareRequest;
   onClose: () => void;
   onAccepted: (senderOverlayId: string) => void;
+  senderPlatform?: string; // 'twitch' | 'youtube' | 'kick' | 'tiktok'
 }
 
-export function AcceptModal({ request, onClose, onAccepted }: AcceptModalProps) {
+export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: AcceptModalProps) {
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [selectedOverlay, setSelectedOverlay] = useState<string>('');
   const [expiryOption, setExpiryOption] = useState<'this_stream' | 'custom' | 'unlimited'>('this_stream');
   const [customHours, setCustomHours] = useState<string>('24');
+
+  const isKickUser = senderPlatform === 'kick';
   const [loading, setLoading] = useState(false);
   const [loadingOverlays, setLoadingOverlays] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // If Kick platform, switch to 'unlimited' since stream lifecycle detection is not supported
+  useEffect(() => {
+    if (isKickUser && expiryOption === 'this_stream') {
+      setExpiryOption('unlimited');
+    }
+  }, [isKickUser]);
 
   // Fetch user's overlays on mount
   useEffect(() => {
@@ -159,17 +169,25 @@ export function AcceptModal({ request, onClose, onAccepted }: AcceptModalProps) 
               </label>
               <div className="space-y-2">
                 {/* This stream */}
-                <label className="flex items-start">
+                <label className={`flex items-start${isKickUser ? ' opacity-50 cursor-not-allowed' : ''}`}>
                   <input
                     type="radio"
                     name="expiry"
                     value="this_stream"
                     checked={expiryOption === 'this_stream'}
                     onChange={(e) => setExpiryOption(e.target.value as any)}
+                    disabled={isKickUser}
                     className="mt-1 mr-2"
                   />
                   <div>
-                    <div className="font-medium">This stream</div>
+                    <div className="font-medium">
+                      This stream
+                      {isKickUser && (
+                        <span className="ml-1 text-xs text-gray-400">
+                          (not available for Kick — stream detection not yet supported)
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-gray-500">Expires when your stream ends</div>
                   </div>
                 </label>

@@ -267,3 +267,106 @@ describe('AcceptModal', () => {
     });
   });
 });
+
+describe('AcceptModal — senderPlatform Kick disable', () => {
+  const mockOnClose = vi.fn();
+  const mockOnAccepted = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(overlaysApi.list).mockResolvedValue(mockOverlays);
+  });
+
+  // Test: Kick disables "This stream" radio
+  it('disables "This stream" option when senderPlatform is kick', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+        senderPlatform="kick"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    const thisStreamRadio = screen.getByRole('radio', { name: /this stream/i });
+    expect(thisStreamRadio).toBeDisabled();
+  });
+
+  // Test: Kick shows explanatory note
+  it('shows explanatory note when senderPlatform is kick', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+        senderPlatform="kick"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/not available for Kick/i)).toBeInTheDocument();
+  });
+
+  // Test: Non-kick platform does not disable "This stream"
+  it('does not disable "This stream" for non-Kick platforms', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+        senderPlatform="twitch"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    const thisStreamRadio = screen.getByRole('radio', { name: /this stream/i });
+    expect(thisStreamRadio).not.toBeDisabled();
+  });
+
+  // Test: Undefined senderPlatform does not disable "This stream"
+  it('does not disable "This stream" when senderPlatform is undefined', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    const thisStreamRadio = screen.getByRole('radio', { name: /this stream/i });
+    expect(thisStreamRadio).not.toBeDisabled();
+  });
+
+  // Test: Kick switches default to 'unlimited'
+  it('selects "unlimited" by default when senderPlatform is kick', async () => {
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+        senderPlatform="kick"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    const unlimitedRadio = screen.getByRole('radio', { name: /unlimited/i });
+    expect(unlimitedRadio).toBeChecked();
+  });
+});
