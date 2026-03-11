@@ -161,3 +161,26 @@ func TestExpiryJob_OnlyExpiresPending(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, models.StatusAccepted, req.Status)
 }
+
+// TestExpiryJob_TimedAcceptedShares verifies that accepted shares with a
+// past share_expires_at are expired by the job (EXPIRY-04).
+// Wave 0: RED stub — ExpireTimedAcceptedShares does not exist yet.
+func TestExpiryJob_TimedAcceptedShares(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+	// RED: repo.ExpireTimedAcceptedShares does not exist yet.
+	// This test will fail to compile until Wave 1 adds the method.
+	dbPool, err := database.NewPostgresPool(getTestDatabaseURL())
+	if err != nil {
+		t.Skipf("Skipping test: database not available: %v", err)
+	}
+	defer dbPool.Close()
+
+	log := logger.NewLogger("test", "error")
+	repo := repository.NewShareRepository(dbPool, log)
+
+	count, err := repo.ExpireTimedAcceptedShares(context.Background())
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, count, 0)
+}

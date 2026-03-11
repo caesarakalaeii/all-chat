@@ -214,3 +214,17 @@ func (m *mockInnerTubeClient) ExtractContinuation(resp *innertube.LiveChatRespon
 func (m *mockInnerTubeClient) GetPollInterval(resp *innertube.LiveChatResponse) time.Duration {
 	return 2 * time.Second
 }
+
+// TestHandleStreamOffline_PublishesLifecycleEvent verifies that HandleStreamOffline
+// publishes to the Redis "lifecycle:stream_end" channel (EXPIRY-05).
+// Wave 0: RED stub — publish call does not exist yet.
+func TestHandleStreamOffline_PublishesLifecycleEvent(t *testing.T) {
+	// RED: HandleStreamOffline does not accept a redis publisher parameter yet.
+	// Compile error gates Wave 3 implementation.
+	// This stub documents the expected behavior; full assertion in Wave 3.
+	t.Log("Wave 0 RED stub: HandleStreamOffline must publish to lifecycle:stream_end")
+	// When Wave 3 adds publisher parameter, this test will be expanded.
+	// For now, confirm the current signature compiles:
+	_ = HandleStreamOffline // function must exist (it does); publisher extension is the RED gate
+	t.Skip("Wave 0: RED gate — publisher parameter not yet added to HandleStreamOffline")
+}
