@@ -3,8 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import toast from 'react-hot-toast';
-import { BanModal } from '@/components/admin/BanModal';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog } from '@/components/ui/dialog';
+import { toastManager } from '@/lib/toast';
 
 interface User {
   id: string;
@@ -40,6 +43,10 @@ export default function UsersPage() {
   const [filter, setFilter] = useState<'all' | 'active' | 'banned'>('all');
   const [showBanModal, setShowBanModal] = useState(false);
   const [userToBan, setUserToBan] = useState<User | null>(null);
+  const [banReason, setBanReason] = useState('');
+  const [banLoading, setBanLoading] = useState(false);
+  const [impersonateDialogUser, setImpersonateDialogUser] = useState<User | null>(null);
+  const [unbanDialogUser, setUnbanDialogUser] = useState<User | null>(null);
 
   // Fetch all users from the database
   useEffect(() => {
@@ -119,12 +126,8 @@ export default function UsersPage() {
     }
   };
 
-  // Handle impersonation
+  // Handle impersonation (called from Dialog confirm)
   const handleImpersonate = async (userId: string) => {
-    if (!confirm('Are you sure you want to impersonate this user? This will replace your current session.')) {
-      return;
-    }
-
     setImpersonating(true);
     try {
       const token = localStorage.getItem('jwt_token');
@@ -154,9 +157,10 @@ export default function UsersPage() {
       router.push('/');
     } catch (err) {
       console.error('Failed to impersonate user:', err);
-      alert('Failed to start impersonation. Please try again.');
+      toastManager.add({ title: 'Failed to start impersonation. Please try again.', type: 'error' });
     } finally {
       setImpersonating(false);
+      setImpersonateDialogUser(null);
     }
   };
 
@@ -164,6 +168,7 @@ export default function UsersPage() {
   const handleBanUser = async (reason: string) => {
     if (!userToBan) return;
 
+    setBanLoading(true);
     try {
       const token = localStorage.getItem('jwt_token');
       const response = await fetch(`/api/v1/admin/users/${userToBan.id}/ban`, {
@@ -176,11 +181,14 @@ export default function UsersPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to ban user');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to ban user');
       }
 
-      toast.success(`${userToBan.username} banned successfully`);
+      toastManager.add({ title: `${userToBan.username} banned successfully`, type: 'success' });
+      setShowBanModal(false);
+      setUserToBan(null);
+      setBanReason('');
       await refetchUsers();
 
       // Clear selected user if it was the banned one
@@ -188,17 +196,14 @@ export default function UsersPage() {
         setSelectedUser(null);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to ban user');
-      throw err;
+      toastManager.add({ title: err.message || 'Failed to ban user', type: 'error' });
+    } finally {
+      setBanLoading(false);
     }
   };
 
-  // Handle unban user
+  // Handle unban user (called from Dialog confirm)
   const handleUnbanUser = async (userId: string, username: string) => {
-    if (!confirm(`Are you sure you want to unban ${username}?`)) {
-      return;
-    }
-
     try {
       const token = localStorage.getItem('jwt_token');
       const response = await fetch(`/api/v1/admin/users/${userId}/unban`, {
@@ -209,14 +214,15 @@ export default function UsersPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to unban user');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to unban user');
       }
 
-      toast.success(`${username} unbanned successfully`);
+      toastManager.add({ title: `${username} unbanned successfully`, type: 'success' });
+      setUnbanDialogUser(null);
       await refetchUsers();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to unban user');
+      toastManager.add({ title: err.message || 'Failed to unban user', type: 'error' });
     }
   };
 
@@ -241,18 +247,12 @@ export default function UsersPage() {
     return true;
   });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading users...</div>
-      </div>
-    );
-  }
-
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-md p-4">
-        <p className="text-red-800">{error}</p>
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <Card className="p-4 border-destructive">
+          <p className="text-destructive">{error}</p>
+        </Card>
       </div>
     );
   }
@@ -261,10 +261,10 @@ export default function UsersPage() {
   const activeCount = users.filter((u) => !u.is_banned).length;
 
   return (
-    <div className="px-4 py-6 sm:px-0">
+    <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Users</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="text-2xl font-bold text-text">Users</h1>
+        <p className="mt-1 text-sm text-text-sub">
           Manage and view all users in the system
         </p>
       </div>
@@ -272,214 +272,281 @@ export default function UsersPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Users List */}
         <div className="lg:col-span-2">
-          <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-            <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">
-                All Users ({users.length})
-              </h3>
-
-              {/* Search Input */}
-              <div className="mt-4">
-                <input
-                  type="text"
-                  placeholder="Search by username, display name, or platform ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Filter Tabs */}
-              <div className="mt-4 flex space-x-4 border-b border-gray-200">
-                <button
-                  onClick={() => setFilter('all')}
-                  className={`pb-2 px-1 text-sm font-medium border-b-2 ${
-                    filter === 'all'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-                  }`}
-                >
-                  All ({users.length})
-                </button>
-                <button
-                  onClick={() => setFilter('active')}
-                  className={`pb-2 px-1 text-sm font-medium border-b-2 ${
-                    filter === 'active'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-                  }`}
-                >
-                  Active ({activeCount})
-                </button>
-                <button
-                  onClick={() => setFilter('banned')}
-                  className={`pb-2 px-1 text-sm font-medium border-b-2 ${
-                    filter === 'banned'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-                  }`}
-                >
-                  Banned ({bannedCount})
-                </button>
-              </div>
-            </div>
-            <ul className="divide-y divide-gray-200">
-              {displayUsers.map((user) => (
-                <li
-                  key={user.id}
-                  className={`px-4 py-4 hover:bg-gray-50 cursor-pointer transition-colors ${
-                    selectedUser?.id === user.id ? 'bg-blue-50' : ''
-                  }`}
-                  onClick={() => setSelectedUser(user)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center">
-                        <p className="text-sm font-medium text-gray-900">
-                          {user.display_name}
-                        </p>
-                        <div className="ml-2 flex space-x-1">
-                          {user.is_banned && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-                              BANNED
-                            </span>
-                          )}
-                          {user.twitch_id && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                              Twitch
-                            </span>
-                          )}
-                          {user.youtube_id && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                              YouTube
-                            </span>
-                          )}
-                          {user.kick_id && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                              Kick
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-500">@{user.username}</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Joined {new Date(user.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div>
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </div>
-                </li>
+          {loading ? (
+            <Card className="p-6 space-y-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-lg" />
               ))}
-            </ul>
-          </div>
+            </Card>
+          ) : (
+            <Card className="overflow-hidden">
+              <div className="px-4 py-5 border-b border-border">
+                <h3 className="text-base font-medium text-text">
+                  All Users ({users.length})
+                </h3>
+
+                {/* Search Input */}
+                <div className="mt-4">
+                  <input
+                    type="text"
+                    placeholder="Search by username, display name, or platform ID..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full px-4 py-2 border border-border rounded-lg bg-surface-2 text-text placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="mt-4 flex space-x-4 border-b border-border">
+                  <button
+                    onClick={() => setFilter('all')}
+                    className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                      filter === 'all'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-text-sub hover:text-text hover:border-border'
+                    }`}
+                  >
+                    All ({users.length})
+                  </button>
+                  <button
+                    onClick={() => setFilter('active')}
+                    className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                      filter === 'active'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-text-sub hover:text-text hover:border-border'
+                    }`}
+                  >
+                    Active ({activeCount})
+                  </button>
+                  <button
+                    onClick={() => setFilter('banned')}
+                    className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                      filter === 'banned'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-text-sub hover:text-text hover:border-border'
+                    }`}
+                  >
+                    Banned ({bannedCount})
+                  </button>
+                </div>
+              </div>
+              <ul className="divide-y divide-border">
+                {displayUsers.map((user) => (
+                  <li
+                    key={user.id}
+                    className={`px-4 py-4 hover:bg-surface-2 cursor-pointer transition-colors ${
+                      selectedUser?.id === user.id ? 'bg-surface-2' : ''
+                    }`}
+                    onClick={() => setSelectedUser(user)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center">
+                          <p className="text-sm font-medium text-text">
+                            {user.display_name}
+                          </p>
+                          <div className="ml-2 flex space-x-1">
+                            {user.is_banned && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20">
+                                BANNED
+                              </span>
+                            )}
+                            {user.twitch_id && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-twitch bg-badge-bg">
+                                Twitch
+                              </span>
+                            )}
+                            {user.youtube_id && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-youtube bg-badge-bg">
+                                YouTube
+                              </span>
+                            )}
+                            {user.kick_id && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-kick bg-badge-bg">
+                                Kick
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-sm text-text-sub">@{user.username}</p>
+                        <p className="text-xs text-text-dim mt-1">
+                          Joined {new Date(user.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        <svg className="h-5 w-5 text-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
 
         {/* User Details Panel */}
         <div className="lg:col-span-1">
           {selectedUser ? (
-            <div className="bg-white shadow sm:rounded-lg">
-              <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
+            <Card className="overflow-hidden">
+              <div className="px-4 py-5 border-b border-border">
+                <h3 className="text-base font-medium text-text">
                   User Details
                 </h3>
               </div>
-              <div className="px-4 py-5 sm:p-6">
+              <div className="px-4 py-5">
                 <dl className="space-y-4">
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">ID</dt>
-                    <dd className="mt-1 text-sm text-gray-900 font-mono">{selectedUser.id}</dd>
+                    <dt className="text-sm font-medium text-text-sub">ID</dt>
+                    <dd className="mt-1 text-sm text-text font-mono break-all">{selectedUser.id}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">Username</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{selectedUser.username}</dd>
+                    <dt className="text-sm font-medium text-text-sub">Username</dt>
+                    <dd className="mt-1 text-sm text-text">{selectedUser.username}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">Display Name</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{selectedUser.display_name}</dd>
+                    <dt className="text-sm font-medium text-text-sub">Display Name</dt>
+                    <dd className="mt-1 text-sm text-text">{selectedUser.display_name}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">Auth Provider</dt>
-                    <dd className="mt-1 text-sm text-gray-900 capitalize">{selectedUser.auth_provider}</dd>
+                    <dt className="text-sm font-medium text-text-sub">Auth Provider</dt>
+                    <dd className="mt-1 text-sm text-text capitalize">{selectedUser.auth_provider}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">Connected Platforms</dt>
+                    <dt className="text-sm font-medium text-text-sub">Connected Platforms</dt>
                     <dd className="mt-2 space-y-1">
                       {selectedUser.twitch_id && (
                         <div className="flex items-center text-sm">
-                          <span className="font-medium text-purple-600">Twitch:</span>
-                          <span className="ml-2 text-gray-700 font-mono text-xs">{selectedUser.twitch_id}</span>
+                          <span className="font-medium text-twitch">Twitch:</span>
+                          <span className="ml-2 text-text-sub font-mono text-xs">{selectedUser.twitch_id}</span>
                         </div>
                       )}
                       {selectedUser.youtube_id && (
                         <div className="flex items-center text-sm">
-                          <span className="font-medium text-red-600">YouTube:</span>
-                          <span className="ml-2 text-gray-700 font-mono text-xs">{selectedUser.youtube_id}</span>
+                          <span className="font-medium text-youtube">YouTube:</span>
+                          <span className="ml-2 text-text-sub font-mono text-xs">{selectedUser.youtube_id}</span>
                         </div>
                       )}
                       {selectedUser.kick_id && (
                         <div className="flex items-center text-sm">
-                          <span className="font-medium text-green-600">Kick:</span>
-                          <span className="ml-2 text-gray-700 font-mono text-xs">{selectedUser.kick_id}</span>
+                          <span className="font-medium text-kick">Kick:</span>
+                          <span className="ml-2 text-text-sub font-mono text-xs">{selectedUser.kick_id}</span>
                         </div>
                       )}
                     </dd>
                   </div>
                 </dl>
 
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <button
-                    onClick={() => handleImpersonate(selectedUser.id)}
-                    disabled={impersonating}
-                    className="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors flex items-center justify-center gap-2"
+                {/* Impersonate — Dialog confirmation */}
+                <div className="mt-6 pt-6 border-t border-border">
+                  <Dialog.Root
+                    open={impersonateDialogUser?.id === selectedUser.id}
+                    onOpenChange={(open) => {
+                      if (!open) setImpersonateDialogUser(null);
+                    }}
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                    </svg>
-                    View as {selectedUser.username}
-                  </button>
-                  <p className="mt-2 text-xs text-gray-500 text-center">
+                    <Dialog.Trigger
+                      render={
+                        <Button
+                          variant="outline"
+                          className="w-full flex items-center gap-2"
+                          disabled={impersonating}
+                          onClick={() => setImpersonateDialogUser(selectedUser)}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                          </svg>
+                          View as {selectedUser.username}
+                        </Button>
+                      }
+                    />
+                    <Dialog.Content showCloseButton={false}>
+                      <Dialog.Title>Impersonate &ldquo;{selectedUser.username}&rdquo;?</Dialog.Title>
+                      <Dialog.Description>
+                        This will replace your current session. You can return to admin by using the stored admin token.
+                      </Dialog.Description>
+                      <div className="flex gap-3 justify-end mt-6">
+                        <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                        <Button
+                          variant="default"
+                          disabled={impersonating}
+                          onClick={() => handleImpersonate(selectedUser.id)}
+                        >
+                          {impersonating ? 'Switching...' : 'Impersonate'}
+                        </Button>
+                      </div>
+                    </Dialog.Content>
+                  </Dialog.Root>
+                  <p className="mt-2 text-xs text-text-dim text-center">
                     Temporarily act as this user to debug issues
                   </p>
                 </div>
 
                 {/* Ban/Unban Section */}
-                <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="mt-6 pt-6 border-t border-border">
                   {selectedUser.is_banned ? (
                     <>
-                      <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
-                        <p className="text-sm font-medium text-red-800">
+                      <div className="mb-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <p className="text-sm font-medium text-destructive">
                           Banned: {selectedUser.banned_reason}
                         </p>
-                        <p className="text-xs text-red-600 mt-1">
+                        <p className="text-xs text-destructive/70 mt-1">
                           {selectedUser.banned_at && `Banned on ${new Date(selectedUser.banned_at).toLocaleString()}`}
                         </p>
                       </div>
-                      <button
-                        onClick={() => handleUnbanUser(selectedUser.id, selectedUser.username)}
-                        className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-md transition-colors"
+                      {/* Unban — Dialog confirmation */}
+                      <Dialog.Root
+                        open={unbanDialogUser?.id === selectedUser.id}
+                        onOpenChange={(open) => {
+                          if (!open) setUnbanDialogUser(null);
+                        }}
                       >
-                        Unban User
-                      </button>
+                        <Dialog.Trigger
+                          render={
+                            <Button
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => setUnbanDialogUser(selectedUser)}
+                            >
+                              Unban User
+                            </Button>
+                          }
+                        />
+                        <Dialog.Content showCloseButton={false}>
+                          <Dialog.Title>Unban &ldquo;{selectedUser.username}&rdquo;?</Dialog.Title>
+                          <Dialog.Description>
+                            This will restore their access to the platform.
+                          </Dialog.Description>
+                          <div className="flex gap-3 justify-end mt-6">
+                            <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                            <Button
+                              variant="default"
+                              onClick={() => handleUnbanUser(selectedUser.id, selectedUser.username)}
+                            >
+                              Unban User
+                            </Button>
+                          </div>
+                        </Dialog.Content>
+                      </Dialog.Root>
                     </>
                   ) : (
-                    <button
+                    <Button
+                      variant="destructive"
+                      className="w-full"
                       onClick={() => {
                         setUserToBan(selectedUser);
+                        setBanReason('');
                         setShowBanModal(true);
                       }}
-                      className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-md transition-colors"
                     >
                       Ban User
-                    </button>
+                    </Button>
                   )}
                 </div>
 
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <h4 className="text-sm font-medium text-gray-500 mb-2">
+                <div className="mt-6 pt-6 border-t border-border">
+                  <h4 className="text-sm font-medium text-text-sub mb-2">
                     Overlays ({userOverlays.length})
                   </h4>
                   {userOverlays.length > 0 ? (
@@ -489,14 +556,14 @@ export default function UsersPage() {
                           <Link
                             href={`/overlay/${overlay.id}`}
                             target="_blank"
-                            className="block px-3 py-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                            className="block px-3 py-2 bg-surface-2 rounded-lg hover:bg-surface-2/80 transition-colors border border-border"
                           >
                             <div className="flex items-center justify-between">
                               <div>
-                                <div className="text-sm font-medium text-gray-900">{overlay.name}</div>
-                                <div className="text-xs text-gray-500">{overlay.sources_count} sources</div>
+                                <div className="text-sm font-medium text-text">{overlay.name}</div>
+                                <div className="text-xs text-text-sub">{overlay.sources_count} sources</div>
                               </div>
-                              <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="h-4 w-4 text-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                               </svg>
                             </div>
@@ -505,36 +572,64 @@ export default function UsersPage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-gray-500 italic">No overlays yet</p>
+                    <p className="text-sm text-text-dim italic">No overlays yet</p>
                   )}
                 </div>
               </div>
-            </div>
+            </Card>
           ) : (
-            <div className="bg-white shadow sm:rounded-lg">
-              <div className="px-4 py-5 sm:p-6 text-center">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <p className="mt-2 text-sm text-gray-500">
-                  Select a user to view details
-                </p>
-              </div>
-            </div>
+            <Card className="p-6 text-center">
+              <svg className="mx-auto h-12 w-12 text-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <p className="mt-2 text-sm text-text-sub">
+                Select a user to view details
+              </p>
+            </Card>
           )}
         </div>
       </div>
 
-      {/* Ban Modal */}
-      <BanModal
-        isOpen={showBanModal}
-        onClose={() => {
-          setShowBanModal(false);
-          setUserToBan(null);
+      {/* Ban Modal — Dialog for ban with reason input */}
+      <Dialog.Root
+        open={showBanModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowBanModal(false);
+            setUserToBan(null);
+            setBanReason('');
+          }
         }}
-        onConfirm={handleBanUser}
-        username={userToBan?.username || ''}
-      />
+      >
+        <Dialog.Content showCloseButton={false}>
+          <Dialog.Title>Ban &ldquo;{userToBan?.username}&rdquo;?</Dialog.Title>
+          <Dialog.Description>
+            This will prevent the user from accessing the platform.
+          </Dialog.Description>
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-text-sub mb-2">
+              Reason for ban *
+            </label>
+            <textarea
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-lg bg-surface-2 text-text placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              rows={3}
+              placeholder="Spam, abuse, ToS violation, etc..."
+            />
+          </div>
+          <div className="flex gap-3 justify-end mt-6">
+            <Dialog.Close render={<Button variant="outline" disabled={banLoading}>Cancel</Button>} />
+            <Button
+              variant="destructive"
+              disabled={banLoading || !banReason.trim()}
+              onClick={() => handleBanUser(banReason)}
+            >
+              {banLoading ? 'Banning...' : 'Ban User'}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
     </div>
   );
 }
