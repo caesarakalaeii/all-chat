@@ -217,7 +217,13 @@ Plans:
   4. Twitch stream lifecycle detected via Helix API polling
   5. YouTube and TikTok stream lifecycle reuses existing listener detection (no new code needed)
   6. Kick stream lifecycle detection implemented or gracefully disabled (per research outcome)
-**Plans**: TBD
+**Plans**: 4 plans in 4 waves
+
+Plans:
+- [ ] 19-00-PLAN.md — Migration 034 + RED test stubs (Wave 0)
+- [ ] 19-01-PLAN.md — Expiry schema persistence + ExpiryJob time-based extension (Wave 1)
+- [ ] 19-02-PLAN.md — Twitch EventSub stream.offline + LifecycleSubscriber (Wave 2)
+- [ ] 19-03-PLAN.md — YouTube/TikTok lifecycle publish + Kick graceful disable + human verification (Wave 3)
 
 ## Progress
 
@@ -239,8 +245,8 @@ Plans:
 | 15. Share Acceptance | v1.3 | 4/4 | Complete | 2026-03-09 |
 | 16. Shared Overlay Sources | v1.3 | 4/4 | Complete | 2026-03-10 |
 | 17. Message Routing | v1.3 | 2/2 | Complete | 2026-03-10 |
-| 18. Revocation | 5/5 | Complete    | 2026-03-10 | - |
-| 19. Lifecycle & Expiry | v1.3 | 0/TBD | Not started | - |
+| 18. Revocation | v1.3 | 5/5 | Complete | 2026-03-10 |
+| 19. Lifecycle & Expiry | v1.3 | 0/4 | Not started | - |
 
 ---
-*Last updated: 2026-03-10 after Phase 18 plan revision*
+*Last updated: 2026-03-11 after Phase 19 planning*
