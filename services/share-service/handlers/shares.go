@@ -281,17 +281,32 @@ func (h *ShareHandler) AcceptShareRequest(c *gin.Context) {
 		return
 	}
 
-	// Update share status to accepted, persisting recipient_overlay_id for future source lookups
+	// Compute share_expires_at for custom expiry option
+	var shareExpiresAt *time.Time
+	if req.ExpiryOption == "custom" && req.ExpiryHours != nil {
+		t := time.Now().Add(time.Duration(*req.ExpiryHours) * time.Hour)
+		shareExpiresAt = &t
+	}
+
+	// Update share status to accepted, persisting recipient_overlay_id and expiry fields
 	updateQuery := `
 		UPDATE share_requests
 		SET status = $1,
 		    responded_at = NOW(),
-		    recipient_overlay_id = $3
+		    recipient_overlay_id = $3,
+		    expiry_option = $4,
+		    share_expires_at = $5
 		WHERE id = $2
 		RETURNING status, responded_at
 	`
 
-	err = tx.QueryRow(c.Request.Context(), updateQuery, models.StatusAccepted, requestID, req.RecipientOverlayID).Scan(
+	err = tx.QueryRow(c.Request.Context(), updateQuery,
+		models.StatusAccepted,
+		requestID,
+		req.RecipientOverlayID,
+		req.ExpiryOption,
+		shareExpiresAt,
+	).Scan(
 		&shareRequest.Status, &shareRequest.RespondedAt,
 	)
 
@@ -311,6 +326,9 @@ func (h *ShareHandler) AcceptShareRequest(c *gin.Context) {
 		})
 		return
 	}
+
+	shareRequest.ExpiryOption = req.ExpiryOption
+	shareRequest.ShareExpiresAt = shareExpiresAt
 
 	h.logger.Info("Share request accepted",
 		zap.String("request_id", requestID),

@@ -18,6 +18,8 @@ type ShareRequest struct {
 	ExpiresAt          time.Time  `json:"expires_at" db:"expires_at"`
 	HasSeenAcceptance  bool       `json:"has_seen_acceptance" db:"has_seen_acceptance"`
 	SenderDisplayName  string     `json:"sender_display_name,omitempty" db:"sender_display_name"` // Join with users table
+	ExpiryOption       string     `json:"expiry_option,omitempty" db:"expiry_option"`
+	ShareExpiresAt     *time.Time `json:"share_expires_at,omitempty" db:"share_expires_at"`
 }
 
 // Valid status constants
