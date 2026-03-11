@@ -1,5 +1,24 @@
 # Milestones
 
+## v1.3 Chat Overlay Sharing (Shipped: 2026-03-11)
+
+**Phases completed:** 6 phases (14-19), 23 plans
+**Timeline:** 3 days (2026-03-09 → 2026-03-11)
+**Files changed:** 246 files, 28,236 insertions
+
+**Key accomplishments:**
+- New share-service with PostgreSQL schema, premium enforcement middleware, admin controls, and background expiry job
+- Share acceptance with DFS cycle detection, atomic SELECT FOR UPDATE transactions, bidirectional AddSource prompts, and overlay-specific deduplication
+- Shared overlay platform type (`shared_overlay`) wired end-to-end: DB migration, Go model validPlatforms map, TypeScript union types, and overlay editor UI
+- SQL UNION fan-out in `FindOverlaysForMessage` routes messages from source overlay to all recipient overlays in real-time
+- Atomic revocation endpoint with dual-UPDATE transaction, real-time WS notifications, and inactive source rendering in overlay editor (greyed out at 50% opacity with StatusBadge)
+- Multi-platform stream lifecycle detection: Twitch EventSub stream.offline, YouTube HandleStreamOffline publish, TikTok stream_end in disconnected handler — all with 60s debounce via LifecycleSubscriber; Kick gracefully disabled in AcceptModal
+
+**Known Gaps:**
+- SHARE-05: On acceptance, both users can optionally add shared source to an overlay immediately — AddSourceModal built but requirement not verified through full flow test
+
+---
+
 ## v1.0: Message Deletion Support (Partial)
 
 **Status:** Archived (80% complete - 3 of 4 phases)

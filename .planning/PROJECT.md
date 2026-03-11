@@ -2,23 +2,7 @@
 
 ## What This Is
 
-All-Chat is a cloud-native platform that aggregates live chat messages from multiple streaming platforms (Twitch, YouTube, Kick, TikTok) and displays them in unified overlays for streamers. The platform features intelligent load distribution with hybrid hash-based sharding, automatic rebalancing, and quota-free YouTube ingestion via InnerTube API.
-
-## Core Value
-
-Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-
-## Current Milestone: v1.3 Chat Overlay Sharing
-
-**Goal:** Enable streamers to share their aggregated chat with other streamers, unlocking collaborative streaming experiences as the platform's first premium feature.
-
-**Target features:**
-- Bidirectional overlay sharing with search by platform username
-- Flexible expiry options (this stream, time-based, unlimited)
-- Manual source configuration with immediate add-on-acceptance
-- Premium feature enforcement with admin testing overrides
-- Stream lifecycle detection for automatic expiry
-- Revocation with inactive source marking
+All-Chat is a cloud-native platform that aggregates live chat messages from multiple streaming platforms (Twitch, YouTube, Kick, TikTok) and displays them in unified overlays for streamers. The platform features intelligent load distribution with hybrid hash-based sharding, automatic rebalancing, quota-free YouTube ingestion via InnerTube API, and bidirectional chat overlay sharing between streamers as its first premium feature.
 
 ## Requirements
 
@@ -68,26 +52,25 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 - ✓ Production rollout infrastructure (Argo Rollouts, canary deployment) — v1.2
 - ✓ Advanced metrics (per-channel message rate, network error classification) — v1.2
 
+**Chat Overlay Sharing (v1.3):**
+- ✓ User can search for other users by platform username — v1.3
+- ✓ User can send share request with selected overlay — v1.3
+- ✓ User can view pending share requests in dashboard — v1.3
+- ✓ User can accept share request, selecting overlay to share back and expiry option — v1.3
+- ✓ Users can add shared overlays as sources to any overlay (like platform sources) — v1.3
+- ✓ Shared overlay source delivers all messages from source overlay's chat sources — v1.3
+- ✓ Display settings (CSS, events) apply from displaying overlay, not source — v1.3
+- ✓ Share expires when either user's stream ends (if "this stream" selected) — v1.3
+- ✓ Share expires after duration (if time-based selected) — v1.3
+- ✓ Either user can revoke share at any time — v1.3
+- ✓ Revoked/expired shares marked as inactive (not removed from config) — v1.3
+- ✓ Premium enforcement blocks non-premium users from sharing — v1.3
+- ✓ Admin can mark specific users as premium for testing — v1.3
+- ✓ Stream lifecycle detection: Twitch (EventSub), YouTube (HandleStreamOffline), TikTok (disconnected handler); Kick gracefully disabled — v1.3
+
 ### Active
 
-<!-- Current scope: v1.3 Chat Overlay Sharing -->
-
-**Chat Overlay Sharing (v1.3):**
-- [ ] User can search for other users by platform username
-- [ ] User can send share request with selected overlay
-- [ ] User can view pending share requests in dashboard
-- [ ] User can accept share request, selecting overlay to share back and expiry option
-- [ ] Both users can immediately add shared overlay to an overlay on acceptance
-- [ ] Users can add shared overlays as sources to any overlay (like platform sources)
-- [ ] Shared overlay source delivers all messages from source overlay's chat sources
-- [ ] Display settings (CSS, events) apply from displaying overlay, not source
-- [ ] Share expires when either user's stream ends (if "this stream" selected)
-- [ ] Share expires after duration (if time-based selected)
-- [ ] Either user can revoke share at any time
-- [ ] Revoked/expired shares marked as inactive (not removed from config)
-- [ ] Premium enforcement blocks non-premium users from sharing
-- [ ] Admin can mark specific users as premium for testing
-- [ ] Stream lifecycle detection for Twitch (YouTube/TikTok already tracked, Kick to research)
+<!-- Next milestone scope: TBD -->
 
 ### Out of Scope
 
@@ -98,14 +81,20 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 - Multi-tenancy isolation — Single-tenant deployment model
 - Event suppression (emit 1 batch event vs N events) — Deferred to future (detection working, metadata provided)
 - Self-hoster migration guide — Canary deployment guide exists, standalone migration deferred
+- Kick stream lifecycle detection — Researched in v1.3; no reliable webhook/API found; graceful disable implemented
+- Public overlay directory — Moderation burden, copyright risk, DMCA exposure
+- Automatic share acceptance — Violates consent model, security risk
+- Cross-platform relay (A→B→C) — Permission complexity, amplifies load issues
+- Separate expiry microservice — Unnecessary complexity, collocated in share-service
 
 ## Context
 
-**Current State (v1.2 shipped):**
-- 7 core microservices deployed in Kubernetes (api-gateway, auth-service, emote-service, message-processor, overlay-manager, source-manager, token-refresh-service)
-- 5 listener services: 4 with load balancing (twitch-listener, kick-listener, tiktok-listener, youtube-listener) + 1 quota-free InnerTube listener (youtube-listener-innertube, ready for canary deployment)
-- InnerTube service: 8,684 LOC Go, 21 plans across 5 phases, 69 automated tests
-- Deployment infrastructure: Argo Rollouts manifests, Prometheus metrics, Grafana dashboards, comprehensive documentation
+**Current State (v1.3 shipped):**
+- 8 core microservices (added share-service in v1.3: share request management, premium enforcement, expiry jobs, lifecycle subscription)
+- 5 listener services: 4 with load balancing + 1 quota-free InnerTube listener; Twitch/YouTube/TikTok publish lifecycle:stream_end for share expiry
+- share-service: bidirectional overlay sharing, cycle detection, DFS algorithm, WebSocket notifications, background expiry jobs
+- 246 files changed in v1.3 (+28,236 insertions); 3-day delivery (2026-03-09 → 2026-03-11)
+- Premium feature enforcement pattern established for future monetization features
 
 **Load Balancing Implementation (v1.1):**
 - **Coordinator:** Kubernetes Lease-based leader election, bounded-load consistent hashing (1.25x average limit)
@@ -168,6 +157,14 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 | **Argo Rollouts for canary deployment** | Automatic promotion/rollback based on Prometheus metrics | ✓ Good — Infrastructure ready, 10%→50%→100% progression with <1% error threshold |
 | **HTML parsing for stream discovery** | InnerTube browse endpoint unstable, HTML canonical link reliable | ✓ Good — Premiere filtering works, 15-minute timeout appropriate |
 | **Source-manager leadership coordination** | Reuse existing leader election, single source of truth for active streams | ✓ Good — Async discovery, Redis caching, graceful lifecycle management |
+| **New share-service (not extend overlay-manager)** | Share management has distinct concerns (permission model, premium enforcement, cycle detection) | ✓ Good — Clean separation, share-service owns all sharing logic |
+| **ON DELETE RESTRICT for share FK** | Prevents data loss on user deletion; application layer handles cleanup | ✓ Good — Explicit cascade logic, no accidental data loss |
+| **DFS cycle detection for share acceptance** | Prevents circular share dependencies (A shares with B, B shares with A) | ✓ Good — SELECT FOR UPDATE transaction prevents concurrent acceptance races |
+| **SQL UNION fan-out in FindOverlaysForMessage** | Message routing to recipient overlays happens at query level, no separate routing service | ✓ Good — Zero downstream changes, unified enrichment pipeline |
+| **60s debounce in LifecycleSubscriber** | Prevents phantom expiry during Twitch stream restart/category change | ✓ Good — Eliminates false positive share expiry during brief offline events |
+| **Kick lifecycle: gracefully disabled** | No reliable webhook/API found during research; disabling "This stream" for Kick in AcceptModal | ✓ Good — Honest limitation surfaced at UI level with clear messaging |
+| **Redis lifecycle relay (not direct DB writes from listeners)** | Listeners publish lifecycle:stream_end to Redis; share-service subscribes and expires | ✓ Good — Loose coupling; Redis ping failure is non-fatal, service continues |
+| **No premium check on GET /shares/accepted** | Read-only informational endpoint; premium gates mutations only | ✓ Good — Correct authorization model, no unnecessary gatekeeping |
 
 ---
-*Last updated: 2026-03-08 after v1.3 milestone start*
+*Last updated: 2026-03-11 after v1.3 milestone*

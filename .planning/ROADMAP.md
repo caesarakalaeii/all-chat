@@ -5,7 +5,7 @@
 - ✅ **v1.0 Message Deletion Support** — Phases 1-3 (partial, shipped 2026-02-18)
 - ✅ **v1.1 Listener Load Balancing** — Phases 5-8 (shipped 2026-02-21)
 - ✅ **v1.2 InnerTube YouTube Listener** — Phases 9-13 (shipped 2026-03-06)
-- 🚧 **v1.3 Chat Overlay Sharing** — Phases 14-19 (in progress)
+- ✅ **v1.3 Chat Overlay Sharing** — Phases 14-19 (shipped 2026-03-11)
 
 ## Phases
 
@@ -110,120 +110,21 @@
 
 </details>
 
-### 🚧 v1.3 Chat Overlay Sharing (In Progress)
+<details>
+<summary>✅ v1.3 Chat Overlay Sharing (Phases 14-19) — SHIPPED 2026-03-11</summary>
 
 **Milestone Goal:** Enable streamers to share their aggregated chat overlays with other streamers, unlocking collaborative streaming experiences as the platform's first premium feature.
 
-**Phase Numbering:**
-- Integer phases (14, 15, 16, etc.): Planned milestone work
-- Decimal phases (14.1, 14.2): Urgent insertions (marked with INSERTED)
+- [x] Phase 14: Foundation (4/4 plans) — completed 2026-03-09
+- [x] Phase 15: Share Acceptance (4/4 plans) — completed 2026-03-09
+- [x] Phase 16: Shared Overlay Sources (4/4 plans) — completed 2026-03-10
+- [x] Phase 17: Message Routing (2/2 plans) — completed 2026-03-10
+- [x] Phase 18: Revocation (5/5 plans) — completed 2026-03-10
+- [x] Phase 19: Lifecycle & Expiry (4/4 plans) — completed 2026-03-11
 
-Decimal phases appear between their surrounding integers in numeric order.
+**Archive**: [v1.3-ROADMAP.md](milestones/v1.3-ROADMAP.md) | [v1.3-REQUIREMENTS.md](milestones/v1.3-REQUIREMENTS.md)
 
-#### Phase 14: Foundation
-**Goal**: Users can search for streamers and create share requests with premium enforcement
-**Depends on**: Nothing (first phase in v1.3)
-**Requirements**: SHARE-01, SHARE-02, SHARE-03, PREMIUM-01, PREMIUM-02
-**Success Criteria** (what must be TRUE):
-  1. User can search for other users by platform username (Twitch, YouTube, Kick, TikTok)
-  2. Premium users can send share requests selecting an overlay to share
-  3. Non-premium users are blocked from sending share requests (server-side enforcement)
-  4. Users can view list of pending incoming share requests in dashboard
-  5. Admin can mark specific users as premium for testing purposes
-**Plans**: 4 plans
-
-Plans:
-- [x] 14-01-PLAN.md — Database schema and models (Wave 1)
-- [x] 14-02-PLAN.md — User search and share request creation (Wave 2)
-- [x] 14-03-PLAN.md — Premium enforcement and admin controls (Wave 2)
-- [x] 14-04-PLAN.md — Dashboard UI and background expiry job (Wave 3)
-
-#### Phase 15: Share Acceptance
-**Goal**: Users can accept share requests, establishing bidirectional overlay access with cycle prevention
-**Depends on**: Phase 14
-**Requirements**: SHARE-04, SHARE-05, SHARE-08
-**Success Criteria** (what must be TRUE):
-  1. User can accept share request, choosing which overlay to share back and expiry option
-  2. Both users can optionally add shared overlay source immediately on acceptance
-  3. Share status indicators show active, expired, or revoked state in dashboard
-  4. System prevents circular share dependencies (cycle detection blocks acceptance)
-**Plans**: 4 plans in 3 waves
-
-- [ ] 15-00-PLAN.md — Test stubs for Nyquist compliance (Wave 0)
-Plans:
-- [ ] 15-01-PLAN.md — Acceptance backend with cycle detection (Wave 1)
-- [ ] 15-02-PLAN.md — Acceptance UI with modal forms (Wave 1)
-- [ ] 15-03-PLAN.md — Sender notifications and deduplication (Wave 2)
-
-#### Phase 16: Shared Overlay Sources
-**Goal**: Users can browse and add shared overlays as chat sources to their overlays
-**Depends on**: Phase 15
-**Requirements**: SOURCE-01, SOURCE-02, SOURCE-03
-**Success Criteria** (what must be TRUE):
-  1. "Shared Overlays" source type appears alongside platform sources (Twitch, YouTube, etc.)
-  2. User can browse list of available shared overlays when adding source
-  3. User can add shared overlay as source to any overlay via configuration UI
-  4. Shared overlay source persists in configuration like platform sources
-**Plans**: 4 plans in 3 waves
-
-Plans:
-- [ ] 16-00-PLAN.md — Test stubs for Nyquist compliance (Wave 0)
-- [ ] 16-01-PLAN.md — Migration 032 + shared_overlay platform type + TypeScript types (Wave 1)
-- [ ] 16-02-PLAN.md — GetAcceptedShares endpoint + api-gateway route fix + frontend API (Wave 1)
-- [ ] 16-03-PLAN.md — HandleAddSource validation + AddSourceModal wiring + overlay editor UI (Wave 2)
-
-#### Phase 17: Message Routing
-**Goal**: Messages from source overlay's aggregated chat are delivered to recipient's overlay with display settings isolation
-**Depends on**: Phase 16
-**Requirements**: SOURCE-04, SOURCE-05
-**Success Criteria** (what must be TRUE):
-  1. Messages from all sources in shared overlay appear in recipient's overlay in real-time
-  2. Recipient's display settings (CSS, event filters) apply to shared messages, not source overlay's settings
-  3. Shared messages are visually indistinguishable from platform source messages (unified rendering)
-  4. Message enrichment (emotes, badges) works for shared messages identically to platform messages
-**Plans**: 2 plans in 2 waves
-
-Plans:
-- [ ] 17-00-PLAN.md — Test stubs for Nyquist compliance (Wave 0)
-- [ ] 17-01-PLAN.md — SQL UNION fan-out in overlay_router + is_active fix in HandleAddSource (Wave 1)
-
-#### Phase 18: Revocation
-**Goal**: Users can revoke shares instantly with inactive source marking
-**Depends on**: Phase 17
-**Requirements**: SHARE-06, SHARE-07
-**Success Criteria** (what must be TRUE):
-  1. Either user can revoke share at any time from dashboard
-  2. Revoked shares stop delivering messages within 1 second (cache invalidation)
-  3. Revoked or expired shares are marked as inactive in overlay configuration (not deleted)
-  4. User can distinguish active vs inactive shared sources in overlay editor
-  5. User B sees a real-time notification in the overlay editor when their share is revoked
-**Plans**: 5 plans in 4 waves
-
-Plans:
-- [ ] 18-00-PLAN.md — Test stubs for Nyquist compliance (Wave 0)
-- [ ] 18-01-PLAN.md — Migration 033 + RevokeShareRequest handler + notifyShareRevoked + gateway route (Wave 1)
-- [ ] 18-02-PLAN.md — overlay-manager ChatSource share_status JOIN (Wave 1, parallel)
-- [ ] 18-03-PLAN.md — RevocationConfirmModal + ShareRequestCard Revoke button + dashboard History fix (Wave 2)
-- [ ] 18-04-PLAN.md — Overlay editor inactive source rendering + share_revoked WS handler + human verification checkpoint (Wave 3)
-
-#### Phase 19: Lifecycle & Expiry
-**Goal**: Shares auto-expire based on stream lifecycle or time duration
-**Depends on**: Phase 18
-**Requirements**: EXPIRY-01, EXPIRY-02, EXPIRY-03, EXPIRY-04, EXPIRY-05, EXPIRY-06
-**Success Criteria** (what must be TRUE):
-  1. User can choose expiry option when accepting: "This stream", "n hours", "Unlimited"
-  2. Share auto-expires when either user's stream ends (if "This stream" selected)
-  3. Share auto-expires after configured duration (if time-based selected)
-  4. Twitch stream lifecycle detected via Helix API polling
-  5. YouTube and TikTok stream lifecycle reuses existing listener detection (no new code needed)
-  6. Kick stream lifecycle detection implemented or gracefully disabled (per research outcome)
-**Plans**: 4 plans in 4 waves
-
-Plans:
-- [ ] 19-00-PLAN.md — Migration 034 + RED test stubs (Wave 0)
-- [ ] 19-01-PLAN.md — Expiry schema persistence + ExpiryJob time-based extension (Wave 1)
-- [ ] 19-02-PLAN.md — Twitch EventSub stream.offline + LifecycleSubscriber (Wave 2)
-- [ ] 19-03-PLAN.md — YouTube/TikTok lifecycle publish + Kick graceful disable + human verification (Wave 3)
+</details>
 
 ## Progress
 
@@ -246,7 +147,7 @@ Plans:
 | 16. Shared Overlay Sources | v1.3 | 4/4 | Complete | 2026-03-10 |
 | 17. Message Routing | v1.3 | 2/2 | Complete | 2026-03-10 |
 | 18. Revocation | v1.3 | 5/5 | Complete | 2026-03-10 |
-| 19. Lifecycle & Expiry | 4/4 | Complete   | 2026-03-11 | - |
+| 19. Lifecycle & Expiry | v1.3 | 4/4 | Complete | 2026-03-11 |
 
 ---
-*Last updated: 2026-03-11 after Phase 19 planning*
+*Last updated: 2026-03-11 after v1.3 milestone completion*
