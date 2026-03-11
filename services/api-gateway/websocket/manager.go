@@ -389,6 +389,20 @@ func (m *Manager) HasPool(overlayID string) bool {
 	return exists
 }
 
+// GetConnectionsByUser returns all connections for a specific user across all overlays
+func (m *Manager) GetConnectionsByUser(userID string) []*Connection {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var connections []*Connection
+	for _, pool := range m.pools {
+		poolConns := pool.GetConnectionsByUser(userID)
+		connections = append(connections, poolConns...)
+	}
+
+	return connections
+}
+
 // startHeartbeat starts a background goroutine to refresh connection TTLs
 func (m *Manager) startHeartbeat() {
 	m.heartbeatWg.Add(1)

@@ -20,8 +20,12 @@ import { use, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { overlaysApi } from '@/lib/api/overlays';
+import { sharesApi } from '@/lib/api/shares';
 import type { Overlay, ChatSource } from '@/lib/types/overlay';
+import type { AcceptedShare } from '@/lib/types/share';
 import { BetaWarning } from '@/components/BetaWarning';
+import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge';
+import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal';
 
 export default function OverlayEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -40,6 +44,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [newSourceChannel, setNewSourceChannel] = useState('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | null>(null);
+  const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([]);
+  const [revokeTarget, setRevokeTarget] = useState<ChatSource | null>(null);
 
   // Load overlay and sources
   useEffect(() => {
@@ -61,6 +67,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           console.warn('Sources endpoint not available yet, starting with empty sources');
           setSources([]);
         }
+
+        // Load accepted shares for Shared Overlays section — non-critical
+        try {
+          const sharesData = await sharesApi.getAcceptedShares();
+          setAcceptedShares(sharesData);
+        } catch {
+          // Non-critical — overlay editor works without shared overlays
+        }
       } catch (error) {
         console.error('Failed to load overlay:', error);
         setOverlay(null);
@@ -71,6 +85,45 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
     loadData();
   }, [id, token, router]);
+
+  // WebSocket listener for share_revoked notifications (User B real-time update)
+  useEffect(() => {
+    if (!token || !id) return;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/overlay/${id}?token=${token}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      try {
+        const envelope = JSON.parse(event.data);
+        if (envelope.type === 'share_revoked') {
+          const revokerUsername = envelope.data?.revoked_by_username || 'someone';
+          setNotification({
+            type: 'error',
+            message: `Your share with ${revokerUsername} was revoked`
+          });
+          setTimeout(() => setNotification(null), 5000);
+          // Refresh sources so revoked rows grey out immediately
+          overlaysApi.getSources(id).then(setSources).catch(console.error);
+        }
+        // Ignore chat_message and other overlay events — this WS is for notifications only
+      } catch {
+        // Ignore parse errors
+      }
+    };
+
+    ws.onerror = () => {
+      // Non-fatal: notification WS failure does not break the editor
+      console.warn('[OverlayEditor] Notification WS error');
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+  }, [id, token]);
 
   // Handle OAuth callback redirects
   useEffect(() => {
@@ -244,6 +297,31 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setNotification({
         type: 'error',
         message: 'Failed to add TikTok source. Please try again.'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleAddSharedOverlay = async (share: AcceptedShare) => {
+    try {
+      await overlaysApi.addSource(id, {
+        platform: 'shared_overlay',
+        channel_id: share.sender_overlay_id,
+        channel_name: `${share.sender_display_name}'s overlay`,
+      });
+      const updatedSources = await overlaysApi.getSources(id);
+      setSources(updatedSources);
+      setShowAddSource(false);
+      setNotification({
+        type: 'success',
+        message: `Added ${share.sender_display_name}'s overlay!`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } catch (error) {
+      console.error('Failed to add shared overlay:', error);
+      setNotification({
+        type: 'error',
+        message: 'Failed to add shared overlay source. Please try again.',
       });
       setTimeout(() => setNotification(null), 5000);
     }
@@ -602,6 +680,25 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 )}
               </div>
 
+              {/* Shared Overlays section — only shown if user has accepted shares */}
+              {acceptedShares.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-600">
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">Shared Overlays</h4>
+                  <div className="space-y-2">
+                    {acceptedShares.map((share) => (
+                      <button
+                        key={share.share_id}
+                        onClick={() => handleAddSharedOverlay(share)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-sm bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 rounded border border-purple-700/50 transition-colors"
+                      >
+                        <span>{share.sender_display_name}&apos;s overlay</span>
+                        <span className="text-xs text-purple-400">+ Add</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Divider */}
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
@@ -692,44 +789,61 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             </div>
           ) : (
             <div className="space-y-3">
-              {sources?.map((source) => (
-                <div
-                  key={source.id}
-                  className={`flex items-center justify-between p-4 bg-gray-750 rounded-lg border ${getPlatformColor(
-                    source.platform
-                  )}`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      {getPlatformIcon(source.platform)}
-                      <span
-                        className={`text-xs font-semibold uppercase ${
-                          getPlatformColor(source.platform).split(' ')[1]
-                        }`}
-                      >
-                        {source.platform}
-                      </span>
-                    </div>
-                    <span className="text-white font-medium">
-                      {source.channel_name || source.channel_id}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleRemoveSource(source.id)}
-                    className="text-red-400 hover:text-red-300 transition-colors"
-                    title="Remove source"
+              {sources?.map((source) => {
+                const isInactiveSharedOverlay = source.platform === 'shared_overlay' && !source.is_active;
+                const isActiveSharedOverlay = source.platform === 'shared_overlay' && source.is_active;
+                return (
+                  <div
+                    key={source.id}
+                    className={`flex items-center justify-between p-4 bg-gray-750 rounded-lg border ${getPlatformColor(
+                      source.platform
+                    )}${isInactiveSharedOverlay ? ' opacity-50' : ''}`}
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        {getPlatformIcon(source.platform)}
+                        <span
+                          className={`text-xs font-semibold uppercase ${
+                            getPlatformColor(source.platform).split(' ')[1]
+                          }`}
+                        >
+                          {source.platform}
+                        </span>
+                      </div>
+                      <span className="text-white font-medium">
+                        {source.channel_name || source.channel_id}
+                      </span>
+                      {isInactiveSharedOverlay && source.share_status && (
+                        <StatusBadge status={source.share_status} size="sm" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isActiveSharedOverlay && (
+                        <button
+                          onClick={() => setRevokeTarget(source)}
+                          className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50 transition-colors"
+                        >
+                          Revoke
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleRemoveSource(source.id)}
+                        className="text-red-400 hover:text-red-300 transition-colors"
+                        title="Remove source"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -744,6 +858,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             const platform = showBetaWarning;
             setShowBetaWarning(null);
             proceedWithOAuthAddSource(platform);
+          }}
+        />
+      )}
+
+      {/* Revocation Confirm Modal */}
+      {revokeTarget && (
+        <RevocationConfirmModal
+          partnerName={revokeTarget.channel_name || 'shared overlay'}
+          shareId={revokeTarget.channel_id}
+          onClose={() => setRevokeTarget(null)}
+          onRevoked={() => {
+            setRevokeTarget(null);
+            overlaysApi.getSources(id).then(setSources).catch(console.error);
           }}
         />
       )}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"strings"
@@ -288,4 +289,66 @@ func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
 		zap.String("origin", origin),
 	)
 	return false
+}
+
+// NotifyUser sends a notification to a specific user via WebSocket
+// POST /internal/ws/notify
+// Body: {"user_id": "uuid", "type": "share_accepted", "data": {...}}
+func (h *WebSocketHandler) NotifyUser(c *gin.Context) {
+	var req struct {
+		UserID string                 `json:"user_id" binding:"required"`
+		Type   string                 `json:"type" binding:"required"`
+		Data   map[string]interface{} `json:"data"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Find all connections for this user across all overlays
+	connections := h.wsManager.GetConnectionsByUser(req.UserID)
+
+	if len(connections) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not connected"})
+		return
+	}
+
+	// Create notification message envelope
+	message := map[string]interface{}{
+		"type":      req.Type,
+		"data":      req.Data,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	// Marshal to JSON
+	messageJSON, err := json.Marshal(message)
+	if err != nil {
+		h.logger.Error("Failed to marshal notification", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to marshal message"})
+		return
+	}
+
+	// Broadcast to all user's connections
+	sentCount := 0
+	for _, conn := range connections {
+		if conn.Send(messageJSON) {
+			sentCount++
+		} else {
+			h.logger.Error("Failed to send WebSocket message",
+				zap.String("user_id", req.UserID))
+		}
+	}
+
+	if sentCount == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send to any connection"})
+		return
+	}
+
+	h.logger.Info("Notification sent to user",
+		zap.String("user_id", req.UserID),
+		zap.String("type", req.Type),
+		zap.Int("connections", sentCount))
+
+	c.JSON(http.StatusOK, gin.H{"status": "sent", "connections": sentCount})
 }

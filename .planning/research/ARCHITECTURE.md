@@ -1,821 +1,685 @@
-# Architecture Research: InnerTube YouTube Listener Integration
+# Architecture Patterns: Chat Overlay Sharing
 
-**Domain:** InnerTube-based YouTube Live Chat Listener for All-Chat
-**Researched:** 2026-02-21
-**Confidence:** HIGH
+**Domain:** Chat overlay sharing for All-Chat platform
+**Researched:** 2026-03-08
 
-## Integration Strategy
+## Recommended Architecture
 
-### Decision: Separate Service (Drop-In Replacement)
+Chat overlay sharing integrates with the existing All-Chat microservices architecture through a **hybrid approach**: a new `share-service` for share lifecycle management combined with extensions to existing services for message routing and permissions.
 
-**Recommendation:** Deploy InnerTube YouTube listener as a **separate, standalone service** that is a drop-in replacement for the existing official API-based youtube-listener.
-
-**Rationale:**
-1. **Self-Hoster Choice**: Users can choose official API (with quota limits) OR InnerTube (quota-free but unofficial)
-2. **Risk Isolation**: If YouTube breaks InnerTube API, official listener remains functional
-3. **Zero Architecture Changes**: Both publish identical Redis Stream messages
-4. **Deployment Flexibility**: Switch via image tag in Kubernetes deployment
-5. **Testing Safety**: Run both in parallel during migration, compare outputs
-
-**NOT Recommended:**
-- Single service with mode switch (more complexity, larger binary, shared failure modes)
-- Modifying existing youtube-listener (breaks single responsibility, complicates rollback)
-
----
-
-## System Overview
-
-### InnerTube Listener in Existing Architecture
+### High-Level Integration
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                          EXISTING ARCHITECTURE                            │
-├──────────────────────────────────────────────────────────────────────────┤
-│  Platform Listeners (Microservices)                                       │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │   Twitch     │  │   YouTube    │  │     Kick     │  │   TikTok     │ │
-│  │  Listener    │  │   Listener   │  │   Listener   │  │   Listener   │ │
-│  │  (IRC)       │  │ (Official API)│  │  (Pusher WS) │  │ (Unofficial) │ │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘ │
-│         │                 │                 │                 │          │
-│         └─────────────────┴─────────────────┴─────────────────┘          │
-│                                  ↓                                        │
-│         Redis Streams: chat:raw (RawChatMessage format)                   │
-│                                  ↓                                        │
-│  ┌──────────────────────────────────────────────────────────────────┐    │
-│  │            Message Processor (Consumer Group)                     │    │
-│  │  Normalize → Enrich (emotes) → Route (overlay mapping)           │    │
-│  └──────────────────────────────┬───────────────────────────────────┘    │
-│                                  ↓                                        │
-│         Redis Pub/Sub: overlay:{overlay_id}                               │
-│                                  ↓                                        │
-│  ┌──────────────────────────────────────────────────────────────────┐    │
-│  │              API Gateway → WebSocket → Frontend                   │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────────────┐
-│                      NEW: INNERTUBE INTEGRATION                           │
-├──────────────────────────────────────────────────────────────────────────┤
-│  Self-Hoster Chooses ONE of:                                              │
-│                                                                            │
-│  Option A: youtube-listener (Official API)                                │
-│    ┌──────────────────────────────────────────────────────────┐          │
-│    │  - HTTP polling (liveChatMessages.list)                   │          │
-│    │  - OAuth 2.0 per user                                     │          │
-│    │  - Quota tracking (1,009,000 units/day)                   │          │
-│    │  - Leader election (per stream)                           │          │
-│    │  - PostgreSQL quota state                                 │          │
-│    └────────────────────────┬─────────────────────────────────┘          │
-│                             ↓                                             │
-│              Redis Streams: chat:raw (platform=youtube)                   │
-│                                                                            │
-│  Option B: youtube-innertube-listener (InnerTube API) ← NEW               │
-│    ┌──────────────────────────────────────────────────────────┐          │
-│    │  - InnerTube continuation token polling                   │          │
-│    │  - NO OAuth (uses YouTube web context)                    │          │
-│    │  - NO quota limits (unofficial API)                       │          │
-│    │  - Leader election (per stream, same pattern)             │          │
-│    │  - Rate limit awareness (avoid IP blocks)                 │          │
-│    └────────────────────────┬─────────────────────────────────┘          │
-│                             ↓                                             │
-│              Redis Streams: chat:raw (platform=youtube)                   │
-│                             ↓                                             │
-│                      IDENTICAL OUTPUT                                     │
-│  Both listeners produce same RawChatMessage schema                        │
-│  Message Processor cannot distinguish between them                        │
-└──────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                     NEW: Share Service (8091)                        │
+│  • Share request CRUD (create, accept, revoke)                      │
+│  • Share lifecycle management (expiry, stream detection)            │
+│  • Permission validation (premium, active status)                   │
+│  • User search by platform username                                 │
+└───────────────┬─────────────────────────────────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              EXISTING: Overlay-Manager (8082)                        │
+│  NEW: Share source type in overlay_chat_sources                     │
+│  • platform="share", channel_id=share_id                            │
+│  • Config: {source_overlay_id, source_user_id}                      │
+└───────────────┬─────────────────────────────────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│            MODIFIED: Message Processor (8087)                        │
+│  NEW: Share source resolver                                         │
+│  • Detects platform="share" sources                                 │
+│  • Resolves to actual platform sources from source overlay          │
+│  • Publishes to both source and consuming overlay channels          │
+└───────────────┬─────────────────────────────────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              EXISTING: Redis Pub/Sub (unchanged)                     │
+│  • overlay:{source_overlay_id} (original messages)                  │
+│  • overlay:{consuming_overlay_id} (shared messages)                 │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
----
+### Component Boundaries
 
-## Component Responsibilities
+| Component | Responsibility | Communicates With |
+|-----------|---------------|-------------------|
+| **share-service** (NEW) | Share CRUD, expiry, permissions, user search | PostgreSQL, Redis, auth-service (user lookup), twitch-eventsub-listener (stream status) |
+| **overlay-manager** (EXTEND) | Add share sources to overlays | share-service (validate share exists), PostgreSQL |
+| **message-processor** (EXTEND) | Resolve share sources, duplicate to consuming overlays | PostgreSQL (resolve shares), Redis Pub/Sub |
+| **api-gateway** (EXTEND) | Share endpoints proxy | share-service |
+| **auth-service** (EXTEND) | Premium flag on users table | PostgreSQL |
 
-### New Service: youtube-innertube-listener
-
-| Component | Responsibility | Implementation |
-|-----------|----------------|----------------|
-| **InnerTube Client** | HTTP client for YouTube's private API | Go HTTP client with custom headers mimicking browser |
-| **Continuation Manager** | Obtain and refresh continuation tokens | Extract from initial page load, poll with continuation |
-| **Chat Poller** | Poll InnerTube endpoint for chat messages | HTTP POST to `/youtubei/v1/live_chat/get_live_chat` |
-| **Message Parser** | Parse InnerTube JSON response to RawChatMessage | Extract actions, map to unified schema |
-| **Rate Limiter** | Prevent IP blocks from aggressive polling | Configurable polling interval (default 1000-2000ms) |
-| **Leader Election Client** | Claim/renew leadership for streams | HTTP client to source-manager (same as official listener) |
-| **Redis Publisher** | Publish to chat:raw stream | Same XAdd pattern as all other listeners |
-| **Health Checks** | Kubernetes liveness/readiness | Same /health/live, /health/ready endpoints |
-
-### Reused Components (No Changes)
-
-| Component | Used By | Notes |
-|-----------|---------|-------|
-| **Source Manager** | Both listeners | Same leader election API, stream ID format |
-| **Message Processor** | Both listeners | Cannot distinguish source (same platform=youtube) |
-| **API Gateway** | Both listeners | No changes, subscribes to same Pub/Sub channels |
-| **Overlay Manager** | Both listeners | No changes, manages source configuration |
-| **PostgreSQL** | Both listeners | Same overlay_chat_sources table schema |
-| **Redis** | Both listeners | Same Streams (chat:raw) and leader locks |
-
----
-
-## Recommended Project Structure
-
-### New Service Directory
+### Data Flow
 
 ```
-services/
-├── youtube-listener/                # EXISTING (Official API)
-│   ├── cmd/main.go
-│   ├── oauth/                       # OAuth token management
-│   ├── polling/                     # Official API polling
-│   ├── quota/                       # Quota tracking
-│   └── ...
-│
-├── youtube-innertube-listener/      # NEW (InnerTube API)
-│   ├── cmd/
-│   │   └── main.go                  # Entry point (logger, Redis, HTTP server)
-│   ├── innertube/
-│   │   ├── client.go                # HTTP client with browser headers
-│   │   ├── continuation.go          # Continuation token extraction/refresh
-│   │   ├── models.go                # InnerTube API response structs
-│   │   └── parser.go                # Parse actions → RawChatMessage
-│   ├── polling/
-│   │   ├── poller.go                # Main polling loop per stream
-│   │   ├── manager.go               # Manages pollers (start/stop)
-│   │   └── rate_limiter.go          # Prevent aggressive polling
-│   ├── discovery/
-│   │   ├── stream_finder.go         # Find live streams for channels
-│   │   └── initial_data.go          # Extract chat context from page
-│   ├── leadership/
-│   │   └── client.go                # Source Manager HTTP client
-│   ├── publisher/
-│   │   └── redis.go                 # Publish to chat:raw stream
-│   ├── handlers/
-│   │   └── health.go                # /health/live, /health/ready
-│   ├── models/
-│   │   └── message.go               # RawChatMessage (same as official)
-│   ├── go.mod
-│   ├── go.sum
-│   ├── Dockerfile                   # Multi-stage build (same pattern)
-│   └── README.md
-│
-└── message-processor/               # UNCHANGED (works with both)
-    └── ...
+Share Request Flow:
+1. User A searches for User B by platform username
+   → share-service queries users table
+
+2. User A creates share request (overlay_id, recipient_user_id, expiry_type)
+   → share-service validates premium status
+   → share-service inserts to shares table (status="pending")
+
+3. User B views pending requests
+   → share-service queries WHERE recipient_user_id = B AND status="pending"
+
+4. User B accepts share (selects return overlay, expiry)
+   → share-service validates both users premium
+   → share-service updates share (status="active", return_overlay_id)
+   → share-service inserts bidirectional share record
+
+Share Source Activation Flow:
+5. User A adds User B's shared overlay as source to their overlay
+   → overlay-manager validates share exists and is active
+   → overlay-manager inserts overlay_chat_sources (platform="share", channel_id=share_id, config={source_overlay_id})
+
+6. Source activation triggers listeners
+   → source-manager detects new share source
+   → source-manager publishes control command to message-processor
+
+Message Delivery Flow:
+7. Message arrives from platform listener (Twitch, YouTube, etc.)
+   → Redis Streams: chat:raw
+
+8. Message processor consumes message
+   → Normalize → Enrich → Publish to overlay:{source_overlay_id}
+   → NEW: Check if source_overlay_id has active shares
+   → Resolve share sources pointing to this overlay
+   → Publish to overlay:{consuming_overlay_id} for each share
+
+9. API Gateway subscribes to both channels
+   → Broadcast to source overlay WebSocket clients
+   → Broadcast to consuming overlay WebSocket clients (shared messages)
 ```
 
-### Structure Rationale
+## Patterns to Follow
 
-- **innertube/**: Core InnerTube API integration (client, continuation, parsing)
-- **polling/**: Same responsibility as official listener's polling module
-- **discovery/**: Replaces OAuth-based stream discovery with page scraping
-- **leadership/**: Identical pattern to official listener (reuse interface if extracted to shared/)
-- **publisher/**: Identical Redis Streams publishing logic (reuse if extracted to shared/)
-- **handlers/**: Same health check endpoints for Kubernetes
-- **models/**: RawChatMessage schema MUST match official listener exactly
+### Pattern 1: Share as Virtual Platform Source
 
----
+**What:** Treat shared overlays as a special "platform" type in overlay_chat_sources
 
-## Architectural Patterns
+**When:** User adds a shared overlay to their overlay configuration
 
-### Pattern 1: Drop-In Replacement
+**Implementation:**
 
-**What:** Two services with identical external contracts (input: database sources, output: Redis Stream messages)
+```sql
+-- In overlay_chat_sources table
+INSERT INTO overlay_chat_sources (
+    overlay_id,          -- Consuming overlay
+    platform,            -- "share" (new virtual platform)
+    channel_id,          -- share_id (UUID from shares table)
+    channel_name,        -- "{source_user_display_name}'s chat"
+    config,              -- {"source_overlay_id": "uuid", "source_user_id": "uuid"}
+    is_active
+) VALUES (
+    '...', 'share', '...', 'xQc's chat', '{"source_overlay_id": "..."}', true
+);
+```
 
-**When to use:** When migrating from risky/expensive service to alternative with same functionality
+**Why:**
+- Reuses existing source activation flow (source-manager)
+- Consistent with other platform sources (Twitch, YouTube, etc.)
+- Automatic activation/deactivation on WebSocket connect/disconnect
+- No changes to frontend overlay configuration UI (just another source type)
+
+**Advantages:**
+- Minimal changes to existing codebase
+- Consistent UX (add share like any other source)
+- Automatic lifecycle management
 
 **Trade-offs:**
-- **Pros:** Zero architecture changes, easy rollback, run both in parallel for validation
-- **Cons:** Code duplication (polling logic, message parsing, health checks)
+- "platform" field semantics stretched (share is not a platform)
+- Additional lookup required in message processor (resolve share → source overlay)
 
-**Example:**
+### Pattern 2: Database-per-Service with Share Table Ownership
+
+**What:** share-service owns the `shares` table, other services query via API
+
+**When:** Other services need to validate share existence or status
+
+**Implementation:**
+
+```sql
+-- Owned by share-service
+CREATE TABLE shares (
+    id UUID PRIMARY KEY,
+    requester_user_id UUID NOT NULL,
+    recipient_user_id UUID NOT NULL,
+    requester_overlay_id UUID NOT NULL,
+    recipient_overlay_id UUID,              -- NULL until accepted
+    status VARCHAR(20) NOT NULL,            -- "pending", "active", "expired", "revoked"
+    expiry_type VARCHAR(20) NOT NULL,       -- "this_stream", "duration", "unlimited"
+    expiry_duration INTERVAL,               -- NULL if unlimited or this_stream
+    expires_at TIMESTAMP,                   -- NULL if unlimited
+    created_at TIMESTAMP,
+    accepted_at TIMESTAMP,                  -- NULL if pending
+    revoked_at TIMESTAMP,                   -- NULL if not revoked
+    revoked_by_user_id UUID,                -- Who revoked (NULL if not revoked)
+    CONSTRAINT check_status CHECK (status IN ('pending', 'active', 'expired', 'revoked'))
+);
+
+-- Queried by overlay-manager, message-processor
+-- Via share-service HTTP API (not direct database access)
+```
+
+**API Contract:**
+
 ```go
-// BOTH services publish identical messages to Redis Streams
-type RawChatMessage struct {
-    MessageID   string            `json:"message_id"`
-    Platform    string            `json:"platform"` // Always "youtube"
-    ChannelID   string            `json:"channel_id"`
-    StreamID    string            `json:"stream_id"`
-    UserID      string            `json:"user_id"`
-    Username    string            `json:"username"`
-    Text        string            `json:"text"`
-    Timestamp   time.Time         `json:"timestamp"`
-    Tags        map[string]string `json:"tags"`
-}
-
-// Official Listener: Parses from YouTube Data API response
-func (p *OfficialPoller) parseMessage(apiMsg *youtube.LiveChatMessage) RawChatMessage {
-    return RawChatMessage{
-        Platform:  "youtube",
-        ChannelID: apiMsg.AuthorDetails.ChannelID,
-        // ... extract from official API fields
-    }
-}
-
-// InnerTube Listener: Parses from InnerTube API response
-func (p *InnerTubePoller) parseMessage(action *AddChatItemAction) RawChatMessage {
-    return RawChatMessage{
-        Platform:  "youtube",
-        ChannelID: action.Item.LiveChatTextMessageRenderer.AuthorExternalChannelID,
-        // ... extract from InnerTube API fields
-    }
-}
-
-// Message Processor: Receives identical messages from EITHER listener
-func (mp *MessageProcessor) consumeRawMessages(ctx context.Context) {
-    streams, _ := mp.redis.XReadGroup(ctx, &redis.XReadGroupArgs{
-        Group:    "message-processors",
-        Consumer: "consumer-1",
-        Streams:  []string{"chat:raw", ">"},
-    }).Result()
-    // Cannot distinguish which listener published the message
-}
+// share-service provides HTTP endpoints
+GET  /api/v1/shares/:share_id               // Get share details
+GET  /api/v1/shares?user_id=xxx&status=active  // List shares
+POST /api/v1/shares/validate                // Validate share exists and is active
 ```
 
-### Pattern 2: Continuation-Based Polling
+**Why:**
+- Follows microservices principle: each service owns its data
+- Prevents coupling through shared database tables
+- Allows share-service to enforce business rules (premium check, expiry)
+- Changes to share schema don't break other services
 
-**What:** Use continuation tokens from InnerTube API to paginate through live chat messages
+**Reference:**
+- [Database Per Service Pattern](https://microservices.io/patterns/data/database-per-service.html)
+- [Microsoft: Data Considerations for Microservices](https://learn.microsoft.com/en-us/azure/architecture/microservices/design/data-considerations)
 
-**When to use:** YouTube InnerTube API requires continuation tokens for chat message pagination
+### Pattern 3: Message Fan-Out at Processor Layer
 
-**Trade-offs:**
-- **Pros:** Stateless polling (continuation token contains all state), lower overhead than OAuth
-- **Cons:** Continuation tokens can expire, initial token acquisition requires page scraping
+**What:** Message processor publishes enriched messages to multiple overlay channels when shares exist
 
-**Example:**
+**When:** Message arrives for an overlay that has active shares
+
+**Implementation:**
+
 ```go
-// innertube/continuation.go
-type ContinuationManager struct {
-    httpClient *http.Client
-}
+// message-processor: publisher/pubsub_publisher.go
+func (p *PubSubPublisher) PublishWithShares(ctx context.Context, msg *models.UnifiedChatMessage) error {
+    // Always publish to source overlay
+    overlayIDs := []string{msg.OverlayID}
 
-// Extract initial continuation token from live stream page
-func (cm *ContinuationManager) GetInitialContinuation(videoID string) (string, error) {
-    url := fmt.Sprintf("https://www.youtube.com/live_chat?v=%s", videoID)
-    resp, err := cm.httpClient.Get(url)
-    // Parse HTML → extract ytInitialData → liveChatRenderer.continuations[0].token
-    return extractContinuationFromHTML(resp.Body)
-}
-
-// Poll with continuation token
-func (cm *ContinuationManager) PollChat(continuation string) (*ChatResponse, string, error) {
-    payload := map[string]interface{}{
-        "context": cm.buildContext(),
-        "continuation": continuation,
+    // Lookup shares pointing to this overlay (cache in Redis)
+    shares, _ := p.shareResolver.GetActiveShares(ctx, msg.OverlayID)
+    for _, share := range shares {
+        overlayIDs = append(overlayIDs, share.ConsumingOverlayID)
     }
 
-    resp, err := cm.httpClient.Post(
-        "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-        "application/json",
-        jsonPayload(payload),
-    )
-
-    chatResp := parseResponse(resp.Body)
-    nextContinuation := extractNextContinuation(chatResp)
-    return chatResp, nextContinuation, nil
+    // Batch publish to all overlay channels
+    return p.PublishToMultiple(ctx, overlayIDs, msg)
 }
 ```
 
-### Pattern 3: Leader Election (Reused from Official Listener)
+**Why:**
+- Messages enriched once, delivered to multiple overlays
+- Avoids duplicate processing (normalization, emote enrichment)
+- Low latency (single Redis pipeline for multiple PUBLISH)
+- No changes to listener services (still publish to chat:raw)
 
-**What:** Use Source Manager to coordinate which pod polls which stream (prevent duplicate API calls)
+**Caching Strategy:**
 
-**When to use:** Multiple replicas of youtube-innertube-listener running (HPA scales 1-5 pods)
-
-**Trade-offs:**
-- **Pros:** Same pattern as official listener, proven in production, prevents duplicate polling
-- **Cons:** Adds HTTP overhead for claim/renew, requires Source Manager availability
-
-**Example:**
 ```go
-// leadership/client.go (IDENTICAL to official listener)
-type SourceManagerClient struct {
-    baseURL    string
-    secret     string
-    httpClient *http.Client
+// Redis cache: shares:overlay:{overlay_id} → JSON array of consuming overlay IDs
+// TTL: 5 minutes (short TTL to catch revocations quickly)
+// Invalidated on share accept/revoke
+
+// Example cache value:
+// shares:overlay:source-123 → ["consuming-456", "consuming-789"]
+```
+
+**Performance:**
+- Cache hit: <5ms to resolve shares
+- Cache miss: 10-20ms (database query to shares table)
+- Expected hit rate: >95% (overlays rarely change share config)
+
+### Pattern 4: Stream Lifecycle Detection for Expiry
+
+**What:** Detect stream start/end events to expire "this stream" shares
+
+**When:** Share has `expiry_type="this_stream"`
+
+**Implementation:**
+
+```go
+// share-service subscribes to Twitch EventSub, YouTube activity, Kick/TikTok stream status
+
+// Twitch: Use existing twitch-eventsub-listener
+// - stream.online → record stream session start
+// - stream.offline → expire shares for this user
+
+// YouTube: Use existing stream history tracking (migrations/010_stream_history_tracking.sql)
+// - Check stream_sessions table for active streams
+
+// Kick: Research needed (see PITFALLS.md)
+
+// TikTok: Use existing tiktok-listener stream detection
+```
+
+**Expiry Check Cron:**
+
+```go
+// share-service: runs every 5 minutes
+func (s *ShareService) ExpireThisStreamShares(ctx context.Context) {
+    // Find shares with expiry_type="this_stream" AND status="active"
+    shares, _ := s.repo.GetActiveThisStreamShares(ctx)
+
+    for _, share := range shares {
+        // Check if requester's stream is offline
+        isLive := s.streamDetector.IsStreamLive(ctx, share.RequesterUserID)
+        if !isLive {
+            s.repo.ExpireShare(ctx, share.ID)
+        }
+
+        // Check if recipient's stream is offline
+        isLive = s.streamDetector.IsStreamLive(ctx, share.RecipientUserID)
+        if !isLive {
+            s.repo.ExpireShare(ctx, share.ID)
+        }
+    }
+}
+```
+
+**Why:**
+- Automatic expiry without manual user action
+- Leverages existing stream detection infrastructure
+- Respects user intent ("share for this stream only")
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Direct Database Joins Across Services
+
+**What:** Message processor directly joining `overlay_chat_sources` with `shares` table
+
+**Why bad:**
+- Tight coupling between services
+- Schema changes in share-service break message-processor
+- Violates microservices principle (service autonomy)
+- Hard to scale independently (shared database bottleneck)
+
+**Instead:** API calls or Redis cache for cross-service data
+
+### Anti-Pattern 2: Synchronous Share Validation in Message Path
+
+**What:** Message processor calls share-service API for every message to validate share is active
+
+**Why bad:**
+- Adds 10-50ms latency per message
+- Share service becomes bottleneck (3,000 msg/s × 10ms = 30 concurrent requests)
+- Single point of failure (share-service down = no messages)
+
+**Instead:** Cache active shares in Redis, refresh on share lifecycle events
+
+```go
+// BAD: Synchronous validation
+for each message:
+    shares := callShareServiceAPI(overlayID)  // 10-50ms per message!
+    publishToShares(shares)
+
+// GOOD: Cached shares with event invalidation
+shares := getFromRedisCache(overlayID)  // <5ms
+publishToShares(shares)
+
+// share-service publishes to Redis Pub/Sub on share lifecycle events
+// message-processor subscribes and invalidates cache
+```
+
+### Anti-Pattern 3: Nested Share Chains
+
+**What:** Allowing User A to share their overlay (which contains User B's shared overlay) with User C
+
+**Why bad:**
+- Infinite loop potential (A shares to B, B shares to A)
+- Permission explosion (transitive sharing violates intent)
+- Complexity in expiry (if B's share expires, does C's share also expire?)
+- Hard to reason about ownership and revocation
+
+**Instead:** Shares resolve to platform sources only (one level deep)
+
+```sql
+-- Enforce constraint: shares cannot reference other shares
+-- In overlay_chat_sources: if platform="share", verify channel_id points to share with platform sources only
+```
+
+### Anti-Pattern 4: Share Source as Separate Overlay Type
+
+**What:** Creating a new `shared_overlays` table separate from `overlay_chat_sources`
+
+**Why bad:**
+- Duplicates source management logic (activation, deactivation, lifecycle)
+- Frontend needs separate UI for share sources vs platform sources
+- Source-manager must handle two different data models
+- More complex codebase (two paths for similar functionality)
+
+**Instead:** Treat shares as virtual platform sources (Pattern 1)
+
+## Scalability Considerations
+
+| Concern | At 100 shares | At 10K shares | At 1M shares |
+|---------|---------------|---------------|--------------|
+| **Share lookup** | In-memory cache (Redis) | Redis cache with partitioning | Redis Cluster with sharding by overlay_id |
+| **Message fan-out** | Single Redis PUBLISH pipeline | Same (pipeline supports 100s of overlays) | Split hot overlays to dedicated Pub/Sub instances |
+| **Expiry checks** | Cron every 5 minutes | Background worker pool (10 workers) | Distributed task queue (BullMQ, Temporal) |
+| **User search** | PostgreSQL LIKE query | PostgreSQL full-text search index | ElasticSearch index on usernames |
+
+### Fan-Out Amplification
+
+**Scenario:** Popular streamer (100K viewers) shares their chat with 1,000 other streamers
+
+**Impact:**
+- Message rate: 500 msg/s (popular channel)
+- Fan-out: 1,000 overlays × 500 msg/s = 500K messages/s published to Redis Pub/Sub
+- Redis Pub/Sub capacity: ~500K msg/s per instance (acceptable, but close to limit)
+
+**Mitigation:**
+1. **Cap shares per overlay:** Limit to 10 active shares per overlay (prevent abuse)
+2. **Hot overlay detection:** If overlay has >100 shares, flag for manual review (likely spam)
+3. **Rate limiting:** Throttle share requests (5 requests/hour per user)
+4. **Premium tier limits:** Free tier = 1 share, Premium = 10 shares, Partner = 100 shares
+
+### Share Cache Invalidation
+
+**Challenge:** Cache must be invalidated within seconds of share revocation
+
+**Solution:** Redis Pub/Sub for cache invalidation
+
+```go
+// share-service publishes on share lifecycle events
+redis.Publish("shares:invalidate", json.Marshal({
+    "source_overlay_id": "...",
+    "consuming_overlay_id": "...",
+    "action": "revoke"  // or "activate", "expire"
+}))
+
+// message-processor subscribes
+func (p *MessageProcessor) handleShareInvalidation(msg ShareInvalidationEvent) {
+    // Delete cache entries
+    p.cache.Delete("shares:overlay:" + msg.SourceOverlayID)
+    p.cache.Delete("shares:overlay:" + msg.ConsumingOverlayID)
+}
+```
+
+**Fallback:** If message arrives before cache invalidation, worst case is one extra message delivered to revoked share (acceptable trade-off for low latency)
+
+## Database Schema Extensions
+
+### New Table: shares
+
+```sql
+CREATE TABLE shares (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    -- Requester (initiator of share request)
+    requester_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    requester_overlay_id UUID NOT NULL REFERENCES overlays(id) ON DELETE CASCADE,
+
+    -- Recipient (receives share request)
+    recipient_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_overlay_id UUID REFERENCES overlays(id) ON DELETE CASCADE,  -- NULL until accepted
+
+    -- Status and lifecycle
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    expiry_type VARCHAR(20) NOT NULL,
+    expiry_duration INTERVAL,           -- Used if expiry_type="duration"
+    expires_at TIMESTAMP,                -- Computed expiry timestamp
+
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT NOW(),
+    accepted_at TIMESTAMP,               -- When recipient accepted
+    revoked_at TIMESTAMP,                -- When revoked
+    revoked_by_user_id UUID REFERENCES users(id),  -- Who revoked
+
+    -- Constraints
+    CONSTRAINT check_status CHECK (status IN ('pending', 'active', 'expired', 'revoked')),
+    CONSTRAINT check_expiry_type CHECK (expiry_type IN ('this_stream', 'duration', 'unlimited')),
+    CONSTRAINT check_not_self_share CHECK (requester_user_id != recipient_user_id)
+);
+
+-- Indexes
+CREATE INDEX idx_shares_requester_user_id ON shares(requester_user_id);
+CREATE INDEX idx_shares_recipient_user_id ON shares(recipient_user_id);
+CREATE INDEX idx_shares_status ON shares(status);
+CREATE INDEX idx_shares_requester_overlay_id ON shares(requester_overlay_id) WHERE status = 'active';
+CREATE INDEX idx_shares_recipient_overlay_id ON shares(recipient_overlay_id) WHERE status = 'active';
+
+-- Index for expiry checks
+CREATE INDEX idx_shares_expiry ON shares(expires_at) WHERE status = 'active' AND expires_at IS NOT NULL;
+```
+
+### Modified Table: users
+
+```sql
+-- Add premium flag
+ALTER TABLE users ADD COLUMN is_premium BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN premium_expires_at TIMESTAMP;
+
+-- Index for premium checks
+CREATE INDEX idx_users_is_premium ON users(is_premium) WHERE is_premium = TRUE;
+```
+
+### Modified Table: overlay_chat_sources
+
+```sql
+-- No schema changes needed, but add new "share" platform to supported_platforms
+
+INSERT INTO supported_platforms (platform, display_name, is_enabled, requires_oauth)
+VALUES ('share', 'Shared Overlay', TRUE, FALSE)
+ON CONFLICT (platform) DO NOTHING;
+
+-- Config JSONB for share sources:
+-- {
+--   "source_overlay_id": "uuid",
+--   "source_user_id": "uuid",
+--   "share_id": "uuid"
+-- }
+```
+
+## Service Interface Contracts
+
+### share-service API
+
+```go
+// Share Management
+POST   /api/v1/shares                 // Create share request (requires premium)
+GET    /api/v1/shares                 // List shares (filter by status, user)
+GET    /api/v1/shares/:id             // Get share details
+PUT    /api/v1/shares/:id/accept      // Accept share request (requires premium)
+DELETE /api/v1/shares/:id             // Revoke share
+
+// User Search
+GET    /api/v1/users/search?platform=twitch&username=xqc  // Search by platform username
+
+// Internal APIs (service-to-service)
+GET    /internal/shares/validate/:share_id              // Validate share exists and is active
+GET    /internal/shares/resolve/:overlay_id             // Get consuming overlays for source overlay
+POST   /internal/shares/expire                          // Bulk expire shares (cron job)
+```
+
+### overlay-manager Extensions
+
+```go
+// Existing endpoint, modified behavior
+POST /api/v1/overlays/:id/sources
+// New validation: if platform="share", verify share exists and is active via share-service API
+
+// Request body:
+{
+  "platform": "share",
+  "channel_id": "share-uuid-123",        // Share ID from shares table
+  "channel_name": "xQc's chat",
+  "config": {
+    "source_overlay_id": "overlay-uuid",
+    "source_user_id": "user-uuid",
+    "share_id": "share-uuid-123"
+  }
+}
+```
+
+### message-processor Extensions
+
+```go
+// Internal: Share resolver
+type ShareResolver interface {
+    GetActiveShares(ctx context.Context, sourceOverlayID string) ([]Share, error)
+    InvalidateCache(ctx context.Context, overlayID string) error
 }
 
-func (c *SourceManagerClient) ClaimLeadership(streamID, consumerID string, ttl int) (bool, error) {
-    payload := map[string]interface{}{
-        "stream_id":   streamID,
-        "consumer_id": consumerID,
-        "ttl_seconds": ttl,
-    }
-
-    req, _ := http.NewRequest("POST", c.baseURL+"/leadership/claim", jsonPayload(payload))
-    req.Header.Set("Authorization", "Bearer "+c.secret)
-
-    resp, err := c.httpClient.Do(req)
-    return resp.StatusCode == 200, err
-}
-
-// polling/poller.go (uses leadership client)
-func (p *Poller) Start(ctx context.Context, streamID string) {
-    // Claim leadership before starting
-    claimed, _ := p.leaderClient.ClaimLeadership(streamID, p.podName, 60)
-    if !claimed {
-        return // Another pod is leader, enter standby
-    }
-
-    // Renew leadership every 30s
-    go p.renewLeadership(ctx, streamID)
-
-    // Poll chat messages
-    continuation := p.getContinuation(streamID)
-    for {
-        messages, nextContinuation, _ := p.innertubeClient.PollChat(continuation)
-        p.publishMessages(messages)
-        continuation = nextContinuation
-        time.Sleep(p.pollingInterval)
-    }
-}
+// Modified publisher
+func (p *PubSubPublisher) PublishWithShares(ctx context.Context, msg *models.UnifiedChatMessage) error
 ```
 
----
-
-## Data Flow
-
-### InnerTube Listener Message Flow
-
-```
-1. Overlay Manager: User adds YouTube source
-       ↓
-   PostgreSQL: INSERT INTO overlay_chat_sources (platform=youtube, channel_id=UCxxxxx)
-       ↓
-   PostgreSQL NOTIFY: source_changes channel
-       ↓
-2. YouTube InnerTube Listener: Receives notification (via PostgreSQL LISTEN)
-       ↓
-   Discovery: Find live stream for channel UCxxxxx
-       ↓
-   InnerTube Client: GET https://www.youtube.com/channel/UCxxxxx/live
-       ↓
-   Parser: Extract video ID from page
-       ↓
-3. Leadership Client: Claim leadership for stream (video ID)
-       ↓
-   Source Manager: SET leader:stream:{video_id} = pod-abc123 EX 60
-       ↓ (if claimed)
-4. Continuation Manager: Get initial continuation token
-       ↓
-   InnerTube Client: GET https://www.youtube.com/live_chat?v={video_id}
-       ↓
-   Parser: Extract ytInitialData → continuations[0].token
-       ↓
-5. Poller: Start polling loop
-       ↓
-   InnerTube Client: POST /youtubei/v1/live_chat/get_live_chat
-       ↓ (every 1-2 seconds)
-   Response: { actions: [addChatItemAction, ...], continuations: [...] }
-       ↓
-6. Parser: Extract messages from actions
-       ↓
-   RawChatMessage: {platform: "youtube", channel_id: "UCxxxxx", ...}
-       ↓
-7. Redis Publisher: XADD chat:raw {message JSON}
-       ↓
-   ════════════════════════════════════════════════════════════
-   IDENTICAL TO OFFICIAL LISTENER FROM THIS POINT FORWARD
-   ════════════════════════════════════════════════════════════
-       ↓
-8. Message Processor: XREADGROUP chat:raw
-       ↓
-   Normalize → Enrich (emotes) → Route (overlay mapping)
-       ↓
-9. Redis Pub/Sub: PUBLISH overlay:{overlay_id} {enriched message}
-       ↓
-10. API Gateway: SUBSCRIBE overlay:{overlay_id}
-       ↓
-    WebSocket: Push to frontend overlays
-```
-
-### State Management
-
-**Stream State (Redis):**
-```
-leader:stream:{video_id}              → "youtube-innertube-pod-abc123" (TTL: 60s)
-continuation:{video_id}                → "continuation_token_xyz" (TTL: 300s, optional cache)
-rate_limit:global                      → Request count in sliding window
-```
-
-**Persistent State (PostgreSQL):**
-```
-overlay_chat_sources
-├── platform: "youtube"
-├── channel_id: "UCxxxxx"
-├── config: {"polling_interval_ms": 1500}  # InnerTube-specific config
-└── is_active: true
-```
-
-**No Quota State (vs Official Listener):**
-- InnerTube listener does NOT need youtube_quota_usage table
-- InnerTube listener does NOT need reserve-confirm-rollback pattern
-- InnerTube listener does NOT track API quota (no official quota applies)
-
----
-
-## Integration Points
-
-### Identical to Official Listener
-
-| Integration | Pattern | Notes |
-|-------------|---------|-------|
-| **Redis Streams** | XADD chat:raw | Identical message schema (RawChatMessage) |
-| **Source Manager** | HTTP API (claim/renew/release) | Same leadership endpoints, stream ID format |
-| **PostgreSQL** | Read overlay_chat_sources | Same schema, platform="youtube" |
-| **Message Processor** | Consumer of chat:raw | Cannot distinguish InnerTube vs official |
-| **Health Checks** | /health/live, /health/ready | Same endpoints for Kubernetes |
-| **Metrics** | /metrics (Prometheus) | Same metrics format (counter, histogram, gauge) |
-
-### Different from Official Listener
-
-| Aspect | Official Listener | InnerTube Listener |
-|--------|-------------------|---------------------|
-| **Authentication** | OAuth 2.0 (per user) | None (uses browser context) |
-| **API Endpoint** | YouTube Data API v3 | InnerTube private API |
-| **Quota Tracking** | PostgreSQL youtube_quota_usage | Not needed (no quota limits) |
-| **Initial Discovery** | search.list API call (100 units) | Page scraping (0 quota) |
-| **Polling Mechanism** | liveChatMessages.list (5 units) | Continuation token (0 quota) |
-| **Rate Limiting** | API quota state machine | IP-based rate limiting (avoid blocks) |
-| **Config Schema** | YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET | INNERTUBE_POLLING_INTERVAL_MS |
-
----
-
-## Deployment Strategy
-
-### Kubernetes Deployment: Mutual Exclusivity
-
-**Self-hosters deploy ONE of these:**
-
-#### Option A: Official API Listener (deployments/k8s/youtube-listener/deployment.yaml)
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: youtube-listener
-  namespace: allchat
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: youtube-listener
-      variant: official  # NEW label
-  template:
-    metadata:
-      labels:
-        app: youtube-listener
-        variant: official
-    spec:
-      containers:
-      - name: youtube-listener
-        image: allchat/youtube-listener:v1.2.0
-        env:
-        - name: YOUTUBE_CLIENT_ID
-          valueFrom:
-            secretKeyRef:
-              name: youtube-oauth
-              key: client_id
-        - name: YOUTUBE_CLIENT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: youtube-oauth
-              key: client_secret
-        # ... rest of config
-```
-
-#### Option B: InnerTube Listener (deployments/k8s/youtube-innertube-listener/deployment.yaml)
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: youtube-innertube-listener
-  namespace: allchat
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: youtube-listener          # SAME app label
-      variant: innertube              # Different variant
-  template:
-    metadata:
-      labels:
-        app: youtube-listener
-        variant: innertube
-    spec:
-      containers:
-      - name: youtube-innertube-listener
-        image: allchat/youtube-innertube-listener:v1.0.0
-        env:
-        - name: INNERTUBE_POLLING_INTERVAL_MS
-          value: "1500"
-        - name: INNERTUBE_USER_AGENT
-          value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)..."
-        # NO OAuth secrets needed
-        # ... rest of config
-```
-
-**Deployment Instructions for Self-Hosters:**
-```bash
-# Choose ONE deployment method:
-
-# Option A: Official API (requires OAuth setup)
-kubectl apply -f deployments/k8s/youtube-listener/
-
-# Option B: InnerTube API (no OAuth, quota-free)
-kubectl apply -f deployments/k8s/youtube-innertube-listener/
-
-# DO NOT deploy both simultaneously (will cause duplicate messages)
-```
-
-### Docker Image Build
-
-**Separate Images:**
-```dockerfile
-# services/youtube-innertube-listener/Dockerfile
-FROM golang:1.25-alpine AS builder
-
-WORKDIR /build
-COPY shared /build/shared
-COPY services/youtube-innertube-listener /build/services/youtube-innertube-listener
-
-WORKDIR /build/services/youtube-innertube-listener
-RUN go mod download
-RUN CGO_ENABLED=0 GOOS=linux go build -o youtube-innertube-listener ./cmd
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates tzdata
-WORKDIR /app
-COPY --from=builder /build/services/youtube-innertube-listener/youtube-innertube-listener .
-EXPOSE 8089  # Different port from official (8086)
-CMD ["./youtube-innertube-listener"]
-```
-
-**Build Commands:**
-```bash
-# Build official listener
-docker build -t allchat/youtube-listener:v1.2.0 -f services/youtube-listener/Dockerfile .
-
-# Build InnerTube listener
-docker build -t allchat/youtube-innertube-listener:v1.0.0 -f services/youtube-innertube-listener/Dockerfile .
-```
-
-### Load Balancing Considerations
-
-**No Special Load Balancing Needed:**
-- InnerTube listener uses same leader election pattern as official listener
-- Source Manager already handles load distribution across replicas
-- HPA scales based on CPU/memory (same as all other listeners)
-
-**Leader Election Prevents Duplicate Polling:**
-```
-┌────────────────────────────────────────────────────────┐
-│  InnerTube Listener Replicas (HPA: 1-5 pods)          │
-├────────────────────────────────────────────────────────┤
-│                                                         │
-│  Pod 1: Leader for stream A, stream B                  │
-│         → Polls InnerTube API for A and B              │
-│                                                         │
-│  Pod 2: Leader for stream C                            │
-│         → Polls InnerTube API for C                    │
-│                                                         │
-│  Pod 3: Standby (no leadership)                        │
-│         → Monitors for leadership opportunities        │
-│                                                         │
-│  (If Pod 1 crashes, Pod 3 claims leadership for A+B)   │
-└────────────────────────────────────────────────────────┘
-                        ↓
-        Source Manager (Redis-based locks)
-                        ↓
-          leader:stream:video_abc → "pod-1"
-          leader:stream:video_xyz → "pod-1"
-          leader:stream:video_123 → "pod-2"
-```
-
----
-
-## Scaling Considerations
-
-### Per-Replica Capacity
-
-| Metric | Official Listener | InnerTube Listener |
-|--------|-------------------|---------------------|
-| **Streams/Pod** | ~50 concurrent streams | ~50-100 concurrent streams |
-| **CPU** | 200-500m (API parsing overhead) | 100-300m (simpler parsing) |
-| **Memory** | 256Mi-512Mi (OAuth tokens, quota state) | 128Mi-256Mi (no quota state) |
-| **Bottleneck** | API quota (1.009M units/day) | Rate limiting (avoid IP blocks) |
-
-### Scaling Priorities
-
-1. **First bottleneck: Rate limiting (InnerTube)**
-   - **Symptom:** Polling fails with 429 Too Many Requests or IP blocks
-   - **Fix:** Increase polling interval from 1000ms to 1500-2000ms
-   - **Tuning:** Configure INNERTUBE_POLLING_INTERVAL_MS per deployment
-
-2. **Second bottleneck: CPU (message parsing)**
-   - **Symptom:** CPU >80% on listener pods
-   - **Fix:** Scale replicas (HPA increases from 3 → 5 → 10 pods)
-   - **Note:** Leader election distributes streams across replicas automatically
-
-3. **Third bottleneck: Redis Streams throughput**
-   - **Symptom:** chat:raw stream lag increases
-   - **Fix:** Scale Message Processor replicas (consumer group shares load)
-
----
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Combining Official and InnerTube in Single Service
-
-**What people might do:** Add InnerTube client to existing youtube-listener with a config flag
-
-**Why it's wrong:**
-- Larger binary (both OAuth and InnerTube dependencies)
-- More complex failure modes (OAuth token refresh can break InnerTube polling)
-- Harder to test (need to mock both APIs)
-- Violates single responsibility principle
-
-**Do this instead:** Separate services that share common interfaces (leadership, publisher)
-
-### Anti-Pattern 2: Running Both Listeners Simultaneously
-
-**What people might do:** Deploy both official and InnerTube listeners at same time
-
-**Why it's wrong:**
-- Duplicate messages published to Redis Streams (same platform=youtube)
-- Message Processor sees 2x messages for same chat
-- Users see duplicate messages in overlays
-- Wastes resources (both listeners polling same streams)
-
-**Do this instead:** Deploy ONE listener per environment, use feature flag at deployment level
-
-### Anti-Pattern 3: Aggressive Polling to "Reduce Latency"
-
-**What people might do:** Set INNERTUBE_POLLING_INTERVAL_MS=100 (10 polls/second)
-
-**Why it's wrong:**
-- YouTube will rate limit or block IP address
-- InnerTube API is not designed for sub-second polling
-- No latency benefit (chat messages batched by YouTube)
-- Wastes CPU and network bandwidth
-
-**Do this instead:** Use 1000-2000ms polling interval (same latency as official API polling)
-
-### Anti-Pattern 4: Ignoring Continuation Token Expiry
-
-**What people might do:** Cache continuation token indefinitely, reuse across restarts
-
-**Why it's wrong:**
-- Continuation tokens expire after 5-10 minutes of inactivity
-- Stale tokens return 400 Bad Request (requires re-fetching initial token)
-- Stream state changes (stream ends/restarts) invalidate tokens
-
-**Do this instead:** Always re-fetch initial continuation on stream start, handle 400 errors by re-initializing
-
----
-
-## Suggested Build Order
-
-### Phase 1: Core InnerTube Client (Foundation)
-1. **innertube/client.go**: HTTP client with browser headers
-2. **innertube/models.go**: Response structs (actions, continuations)
-3. **innertube/continuation.go**: Extract initial continuation from page
-4. **innertube/parser.go**: Parse addChatItemAction → RawChatMessage
-5. **Tests**: Mock InnerTube API responses, verify parsing
-
-**Milestone:** Can fetch live chat messages for a hardcoded video ID
-
-### Phase 2: Polling & Publishing (Integration)
-6. **polling/poller.go**: Main polling loop (continuation → poll → parse → repeat)
-7. **publisher/redis.go**: Publish RawChatMessage to chat:raw stream
-8. **polling/rate_limiter.go**: Sliding window rate limiting
-9. **Tests**: Verify Redis Stream publishing, rate limiting
-
-**Milestone:** Publishes messages to Redis Streams, Message Processor consumes them
-
-### Phase 3: Leadership & Discovery (Scalability)
-10. **leadership/client.go**: Source Manager HTTP client (claim/renew/release)
-11. **discovery/stream_finder.go**: Find live streams for channels
-12. **polling/manager.go**: Start/stop pollers based on active sources
-13. **Tests**: Leader election, stream discovery
-
-**Milestone:** Multiple replicas coordinate via Source Manager, no duplicate polling
-
-### Phase 4: Production Readiness (Observability)
-14. **handlers/health.go**: /health/live, /health/ready endpoints
-15. **cmd/main.go**: Service initialization, graceful shutdown
-16. **Dockerfile**: Multi-stage build, optimized image
-17. **deployments/k8s/youtube-innertube-listener/**: Kubernetes manifests
-18. **README.md**: Documentation (setup, deployment, troubleshooting)
-
-**Milestone:** Production deployment, health checks pass, metrics exported
-
-### Phase 5: Validation & Migration (Safety)
-19. **Compare outputs**: Run both listeners in parallel, compare Redis Stream messages
-20. **Load testing**: Verify rate limiting prevents IP blocks
-21. **Failover testing**: Kill leader pod, verify standby takes over
-22. **Documentation**: Self-hoster migration guide (official → InnerTube)
-
-**Milestone:** Proven drop-in replacement, ready for self-hosters
-
----
+## Build Order and Dependencies
+
+### Phase 1: Database and Core Share Service (Milestone Foundation)
+
+**Goal:** Share CRUD without message delivery
+
+**Components:**
+1. Database migration: `shares` table, `users.is_premium`
+2. share-service: CRUD endpoints, premium validation
+3. share-service: User search endpoint
+4. API Gateway: Route share endpoints
+
+**Dependencies:** None (can build in parallel with other work)
+
+**Validation:** Can create, accept, revoke shares via API
+
+### Phase 2: Overlay Source Integration (Share as Source)
+
+**Goal:** Add shared overlays to overlay configuration
+
+**Components:**
+1. overlay-manager: Validate share exists when adding share source
+2. Frontend: UI to add share source (select from accepted shares)
+3. share-service: Internal validate endpoint
+
+**Dependencies:** Phase 1 complete
+
+**Validation:** Can add share source to overlay, shows in source list
+
+### Phase 3: Message Routing (Actual Chat Delivery)
+
+**Goal:** Messages from shared overlays appear in consuming overlay
+
+**Components:**
+1. message-processor: Share resolver (database query, Redis cache)
+2. message-processor: Modified publisher (fan-out to consuming overlays)
+3. share-service: Cache invalidation events (Redis Pub/Sub)
+
+**Dependencies:** Phase 2 complete
+
+**Validation:** Messages appear in both source and consuming overlay
+
+### Phase 4: Lifecycle and Expiry (Production Ready)
+
+**Goal:** Automatic share expiry based on rules
+
+**Components:**
+1. share-service: Stream lifecycle detection (Twitch EventSub integration)
+2. share-service: Expiry cron job (5-minute interval)
+3. share-service: Manual revocation (mark inactive, invalidate cache)
+
+**Dependencies:** Phase 3 complete
+
+**Validation:** Shares expire when stream ends, manually revoked shares stop delivering messages
+
+### Phase 5: Premium Enforcement (Business Logic)
+
+**Goal:** Enforce premium requirements, admin overrides
+
+**Components:**
+1. auth-service: Premium flag management (admin endpoint)
+2. share-service: Premium checks on create/accept
+3. Frontend: Premium warning UI
+
+**Dependencies:** Phase 1-4 complete
+
+**Validation:** Non-premium users blocked from creating shares, admins can mark users premium
 
 ## New vs Modified Components
 
-### New Components (youtube-innertube-listener service)
+### New Components (Build from Scratch)
 
-| Component | Purpose | Files |
-|-----------|---------|-------|
-| **InnerTube Client** | HTTP client for private API | innertube/client.go, innertube/models.go |
-| **Continuation Manager** | Token extraction and refresh | innertube/continuation.go |
-| **InnerTube Parser** | Parse actions to RawChatMessage | innertube/parser.go |
-| **Rate Limiter** | Prevent IP blocks | polling/rate_limiter.go |
-| **Stream Finder** | Discover live streams | discovery/stream_finder.go |
-| **Poller** | Main polling loop | polling/poller.go |
-| **Poller Manager** | Start/stop pollers | polling/manager.go |
-| **Leadership Client** | Source Manager integration | leadership/client.go |
-| **Redis Publisher** | Publish to chat:raw | publisher/redis.go |
-| **Health Handlers** | Kubernetes probes | handlers/health.go |
-| **Main** | Service entry point | cmd/main.go |
-| **Dockerfile** | Container image | Dockerfile |
-| **K8s Manifests** | Deployment specs | deployments/k8s/youtube-innertube-listener/ |
+| Component | Lines of Code (Estimate) | Complexity | Notes |
+|-----------|--------------------------|------------|-------|
+| **share-service** | ~2,000 LOC | Medium | Standard Go service, follows existing patterns |
+| **share-service/handlers** | ~500 LOC | Low | CRUD handlers, premium validation |
+| **share-service/repository** | ~400 LOC | Low | PostgreSQL queries, standard CRUD |
+| **share-service/expiry** | ~300 LOC | Medium | Cron job, stream detection integration |
+| **share-service/search** | ~200 LOC | Low | User search by platform username |
+| **Database migration** | ~100 LOC | Low | CREATE TABLE shares, ALTER users |
 
-### Modified Components (Minimal Changes)
+**Total New Code:** ~3,500 LOC
 
-| Component | Change | Reason |
-|-----------|--------|--------|
-| **None** | No changes to existing services | Drop-in replacement design |
+### Modified Components (Extend Existing)
 
-### Shared Components (Could Extract to shared/)
+| Component | File | Modification | Complexity |
+|-----------|------|--------------|------------|
+| **overlay-manager** | `handlers/sources.go` | Add share validation on source create | Low (~50 LOC) |
+| **message-processor** | `publisher/pubsub_publisher.go` | Add share resolver, fan-out logic | Medium (~200 LOC) |
+| **message-processor** | `share/resolver.go` | NEW FILE: Share resolver with Redis cache | Medium (~300 LOC) |
+| **api-gateway** | `cmd/main.go` | Route /api/v1/shares/* to share-service | Low (~20 LOC) |
+| **frontend** | Multiple files | Share management UI, source selection | High (~1,000 LOC) |
 
-| Component | Current Location | Shared Usage |
-|-----------|------------------|--------------|
-| **Leadership Client** | youtube-listener/leadership/ | Both listeners use Source Manager |
-| **Redis Publisher** | youtube-listener/publisher/ | All listeners publish to chat:raw |
-| **RawChatMessage Model** | youtube-listener/models/ | All listeners use same schema |
+**Total Modified Code:** ~1,570 LOC
 
-**Recommendation for v2.0:** Extract leadership and publisher to shared/ module to avoid duplication.
+### No Changes Required
 
----
+- Listener services (Twitch, YouTube, Kick, TikTok) - unchanged
+- Emote service - unchanged
+- Auth service - minor addition (premium flag endpoints)
+- Source manager - works with share sources automatically (platform agnostic)
+- Redis Streams/Pub/Sub - no schema changes
 
-## Deployment Workflow Comparison
+## Integration Testing Strategy
 
-### Official Listener Deployment
+### Test 1: End-to-End Share Flow
 
-```bash
-# 1. Create OAuth credentials in Google Cloud Console
-# 2. Create Kubernetes secret
-kubectl create secret generic youtube-oauth \
-  --from-literal=client_id=xxx.apps.googleusercontent.com \
-  --from-literal=client_secret=GOCSPX-xxx \
-  -n allchat
-
-# 3. Deploy official listener
-kubectl apply -f deployments/k8s/youtube-listener/
-
-# 4. Users authenticate via OAuth flow
-# 5. Monitor quota usage
-kubectl exec -n allchat youtube-listener-abc123 -- \
-  wget -qO- http://localhost:8086/quota/status
+```
+1. User A creates share request for User B
+2. User B accepts share request
+3. User A adds User B's shared overlay to their overlay
+4. Message sent in User B's Twitch chat
+5. Message appears in BOTH User B's overlay AND User A's overlay
+6. User A revokes share
+7. Message sent in User B's Twitch chat
+8. Message appears ONLY in User B's overlay (not User A's)
 ```
 
-### InnerTube Listener Deployment
+### Test 2: Expiry Validation
 
-```bash
-# 1. NO OAuth setup needed (skip Google Cloud Console)
-
-# 2. Deploy InnerTube listener
-kubectl apply -f deployments/k8s/youtube-innertube-listener/
-
-# 3. NO user authentication needed (uses browser context)
-
-# 4. Monitor rate limiting (not quota)
-kubectl exec -n allchat youtube-innertube-listener-abc123 -- \
-  wget -qO- http://localhost:8089/status
+```
+1. User A creates share with expiry_type="this_stream"
+2. User B accepts
+3. User A's stream goes offline (Twitch EventSub: stream.offline)
+4. share-service expires share (status="expired")
+5. Message sent in User B's Twitch chat
+6. Message appears ONLY in User B's overlay (share expired)
 ```
 
-**Simpler for self-hosters:** No OAuth credentials, no quota tracking, no Google Cloud Console setup.
+### Test 3: Premium Enforcement
 
----
+```
+1. User A (non-premium) attempts to create share request
+2. share-service returns 403 Forbidden (premium required)
+3. Admin marks User A as premium (is_premium=true)
+4. User A creates share request
+5. Request succeeds
+```
+
+### Test 4: Fan-Out Performance
+
+```
+1. Create 10 shares pointing to same source overlay
+2. Send 100 messages to source overlay Twitch chat
+3. Verify all 100 messages appear in all 11 overlays (source + 10 consumers)
+4. Measure latency: <500ms P95 (same as current system)
+```
 
 ## Sources
 
-**InnerTube API Research:**
-- [YouTube.js - JavaScript client for InnerTube](https://github.com/LuanRT/YouTube.js)
-- [innertube (Python) - Private InnerTube API client](https://github.com/tombulled/innertube)
-- [YTLiveChat (.NET) - InnerTube API for live chat](https://github.com/Agash/YTLiveChat)
-- [InnerTube unofficial documentation](https://github.com/davidzeng0/innertube)
-
-**Quota Comparison:**
-- [YouTube API Quota: 10,000 Units/Day Breakdown](https://www.contentstats.io/blog/youtube-api-quota-tracking)
-- [Is the YouTube API Free? Costs, Limits](https://www.getphyllo.com/post/is-the-youtube-api-free-costs-limits-iv)
-
-**All-Chat Architecture:**
-- services/youtube-listener/README.md (official listener implementation)
-- docs/architecture/01-DATA-FLOW.md (message flow architecture)
-- services/message-processor/README.md (consumer of chat:raw)
-- services/source-manager/README.md (leader election coordination)
-- docs/architecture/02-DEPLOYMENT.md (Kubernetes deployment patterns)
-
----
-
-*Architecture research for: InnerTube YouTube Listener Integration*
-*Researched: 2026-02-21*
-*Confidence: HIGH (verified existing architecture, WebSearch for InnerTube patterns)*
+Research informed by:
+- Existing All-Chat architecture (services/*/README.md, docs/architecture/*)
+- [Microservices Pattern: Database per service](https://microservices.io/patterns/data/database-per-service.html)
+- [Microsoft: Data Considerations for Microservices](https://learn.microsoft.com/en-us/azure/architecture/microservices/design/data-considerations)
+- [8 Essential Example Microservices Architecture Patterns for 2026](https://www.wondermentapps.com/blog/example-microservices-architecture/)
+- [Data Management Patterns for Microservices Architecture](https://www.dataversity.net/articles/data-management-patterns-for-microservices-architecture/)

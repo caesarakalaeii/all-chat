@@ -5,6 +5,7 @@
 - ✅ **v1.0 Message Deletion Support** — Phases 1-3 (partial, shipped 2026-02-18)
 - ✅ **v1.1 Listener Load Balancing** — Phases 5-8 (shipped 2026-02-21)
 - ✅ **v1.2 InnerTube YouTube Listener** — Phases 9-13 (shipped 2026-03-06)
+- ✅ **v1.3 Chat Overlay Sharing** — Phases 14-19 (shipped 2026-03-11)
 
 ## Phases
 
@@ -109,6 +110,22 @@
 
 </details>
 
+<details>
+<summary>✅ v1.3 Chat Overlay Sharing (Phases 14-19) — SHIPPED 2026-03-11</summary>
+
+**Milestone Goal:** Enable streamers to share their aggregated chat overlays with other streamers, unlocking collaborative streaming experiences as the platform's first premium feature.
+
+- [x] Phase 14: Foundation (4/4 plans) — completed 2026-03-09
+- [x] Phase 15: Share Acceptance (4/4 plans) — completed 2026-03-09
+- [x] Phase 16: Shared Overlay Sources (4/4 plans) — completed 2026-03-10
+- [x] Phase 17: Message Routing (2/2 plans) — completed 2026-03-10
+- [x] Phase 18: Revocation (5/5 plans) — completed 2026-03-10
+- [x] Phase 19: Lifecycle & Expiry (4/4 plans) — completed 2026-03-11
+
+**Archive**: [v1.3-ROADMAP.md](milestones/v1.3-ROADMAP.md) | [v1.3-REQUIREMENTS.md](milestones/v1.3-REQUIREMENTS.md)
+
+</details>
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -125,6 +142,12 @@
 | 11. Contract Validation | v1.2 | 4/4 | Complete | 2026-02-21 |
 | 12. Production Rollout | v1.2 | 3/3 | Complete | 2026-03-05 |
 | 13. Feature Parity | v1.2 | 5/5 | Complete | 2026-03-06 |
+| 14. Foundation | v1.3 | 4/4 | Complete | 2026-03-09 |
+| 15. Share Acceptance | v1.3 | 4/4 | Complete | 2026-03-09 |
+| 16. Shared Overlay Sources | v1.3 | 4/4 | Complete | 2026-03-10 |
+| 17. Message Routing | v1.3 | 2/2 | Complete | 2026-03-10 |
+| 18. Revocation | v1.3 | 5/5 | Complete | 2026-03-10 |
+| 19. Lifecycle & Expiry | v1.3 | 4/4 | Complete | 2026-03-11 |
 
 ---
-*Last updated: 2026-03-06 after v1.2 milestone completion*
+*Last updated: 2026-03-11 after v1.3 milestone completion*

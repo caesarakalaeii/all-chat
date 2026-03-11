@@ -111,6 +111,21 @@ func (p *Pool) Size() int {
 	return len(p.connections)
 }
 
+// GetConnectionsByUser returns all connections for a specific user in this pool
+func (p *Pool) GetConnectionsByUser(userID string) []*Connection {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var connections []*Connection
+	for conn := range p.connections {
+		if conn.UserID() == userID {
+			connections = append(connections, conn)
+		}
+	}
+
+	return connections
+}
+
 // CloseAll closes all connections in the pool
 func (p *Pool) CloseAll() {
 	p.mu.Lock()

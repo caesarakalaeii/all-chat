@@ -1,37 +1,45 @@
+---
+gsd_state_version: 1.0
+milestone: v1.3
+milestone_name: Chat Overlay Sharing
+status: complete
+stopped_at: v1.3 milestone archived — 2026-03-11
+last_updated: "2026-03-11T21:30:00.000Z"
+last_activity: 2026-03-11 — v1.3 milestone complete
+progress:
+  total_phases: 19
+  completed_phases: 19
+  total_plans: 55
+  completed_plans: 55
+  percent: 100
+---
+
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-21)
+See: .planning/PROJECT.md (updated 2026-03-11)
 
-**Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing and auto-scaling.
-**Current focus:** v1.2 InnerTube YouTube Listener
+**Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events, unlimited YouTube chat access, and collaborative overlay sharing with other streamers.
+**Current focus:** Planning next milestone — run `/gsd:new-milestone`
 
 ## Current Position
 
-Milestone: v1.2 InnerTube YouTube Listener
-Phase: 13 of 13 (Feature Parity)
-Plan: 3 of 4 complete (plus gap closure 13-05)
-Status: In Progress
-Last activity: 2026-03-06 — Completed Phase 13 Plan 04 (Wire Batch Detection to Emission Logic)
+Phase: 19 of 19 (Lifecycle & Expiry)
+Plan: 4 of 4
+Status: Complete
+Last activity: 2026-03-11 — v1.3 milestone archived
 
-Progress: [████████████░░░░] 3/4 (75% phase 13 complete)
-
-**Phase 13 Progress:**
-- ✓ Plan 01: Batch deletion detection
-- ✓ Plan 02: Deletion event buffering (500ms delay, FIFO overflow)
-- ✓ Plan 04: Wire batch detection to emission logic (gap closure)
-- ✓ Plan 05: Publisher test suite fix (gap closure)
-- ⏳ Plan 03: Advanced metrics
+Progress: [██████████] 100% (v1.3 — SHIPPED)
 
 ## Performance Metrics
 
 **Velocity (all milestones):**
-- Total plans completed: 46
+- Total plans completed: 46 (v1.0-v1.2)
 - Average duration: 9.5 min
 - Total execution time: 7.23 hours
 
-**By Phase:**
+**By Phase (v1.0-v1.2):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
@@ -46,66 +54,103 @@ Progress: [████████████░░░░] 3/4 (75% phase 13 c
 | 10. Production Minimum | 4 | 31 min | 7.75 min |
 | 11. Contract Validation | 4 | 21 min | 5.25 min |
 | 12. Production Rollout | 3 | 40 min | 13.3 min |
+| 13. Feature Parity | 5 | 40 min | 8.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 9.2 min average
-- Trend: Phase 12 in progress - Documentation and observability (10 min avg)
+- v1.2 average: 7.5 min/plan (phases 9-13)
+- v1.1 average: 15.3 min/plan (phases 5-8)
+- Trend: Stable velocity with occasional spikes for complex integration work
 
-*Updated after each plan completion*
-| Phase 13 P04 | 2 | 2 tasks | 2 files |
-| Phase 13 P02 | 12 | 2 tasks | 6 files |
-| Phase 12 P03 | 10 | 3 tasks | 4 files |
-| Phase 12 P01 | 14 | 3 tasks | 6 files |
-| Phase 11 P02 | 12 | 3 tasks | 11 files |
-| Phase 11 P04 | 6 | 3 tasks | 10 files |
-| Phase 11 P03 | 5 | 2 tasks | 6 files |
-| Phase 11 P01 | 5 | 3 tasks | 9 files |
-| Phase 10 P04 | 10 | 2 tasks | 6 files |
-| Phase 10-production-minimum P02 | 5 | 2 tasks | 2 files |
-| Phase 10 P01 | 6 | 2 tasks | 4 files |
-| Phase 13 P02 | 12 | 2 tasks | 6 files |
-| Phase 13 P04 | 2 | 2 tasks | 2 files |
+*Will update after v1.3 plan completions*
+| Phase 14 P01 | 3 | 2 tasks | 6 files |
+| Phase 14 P03 | 3 | 3 tasks | 6 files |
+| Phase 14 P02 | 8 | 4 tasks | 5 files |
+| Phase 14 P04 | 4 | 5 tasks | 10 files |
+| Phase 15 P00 | 1 | 2 tasks | 6 files |
+| Phase 15 P01 | 5 | 2 tasks | 6 files |
+| Phase 15 P02 | 6 | 3 tasks | 10 files |
+| Phase 15 P03 | 530 | 3 tasks | 15 files |
+| Phase 16 P01 | 2 | 2 tasks | 5 files |
+| Phase 16 P02 | 3 | 3 tasks | 6 files |
+| Phase 16-shared-overlay-sources P00 | 3 | 2 tasks | 2 files |
+| Phase 16-shared-overlay-sources P03 | 8 | 2 tasks | 5 files |
+| Phase 17-message-routing P00 | 4 | 2 tasks | 2 files |
+| Phase 17-message-routing P01 | 3 | 2 tasks | 3 files |
+| Phase 18-revocation P00 | 1 | 1 tasks | 1 files |
+| Phase 18-revocation P01 | 4 | 2 tasks | 7 files |
+| Phase 18-revocation P02 | 12 | 1 tasks | 3 files |
+| Phase 18-revocation P03 | 2 | 3 tasks | 6 files |
+| Phase 18-revocation P04 | 7 | 2 tasks | 1 files |
+| Phase 19-lifecycle-expiry P00 | 8 | 2 tasks | 7 files |
+| Phase 19-lifecycle-expiry P01 | 2 | 2 tasks | 6 files |
+| Phase 19-lifecycle-expiry P02 | 525609 | 2 tasks | 8 files |
+| Phase 19 P03 | 6 | 2 tasks | 10 files |
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting v1.2:
+Recent decisions affecting v1.3:
 
-**v1.2 Milestone Decisions:**
-- Go implementation for InnerTube listener (Phase 9: built custom HTTP client, no library dependency)
-- Drop-in replacement pattern (identical RawChatMessage Redis contract, zero message-processor changes)
-- Contract testing before production rollout (schema drift is silent killer per research)
-- Canary deployment 10%→50%→100% (InnerTube instability risk mitigation)
-- Defer deletion events to Phase 13 (validate core flow first, deletions are differentiator not blocker)
-- Hardcoded InnerTube API key for PoC (Phase 10: dynamic extraction from stream HTML)
-- Event type naming follows official listener (Phase 10: super_chat, super_sticker, member_joined, member_milestone)
-- Metrics-based promotion not time-based (Phase 12-02: indefinite pause with 240-minute analysis window)
-- Native K8s traffic routing not service mesh (Phase 12-02: Argo Rollouts Service manipulation, no Istio dependency)
-- Kustomize base + overlay pattern (Phase 12-02: environment-specific replica count and image tags)
-- 8-panel dashboard layout (Phase 12-03: rollout status top, metric comparison middle, detailed diagnostics bottom)
-- Fix-in-place workflow preferred over abort-retry (Phase 12-03: keep rollout at current percentage, deploy fix, resume promotion)
-- ToS disclosure at top of README (Phase 12-03: InnerTube unofficial API warning, not user-facing)
-- 6 common troubleshooting issues (Phase 12-03: automatic rollback, stuck rollout, thundering herd, crashlooping, message deviation, fix-in-place failures)
-- 500ms deletion buffer delay (Phase 13-02: race condition mitigation, ensures original message indexed first)
-- FIFO overflow strategy (Phase 13-02: drop oldest when buffer exceeds 1000 events, newest deletions more relevant)
-- Interface adapters for circular dependencies (Phase 13-02: publisherAdapter and metricsAdapter patterns)
-- Immediate batch result returns (Phase 13-04: AddDeletion returns BatchResult when threshold crossed, not ticker-based)
-- Parser-based batch emission (Phase 13-04: parser owns emission logic, detector provides metadata only)
-- Nil for unused test dependencies (Phase 13-05: pass nil for metrics/deletionBuffer in tests that don't verify those behaviors, keep tests focused)
+**v1.3 Architecture:**
+- New share-service for permission management + extend existing services for message delivery
+- Shared overlays treated as virtual platform sources (reuse activation patterns)
+- Premium enforcement is server-side at every API endpoint (prevents client bypass)
+- Permission model prohibits nested shares (1-layer depth maximum, prevents cascading)
+- Message fan-out happens at message-processor layer (avoid duplicate enrichment)
+- Bidirectional sharing model (both users share back, not unidirectional like Twitch)
 
-**v1.1 Context (still relevant):**
-- Hybrid hash-based + load-aware approach for predictable under normal load
-- Consistent hashing for channel assignment (CRC32, bounded-load 1.25x)
-- Redis for assignment registry (centralized state, atomic updates)
-- Kubernetes Lease-based leader election for split-brain prevention
-- 70% message rate + 30% channel count composite load scoring
-- 5-minute cooldown and thrashing detection safeguards
-- [Phase 10-01]: HTML parsing for stream discovery (simpler than InnerTube browse API, sufficient for MVP)
-- [Phase 10-01]: 24-hour TTL for Redis channel→video mappings (auto-expire, force rediscovery)
-- [Phase 10]: Offline detection via empty continuation array (Phase 10-04): InnerTube returns empty continuations when stream ends, more reliable than continuation token check
-- [Phase 10]: Auto-resume with exponential backoff 1m→10m (Phase 10-04): Enables 24/7 streamers seamless recovery without manual intervention
+**v1.2 Milestone (relevant patterns):**
+- Drop-in replacement pattern proven successful (RawChatMessage compatibility, zero downstream changes)
+- Contract testing before production (schema drift is silent killer)
+- Canary deployment with metrics-based promotion (10%→50%→100%)
+- Interface adapters for circular dependencies (publisherAdapter, metricsAdapter patterns)
+- [Phase 14-01]: Use ON DELETE RESTRICT for share request foreign keys to prevent data loss during user deletion
+- [Phase 14]: No caching for premium status checks (query database on every request for MVP simplicity)
+- [Phase 14]: Use LOWER() function for case-insensitive search to leverage functional index from migration 028
+- [Phase 14]: Premium enforcement at middleware layer for share creation prevents client bypass
+- [Phase 14-04]: Expiry job runs every 5 minutes with immediate execution on start to clean up stale requests
+- [Phase 14-04]: Card-based dashboard with tab filtering (Pending/History) reuses admin pages pattern
+- [Phase 15]: DFS algorithm for cycle detection with visited/recursion stack tracking
+- [Phase 15]: Transaction with SELECT FOR UPDATE prevents concurrent acceptance race conditions
+- [Phase 15]: Custom expiry validation enforces 1-168 hour range at API level
+- [Phase 15-02]: TDD approach for modal components ensures comprehensive test coverage (≥90%)
+- [Phase 15-02]: Sequential modal flow (AcceptModal → AddSourceModal) with proper z-index prevents visual conflicts
+- [Phase 15-02]: StatusBadge uses icons + color coding (pending=yellow, active=green, expired=gray, revoked/rejected=red) for accessibility
+- [Phase 15]: WebSocket notification via internal endpoint (fire-and-forget, 5s timeout)
+- [Phase 15]: Overlay-specific deduplication with 5s TTL (prevents Twitch Shared Chat overlap)
+- [Phase 16-01]: shared_overlay uses is_enabled=TRUE, requires_oauth=FALSE; recipient_overlay_id is nullable FK with ON DELETE SET NULL for bidirectional sharing
+- [Phase 16]: AcceptedShareDetail is a separate struct from ShareRequest — it's a read-only JOIN projection for UI-enriched queries, not a base model mutation
+- [Phase 16]: [Phase 16-02]: No premium check on GET /shares/accepted — viewing available sources is informational (read-only), premium only gates create/accept mutations
+- [Phase 16-shared-overlay-sources]: shares_accepted_test.go already GREEN from 15-03 — GetAcceptedShares already implemented, no compile-error RED gate needed
+- [Phase 16-shared-overlay-sources]: RED test for shared_overlay uses HTTP status assertion (403 vs 201) rather than compile error for cleaner readable RED state
+- [Phase 16-shared-overlay-sources]: Nil DB guard in shared_overlay branch returns 403 — unit tests work without real DB
+- [Phase 16-shared-overlay-sources]: channel_name added to AddSourceRequest interface (was missing from type definition, backend already accepted it)
+- [Phase 17-message-routing]: Stub-based router tests (no pgxmock): message-processor go.mod lacks pgxmock/testcontainers; in-process overlayFinderStub with map lookup suffices for Wave 0 RED scaffolding
+- [Phase 17-message-routing]: productionQueryHasUnion=false sentinel: asserts Wave 1 must add UNION branch; clean RED failure with descriptive message
+- [Phase 17-message-routing]: t.Skip for is_active=true test: nil-db guard returns 403 before createFunc fires; DB dependency deferred to Wave 1 integration test
+- [Phase 17-message-routing]: UNION (not UNION ALL) for message fan-out deduplication: overlays appearing in both direct and shared branches returned exactly once
+- [Phase 17-message-routing]: IsActive: req.Platform == 'shared_overlay' expression: shared_overlay sources are immediately active at creation (share already accepted); other platforms activated by listeners
+- [Phase 18-revocation]: Compile-error RED gate via handler.RevokeShareRequest (undefined) satisfies Nyquist without t.Skip
+- [Phase 18-revocation]: revokeShareData interface for test fixture injection: avoids pgxmock/testcontainers while fully exercising handler auth+status logic
+- [Phase 18-revocation]: [Phase 18-01]: Revoke route is non-premium (alongside mark-seen): revoking an active share should always be allowed
+- [Phase 18-revocation]: Cast sr.id to text (sr.id::text = ocs.channel_id) rather than channel_id to uuid — avoids uuid cast errors for non-uuid channel_ids (twitch/youtube/kick) in LEFT JOIN ON clauses
+- [Phase 18-revocation]: Revoke button placed below StatusBadge on accepted cards; onRevoked triggers onUpdate() for re-fetch without page reload
+- [Phase 18-04]: WS connection in overlay editor uses /ws/overlay/{id} endpoint for share_revoked notifications; Revoke button gated on isActiveSharedOverlay, Remove button always present
+- [Phase 18-04]: ActivateSourcesForOverlay must filter shared_overlay sources where share_request.status IN (revoked, expired) — prevents revocation bypass on WS reconnect (found during verification)
+- [Phase 19-lifecycle-expiry]: Migration 034 uses separate share_expires_at column (not expires_at which is the 7-day acceptance window for pending requests)
+- [Phase 19-lifecycle-expiry]: Partial index on (share_expires_at, status) WHERE status='accepted' AND share_expires_at IS NOT NULL for efficient expiry job queries
+- [Phase 19-lifecycle-expiry]: YouTube lifecycle t.Skip stub (not compile error) — HandleStreamOffline already exists; publisher param extension is the Wave 3 RED gate
+- [Phase 19-lifecycle-expiry]: AcceptShareRequest computes shareExpiresAt only for custom option; unlimited/this_stream leave share_expires_at NULL
+- [Phase 19-lifecycle-expiry]: ExpireAcceptedShare is idempotent: RowsAffected==0 returns nil (share already expired or not found)
+- [Phase 19-lifecycle-expiry]: ExpireTimedAcceptedShares closes rows cursor before per-share expiry loop to avoid holding open cursor during nested transactions
+- [Phase 19-lifecycle-expiry]: Handler.db field on webhooks.Handler for twitch_id -> user_id lookup without threading db through routeEvent chain
+- [Phase 19-lifecycle-expiry]: 60s debounce in LifecycleSubscriber.debounceExpire prevents phantom expiry on Twitch stream restart or category change
+- [Phase 19-lifecycle-expiry]: Redis ping failure in share-service is non-fatal: lifecycle events disabled but service continues
+- [Phase 19-lifecycle-expiry]: YouTube nil guard added to Repository.DeleteChannelVideoMapping to prevent panic with nil redis client in unit tests
+- [Phase 19-lifecycle-expiry]: TikTok stream_end publish placed in disconnected handler in index.ts (live→offline transition), not in LiveStreamPoller polling cycle (which only handles offline→live)
+- [Phase 19-lifecycle-expiry]: overlay_sources must be fetched in ListIncoming (not just share row) — senderPlatform is always undefined without the JOIN; found during Playwright verification (b60e071)
 
 ### Pending Todos
 
@@ -113,22 +158,26 @@ None yet.
 
 ### Blockers/Concerns
 
-**v1.2 Research Flags:**
-- Stream discovery integration: How overlay-manager resolves channel→video ID unclear (may need Phase 10 research-phase)
-- Deletion event schema: InnerTube itemId mapping to message-processor registry unknown (validate in Phase 11/13)
-- Rate limiting thresholds: IP-based limits undocumented (start conservative 2000ms, A/B test in Phase 12)
+**Phase 19 dependency:**
+- Kick stream lifecycle detection research incomplete (unofficial API, webhook patterns unclear)
+- Mitigation: Research during Phase 19 planning, consider disabling "This stream" expiry for Kick if unreliable
 
-**v1.1 Complete - No active blockers:**
-- ✅ All platforms (Twitch, Kick, TikTok, YouTube) successfully scale with HPA
-- ✅ Migration protocol validated with zero message loss
-- ✅ Readiness probe bug resolved (filtered assignment count tracking)
+**Premium feature enforcement:**
+- First premium feature for All-Chat, sets pattern for future monetization
+- Server-side validation must be comprehensive (pitfall #1 from research: client-side bypass)
+- Admin override mechanism needed for testing before billing integration
+
+**Database schema considerations:**
+- ON DELETE RESTRICT for foreign keys (not CASCADE) to prevent data loss on user deletion
+- Application-level cascade logic needed for share cleanup
 
 ## Session Continuity
 
-Last session: 2026-03-06
-Stopped at: Completed Phase 13 Plan 04 (Wire Batch Detection to Emission Logic)
-Resume file: .planning/phases/13-feature-parity/13-04-SUMMARY.md
+Last session: 2026-03-11T19:52:41.361Z
+Stopped at: Completed 19-lifecycle-expiry-03 (Multi-platform stream end detection) — human verified
+Resume file: None
 
-**Next action:** Phase 13 Plan 04 complete. Ready to proceed to Plan 03 (Advanced Metrics) - final plan in Phase 13.
+**Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
 
-**Next action:** Gap closure complete. Publisher tests restored. Ready to proceed to Plan 03 (Advanced Metrics) or Plan 04 (Live Testing).
+---
+*Last updated: 2026-03-08 after v1.3 roadmap creation*

@@ -200,7 +200,7 @@ func main() {
 	channelManager.SetAssignedSourceIDs(assignedSourceIDs, podName)
 
 	// Create webhook handler
-	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, streamPublisher, log)
+	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, log)
 
 	// Leader election state (use struct with mutex for thread-safe access from HTTP handlers)
 	state := &leaderState{}
@@ -326,6 +326,20 @@ func main() {
 					scopeErrorCount++
 				} else {
 					log.Warn("Failed to subscribe to follows", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				successCount++
+			}
+
+			// Stream offline — uses app access token (no user scope needed)
+			if _, err := subscriptionMgr.SubscribeToStreamOffline(ctx, broadcasterID); err != nil {
+				if strings.Contains(err.Error(), "subscription already exists") {
+					successCount++
+				} else {
+					log.Warn("Failed to subscribe to stream.offline",
+						zap.String("broadcaster_id", broadcasterID),
+						zap.Error(err))
 					failCount++
 				}
 			} else {
