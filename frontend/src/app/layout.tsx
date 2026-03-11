@@ -11,13 +11,27 @@
  */
 
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Barlow, DM_Mono } from 'next/font/google';
 import './globals.css';
 import '@/styles/events.css';
 import CookieBanner from '@/components/CookieBanner';
 import ImpersonationBanner from '@/components/ImpersonationBanner';
+import { ToastProvider } from '@/components/ui/toast';
+import { cn } from "@/lib/utils";
 
-const inter = Inter({ subsets: ['latin'] });
+const barlow = Barlow({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-barlow',
+  display: 'swap',
+});
+
+const dmMono = DM_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-dm-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'All-Chat - Multi-Platform Chat Aggregation',
@@ -31,11 +45,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
-        <ImpersonationBanner />
-        {children}
-        <CookieBanner />
+    <html lang="en" className={cn(barlow.variable, dmMono.variable)}>
+      <body>
+        <ToastProvider>
+          <ImpersonationBanner />
+          {children}
+          <CookieBanner />
+        </ToastProvider>
       </body>
     </html>
   );

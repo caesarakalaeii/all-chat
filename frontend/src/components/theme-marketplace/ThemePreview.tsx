@@ -8,6 +8,7 @@
 
 import { useEffect, useState, useMemo, useId } from 'react';
 import type { ChatMessagePreview } from '@/lib/theme-marketplace/types';
+import { PLATFORM_COLORS, type Platform } from '@/lib/platform-colors';
 
 interface ThemePreviewProps {
   css: string;
@@ -68,23 +69,6 @@ const scopeCustomCss = (
   );
 };
 
-/**
- * Get platform color class
- */
-function getPlatformColor(platform: string): string {
-  switch (platform) {
-    case 'twitch':
-      return 'text-purple-400';
-    case 'youtube':
-      return 'text-red-400';
-    case 'kick':
-      return 'text-green-400';
-    case 'tiktok':
-      return 'text-gray-400';
-    default:
-      return 'text-gray-400';
-  }
-}
 
 export default function ThemePreview({ css, messages, themeId }: ThemePreviewProps) {
   const [scopedCss, setScopedCss] = useState('');
@@ -143,9 +127,7 @@ export default function ThemePreview({ css, messages, themeId }: ThemePreviewPro
                   <div className="flex items-center gap-2 mb-1">
                     {/* Platform indicator */}
                     <span
-                      className={`text-xs font-semibold uppercase ${getPlatformColor(
-                        msg.platform
-                      )}`}
+                      className={`text-xs font-semibold uppercase ${PLATFORM_COLORS[msg.platform as Platform]?.text ?? PLATFORM_COLORS.system.text}`}
                     >
                       {msg.platform}
                     </span>

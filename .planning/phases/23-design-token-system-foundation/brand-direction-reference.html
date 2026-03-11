@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>all-chat — Dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+
+:root {
+  --tw: #9146FF;
+  --yt: #FF4444;
+  --ki: #53FC18;
+  --tt: #69C9D0;
+  --bg: #07070a;
+  --surface: #0d0d12;
+  --surface2: #111118;
+  --border: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.1);
+  --text: #e8e8f0;
+  --text-muted: #52526a;
+  --text-dim: #2e2e42;
+  --radius: 14px;
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* subtle grid texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── NAV ── */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  padding: 0 32px;
+  height: 60px;
+  background: rgba(7,7,10,0.75);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid var(--border);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 44px;
+  text-decoration: none;
+}
+
+.logo-ring {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--tw) 0deg 88deg,
+    var(--yt) 90deg 178deg,
+    var(--ki) 180deg 268deg,
+    var(--tt) 270deg 360deg
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 16px rgba(145,70,255,0.3);
+  animation: ring-rotate 8s linear infinite;
+}
+
+@keyframes ring-rotate {
+  to { filter: hue-rotate(360deg); }
+}
+
+.logo-ring-inner {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.logo-text {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+
+.nav-links {
+  display: flex;
+  height: 100%;
+  gap: 2px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+  letter-spacing: 0.01em;
+}
+
+.nav-link:hover { color: var(--text); }
+
+.nav-link.active {
+  color: var(--text);
+}
+
+.nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--tw), var(--tt));
+  border-radius: 2px 2px 0 0;
+}
+
+.nav-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.18);
+  font-size: 11px;
+  font-weight: 500;
+  color: #22c55e;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+}
+
+.live-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34,197,94,0.6);
+  animation: live-glow 2s ease-in-out infinite;
+}
+
+@keyframes live-glow {
+  0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+  50%  { box-shadow: 0 0 0 5px rgba(34,197,94,0); }
+  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+
+.btn-new {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: var(--font-body);
+  letter-spacing: 0.01em;
+}
+
+.btn-new:hover {
+  background: rgba(255,255,255,0.11);
+  border-color: rgba(255,255,255,0.18);
+}
+
+.btn-new::before {
+  content: '+';
+  font-size: 18px;
+  line-height: 1;
+  color: rgba(255,255,255,0.5);
+  font-weight: 300;
+}
+
+/* ── LAYOUT ── */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 0;
+  height: calc(100vh - 60px);
+  position: relative;
+  z-index: 1;
+}
+
+.main-col {
+  padding: 28px 28px 28px 32px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── STAT CARDS ── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.stat-card {
+  position: relative;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 20px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  cursor: default;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+/* platform glow blob */
+.stat-card::before {
+  content: '';
+  position: absolute;
+  bottom: -20px;
+  right: -20px;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  filter: blur(30px);
+  opacity: 0.25;
+  transition: opacity 0.2s;
+}
+.stat-card:hover::before { opacity: 0.4; }
+
+/* top accent line */
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  opacity: 0.6;
+}
+
+.stat-card.tw { border-color: rgba(145,70,255,0.15); }
+.stat-card.yt { border-color: rgba(255,68,68,0.15); }
+.stat-card.ki { border-color: rgba(83,252,24,0.15); }
+.stat-card.tt { border-color: rgba(105,201,208,0.15); }
+
+.stat-card.tw::before { background: var(--tw); }
+.stat-card.yt::before { background: var(--yt); }
+.stat-card.ki::before { background: var(--ki); }
+.stat-card.tt::before { background: var(--tt); }
+
+.stat-card.tw::after { background: linear-gradient(90deg, var(--tw), transparent); }
+.stat-card.yt::after { background: linear-gradient(90deg, var(--yt), transparent); }
+.stat-card.ki::after { background: linear-gradient(90deg, var(--ki), transparent); }
+.stat-card.tt::after { background: linear-gradient(90deg, var(--tt), transparent); }
+
+.stat-card.tw:hover { border-color: rgba(145,70,255,0.3); box-shadow: 0 8px 32px rgba(145,70,255,0.08); }
+.stat-card.yt:hover { border-color: rgba(255,68,68,0.3);  box-shadow: 0 8px 32px rgba(255,68,68,0.08); }
+.stat-card.ki:hover { border-color: rgba(83,252,24,0.3);  box-shadow: 0 8px 32px rgba(83,252,24,0.08); }
+.stat-card.tt:hover { border-color: rgba(105,201,208,0.3);box-shadow: 0 8px 32px rgba(105,201,208,0.08); }
+
+.stat-platform {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  font-family: var(--font-mono);
+}
+.stat-card.tw .stat-platform { color: var(--tw); }
+.stat-card.yt .stat-platform { color: var(--yt); }
+.stat-card.ki .stat-platform { color: var(--ki); }
+.stat-card.tt .stat-platform { color: var(--tt); }
+
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.stat-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  margin-left: 6px;
+  color: #22c55e;
+}
+
+/* ── SECTION HEADER ── */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.section-action {
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.section-action:hover { color: var(--text); }
+
+/* ── OVERLAY CARDS ── */
+.overlay-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.overlay-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  position: relative;
+}
+
+.overlay-card:hover {
+  transform: translateY(-2px);
+}
+
+.overlay-card-top {
+  height: 3px;
+}
+
+.overlay-card.tw-primary .overlay-card-top { background: var(--tw); }
+.overlay-card.yt-primary .overlay-card-top { background: var(--yt); }
+.overlay-card.ki-primary .overlay-card-top { background: var(--ki); }
+
+.overlay-card.tw-primary:hover { border-color: rgba(145,70,255,0.25); box-shadow: 0 8px 32px rgba(145,70,255,0.07), 0 2px 8px rgba(0,0,0,0.3); }
+.overlay-card.yt-primary:hover { border-color: rgba(255,68,68,0.25);  box-shadow: 0 8px 32px rgba(255,68,68,0.07),  0 2px 8px rgba(0,0,0,0.3); }
+.overlay-card.ki-primary:hover { border-color: rgba(83,252,24,0.25);  box-shadow: 0 8px 32px rgba(83,252,24,0.07),  0 2px 8px rgba(0,0,0,0.3); }
+
+.overlay-card-body { padding: 16px; }
+
+.overlay-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.overlay-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.status-dot.active {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34,197,94,0.6);
+  animation: live-glow 2s ease-in-out infinite;
+}
+.status-dot.inactive {
+  background: var(--text-dim);
+}
+
+.platform-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.pbadge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.pbadge.tw { color: var(--tw); background: rgba(145,70,255,0.1); border: 1px solid rgba(145,70,255,0.2); }
+.pbadge.yt { color: var(--yt); background: rgba(255,68,68,0.1);  border: 1px solid rgba(255,68,68,0.2); }
+.pbadge.ki { color: var(--ki); background: rgba(83,252,24,0.1);  border: 1px solid rgba(83,252,24,0.2); }
+.pbadge.tt { color: var(--tt); background: rgba(105,201,208,0.1);border: 1px solid rgba(105,201,208,0.2); }
+
+.overlay-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.msg-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.msg-count span {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.overlay-action {
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s;
+  letter-spacing: 0.02em;
+}
+.overlay-action:hover { color: var(--text); }
+
+/* ── CHAT PANEL ── */
+.chat-col {
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ambient glow from chat col */
+.chat-col::before {
+  content: '';
+  position: absolute;
+  top: 30%;
+  left: -60px;
+  width: 180px;
+  height: 300px;
+  background: radial-gradient(ellipse, rgba(145,70,255,0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.01);
+}
+
+.chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.2);
+  font-size: 10px;
+  font-weight: 700;
+  color: #22c55e;
+  letter-spacing: 0.1em;
+  font-family: var(--font-mono);
+}
+
+.chat-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.platform-dots {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.pdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.pdot.tw { background: var(--tw); box-shadow: 0 0 6px rgba(145,70,255,0.6); }
+.pdot.yt { background: var(--yt); box-shadow: 0 0 6px rgba(255,68,68,0.6); }
+.pdot.ki { background: var(--ki); box-shadow: 0 0 6px rgba(83,252,24,0.6); }
+.pdot.tt { background: var(--tt); box-shadow: 0 0 6px rgba(105,201,208,0.6); }
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-messages::-webkit-scrollbar { width: 3px; }
+.chat-messages::-webkit-scrollbar-track { background: transparent; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+.cmsg {
+  display: grid;
+  grid-template-columns: 8px 1fr;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.025);
+  transition: background 0.1s;
+  align-items: start;
+}
+
+.cmsg:nth-child(even) { background: rgba(255,255,255,0.012); }
+.cmsg:hover { background: rgba(255,255,255,0.03); }
+
+.cmsg-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 3px;
+}
+
+.cmsg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cmsg.tw .cmsg-dot { background: var(--tw); box-shadow: 0 0 8px rgba(145,70,255,0.7); }
+.cmsg.yt .cmsg-dot { background: var(--yt); box-shadow: 0 0 8px rgba(255,68,68,0.7); }
+.cmsg.ki .cmsg-dot { background: var(--ki); box-shadow: 0 0 8px rgba(83,252,24,0.7); }
+.cmsg.tt .cmsg-dot { background: var(--tt); box-shadow: 0 0 8px rgba(105,201,208,0.7); }
+
+.cmsg-content { min-width: 0; }
+
+.cmsg-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 3px;
+  flex-wrap: wrap;
+}
+
+.cmsg-user {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+
+.cmsg.tw .cmsg-user { color: var(--tw); }
+.cmsg.yt .cmsg-user { color: var(--yt); }
+.cmsg.ki .cmsg-user { color: var(--ki); }
+.cmsg.tt .cmsg-user { color: var(--tt); }
+
+.cmsg-platform-tag {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.cmsg.tw .cmsg-platform-tag { color: var(--tw); background: rgba(145,70,255,0.1); }
+.cmsg.yt .cmsg-platform-tag { color: var(--yt); background: rgba(255,68,68,0.1); }
+.cmsg.ki .cmsg-platform-tag { color: var(--ki); background: rgba(83,252,24,0.1); }
+.cmsg.tt .cmsg-platform-tag { color: var(--tt); background: rgba(105,201,208,0.1); }
+
+.cmsg-time {
+  font-size: 9px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  margin-left: auto;
+}
+
+.cmsg-text {
+  font-size: 13px;
+  color: rgba(232,232,240,0.75);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* ── STAGGER ANIMATION ── */
+.stat-card { animation: fade-up 0.4s ease both; }
+.stat-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-card:nth-child(2) { animation-delay: 0.1s; }
+.stat-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-card:nth-child(4) { animation-delay: 0.2s; }
+
+.overlay-card { animation: fade-up 0.4s ease both; }
+.overlay-card:nth-child(1) { animation-delay: 0.25s; }
+.overlay-card:nth-child(2) { animation-delay: 0.3s; }
+.overlay-card:nth-child(3) { animation-delay: 0.35s; }
+
+.cmsg { animation: fade-in 0.3s ease both; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── SCROLLBAR ── */
+.main-col::-webkit-scrollbar { width: 3px; }
+.main-col::-webkit-scrollbar-track { background: transparent; }
+.main-col::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo" href="#">
+    <div class="logo-ring"><div class="logo-ring-inner"></div></div>
+    <span class="logo-text">all-chat</span>
+  </a>
+  <div class="nav-links">
+    <div class="nav-link active">Dashboard</div>
+    <div class="nav-link">Overlays</div>
+    <div class="nav-link">Analytics</div>
+    <div class="nav-link">Settings</div>
+  </div>
+  <div class="nav-right">
+    <div class="nav-badge"><div class="live-pulse"></div>LIVE</div>
+    <div class="btn-new">New Overlay</div>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- ── MAIN COLUMN ── -->
+  <div class="main-col">
+
+    <!-- Stats -->
+    <div class="stat-grid">
+      <div class="stat-card tw">
+        <div class="stat-platform">Twitch</div>
+        <div class="stat-value">4.2k<span class="stat-delta">↑12%</span></div>
+        <div class="stat-label">messages / hour</div>
+      </div>
+      <div class="stat-card yt">
+        <div class="stat-platform">YouTube</div>
+        <div class="stat-value">3.1k<span class="stat-delta">↑8%</span></div>
+        <div class="stat-label">messages / hour</div>
+      </div>
+      <div class="stat-card ki">
+        <div class="stat-platform">Kick</div>
+        <div class="stat-value">2.8k<span class="stat-delta">↑31%</span></div>
+        <div class="stat-label">messages / hour</div>
+      </div>
+      <div class="stat-card tt">
+        <div class="stat-platform">TikTok</div>
+        <div class="stat-value">1.9k<span class="stat-delta">↑5%</span></div>
+        <div class="stat-label">messages / hour</div>
+      </div>
+    </div>
+
+    <!-- Overlays -->
+    <div>
+      <div class="section-header">
+        <div class="section-title">Active Overlays</div>
+        <div class="section-action">View all →</div>
+      </div>
+    </div>
+
+    <div class="overlay-grid">
+
+      <div class="overlay-card tw-primary">
+        <div class="overlay-card-top"></div>
+        <div class="overlay-card-body">
+          <div class="overlay-card-header">
+            <div class="overlay-name">Main Stream</div>
+            <div class="status-dot active"></div>
+          </div>
+          <div class="platform-badges">
+            <span class="pbadge tw">Twitch</span>
+            <span class="pbadge yt">YouTube</span>
+            <span class="pbadge ki">Kick</span>
+          </div>
+          <div class="overlay-card-footer">
+            <div class="msg-count"><span>8,112</span> msgs today</div>
+            <div class="overlay-action">Edit →</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay-card yt-primary">
+        <div class="overlay-card-top"></div>
+        <div class="overlay-card-body">
+          <div class="overlay-card-header">
+            <div class="overlay-name">Gaming Setup</div>
+            <div class="status-dot active"></div>
+          </div>
+          <div class="platform-badges">
+            <span class="pbadge yt">YouTube</span>
+            <span class="pbadge tt">TikTok</span>
+          </div>
+          <div class="overlay-card-footer">
+            <div class="msg-count"><span>3,441</span> msgs today</div>
+            <div class="overlay-action">Edit →</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay-card ki-primary">
+        <div class="overlay-card-top"></div>
+        <div class="overlay-card-body">
+          <div class="overlay-card-header">
+            <div class="overlay-name">IRL Stream</div>
+            <div class="status-dot inactive"></div>
+          </div>
+          <div class="platform-badges">
+            <span class="pbadge ki">Kick</span>
+            <span class="pbadge tt">TikTok</span>
+          </div>
+          <div class="overlay-card-footer">
+            <div class="msg-count"><span>0</span> msgs today</div>
+            <div class="overlay-action">Edit →</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── CHAT COLUMN ── -->
+  <div class="chat-col">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <div class="live-badge"><div class="live-pulse"></div>LIVE</div>
+        <div class="chat-meta">3 overlays</div>
+      </div>
+      <div class="platform-dots">
+        <div class="pdot tw"></div>
+        <div class="pdot yt"></div>
+        <div class="pdot ki"></div>
+        <div class="pdot tt"></div>
+      </div>
+    </div>
+    <div class="chat-messages" id="chat">
+    </div>
+  </div>
+
+</div>
+
+<script>
+const MSGS = [
+  { p:'tw', user:'xQc',         text:'this overlay is actually insane bro',           t:'12:04' },
+  { p:'yt', user:'Pokimane',    text:'wait it combines ALL platforms??',               t:'12:04' },
+  { p:'ki', user:'KaiCenat',    text:'LFG kick chat is showing up too 🔥',             t:'12:05' },
+  { p:'tt', user:'charlidamelio', text:'tiktok stream gang where we at',               t:'12:05' },
+  { p:'tw', user:'HasanAbi',    text:'the truffle extension energy but actually works',t:'12:05' },
+  { p:'yt', user:'Ludwig',      text:'no more switching tabs between chats omg',       t:'12:06' },
+  { p:'ki', user:'Trainwreck',  text:'kick finally getting proper tools',              t:'12:06' },
+  { p:'tw', user:'Shroud',      text:'clean UI honestly',                              t:'12:06' },
+  { p:'tt', user:'BruceDropEmOff', text:'we going multistream lets gooo',             t:'12:07' },
+  { p:'yt', user:'Valkyrae',    text:'omg the platform colors make it so easy to scan',t:'12:07' },
+  { p:'tw', user:'Mizkif',      text:'finally something that actually works lol',      t:'12:07' },
+  { p:'ki', user:'N3on',        text:'kick growing fr fr',                             t:'12:08' },
+  { p:'tt', user:'Kai Cenat',   text:'tiktok chat NEVER misses',                      t:'12:08' },
+  { p:'tw', user:'Asmongold',   text:'sub to the channel bro trust',                  t:'12:08' },
+  { p:'yt', user:'Markiplier',  text:'this is what streamers actually need',           t:'12:09' },
+];
+
+const PLATFORM_LABEL = { tw: 'Twitch', yt: 'YouTube', ki: 'Kick', tt: 'TikTok' };
+
+const chat = document.getElementById('chat');
+
+function renderMessages() {
+  chat.innerHTML = '';
+  MSGS.forEach((m, i) => {
+    const el = document.createElement('div');
+    el.className = `cmsg ${m.p}`;
+    el.style.animationDelay = `${i * 0.04}s`;
+    el.innerHTML = `
+      <div class="cmsg-indicator">
+        <div class="cmsg-dot"></div>
+      </div>
+      <div class="cmsg-content">
+        <div class="cmsg-top">
+          <span class="cmsg-user">${m.user}</span>
+          <span class="cmsg-platform-tag">${PLATFORM_LABEL[m.p]}</span>
+          <span class="cmsg-time">${m.t}</span>
+        </div>
+        <div class="cmsg-text">${m.text}</div>
+      </div>
+    `;
+    chat.appendChild(el);
+  });
+  chat.scrollTop = chat.scrollHeight;
+}
+
+renderMessages();
+
+// simulate live messages trickling in
+const liveMsgs = [
+  { p:'tw', user:'Nickmercs',   text:'built different fr',                            t:'12:09' },
+  { p:'ki', user:'xQc',         text:'moved to kick and this still works 👀',         t:'12:10' },
+  { p:'yt', user:'MrBeast',     text:'sending this to my team rn',                    t:'12:10' },
+  { p:'tt', user:'Ninja',       text:'tiktok chat is actually goated for engagement', t:'12:11' },
+];
+
+let idx = 0;
+setInterval(() => {
+  if (idx < liveMsgs.length) {
+    const m = liveMsgs[idx++];
+    const el = document.createElement('div');
+    el.className = `cmsg ${m.p}`;
+    el.innerHTML = `
+      <div class="cmsg-indicator"><div class="cmsg-dot"></div></div>
+      <div class="cmsg-content">
+        <div class="cmsg-top">
+          <span class="cmsg-user">${m.user}</span>
+          <span class="cmsg-platform-tag">${PLATFORM_LABEL[m.p]}</span>
+          <span class="cmsg-time">${m.t}</span>
+        </div>
+        <div class="cmsg-text">${m.text}</div>
+      </div>
+    `;
+    chat.appendChild(el);
+    chat.scrollTop = chat.scrollHeight;
+  }
+}, 2800);
+</script>
+</body>
+</html>
