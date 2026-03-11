@@ -146,6 +146,16 @@
     animation: ring-spin 12s linear infinite;
     box-shadow: 0 0 12px oklch(from var(--color-twitch) l c h / 0.4);
   }
+
+  /* SplitView config panel — full width on mobile, CSS variable width on desktop */
+  .split-view-config {
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    .split-view-config {
+      width: var(--split-left, 40%);
+    }
+  }
 }
 
 /* @keyframes ring-spin — kept at document scope (outside @layer) per Phase 23-03 decision:
