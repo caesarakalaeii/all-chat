@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { overlaysApi } from '@/lib/api/overlays'
 import { useRouter } from 'next/navigation'
 import { MonitorPlay, Plus, Trash2 } from 'lucide-react'
 import { useOverlayStore } from '@/lib/stores/overlay-store'
@@ -135,10 +136,25 @@ function DeleteOverlayDialog({
 function DashboardContent() {
   const router = useRouter()
   const { overlays, loading, fetchOverlays, deleteOverlay } = useOverlayStore()
+  const [sourcesByOverlay, setSourcesByOverlay] = useState<Record<string, ChatSource[]>>({})
 
   useEffect(() => {
     fetchOverlays()
   }, [fetchOverlays])
+
+  // Fetch sources for all overlays after the list loads
+  useEffect(() => {
+    if (loading || overlays.length === 0) return
+    Promise.allSettled(
+      overlays.map(o => overlaysApi.getSources(o.id).then(sources => ({ id: o.id, sources })))
+    ).then(results => {
+      const map: Record<string, ChatSource[]> = {}
+      results.forEach(r => {
+        if (r.status === 'fulfilled') map[r.value.id] = r.value.sources
+      })
+      setSourcesByOverlay(map)
+    })
+  }, [overlays, loading])
 
   async function handleDelete(id: string) {
     try {
@@ -153,8 +169,10 @@ function DashboardContent() {
     }
   }
 
-  // Cast overlays to extended type — sources may be present if API returns them
-  const overlaysWithSources = overlays as unknown as OverlayWithSources[]
+  const overlaysWithSources: OverlayWithSources[] = overlays.map(o => ({
+    ...o,
+    sources: sourcesByOverlay[o.id],
+  }))
 
   return (
     <div className="min-h-screen bg-bg">
