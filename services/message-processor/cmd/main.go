@@ -498,6 +498,13 @@ func main() {
 			}
 			processorMetrics.RecordMessagePublished("message-processor", overlay.OverlayID, rawMsg.Platform, "success")
 			processorMetrics.FanoutDuration.WithLabelValues("message-processor").Observe(time.Since(startPublish).Seconds())
+
+			// Increment 24h platform message counter (for public stats endpoint).
+			// Key expires 24h after first write; EXPIRE NX avoids resetting the window.
+			statsKey := "chat:stats:24h:" + rawMsg.Platform
+			if redisClient.Incr(ctx, statsKey).Err() == nil {
+				redisClient.ExpireNX(ctx, statsKey, 24*time.Hour)
+			}
 		}
 
 		return nil

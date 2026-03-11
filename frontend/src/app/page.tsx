@@ -192,16 +192,22 @@ function MagGlowCard({
 }
 
 // ---------------------------------------------------------------------------
-// Platform stat data — no internal tech details exposed
+// Platform stat data
 // ---------------------------------------------------------------------------
-const PLATFORM_STATS = [
-  { platform: 'twitch'  as const, label: 'Twitch',  stat: 'Real-time',   detail: 'Live chat' },
-  { platform: 'youtube' as const, label: 'YouTube', stat: 'Live Chat',    detail: 'Stream chat' },
-  { platform: 'kick'    as const, label: 'Kick',    stat: 'WebSocket',    detail: 'Live chat' },
-  { platform: 'tiktok'  as const, label: 'TikTok',  stat: 'Live',         detail: 'LIVE chat' },
-]
+const PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok'] as const
+type Platform = typeof PLATFORMS[number]
 
-const TOTAL_CARDS = PLATFORM_STATS.length + 3 // 4 stat cards + 3 feature cards
+const PLATFORM_LABELS: Record<Platform, string> = {
+  twitch: 'Twitch', youtube: 'YouTube', kick: 'Kick', tiktok: 'TikTok',
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return n.toLocaleString()
+}
+
+const TOTAL_CARDS = PLATFORMS.length + 3 // 4 stat cards + 3 feature cards
 
 // ---------------------------------------------------------------------------
 // Feature card data
@@ -231,8 +237,16 @@ export default function LandingPage() {
   const router = useRouter()
   const { user, token } = useAuthStore()
   const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | null>(null)
+  const [msgCounts, setMsgCounts] = useState<Record<Platform, number> | null>(null)
 
   const { cardRefs, glowRefs } = useMagneticGlow(TOTAL_CARDS)
+
+  useEffect(() => {
+    fetch('/api/v1/stats')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setMsgCounts(data) })
+      .catch(() => {}) // fail silently — stats are decorative
+  }, [])
 
   // Redirect to dashboard if already logged in
   useEffect(() => {
@@ -320,20 +334,23 @@ export default function LandingPage() {
 
         {/* Platform stat cards — magnetic glow hero */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl w-full mx-auto mb-12">
-          {PLATFORM_STATS.map((item, i) => (
-            <MagGlowCard
-              key={item.platform}
-              cardRef={el => { cardRefs.current[i] = el }}
-              glowRef={el => { glowRefs.current[i] = el }}
-              glowColor={PLATFORM_GLOW_COLORS[item.platform]}
-            >
-              <PlatformBadge platform={item.platform} className="mb-3" />
-              <div className={cn('text-2xl font-bold mb-1', PLATFORM_COLORS[item.platform].text)}>
-                {item.stat}
-              </div>
-              <div className="text-sm text-text-sub">{item.detail}</div>
-            </MagGlowCard>
-          ))}
+          {PLATFORMS.map((platform, i) => {
+            const count = msgCounts?.[platform]
+            return (
+              <MagGlowCard
+                key={platform}
+                cardRef={el => { cardRefs.current[i] = el }}
+                glowRef={el => { glowRefs.current[i] = el }}
+                glowColor={PLATFORM_GLOW_COLORS[platform]}
+              >
+                <PlatformBadge platform={platform} className="mb-3" />
+                <div className={cn('text-2xl font-bold mb-1', PLATFORM_COLORS[platform].text)}>
+                  {count != null ? formatCount(count) : '—'}
+                </div>
+                <div className="text-xs text-text-sub">messages / 24h</div>
+              </MagGlowCard>
+            )
+          })}
         </div>
 
         {/* Login buttons */}
@@ -384,7 +401,7 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {FEATURE_CARDS.map((feature, i) => {
             const Icon = feature.icon
-            const cardIdx = PLATFORM_STATS.length + i
+            const cardIdx = PLATFORMS.length + i
             return (
               <MagGlowCard
                 key={feature.title}
