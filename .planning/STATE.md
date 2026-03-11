@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Frontend Redesign
 status: executing
-stopped_at: "Completed 25-04-PLAN.md: New overlay form and settings page migration"
-last_updated: "2026-03-11T18:32:24.661Z"
+stopped_at: "Completed 25-03-PLAN.md: Dashboard page migration with overlay grid, skeleton, empty state, dialog delete"
+last_updated: "2026-03-11T18:32:51.449Z"
 last_activity: 2026-03-10 — 23-03 events.css cascade layer migration complete, human visual verification approved
 progress:
   total_phases: 16
   completed_phases: 8
   total_plans: 44
-  completed_plans: 38
+  completed_plans: 39
   percent: 97
 ---
 
@@ -64,6 +64,7 @@ v1.3 is frontend-focused (React, Tailwind, design system) vs backend microservic
 | Phase 24-component-library-setup-customization P05 | 10 | 2 tasks | 6 files |
 | Phase 25-page-migration-split-view-preview P01 | 7 | 2 tasks | 7 files |
 | Phase 25-page-migration-split-view-preview P04 | 6 | 2 tasks | 3 files |
+| Phase 25-page-migration-split-view-preview P03 | 6 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ Recent decisions affecting v1.3 work:
 - [Phase 25-01]: Story stubs use inline placeholder components — wave-0 test infrastructure pattern from Phase 24
 - [Phase 25]: Settings delete confirmation uses Dialog.Root (not window.confirm) — provides accessible, dismissable confirmation with keyboard support
 - [Phase 25]: [Phase 25-04]: Local notification/error state replaced with toastManager across new overlay form and settings page — consistent UX pattern, eliminates inline error rendering
+- [Phase 25-03]: Used useOverlayStore.deleteOverlay() instead of raw overlaysApi — store handles state cleanup automatically
+- [Phase 25-03]: OverlayWithSources cast pattern: Overlay type lacks sources field; API may return them but type not updated — cast via 'as unknown as' for safe optional access
+- [Phase 25-03]: Dashboard stories use inline self-contained components — no auth/router context needed for visual Storybook testing
 
 ### Pending Todos
 
@@ -116,8 +120,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T18:32:24.657Z
-Stopped at: Completed 25-04-PLAN.md: New overlay form and settings page migration
+Last session: 2026-03-11T18:32:51.445Z
+Stopped at: Completed 25-03-PLAN.md: Dashboard page migration with overlay grid, skeleton, empty state, dialog delete
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 24` to plan Phase 24 (Component Library Setup & Customization)
