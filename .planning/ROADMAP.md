@@ -173,10 +173,17 @@ Plans:
   7. WCAG 2.1 AA accessibility compliance achieved (keyboard navigation, focus states, Storybook a11y addon passing in 'error' mode)
   8. Loading states and empty states implemented with illustrations and clear CTAs
   9. Overlay preview CSS preserved unchanged (marketplace theme compatibility maintained)
-**Plans**: TBD
+**Plans**: 8 plans
 
 Plans:
-- [ ] 25-01: TBD
+- [ ] 25-01-PLAN.md — Shared infrastructure: AppNav component + logo-ring + Storybook story stubs (Wave 0)
+- [ ] 25-02-PLAN.md — Landing page redesign: magnetic glow hero, platform login buttons, feature grid
+- [ ] 25-03-PLAN.md — Dashboard redesign: overlay grid, skeleton loading, empty state, Dialog delete
+- [ ] 25-04-PLAN.md — New overlay form + settings page migration
+- [ ] 25-05-PLAN.md — Overlay editor redesign + SplitView component (FEAT-01 to FEAT-04)
+- [ ] 25-06-PLAN.md — Admin layout + dashboard dark theme conversion
+- [ ] 25-07-PLAN.md — Admin sub-pages dark theme migration (users, overlays, sources, viewers)
+- [ ] 25-08-PLAN.md — Automated quality gates + human visual verification checkpoint
 
 ### Phase 26: Enforcement & Quality Gates
 **Goal**: Design system compliance automated through tooling, preventing regression and ensuring marketplace compatibility
