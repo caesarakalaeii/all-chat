@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: Completed 19-lifecycle-expiry-01 (AcceptShareRequest expiry persistence + ExpiryJob + ExpireTimedAcceptedShares)
-last_updated: "2026-03-11T17:51:19.756Z"
+stopped_at: Completed 19-lifecycle-expiry-02 (Twitch stream.offline EventSub + LifecycleSubscriber)
+last_updated: "2026-03-11T17:56:57.780Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
   completed_phases: 12
   total_plans: 55
-  completed_plans: 53
+  completed_plans: 54
   percent: 93
 ---
 
@@ -83,6 +83,7 @@ Progress: [█████████░] 93% (v1.3)
 | Phase 18-revocation P04 | 7 | 2 tasks | 1 files |
 | Phase 19-lifecycle-expiry P00 | 8 | 2 tasks | 7 files |
 | Phase 19-lifecycle-expiry P01 | 2 | 2 tasks | 6 files |
+| Phase 19-lifecycle-expiry P02 | 525609 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -143,6 +144,9 @@ Recent decisions affecting v1.3:
 - [Phase 19-lifecycle-expiry]: AcceptShareRequest computes shareExpiresAt only for custom option; unlimited/this_stream leave share_expires_at NULL
 - [Phase 19-lifecycle-expiry]: ExpireAcceptedShare is idempotent: RowsAffected==0 returns nil (share already expired or not found)
 - [Phase 19-lifecycle-expiry]: ExpireTimedAcceptedShares closes rows cursor before per-share expiry loop to avoid holding open cursor during nested transactions
+- [Phase 19-lifecycle-expiry]: Handler.db field on webhooks.Handler for twitch_id -> user_id lookup without threading db through routeEvent chain
+- [Phase 19-lifecycle-expiry]: 60s debounce in LifecycleSubscriber.debounceExpire prevents phantom expiry on Twitch stream restart or category change
+- [Phase 19-lifecycle-expiry]: Redis ping failure in share-service is non-fatal: lifecycle events disabled but service continues
 
 ### Pending Todos
 
@@ -165,8 +169,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T17:51:19.755Z
-Stopped at: Completed 19-lifecycle-expiry-01 (AcceptShareRequest expiry persistence + ExpiryJob + ExpireTimedAcceptedShares)
+Last session: 2026-03-11T17:56:52.700Z
+Stopped at: Completed 19-lifecycle-expiry-02 (Twitch stream.offline EventSub + LifecycleSubscriber)
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
