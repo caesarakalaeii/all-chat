@@ -23,6 +23,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { authApi } from '@/lib/api/auth';
+import { InfinityLogo } from '@/components/InfinityLogo';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -84,10 +85,9 @@ function AuthCallbackContent() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg">
       {loading ? (
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-2 border-transparent border-t-twitch mx-auto mb-4"></div>
-          <p className="text-text text-lg">Authenticating...</p>
-          <p className="text-text-sub text-sm mt-2">Please wait</p>
+        <div className="flex flex-col items-center gap-4">
+          <InfinityLogo size={64} />
+          <p className="text-text-sub text-sm">Authenticating...</p>
         </div>
       ) : error ? (
         <div className="text-center">
@@ -110,7 +110,7 @@ export default function AuthCallbackPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center bg-bg">
-          <div className="animate-spin rounded-full h-16 w-16 border-2 border-transparent border-t-twitch"></div>
+          <InfinityLogo size={64} />
         </div>
       }
     >

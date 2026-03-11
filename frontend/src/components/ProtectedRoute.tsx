@@ -16,6 +16,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useHydrated } from '@/hooks/useHydrated';
+import { InfinityLogo } from '@/components/InfinityLogo';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -44,11 +45,11 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     }
   }, [token, user, loading, isHydrated, router]);
 
-  // Show loading spinner while initializing or checking auth
+  // Show loading state while initializing or checking auth
   if (!isHydrated || loading || !token || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
-        <div className="animate-spin rounded-full h-12 w-12 border-2 border-transparent border-t-twitch"></div>
+        <InfinityLogo size={64} />
       </div>
     );
   }
