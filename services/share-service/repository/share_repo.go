@@ -134,12 +134,44 @@ func (r *ShareRepository) ListIncoming(ctx context.Context, recipientUserID stri
 		return nil, fmt.Errorf("failed to iterate results: %w", err)
 	}
 
+	// Populate overlay_sources for each request
+	for i := range requests {
+		sources, err := r.listOverlaySources(ctx, requests[i].SenderOverlayID)
+		if err != nil {
+			r.logger.Warn("Failed to fetch overlay sources", zap.String("overlay_id", requests[i].SenderOverlayID), zap.Error(err))
+		} else {
+			requests[i].OverlaySources = sources
+		}
+	}
+
 	r.logger.Debug("Listed incoming share requests",
 		zap.String("recipient_user_id", recipientUserID),
 		zap.String("status", status),
 		zap.Int("count", len(requests)))
 
 	return requests, nil
+}
+
+// listOverlaySources fetches the platform/channel_name pairs for an overlay
+func (r *ShareRepository) listOverlaySources(ctx context.Context, overlayID string) ([]models.OverlaySource, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT platform, channel_name FROM overlay_chat_sources WHERE overlay_id = $1 AND is_active = TRUE ORDER BY platform`,
+		overlayID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sources []models.OverlaySource
+	for rows.Next() {
+		var s models.OverlaySource
+		if err := rows.Scan(&s.Platform, &s.ChannelName); err != nil {
+			return nil, err
+		}
+		sources = append(sources, s)
+	}
+	return sources, rows.Err()
 }
 
 // UpdateStatus updates the status of a share request and sets responded_at timestamp

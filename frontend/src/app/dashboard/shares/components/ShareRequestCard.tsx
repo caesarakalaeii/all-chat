@@ -16,6 +16,7 @@ interface ShareRequestCardProps {
 
 export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
   const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const senderPlatform = request.overlay_sources?.[0]?.platform;
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
   const [showRevokeModal, setShowRevokeModal] = useState(false);
   const [acceptedShare, setAcceptedShare] = useState<{ senderName: string; senderOverlayId: string } | null>(null);
@@ -99,6 +100,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
       {showAcceptModal && (
         <AcceptModal
           request={request}
+          senderPlatform={senderPlatform}
           onClose={() => setShowAcceptModal(false)}
           onAccepted={(senderOverlayId) => {
             setAcceptedShare({
