@@ -13,41 +13,36 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
   const config = {
     pending: {
       label: 'Pending',
-      bgColor: 'bg-yellow-100',
-      textColor: 'text-yellow-800',
+      className: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
       icon: '⏳',
     },
     accepted: {
       label: 'Active',
-      bgColor: 'bg-green-100',
-      textColor: 'text-green-800',
+      className: 'bg-green-500/10 text-green-400 border border-green-500/20',
       icon: '✓',
     },
     expired: {
       label: 'Expired',
-      bgColor: 'bg-gray-100',
-      textColor: 'text-gray-600',
+      className: 'bg-slate-700/40 text-slate-400 border border-slate-600/20',
       icon: '⏱',
     },
     revoked: {
       label: 'Revoked',
-      bgColor: 'bg-red-100',
-      textColor: 'text-red-800',
+      className: 'bg-red-500/10 text-red-400 border border-red-500/20',
       icon: '✗',
     },
     rejected: {
       label: 'Rejected',
-      bgColor: 'bg-red-100',
-      textColor: 'text-red-800',
+      className: 'bg-red-500/10 text-red-400 border border-red-500/20',
       icon: '✗',
     },
   }[status];
 
-  const sizeClasses = size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-sm px-3 py-1';
+  const sizeClasses = size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-xs px-2.5 py-0.5';
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full ${config.bgColor} ${config.textColor} ${sizeClasses} font-medium`}
+      className={`inline-flex items-center gap-1 rounded-full font-medium ${config.className} ${sizeClasses}`}
     >
       <span>{config.icon}</span>
       <span>{config.label}</span>

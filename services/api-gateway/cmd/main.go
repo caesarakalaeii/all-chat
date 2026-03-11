@@ -248,6 +248,7 @@ func main() {
 	proxyHandler := handlers.NewProxyHandler(registry)
 	healthHandler := handlers.NewHealthHandler(registry)
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
+	statsHandler := handlers.NewStatsHandler(redisClient)
 	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, jwtSecret, replayBuffer, log)
 
 	// Create viewer WebSocket handler (same origin policy as owner handler)
@@ -327,6 +328,9 @@ func main() {
 	// Public routes (no auth required)
 	publicAPI := router.Group("/api/v1")
 	{
+		// Platform message stats (last 24h)
+		publicAPI.GET("/stats", statsHandler.GetPlatformStats)
+
 		// Auth service routes
 		publicAPI.POST("/auth/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/login", proxyHandler.ForwardRequest)

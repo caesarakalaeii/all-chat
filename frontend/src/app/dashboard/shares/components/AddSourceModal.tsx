@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { overlaysApi } from '@/lib/api/overlays';
+import { Button } from '@/components/ui/button';
 import type { Overlay } from '@/lib/types/overlay';
 import toast from 'react-hot-toast';
 
@@ -73,32 +74,32 @@ export function AddSourceModal({ senderName, senderOverlayId, onClose, onAdded }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
-      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 p-6">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="relative w-full max-w-sm rounded-xl border border-border bg-surface p-6 shadow-2xl">
         {/* Title */}
-        <h2 className="text-xl font-semibold mb-4">
+        <h2 className="text-xl font-semibold text-text mb-4">
           Add {senderName}&apos;s overlay to one of yours?
         </h2>
 
         {loadingOverlays ? (
-          <div className="py-8 text-center text-gray-500">Loading overlays...</div>
+          <div className="py-8 text-center text-text-sub">Loading overlays...</div>
         ) : (
           <>
             {/* Preview text */}
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-text-sub mb-4">
               {senderName}&apos;s overlay (shared chat)
             </p>
 
             {/* Overlay dropdown */}
             <div className="mb-6">
-              <label htmlFor="target-overlay-select" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="target-overlay-select" className="block text-sm font-medium text-text-sub mb-2">
                 Add to which overlay?
               </label>
               <select
                 id="target-overlay-select"
                 value={selectedOverlay}
                 onChange={(e) => setSelectedOverlay(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text transition-all duration-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 {overlays.map((overlay) => (
                   <option key={overlay.id} value={overlay.id}>
@@ -110,20 +111,22 @@ export function AddSourceModal({ senderName, senderOverlayId, onClose, onAdded }
 
             {/* Action buttons */}
             <div className="flex gap-3">
-              <button
+              <Button
+                variant="ghost"
+                className="flex-1"
                 onClick={onClose}
                 disabled={loading}
-                className="flex-1 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Skip
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="gradient"
+                className="flex-1"
                 onClick={handleAdd}
                 disabled={loading || !selectedOverlay}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Adding...' : 'Add'}
-              </button>
+              </Button>
             </div>
           </>
         )}

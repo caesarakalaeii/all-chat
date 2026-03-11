@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>all-chat — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:        #07070a;
+  --surface:   #0d0d12;
+  --surface2:  #111118;
+  --border:    rgba(255,255,255,0.06);
+  --border-md: rgba(255,255,255,0.10);
+  --text:      #e8e8f0;
+  --text-sub:  #8a8a9e;
+  --text-dim:  #3a3a52;
+  --font:      'Barlow', sans-serif;
+  --mono:      'DM Mono', monospace;
+
+  /* platform RGB tuples */
+  --tw:  145,70,255;
+  --yt:  255,68,68;
+  --ki:  83,252,24;
+  --tt:  105,201,208;
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* grid texture */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.013) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.013) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── NAV ── */
+nav {
+  position: relative; z-index: 100;
+  height: 60px;
+  display: flex; align-items: center;
+  padding: 0 28px 0 32px;
+  background: rgba(7,7,10,0.8);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  margin-right: 40px; text-decoration: none; flex-shrink: 0;
+}
+
+.logo-ring {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  background: conic-gradient(
+    rgb(var(--tw)) 0deg 88deg,
+    rgb(var(--yt)) 90deg 178deg,
+    rgb(var(--ki)) 180deg 268deg,
+    rgb(var(--tt)) 270deg 360deg
+  );
+  display: flex; align-items: center; justify-content: center;
+  animation: ring-spin 12s linear infinite;
+  box-shadow: 0 0 14px rgba(var(--tw),0.25);
+}
+@keyframes ring-spin { to { filter: hue-rotate(360deg); } }
+
+.logo-ring-inner {
+  width: 17px; height: 17px; border-radius: 50%; background: var(--bg);
+}
+
+.logo-text {
+  font-size: 16px; font-weight: 800;
+  letter-spacing: -0.04em; color: var(--text);
+}
+
+.nav-links {
+  display: flex; height: 100%; gap: 2px;
+}
+
+.nav-link {
+  display: flex; align-items: center;
+  padding: 0 14px; font-size: 13px; font-weight: 400;
+  color: var(--text-sub); cursor: pointer; position: relative;
+  transition: color 0.15s; letter-spacing: 0.01em;
+  text-decoration: none;
+}
+.nav-link:hover { color: var(--text); }
+.nav-link.active { color: var(--text); font-weight: 500; }
+.nav-link.active::after {
+  content: ''; position: absolute;
+  bottom: 0; left: 14px; right: 14px; height: 2px;
+  background: linear-gradient(90deg, rgb(var(--tw)), rgb(var(--tt)));
+  border-radius: 2px 2px 0 0;
+}
+
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+.live-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 20px;
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.2);
+  font-size: 10px; font-weight: 700; color: #22c55e;
+  letter-spacing: 0.1em; font-family: var(--mono);
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #22c55e;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+  50%      { box-shadow: 0 0 0 5px rgba(34,197,94,0); }
+}
+
+.btn-new {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border-radius: 8px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text); font-size: 13px; font-weight: 500;
+  cursor: pointer; font-family: var(--font);
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-new:hover {
+  background: rgba(255,255,255,0.11);
+  border-color: rgba(255,255,255,0.18);
+}
+.btn-new::before { content: '+'; font-size: 17px; line-height: 1; color: rgba(255,255,255,0.45); }
+
+/* ── MAIN LAYOUT ── */
+.main {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  height: calc(100vh - 60px);
+  position: relative; z-index: 1;
+}
+
+/* ── LEFT COLUMN ── */
+.left-col {
+  padding: 28px 28px 28px 32px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 28px;
+}
+.left-col::-webkit-scrollbar { width: 3px; }
+.left-col::-webkit-scrollbar-track { background: transparent; }
+.left-col::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── STAT CARDS ── */
+.stat-grid {
+  display: grid; grid-template-columns: repeat(4,1fr); gap: 12px;
+}
+
+.stat-card {
+  position: relative; border-radius: 14px; padding: 22px;
+  border: 1px solid var(--border); overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
+  animation: fade-up 0.5s ease both;
+}
+.stat-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-card:nth-child(2) { animation-delay: 0.10s; }
+.stat-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-card:nth-child(4) { animation-delay: 0.20s; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* top accent line */
+.stat-card::after {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 1px; z-index: 5; opacity: 0.7;
+}
+.stat-card[data-p="tw"]::after { background: linear-gradient(90deg, rgba(var(--tw),0.9), transparent 60%); }
+.stat-card[data-p="yt"]::after { background: linear-gradient(90deg, rgba(var(--yt),0.9), transparent 60%); }
+.stat-card[data-p="ki"]::after { background: linear-gradient(90deg, rgba(var(--ki),0.9), transparent 60%); }
+.stat-card[data-p="tt"]::after { background: linear-gradient(90deg, rgba(var(--tt),0.9), transparent 60%); }
+
+/* magnetic glow blob */
+.mag-glow {
+  position: absolute;
+  width: 180px; height: 180px; border-radius: 50%;
+  transform: translate(-50%,-50%);
+  filter: blur(35px);
+  opacity: 0; pointer-events: none; z-index: 1;
+  transition: opacity 0.5s ease;
+}
+
+/* noise layer */
+.noise {
+  position: absolute; inset: 0; border-radius: inherit;
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  mix-blend-mode: overlay; pointer-events: none; z-index: 2;
+}
+
+.stat-content { position: relative; z-index: 4; }
+
+.stat-platform {
+  font-size: 10px; font-weight: 500; letter-spacing: 0.12em;
+  text-transform: uppercase; margin-bottom: 14px;
+  font-family: var(--mono);
+}
+.stat-card[data-p="tw"] .stat-platform { color: rgb(var(--tw)); }
+.stat-card[data-p="yt"] .stat-platform { color: rgb(var(--yt)); }
+.stat-card[data-p="ki"] .stat-platform { color: rgb(var(--ki)); }
+.stat-card[data-p="tt"] .stat-platform { color: rgb(var(--tt)); }
+
+.stat-value {
+  font-size: 40px; font-weight: 800;
+  letter-spacing: -0.03em; line-height: 1;
+  color: var(--text); margin-bottom: 8px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+
+.stat-delta {
+  font-size: 14px; font-weight: 700;
+  color: #4ade80; font-family: var(--font);
+  letter-spacing: 0;
+}
+
+.stat-label { font-size: 12px; color: var(--text-sub); font-weight: 400; }
+
+/* ── SECTION HEADER ── */
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.section-title {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-sub);
+  font-family: var(--mono);
+}
+.section-action {
+  font-size: 12px; color: var(--text-dim); cursor: pointer;
+  transition: color 0.15s;
+}
+.section-action:hover { color: var(--text-sub); }
+
+/* ── OVERLAY CARDS ── */
+.overlay-grid {
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 12px;
+}
+
+.ov-card {
+  background: var(--surface); border-radius: 14px;
+  border: 1px solid var(--border); overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  animation: fade-up 0.5s ease both;
+}
+.ov-card:nth-child(1) { animation-delay: 0.28s; }
+.ov-card:nth-child(2) { animation-delay: 0.33s; }
+.ov-card:nth-child(3) { animation-delay: 0.38s; }
+
+.ov-card:hover { transform: translateY(-2px); }
+.ov-card[data-primary="tw"]:hover { border-color: rgba(var(--tw),0.25); box-shadow: 0 8px 32px rgba(var(--tw),0.07), 0 2px 8px rgba(0,0,0,0.4); }
+.ov-card[data-primary="yt"]:hover { border-color: rgba(var(--yt),0.25); box-shadow: 0 8px 32px rgba(var(--yt),0.07), 0 2px 8px rgba(0,0,0,0.4); }
+.ov-card[data-primary="ki"]:hover { border-color: rgba(var(--ki),0.25); box-shadow: 0 8px 32px rgba(var(--ki),0.07), 0 2px 8px rgba(0,0,0,0.4); }
+
+.ov-top { height: 3px; }
+.ov-card[data-primary="tw"] .ov-top { background: rgb(var(--tw)); }
+.ov-card[data-primary="yt"] .ov-top { background: rgb(var(--yt)); }
+.ov-card[data-primary="ki"] .ov-top { background: rgb(var(--ki)); }
+
+.ov-body { padding: 16px; }
+
+.ov-header {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; margin-bottom: 12px;
+}
+
+.ov-name {
+  font-size: 15px; font-weight: 700;
+  letter-spacing: -0.02em; color: var(--text); line-height: 1.2;
+}
+
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 4px;
+}
+.status-dot.on {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34,197,94,0.7);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+.status-dot.off { background: var(--text-dim); }
+
+.ov-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
+
+.pbadge {
+  padding: 3px 8px; border-radius: 4px;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  font-family: var(--mono); border: 1px solid;
+}
+.pbadge.tw { color: rgb(var(--tw)); background: rgba(var(--tw),0.1); border-color: rgba(var(--tw),0.2); }
+.pbadge.yt { color: rgb(var(--yt)); background: rgba(var(--yt),0.1); border-color: rgba(var(--yt),0.2); }
+.pbadge.ki { color: rgb(var(--ki)); background: rgba(var(--ki),0.1); border-color: rgba(var(--ki),0.2); }
+.pbadge.tt { color: rgb(var(--tt)); background: rgba(var(--tt),0.1); border-color: rgba(var(--tt),0.2); }
+
+.ov-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 12px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-sub); font-family: var(--mono);
+}
+.ov-footer strong { color: var(--text); font-weight: 500; }
+.ov-edit { color: var(--text-dim); cursor: pointer; transition: color 0.15s; }
+.ov-edit:hover { color: var(--text-sub); }
+
+/* ── RIGHT / CHAT COLUMN ── */
+.chat-col {
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  background: var(--surface); position: relative; overflow: hidden;
+}
+
+/* ambient purple glow from left side */
+.chat-col::before {
+  content: ''; position: absolute;
+  top: 20%; left: -80px; width: 220px; height: 400px;
+  background: radial-gradient(ellipse, rgba(var(--tw),0.035) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+.chat-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; position: relative; z-index: 1;
+  background: rgba(255,255,255,0.01);
+}
+
+.chat-head-left { display: flex; align-items: center; gap: 10px; }
+
+.chat-live-badge {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px;
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.2);
+  font-size: 10px; font-weight: 700; color: #22c55e;
+  letter-spacing: 0.1em; font-family: var(--mono);
+}
+
+.chat-meta { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+
+.platform-dots { display: flex; gap: 5px; align-items: center; }
+.pdot {
+  width: 8px; height: 8px; border-radius: 50%;
+  transition: box-shadow 0.3s;
+}
+.pdot.tw { background: rgb(var(--tw)); box-shadow: 0 0 7px rgba(var(--tw),0.7); }
+.pdot.yt { background: rgb(var(--yt)); box-shadow: 0 0 7px rgba(var(--yt),0.7); }
+.pdot.ki { background: rgb(var(--ki)); box-shadow: 0 0 7px rgba(var(--ki),0.7); }
+.pdot.tt { background: rgb(var(--tt)); box-shadow: 0 0 7px rgba(var(--tt),0.7); }
+
+/* ── MESSAGES ── */
+.chat-msgs {
+  flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column;
+  position: relative; z-index: 1;
+}
+.chat-msgs::-webkit-scrollbar { width: 3px; }
+.chat-msgs::-webkit-scrollbar-track { background: transparent; }
+.chat-msgs::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 2px; }
+
+.cmsg {
+  display: grid; grid-template-columns: 8px 1fr; gap: 10px;
+  padding: 9px 18px; border-bottom: 1px solid rgba(255,255,255,0.025);
+  align-items: start; animation: fade-in 0.25s ease both;
+}
+.cmsg:nth-child(even) { background: rgba(255,255,255,0.012); }
+.cmsg:hover { background: rgba(255,255,255,0.03); }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.cmsg-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 4px;
+}
+.cmsg.tw .cmsg-dot { background: rgb(var(--tw)); box-shadow: 0 0 7px rgba(var(--tw),0.7); }
+.cmsg.yt .cmsg-dot { background: rgb(var(--yt)); box-shadow: 0 0 7px rgba(var(--yt),0.7); }
+.cmsg.ki .cmsg-dot { background: rgb(var(--ki)); box-shadow: 0 0 7px rgba(var(--ki),0.7); }
+.cmsg.tt .cmsg-dot { background: rgb(var(--tt)); box-shadow: 0 0 7px rgba(var(--tt),0.7); }
+
+.cmsg-body { min-width: 0; }
+
+.cmsg-top {
+  display: flex; align-items: baseline;
+  gap: 5px; margin-bottom: 3px; flex-wrap: wrap;
+}
+
+.cmsg-user { font-size: 12px; font-weight: 700; line-height: 1; }
+.cmsg.tw .cmsg-user { color: rgb(var(--tw)); }
+.cmsg.yt .cmsg-user { color: rgb(var(--yt)); }
+.cmsg.ki .cmsg-user { color: rgb(var(--ki)); }
+.cmsg.tt .cmsg-user { color: rgb(var(--tt)); }
+
+.cmsg-tag {
+  font-size: 9px; font-family: var(--mono); font-weight: 500;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  padding: 1px 5px; border-radius: 3px;
+}
+.cmsg.tw .cmsg-tag { color: rgb(var(--tw)); background: rgba(var(--tw),0.12); }
+.cmsg.yt .cmsg-tag { color: rgb(var(--yt)); background: rgba(var(--yt),0.12); }
+.cmsg.ki .cmsg-tag { color: rgb(var(--ki)); background: rgba(var(--ki),0.12); }
+.cmsg.tt .cmsg-tag { color: rgb(var(--tt)); background: rgba(var(--tt),0.12); }
+
+.cmsg-time {
+  font-size: 9px; color: var(--text-dim);
+  font-family: var(--mono); margin-left: auto; flex-shrink: 0;
+}
+
+.cmsg-text {
+  font-size: 13px; color: rgba(232,232,240,0.72);
+  line-height: 1.45; word-break: break-word;
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="logo" href="#">
+    <div class="logo-ring"><div class="logo-ring-inner"></div></div>
+    <span class="logo-text">all-chat</span>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link active" href="#">Dashboard</a>
+    <a class="nav-link" href="#">Overlays</a>
+    <a class="nav-link" href="#">Analytics</a>
+    <a class="nav-link" href="#">Settings</a>
+  </div>
+  <div class="nav-right">
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <button class="btn-new">New Overlay</button>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- LEFT -->
+  <div class="left-col">
+
+    <!-- Stats -->
+    <div class="stat-grid">
+      <div class="stat-card" data-p="tw" data-rgb="145,70,255">
+        <div class="mag-glow"></div><div class="noise"></div>
+        <div class="stat-content">
+          <div class="stat-platform">Twitch</div>
+          <div class="stat-value">4.2k<span class="stat-delta">↑12%</span></div>
+          <div class="stat-label">messages / hour</div>
+        </div>
+      </div>
+      <div class="stat-card" data-p="yt" data-rgb="255,68,68">
+        <div class="mag-glow"></div><div class="noise"></div>
+        <div class="stat-content">
+          <div class="stat-platform">YouTube</div>
+          <div class="stat-value">3.1k<span class="stat-delta">↑8%</span></div>
+          <div class="stat-label">messages / hour</div>
+        </div>
+      </div>
+      <div class="stat-card" data-p="ki" data-rgb="83,252,24">
+        <div class="mag-glow"></div><div class="noise"></div>
+        <div class="stat-content">
+          <div class="stat-platform">Kick</div>
+          <div class="stat-value">2.8k<span class="stat-delta">↑31%</span></div>
+          <div class="stat-label">messages / hour</div>
+        </div>
+      </div>
+      <div class="stat-card" data-p="tt" data-rgb="105,201,208">
+        <div class="mag-glow"></div><div class="noise"></div>
+        <div class="stat-content">
+          <div class="stat-platform">TikTok</div>
+          <div class="stat-value">1.9k<span class="stat-delta">↑5%</span></div>
+          <div class="stat-label">messages / hour</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overlays -->
+    <div>
+      <div class="section-head">
+        <div class="section-title">Active Overlays</div>
+        <div class="section-action">View all →</div>
+      </div>
+      <div class="overlay-grid">
+
+        <div class="ov-card" data-primary="tw">
+          <div class="ov-top"></div>
+          <div class="ov-body">
+            <div class="ov-header">
+              <div class="ov-name">Main Stream</div>
+              <div class="status-dot on"></div>
+            </div>
+            <div class="ov-badges">
+              <span class="pbadge tw">Twitch</span>
+              <span class="pbadge yt">YouTube</span>
+              <span class="pbadge ki">Kick</span>
+            </div>
+            <div class="ov-footer">
+              <div><strong>8,112</strong> msgs today</div>
+              <div class="ov-edit">Edit →</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ov-card" data-primary="yt">
+          <div class="ov-top"></div>
+          <div class="ov-body">
+            <div class="ov-header">
+              <div class="ov-name">Gaming Setup</div>
+              <div class="status-dot on"></div>
+            </div>
+            <div class="ov-badges">
+              <span class="pbadge yt">YouTube</span>
+              <span class="pbadge tt">TikTok</span>
+            </div>
+            <div class="ov-footer">
+              <div><strong>3,441</strong> msgs today</div>
+              <div class="ov-edit">Edit →</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ov-card" data-primary="ki">
+          <div class="ov-top"></div>
+          <div class="ov-body">
+            <div class="ov-header">
+              <div class="ov-name">IRL Stream</div>
+              <div class="status-dot off"></div>
+            </div>
+            <div class="ov-badges">
+              <span class="pbadge ki">Kick</span>
+              <span class="pbadge tt">TikTok</span>
+            </div>
+            <div class="ov-footer">
+              <div><strong>0</strong> msgs today</div>
+              <div class="ov-edit">Edit →</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT / CHAT -->
+  <div class="chat-col">
+    <div class="chat-head">
+      <div class="chat-head-left">
+        <div class="chat-live-badge"><div class="live-dot"></div>LIVE</div>
+        <div class="chat-meta">3 overlays</div>
+      </div>
+      <div class="platform-dots">
+        <div class="pdot tw"></div>
+        <div class="pdot yt"></div>
+        <div class="pdot ki"></div>
+        <div class="pdot tt"></div>
+      </div>
+    </div>
+    <div class="chat-msgs" id="chat"></div>
+  </div>
+
+</div>
+
+<script>
+// ── CHAT DATA ──
+const PLATFORM = {
+  tw: 'Twitch', yt: 'YouTube', ki: 'Kick', tt: 'TikTok'
+};
+
+const MSGS = [
+  { p:'tw', u:'xQc',           t:'12:04', m:'this overlay is actually insane bro' },
+  { p:'yt', u:'Pokimane',      t:'12:04', m:'wait it combines ALL platforms??' },
+  { p:'ki', u:'KaiCenat',      t:'12:05', m:'LFG kick chat is showing up too 🔥' },
+  { p:'tt', u:'charlidamelio', t:'12:05', m:'tiktok stream gang where we at' },
+  { p:'tw', u:'HasanAbi',      t:'12:05', m:'the truffle extension energy but actually works' },
+  { p:'yt', u:'Ludwig',        t:'12:06', m:'no more switching tabs between chats omg' },
+  { p:'ki', u:'Trainwreck',    t:'12:06', m:'kick finally getting proper tools' },
+  { p:'tw', u:'Shroud',        t:'12:06', m:'clean UI honestly' },
+  { p:'tt', u:'BruceDropEmOff',t:'12:07', m:'we going multistream lets gooo' },
+  { p:'yt', u:'Valkyrae',      t:'12:07', m:'the platform colors make it so easy to scan' },
+  { p:'tw', u:'Mizkif',        t:'12:07', m:'finally something that actually works lol' },
+  { p:'ki', u:'N3on',          t:'12:08', m:'kick growing fr fr' },
+  { p:'tt', u:'Kai Cenat',     t:'12:08', m:'tiktok chat NEVER misses' },
+  { p:'tw', u:'Asmongold',     t:'12:08', m:'sub to the channel bro trust' },
+  { p:'yt', u:'Markiplier',    t:'12:09', m:'this is what streamers actually need' },
+];
+
+const LIVE = [
+  { p:'tw', u:'Nickmercs',   t:'12:09', m:'built different fr' },
+  { p:'ki', u:'xQc',         t:'12:10', m:'moved to kick and this still works 👀' },
+  { p:'yt', u:'MrBeast',     t:'12:10', m:'sending this to my team rn' },
+  { p:'tt', u:'Ninja',       t:'12:11', m:'tiktok chat is actually goated for engagement' },
+];
+
+const chat = document.getElementById('chat');
+
+function makeMsg(d) {
+  const el = document.createElement('div');
+  el.className = `cmsg ${d.p}`;
+  el.innerHTML = `
+    <div class="cmsg-dot"></div>
+    <div class="cmsg-body">
+      <div class="cmsg-top">
+        <span class="cmsg-user">${d.u}</span>
+        <span class="cmsg-tag">${PLATFORM[d.p]}</span>
+        <span class="cmsg-time">${d.t}</span>
+      </div>
+      <div class="cmsg-text">${d.m}</div>
+    </div>`;
+  return el;
+}
+
+MSGS.forEach(d => chat.appendChild(makeMsg(d)));
+chat.scrollTop = chat.scrollHeight;
+
+let li = 0;
+setInterval(() => {
+  if (li < LIVE.length) {
+    chat.appendChild(makeMsg(LIVE[li++]));
+    chat.scrollTop = chat.scrollHeight;
+  }
+}, 2800);
+
+// ── MAGNETIC GLOW ──
+const cards      = [...document.querySelectorAll('.stat-card')];
+const MAX_DIST   = 520;
+const IDLE_DELAY = 1800;
+
+let idleTimer = null, idleRaf = null, isIdle = false, idleStart = 0;
+
+const idleState = cards.map(() => ({
+  speed:    0.0004 + Math.random() * 0.0003,
+  radius:   0.32   + Math.random() * 0.22,
+  phaseOff: Math.random() * Math.PI * 2,
+}));
+
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+function closestDist(rect, mx, my) {
+  const cx = clamp(mx, rect.left, rect.right);
+  const cy = clamp(my, rect.top,  rect.bottom);
+  const inside = mx>=rect.left && mx<=rect.right && my>=rect.top && my<=rect.bottom;
+  return { dist: inside ? 0 : Math.hypot(mx-cx, my-cy), inside };
+}
+
+function directionalBorder(rect, mx, my, rgb, intensity) {
+  const ccx = rect.left + rect.width/2;
+  const ccy = rect.top  + rect.height/2;
+  const len = Math.hypot(mx-ccx, my-ccy) || 1;
+  const nx = (mx-ccx)/len, ny = (my-ccy)/len;
+
+  const base = 0.06, boost = 0.55*intensity;
+  return {
+    aT: base + clamp(-ny,0,1)*boost,
+    aR: base + clamp( nx,0,1)*boost,
+    aB: base + clamp( ny,0,1)*boost,
+    aL: base + clamp(-nx,0,1)*boost,
+  };
+}
+
+function applyBorder(card, rgb, {aT,aR,aB,aL}) {
+  const avg = (aT+aR+aB+aL)/4;
+  card.style.borderColor = `rgba(${rgb},${avg})`;
+  const s = 2;
+  card.style.boxShadow = [
+    `0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3)`,
+    `inset 0 ${s}px ${s*3}px rgba(${rgb},${aT*0.35})`,
+    `inset -${s}px 0 ${s*3}px rgba(${rgb},${aR*0.35})`,
+    `inset 0 -${s}px ${s*3}px rgba(${rgb},${aB*0.35})`,
+    `inset ${s}px 0 ${s*3}px rgba(${rgb},${aL*0.35})`,
+  ].join(', ');
+}
+
+function applyTracking(mx, my) {
+  cards.forEach(card => {
+    const rgb  = card.dataset.rgb;
+    const glow = card.querySelector('.mag-glow');
+    const rect = card.getBoundingClientRect();
+    const { dist, inside } = closestDist(rect, mx, my);
+
+    const raw = clamp(1 - dist/MAX_DIST, 0, 1);
+    const intensity = raw*raw;
+
+    if (intensity < 0.003) {
+      glow.style.opacity = '0';
+      card.style.borderColor = `rgba(${rgb},0.06)`;
+      card.style.boxShadow = '0 4px 24px rgba(0,0,0,0.4)';
+      return;
+    }
+
+    // Global cursor → card-local space (NOT clamped — one shared light source)
+    glow.style.left       = `${mx - rect.left}px`;
+    glow.style.top        = `${my - rect.top}px`;
+    glow.style.opacity    = `${clamp(intensity*(inside?1.35:1),0,1)}`;
+    glow.style.background = `radial-gradient(circle, rgba(${rgb},0.6) 0%, rgba(${rgb},0.15) 50%, transparent 75%)`;
+    glow.style.transition = 'opacity 0.4s ease';
+
+    applyBorder(card, rgb, directionalBorder(rect, mx, my, rgb, intensity));
+  });
+}
+
+function startIdle() {
+  if (idleRaf) return;
+  isIdle = true;
+  idleStart = performance.now();
+
+  function tick(now) {
+    const t = now - idleStart;
+    cards.forEach((card, i) => {
+      const rgb  = card.dataset.rgb;
+      const glow = card.querySelector('.mag-glow');
+      const rect = card.getBoundingClientRect();
+      const s    = idleState[i];
+
+      const cx = rect.width  * (0.5 + Math.cos(t*s.speed + s.phaseOff) * s.radius * 0.5);
+      const cy = rect.height * (0.5 + Math.sin(t*s.speed*1.37 + s.phaseOff+1.1) * s.radius * 0.5);
+      const br = 0.17 + 0.09*Math.sin(t*0.0008 + s.phaseOff);
+
+      glow.style.left       = `${cx}px`;
+      glow.style.top        = `${cy}px`;
+      glow.style.opacity    = `${br}`;
+      glow.style.background = `radial-gradient(circle, rgba(${rgb},0.6) 0%, rgba(${rgb},0.15) 50%, transparent 75%)`;
+      glow.style.transition = 'opacity 1.2s ease';
+
+      const vmx = rect.left + cx, vmy = rect.top + cy;
+      applyBorder(card, rgb, directionalBorder(rect, vmx, vmy, rgb, br*0.7));
+    });
+    idleRaf = requestAnimationFrame(tick);
+  }
+  idleRaf = requestAnimationFrame(tick);
+}
+
+function stopIdle() {
+  if (idleRaf) { cancelAnimationFrame(idleRaf); idleRaf = null; }
+  isIdle = false;
+}
+
+function scheduleIdle(delay=IDLE_DELAY) {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(startIdle, delay);
+}
+
+document.addEventListener('mousemove', e => {
+  if (isIdle) {
+    stopIdle();
+    cards.forEach(c => { c.querySelector('.mag-glow').style.transition = 'opacity 0.35s ease'; });
+  }
+  applyTracking(e.clientX, e.clientY);
+  scheduleIdle();
+});
+
+document.addEventListener('mouseleave', () => {
+  cards.forEach(c => {
+    c.querySelector('.mag-glow').style.opacity = '0';
+    c.style.borderColor = '';
+    c.style.boxShadow = '0 4px 24px rgba(0,0,0,0.4)';
+  });
+  scheduleIdle(600);
+});
+
+// Start idle immediately — no cursor on load
+scheduleIdle(0);
+</script>
+</body>
+</html>

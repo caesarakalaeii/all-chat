@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>all-chat — Magnetic v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #07070a;
+  --surface: #0d0d12;
+  --border: rgba(255,255,255,0.06);
+  --text: #e8e8f0;
+  --text-muted: #52526a;
+  --font: 'Barlow', sans-serif;
+  --mono: 'DM Mono', monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100vh;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.013) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.013) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.label   { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: #444; font-family: var(--mono); margin-bottom: 4px; position: relative; z-index: 1; }
+.sublabel{ font-size: 11px; color: #333; font-family: var(--mono); margin-bottom: 16px; line-height: 1.7; position: relative; z-index: 1; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  position: relative; z-index: 1;
+}
+
+/* ── CARD ── */
+.card {
+  position: relative;
+  border-radius: 14px;
+  padding: 22px;
+  /* border drawn via box-shadow so we can control each side independently */
+  border: 1px solid transparent;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+/* inner glow blob — tracks cursor closest point */
+.card .mag-glow {
+  position: absolute;
+  width: 180px; height: 180px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  filter: blur(35px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 0.6s ease;
+}
+
+/* noise — kills banding */
+.card .noise {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* card content */
+.card-content { position: relative; z-index: 4; }
+
+.stat-platform {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  margin-bottom: 14px; font-family: var(--mono);
+}
+.stat-value {
+  font-size: 40px; font-weight: 800;
+  letter-spacing: -0.03em; line-height: 1;
+  color: var(--text); margin-bottom: 6px;
+}
+.stat-delta {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4ade80;
+  font-family: var(--font);
+  margin-left: 8px;
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+.stat-label { font-size: 12px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div>
+  <div class="label">Magnetic glow v2 — directional border + idle animation</div>
+  <div class="sublabel">
+    Border brightness follows the light source direction from cursor to card edge.<br>
+    Move away or leave the window — cards go idle and drift on their own.<br>
+    Return and they snap back to tracking.
+  </div>
+</div>
+
+<div class="grid" id="grid">
+  <div class="card" data-rgb="145,70,255" data-name="Twitch" data-val="4.2k" data-delta="↑12%" data-label="messages / hour" style="--pc:145,70,255"></div>
+  <div class="card" data-rgb="255,68,68"  data-name="YouTube" data-val="3.1k" data-delta="↑8%"  data-label="messages / hour" style="--pc:255,68,68"></div>
+  <div class="card" data-rgb="83,252,24"  data-name="Kick"    data-val="2.8k" data-delta="↑31%" data-label="messages / hour" style="--pc:83,252,24"></div>
+  <div class="card" data-rgb="105,201,208" data-name="TikTok" data-val="1.9k" data-delta="↑5%"  data-label="messages / hour" style="--pc:105,201,208"></div>
+</div>
+
+<script>
+// ── Build card interiors ──
+document.querySelectorAll('.card').forEach(card => {
+  const { name, val, delta, label } = card.dataset;
+  const rgb = card.dataset.rgb;
+
+  card.innerHTML = `
+    <div class="mag-glow"></div>
+    <div class="noise"></div>
+    <div class="card-content">
+      <div class="stat-platform" style="color:rgb(${rgb})">${name}</div>
+      <div class="stat-value">${val}<span class="stat-delta">${delta}</span></div>
+      <div class="stat-label">${label}</div>
+    </div>
+  `;
+});
+
+// ── State ──
+const cards   = [...document.querySelectorAll('.card')];
+const MAX_DIST = 520;      // px — how far cursor still influences cards
+const IDLE_TIMEOUT = 1800; // ms of no movement before idle kicks in
+
+let mouse = null;           // null = off-screen / unknown
+let idleTimer = null;
+let isIdle = false;
+let idleRaf = null;
+let idleStart = 0;
+
+// Per-card idle state (each card wanders independently)
+const idleState = cards.map(() => ({
+  angle:    Math.random() * Math.PI * 2,
+  speed:    0.0004 + Math.random() * 0.0003,
+  radius:   0.35 + Math.random() * 0.25,   // fraction of card size
+  phaseOff: Math.random() * Math.PI * 2,
+}));
+
+// ── Helpers ──
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function closestPointOnRect(rect, mx, my) {
+  const cx = clamp(mx, rect.left, rect.right);
+  const cy = clamp(my, rect.top,  rect.bottom);
+  const inside = mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
+  const dist = inside ? 0 : Math.hypot(mx - cx, my - cy);
+  return { cx, cy, dist, inside };
+}
+
+// Directional border: given a normalised light direction vector
+// pointing FROM outside TOWARD the card, brighten the edges
+// that face toward the source. Returns a CSS border shorthand string.
+function directionalBorder(rect, mx, my, rgb, intensity) {
+  // Vector from card centre to cursor
+  const ccx = rect.left + rect.width  / 2;
+  const ccy = rect.top  + rect.height / 2;
+  const dx  = mx - ccx;
+  const dy  = my - ccy;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx  = dx / len;  // normalised: points cursor→centre (inverted below)
+  const ny  = dy / len;
+
+  // Each edge normal (pointing outward from card)
+  // top: (0,-1)  right: (1,0)  bottom: (0,1)  left: (-1,0)
+  // dot product with cursor direction = how much that edge faces the light
+  const dotTop    = clamp( ny, 0, 1);   // cursor above  → top edge lit
+  const dotRight  = clamp(-nx, 0, 1);   // cursor right  → right edge lit  (note sign)
+  const dotBottom = clamp(-ny, 0, 1);   // cursor below  → bottom edge lit
+  const dotLeft   = clamp( nx, 0, 1);   // cursor left   → left edge lit
+
+  // Wait — we want edges FACING the cursor, so the edge whose outward
+  // normal points TOWARD the cursor. Cursor is at (mx,my), card centre
+  // at (ccx,ccy). Direction from centre to cursor: (nx,ny).
+  // Edge facing cursor = edge whose outward normal dots positively with (nx,ny).
+  const fTop    = clamp(-ny, 0, 1);  // top outward = (0,-1), dot with (nx,ny) = -ny
+  const fRight  = clamp( nx, 0, 1);  // right outward = (1,0)
+  const fBottom = clamp( ny, 0, 1);  // bottom outward = (0,1)
+  const fLeft   = clamp(-nx, 0, 1);  // left outward = (-1,0)
+
+  const base = 0.06;
+  const boost = 0.55 * intensity;
+
+  const aTop    = base + fTop    * boost;
+  const aRight  = base + fRight  * boost;
+  const aBottom = base + fBottom * boost;
+  const aLeft   = base + fLeft   * boost;
+
+  // box-shadow approach for per-side brightness:
+  // We use an inset outline trick — gradient border via
+  // pseudo-element would be cleaner but needs JS to set.
+  // Easiest: set border-image or use outline trick.
+  // We'll return per-side rgba values and apply via JS directly.
+  return { aTop, aRight, aBottom, aLeft };
+}
+
+function applyBorder(card, rgb, aTop, aRight, aBottom, aLeft) {
+  // Use box-shadow with inset layers to simulate directional border glow.
+  // Real border uses a single colour — we fake multi-side via
+  // outline + box-shadow combination.
+  card.style.borderColor = `rgba(${rgb},${(aTop+aRight+aBottom+aLeft)/4})`;
+
+  // Directional glow: inset shadows on each side
+  const s = 2;
+  card.style.boxShadow = [
+    `inset 0 ${s}px  ${s*3}px rgba(${rgb},${aTop    * 0.4})`,   // top
+    `inset -${s}px 0 ${s*3}px rgba(${rgb},${aRight  * 0.4})`,   // right
+    `inset 0 -${s}px ${s*3}px rgba(${rgb},${aBottom * 0.4})`,   // bottom
+    `inset ${s}px  0 ${s*3}px rgba(${rgb},${aLeft   * 0.4})`,   // left
+  ].join(', ');
+}
+
+// ── Tracking mode ──
+// The key insight: glow position is the GLOBAL cursor projected onto
+// each card's coordinate space — not the closest edge point.
+// This means as the cursor sweeps across cards, the glow exits one
+// card's right side exactly as it enters the next card's left side.
+// One light source, multiple surfaces.
+function applyMouse(mx, my) {
+  cards.forEach((card, i) => {
+    const rgb  = card.dataset.rgb;
+    const glow = card.querySelector('.mag-glow');
+    const rect = card.getBoundingClientRect();
+
+    // Distance from cursor to nearest point on card — for intensity only
+    const { dist, inside } = closestPointOnRect(rect, mx, my);
+    const raw = clamp(1 - dist / MAX_DIST, 0, 1);
+    const intensity = raw * raw;
+
+    if (intensity < 0.003) {
+      glow.style.opacity = '0';
+      card.style.borderColor = `rgba(${rgb},0.06)`;
+      card.style.boxShadow = 'none';
+      return;
+    }
+
+    // Glow position: cursor in card-local space (can be outside card bounds —
+    // that's intentional, the gradient just peeks in from the edge)
+    const glowX = mx - rect.left;
+    const glowY = my - rect.top;
+
+    glow.style.left       = `${glowX}px`;
+    glow.style.top        = `${glowY}px`;
+    glow.style.opacity    = `${clamp(intensity * (inside ? 1.4 : 1), 0, 1)}`;
+    glow.style.background = `radial-gradient(circle, rgba(${rgb},0.6) 0%, rgba(${rgb},0.15) 50%, transparent 75%)`;
+    glow.style.transition = 'opacity 0.4s ease';
+
+    // Directional border — still uses global cursor position
+    const { aTop, aRight, aBottom, aLeft } = directionalBorder(rect, mx, my, rgb, intensity);
+    applyBorder(card, rgb, aTop, aRight, aBottom, aLeft);
+  });
+}
+
+// ── Idle animation ──
+function startIdle() {
+  if (idleRaf) return;
+  isIdle = true;
+  idleStart = performance.now();
+
+  function tick(now) {
+    const t = now - idleStart;
+
+    cards.forEach((card, i) => {
+      const rgb  = card.dataset.rgb;
+      const glow = card.querySelector('.mag-glow');
+      const rect = card.getBoundingClientRect();
+      const s    = idleState[i];
+
+      // Lissajous-ish drift: each card has its own phase/speed
+      const angle  = t * s.speed + s.phaseOff;
+      const angle2 = t * s.speed * 1.37 + s.phaseOff + 1.1;
+
+      // Wander within the card bounds
+      const cx = rect.width  * (0.5 + Math.cos(angle)  * s.radius * 0.5);
+      const cy = rect.height * (0.5 + Math.sin(angle2) * s.radius * 0.5);
+
+      // Breathing intensity — pulses gently
+      const breathe = 0.18 + 0.10 * Math.sin(t * 0.0008 + s.phaseOff);
+
+      glow.style.left       = `${cx}px`;
+      glow.style.top        = `${cy}px`;
+      glow.style.opacity    = `${breathe}`;
+      glow.style.background = `radial-gradient(circle, rgba(${rgb},0.55) 0%, transparent 65%)`;
+      glow.style.transition = 'opacity 1.2s ease'; // slow fade for idle mode
+
+      // Border: gentle ambient pulse, slightly directional toward glow
+      // treat glow position as a virtual light source
+      const virtualMx = rect.left + cx;
+      const virtualMy = rect.top  + cy;
+      const { aTop, aRight, aBottom, aLeft } =
+        directionalBorder(rect, virtualMx, virtualMy, rgb, breathe * 0.7);
+      applyBorder(card, rgb, aTop, aRight, aBottom, aLeft);
+    });
+
+    idleRaf = requestAnimationFrame(tick);
+  }
+
+  idleRaf = requestAnimationFrame(tick);
+}
+
+function stopIdle() {
+  if (idleRaf) { cancelAnimationFrame(idleRaf); idleRaf = null; }
+  isIdle = false;
+}
+
+function scheduleIdle() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    if (!mouse) startIdle();
+  }, IDLE_TIMEOUT);
+}
+
+// ── Event listeners ──
+document.addEventListener('mousemove', e => {
+  mouse = { x: e.clientX, y: e.clientY };
+
+  if (isIdle) {
+    stopIdle();
+    // Brief transition back to tracking
+    cards.forEach(card => {
+      card.querySelector('.mag-glow').style.transition = 'opacity 0.4s ease';
+    });
+  }
+
+  applyMouse(e.clientX, e.clientY);
+  scheduleIdle();
+});
+
+document.addEventListener('mouseleave', () => {
+  mouse = null;
+  cards.forEach(card => {
+    const rgb = card.dataset.rgb;
+    card.querySelector('.mag-glow').style.opacity = '0';
+    card.style.borderColor = '';
+    card.style.boxShadow   = '';
+  });
+  // Start idle sooner when cursor leaves window
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(startIdle, 600);
+});
+
+// Init — start idle immediately since no cursor yet
+scheduleIdle();
+</script>
+</body>
+</html>

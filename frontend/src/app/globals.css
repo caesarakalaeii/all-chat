@@ -1,86 +1,169 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
+/* Cascade layer order — must be declared before any @layer body */
+@layer base, design-system, marketplace-themes, user-overrides;
+
+/* Font bridge — maps next/font/google CSS variables to Tailwind font utilities */
+@theme inline {
+  --font-sans: var(--font-barlow);
+  --font-mono: var(--font-dm-mono);
+}
+
+/* ============================================================
+   DESIGN TOKENS — single authoritative dark-only token system
+   Three-tier hierarchy: base → semantic → component
+   ============================================================ */
 @theme {
-  /* Platform colors */
-  --color-twitch: #9146FF;
-  --color-youtube: #FF0000;
-  --color-kick: #53FC18;
-  --color-tiktok: #000000;
+  /* --------------------------------------------------
+     TIER 1: BASE TOKENS (raw palette)
+     -------------------------------------------------- */
 
-  /* Shadcn-style color system */
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
+  /* Platform colors — WCAG AA-accessible on dark backgrounds (#020204)
+     Twitch: #A37BFF (lightened from brand #9146FF for 4.5:1 contrast)
+     Others already pass: YouTube #FF4444, Kick #53FC18, TikTok #69C9D0 */
+  --color-twitch:  #A37BFF;
+  --color-youtube: #FF4444;
+  --color-kick:    #53FC18;
+  --color-tiktok:  #69C9D0;
 
-  /* Border radius */
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
+  --color-neutral-950: oklch(0.09 0.007 270);   /* #07070a — bg */
+  --color-neutral-900: oklch(0.11 0.009 270);   /* #0d0d12 — surface */
+  --color-neutral-800: oklch(0.14 0.008 270);   /* surface-2 */
+  --color-neutral-700: oklch(0.22 0.007 270);   /* elevated border */
+  --color-neutral-600: oklch(0.35 0.007 270);   /* muted text */
+  --color-neutral-400: oklch(0.58 0.007 270);   /* secondary text */
+  --color-neutral-200: oklch(0.78 0.005 270);   /* tertiary text */
+  --color-neutral-100: oklch(0.91 0.003 270);   /* primary text */
+
+  /* --------------------------------------------------
+     TIER 2: SEMANTIC TOKENS (purpose-named)
+     -------------------------------------------------- */
+  --color-bg:        var(--color-neutral-950);
+  --color-surface:   var(--color-neutral-900);
+  --color-surface-2: var(--color-neutral-800);
+  --color-border:    oklch(from var(--color-neutral-100) l c h / 0.06);
+  --color-border-md: oklch(from var(--color-neutral-100) l c h / 0.10);
+  --color-text:      var(--color-neutral-100);
+  --color-text-sub:  var(--color-neutral-400);
+  --color-text-dim:  var(--color-neutral-600);
+
+  /* --------------------------------------------------
+     TIER 3: COMPONENT TOKENS (specific-use)
+     -------------------------------------------------- */
+
+  /* Stat card glows — 25% alpha versions of platform colors */
+  --color-stat-glow-twitch:  color-mix(in oklch, var(--color-twitch) 25%, transparent);
+  --color-stat-glow-youtube: color-mix(in oklch, var(--color-youtube) 25%, transparent);
+  --color-stat-glow-kick:    color-mix(in oklch, var(--color-kick) 25%, transparent);
+  --color-stat-glow-tiktok:  color-mix(in oklch, var(--color-tiktok) 25%, transparent);
+
+  /* Shadow glows for platform elements */
+  --shadow-glow-twitch:  0 0 20px color-mix(in oklch, var(--color-twitch) 40%, transparent);
+  --shadow-glow-youtube: 0 0 20px color-mix(in oklch, var(--color-youtube) 40%, transparent);
+  --shadow-glow-kick:    0 0 20px color-mix(in oklch, var(--color-kick) 40%, transparent);
+  --shadow-glow-tiktok:  0 0 20px color-mix(in oklch, var(--color-tiktok) 40%, transparent);
+
+  /* Badge background */
+  --color-badge-bg: oklch(from var(--color-neutral-100) l c h / 0.07);
+
+  /* Nav */
+  --color-nav-bg: oklch(from var(--color-neutral-950) l c h / 0.80);
+
+  /* --------------------------------------------------
+     TYPOGRAPHY
+     -------------------------------------------------- */
+  --text-xs:   0.6875rem;   /* 11px */
+  --text-sm:   0.8125rem;   /* 13px */
+  --text-base: 0.875rem;    /* 14px */
+  --text-lg:   1rem;        /* 16px */
+  --text-xl:   1.25rem;     /* 20px */
+  --text-2xl:  1.5rem;      /* 24px */
+  --text-3xl:  2rem;        /* 32px */
+
+  /* --------------------------------------------------
+     SPACING
+     -------------------------------------------------- */
+  --spacing-1:  0.25rem;
+  --spacing-2:  0.5rem;
+  --spacing-3:  0.75rem;
+  --spacing-4:  1rem;
+  --spacing-6:  1.5rem;
+  --spacing-8:  2rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+
+  /* --------------------------------------------------
+     BORDER RADIUS
+     -------------------------------------------------- */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  24px;
+  --radius-full: 9999px;
 }
 
+/* ============================================================
+   BASE LAYER — resets and default element styles
+   ============================================================ */
 @layer base {
-  :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 262.1 83.3% 57.8%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 262.1 83.3% 57.8%;
-    --radius: 0.5rem;
+  *, *::before, *::after {
+    box-sizing: border-box;
   }
-}
-
-@layer base {
-  * {
-    @apply border-border;
+  html {
+    font-family: var(--font-sans);
+    background: var(--color-bg);
+    color: var(--color-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--color-bg);
+    background-image:
+      linear-gradient(rgba(255,255,255,0.013) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.013) 1px, transparent 1px);
+    background-size: 40px 40px;
+    color: var(--color-text);
+    min-height: 100vh;
   }
 }
 
-@layer utilities {
+/* ============================================================
+   DESIGN-SYSTEM LAYER — animations and utilities
+   ============================================================ */
+@layer design-system {
   @keyframes slide-up {
-    from {
-      transform: translateY(100%);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
   }
-
   .animate-slide-up {
     animation: slide-up 0.4s ease-out;
   }
+
+  .logo-ring {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--color-twitch), var(--color-tiktok), var(--color-twitch));
+    animation: ring-spin 12s linear infinite;
+    box-shadow: 0 0 12px oklch(from var(--color-twitch) l c h / 0.4);
+  }
+
+  /* SplitView config panel — full width on mobile, CSS variable width on desktop */
+  .split-view-config {
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    .split-view-config {
+      width: var(--split-left, 40%);
+    }
+  }
+}
+
+/* @keyframes ring-spin — kept at document scope (outside @layer) per Phase 23-03 decision:
+   animation names are globally scoped regardless of cascade layer context */
+@keyframes ring-spin {
+  to { transform: rotate(360deg); }
 }

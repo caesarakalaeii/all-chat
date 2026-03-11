@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>all-chat — Logo v4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@700;800&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #07070a; --surface: #0d0d12;
+  --border: rgba(255,255,255,0.06);
+  --text: #e8e8f0; --mono: 'DM Mono', monospace;
+}
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Barlow', sans-serif;
+  padding: 48px; display: flex; flex-direction: column; gap: 10px;
+}
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.013) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.013) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.page-label {
+  font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: #333; font-family: var(--mono); margin-bottom: 16px; position: relative; z-index: 1;
+}
+.section-label {
+  font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #444; font-family: var(--mono); margin: 20px 0 8px; position: relative; z-index: 1;
+}
+.row {
+  display: flex; align-items: center; gap: 32px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 22px 28px;
+  position: relative; z-index: 1;
+}
+.row-label {
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #444; font-family: var(--mono); width: 200px; flex-shrink: 0; line-height: 1.8;
+}
+.logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.logo-text { font-size: 16px; font-weight: 800; letter-spacing: -0.04em; color: var(--text); }
+.logo-lg .logo-text { font-size: 26px; }
+
+.bubble {
+  position: relative; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.bubble .inf-svg {
+  position: absolute;
+  /* Nudge up to optically centre in the bubble body, excluding the tail spike.
+     The spike adds ~20% extra height below — shift up by ~10% of bubble height. */
+  transform: translateY(-10%);
+  filter: drop-shadow(0 0 3px rgba(0,0,0,0.9));
+}
+
+/* ── The infinity path, shared d attribute ── */
+/* d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" */
+</style>
+</head>
+<body>
+
+<div class="page-label">Logo v4 — 4 solid-colour layers, equal segments, seamless loop</div>
+
+<!-- A: outline single -->
+<div class="row">
+  <div class="row-label">A<br>Outline bubble<br>4-layer solid colours</div>
+  <div class="logo">
+    <div class="bubble" style="width:36px;height:36px">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+        <path d="M2.25 12.7593C2.25 14.3604 3.37341 15.754 4.95746 15.987C6.04357 16.1467 7.14151 16.27 8.25 16.3556V21L12.326 16.924C12.6017 16.6483 12.9738 16.4919 13.3635 16.481C15.2869 16.4274 17.1821 16.2606 19.0425 15.9871C20.6266 15.7542 21.75 14.3606 21.75 12.7595V6.74056C21.75 5.13946 20.6266 3.74583 19.0425 3.51293C16.744 3.17501 14.3926 3 12.0003 3C9.60776 3 7.25612 3.17504 4.95747 3.51302C3.37342 3.74593 2.25 5.13956 2.25 6.74064V12.7593Z"
+          stroke="rgba(255,255,255,0.12)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <svg class="inf-svg" width="24" height="14" viewBox="0 0 24 14" id="logo-a">
+        <!-- ghost trail -->
+        <path class="trail" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"
+          fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2" stroke-linecap="round"/>
+        <!-- 4 colour layers — dashoffset animated per-frame -->
+        <path class="seg tw" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg yt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg ki" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg tt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="logo-text">all-chat</span>
+  </div>
+</div>
+
+<!-- B: solid single -->
+<div class="row">
+  <div class="row-label">B<br>Solid bubble<br>Thicker stroke</div>
+  <div class="logo">
+    <div class="bubble" style="width:36px;height:36px">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+        <path fill-rule="evenodd" clip-rule="evenodd"
+          d="M4.84836 2.771C7.18302 2.42773 9.57113 2.25 12.0003 2.25C14.4292 2.25 16.8171 2.4277 19.1516 2.77091C21.1299 3.06177 22.5 4.79445 22.5 6.74056V12.7595C22.5 14.7056 21.1299 16.4382 19.1516 16.7291C17.2123 17.0142 15.2361 17.1851 13.2302 17.2348C13.1266 17.2374 13.0318 17.2788 12.9638 17.3468L8.78033 21.5303C8.56583 21.7448 8.24324 21.809 7.96299 21.6929C7.68273 21.5768 7.5 21.3033 7.5 21V17.045C6.60901 16.9634 5.72491 16.8579 4.84836 16.729C2.87004 16.4381 1.5 14.7054 1.5 12.7593V6.74064C1.5 4.79455 2.87004 3.06188 4.84836 2.771Z"
+          fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>
+      </svg>
+      <svg class="inf-svg" width="24" height="14" viewBox="0 0 24 14" id="logo-b">
+        <path class="trail" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"
+          fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg tw" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg yt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg ki" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg tt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="logo-text">all-chat</span>
+  </div>
+</div>
+
+<!-- C: solid double -->
+<div class="row">
+  <div class="row-label">C<br>Double bubble</div>
+  <div class="logo">
+    <div class="bubble" style="width:36px;height:36px">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+        <path d="M4.91307 2.65823C6.9877 2.38888 9.10296 2.25 11.2503 2.25C13.3974 2.25 15.5124 2.38885 17.5869 2.65815C19.5091 2.90769 20.8783 4.51937 20.9923 6.38495C20.6665 6.27614 20.3212 6.20396 19.96 6.17399C18.5715 6.05874 17.1673 6 15.75 6C14.3326 6 12.9285 6.05874 11.54 6.17398C9.1817 6.36971 7.5 8.36467 7.5 10.6082V14.8937C7.5 16.5844 8.45468 18.1326 9.9328 18.8779L7.28033 21.5303C7.06583 21.7448 6.74324 21.809 6.46299 21.6929C6.18273 21.5768 6 21.3033 6 21V16.9705C5.63649 16.9316 5.27417 16.8887 4.91308 16.8418C2.90466 16.581 1.5 14.8333 1.5 12.8626V6.63738C1.5 4.66672 2.90466 2.91899 4.91307 2.65823Z"
+          fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.09)" stroke-width="0.5"/>
+        <path d="M15.75 7.5C14.3741 7.5 13.0114 7.55702 11.6641 7.66884C10.1248 7.7966 9 9.10282 9 10.6082V14.8937C9 16.4014 10.128 17.7083 11.6692 17.8341C12.9131 17.9357 14.17 17.9912 15.4384 17.999L18.2197 20.7803C18.4342 20.9948 18.7568 21.059 19.037 20.9429C19.3173 20.8268 19.5 20.5533 19.5 20.25V17.8601C19.6103 17.8518 19.7206 17.8432 19.8307 17.8342C21.372 17.7085 22.5 16.4015 22.5 14.8938V10.6082C22.5 9.10283 21.3752 7.79661 19.836 7.66885C18.4886 7.55702 17.1259 7.5 15.75 7.5Z"
+          fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.11)" stroke-width="0.5"/>
+      </svg>
+      <svg class="inf-svg" width="24" height="14" viewBox="0 0 24 14" id="logo-c">
+        <path class="trail" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"
+          fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg tw" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg yt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg ki" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg tt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="logo-text">all-chat</span>
+  </div>
+</div>
+
+<div class="section-label">Large — B at 2×</div>
+
+<div class="row">
+  <div class="row-label">B × large</div>
+  <div class="logo logo-lg">
+    <div class="bubble" style="width:52px;height:52px">
+      <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
+        <path fill-rule="evenodd" clip-rule="evenodd"
+          d="M4.84836 2.771C7.18302 2.42773 9.57113 2.25 12.0003 2.25C14.4292 2.25 16.8171 2.4277 19.1516 2.77091C21.1299 3.06177 22.5 4.79445 22.5 6.74056V12.7595C22.5 14.7056 21.1299 16.4382 19.1516 16.7291C17.2123 17.0142 15.2361 17.1851 13.2302 17.2348C13.1266 17.2374 13.0318 17.2788 12.9638 17.3468L8.78033 21.5303C8.56583 21.7448 8.24324 21.809 7.96299 21.6929C7.68273 21.5768 7.5 21.3033 7.5 21V17.045C6.60901 16.9634 5.72491 16.8579 4.84836 16.729C2.87004 16.4381 1.5 14.7054 1.5 12.7593V6.74064C1.5 4.79455 2.87004 3.06188 4.84836 2.771Z"
+          fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>
+      </svg>
+      <svg class="inf-svg" width="34" height="20" viewBox="0 0 24 14" id="logo-d">
+        <path class="trail" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"
+          fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg tw" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg yt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg ki" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg tt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="logo-text">all-chat</span>
+  </div>
+</div>
+
+<script>
+// ── 4-layer solid colour snake ──
+//
+// Each colour is its own path with stroke-dasharray = [segLen/4, huge].
+// The 4 paths are offset by segLen/4 from each other so they tile perfectly.
+// One full loop = total path length. Colours stay pure, lengths stay equal.
+//
+// Two copies per colour (A and B) for seamless wrap — same trick as before.
+
+const LOGOS   = ['logo-a', 'logo-b', 'logo-c', 'logo-d'];
+const SEG_FRAC = 0.55;  // total coloured snake as fraction of path
+const LOOP_MS  = 6000;  // one full revolution in ms — slow and smooth
+
+// Measure from first path in each SVG
+const lengths = LOGOS.map(id => {
+  const path = document.querySelector(`#${id} .seg`);
+  return path ? path.getTotalLength() : 60;
+});
+
+// Set dasharray on every seg path
+LOGOS.forEach((id, li) => {
+  const total  = lengths[li];
+  const seg    = total * SEG_FRAC;
+  const piece  = seg / 4;          // each colour gets exactly 1/4 of the snake
+  const huge   = total * 10;       // gap so large second dash never appears
+
+  document.querySelectorAll(`#${id} .seg`).forEach((path, ci) => {
+    path.style.strokeDasharray = `${piece} ${huge}`;
+    // Will be set each frame via dashoffset
+  });
+});
+
+function tick(now) {
+  LOGOS.forEach((id, li) => {
+    const total = lengths[li];
+    const seg   = total * SEG_FRAC;
+    const piece = seg / 4;
+
+    // Head position — linear, constant speed
+    const head = (now / LOOP_MS * total) % total;
+
+    document.querySelectorAll(`#${id} .seg`).forEach((path, ci) => {
+      const colourOffset = ci * piece;
+      const t = ((head - colourOffset) % total + total) % total;
+
+      // Two-copy seamless wrap:
+      // dasharray = piece  (total*2) so gap is always >> total
+      // Primary copy at -t, secondary copy at -(t - total)
+      // When primary exits end, secondary already entering from start
+      path.style.strokeDasharray  = `${piece} ${total * 2}`;
+      path.style.strokeDashoffset = `${-t}`;
+
+      // Secondary copy — sibling with class 'seg-b'
+      const bPath = path.nextElementSibling;
+      if (bPath && bPath.classList.contains('seg-b')) {
+        bPath.style.strokeDasharray  = `${piece} ${total * 2}`;
+        bPath.style.strokeDashoffset = `${-(t - total)}`;
+      }
+    });
+  });
+
+  requestAnimationFrame(tick);
+}
+
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

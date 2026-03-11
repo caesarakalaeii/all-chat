@@ -1,3 +1,12 @@
+/**
+ * Local PlatformBadge re-export.
+ *
+ * Adapts the shares-domain `source` object shape to the shared
+ * PlatformBadge component from @/components/ui/badge.
+ */
+import { PlatformBadge as SharedPlatformBadge } from '@/components/ui/badge';
+import type { Platform } from '@/lib/platform-colors';
+
 interface PlatformBadgeProps {
   source: {
     platform: string;
@@ -5,22 +14,13 @@ interface PlatformBadgeProps {
   };
 }
 
-const PLATFORM_COLORS = {
-  twitch: 'bg-purple-100 text-purple-800',
-  youtube: 'bg-red-100 text-red-800',
-  kick: 'bg-green-100 text-green-800',
-  tiktok: 'bg-gray-100 text-gray-800',
-};
-
 export function PlatformBadge({ source }: PlatformBadgeProps) {
-  const colorClass = PLATFORM_COLORS[source.platform as keyof typeof PLATFORM_COLORS] || 'bg-gray-100 text-gray-800';
+  const knownPlatforms: Platform[] = ['twitch', 'youtube', 'kick', 'tiktok', 'system'];
+  const platform: Platform = knownPlatforms.includes(source.platform as Platform)
+    ? (source.platform as Platform)
+    : 'system';
 
   return (
-    <div
-      className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${colorClass}`}
-      title={`${source.channel_name} on ${source.platform}`}
-    >
-      <span className="capitalize">{source.platform}</span>
-    </div>
+    <SharedPlatformBadge platform={platform} />
   );
 }

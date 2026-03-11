@@ -1,156 +1,124 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.3
-milestone_name: Chat Overlay Sharing
-status: complete
-stopped_at: v1.3 milestone archived — 2026-03-11
-last_updated: "2026-03-11T21:30:00.000Z"
-last_activity: 2026-03-11 — v1.3 milestone complete
+milestone_name: Frontend Redesign
+status: executing
+stopped_at: "Completed 25-08-PLAN.md: Final visual verification and Phase 25 completion gate"
+last_updated: "2026-03-11T21:04:04.403Z"
+last_activity: 2026-03-10 — 23-03 events.css cascade layer migration complete, human visual verification approved
 progress:
-  total_phases: 19
-  completed_phases: 19
-  total_plans: 55
-  completed_plans: 55
-  percent: 100
+  total_phases: 16
+  completed_phases: 9
+  total_plans: 44
+  completed_plans: 44
+  percent: 97
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-11)
+See: .planning/PROJECT.md (updated 2026-03-06)
 
-**Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events, unlimited YouTube chat access, and collaborative overlay sharing with other streamers.
-**Current focus:** Planning next milestone — run `/gsd:new-milestone`
+**Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
+**Current focus:** Phase 23 - Design Token System & Foundation (v1.3 Frontend Redesign)
 
 ## Current Position
 
-Phase: 19 of 19 (Lifecycle & Expiry)
-Plan: 4 of 4
-Status: Complete
-Last activity: 2026-03-11 — v1.3 milestone archived
+Phase: 23 of 26 (Design Token System & Foundation)
+Plan: 23-03 complete, Phase 23 fully complete — ready for Phase 24
+Status: Executing phase 23
+Last activity: 2026-03-10 — 23-03 events.css cascade layer migration complete, human visual verification approved
 
-Progress: [██████████] 100% (v1.3 — SHIPPED)
+Progress: [██████████] 97% (35/35 plans complete — Phase 23 all 3 plans complete)
 
 ## Performance Metrics
 
-**Velocity (all milestones):**
-- Total plans completed: 46 (v1.0-v1.2)
-- Average duration: 9.5 min
-- Total execution time: 7.23 hours
+**Velocity:**
+- Total plans completed: 53 (from v1.0-v1.2)
+- v1.0: 11 plans (3 phases)
+- v1.1: 21 plans (7 phases)
+- v1.2: 21 plans (12 phases)
+- v1.3: 3 plans complete (23-01 design token system, 23-02 platform colors, 23-03 events.css cascade layers)
 
-**By Phase (v1.0-v1.2):**
+**By Milestone:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1. Foundation + Twitch | 5 | 33 min | 6.6 min |
-| 2. YouTube Integration | 2 | 9 min | 4.5 min |
-| 3. Kick Integration | 4 | 15 min | 3.75 min |
-| 5. Sharding Infrastructure | 5 | 22 min | 4.4 min |
-| 6. Connection Management | 8 | 217 min | 27.1 min |
-| 7. Dynamic Rebalancing | 4 | 22 min | 5.5 min |
-| 8. Observability & Production | 4 | 15 min | 3.75 min |
-| 9. Core Ingestion PoC | 5 | 32 min | 6.4 min |
-| 10. Production Minimum | 4 | 31 min | 7.75 min |
-| 11. Contract Validation | 4 | 21 min | 5.25 min |
-| 12. Production Rollout | 3 | 40 min | 13.3 min |
-| 13. Feature Parity | 5 | 40 min | 8.0 min |
+| Milestone | Phases | Plans | Status |
+|-----------|--------|-------|--------|
+| v1.0 Message Deletion | 1-3 | 11 | Complete (partial - 3/4 phases) |
+| v1.1 Load Balancing | 4-10 | 21 | Complete |
+| v1.2 InnerTube Listener | 11-22 | 21 | Complete |
+| v1.3 Frontend Redesign | 23-26 | TBD | In progress (2 plans complete) |
 
 **Recent Trend:**
-- v1.2 average: 7.5 min/plan (phases 9-13)
-- v1.1 average: 15.3 min/plan (phases 5-8)
-- Trend: Stable velocity with occasional spikes for complex integration work
+v1.3 is frontend-focused (React, Tailwind, design system) vs backend microservices (Go). Velocity pattern may differ from previous milestones.
 
-*Will update after v1.3 plan completions*
-| Phase 14 P01 | 3 | 2 tasks | 6 files |
-| Phase 14 P03 | 3 | 3 tasks | 6 files |
-| Phase 14 P02 | 8 | 4 tasks | 5 files |
-| Phase 14 P04 | 4 | 5 tasks | 10 files |
-| Phase 15 P00 | 1 | 2 tasks | 6 files |
-| Phase 15 P01 | 5 | 2 tasks | 6 files |
-| Phase 15 P02 | 6 | 3 tasks | 10 files |
-| Phase 15 P03 | 530 | 3 tasks | 15 files |
-| Phase 16 P01 | 2 | 2 tasks | 5 files |
-| Phase 16 P02 | 3 | 3 tasks | 6 files |
-| Phase 16-shared-overlay-sources P00 | 3 | 2 tasks | 2 files |
-| Phase 16-shared-overlay-sources P03 | 8 | 2 tasks | 5 files |
-| Phase 17-message-routing P00 | 4 | 2 tasks | 2 files |
-| Phase 17-message-routing P01 | 3 | 2 tasks | 3 files |
-| Phase 18-revocation P00 | 1 | 1 tasks | 1 files |
-| Phase 18-revocation P01 | 4 | 2 tasks | 7 files |
-| Phase 18-revocation P02 | 12 | 1 tasks | 3 files |
-| Phase 18-revocation P03 | 2 | 3 tasks | 6 files |
-| Phase 18-revocation P04 | 7 | 2 tasks | 1 files |
-| Phase 19-lifecycle-expiry P00 | 8 | 2 tasks | 7 files |
-| Phase 19-lifecycle-expiry P01 | 2 | 2 tasks | 6 files |
-| Phase 19-lifecycle-expiry P02 | 525609 | 2 tasks | 8 files |
-| Phase 19 P03 | 6 | 2 tasks | 10 files |
+*Updated: 2026-03-09 after roadmap creation*
+| Phase 23-design-token-system-foundation P01 | 8 | 2 tasks | 2 files |
+| Phase 23-design-token-system-foundation P02 | 4min | 3 tasks | 8 files |
+| Phase 23-design-token-system-foundation P03 | 3min | 2 tasks | 2 files |
+| Phase 24-component-library-setup-customization P01 | 2 | 2 tasks | 7 files |
+| Phase 24-component-library-setup-customization P02 | 5 | 3 tasks | 12 files |
+| Phase 24-component-library-setup-customization P03 | 5 | 2 tasks | 2 files |
+| Phase 24-component-library-setup-customization P04 | 4 | 3 tasks | 6 files |
+| Phase 24-component-library-setup-customization P05 | 10 | 2 tasks | 6 files |
+| Phase 25-page-migration-split-view-preview P01 | 7 | 2 tasks | 7 files |
+| Phase 25-page-migration-split-view-preview P04 | 6 | 2 tasks | 3 files |
+| Phase 25-page-migration-split-view-preview P03 | 6 | 2 tasks | 2 files |
+| Phase 25-page-migration-split-view-preview P02 | 12 | 2 tasks | 3 files |
+| Phase 25-page-migration-split-view-preview P05 | 15 | 2 tasks | 4 files |
+| Phase 25-page-migration-split-view-preview P06 | 3 | 2 tasks | 4 files |
+| Phase 25-page-migration-split-view-preview P07 | 5 | 2 tasks | 4 files |
+| Phase 25-page-migration-split-view-preview P08 | 5 | 2 tasks | 0 files |
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting v1.3:
+Recent decisions affecting v1.3 work:
 
-**v1.3 Architecture:**
-- New share-service for permission management + extend existing services for message delivery
-- Shared overlays treated as virtual platform sources (reuse activation patterns)
-- Premium enforcement is server-side at every API endpoint (prevents client bypass)
-- Permission model prohibits nested shares (1-layer depth maximum, prevents cascading)
-- Message fan-out happens at message-processor layer (avoid duplicate enrichment)
-- Bidirectional sharing model (both users share back, not unidirectional like Twitch)
-
-**v1.2 Milestone (relevant patterns):**
-- Drop-in replacement pattern proven successful (RawChatMessage compatibility, zero downstream changes)
-- Contract testing before production (schema drift is silent killer)
-- Canary deployment with metrics-based promotion (10%→50%→100%)
-- Interface adapters for circular dependencies (publisherAdapter, metricsAdapter patterns)
-- [Phase 14-01]: Use ON DELETE RESTRICT for share request foreign keys to prevent data loss during user deletion
-- [Phase 14]: No caching for premium status checks (query database on every request for MVP simplicity)
-- [Phase 14]: Use LOWER() function for case-insensitive search to leverage functional index from migration 028
-- [Phase 14]: Premium enforcement at middleware layer for share creation prevents client bypass
-- [Phase 14-04]: Expiry job runs every 5 minutes with immediate execution on start to clean up stale requests
-- [Phase 14-04]: Card-based dashboard with tab filtering (Pending/History) reuses admin pages pattern
-- [Phase 15]: DFS algorithm for cycle detection with visited/recursion stack tracking
-- [Phase 15]: Transaction with SELECT FOR UPDATE prevents concurrent acceptance race conditions
-- [Phase 15]: Custom expiry validation enforces 1-168 hour range at API level
-- [Phase 15-02]: TDD approach for modal components ensures comprehensive test coverage (≥90%)
-- [Phase 15-02]: Sequential modal flow (AcceptModal → AddSourceModal) with proper z-index prevents visual conflicts
-- [Phase 15-02]: StatusBadge uses icons + color coding (pending=yellow, active=green, expired=gray, revoked/rejected=red) for accessibility
-- [Phase 15]: WebSocket notification via internal endpoint (fire-and-forget, 5s timeout)
-- [Phase 15]: Overlay-specific deduplication with 5s TTL (prevents Twitch Shared Chat overlap)
-- [Phase 16-01]: shared_overlay uses is_enabled=TRUE, requires_oauth=FALSE; recipient_overlay_id is nullable FK with ON DELETE SET NULL for bidirectional sharing
-- [Phase 16]: AcceptedShareDetail is a separate struct from ShareRequest — it's a read-only JOIN projection for UI-enriched queries, not a base model mutation
-- [Phase 16]: [Phase 16-02]: No premium check on GET /shares/accepted — viewing available sources is informational (read-only), premium only gates create/accept mutations
-- [Phase 16-shared-overlay-sources]: shares_accepted_test.go already GREEN from 15-03 — GetAcceptedShares already implemented, no compile-error RED gate needed
-- [Phase 16-shared-overlay-sources]: RED test for shared_overlay uses HTTP status assertion (403 vs 201) rather than compile error for cleaner readable RED state
-- [Phase 16-shared-overlay-sources]: Nil DB guard in shared_overlay branch returns 403 — unit tests work without real DB
-- [Phase 16-shared-overlay-sources]: channel_name added to AddSourceRequest interface (was missing from type definition, backend already accepted it)
-- [Phase 17-message-routing]: Stub-based router tests (no pgxmock): message-processor go.mod lacks pgxmock/testcontainers; in-process overlayFinderStub with map lookup suffices for Wave 0 RED scaffolding
-- [Phase 17-message-routing]: productionQueryHasUnion=false sentinel: asserts Wave 1 must add UNION branch; clean RED failure with descriptive message
-- [Phase 17-message-routing]: t.Skip for is_active=true test: nil-db guard returns 403 before createFunc fires; DB dependency deferred to Wave 1 integration test
-- [Phase 17-message-routing]: UNION (not UNION ALL) for message fan-out deduplication: overlays appearing in both direct and shared branches returned exactly once
-- [Phase 17-message-routing]: IsActive: req.Platform == 'shared_overlay' expression: shared_overlay sources are immediately active at creation (share already accepted); other platforms activated by listeners
-- [Phase 18-revocation]: Compile-error RED gate via handler.RevokeShareRequest (undefined) satisfies Nyquist without t.Skip
-- [Phase 18-revocation]: revokeShareData interface for test fixture injection: avoids pgxmock/testcontainers while fully exercising handler auth+status logic
-- [Phase 18-revocation]: [Phase 18-01]: Revoke route is non-premium (alongside mark-seen): revoking an active share should always be allowed
-- [Phase 18-revocation]: Cast sr.id to text (sr.id::text = ocs.channel_id) rather than channel_id to uuid — avoids uuid cast errors for non-uuid channel_ids (twitch/youtube/kick) in LEFT JOIN ON clauses
-- [Phase 18-revocation]: Revoke button placed below StatusBadge on accepted cards; onRevoked triggers onUpdate() for re-fetch without page reload
-- [Phase 18-04]: WS connection in overlay editor uses /ws/overlay/{id} endpoint for share_revoked notifications; Revoke button gated on isActiveSharedOverlay, Remove button always present
-- [Phase 18-04]: ActivateSourcesForOverlay must filter shared_overlay sources where share_request.status IN (revoked, expired) — prevents revocation bypass on WS reconnect (found during verification)
-- [Phase 19-lifecycle-expiry]: Migration 034 uses separate share_expires_at column (not expires_at which is the 7-day acceptance window for pending requests)
-- [Phase 19-lifecycle-expiry]: Partial index on (share_expires_at, status) WHERE status='accepted' AND share_expires_at IS NOT NULL for efficient expiry job queries
-- [Phase 19-lifecycle-expiry]: YouTube lifecycle t.Skip stub (not compile error) — HandleStreamOffline already exists; publisher param extension is the Wave 3 RED gate
-- [Phase 19-lifecycle-expiry]: AcceptShareRequest computes shareExpiresAt only for custom option; unlimited/this_stream leave share_expires_at NULL
-- [Phase 19-lifecycle-expiry]: ExpireAcceptedShare is idempotent: RowsAffected==0 returns nil (share already expired or not found)
-- [Phase 19-lifecycle-expiry]: ExpireTimedAcceptedShares closes rows cursor before per-share expiry loop to avoid holding open cursor during nested transactions
-- [Phase 19-lifecycle-expiry]: Handler.db field on webhooks.Handler for twitch_id -> user_id lookup without threading db through routeEvent chain
-- [Phase 19-lifecycle-expiry]: 60s debounce in LifecycleSubscriber.debounceExpire prevents phantom expiry on Twitch stream restart or category change
-- [Phase 19-lifecycle-expiry]: Redis ping failure in share-service is non-fatal: lifecycle events disabled but service continues
-- [Phase 19-lifecycle-expiry]: YouTube nil guard added to Repository.DeleteChannelVideoMapping to prevent panic with nil redis client in unit tests
-- [Phase 19-lifecycle-expiry]: TikTok stream_end publish placed in disconnected handler in index.ts (live→offline transition), not in LiveStreamPoller polling cycle (which only handles offline→live)
-- [Phase 19-lifecycle-expiry]: overlay_sources must be fetched in ListIncoming (not just share row) — senderPlatform is always undefined without the JOIN; found during Playwright verification (b60e071)
+- **Design System Foundation First**: Establish design tokens and tooling BEFORE touching existing pages to prevent rework and ensure consistency
+- **Overlay CSS Stability Contract**: Treat events.css classes as immutable public API for marketplace theme compatibility
+- **Static Platform Color Mapping**: Replace dynamic class construction to ensure Tailwind JIT compilation works correctly
+- **All-Page Migration in Phase 25**: Migrate ALL pages together to avoid visual inconsistencies (not gradual rollout)
+- **Enforcement Last (Phase 26)**: Only enforce design system rules AFTER 100% migration complete to avoid blocking legitimate work
+- [Phase 23]: Removed shadcn/tailwind.css import to prevent HSL token conflicts with new design system
+- [Phase 23]: Dark-only app: removed @custom-variant dark and .dark class toggle, single token set
+- [Phase 23]: Static PLATFORM_COLORS map uses complete literal class strings for Tailwind JIT safety — no dynamic concatenation like 'text-' + platform
+- [Phase 23-03]: @keyframes kept at document scope outside @layer — animation names are globally scoped regardless of cascade layer context
+- [Phase 23-03]: Layer order declaration duplicated in events.css for standalone overlay page context without globals.css
+- [Phase 24]: Story stubs use inline placeholder components rather than importing from @/components/ui/* to avoid TypeScript module resolution errors before real components are built
+- [Phase 24]: globals.css imported as first line of preview.ts so all CSS custom properties are in scope before Storybook renders any story
+- [Phase 24]: Use Omit<InputPrimitive.Props, 'size'> to resolve native HTML size (number) vs CVA size variant (string) type conflict — pattern for future CVA variants clashing with HTML attributes
+- [Phase 24]: CVA interactive boolean variant uses string keys 'true'/'false' per CVA convention — maps correctly from JSX boolean interactive={true}
+- [Phase 24-03]: Glow dot uses var(--shadow-glow-{platform}) CSS custom property; system platform fallback with neutral style
+- [Phase 24-03]: Render-only Storybook stories require args with required props to satisfy TypeScript story types
+- [Phase 24-04]: createToastManager must be accessed via Toast namespace (import { Toast } from '@base-ui/react/toast') — named export is type-only in index.d.ts
+- [Phase 24-04]: Toast stories use static visual ToastPreview — live Provider setup in Storybook decorators complex; visual appearance is the test target
+- [Phase 24-05]: Twitch color lightened from #9146FF to #A37BFF for WCAG AA 4.5:1 compliance in badge text context
+- [Phase 24-05]: Platform color tokens must target ≥4.5:1 contrast against dark background (#020204) when used as text
+- [Phase 24-05]: Storybook a11y in error mode: stories must include aria-label when no placeholder present on inputs
+- [Phase 24-05]: Toast border colors use defined @theme tokens: border-l-youtube (red) for error, border-l-tiktok (teal) for info — border-l-destructive and border-l-ring are not in the custom token system
+- [Phase 25-01]: @keyframes ring-spin kept at document scope outside @layer; .logo-ring class in @layer design-system — per Phase 23-03 decision
+- [Phase 25-01]: Story stubs use inline placeholder components — wave-0 test infrastructure pattern from Phase 24
+- [Phase 25]: Settings delete confirmation uses Dialog.Root (not window.confirm) — provides accessible, dismissable confirmation with keyboard support
+- [Phase 25]: [Phase 25-04]: Local notification/error state replaced with toastManager across new overlay form and settings page — consistent UX pattern, eliminates inline error rendering
+- [Phase 25-03]: Used useOverlayStore.deleteOverlay() instead of raw overlaysApi — store handles state cleanup automatically
+- [Phase 25-03]: OverlayWithSources cast pattern: Overlay type lacks sources field; API may return them but type not updated — cast via 'as unknown as' for safe optional access
+- [Phase 25-03]: Dashboard stories use inline self-contained components — no auth/router context needed for visual Storybook testing
+- [Phase 25-02]: useMagneticGlow uses direct DOM mutation on glow elements via refs — avoids re-render storms from pointermove
+- [Phase 25-02]: BetaWarning migrated to Dialog.Root controlled pattern — parent drives open/close, no internal state
+- [Phase 25-02]: LandingPage story uses self-contained LandingHeroCards — avoids OAuth router dependencies in Storybook
+- [Phase 25]: SplitView uses CSS variable --split-left on container + .split-view-config class in globals.css for responsive width without double-rendering or JIT-unsafe dynamic classes
+- [Phase 25]: [Phase 25-05]: PLATFORM_BORDER static map uses complete literal border-l-{platform} class strings — same Tailwind JIT safety pattern as PLATFORM_COLORS
+- [Phase 25]: [Phase 25-05]: isDragging stored in useRef (not useState) in SplitView — pointermove fires constantly, setState would trigger continuous re-renders
+- [Phase 25-06]: AdminNav created as separate component (not AppNav reuse) — admin has distinct 5-link sub-nav plus Admin breadcrumb label
+- [Phase 25-06]: admin/layout.tsx converted from 'use client' to server component — ProtectedRoute and AdminNav are client components, Next.js handles import correctly
+- [Phase 25-07]: [Phase 25-07]: BanModal replaced with inline Dialog.Root — eliminates light-mode modal, simplifies component tree
+- [Phase 25-07]: [Phase 25-07]: viewers/page.tsx embedded nav removed — redundant with admin/layout.tsx AdminNav from Plan 06
+- [Phase 25-07]: [Phase 25-07]: getPlatformColor() helpers removed from admin pages — PlatformBadge handles platform coloring with design tokens
+- [Phase 25-page-migration-split-view-preview]: Two-stage quality gate pattern: automated grep/build first, then human visual review — phase completion requires both
 
 ### Pending Todos
 
@@ -158,26 +126,19 @@ None yet.
 
 ### Blockers/Concerns
 
-**Phase 19 dependency:**
-- Kick stream lifecycle detection research incomplete (unofficial API, webhook patterns unclear)
-- Mitigation: Research during Phase 19 planning, consider disabling "This stream" expiry for Kick if unreliable
+**Phase 23 Considerations:**
+- Tailwind v4 gradient codemod requires manual audit after automated migration
+- eslint-plugin-tailwindcss beta may have edge case false positives with Tailwind v4
 
-**Premium feature enforcement:**
-- First premium feature for All-Chat, sets pattern for future monetization
-- Server-side validation must be comprehensive (pitfall #1 from research: client-side bypass)
-- Admin override mechanism needed for testing before billing integration
-
-**Database schema considerations:**
-- ON DELETE RESTRICT for foreign keys (not CASCADE) to prevent data loss on user deletion
-- Application-level cascade logic needed for share cleanup
+**Phase 25 Considerations:**
+- WCAG 2.1 AA compliance deadline: April 24, 2026 (ADA requirement)
+- Performance validation required: <16ms message render time at 20 msg/sec
+- Marketplace theme compatibility testing needed with real-world themes
 
 ## Session Continuity
 
-Last session: 2026-03-11T19:52:41.361Z
-Stopped at: Completed 19-lifecycle-expiry-03 (Multi-platform stream end detection) — human verified
+Last session: 2026-03-11T21:04:04.399Z
+Stopped at: Completed 25-08-PLAN.md: Final visual verification and Phase 25 completion gate
 Resume file: None
 
-**Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
-
----
-*Last updated: 2026-03-08 after v1.3 roadmap creation*
+**Next action:** `/gsd:plan-phase 24` to plan Phase 24 (Component Library Setup & Customization)

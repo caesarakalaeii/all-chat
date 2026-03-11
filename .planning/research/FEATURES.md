@@ -1,8 +1,8 @@
 # Feature Research
 
-**Domain:** Chat Overlay Sharing for Streaming Platforms
-**Researched:** 2026-03-08
-**Confidence:** MEDIUM
+**Domain:** Frontend UI/UX Design System for Streaming Platform
+**Researched:** 2026-03-09
+**Confidence:** HIGH
 
 ## Feature Landscape
 
@@ -12,12 +12,15 @@ Features users assume exist. Missing these = product feels incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Send share request to another user | Standard collaboration pattern in all SaaS products; users expect to initiate sharing | LOW | Search by platform username (Twitch, YouTube, etc.) — follows existing Twitch Stream Together model |
-| Accept/decline share requests | Basic permission model — users must consent to collaboration | LOW | Dashboard view of pending requests with clear accept/decline actions |
-| Immediate add-on-acceptance | Users expect shared resources to be usable immediately after acceptance | MEDIUM | Both parties must be able to add the shared overlay to their own overlays as sources (no additional approval step) |
-| Revoke access at any time | Standard security/privacy expectation in all collaboration tools | LOW | Either party should be able to end the share at any time, following SharePoint/Slack/AWS patterns |
-| Visual distinction for shared sources | Users need to differentiate between platform sources and shared overlay sources | LOW | UI indicator showing source type (platform vs shared overlay) in source list |
-| Display settings isolation | Users expect their own overlay styling to apply, not the source's styling | MEDIUM | CSS, animations, display settings come from displaying overlay — only message content from source overlay |
+| Design token system (colors, spacing, typography) | Foundation for consistent theming across all pages | MEDIUM | Tailwind v4 @theme directive, CSS variables, three-layer hierarchy (base → semantic → component) |
+| Component library with shadcn/ui | Modern React apps expect accessible, customizable UI primitives | MEDIUM | 70+ components available, Radix UI foundation, copy-paste architecture |
+| Responsive layouts (mobile-first) | Streaming tools accessed from multiple devices | LOW | Already using Tailwind breakpoints, need systematic mobile/tablet/desktop patterns |
+| Dark theme optimized for creators | Streaming tools are dark by default (StreamElements, OBS, etc.) | LOW | Already dark (gray palette), needs refinement to slate for warmth |
+| Platform branding (Twitch purple, YouTube red, etc.) | Users expect platform colors for badges, status indicators | LOW | Already implemented, needs consistency in usage patterns |
+| Accessible focus states and keyboard navigation | Professional tools must meet WCAG AA standards | LOW | Add ring-2 ring-blue-500/20 to all interactive elements |
+| Consistent spacing and typography scale | Prevents visual inconsistency, makes UI feel polished | LOW | Even spacing (gap-4, gap-6), Inter font already loaded |
+| Loading states and skeletons | Users expect feedback during data fetching | LOW | Already has spinners, needs skeleton screens for cards |
+| Toast notifications for actions | Feedback for create/delete/update operations | LOW | Already implemented inline, needs shadcn/ui toast/sonner |
 
 ### Differentiators (Competitive Advantage)
 
@@ -25,13 +28,14 @@ Features that set the product apart. Not required, but valuable.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Bidirectional sharing (mutual access) | Unlike Twitch Shared Chat (unidirectional), both users share overlays with each other | MEDIUM | Accept workflow includes "share back" selection — creates mutual collaboration, not just guest access |
-| Flexible expiry options | Fine-grained control over share lifetime aligns with streaming use cases | MEDIUM | "This stream only", time-based (hours/days), unlimited — most competitors offer only session-based or unlimited |
-| Stream lifecycle awareness | Automatic expiry when stream ends without manual cleanup | HIGH | Requires stream detection for all platforms (Twitch already tracked, YouTube/TikTok via InnerTube, Kick needs research) |
-| Inactive marking (not deletion) | Preserves historical configuration when shares expire/revoke | LOW | Microsoft 365/SharePoint pattern — shows user what was configured, audit trail, easier to renew |
-| Premium feature positioning | First premium feature for All-Chat establishes monetization foundation | LOW | Freemium model follows Discord, Slack, StreamElements pattern — collaboration as premium tier differentiator |
-| Admin testing overrides | Enables dogfooding and validation before broad premium rollout | LOW | Admin flag bypasses premium check — critical for testing collaborative features internally |
-| Multi-source overlay sharing | Share an overlay that aggregates multiple platform sources (Twitch + YouTube + Kick), not just single platform | LOW | Leverages existing multi-source architecture — more powerful than single-platform sharing (Twitch Shared Chat limitation) |
+| Split-view live preview (editor + preview) | Immediate visual feedback (like Claude Code Desktop 2026 feature) | MEDIUM | Configuration on left, sticky preview on right, real-time WebSocket updates |
+| Smooth micro-interactions (hover, scale, shadow) | Makes UI feel premium vs generic Tailwind templates | LOW | transition-all duration-200, hover:scale-[1.02], shadow depth progression |
+| Gradient CTAs (purple → blue) | Distinctive brand identity, stands out from competitors | LOW | Use only for primary actions (Create Overlay, Save), not overused |
+| Platform-color coded sections | Visual hierarchy for multi-platform chat sources | LOW | border-l-4 border-l-{platform}-500 accents on cards |
+| Animated empty states with illustrations | Engaging first-time user experience | LOW | Already has emoji-based empty states, could enhance with SVG illustrations |
+| Click-to-edit inline patterns | Reduces friction for overlay name/description editing | MEDIUM | Inline contenteditable or input fields with save/cancel |
+| Drag-and-drop source reordering | Intuitive priority management for chat sources | MEDIUM | React DnD or dnd-kit library, visual drop zones |
+| Command palette (Cmd+K) | Power user feature for quick navigation | MEDIUM | cmdk library (shadcn/ui command component), search overlays/sources/settings |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
@@ -39,193 +43,186 @@ Features that seem good but create problems.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Public overlay directory/marketplace | "Let anyone discover and use my overlay" | Creates moderation burden, copyright issues with emotes/content, unexpected load from viral overlays, DMCA risk | Manual username search + explicit consent model (invite-based) |
-| Automatic share acceptance | "Skip the accept step for trusted users" | Violates consent model, security risk (compromised accounts), no opportunity to select expiry/overlay | Always require explicit acceptance with overlay selection + expiry choice |
-| Share settings inheritance | "Use the source overlay's display settings" | Breaks user control over their own stream appearance, CSS conflicts, unexpected visual changes | Always apply destination overlay's display settings (CSS, events) — only content flows |
-| Unlimited free sharing | "Make sharing free for everyone" | Eliminates monetization path, reduces value perception, enables abuse/spam | Premium-gate sharing feature, admin override for testing — follows freemium SaaS pattern |
-| Cross-platform relay (A shares to B, B auto-shares to C) | "Chain shares for maximum reach" | Creates permission complexity (did A consent to C?), amplifies load unpredictably, audit trail confusion | Direct sharing only — C must request from A explicitly |
-| Share analytics/metrics | "Show me who's viewing my shared overlay" | Privacy concerns, creates performance tracking burden, unclear value for collaborative streaming | Focus on collaboration quality, not surveillance — trust-based model |
+| Light theme toggle | "Users want choice" | Doubles maintenance burden, streaming tools are dark by default | Focus on perfecting dark theme (StreamElements doesn't offer light mode) |
+| Heavy animations (parallax, complex transitions) | "Make it feel modern" | Performance issues in OBS browser sources, distracts from content | Subtle micro-interactions (scale, shadow), CSS transforms only |
+| Customizable everything (colors, fonts, sizes) | "Give users control" | Destroys design consistency, creates support burden | Provide 2-3 preset themes maximum, enforce design system |
+| Real-time collaboration editing | "Like Figma for overlays" | Complex infrastructure, unclear user need, adds latency | Single-user ownership, share preview URLs for feedback |
+| Marketplace-style component browsing | "Like Storybook showcase" | Premature for v1.3, unclear if users want custom components vs templates | Focus on solid base components, defer marketplace to v2+ |
+| Per-component animation customization | "Let users animate everything" | Creates jarring UX, CSS complexity in browser sources | Provide sensible defaults, defer custom animations to CSS class overrides |
 
 ## Feature Dependencies
 
 ```
-[Share Request/Accept Workflow]
-    └──requires──> [User Search by Platform Username]
-                       └──requires──> [User Platform Connection Registry]
+Design Token System
+    └──requires──> Tailwind v4 Configuration
+                       └──requires──> CSS Variable Setup
 
-[Bidirectional Sharing]
-    └──requires──> [Share Request/Accept Workflow]
-    └──requires──> [Overlay Selection on Accept]
+shadcn/ui Component Library
+    └──requires──> Radix UI Package (unified)
+    └──requires──> Design Token System (for theming)
 
-[Stream-Based Expiry ("this stream only")]
-    └──requires──> [Stream Lifecycle Detection]
-                       └──requires──> [Platform Stream Status APIs]
-                            ├──requires──> [Twitch Stream Status] (existing)
-                            ├──requires──> [YouTube Stream Status] (InnerTube API, existing)
-                            ├──requires──> [TikTok Stream Status] (InnerTube-like, existing)
-                            └──requires──> [Kick Stream Status] (needs research)
+Page Redesigns
+    └──requires──> Component Library
+    └──requires──> Design Token System
 
-[Time-Based Expiry]
-    └──requires──> [Background Job Scheduler]
-    └──requires──> [Expiry Timestamp Storage]
+Split-view Live Preview
+    └──requires──> Responsive Layout System
+    └──requires──> WebSocket Connection (already exists)
 
-[Inactive Source Marking]
-    └──requires──> [Source State Management (active/inactive)]
-    └──requires──> [Revocation Event Handling]
+Command Palette
+    └──requires──> Component Library (shadcn/ui command)
+    └──enhances──> Navigation UX
 
-[Premium Feature Enforcement]
-    └──requires──> [User Premium Status Flag]
-    └──requires──> [Admin Override Flag]
+Drag-and-Drop Reordering
+    └──requires──> Component Library
+    └──enhances──> Source Management UX
 
-[Shared Overlay Source]
-    └──requires──> [Source Registry Extension (new source type)]
-    └──requires──> [Message Routing from Source Overlay's Redis Pub/Sub]
+ESLint + Pre-commit Hooks
+    └──requires──> Design Token System (enforce token usage)
+    └──prevents──> Design System Violations
 ```
 
 ### Dependency Notes
 
-- **Share Request requires User Search:** Users must be able to find each other by platform username (e.g., Twitch handle) before initiating share. Depends on existing user-to-platform connection mapping.
-- **Stream-Based Expiry requires Stream Lifecycle Detection:** "This stream only" expiry option depends on platform APIs to detect when user's stream ends. Twitch, YouTube, TikTok already tracked; Kick needs investigation.
-- **Bidirectional Sharing requires Overlay Selection:** On accept, user selects which overlay to share back — this creates mutual access pattern that differentiates from unidirectional guest models.
-- **Inactive Marking requires Source State:** Instead of deleting expired/revoked shares, mark sources as "inactive" in database — preserves configuration history and enables audit trail (follows Microsoft 365 pattern).
-- **Premium Enforcement requires Flags:** Both user-level premium status and admin-level testing override flags needed to gate feature and enable internal validation.
-- **Shared Overlay Source requires Message Routing:** New source type that subscribes to another user's overlay's Redis Pub/Sub channel (overlay:{overlay_id}) and forwards messages through existing message processing pipeline.
+- **Design Token System requires Tailwind v4:** New @theme directive approach (CSS-first vs JS config)
+- **shadcn/ui requires unified Radix UI package:** February 2026 update consolidates @radix-ui/react-* packages
+- **Page Redesigns require Component Library:** Can't redesign without standardized components
+- **Split-view preview enhances Editor UX:** Already have preview page, needs simultaneous view
+- **Command Palette enhances Navigation:** Not blocking, but valuable for power users
+- **ESLint prevents design drift:** Critical for long-term maintenance, enforces token usage
 
 ## MVP Definition
 
 ### Launch With (v1.3)
 
-Minimum viable product — what's needed to validate the concept.
+Minimum viable product — what's needed to validate the redesign.
 
-- [x] User search by platform username — Core discovery mechanism, enables finding collaboration partners
-- [x] Send share request (select overlay to share) — Initiates sharing workflow with explicit overlay selection
-- [x] View pending requests dashboard — Visibility into incoming/outgoing requests with clear status
-- [x] Accept request (select overlay to share back, choose expiry) — Bidirectional consent with configuration
-- [x] Immediate add-on-acceptance (both users can add as source) — No additional approval, instant usability
-- [x] Shared overlay source type — New source type that delivers all messages from source overlay's chat sources
-- [x] Display settings isolation — Destination overlay's CSS/events apply, not source's settings
-- [x] Flexible expiry (this stream, time-based, unlimited) — Covers primary use cases for temporary/permanent collaboration
-- [x] Stream lifecycle detection (Twitch, YouTube, TikTok existing; Kick to research) — Enables "this stream only" expiry
-- [x] Manual revocation (either party) — Basic security/privacy requirement
-- [x] Inactive source marking (not deletion) — Preserves configuration history, enables audit trail
-- [x] Premium enforcement (blocks non-premium users) — Establishes monetization path, first premium feature
-- [x] Admin testing override — Enables internal validation before broad rollout
+- [x] **Design Token System** — Foundation for all other work (colors, spacing, typography, shadows)
+- [x] **Tailwind v4 Configuration** — @theme directive, CSS variables, semantic naming
+- [x] **shadcn/ui Component Library** — Core primitives (Button, Card, Input, Badge, Dialog, Toast)
+- [ ] **Landing Page Redesign** — First impression, gradient hero, platform login buttons
+- [ ] **Dashboard Redesign** — Overlay grid with hover states, empty states, create button
+- [ ] **Overlay Editor Redesign** — Source management cards, platform-color coding, notifications
+- [ ] **Settings Page Redesign** — Account management, profile display, logout
+- [ ] **ESLint Rules for Design System** — Enforce token usage (no arbitrary values, no gray-* classes)
+- [ ] **Pre-commit Hooks** — Prettier + ESLint, validate design system compliance
 
-### Add After Validation (v1.4+)
+### Add After Validation (v1.x)
 
-Features to add once core is working.
+Features to add once core redesign is working.
 
-- [ ] Share request expiration (e.g., 7 days) — Prevents stale pending requests, follows Slack/SailPoint pattern (currently requests persist indefinitely)
-- [ ] Notification system for share events (request received, accepted, revoked, expired) — Improves awareness, reduces need to check dashboard manually
-- [ ] Share renewal workflow — Easier to extend expired share than create new request (especially for recurring collaborations)
-- [ ] Usage metrics for premium upsell — Track share attempts by non-premium users, inform conversion funnel optimization
-- [ ] Batch expiry cleanup — Scheduled job to mark inactive sources from expired shares (currently immediate on stream end detection)
+- [ ] **Split-view Live Preview** — Trigger: Users request side-by-side editing (HIGH value, MEDIUM complexity)
+- [ ] **Command Palette (Cmd+K)** — Trigger: 50+ overlays average per user (power user feature)
+- [ ] **Drag-and-Drop Source Reordering** — Trigger: Users ask "How do I prioritize sources?" (UX enhancement)
+- [ ] **Admin Page Redesigns** — Trigger: After user-facing pages complete (lower priority)
+- [ ] **Storybook Documentation** — Trigger: Multiple developers contributing (onboarding tool)
+- [ ] **Animation Library Integration** — Trigger: Need complex animations (Framer Motion for UI, defer GSAP to overlay marketplace)
 
 ### Future Consideration (v2+)
 
 Features to defer until product-market fit is established.
 
-- [ ] Share templates (preset expiry + permissions) — Power user feature, defer until usage patterns emerge
-- [ ] Whitelabel/branded shared overlays — Enterprise feature, defer until B2B demand validated
-- [ ] Share history/audit log UI — Currently database records exist, but no UI — add if compliance/transparency becomes user request
-- [ ] Multi-tier premium (different share limits) — Defer until single premium tier validated and conversion optimized
-- [ ] API for programmatic sharing — Developer/automation feature, defer until core workflow validated
+- [ ] **Theme Presets (2-3 options)** — Why defer: Perfect single theme first, then variants
+- [ ] **Component Marketplace** — Why defer: Users need core functionality before customization
+- [ ] **Advanced Animations (GSAP)** — Why defer: Focus on OBS browser source compatibility first
+- [ ] **Accessibility Audit Tool** — Why defer: Manual WCAG AA compliance sufficient for v1.3
+- [ ] **Design System Documentation Site** — Why defer: DESIGN_SYSTEM.md + inline docs sufficient initially
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| User search by platform username | HIGH | MEDIUM | P1 |
-| Send/accept share requests | HIGH | MEDIUM | P1 |
-| Bidirectional sharing workflow | HIGH | MEDIUM | P1 |
-| Shared overlay source type | HIGH | HIGH | P1 |
-| Display settings isolation | HIGH | MEDIUM | P1 |
-| Flexible expiry options | HIGH | MEDIUM | P1 |
-| Manual revocation | HIGH | LOW | P1 |
-| Inactive source marking | MEDIUM | LOW | P1 |
-| Premium enforcement + admin override | HIGH | LOW | P1 |
-| Stream lifecycle detection (all platforms) | MEDIUM | MEDIUM | P1 |
-| Share request expiration | MEDIUM | LOW | P2 |
-| Notification system | MEDIUM | MEDIUM | P2 |
-| Share renewal workflow | MEDIUM | MEDIUM | P2 |
-| Usage metrics for premium upsell | LOW | LOW | P2 |
-| Share templates | LOW | MEDIUM | P3 |
-| Audit log UI | LOW | MEDIUM | P3 |
-| API for programmatic sharing | LOW | HIGH | P3 |
+| Design Token System | HIGH | MEDIUM | P1 |
+| shadcn/ui Component Library | HIGH | MEDIUM | P1 |
+| Landing Page Redesign | HIGH | LOW | P1 |
+| Dashboard Redesign | HIGH | LOW | P1 |
+| Overlay Editor Redesign | HIGH | MEDIUM | P1 |
+| Settings Page Redesign | MEDIUM | LOW | P1 |
+| ESLint + Pre-commit Hooks | HIGH | LOW | P1 |
+| Split-view Live Preview | HIGH | MEDIUM | P2 |
+| Command Palette | MEDIUM | MEDIUM | P2 |
+| Drag-and-Drop Reordering | MEDIUM | MEDIUM | P2 |
+| Admin Page Redesigns | LOW | LOW | P2 |
+| Storybook Documentation | LOW | MEDIUM | P2 |
+| Animation Library (Framer Motion) | MEDIUM | LOW | P2 |
+| Theme Presets | LOW | MEDIUM | P3 |
+| Component Marketplace | LOW | HIGH | P3 |
+| GSAP Integration | LOW | MEDIUM | P3 |
 
 **Priority key:**
-- P1: Must have for launch (v1.3)
-- P2: Should have, add when possible (v1.4+)
-- P3: Nice to have, future consideration (v2+)
+- P1: Must have for v1.3 launch (table stakes + core redesigns)
+- P2: Should have, add when possible (enhances UX, not blocking)
+- P3: Nice to have, future consideration (after product-market fit)
 
 ## Competitor Feature Analysis
 
-| Feature | Twitch Shared Chat | Restream Pairs | StreamElements/Streamlabs | All-Chat Approach |
-|---------|-------------------|----------------|---------------------------|-------------------|
-| Discovery mechanism | In-platform (Stream Together invite) | Link-based (share URL) | N/A (no sharing) | Username search (cross-platform: Twitch, YouTube, Kick, TikTok handles) |
-| Share direction | Unidirectional (chat flows one way) | Asymmetric (guests broadcast to their channels) | N/A | Bidirectional (mutual overlay sharing) |
-| Expiry control | Session-based (ends with Stream Together) | Persistent (manual cleanup) | N/A | Flexible (this stream, time-based, unlimited) |
-| Permission model | Stream Together host controls | Link access control (anyone with link) | N/A | Explicit accept/decline with consent |
-| Access revocation | End Stream Together session | Unclear | N/A | Either party can revoke at any time |
-| Expired access visibility | N/A (session-based) | N/A | N/A | Inactive marking (preserves config history) |
-| Monetization | Free (Twitch Platform feature) | Freemium (free up to 20 guests) | Free/subscription (not sharing-specific) | Premium-gated (first premium feature for All-Chat) |
-| Multi-platform support | Twitch-only | Multi-platform broadcast | Multi-platform overlays (no sharing) | Multi-platform overlay sharing (Twitch + YouTube + Kick + TikTok aggregated) |
-| Display settings | Host's chat styling | Each streamer's own styling | Own styling | Destination overlay's styling (CSS isolation) |
+| Feature | StreamElements | OBS Studio | All-Chat (Target) |
+|---------|----------------|------------|-------------------|
+| Design System | Polished dark theme, consistent spacing, platform colors | Basic gray UI, functional but dated | StreamElements Modern aesthetic (slate backgrounds, gradient CTAs) |
+| Component Library | Custom React components, not open | Qt widgets (C++) | shadcn/ui + Radix UI (accessible, customizable, copy-paste) |
+| Live Preview | Separate preview window, not side-by-side | Browser source preview in scene | Split-view with sticky preview (like Claude Code Desktop 2026) |
+| Theme Customization | Single dark theme (no toggle) | Basic Qt theming | Single optimized dark theme (focus on perfecting one) |
+| Empty States | Text-based, minimal | No empty states | Emoji + illustrations, engaging |
+| Micro-interactions | Smooth hover states, shadow depth | Minimal hover feedback | Scale + shadow progression, transition-all duration-200 |
+| Platform Branding | Color-coded badges, borders | Not applicable | Platform-color coded sections (border-l-4 accents) |
+| Accessibility | WCAG AA compliant | Basic keyboard nav | WCAG AA focus rings, keyboard nav, semantic HTML |
+| Responsive Design | Desktop-first (creator tool) | Desktop only | Mobile-first (creators check from phones) |
+| Command Palette | No | No | Planned for P2 (power user differentiator) |
 
-**Key Differentiators:**
-1. **Bidirectional vs Unidirectional:** Twitch Shared Chat is one-way (chat merges to host); All-Chat is mutual (both share their aggregated overlays)
-2. **Multi-Platform Aggregation:** Competitors share single-platform chat; All-Chat shares overlays that aggregate multiple platforms (Twitch + YouTube + Kick + TikTok)
-3. **Flexible Expiry:** Twitch = session-only, Restream = persistent, All-Chat = user choice (session, time, unlimited)
-4. **Explicit Consent:** Link-based (Restream) risks unwanted access; username search + accept/decline = privacy-first
-5. **Premium Positioning:** Establishes monetization foundation (freemium model) while competitors treat collaboration as free platform feature
+### Competitive Advantages
+
+**vs StreamElements:**
+- Open source component library (shadcn/ui) vs proprietary
+- Split-view live preview (immediate feedback loop)
+- Mobile-responsive (check overlays from phone)
+- Command palette for power users (faster navigation)
+
+**vs OBS Studio:**
+- Modern web UI vs desktop Qt (more accessible, no install)
+- Real-time WebSocket updates (no refresh needed)
+- Platform-specific color coding (visual hierarchy)
+- Accessible by default (Radix UI primitives)
+
+**All-Chat Unique Value:**
+- Multi-platform chat aggregation (not just UI, but core functionality)
+- Design system optimized for streaming tools (dark, platform-aware, functional)
+- Gradient CTAs (distinctive brand identity)
+- Focus on table stakes done exceptionally well (not feature bloat)
 
 ## Sources
 
-### Streaming Platform Collaboration Features
-- [Livepush Multi Chat Overlay](https://livepush.io/features/multi-chat.html) — Multi-platform chat aggregation patterns
-- [Streamlabs Shared Twitch Chat](https://streamlabs.com/content-hub/post/streamlabs-desktop-twitch-shared-chat) — Twitch native sharing implementation
-- [Twitch Shared Chat Help](https://help.twitch.tv/s/article/shared-chat?language=en_US) — Official Twitch collaboration model
-- [Twitch Shared Chat: How It Works](https://www.streamscheme.com/twitch-shared-chat/) — User-facing Shared Chat guide
-- [Social Stream Ninja](https://socialstream.ninja/) — Multi-platform chat integration patterns
-- [Restream Chat Guide](https://restream.io/blog/restream-chat-everything-you-need-to-know/) — Chat aggregation for collaborations
+**Design Systems & Best Practices:**
+- [Design Tokens That Scale in 2026 (Tailwind v4 + CSS Variables)](https://www.maviklabs.com/blog/design-tokens-tailwind-v4-2026) — Three-layer token hierarchy (base → semantic → component)
+- [shadcn/ui February 2026 - Unified Radix UI Package](https://ui.shadcn.com/docs/changelog/2026-02-radix-ui) — Cleaner package.json, single radix-ui dependency
+- [Tailwind CSS v4 2026: Migration Best Practices](https://www.digitalapplied.com/blog/tailwind-css-v4-2026-migration-best-practices) — @theme directive, CSS-first configuration
+- [CSS Variables Guide: Design Tokens & Theming](https://www.frontendtools.tech/blog/css-variables-guide-design-tokens-theming-2025) — Runtime theme switching without rebuild
 
-### Collaboration & Guest Access Patterns
-- [Restream Pairs](https://support.restream.io/en/articles/11726283-what-is-restream-pairs) — Bidirectional guest channel sharing (up to 20 guests)
-- [Restream Guest Channels](https://support.restream.io/en/articles/8540565-how-to-add-guest-channels-to-my-studio-stream) — Guest collaboration workflow
-- [Restream Guest Capabilities](https://support.restream.io/en/articles/9184240-what-you-can-do-as-a-guest-in-restream-studio) — Guest permissions and features
-- [StreamYard Guest Invites](https://support.streamyard.com/hc/en-us/articles/360054866191-Does-My-Link-to-Invite-A-Guest-Expire) — Invitation expiry (links last forever, no session reuse)
-- [Twitch Raids Guide](https://streamlabs.com/content-hub/post/twitch-raids-what-they-are-and-how-to-raid) — Viewer sharing patterns
-- [Collaborative Multistreaming Software](https://streamyard.com/blog/collaborative-multistreaming-software) — Team collaboration features
+**Streaming Tool UI Patterns:**
+- [StreamElements Features - Overlays](https://streamelements.com/features/overlays) — Cloud-based overlay editor, pre-configured widgets
+- [Dashboard Builder Guide 2026: No-Code, AI, Best Practices](https://www.weweb.io/blog/dashboard-builder-guide-no-code-ai-best-practices) — Real-time dashboards, interactivity patterns
+- [Twitch Creator Dashboard Guide](https://explore.st-aug.edu/exp/unlock-your-streaming-success-master-the-twitch-creator-dashboard-like-a-pro) — Scheduler, moderator dashboards, analytics
 
-### Freemium & Premium Feature Patterns
-- [Freemium Paywalls | RevenueCat](https://www.revenuecat.com/docs/playbooks/guides/freemium) — Freemium paywall implementation patterns
-- [Freemium vs Premium | Refact](https://refact.co/freemium-vs-premium-comparing-two-paywall-models/) — Comparing paywall models
-- [Freemium Business Model | Recurly](https://recurly.com/blog/what-is-freemium-a-guide-for-subscription-businesses/) — Freemium strategy guide
-- [StreamElements Setup 2026](https://eathealthy365.com/your-complete-streamelements-setup-walkthrough-for-2026/) — Streaming platform premium tiers
-- [Streamlabs vs StreamElements 2026](https://www.streamscheme.com/streamlabs-vs-streamelements/) — Feature comparison (premium vs free)
+**Component Libraries & Documentation:**
+- [shadcn/ui CLI v4 (March 2026)](https://ui.shadcn.com/docs/changelog/2026-03-cli-v4) — Registry:base for entire design systems, preset feature
+- [Storybook: Frontend workshop for UI development](https://storybook.js.org/) — Component documentation, live code examples
+- [Top Storybook Documentation Examples](https://www.supernova.io/blog/top-storybook-documentation-examples-and-the-lessons-you-can-learn) — BBC, Guardian, Financial Times design systems
 
-### SaaS Invitation & Access Management Patterns
-- [Slack Pending Invitations](https://slack.com/help/articles/360022158293-Pending-member-invitations) — Invitation expiry (30 days)
-- [AWS Resource Share Invitations](https://docs.aws.amazon.com/ram/latest/userguide/working-with-shared-invitations.html) — Accept/reject invitation workflow (7-day expiry)
-- [Auth0 User Invitations](https://auth0.com/docs/customize/email/send-email-invitations-for-application-signup) — Email invitation patterns
-- [Clerk Organization Invitations](https://clerk.com/docs/guides/organizations/add-members/invitations) — Unique invitation links with email delivery
-- [Supersaas Invitation Flow](https://supersaas.dev/docs/teams/invite-flow) — User invitation workflow best practices
-- [Microsoft Guest Invitation Expiry](https://learn.microsoft.com/en-us/answers/questions/5551108/what-is-the-validity-time-for-the-invitation-link) — External invitation validity (7-90 days)
-- [SharePoint Guest Access Expiration](https://www.sharepointdiary.com/2021/08/guest-user-access-expiration-in-sharepoint-online-onedrive.html) — Guest access thresholds (1-365 days)
+**Animation & Performance:**
+- [Comparing the best React animation libraries for 2026](https://blog.logrocket.com/best-react-animation-libraries/) — Framer Motion (85KB, great DX), GSAP (78KB, pro-grade performance)
+- [Framer Motion: Complete React & Next.js Guide 2026](https://inhaq.com/blog/framer-motion-complete-guide-react-nextjs-developers) — 60FPS default, excellent React integration
+- [OBS Browser Source Overlay CSS Animation Patterns](https://github.com/carlosromanxyz/carlosromanxyz-obs-studio) — Pure HTML/Tailwind overlays, zero build step
 
-### Collaboration UX Patterns & Anti-Patterns
-- [Table Stakes in SaaS](https://www.linkedin.com/pulse/table-stake-features-saas-enterprise-products-rohit-pareek) — Expected vs differentiating features
-- [Table Stakes Sequencing | Product Teacher](https://www.productteacher.com/articles/sequencing-table-stakes-and-differentiators) — Prioritizing table stakes vs differentiators
-- [Real-Time Collaboration 2025 | Medium](https://medium.com/@sachhsoft/building-real-time-collaboration-features-what-saas-teams-need-to-know-in-2025-d61a9b678cf5) — Collaboration as table stakes (was premium 5 years ago)
-- [Collaboration Anti-Patterns | Lucid](https://lucid.co/blog/collaboration-anti-patterns) — Common collaboration mistakes (stifled discussion, no clear roles)
-- [Improved UX for Sharing | Microsoft](https://learn.microsoft.com/en-us/power-platform/release-plan/2023wave1/power-apps/improved-ux-sharing-records) — Access revocation patterns (Share > Manage access > Remove)
-- [UX Patterns for Collaborative Interfaces | Medium](https://medium.com/@space.alpaca/ux-patterns-to-use-in-collaborative-interfaces-cf7182ae6e52) — Permission management, mutual awareness, conflict resolution
+**Enforcement & Tooling:**
+- [ESLint Plugin Tailwind CSS](https://tessl.io/registry/tessl/npm-eslint-plugin-tailwindcss/2.0.0/files/docs/index.md) — classnames-order, no-contradicting-classname, no-custom-classname rules
+- [Pre-commit Hooks Guide for 2025-2026](https://gatlenculp.medium.com/effortless-code-quality-the-ultimate-pre-commit-hooks-guide-for-2025-57ca501d9835) — Prettier, Stylelint, CSSLint integration
+- [Create a Pre-commit Git Hook for JavaScript/TypeScript](https://plainenglish.io/blog/create-a-pre-commit-git-hook-to-check-and-fix-your-javascript-typescript-code-automatically) — Automatic formatting and linting
 
-### Access Management Best Practices
-- [M365 Guest User Management | CoreView](https://www.coreview.com/blog/microsoft-365-guest-user-governance-and-best-sharing-practices-to-protect-your-privacy) — Inactive vs deleted access visibility
-- [B2B Governance Best Practices | EasyLife 365](https://www.easylife365.cloud/stories/b2b-goverance-best-practices/) — Deactivating inactive guests (90+ days)
-- [SharePoint Sharing Permissions | Microsoft Learn](https://learn.microsoft.com/en-us/sharepoint/modern-experience-sharing-permissions) — External sharing security
+**Live Preview Patterns:**
+- [Live Preview Panel with Click-to-Edit for Claude Code](https://github.com/slopus/happy/issues/802) — February 2026 feature, click UI element to edit
+- [XAML Live Preview - Visual Studio](https://learn.microsoft.com/en-us/visualstudio/xaml-tools/xaml-live-preview) — Hot reload, real-time changes
+- [UltraEdit Live Preview](https://wiki.ultraedit.com/Live_preview) — Split-view HTML/Markdown preview
 
 ---
-*Feature research for: Chat Overlay Sharing (All-Chat v1.3)*
-*Researched: 2026-03-08*
+*Feature research for: All-Chat Frontend Redesign (v1.3)*
+*Researched: 2026-03-09*
+*Confidence: HIGH — Based on current design system spec, existing codebase analysis, and 2026 UI/UX best practices*

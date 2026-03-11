@@ -177,7 +177,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-900 to-black">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-gray-900 to-black">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white mx-auto mb-4"></div>
           <p className="text-white text-xl">Loading Credits...</p>
@@ -188,7 +188,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-900 to-black">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-gray-900 to-black">
         <div className="text-center">
           <div className="text-6xl mb-4">⚠️</div>
           <p className="text-white text-xl mb-2">Unable to Load Credit Roll</p>
@@ -201,7 +201,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   if (!creditData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-900 to-black">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-gray-900 to-black">
         <div className="text-center">
           <p className="text-white text-xl">No credit roll data available</p>
         </div>

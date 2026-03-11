@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { PlatformBadge } from '@/components/ui/badge';
+import type { Platform } from '@/lib/platform-colors';
 
 interface Overlay {
   id: string;
@@ -99,16 +103,6 @@ export default function OverlaysPage() {
     fetchSources();
   }, [selectedOverlay]);
 
-  const getPlatformColor = (platform: string) => {
-    switch (platform) {
-      case 'twitch': return 'bg-purple-100 text-purple-800';
-      case 'youtube': return 'bg-red-100 text-red-800';
-      case 'kick': return 'bg-green-100 text-green-800';
-      case 'tiktok': return 'bg-pink-100 text-pink-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   // Filter overlays by search term
   const filteredOverlays = overlays.filter((o) => {
     if (!searchTerm) return true;
@@ -120,27 +114,21 @@ export default function OverlaysPage() {
     );
   });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading overlays...</div>
-      </div>
-    );
-  }
-
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-md p-4">
-        <p className="text-red-800">{error}</p>
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <Card className="p-4 border-destructive">
+          <p className="text-destructive">{error}</p>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="px-4 py-6 sm:px-0">
+    <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Overlays</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="text-2xl font-bold text-text">Overlays</h1>
+        <p className="mt-1 text-sm text-text-sub">
           Manage overlays and their connected chat sources
         </p>
       </div>
@@ -148,69 +136,77 @@ export default function OverlaysPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Overlays List */}
         <div className="lg:col-span-2">
-          <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-            <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">
-                All Overlays ({overlays.length})
-              </h3>
-
-              {/* Search Input */}
-              <div className="mt-4">
-                <input
-                  type="text"
-                  placeholder="Search by overlay name, ID, or user ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-            <ul className="divide-y divide-gray-200">
-              {filteredOverlays.map((overlay) => (
-                <li
-                  key={overlay.id}
-                  className={`px-4 py-4 hover:bg-gray-50 cursor-pointer transition-colors ${
-                    selectedOverlay?.id === overlay.id ? 'bg-blue-50' : ''
-                  }`}
-                  onClick={() => setSelectedOverlay(overlay)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center">
-                        <p className="text-sm font-medium text-gray-900">
-                          {overlay.name}
-                        </p>
-                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                          {overlay.sources_count || 0} sources
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500 font-mono text-xs mt-1">
-                        ID: {overlay.id}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Created {new Date(overlay.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Link
-                        href={`/overlay/${overlay.id}`}
-                        target="_blank"
-                        className="text-blue-600 hover:text-blue-800 text-sm"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </Link>
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </div>
-                </li>
+          {loading ? (
+            <Card className="p-6 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-lg" />
               ))}
-            </ul>
-          </div>
+            </Card>
+          ) : (
+            <Card className="overflow-hidden">
+              <div className="px-4 py-5 border-b border-border">
+                <h3 className="text-base font-medium text-text">
+                  All Overlays ({overlays.length})
+                </h3>
+
+                {/* Search Input */}
+                <div className="mt-4">
+                  <input
+                    type="text"
+                    placeholder="Search by overlay name, ID, or user ID..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full px-4 py-2 border border-border rounded-lg bg-surface-2 text-text placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              </div>
+              <ul className="divide-y divide-border">
+                {filteredOverlays.map((overlay) => (
+                  <li
+                    key={overlay.id}
+                    className={`px-4 py-4 hover:bg-surface-2 cursor-pointer transition-colors ${
+                      selectedOverlay?.id === overlay.id ? 'bg-surface-2' : ''
+                    }`}
+                    onClick={() => setSelectedOverlay(overlay)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center">
+                          <p className="text-sm font-medium text-text">
+                            {overlay.name}
+                          </p>
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-badge-bg text-text-sub">
+                            {overlay.sources_count || 0} sources
+                          </span>
+                        </div>
+                        <p className="text-xs text-text-sub font-mono mt-1">
+                          ID: {overlay.id}
+                        </p>
+                        <p className="text-xs text-text-dim mt-1">
+                          Created {new Date(overlay.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Link
+                          href={`/overlay/${overlay.id}`}
+                          target="_blank"
+                          className="text-text-sub hover:text-text text-sm transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </Link>
+                        <svg className="h-5 w-5 text-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
 
         {/* Overlay Details & Sources */}
@@ -218,67 +214,68 @@ export default function OverlaysPage() {
           {selectedOverlay ? (
             <div className="space-y-4">
               {/* Overlay Details */}
-              <div className="bg-white shadow sm:rounded-lg">
-                <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+              <Card className="overflow-hidden">
+                <div className="px-4 py-5 border-b border-border">
+                  <h3 className="text-base font-medium text-text">
                     Overlay Details
                   </h3>
                 </div>
-                <div className="px-4 py-5 sm:p-6">
+                <div className="px-4 py-5">
                   <dl className="space-y-4">
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">Name</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{selectedOverlay.name}</dd>
+                      <dt className="text-sm font-medium text-text-sub">Name</dt>
+                      <dd className="mt-1 text-sm text-text">{selectedOverlay.name}</dd>
                     </div>
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">ID</dt>
-                      <dd className="mt-1 text-sm text-gray-900 font-mono text-xs">{selectedOverlay.id}</dd>
+                      <dt className="text-sm font-medium text-text-sub">ID</dt>
+                      <dd className="mt-1 text-xs text-text font-mono break-all">{selectedOverlay.id}</dd>
                     </div>
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">User ID</dt>
-                      <dd className="mt-1 text-sm text-gray-900 font-mono text-xs">{selectedOverlay.user_id}</dd>
+                      <dt className="text-sm font-medium text-text-sub">User ID</dt>
+                      <dd className="mt-1 text-xs text-text font-mono break-all">{selectedOverlay.user_id}</dd>
                     </div>
                   </dl>
                 </div>
-              </div>
+              </Card>
 
               {/* Sources */}
-              <div className="bg-white shadow sm:rounded-lg">
-                <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+              <Card className="overflow-hidden">
+                <div className="px-4 py-5 border-b border-border">
+                  <h3 className="text-base font-medium text-text">
                     Connected Sources ({sources.length})
                   </h3>
                 </div>
-                <div className="px-4 py-5 sm:p-6">
+                <div className="px-4 py-5">
                   {sourcesLoading ? (
-                    <p className="text-sm text-gray-500">Loading sources...</p>
+                    <div className="space-y-2">
+                      <Skeleton className="h-10 w-full rounded-lg" />
+                      <Skeleton className="h-10 w-full rounded-lg" />
+                    </div>
                   ) : sources.length > 0 ? (
                     <ul className="space-y-3">
                       {sources.map((source) => (
-                        <li key={source.id} className="border border-gray-200 rounded-lg p-3">
+                        <li key={source.id} className="border border-border rounded-lg p-3">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center space-x-2">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getPlatformColor(source.platform)}`}>
-                                  {source.platform.charAt(0).toUpperCase() + source.platform.slice(1)}
-                                </span>
+                                <PlatformBadge platform={source.platform as Platform} size="sm" />
                                 {source.is_active ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-kick/10 text-kick">
                                     Active
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-badge-bg text-text-dim">
                                     Inactive
                                   </span>
                                 )}
                               </div>
-                              <p className="mt-1 text-sm font-medium text-gray-900">
+                              <p className="mt-1 text-sm font-medium text-text">
                                 {source.channel_name}
                               </p>
-                              <p className="mt-1 text-xs text-gray-500 font-mono">
+                              <p className="mt-1 text-xs text-text-sub font-mono">
                                 {source.channel_id}
                               </p>
-                              <p className="mt-1 text-xs text-gray-400">
+                              <p className="mt-1 text-xs text-text-dim">
                                 Added {new Date(source.created_at).toLocaleDateString()}
                               </p>
                             </div>
@@ -287,22 +284,20 @@ export default function OverlaysPage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-gray-500 italic">No sources connected</p>
+                    <p className="text-sm text-text-dim italic">No sources connected</p>
                   )}
                 </div>
-              </div>
+              </Card>
             </div>
           ) : (
-            <div className="bg-white shadow sm:rounded-lg">
-              <div className="px-4 py-5 sm:p-6 text-center">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                <p className="mt-2 text-sm text-gray-500">
-                  Select an overlay to view details
-                </p>
-              </div>
-            </div>
+            <Card className="p-6 text-center">
+              <svg className="mx-auto h-12 w-12 text-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <p className="mt-2 text-sm text-text-sub">
+                Select an overlay to view details
+              </p>
+            </Card>
           )}
         </div>
       </div>
