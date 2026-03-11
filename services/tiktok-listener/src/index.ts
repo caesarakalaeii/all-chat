@@ -316,6 +316,9 @@ class TikTokListenerService {
         logger.warn('Coordinator integration disabled (SERVICE_JWT_SECRET not set)');
       }
 
+      // Wire Redis client to livePoller for lifecycle event publishing (EXPIRY-06)
+      this.livePoller.setRedisClient(this.redis);
+
       // Start live stream poller
       this.livePoller.start();
       logger.info('Live stream poller started');
@@ -986,6 +989,9 @@ class TikTokListenerService {
 
         // Stop heartbeat monitoring
         this.heartbeatMonitor.stop(username);
+
+        // Publish lifecycle:stream_end event for share expiry (EXPIRY-06)
+        this.livePoller.publishStreamEnd(username);
 
         // Stream ended - reset to quick re-check
         this.backoffManager.recordDisconnection(username);

@@ -64,13 +64,21 @@ func (r *SourceRepository) Create(ctx context.Context, source *models.ChatSource
 	return nil
 }
 
-// ListByOverlayID retrieves all sources for an overlay
+// ListByOverlayID retrieves all sources for an overlay.
+// For shared_overlay sources, it JOINs share_requests to populate ShareStatus.
+// Non-shared_overlay sources have ShareStatus == nil (omitted from JSON).
 func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error) {
 	query := `
-		SELECT id, overlay_id, platform, channel_id, channel_name, channel_handle, auth_required, config, is_active, created_at, updated_at
-		FROM overlay_chat_sources
-		WHERE overlay_id = $1
-		ORDER BY created_at DESC
+		SELECT ocs.id, ocs.overlay_id, ocs.platform, ocs.channel_id, ocs.channel_name,
+		       ocs.channel_handle, ocs.auth_required, ocs.config, ocs.is_active,
+		       ocs.created_at, ocs.updated_at,
+		       sr.status AS share_status
+		FROM overlay_chat_sources ocs
+		LEFT JOIN share_requests sr
+		    ON ocs.platform = 'shared_overlay'
+		    AND sr.id::text = ocs.channel_id
+		WHERE ocs.overlay_id = $1
+		ORDER BY ocs.created_at DESC
 	`
 
 	rows, err := r.pool.Query(ctx, query, overlayID)
@@ -94,6 +102,7 @@ func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string
 			&source.IsActive,
 			&source.CreatedAt,
 			&source.UpdatedAt,
+			&source.ShareStatus,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan source: %w", err)

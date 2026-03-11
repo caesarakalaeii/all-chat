@@ -79,13 +79,22 @@ func (r *Repository) GetPublicOverlayByUsername(ctx context.Context, username st
 
 // ActivateSourcesForOverlay activates all sources for an overlay
 // This is called when a WebSocket connection is established
+// Skips shared_overlay sources whose share_request is revoked or expired.
 func (r *Repository) ActivateSourcesForOverlay(ctx context.Context, overlayID string) (int, error) {
 	query := `
-		UPDATE overlay_chat_sources
+		UPDATE overlay_chat_sources ocs
 		SET is_active = true,
 		    updated_at = NOW()
-		WHERE overlay_id = $1
-		  AND is_active = false
+		WHERE ocs.overlay_id = $1
+		  AND ocs.is_active = false
+		  AND NOT (
+		    ocs.platform = 'shared_overlay'
+		    AND EXISTS (
+		      SELECT 1 FROM share_requests sr
+		      WHERE sr.id::text = ocs.channel_id
+		        AND sr.status IN ('revoked', 'expired')
+		    )
+		  )
 	`
 
 	result, err := r.db.Exec(ctx, query, overlayID)

@@ -30,12 +30,21 @@ export interface PollerConfig {
 }
 
 /**
+ * Minimal interface for a Redis client that can publish messages.
+ * Accepts both ioredis and node-redis client shapes.
+ */
+export interface RedisPublisher {
+  publish(channel: string, message: string): Promise<unknown>;
+}
+
+/**
  * LiveStreamPoller periodically checks if offline users went live
  */
 export class LiveStreamPoller {
   private logger: Logger;
   private statusChecker: TikTokStatusChecker;
   private backoffManager: BackoffManager;
+  private redisClient?: RedisPublisher;
 
   private pollingTargets: Map<string, PollingTarget> = new Map();
   private pollingTimer?: NodeJS.Timeout;
@@ -50,17 +59,20 @@ export class LiveStreamPoller {
    * @param backoffManager BackoffManager instance
    * @param logger Winston logger instance
    * @param config Optional poller configuration
+   * @param redisClient Optional Redis client for lifecycle event publishing
    */
   constructor(
     statusChecker: TikTokStatusChecker,
     backoffManager: BackoffManager,
     logger: Logger,
-    config?: Partial<PollerConfig>
+    config?: Partial<PollerConfig>,
+    redisClient?: RedisPublisher
   ) {
     this.statusChecker = statusChecker;
     this.backoffManager = backoffManager;
     this.logger = logger;
     this.POLL_INTERVAL_MS = config?.pollIntervalMs ?? 30000; // 30 seconds default
+    this.redisClient = redisClient;
   }
 
   /**
@@ -297,13 +309,60 @@ export class LiveStreamPoller {
   }
 
   /**
+   * Set the Redis client used for lifecycle event publishing.
+   * Can be called after construction if the client is not available at init time.
+   *
+   * @param redisClient Redis client with publish capability
+   */
+  setRedisClient(redisClient: RedisPublisher): void {
+    this.redisClient = redisClient;
+  }
+
+  /**
+   * Publish a stream end lifecycle event to Redis.
+   * Called when a TikTok stream goes offline (live → offline transition).
+   * Fire-and-forget: errors are logged but not propagated.
+   *
+   * @param username TikTok username whose stream ended
+   */
+  publishStreamEnd(username: string): void {
+    const payload = JSON.stringify({
+      platform: 'tiktok',
+      user_id: '',          // TikTok user_id resolution deferred — users table has no tiktok_id column
+      broadcaster_id: username,
+      timestamp: new Date().toISOString(),
+    });
+
+    this.redisPublish('lifecycle:stream_end', payload).then(() => {
+      this.logger.info('Published TikTok stream end lifecycle event', { username });
+    }).catch((err: unknown) => {
+      this.logger.warn('Failed to publish TikTok stream end event', { username, err });
+    });
+  }
+
+  /**
+   * Publish a message to a Redis channel.
+   * No-ops if no redis client is configured.
+   *
+   * @param channel Redis channel name
+   * @param message Message payload
+   */
+  private async redisPublish(channel: string, message: string): Promise<void> {
+    if (!this.redisClient) {
+      this.logger.debug('No redis client available for lifecycle publish', { channel });
+      return;
+    }
+    await this.redisClient.publish(channel, message);
+  }
+
+  /**
    * Recover stuck channels (channels in max backoff for too long)
    * Run periodically to prevent channels from being permanently stuck
-   * 
+   *
    * Detects:
    * - Max backoff (3min) for >5 minutes
    * - Last check >5 minutes ago
-   * 
+   *
    * Action: Force reset to base backoff
    */
   recoverStuckChannels(): void {

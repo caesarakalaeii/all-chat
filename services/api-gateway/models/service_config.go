@@ -87,6 +87,23 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		RewritePrefix: "/admin/sources", // Rewrite to /admin/sources for overlay-manager
 	}
 
+	// Share Service
+	shareURL := getEnvOrDefault("SHARE_SERVICE_URL", "http://localhost:8090")
+	registry.Services["share-service-shares"] = &ServiceConfig{
+		Name:        "share-service-shares",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/shares",
+		StripPrefix: false,
+	}
+	registry.Services["share-service-users"] = &ServiceConfig{
+		Name:        "share-service-users",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/users",
+		StripPrefix: false,
+	}
+
 	// Validate all service URLs are set
 	for name, service := range registry.Services {
 		if service.BaseURL == "" {

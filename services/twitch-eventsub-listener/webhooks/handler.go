@@ -16,23 +16,34 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// StreamEndEvent is published to Redis "lifecycle:stream_end" when a stream ends.
+type StreamEndEvent struct {
+	Platform      string    `json:"platform"`
+	UserID        string    `json:"user_id"`        // all-chat user UUID
+	BroadcasterID string    `json:"broadcaster_id"` // platform-specific ID
+	Timestamp     time.Time `json:"timestamp"`
+}
 
 // Handler handles Twitch EventSub webhook callbacks
 type Handler struct {
 	secret    []byte
 	redis     *redis.Client
+	db        *pgxpool.Pool // for twitch_id -> user_id lookup
 	publisher *publisher.StreamPublisher
 	logger    *zap.Logger
 }
 
 // NewHandler creates a new webhook handler
-func NewHandler(secret string, redis *redis.Client, publisher *publisher.StreamPublisher, logger *zap.Logger) *Handler {
+func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher *publisher.StreamPublisher, logger *zap.Logger) *Handler {
 	return &Handler{
 		secret:    []byte(secret),
 		redis:     redis,
+		db:        db,
 		publisher: publisher,
 		logger:    logger,
 	}
@@ -222,10 +233,65 @@ func (h *Handler) routeEvent(ctx context.Context, subscriptionType string, event
 		return h.handleCheer(ctx, eventData)
 	case "channel.follow":
 		return h.handleFollow(ctx, eventData)
+	case "stream.offline":
+		return h.handleStreamOffline(ctx, eventData)
+	case "stream.online":
+		// stream.online: cancel any pending debounced expiry (no-op for MVP — debounce is in subscriber)
+		h.logger.Debug("Stream online event received", zap.String("type", subscriptionType))
+		return nil
 	default:
 		h.logger.Warn("Unhandled subscription type", zap.String("type", subscriptionType))
 		return nil
 	}
+}
+
+// handleStreamOffline publishes a StreamEndEvent to Redis "lifecycle:stream_end"
+// after looking up the all-chat user_id from the users table via twitch_id.
+func (h *Handler) handleStreamOffline(ctx context.Context, eventData json.RawMessage) error {
+	var event struct {
+		BroadcasterUserID string `json:"broadcaster_user_id"`
+	}
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal stream.offline event: %w", err)
+	}
+	if event.BroadcasterUserID == "" {
+		h.logger.Warn("stream.offline event missing broadcaster_user_id")
+		return nil
+	}
+
+	// Look up all-chat user_id from users table via twitch_id
+	var userID string
+	err := h.db.QueryRow(ctx,
+		"SELECT id FROM users WHERE twitch_id = $1", event.BroadcasterUserID).Scan(&userID)
+	if err != nil {
+		// No user found — broadcaster not registered in all-chat; not an error
+		h.logger.Debug("No all-chat user found for Twitch broadcaster",
+			zap.String("broadcaster_id", event.BroadcasterUserID))
+		return nil
+	}
+
+	payload := StreamEndEvent{
+		Platform:      "twitch",
+		UserID:        userID,
+		BroadcasterID: event.BroadcasterUserID,
+		Timestamp:     time.Now(),
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal stream end event: %w", err)
+	}
+
+	if err := h.redis.Publish(ctx, "lifecycle:stream_end", string(data)).Err(); err != nil {
+		h.logger.Error("Failed to publish lifecycle event",
+			zap.String("user_id", userID),
+			zap.Error(err))
+		return fmt.Errorf("failed to publish lifecycle event: %w", err)
+	}
+
+	h.logger.Info("Published stream end lifecycle event",
+		zap.String("user_id", userID),
+		zap.String("broadcaster_id", event.BroadcasterUserID))
+	return nil
 }
 
 // handleChannelPointsRedemption processes channel point redemption events

@@ -1,186 +1,231 @@
-# Feature Landscape
+# Feature Research
 
-**Domain:** YouTube Live Chat Listener (InnerTube-based)
-**Researched:** 2026-02-21
+**Domain:** Chat Overlay Sharing for Streaming Platforms
+**Researched:** 2026-03-08
+**Confidence:** MEDIUM
 
-## Table Stakes
+## Feature Landscape
 
-Features users expect. Missing = product feels incomplete.
+### Table Stakes (Users Expect These)
+
+Features users assume exist. Missing these = product feels incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **Stream discovery** | Must find latest live stream for a channel | Medium | InnerTube uses `browse` endpoint with channel ID. No search quota costs. Filter live streams from browse results. |
-| **Regular chat messages** | Core functionality - text messages from viewers | Low | InnerTube returns `liveChatTextMessageRenderer` with message, author, timestamp, badges |
-| **Super Chat events** | Monetization events must be captured | Low | InnerTube provides `liveChatPaidMessageRenderer` with amount, currency, tier, message |
-| **Super Sticker events** | Monetization events must be captured | Low | InnerTube provides `liveChatPaidStickerRenderer` with sticker metadata, amount |
-| **Membership events** | New memberships, milestones, gifts | Medium | InnerTube supports new sponsor, milestone chat, gift purchase renderers |
-| **Single message deletion** | Moderator actions must reflect in overlay | Medium | InnerTube sends `markChatItemAsDeletedAction` with target message ID |
-| **Batch deletion (ban)** | User bans must remove all their messages | Medium | InnerTube sends `markChatItemsByAuthorAsDeletedAction` with author ID |
-| **Continuation tokens** | Resume streaming without missing messages | Low | InnerTube provides continuation token in response, used in next request |
-| **User metadata** | Display name, badges, profile image, verified status | Low | Included in InnerTube message renderers (`authorBadges`, `authorPhoto`, etc.) |
-| **Emote parsing** | YouTube custom emotes (membership emotes) | Medium | InnerTube provides emoji metadata in message `runs` (image URL, alt text, custom emoji flag) |
-| **Live/offline detection** | Know when stream ends | Low | InnerTube returns `offlineAt` timestamp or error when stream ends |
-| **Connection gating** | Stop streaming when overlay disconnected (quota efficiency) | Low | Already implemented in official listener, reuse pattern |
+| Send share request to another user | Standard collaboration pattern in all SaaS products; users expect to initiate sharing | LOW | Search by platform username (Twitch, YouTube, etc.) — follows existing Twitch Stream Together model |
+| Accept/decline share requests | Basic permission model — users must consent to collaboration | LOW | Dashboard view of pending requests with clear accept/decline actions |
+| Immediate add-on-acceptance | Users expect shared resources to be usable immediately after acceptance | MEDIUM | Both parties must be able to add the shared overlay to their own overlays as sources (no additional approval step) |
+| Revoke access at any time | Standard security/privacy expectation in all collaboration tools | LOW | Either party should be able to end the share at any time, following SharePoint/Slack/AWS patterns |
+| Visual distinction for shared sources | Users need to differentiate between platform sources and shared overlay sources | LOW | UI indicator showing source type (platform vs shared overlay) in source list |
+| Display settings isolation | Users expect their own overlay styling to apply, not the source's styling | MEDIUM | CSS, animations, display settings come from displaying overlay — only message content from source overlay |
 
-## Differentiators
+### Differentiators (Competitive Advantage)
 
-Features that set product apart. Not expected, but valued.
+Features that set the product apart. Not required, but valuable.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Zero quota consumption** | Unlimited polling, no YouTube API quota limits | HIGH VALUE | InnerTube has no quota (unofficial API). Official listener limited to 1,009,000 units/day. |
-| **Faster deletion detection** | Real-time deletion events vs polling delay | MEDIUM VALUE | InnerTube sends deletions immediately in stream. Official API requires polling every 2-5s to detect. |
-| **Lower polling latency** | Faster message delivery to overlay | MEDIUM VALUE | InnerTube continuation timeout can be lower (sub-second possible). Official API enforces `pollingIntervalMillis` (2-5s). |
-| **No OAuth required** | Simpler setup, no token management | HIGH VALUE | InnerTube works without authentication. Official listener requires OAuth per streamer. |
-| **Ticker events** | Paid message ticker announcements | LOW VALUE | InnerTube provides `addLiveChatTickerItemAction` for ticker items. Nice-to-have, not critical. |
-| **Viewer leaderboard rank** | Top contributor crown tags (#1, #2, #3) | LOW VALUE | InnerTube exposes YouTube points ranking. Community feature, not essential. |
+| Bidirectional sharing (mutual access) | Unlike Twitch Shared Chat (unidirectional), both users share overlays with each other | MEDIUM | Accept workflow includes "share back" selection — creates mutual collaboration, not just guest access |
+| Flexible expiry options | Fine-grained control over share lifetime aligns with streaming use cases | MEDIUM | "This stream only", time-based (hours/days), unlimited — most competitors offer only session-based or unlimited |
+| Stream lifecycle awareness | Automatic expiry when stream ends without manual cleanup | HIGH | Requires stream detection for all platforms (Twitch already tracked, YouTube/TikTok via InnerTube, Kick needs research) |
+| Inactive marking (not deletion) | Preserves historical configuration when shares expire/revoke | LOW | Microsoft 365/SharePoint pattern — shows user what was configured, audit trail, easier to renew |
+| Premium feature positioning | First premium feature for All-Chat establishes monetization foundation | LOW | Freemium model follows Discord, Slack, StreamElements pattern — collaboration as premium tier differentiator |
+| Admin testing overrides | Enables dogfooding and validation before broad premium rollout | LOW | Admin flag bypasses premium check — critical for testing collaborative features internally |
+| Multi-source overlay sharing | Share an overlay that aggregates multiple platform sources (Twitch + YouTube + Kick), not just single platform | LOW | Leverages existing multi-source architecture — more powerful than single-platform sharing (Twitch Shared Chat limitation) |
 
-## Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
-Features to explicitly NOT build.
+Features that seem good but create problems.
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Sending messages** | Requires authentication, out of scope, increases complexity | READ ONLY - InnerTube listener only consumes chat, never sends |
-| **Polls/Creator goals** | Unstable InnerTube schema, not core chat functionality | Defer to future phase if user demand emerges |
-| **Historical chat replay** | Different API endpoint, separate use case | Stream live chat only. Replay is separate feature. |
-| **Multiple stream tracking per channel** | Complexity, edge case (official listener tracks latest only) | Track latest live stream only (drop-in replacement behavior) |
-| **Quota tracking** | InnerTube has no quota | Remove quota tracking entirely (simplification over official listener) |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Public overlay directory/marketplace | "Let anyone discover and use my overlay" | Creates moderation burden, copyright issues with emotes/content, unexpected load from viral overlays, DMCA risk | Manual username search + explicit consent model (invite-based) |
+| Automatic share acceptance | "Skip the accept step for trusted users" | Violates consent model, security risk (compromised accounts), no opportunity to select expiry/overlay | Always require explicit acceptance with overlay selection + expiry choice |
+| Share settings inheritance | "Use the source overlay's display settings" | Breaks user control over their own stream appearance, CSS conflicts, unexpected visual changes | Always apply destination overlay's display settings (CSS, events) — only content flows |
+| Unlimited free sharing | "Make sharing free for everyone" | Eliminates monetization path, reduces value perception, enables abuse/spam | Premium-gate sharing feature, admin override for testing — follows freemium SaaS pattern |
+| Cross-platform relay (A shares to B, B auto-shares to C) | "Chain shares for maximum reach" | Creates permission complexity (did A consent to C?), amplifies load unpredictably, audit trail confusion | Direct sharing only — C must request from A explicitly |
+| Share analytics/metrics | "Show me who's viewing my shared overlay" | Privacy concerns, creates performance tracking burden, unclear value for collaborative streaming | Focus on collaboration quality, not surveillance — trust-based model |
 
 ## Feature Dependencies
 
 ```
-Stream discovery → Live chat streaming (need stream/video ID to fetch chat)
-Continuation tokens → Resume streaming (prevents message loss on reconnect)
-Connection gating → Stop streaming (prevents wasted resources when overlay offline)
-User metadata → Message rendering (overlay needs display name, badges, avatar)
-Single deletion → Batch deletion (both use same removal mechanism in overlay)
+[Share Request/Accept Workflow]
+    └──requires──> [User Search by Platform Username]
+                       └──requires──> [User Platform Connection Registry]
+
+[Bidirectional Sharing]
+    └──requires──> [Share Request/Accept Workflow]
+    └──requires──> [Overlay Selection on Accept]
+
+[Stream-Based Expiry ("this stream only")]
+    └──requires──> [Stream Lifecycle Detection]
+                       └──requires──> [Platform Stream Status APIs]
+                            ├──requires──> [Twitch Stream Status] (existing)
+                            ├──requires──> [YouTube Stream Status] (InnerTube API, existing)
+                            ├──requires──> [TikTok Stream Status] (InnerTube-like, existing)
+                            └──requires──> [Kick Stream Status] (needs research)
+
+[Time-Based Expiry]
+    └──requires──> [Background Job Scheduler]
+    └──requires──> [Expiry Timestamp Storage]
+
+[Inactive Source Marking]
+    └──requires──> [Source State Management (active/inactive)]
+    └──requires──> [Revocation Event Handling]
+
+[Premium Feature Enforcement]
+    └──requires──> [User Premium Status Flag]
+    └──requires──> [Admin Override Flag]
+
+[Shared Overlay Source]
+    └──requires──> [Source Registry Extension (new source type)]
+    └──requires──> [Message Routing from Source Overlay's Redis Pub/Sub]
 ```
 
-## MVP Recommendation
+### Dependency Notes
 
-**Phase 1: Core parity (drop-in replacement)**
-Prioritize:
-1. Stream discovery (find latest live stream for channel)
-2. Live chat streaming with continuation tokens
-3. Regular messages, Super Chat, Super Sticker, membership events
-4. Single + batch deletion events
-5. User metadata (name, badges, avatar, verified)
-6. Live/offline detection
-7. Connection gating (stop when overlay disconnected)
+- **Share Request requires User Search:** Users must be able to find each other by platform username (e.g., Twitch handle) before initiating share. Depends on existing user-to-platform connection mapping.
+- **Stream-Based Expiry requires Stream Lifecycle Detection:** "This stream only" expiry option depends on platform APIs to detect when user's stream ends. Twitch, YouTube, TikTok already tracked; Kick needs investigation.
+- **Bidirectional Sharing requires Overlay Selection:** On accept, user selects which overlay to share back — this creates mutual access pattern that differentiates from unidirectional guest models.
+- **Inactive Marking requires Source State:** Instead of deleting expired/revoked shares, mark sources as "inactive" in database — preserves configuration history and enables audit trail (follows Microsoft 365 pattern).
+- **Premium Enforcement requires Flags:** Both user-level premium status and admin-level testing override flags needed to gate feature and enable internal validation.
+- **Shared Overlay Source requires Message Routing:** New source type that subscribes to another user's overlay's Redis Pub/Sub channel (overlay:{overlay_id}) and forwards messages through existing message processing pipeline.
 
-**Phase 2: Differentiators (beyond official listener)**
-8. YouTube custom emotes (membership emotes in message runs)
-9. Ticker events (nice-to-have)
+## MVP Definition
 
-Defer:
-- **Polls/Creator goals**: Unstable schema, not core functionality
-- **Viewer leaderboard rank**: Low value, community feature
-- **Sending messages**: Out of scope (read-only listener)
+### Launch With (v1.3)
 
-## Complexity Assessment
+Minimum viable product — what's needed to validate the concept.
 
-### Low Complexity (1-2 days)
-- Regular chat messages (straightforward InnerTube renderer parsing)
-- Super Chat/Sticker events (similar to regular messages)
-- Continuation tokens (provided by InnerTube, just pass through)
-- User metadata (included in renderers)
-- Live/offline detection (check `offlineAt` field)
-- Connection gating (reuse official listener pattern)
+- [x] User search by platform username — Core discovery mechanism, enables finding collaboration partners
+- [x] Send share request (select overlay to share) — Initiates sharing workflow with explicit overlay selection
+- [x] View pending requests dashboard — Visibility into incoming/outgoing requests with clear status
+- [x] Accept request (select overlay to share back, choose expiry) — Bidirectional consent with configuration
+- [x] Immediate add-on-acceptance (both users can add as source) — No additional approval, instant usability
+- [x] Shared overlay source type — New source type that delivers all messages from source overlay's chat sources
+- [x] Display settings isolation — Destination overlay's CSS/events apply, not source's settings
+- [x] Flexible expiry (this stream, time-based, unlimited) — Covers primary use cases for temporary/permanent collaboration
+- [x] Stream lifecycle detection (Twitch, YouTube, TikTok existing; Kick to research) — Enables "this stream only" expiry
+- [x] Manual revocation (either party) — Basic security/privacy requirement
+- [x] Inactive source marking (not deletion) — Preserves configuration history, enables audit trail
+- [x] Premium enforcement (blocks non-premium users) — Establishes monetization path, first premium feature
+- [x] Admin testing override — Enables internal validation before broad rollout
 
-### Medium Complexity (3-5 days)
-- **Stream discovery** (find live stream from channel browse results, filter logic)
-- Membership events (multiple renderer types: new sponsor, milestone, gift, received)
-- Single message deletion (match `targetItemId` to message ID, remove from overlay)
-- Batch deletion (find all messages from author, remove)
-- YouTube custom emotes (parse message `runs`, extract emoji metadata)
+### Add After Validation (v1.4+)
 
-### High Complexity (5-10 days)
-- **InnerTube protocol reverse engineering** (no official docs, must inspect network traffic)
-- **Stability handling** (InnerTube schema can change without notice)
-- **Error handling** (undocumented error codes, must infer from responses)
+Features to add once core is working.
 
-## Drop-In Replacement Feature Parity Checklist
+- [ ] Share request expiration (e.g., 7 days) — Prevents stale pending requests, follows Slack/SailPoint pattern (currently requests persist indefinitely)
+- [ ] Notification system for share events (request received, accepted, revoked, expired) — Improves awareness, reduces need to check dashboard manually
+- [ ] Share renewal workflow — Easier to extend expired share than create new request (especially for recurring collaborations)
+- [ ] Usage metrics for premium upsell — Track share attempts by non-premium users, inform conversion funnel optimization
+- [ ] Batch expiry cleanup — Scheduled job to mark inactive sources from expired shares (currently immediate on stream end detection)
 
-Can InnerTube match official listener behavior exactly?
+### Future Consideration (v2+)
 
-| Official Listener Feature | InnerTube Equivalent | Parity Status | Notes |
-|---------------------------|----------------------|---------------|-------|
-| OAuth-based stream discovery | Browse endpoint (no auth) | ✅ YES | InnerTube `browse` returns live streams, no quota cost |
-| Poll live chat (5 units/poll) | Continuation-based streaming | ✅ YES (BETTER) | Zero quota, no polling cost |
-| Regular messages | `liveChatTextMessageRenderer` | ✅ YES | Direct mapping |
-| Super Chat | `liveChatPaidMessageRenderer` | ✅ YES | Amount, currency, tier, message |
-| Super Sticker | `liveChatPaidStickerRenderer` | ✅ YES | Sticker metadata, amount |
-| New membership | `liveChatSponsorshipsGiftPurchaseAnnouncementRenderer` | ✅ YES | New sponsor event |
-| Membership milestone | `liveChatMembershipItemRenderer` | ✅ YES | Milestone months |
-| Membership gifts | `liveChatSponsorshipsGiftPurchaseAnnouncementRenderer` | ✅ YES | Gift count, level |
-| Single deletion | `markChatItemAsDeletedAction` | ✅ YES | Target message ID |
-| Batch deletion (ban) | `markChatItemsByAuthorAsDeletedAction` | ✅ YES | Target author ID |
-| User badges | `authorBadges` in renderer | ✅ YES | Moderator, verified, owner, member |
-| Profile image | `authorPhoto` in renderer | ✅ YES | Avatar URL |
-| Polling interval | Continuation timeout | ✅ YES (BETTER) | InnerTube can be faster (sub-second) |
-| Live/offline detection | `offlineAt` timestamp | ✅ YES | Stream end notification |
-| Quota tracking | N/A (no quota) | ✅ YES (SIMPLER) | Remove quota tracking code |
-| Connection gating | Reuse pattern | ✅ YES | Stop when overlay disconnected |
-| Token refresh | N/A (no auth) | ✅ YES (SIMPLER) | Remove OAuth token management |
+Features to defer until product-market fit is established.
 
-**Verdict:** InnerTube can provide **100% feature parity** with official listener, with **improvements** in quota elimination, deletion latency, and setup simplicity.
+- [ ] Share templates (preset expiry + permissions) — Power user feature, defer until usage patterns emerge
+- [ ] Whitelabel/branded shared overlays — Enterprise feature, defer until B2B demand validated
+- [ ] Share history/audit log UI — Currently database records exist, but no UI — add if compliance/transparency becomes user request
+- [ ] Multi-tier premium (different share limits) — Defer until single premium tier validated and conversion optimized
+- [ ] API for programmatic sharing — Developer/automation feature, defer until core workflow validated
 
-## Key Risks
+## Feature Prioritization Matrix
 
-### Stability Risk: HIGH
-- InnerTube is **unofficial, undocumented** API
-- YouTube can change schema **without notice** (breaking changes possible)
-- No SLA, no support, no version guarantees
-- **Mitigation**: Robust error handling, schema validation, fallback to official listener on breakage
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| User search by platform username | HIGH | MEDIUM | P1 |
+| Send/accept share requests | HIGH | MEDIUM | P1 |
+| Bidirectional sharing workflow | HIGH | MEDIUM | P1 |
+| Shared overlay source type | HIGH | HIGH | P1 |
+| Display settings isolation | HIGH | MEDIUM | P1 |
+| Flexible expiry options | HIGH | MEDIUM | P1 |
+| Manual revocation | HIGH | LOW | P1 |
+| Inactive source marking | MEDIUM | LOW | P1 |
+| Premium enforcement + admin override | HIGH | LOW | P1 |
+| Stream lifecycle detection (all platforms) | MEDIUM | MEDIUM | P1 |
+| Share request expiration | MEDIUM | LOW | P2 |
+| Notification system | MEDIUM | MEDIUM | P2 |
+| Share renewal workflow | MEDIUM | MEDIUM | P2 |
+| Usage metrics for premium upsell | LOW | LOW | P2 |
+| Share templates | LOW | MEDIUM | P3 |
+| Audit log UI | LOW | MEDIUM | P3 |
+| API for programmatic sharing | LOW | HIGH | P3 |
 
-### Rate Limiting Risk: MEDIUM
-- InnerTube has "request limits" but "so high you'll likely never hit them" (source: GitHub discussions)
-- No documented rate limits, must discover empirically
-- **Mitigation**: Implement exponential backoff, monitor for rate limit errors
+**Priority key:**
+- P1: Must have for launch (v1.3)
+- P2: Should have, add when possible (v1.4+)
+- P3: Nice to have, future consideration (v2+)
 
-### Detection Risk: LOW-MEDIUM
-- YouTube could detect/block InnerTube usage from non-browser clients
-- No evidence of widespread blocking (libraries actively used in 2026)
-- **Mitigation**: User-Agent spoofing, request header matching browser behavior
+## Competitor Feature Analysis
 
-### Go Library Availability Risk: HIGH
-- **Most InnerTube libraries are JavaScript/Python** (.NET, Python dominate)
-- **Go library found: `github.com/nezbut/innertube-go`** but **does NOT support live chat**
-- **Go library found: `github.com/abhinavxd/youtube-live-chat-downloader/v2`** (Go-specific live chat)
-- **Mitigation**: Evaluate `youtube-live-chat-downloader` or implement InnerTube protocol directly
+| Feature | Twitch Shared Chat | Restream Pairs | StreamElements/Streamlabs | All-Chat Approach |
+|---------|-------------------|----------------|---------------------------|-------------------|
+| Discovery mechanism | In-platform (Stream Together invite) | Link-based (share URL) | N/A (no sharing) | Username search (cross-platform: Twitch, YouTube, Kick, TikTok handles) |
+| Share direction | Unidirectional (chat flows one way) | Asymmetric (guests broadcast to their channels) | N/A | Bidirectional (mutual overlay sharing) |
+| Expiry control | Session-based (ends with Stream Together) | Persistent (manual cleanup) | N/A | Flexible (this stream, time-based, unlimited) |
+| Permission model | Stream Together host controls | Link access control (anyone with link) | N/A | Explicit accept/decline with consent |
+| Access revocation | End Stream Together session | Unclear | N/A | Either party can revoke at any time |
+| Expired access visibility | N/A (session-based) | N/A | N/A | Inactive marking (preserves config history) |
+| Monetization | Free (Twitch Platform feature) | Freemium (free up to 20 guests) | Free/subscription (not sharing-specific) | Premium-gated (first premium feature for All-Chat) |
+| Multi-platform support | Twitch-only | Multi-platform broadcast | Multi-platform overlays (no sharing) | Multi-platform overlay sharing (Twitch + YouTube + Kick + TikTok aggregated) |
+| Display settings | Host's chat styling | Each streamer's own styling | Own styling | Destination overlay's styling (CSS isolation) |
 
-## Dependencies on Existing Features
-
-| Existing Feature | InnerTube Reuse | Modification Required |
-|------------------|-----------------|----------------------|
-| Message normalization (message-processor) | ✅ Reuse | None - same `RawChatMessage` schema |
-| Redis Streams publishing | ✅ Reuse | None - same `chat:raw` stream |
-| Connection gating pattern | ✅ Reuse | Port from official listener poller |
-| Leader election (source-manager) | ✅ Reuse | None - same leader election pattern |
-| Health checks | ✅ Reuse | None - same `/health/live` and `/health/ready` |
-| Metrics (Prometheus) | ✅ Reuse | Remove quota metrics, add InnerTube-specific |
-| Database schema | ⚠️ Partial | Remove `youtube_quota_usage`, `youtube_oauth_tokens` tables |
-| OAuth manager | ❌ Remove | InnerTube requires no authentication |
-| Quota tracker | ❌ Remove | InnerTube has no quota |
+**Key Differentiators:**
+1. **Bidirectional vs Unidirectional:** Twitch Shared Chat is one-way (chat merges to host); All-Chat is mutual (both share their aggregated overlays)
+2. **Multi-Platform Aggregation:** Competitors share single-platform chat; All-Chat shares overlays that aggregate multiple platforms (Twitch + YouTube + Kick + TikTok)
+3. **Flexible Expiry:** Twitch = session-only, Restream = persistent, All-Chat = user choice (session, time, unlimited)
+4. **Explicit Consent:** Link-based (Restream) risks unwanted access; username search + accept/decline = privacy-first
+5. **Premium Positioning:** Establishes monetization foundation (freemium model) while competitors treat collaboration as free platform feature
 
 ## Sources
 
-### High Confidence (Official Documentation)
-- [YouTube Live Streaming API - LiveChatMessages](https://developers.google.com/youtube/v3/live/docs/liveChatMessages)
-- [YouTube API Quota Calculator](https://developers.google.com/youtube/v3/determine_quota_cost)
+### Streaming Platform Collaboration Features
+- [Livepush Multi Chat Overlay](https://livepush.io/features/multi-chat.html) — Multi-platform chat aggregation patterns
+- [Streamlabs Shared Twitch Chat](https://streamlabs.com/content-hub/post/streamlabs-desktop-twitch-shared-chat) — Twitch native sharing implementation
+- [Twitch Shared Chat Help](https://help.twitch.tv/s/article/shared-chat?language=en_US) — Official Twitch collaboration model
+- [Twitch Shared Chat: How It Works](https://www.streamscheme.com/twitch-shared-chat/) — User-facing Shared Chat guide
+- [Social Stream Ninja](https://socialstream.ninja/) — Multi-platform chat integration patterns
+- [Restream Chat Guide](https://restream.io/blog/restream-chat-everything-you-need-to-know/) — Chat aggregation for collaborations
 
-### Medium Confidence (Verified Libraries)
-- [YTLiveChat (C#/.NET InnerTube library)](https://github.com/Agash/YTLiveChat)
-- [YouTube.js (JavaScript InnerTube library)](https://github.com/LuanRT/YouTube.js)
-- [innertube-go (Go InnerTube library - no live chat)](https://pkg.go.dev/github.com/nezbut/innertube-go)
-- [youtube-live-chat-downloader (Go live chat library)](https://pkg.go.dev/github.com/abhinavxd/youtube-live-chat-downloader/v2)
+### Collaboration & Guest Access Patterns
+- [Restream Pairs](https://support.restream.io/en/articles/11726283-what-is-restream-pairs) — Bidirectional guest channel sharing (up to 20 guests)
+- [Restream Guest Channels](https://support.restream.io/en/articles/8540565-how-to-add-guest-channels-to-my-studio-stream) — Guest collaboration workflow
+- [Restream Guest Capabilities](https://support.restream.io/en/articles/9184240-what-you-can-do-as-a-guest-in-restream-studio) — Guest permissions and features
+- [StreamYard Guest Invites](https://support.streamyard.com/hc/en-us/articles/360054866191-Does-My-Link-to-Invite-A-Guest-Expire) — Invitation expiry (links last forever, no session reuse)
+- [Twitch Raids Guide](https://streamlabs.com/content-hub/post/twitch-raids-what-they-are-and-how-to-raid) — Viewer sharing patterns
+- [Collaborative Multistreaming Software](https://streamyard.com/blog/collaborative-multistreaming-software) — Team collaboration features
 
-### Medium Confidence (Community Research)
-- [YouTube API Quota Breakdown 2026](https://www.contentstats.io/blog/youtube-api-quota-tracking)
-- [YouTube API Quota Exceeded Fix 2026](https://getlate.dev/blog/youtube-api-limits-how-to-calculate-api-usage-cost-and-fix-exceeded-api-quota)
-- [VTuber LiveChat Dataset (InnerTube moderation events)](https://repopython.com/r/holodata/vtuber-livechat-dataset)
+### Freemium & Premium Feature Patterns
+- [Freemium Paywalls | RevenueCat](https://www.revenuecat.com/docs/playbooks/guides/freemium) — Freemium paywall implementation patterns
+- [Freemium vs Premium | Refact](https://refact.co/freemium-vs-premium-comparing-two-paywall-models/) — Comparing paywall models
+- [Freemium Business Model | Recurly](https://recurly.com/blog/what-is-freemium-a-guide-for-subscription-businesses/) — Freemium strategy guide
+- [StreamElements Setup 2026](https://eathealthy365.com/your-complete-streamelements-setup-walkthrough-for-2026/) — Streaming platform premium tiers
+- [Streamlabs vs StreamElements 2026](https://www.streamscheme.com/streamlabs-vs-streamelements/) — Feature comparison (premium vs free)
 
-### Low Confidence (GitHub Issues, Discussions)
-- [Retract Message Issue #263](https://github.com/youtube/api-samples/issues/263)
-- [Parse LiveChat Parameters Issue #192](https://github.com/Tyrrrz/YoutubeExplode/issues/192)
+### SaaS Invitation & Access Management Patterns
+- [Slack Pending Invitations](https://slack.com/help/articles/360022158293-Pending-member-invitations) — Invitation expiry (30 days)
+- [AWS Resource Share Invitations](https://docs.aws.amazon.com/ram/latest/userguide/working-with-shared-invitations.html) — Accept/reject invitation workflow (7-day expiry)
+- [Auth0 User Invitations](https://auth0.com/docs/customize/email/send-email-invitations-for-application-signup) — Email invitation patterns
+- [Clerk Organization Invitations](https://clerk.com/docs/guides/organizations/add-members/invitations) — Unique invitation links with email delivery
+- [Supersaas Invitation Flow](https://supersaas.dev/docs/teams/invite-flow) — User invitation workflow best practices
+- [Microsoft Guest Invitation Expiry](https://learn.microsoft.com/en-us/answers/questions/5551108/what-is-the-validity-time-for-the-invitation-link) — External invitation validity (7-90 days)
+- [SharePoint Guest Access Expiration](https://www.sharepointdiary.com/2021/08/guest-user-access-expiration-in-sharepoint-online-onedrive.html) — Guest access thresholds (1-365 days)
+
+### Collaboration UX Patterns & Anti-Patterns
+- [Table Stakes in SaaS](https://www.linkedin.com/pulse/table-stake-features-saas-enterprise-products-rohit-pareek) — Expected vs differentiating features
+- [Table Stakes Sequencing | Product Teacher](https://www.productteacher.com/articles/sequencing-table-stakes-and-differentiators) — Prioritizing table stakes vs differentiators
+- [Real-Time Collaboration 2025 | Medium](https://medium.com/@sachhsoft/building-real-time-collaboration-features-what-saas-teams-need-to-know-in-2025-d61a9b678cf5) — Collaboration as table stakes (was premium 5 years ago)
+- [Collaboration Anti-Patterns | Lucid](https://lucid.co/blog/collaboration-anti-patterns) — Common collaboration mistakes (stifled discussion, no clear roles)
+- [Improved UX for Sharing | Microsoft](https://learn.microsoft.com/en-us/power-platform/release-plan/2023wave1/power-apps/improved-ux-sharing-records) — Access revocation patterns (Share > Manage access > Remove)
+- [UX Patterns for Collaborative Interfaces | Medium](https://medium.com/@space.alpaca/ux-patterns-to-use-in-collaborative-interfaces-cf7182ae6e52) — Permission management, mutual awareness, conflict resolution
+
+### Access Management Best Practices
+- [M365 Guest User Management | CoreView](https://www.coreview.com/blog/microsoft-365-guest-user-governance-and-best-sharing-practices-to-protect-your-privacy) — Inactive vs deleted access visibility
+- [B2B Governance Best Practices | EasyLife 365](https://www.easylife365.cloud/stories/b2b-goverance-best-practices/) — Deactivating inactive guests (90+ days)
+- [SharePoint Sharing Permissions | Microsoft Learn](https://learn.microsoft.com/en-us/sharepoint/modern-experience-sharing-permissions) — External sharing security
+
+---
+*Feature research for: Chat Overlay Sharing (All-Chat v1.3)*
+*Researched: 2026-03-08*

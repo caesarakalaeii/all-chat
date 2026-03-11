@@ -174,6 +174,30 @@ func (sm *SubscriptionManager) SubscribeToFollows(ctx context.Context, broadcast
 	return sm.subscribeWithCondition(ctx, "channel.follow", broadcasterID, token, "2", condition, cacheKey)
 }
 
+// SubscribeToStreamOffline creates a subscription for stream offline events.
+// Requires only app access token (no user OAuth scope needed).
+func (sm *SubscriptionManager) SubscribeToStreamOffline(ctx context.Context, broadcasterID string) (string, error) {
+	token, err := sm.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
+	cacheKey := broadcasterID + ":stream.offline"
+	condition := map[string]string{"broadcaster_user_id": broadcasterID}
+	return sm.subscribeWithCondition(ctx, "stream.offline", broadcasterID, token, "1", condition, cacheKey)
+}
+
+// SubscribeToStreamOnline creates a subscription for stream online events.
+// Requires only app access token (no user OAuth scope needed).
+func (sm *SubscriptionManager) SubscribeToStreamOnline(ctx context.Context, broadcasterID string) (string, error) {
+	token, err := sm.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
+	cacheKey := broadcasterID + ":stream.online"
+	condition := map[string]string{"broadcaster_user_id": broadcasterID}
+	return sm.subscribeWithCondition(ctx, "stream.online", broadcasterID, token, "1", condition, cacheKey)
+}
+
 // Unsubscribe deletes a subscription
 func (sm *SubscriptionManager) Unsubscribe(ctx context.Context, broadcasterID string) error {
 	sm.mu.RLock()

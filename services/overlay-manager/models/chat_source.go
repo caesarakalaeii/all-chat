@@ -16,16 +16,18 @@ type ChatSource struct {
 	AuthRequired  bool                   `json:"auth_required"`
 	Config        map[string]interface{} `json:"config"`
 	IsActive      bool                   `json:"is_active"`
+	ShareStatus   *string                `json:"share_status,omitempty"` // Only set for platform='shared_overlay'
 	CreatedAt     time.Time              `json:"created_at"`
 	UpdatedAt     time.Time              `json:"updated_at"`
 }
 
 // Valid platforms
 var validPlatforms = map[string]bool{
-	"twitch":  true,
-	"youtube": true,
-	"kick":    true,
-	"tiktok":  true,
+	"twitch":         true,
+	"youtube":        true,
+	"kick":           true,
+	"tiktok":         true,
+	"shared_overlay": true, // Phase 16: shared overlay sources
 }
 
 // Validate validates the chat source fields

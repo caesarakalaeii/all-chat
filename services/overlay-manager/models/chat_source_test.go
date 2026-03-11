@@ -115,6 +115,18 @@ func TestChatSource_Validate(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "valid shared_overlay source",
+			source: &ChatSource{
+				ID:          uuid.New().String(),
+				OverlayID:   uuid.New().String(),
+				Platform:    "shared_overlay",
+				ChannelID:   uuid.New().String(), // sender_overlay_id UUID
+				ChannelName: "xqc's overlay",
+				IsActive:    true,
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -136,6 +148,7 @@ func TestChatSource_IsValidPlatform(t *testing.T) {
 		{"youtube", true},
 		{"kick", true},
 		{"tiktok", true},
+		{"shared_overlay", true},
 		{"discord", false},
 		{"", false},
 		{"TWITCH", false}, // case-sensitive

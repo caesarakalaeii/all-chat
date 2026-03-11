@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -9,6 +10,20 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// LifecyclePublisher publishes stream end events to Redis.
+// Defined as interface for testability.
+type LifecyclePublisher interface {
+	Publish(ctx context.Context, channel string, message interface{}) *redis.IntCmd
+}
+
+// StreamEndPayload is the JSON payload published to lifecycle:stream_end.
+type StreamEndPayload struct {
+	Platform      string `json:"platform"`
+	UserID        string `json:"user_id"`        // may be "" — share-service resolves via google_id lookup
+	BroadcasterID string `json:"broadcaster_id"` // YouTube channel_id
+	Timestamp     string `json:"timestamp"`
+}
 
 // Repository handles Redis operations for channel-video mappings
 // Used for lifecycle management: storing/clearing video IDs when streams go offline
@@ -28,6 +43,10 @@ func NewRepository(client *redis.Client, logger *zap.Logger) *Repository {
 // DeleteChannelVideoMapping removes the cached video ID for a channel
 // This forces rediscovery on the next poll attempt
 func (r *Repository) DeleteChannelVideoMapping(ctx context.Context, channelID string) error {
+	if r.client == nil {
+		return fmt.Errorf("redis client is nil")
+	}
+
 	key := fmt.Sprintf("youtube:innertube:channel:%s:video_id", channelID)
 
 	err := r.client.Del(ctx, key).Err()
@@ -111,12 +130,13 @@ func DetectOffline(resp *innertube.LiveChatResponse) bool {
 	return false
 }
 
-// HandleStreamOffline handles the stream offline event
+// HandleStreamOffline handles the stream offline event.
 // Actions:
-//   1. Log offline detection
-//   2. Delete Redis mapping to force rediscovery
-//   3. Return error to signal manager to stop polling
-func HandleStreamOffline(ctx context.Context, channelID string, videoID string, repository *Repository, logger *zap.Logger) error {
+//  1. Log offline detection
+//  2. Delete Redis mapping to force rediscovery
+//  3. Publish lifecycle event to Redis (if publisher is non-nil)
+//  4. Return error to signal manager to stop polling
+func HandleStreamOffline(ctx context.Context, channelID string, videoID string, repository *Repository, publisher LifecyclePublisher, logger *zap.Logger) error {
 	logger.Info("Stream went offline",
 		zap.String("channel_id", channelID),
 		zap.String("video_id", videoID),
@@ -128,6 +148,29 @@ func HandleStreamOffline(ctx context.Context, channelID string, videoID string, 
 			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
+	}
+
+	// Publish lifecycle event if publisher available
+	if publisher != nil {
+		payload := StreamEndPayload{
+			Platform:      "youtube",
+			UserID:        "",        // share-service resolves via google_id lookup
+			BroadcasterID: channelID, // YouTube channel_id = google_id in users table
+			Timestamp:     time.Now().UTC().Format(time.RFC3339),
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			logger.Warn("Failed to marshal lifecycle event", zap.Error(err))
+		} else {
+			if err := publisher.Publish(ctx, "lifecycle:stream_end", string(data)).Err(); err != nil {
+				logger.Warn("Failed to publish lifecycle event",
+					zap.String("channel_id", channelID),
+					zap.Error(err))
+			} else {
+				logger.Info("Published YouTube stream end lifecycle event",
+					zap.String("channel_id", channelID))
+			}
+		}
 	}
 
 	// Return error to signal polling should stop

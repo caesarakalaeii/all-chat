@@ -198,24 +198,9 @@ func main() {
 			return nil
 		}
 
-		// Check for duplicate messages (prevents double-publishing to overlays)
-		isDup, dedupErr := deduplicator.IsDuplicate(ctx, rawMsg.Platform, rawMsg.ChannelID, rawMsg.UserID, rawMsg.Text, rawMsg.Timestamp)
-		if dedupErr != nil {
-			log.Warn("Deduplication check failed, processing message anyway",
-				zap.Error(dedupErr),
-				zap.String("message_id", rawMsg.MessageID),
-			)
-			// Continue processing on error (fail open)
-		} else if isDup {
-			log.Debug("Duplicate message detected, skipping",
-				zap.String("platform", rawMsg.Platform),
-				zap.String("channel", rawMsg.ChannelID),
-				zap.String("user", rawMsg.UserID),
-				zap.String("message_id", rawMsg.MessageID),
-			)
-			processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "deduplicated", "skipped")
-			return nil
-		}
+		// Note: Deduplication moved to per-overlay loop (Phase 15-03)
+		// This prevents duplicate messages from overlapping sources (e.g., Twitch Shared Chat)
+		// while allowing same message to be delivered to different overlays
 
 		// Find target overlays for this message
 		var overlays []models.OverlayTarget
@@ -473,6 +458,43 @@ func main() {
 			}
 
 		publish:
+			// Check for duplicate messages per overlay (Phase 15-03: overlay-specific deduplication)
+			// Prevents duplicates from overlapping sources (e.g., Twitch Shared Chat)
+			// Extract platform message ID from tags for better fingerprinting
+			platformMsgID := rawMsg.Tags["id"]
+			if platformMsgID == "" {
+				platformMsgID = rawMsg.MessageID
+			}
+
+			isDup, dedupErr := deduplicator.IsDuplicateForOverlay(
+				ctx,
+				overlay.OverlayID,
+				rawMsg.Platform,
+				rawMsg.ChannelID,
+				platformMsgID,
+				rawMsg.UserID,
+				rawMsg.Text,
+				rawMsg.Timestamp,
+			)
+
+			if dedupErr != nil {
+				log.Warn("Deduplication check failed, processing message anyway",
+					zap.Error(dedupErr),
+					zap.String("message_id", rawMsg.MessageID),
+					zap.String("overlay_id", overlay.OverlayID),
+				)
+				// Continue processing on error (fail open)
+			} else if isDup {
+				log.Debug("Duplicate message detected for overlay, skipping",
+					zap.String("overlay_id", overlay.OverlayID),
+					zap.String("platform", rawMsg.Platform),
+					zap.String("channel", rawMsg.ChannelID),
+					zap.String("message_id", platformMsgID),
+				)
+				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "deduplicated", "skipped")
+				continue // Skip publishing to this overlay
+			}
+
 			// Capture event for credit roll if applicable
 			if unified.Event != nil {
 				if err := eventCapture.CaptureIfActive(ctx, unified); err != nil {
