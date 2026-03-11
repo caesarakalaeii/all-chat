@@ -167,9 +167,9 @@ func main() {
 			premiumRoutes.POST("/shares/:id/reject", shareHandler.RejectRequest)
 		}
 
-		// Admin routes (requires is_admin check - to be added)
-		// For MVP: admin routes exist but no is_admin enforcement yet
+		// Admin routes — requires valid JWT + admin role
 		adminRoutes := api.Group("/admin")
+		adminRoutes.Use(middleware.AdminOnly())
 		{
 			adminRoutes.POST("/users/:id/premium", adminHandler.SetUserPremium)
 		}

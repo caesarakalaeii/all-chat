@@ -19,6 +19,7 @@ interface User {
   twitch_id?: string;
   youtube_id?: string;
   kick_id?: string;
+  is_premium: boolean;
   is_banned: boolean;
   banned_at?: string;
   banned_reason?: string;
@@ -40,13 +41,15 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [impersonating, setImpersonating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState<'all' | 'active' | 'banned'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'banned' | 'premium'>('all');
   const [showBanModal, setShowBanModal] = useState(false);
   const [userToBan, setUserToBan] = useState<User | null>(null);
   const [banReason, setBanReason] = useState('');
   const [banLoading, setBanLoading] = useState(false);
   const [impersonateDialogUser, setImpersonateDialogUser] = useState<User | null>(null);
   const [unbanDialogUser, setUnbanDialogUser] = useState<User | null>(null);
+  const [premiumDialogUser, setPremiumDialogUser] = useState<User | null>(null);
+  const [premiumLoading, setPremiumLoading] = useState(false);
 
   // Fetch all users from the database
   useEffect(() => {
@@ -226,11 +229,51 @@ export default function UsersPage() {
     }
   };
 
+  // Handle premium toggle
+  const handleSetPremium = async (userId: string, username: string, isPremium: boolean) => {
+    setPremiumLoading(true);
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const response = await fetch(`/api/v1/admin/users/${userId}/premium`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_premium: isPremium }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update premium status');
+      }
+
+      toastManager.add({
+        title: isPremium
+          ? `${username} granted premium access`
+          : `${username} premium access removed`,
+        type: 'success',
+      });
+      setPremiumDialogUser(null);
+      await refetchUsers();
+
+      // Update selectedUser in place so the panel reflects the change immediately
+      if (selectedUser?.id === userId) {
+        setSelectedUser((u) => u ? { ...u, is_premium: isPremium } : u);
+      }
+    } catch (err: any) {
+      toastManager.add({ title: err.message || 'Failed to update premium status', type: 'error' });
+    } finally {
+      setPremiumLoading(false);
+    }
+  };
+
   // Filter and search users
   const displayUsers = users.filter((u) => {
-    // Filter by ban status
+    // Filter by status
     if (filter === 'banned' && !u.is_banned) return false;
     if (filter === 'active' && u.is_banned) return false;
+    if (filter === 'premium' && !u.is_premium) return false;
 
     // Search filter
     if (searchTerm) {
@@ -259,6 +302,7 @@ export default function UsersPage() {
 
   const bannedCount = users.filter((u) => u.is_banned).length;
   const activeCount = users.filter((u) => !u.is_banned).length;
+  const premiumCount = users.filter((u) => u.is_premium).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -328,6 +372,16 @@ export default function UsersPage() {
                   >
                     Banned ({bannedCount})
                   </button>
+                  <button
+                    onClick={() => setFilter('premium')}
+                    className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                      filter === 'premium'
+                        ? 'border-amber-400 text-amber-400'
+                        : 'border-transparent text-text-sub hover:text-text hover:border-border'
+                    }`}
+                  >
+                    Premium ({premiumCount})
+                  </button>
                 </div>
               </div>
               <ul className="divide-y divide-border">
@@ -346,6 +400,11 @@ export default function UsersPage() {
                             {user.display_name}
                           </p>
                           <div className="ml-2 flex space-x-1">
+                            {user.is_premium && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                PREMIUM
+                              </span>
+                            )}
                             {user.is_banned && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20">
                                 BANNED
@@ -481,6 +540,85 @@ export default function UsersPage() {
                   <p className="mt-2 text-xs text-text-dim text-center">
                     Temporarily act as this user to debug issues
                   </p>
+                </div>
+
+                {/* Premium Section */}
+                <div className="mt-6 pt-6 border-t border-border">
+                  {selectedUser.is_premium ? (
+                    <>
+                      <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                        <p className="text-sm font-medium text-amber-400">Premium access active</p>
+                        <p className="text-xs text-amber-400/70 mt-1">
+                          This user can create and accept share requests.
+                        </p>
+                      </div>
+                      <Dialog.Root
+                        open={premiumDialogUser?.id === selectedUser.id && premiumDialogUser?.is_premium === true}
+                        onOpenChange={(open) => { if (!open) setPremiumDialogUser(null); }}
+                      >
+                        <Dialog.Trigger
+                          render={
+                            <Button
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => setPremiumDialogUser(selectedUser)}
+                            >
+                              Revoke Premium
+                            </Button>
+                          }
+                        />
+                        <Dialog.Content showCloseButton={false}>
+                          <Dialog.Title>Revoke premium for &ldquo;{selectedUser.username}&rdquo;?</Dialog.Title>
+                          <Dialog.Description>
+                            They will no longer be able to create or accept share requests.
+                          </Dialog.Description>
+                          <div className="flex gap-3 justify-end mt-6">
+                            <Dialog.Close render={<Button variant="outline" disabled={premiumLoading}>Cancel</Button>} />
+                            <Button
+                              variant="destructive"
+                              disabled={premiumLoading}
+                              onClick={() => handleSetPremium(selectedUser.id, selectedUser.username, false)}
+                            >
+                              {premiumLoading ? 'Saving...' : 'Revoke Premium'}
+                            </Button>
+                          </div>
+                        </Dialog.Content>
+                      </Dialog.Root>
+                    </>
+                  ) : (
+                    <Dialog.Root
+                      open={premiumDialogUser?.id === selectedUser.id && premiumDialogUser?.is_premium === false}
+                      onOpenChange={(open) => { if (!open) setPremiumDialogUser(null); }}
+                    >
+                      <Dialog.Trigger
+                        render={
+                          <Button
+                            variant="outline"
+                            className="w-full border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/60"
+                            onClick={() => setPremiumDialogUser(selectedUser)}
+                          >
+                            Grant Premium
+                          </Button>
+                        }
+                      />
+                      <Dialog.Content showCloseButton={false}>
+                        <Dialog.Title>Grant premium to &ldquo;{selectedUser.username}&rdquo;?</Dialog.Title>
+                        <Dialog.Description>
+                          They will be able to create and accept chat overlay share requests.
+                        </Dialog.Description>
+                        <div className="flex gap-3 justify-end mt-6">
+                          <Dialog.Close render={<Button variant="outline" disabled={premiumLoading}>Cancel</Button>} />
+                          <Button
+                            variant="default"
+                            disabled={premiumLoading}
+                            onClick={() => handleSetPremium(selectedUser.id, selectedUser.username, true)}
+                          >
+                            {premiumLoading ? 'Saving...' : 'Grant Premium'}
+                          </Button>
+                        </div>
+                      </Dialog.Content>
+                    </Dialog.Root>
+                  )}
                 </div>
 
                 {/* Ban/Unban Section */}
