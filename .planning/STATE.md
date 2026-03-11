@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Chat Overlay Sharing
 status: executing
-stopped_at: Completed 18-revocation-04 (Overlay Editor Revocation UI) — Phase 18 complete, v1.3 milestone complete
-last_updated: "2026-03-10T22:01:01.178Z"
+stopped_at: "Completed 19-lifecycle-expiry-00 (Nyquist compliance: Migration 034 + RED test stubs)"
+last_updated: "2026-03-11T17:47:23.862Z"
 last_activity: 2026-03-09 — Completed plan 15-02 (Frontend Acceptance Flow)
 progress:
   total_phases: 18
   completed_phases: 12
-  total_plans: 51
-  completed_plans: 51
+  total_plans: 55
+  completed_plans: 52
   percent: 93
 ---
 
@@ -81,6 +81,7 @@ Progress: [█████████░] 93% (v1.3)
 | Phase 18-revocation P02 | 12 | 1 tasks | 3 files |
 | Phase 18-revocation P03 | 2 | 3 tasks | 6 files |
 | Phase 18-revocation P04 | 7 | 2 tasks | 1 files |
+| Phase 19-lifecycle-expiry P00 | 8 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -135,6 +136,9 @@ Recent decisions affecting v1.3:
 - [Phase 18-revocation]: Revoke button placed below StatusBadge on accepted cards; onRevoked triggers onUpdate() for re-fetch without page reload
 - [Phase 18-04]: WS connection in overlay editor uses /ws/overlay/{id} endpoint for share_revoked notifications; Revoke button gated on isActiveSharedOverlay, Remove button always present
 - [Phase 18-04]: ActivateSourcesForOverlay must filter shared_overlay sources where share_request.status IN (revoked, expired) — prevents revocation bypass on WS reconnect (found during verification)
+- [Phase 19-lifecycle-expiry]: Migration 034 uses separate share_expires_at column (not expires_at which is the 7-day acceptance window for pending requests)
+- [Phase 19-lifecycle-expiry]: Partial index on (share_expires_at, status) WHERE status='accepted' AND share_expires_at IS NOT NULL for efficient expiry job queries
+- [Phase 19-lifecycle-expiry]: YouTube lifecycle t.Skip stub (not compile error) — HandleStreamOffline already exists; publisher param extension is the Wave 3 RED gate
 
 ### Pending Todos
 
@@ -157,8 +161,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T21:56:43.998Z
-Stopped at: Completed 18-revocation-04 (Overlay Editor Revocation UI) — Phase 18 complete, v1.3 milestone complete
+Last session: 2026-03-11T17:47:23.860Z
+Stopped at: Completed 19-lifecycle-expiry-00 (Nyquist compliance: Migration 034 + RED test stubs)
 Resume file: None
 
 **Next action:** Run `/gsd:plan-phase 14` to begin planning Foundation phase
