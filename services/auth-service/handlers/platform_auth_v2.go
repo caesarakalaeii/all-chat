@@ -629,6 +629,10 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
 
+	if err != nil && !errors.Is(err, repository.ErrUserNotFound) {
+		return nil, fmt.Errorf("failed to look up user: %w", err)
+	}
+
 	if err != nil {
 		// User doesn't exist, create new one
 		platformID := platformUser.GetID()
