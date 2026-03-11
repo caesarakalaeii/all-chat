@@ -43,7 +43,8 @@ created: 2026-03-11
 | 19-01-03 | 01 | 1 | EXPIRY-04 | unit | `cd services/share-service && go test ./jobs/ -run TestExpiryJob_TimedAccepted -short` | ❌ W0 | ⬜ pending |
 | 19-02-01 | 02 | 2 | EXPIRY-02 | unit | `cd services/twitch-eventsub-listener && go test ./eventsub/ -run TestSubscribeToStream -short` | ❌ W0 | ⬜ pending |
 | 19-02-02 | 02 | 2 | EXPIRY-03 | unit | `cd services/share-service && go test ./jobs/ -run TestLifecycleSubscriber -short` | ❌ W0 | ⬜ pending |
-| 19-03-01 | 03 | 3 | EXPIRY-05 | unit | `cd services/youtube-listener-innertube && go test ./... -run TestStreamOfflinePublishesLifecycle -short` | ❌ W0 | ⬜ pending |
+| 19-03-01 | 03 | 3 | EXPIRY-05 (YouTube) | unit | `cd services/youtube-listener-innertube && go test ./poller/ -run TestHandleStreamOffline -short` | ❌ W0 | ⬜ pending |
+| 19-03-02 | 03 | 3 | EXPIRY-05 (TikTok) | manual | TikTok poller is Node.js; no Jest test exists in Wave 0 — manual verification only (see Manual-Only below) | N/A | ⬜ pending |
 | 19-04-01 | 04 | 4 | EXPIRY-06 | manual | see manual verifications | N/A | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -55,8 +56,10 @@ created: 2026-03-11
 - [ ] `services/share-service/jobs/lifecycle_subscriber_test.go` — stubs for EXPIRY-03
 - [ ] `services/share-service/jobs/expiry_test.go` — add TestExpiryJob_TimedAcceptedShares for EXPIRY-04
 - [ ] `services/twitch-eventsub-listener/eventsub/subscription_manager_test.go` — covers EXPIRY-02
-- [ ] `services/youtube-listener-innertube/streams/lifecycle_test.go` — covers EXPIRY-05 (YouTube publish)
+- [ ] `services/youtube-listener-innertube/poller/lifecycle_test.go` — covers EXPIRY-05 (YouTube publish)
 - [ ] Migration `migrations/034_share_expiry_fields.sql` — needed before all tests that touch DB
+
+Note: TikTok EXPIRY-05 coverage is manual-only (Wave 0 has no Jest stub). The TikTok service is Node.js; no test framework is currently wired for the poller module. Verification is via the manual-only section below.
 
 ---
 
@@ -66,6 +69,7 @@ created: 2026-03-11
 |----------|-------------|------------|-------------------|
 | Kick gracefully shows "Unlimited" when stream platform is Kick | EXPIRY-06 | No automated webhook path; Kick lifecycle deferred | 1. Create a share where sender has Kick as active platform. 2. Open AcceptModal. 3. Verify "This stream" option is disabled/hidden or shows a note. 4. Confirm "Unlimited" is the default. |
 | 60-second debounce prevents phantom Twitch expiry | EXPIRY-02/EXPIRY-03 | Requires simulating rapid stream.offline → stream.online sequence | 1. Trigger stream.offline webhook. 2. Within 60s, trigger stream.online. 3. Verify share was NOT expired after 60s. |
+| TikTok stream end publishes to lifecycle:stream_end | EXPIRY-05 (TikTok) | No Jest test stub in Wave 0; TikTok poller has no existing test framework | 1. Start TikTok listener. 2. Simulate a live→offline transition. 3. Monitor Redis: `SUBSCRIBE lifecycle:stream_end`. 4. Confirm payload arrives with `platform: 'tiktok'`. |
 
 ---
 
