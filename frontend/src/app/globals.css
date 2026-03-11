@@ -120,7 +120,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
   body {
-    background: var(--color-bg);
+    background-color: var(--color-bg);
+    background-image:
+      linear-gradient(rgba(255,255,255,0.013) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.013) 1px, transparent 1px);
+    background-size: 40px 40px;
     color: var(--color-text);
     min-height: 100vh;
   }
