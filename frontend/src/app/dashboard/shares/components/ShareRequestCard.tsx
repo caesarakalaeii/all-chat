@@ -8,6 +8,8 @@ import { StatusBadge } from './StatusBadge';
 import { AcceptModal } from './AcceptModal';
 import { AddSourceModal } from './AddSourceModal';
 import { RevocationConfirmModal } from './RevocationConfirmModal';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 interface ShareRequestCardProps {
   request: ShareRequest;
@@ -22,7 +24,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
   const [acceptedShare, setAcceptedShare] = useState<{ senderName: string; senderOverlayId: string } | null>(null);
 
   return (
-    <div className="bg-white rounded-lg shadow hover:shadow-md transition-shadow p-4">
+    <Card className="p-4 shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200">
       {/* User info */}
       <div className="flex items-center mb-3">
         {request.sender && (
@@ -33,16 +35,16 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
               className="w-10 h-10 rounded-full"
             />
             <div className="ml-3">
-              <p className="font-medium">{request.sender.display_name}</p>
-              <p className="text-sm text-gray-500">@{request.sender.username}</p>
+              <p className="font-medium text-text">{request.sender.display_name}</p>
+              <p className="text-sm text-text-sub">@{request.sender.username}</p>
             </div>
           </>
         )}
         {!request.sender && (
           <div className="flex items-center">
-            <div className="w-10 h-10 rounded-full bg-gray-200"></div>
+            <div className="w-10 h-10 rounded-full bg-surface-2"></div>
             <div className="ml-3">
-              <p className="text-sm text-gray-500">Loading user info...</p>
+              <p className="text-sm text-text-sub">Loading user info...</p>
             </div>
           </div>
         )}
@@ -58,41 +60,47 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
       )}
 
       {/* Timestamp */}
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-text-dim">
         {formatDistanceToNow(new Date(request.created_at), { addSuffix: true })}
       </p>
 
       {/* Status indicator */}
-      <div className="mt-3 pt-3 border-t">
+      <div className="mt-3 pt-3 border-t border-border">
         <StatusBadge status={request.status} />
         {request.status === 'accepted' && (
-          <button
-            className="mt-2 w-full px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+          <Button
+            variant="destructive"
+            size="sm"
+            className="mt-2 w-full"
             onClick={() => setShowRevokeModal(true)}
           >
             Revoke
-          </button>
+          </Button>
         )}
       </div>
 
       {/* Action buttons (for pending requests) */}
       {request.status === 'pending' && (
         <div className="mt-3 flex gap-2">
-          <button
-            className="flex-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          <Button
+            variant="gradient"
+            size="sm"
+            className="flex-1"
             onClick={() => setShowAcceptModal(true)}
           >
             Accept
-          </button>
-          <button
-            className="flex-1 px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
             onClick={() => {
               // Phase 15: Reject action (implement in future plan)
               console.log('Reject not implemented yet (Phase 15)');
             }}
           >
             Reject
-          </button>
+          </Button>
         </div>
       )}
 
@@ -143,6 +151,6 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
           }}
         />
       )}
-    </div>
+    </Card>
   );
 }

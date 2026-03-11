@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { sharesApi } from '@/lib/api/shares';
 import { overlaysApi } from '@/lib/api/overlays';
 import { PlatformBadge } from './PlatformBadge';
+import { Button } from '@/components/ui/button';
 import type { ShareRequest } from '@/lib/types/share';
 import type { Overlay } from '@/lib/types/overlay';
 import toast from 'react-hot-toast';
@@ -107,26 +108,23 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
   // Show error modal if no overlays
   if (error && overlays.length === 0) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-          <h2 className="text-xl font-semibold mb-4">Cannot Accept Share</h2>
-          <p className="text-gray-700 mb-6">{error}</p>
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-          >
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl">
+          <h2 className="text-xl font-semibold text-text mb-4">Cannot Accept Share</h2>
+          <p className="text-text-sub mb-6">{error}</p>
+          <Button variant="outline" className="w-full" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl">
         {/* Title */}
-        <h2 className="text-xl font-semibold mb-4">
+        <h2 className="text-xl font-semibold text-text mb-4">
           {request.sender?.display_name || 'User'} wants to share with you
         </h2>
 
@@ -140,19 +138,19 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
         )}
 
         {loadingOverlays ? (
-          <div className="py-8 text-center text-gray-500">Loading overlays...</div>
+          <div className="py-8 text-center text-text-sub">Loading overlays...</div>
         ) : (
           <>
             {/* Overlay dropdown */}
             <div className="mb-4">
-              <label htmlFor="overlay-select" className="block text-sm font-medium text-gray-700 mb-2">
-                Share back which overlay? <span className="text-red-500">*</span>
+              <label htmlFor="overlay-select" className="block text-sm font-medium text-text-sub mb-2">
+                Share back which overlay? <span className="text-red-400">*</span>
               </label>
               <select
                 id="overlay-select"
                 value={selectedOverlay}
                 onChange={(e) => setSelectedOverlay(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder-text-dim transition-all duration-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 {overlays.map((overlay) => (
                   <option key={overlay.id} value={overlay.id}>
@@ -164,12 +162,12 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
             {/* Expiry options */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-text-sub mb-2">
                 When should the share expire?
               </label>
               <div className="space-y-2">
                 {/* This stream */}
-                <label className={`flex items-start${isKickUser ? ' opacity-50 cursor-not-allowed' : ''}`}>
+                <label className={`flex items-start cursor-pointer${isKickUser ? ' opacity-50 cursor-not-allowed' : ''}`}>
                   <input
                     type="radio"
                     name="expiry"
@@ -177,33 +175,33 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     checked={expiryOption === 'this_stream'}
                     onChange={(e) => setExpiryOption(e.target.value as any)}
                     disabled={isKickUser}
-                    className="mt-1 mr-2"
+                    className="mt-1 mr-2 accent-blue-500"
                   />
                   <div>
-                    <div className="font-medium">
+                    <div className="font-medium text-sm text-text">
                       This stream
                       {isKickUser && (
-                        <span className="ml-1 text-xs text-gray-400">
+                        <span className="ml-1 text-xs text-text-dim">
                           (not available for Kick — stream detection not yet supported)
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-gray-500">Expires when your stream ends</div>
+                    <div className="text-xs text-text-dim">Expires when your stream ends</div>
                   </div>
                 </label>
 
                 {/* Custom duration */}
-                <label className="flex items-start">
+                <label className="flex items-start cursor-pointer">
                   <input
                     type="radio"
                     name="expiry"
                     value="custom"
                     checked={expiryOption === 'custom'}
                     onChange={(e) => setExpiryOption(e.target.value as any)}
-                    className="mt-1 mr-2"
+                    className="mt-1 mr-2 accent-blue-500"
                   />
                   <div className="flex-1">
-                    <div className="font-medium">Custom duration</div>
+                    <div className="font-medium text-sm text-text">Custom duration</div>
                     {expiryOption === 'custom' && (
                       <div className="mt-2">
                         <div className="flex items-center gap-2">
@@ -214,14 +212,14 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                             value={customHours}
                             onChange={(e) => setCustomHours(e.target.value)}
                             placeholder="hours"
-                            className={`w-24 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                              !isValidCustomHours() ? 'border-red-500' : 'border-gray-300'
+                            className={`w-24 rounded-lg px-2 py-1 text-sm text-text bg-surface-2 border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                              !isValidCustomHours() ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-blue-500'
                             }`}
                           />
-                          <span className="text-sm text-gray-600">hours (1-168)</span>
+                          <span className="text-sm text-text-sub">hours (1-168)</span>
                         </div>
                         {!isValidCustomHours() && (
-                          <p className="text-xs text-red-500 mt-1">Must be between 1 and 168 hours</p>
+                          <p className="text-xs text-red-400 mt-1">Must be between 1 and 168 hours</p>
                         )}
                       </div>
                     )}
@@ -229,18 +227,18 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                 </label>
 
                 {/* Unlimited */}
-                <label className="flex items-start">
+                <label className="flex items-start cursor-pointer">
                   <input
                     type="radio"
                     name="expiry"
                     value="unlimited"
                     checked={expiryOption === 'unlimited'}
                     onChange={(e) => setExpiryOption(e.target.value as any)}
-                    className="mt-1 mr-2"
+                    className="mt-1 mr-2 accent-blue-500"
                   />
                   <div>
-                    <div className="font-medium">Unlimited</div>
-                    <div className="text-xs text-gray-500">Never expires</div>
+                    <div className="font-medium text-sm text-text">Unlimited</div>
+                    <div className="text-xs text-text-dim">Never expires</div>
                   </div>
                 </label>
               </div>
@@ -248,20 +246,22 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
             {/* Action buttons */}
             <div className="flex gap-3">
-              <button
+              <Button
+                variant="outline"
+                className="flex-1"
                 onClick={onClose}
                 disabled={loading}
-                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="gradient"
+                className="flex-1"
                 onClick={handleAccept}
                 disabled={!canSubmit}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Accepting...' : 'Accept'}
-              </button>
+              </Button>
             </div>
           </>
         )}

@@ -8,7 +8,7 @@ interface LegalLayoutProps {
 
 export default function LegalLayout({ title, lastUpdated, children }: LegalLayoutProps) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 py-12 px-4 text-gray-700">
+    <div className="min-h-screen bg-linear-to-b from-gray-50 to-gray-100 py-12 px-4 text-gray-700">
       <div className="max-w-4xl mx-auto bg-white shadow-xl rounded-2xl border border-gray-100 p-8 md:p-12">
         <div className="mb-8 space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-500">All-Chat Legal</p>

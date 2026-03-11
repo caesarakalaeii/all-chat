@@ -1,279 +1,265 @@
-# Pitfalls Research: Distributed Channel Sharding
+# Pitfalls Research
 
-**Domain:** Distributed Load Balancing for Real-Time Messaging Microservices
-**Researched:** 2026-02-19
-**Confidence:** MEDIUM-HIGH
+**Domain:** Frontend Design System Integration — Adding shadcn/ui and comprehensive design tokens to existing All-Chat streaming overlay platform
+**Researched:** 2026-03-09
+**Confidence:** HIGH
 
 ## Critical Pitfalls
 
-### Pitfall 1: Split-Brain During Channel Assignment
+### Pitfall 1: Breaking Overlay Marketplace CSS Themes
 
 **What goes wrong:**
-Network partitions cause multiple pods to simultaneously believe they own the same channel, resulting in duplicate connections to the platform (e.g., two pods both join the same Twitch IRC channel) and duplicate message delivery to overlays.
+Marketplace theme creators have built custom CSS targeting existing class names (`event-message`, `event-tier-high`, `event-icon`, etc.). When design system migration changes or removes these class names, all marketplace themes break simultaneously, creating support chaos and user frustration.
 
 **Why it happens:**
-Leader election or distributed lock implementations fail to handle network partitions correctly. Most systems use Redis or etcd for coordination, but without proper fencing tokens or quorum-based decisions, two partitions can both believe they're authoritative.
+- Tailwind v4 renames gradient classes (`bg-gradient-to-r` → `bg-linear-to-r`) which are used in `events.css` line 111
+- shadcn/ui components use different base class structures than current implementation
+- Design tokens replace hardcoded values but marketplace themes depend on those exact values
+- Developers focus on app UI migration and forget overlay CSS is a public API
 
 **How to avoid:**
-- Use Kubernetes Lease API (coordination.k8s.io/v1) with proper TTLs and renewal intervals
-- Implement fencing tokens (monotonic counters) that increase with each channel assignment
-- Require majority quorum for channel ownership decisions
-- Add platform-level duplicate detection: track message IDs and filter duplicates before publishing to Redis
+1. **Class Name Stability Contract**: Treat all classes in `frontend/src/styles/events.css` as immutable public API
+2. **Parallel Implementation**: Create new design system classes alongside old ones, never rename/remove existing
+3. **Migration Guide First**: Write marketplace CSS migration guide BEFORE any code changes
+4. **Deprecation Timeline**: If class changes are unavoidable, require 6+ month deprecation notice with automated migration tools
+5. **Prefix Isolation**: Use `ac-` prefix for all new design system classes to avoid conflicts (e.g., `ac-button`, `ac-card`)
 
 **Warning signs:**
-- Duplicate messages appearing in overlays (same message ID delivered twice)
-- Platform rate limit errors (two pods connecting to same channel)
-- Metrics showing: sum(channels_per_pod) > total_active_channels
-- Multiple pods logging "acquired channel X" simultaneously
+- Any `git diff` showing deletions in `events.css`
+- Tailwind v4 upgrade without codemod review
+- shadcn/ui components added without checking for `.event-*` class conflicts
+- Bundle size analysis showing removed CSS that marketplace themes depend on
+- Missing entries in "Breaking Changes" section of release notes
 
 **Phase to address:**
-Phase 1 (Sharding Infrastructure) - Critical to get right from the start. Cannot be retrofitted easily once in production.
-
-**Severity:** CRITICAL - Causes duplicate charges for API quota (YouTube), rate limit bans (all platforms), and breaks message deduplication guarantees to users.
-
-**Sources:**
-- [Split-brain in distributed systems (DZone)](https://dzone.com/articles/split-brain-in-distributed-systems)
-- [Understanding Split-Brain Scenarios with etcd](https://sithara-wanigasooriya.medium.com/understanding-split-brain-scenarios-in-distributed-systems-and-how-etcd-mitigates-them-e3007acd506d)
-- [Leader Election in Distributed Systems 2026](https://www.devahmedali.click/post/leader-election-in-distributed-systems-complete-guide)
+- **Phase 1 (Design Tokens):** Document all public CSS classes as stable API
+- **Phase 2 (Component Library):** Implement prefix isolation strategy
+- **Phase 3 (Page Migration):** Validate no overlay CSS classes changed
+- **Phase 4 (Enforcement):** Add pre-commit hook to prevent `events.css` modifications
 
 ---
 
-### Pitfall 2: Message Loss During Channel Migration
+### Pitfall 2: Tailwind v4 Gradient Class Renames Breaking Production
 
 **What goes wrong:**
-When a channel moves from Pod A to Pod B during rebalancing (scaling, rolling update, or pod crash), messages sent during the handoff window are lost. Old pod disconnects before new pod establishes connection, creating a 1-10 second gap where messages aren't captured.
+Tailwind v4 renames `bg-gradient-to-*` → `bg-linear-to-*` across ALL gradient utilities. Your design system spec uses `bg-gradient-to-r from-purple-500 to-blue-500` extensively (Button component line 180, Card component line 111 in events.css). After Tailwind v4 migration, all gradients disappear or render as solid colors, breaking visual hierarchy.
 
 **Why it happens:**
-Migration implementations focus on state transfer but forget that real-time connections are stateful. IRC connections take 2-5 seconds to establish (TCP handshake → TLS → IRC NICK/PASS → JOIN channel). WebSocket connections (Kick) have similar overhead. During this window, the old pod has already disconnected.
+- Tailwind v4 removes all class aliases that don't match underlying CSS properties
+- Automated upgrade tool (`npx @tailwindcss/upgrade`) handles 90% of cases but misses dynamic class construction
+- `events.css` has CSS-in-JS patterns the codemod cannot detect
+- Testing focuses on functionality, not visual regression
 
 **How to avoid:**
-- Implement overlap migration: new pod connects and confirms receiving messages BEFORE old pod disconnects
-- Use Redis Streams offset tracking: new pod starts consuming from old pod's last confirmed offset
-- Add replay buffer in Message Processor: keep last 60 seconds of messages per channel, replay on reconnect
-- For critical channels, implement dual-connection during migration (both pods listen, deduplicate downstream)
+1. **Pre-Migration Audit**: Grep entire codebase for `bg-gradient-to-`, `flex-shrink-`, `overflow-ellipsis` (all renamed in v4)
+2. **Run Codemod First**: Execute `npx @tailwindcss/upgrade` before any manual changes
+3. **Visual Regression Tests**: Capture screenshots of all overlay event types before migration, diff after
+4. **Dynamic Class Review**: Manually search for string concatenation patterns like `'bg-gradient-to-' + direction`
+5. **CSS-in-CSS Migration**: Move all Tailwind classes from CSS files to React components before v4 upgrade (codemods work better in JSX)
 
 **Warning signs:**
-- Users report "missed messages" during deployments
-- Gaps in Redis Streams consumer group offsets
-- Connection timing metrics show disconnect → reconnect gaps > 1 second
-- Increased "reconnect_events" metric correlated with "migration_events" metric
+- Tailwind v4 appears in `package.json` without corresponding `CHANGELOG.md` entry documenting breaking changes
+- Gradient buttons rendering as solid colors in dev environment
+- Event tier backgrounds (`event-tier-high` line 40-48) losing gradient effects
+- User reports of "flat" or "missing" visual effects after deployment
+- Bundle size decrease from removed gradient classes
 
 **Phase to address:**
-Phase 2 (Connection Management) - Build overlap migration before going to production. Message loss is unacceptable for streaming overlays.
-
-**Severity:** CRITICAL - Directly violates product promise. Streamers will notice missed chats during live streams.
-
-**Sources:**
-- [Stateful Microservice Migration Challenges in Kubernetes](https://cloudnativenow.com/features/stateful-microservice-migration-the-live-state-challenge-in-kubernetes/)
-- [Migrate Stateful Workloads with Zero Downtime](https://cast.ai/blog/how-to-migrate-stateful-workloads-on-kubernetes-with-zero-downtime/)
-- [How to Handle Graceful Shutdown for WebSocket Servers 2026](https://oneuptime.com/blog/post/2026-02-02-websocket-graceful-shutdown/view)
+- **Phase 1 (Design Tokens):** Identify all gradient usage, plan v4 migration
+- **Phase 2 (Component Library):** Refactor `events.css` gradients to CSS variables
+- **Pre-Phase 3:** Run Tailwind v4 upgrade with full visual regression suite
+- **Phase 3 (Page Migration):** Validate all gradients render correctly across browsers
 
 ---
 
-### Pitfall 3: Thundering Herd on HPA Scale-Up
+### Pitfall 3: Real-Time Performance Regression from Design System Overhead
 
 **What goes wrong:**
-When Kubernetes HPA adds 5 new pods simultaneously (traffic spike), all 5 pods attempt channel rebalancing at the exact same moment. This triggers:
-- Redis lock contention (all pods competing for same channels)
-- Platform rate limits (YouTube quota exhausted by simultaneous API calls)
-- Cascading failures (rebalancing failures trigger more HPA scaling)
-- Election storms (leadership changes multiple times in 10 seconds)
+Adding shadcn/ui + Radix UI primitives increases bundle size by 50-100KB. Real-time WebSocket updates (every 50-100ms) now trigger heavier React reconciliation due to complex component trees. Message rendering slows from <16ms to >50ms, causing visible stutter in high-traffic streams (raids, 20+ messages/second). Users complain of "laggy chat" and switch to competitors.
 
 **Why it happens:**
-HPA scale-up is synchronous - all new pods reach "ready" state within 1-2 seconds of each other. Each pod's startup logic immediately attempts to:
-1. Register in source-manager
-2. Participate in leader election
-3. Request channel assignments
-4. Establish platform connections
-
-Without jitter or rate limiting, this creates a stampede.
+- shadcn/ui components wrap simple elements in Radix UI primitives with accessibility features (focus management, ARIA attributes)
+- Each message re-render now processes deeper component trees (Button → Radix Primitive → slot composition)
+- Design system adds CSS-in-JS or runtime theme calculations
+- Developers test with 1-2 messages/second, not real-world 20+ messages/second during raids
+- No performance budget established before migration
 
 **How to avoid:**
-- Add startup jitter: sleep(random(0, pod_ordinal * 2)) before registration
-- Implement gradual rebalancing: leader assigns channels in batches (10/second) not all-at-once
-- Use token bucket rate limiter for platform API calls: shared across all pods via Redis
-- Set HPA scaleUp behavior: stabilizationWindowSeconds: 60, policies: limit 2 pods/min
-- Defer non-critical channels during rebalancing: prioritize high-traffic channels first
+1. **Performance Budget**: Establish baseline BEFORE migration (target: <16ms per message render, <100KB additional bundle size)
+2. **Selective Adoption**: Use shadcn/ui for static UI (dashboard, settings) NOT for real-time overlays
+3. **Keep Overlay Simple**: Overlay message components should remain plain HTML/CSS without Radix primitives
+4. **Bundle Analysis**: Run `npm run analyze` before/after each phase, flag >20KB increases
+5. **Real-World Load Testing**: Test with 20 messages/second WebSocket feed, measure frame rate
+6. **React.memo() Strategy**: Wrap all message components with `React.memo()` and custom comparison functions
+7. **requestAnimationFrame Batching**: Buffer WebSocket updates in `useRef`, flush once per animation frame (reduce 20 renders/sec to 60fps max)
 
 **Warning signs:**
-- Spiking "redis_lock_timeout" errors during scale-up
-- Platform API 429 (rate limit) errors correlated with HPA events
-- "leader_election_changed" metric shows > 3 elections in 60 seconds
-- Multiple pods logging "failed to acquire channel" simultaneously
+- Bundle size increase >50KB after adding first shadcn/ui components
+- Chrome DevTools Performance tab showing >16ms render times for message components
+- Users reporting "choppy" or "laggy" chat during high-traffic events
+- Lighthouse Performance score dropping below 90
+- Frame rate drops below 60fps when WebSocket receives rapid messages
+- `yarn why` showing multiple Radix UI packages totaling >100KB
 
 **Phase to address:**
-Phase 3 (Scaling & Resilience) - Test with simulated scale-ups before production. Add chaos engineering tests.
-
-**Severity:** CRITICAL - Can cause service-wide outages. YouTube quota exhaustion affects all users for 24 hours.
-
-**Sources:**
-- [Distributed Systems Horror Stories: The Thundering Herd Problem](https://encore.dev/blog/thundering-herd-problem)
-- [The Thundering Herd Problem and Solutions](https://singhajit.com/thundering-herd-problem/)
-- [Kubernetes Leader Election in Pods 2026](https://oneuptime.com/blog/post/2026-01-19-kubernetes-leader-election-pods/view)
+- **Phase 1 (Design Tokens):** Establish performance budget and monitoring
+- **Phase 2 (Component Library):** Isolate overlay components from design system (use plain components)
+- **Phase 3 (Page Migration):** Apply design system to static pages only, benchmark before/after
+- **Phase 4 (Enforcement):** Add bundle size CI checks, performance regression tests
 
 ---
 
-### Pitfall 4: Inconsistent Hashing Key Selection Breaks Channel Affinity
+### Pitfall 4: CSS Specificity Wars Between Design System and Marketplace Themes
 
 **What goes wrong:**
-Poor choice of consistent hashing key causes:
-- Hot spots (all popular channels hash to same pod)
-- Migration churn (different components use different keys, causing repeated migrations)
-- State loss (channel metadata stored with one key, but channel assigned with different key)
+Marketplace theme creators use high-specificity selectors (`.event-message.event-tier-high`, `!important` flags) to override defaults. Design system introduces Tailwind v4's highest-precedence layer that overrides everything regardless of source order. Marketplace themes stop working, theme customization breaks, users can't personalize overlays.
 
 **Why it happens:**
-Team uses overlayID as hash key instead of channelID. When a channel is used by multiple overlays, it gets assigned to different pods depending on which overlay's consumer group processes it first. Channel bounces between pods every few minutes.
-
-Alternatively, team uses composite key like "platform:channelID:overlayID" which creates N connections for a channel used by N overlays, wasting resources and hitting platform connection limits.
+- Tailwind v4 utilities are in the highest-precedence layer by design
+- Design system uses `!important` modifiers to force consistency
+- Marketplace themes expect to override with higher specificity
+- No documented override mechanism for theme creators
+- Existing `events.css` uses `!important` extensively (12+ occurrences), setting precedent
 
 **How to avoid:**
-- Always hash on channelID (or "platform:channelID" for global uniqueness)
-- Document hash key selection in ADR with rationale
-- Use virtual nodes (150-200 per physical pod) to distribute load evenly
-- Implement "hot key detection" using Count-Min Sketch: track requests/sec per channel, move 1% hottest channels to dedicated pods
-- Add hash key validation in tests: ensure same channel always maps to same pod
+1. **CSS Layers Architecture**: Define explicit cascade layers:
+   ```css
+   @layer base, design-system, marketplace-themes, user-overrides;
+   ```
+2. **Remove !important**: Refactor `events.css` to use cascade layers instead of `!important` flags
+3. **Theme Override API**: Provide CSS custom properties for all themeable values:
+   ```css
+   --event-tier-high-border: var(--marketplace-override-border, #FFD700);
+   ```
+4. **Documentation**: Create `THEMING_API.md` documenting all overridable CSS variables
+5. **Escape Hatch**: Provide `data-allow-override` attribute to explicitly allow marketplace CSS to win
 
 **Warning signs:**
-- Highly variable load across pods (1 pod at 90% CPU, others at 20%)
-- "channel_migration_events" metric shows frequent migrations for same channel
-- Platform connection limits reached despite total channels < limit
-- Duplicate connection errors from platforms
+- Marketplace theme preview showing default styles instead of custom theme
+- User reports: "My custom CSS stopped working after update"
+- CSS inspector showing Tailwind classes overriding marketplace `.event-*` selectors
+- GitHub issues with "theme broken" or "can't customize" in title
+- Testing reveals `!important` count increasing in codebase
 
 **Phase to address:**
-Phase 1 (Sharding Infrastructure) - Hash key selection is foundational. Wrong choice requires full rewrite.
-
-**Severity:** MAJOR - Doesn't cause immediate failure but degrades performance and causes cascading issues under load.
-
-**Sources:**
-- [How to Build Consistent Hashing Implementation](https://oneuptime.com/blog/post/2026-01-30-consistent-hashing-implementation/view)
-- [The Hot Key Crisis in Consistent Hashing](https://systemdr.substack.com/p/the-hot-key-crisis-in-consistent)
-- [Understanding Consistent Hashing](https://www.pubnub.com/blog/consistent-hashing-in-distributed-systems/)
+- **Phase 1 (Design Tokens):** Design CSS layers architecture, document override API
+- **Phase 2 (Component Library):** Refactor `events.css` to use layers, remove `!important`
+- **Phase 3 (Page Migration):** Validate marketplace theme compatibility
+- **Phase 4 (Enforcement):** Add ESLint rule forbidding new `!important` usage
 
 ---
 
-### Pitfall 5: Platform-Specific Connection State Not Migrated
+### Pitfall 5: Accessibility Regression from Insufficient Focus State Testing
 
 **What goes wrong:**
-Different platforms have different stateful connection requirements:
-- **IRC (Twitch):** Channels must be explicitly JOINed, state includes active channel list
-- **HTTP Polling (YouTube):** Polling offset (pageToken) resets on migration, causing duplicate/missed messages
-- **WebSocket (Kick):** Subscription IDs must match original connection, can't resume on different pod
-
-When channels migrate, new pod establishes "clean" connection without transferring platform-specific state, causing:
-- Twitch: Pod connects but doesn't JOIN channels → no messages
-- YouTube: Polling restarts from beginning → duplicates or skipped messages
-- Kick: Subscription fails → connection alive but no messages
+Design system defines focus states (`focus:ring-2 focus:ring-blue-500/20`) but existing components lack focus styles. Migration adds focus rings to new components but misses legacy overlay controls. Keyboard users can't navigate overlays, WCAG 2.1 AA compliance breaks, ADA Title II deadline (April 24, 2026) missed.
 
 **Why it happens:**
-Generic sharding implementation treats all platforms identically. Source-manager tracks "channelID → podID" mapping but doesn't track platform-specific connection metadata (YouTube pageToken, Kick subscription ID, IRC join state).
+- Design system spec focuses on visual design, accessibility treated as secondary
+- Testing uses mouse/clicks, not keyboard navigation
+- Overlay preview lacks focus indicators (chat messages aren't focusable, skip links missing)
+- Automated tools (axe, Lighthouse) run on dashboard but not overlay iframe
+- Focus states work in dev (high contrast) but invisible in production dark theme
 
 **How to avoid:**
-- Design platform-specific "connection snapshot" interface:
-  ```go
-  type ConnectionSnapshot interface {
-      Capture() ([]byte, error)  // Serialize current state
-      Restore([]byte) error       // Restore state on new pod
-  }
-  ```
-- Store snapshots in Redis with TTL: `connection_state:{platform}:{channelID}`
-- Implement per-platform migration handlers:
-  - Twitch: Capture active JOIN list, replay on new connection
-  - YouTube: Store last pageToken + timestamp, resume from that point
-  - Kick: Store subscription IDs, re-subscribe with same IDs
-- Add integration tests: migrate channel mid-stream, verify no message loss/duplication
+1. **Keyboard-First Testing**: Test every page with Tab key BEFORE mouse testing
+2. **Focus Visible Enforcement**: Add ESLint rule requiring `focus-visible:` on all interactive elements
+3. **Contrast Validation**: Run contrast checker on `ring-blue-500/20` against `bg-slate-900` (ensure 3:1 ratio)
+4. **Overlay Accessibility**: Add skip links, landmark regions, keyboard shortcuts to overlay preview
+5. **CI/CD Integration**: Run axe-core in Playwright tests against all pages including overlays
+6. **Manual Audit**: Schedule quarterly keyboard-only navigation audit
 
 **Warning signs:**
-- After migrations, message rate drops to zero (connection alive but not receiving)
-- Duplicate messages appear after migration (YouTube polling restarted)
-- Platform error logs: "Not subscribed to channel" (Kick), "Not in channel" (Twitch)
-- Manual intervention required after migrations (restart pods to fix connections)
+- Playwright tests don't include keyboard navigation scenarios
+- `focus:` appears in design system but not in overlay component code
+- Axe violations in CI logs (Focus order, focus visible, color contrast)
+- User reports: "Can't use app with keyboard"
+- Manual Tab navigation reveals invisible focus states on dark backgrounds
 
 **Phase to address:**
-Phase 2 (Connection Management) - Must be implemented before production. Each platform needs custom migration logic.
-
-**Severity:** CRITICAL - Without this, migration = downtime. Every rolling update loses messages.
-
-**Sources:**
-- [Effective Strategies for Managing WebSockets in Kubernetes](https://wafatech.sa/blog/devops/kubernetes/effective-strategies-for-managing-websockets-in-kubernetes-environments/)
-- [How to Handle WebSocket Connection Pooling 2026](https://oneuptime.com/blog/post/2026-01-24-websocket-connection-pooling/view)
+- **Phase 1 (Design Tokens):** Validate all focus ring colors meet WCAG AA contrast ratios
+- **Phase 2 (Component Library):** Add focus states to ALL interactive components
+- **Phase 3 (Page Migration):** Keyboard navigation testing for every migrated page
+- **Phase 4 (Enforcement):** Add focus state coverage to CI/CD, block PRs with violations
 
 ---
 
-### Pitfall 6: Message Ordering Violations During Rebalancing
+### Pitfall 6: Incomplete Migration Leaving Visual Inconsistencies
 
 **What goes wrong:**
-During channel migration, messages from the same channel arrive out-of-order at Message Processor:
-- Old pod publishes message A (timestamp: T1) to Redis Streams
-- New pod connects, receives message B (timestamp: T2) and publishes immediately
-- Old pod finishes graceful shutdown, message A arrives AFTER message B
-- Overlay displays: "message B", then "message A" (backwards)
+Phase 3 migrates landing page, dashboard, editor to new design system. Settings and admin pages remain on old styles due to scope creep fatigue. Users see professional StreamElements-style UI, then jarring gray-scale generic Tailwind on settings page. Brand perception damaged, app feels unfinished.
 
 **Why it happens:**
-Redis Streams provides ordering within a single producer, but not across producers. During migration, a channel temporarily has TWO producers (old pod + new pod), breaking ordering guarantees.
+- Migration fatigue after redesigning 3-4 major pages
+- Settings/admin pages seem "low priority" (not user-facing)
+- No visual consistency audit between phases
+- Screenshots in docs show new design, users expect it everywhere
+- Design system enforcement starts before migration complete
 
 **How to avoid:**
-- Use sequence numbers per channel: each message includes channel-specific sequence number
-- Message Processor validates sequence: buffer out-of-order messages, deliver when gap fills
-- During migration, old pod stops publishing BEFORE new pod starts (brief gap acceptable, out-of-order not)
-- Alternative (zero-gap): Use "migration coordinator" - old pod routes messages through new pod during overlap
-- Add ordering verification in tests: inject messages A, B, C during migration, verify delivery order
+1. **All-or-Nothing Approach**: Migrate ALL pages in Phase 3, or delay enforcement until Phase 4
+2. **Transition Stylesheet**: Create temporary `migration.css` that makes old pages acceptable (not perfect) until migration
+3. **Migration Dashboard**: Track completion percentage, visualize inconsistencies
+4. **Staging Environment**: Deploy partial migrations to staging only, block production until 100% complete
+5. **Visual Consistency Tests**: Automated screenshot diffing across all pages, flag style discrepancies >20%
 
 **Warning signs:**
-- Users report "messages appearing in wrong order" during deployments
-- Message Processor logs "sequence gap detected" warnings
-- Metrics show increased "buffered_messages" during migration events
-- E2E tests fail with "ordering violation" errors
+- Phase 3 PR shows 3 pages migrated, 5 pages unchanged
+- Design system enforcement PR merged while old components still in use
+- User screenshots showing mix of old/new styles in same session
+- QA testing reveals "This page looks different" observations
+- Analytics showing drop-off on settings page (users confused by style change)
 
 **Phase to address:**
-Phase 2 (Connection Management) - Build sequence number system into message format from start.
-
-**Severity:** MAJOR - Breaks user experience. Chat messages out-of-order is confusing but not catastrophic (unlike message loss).
-
-**Sources:**
-- [How to Guarantee Message Order in Kafka 2026](https://oneuptime.com/blog/post/2026-01-26-kafka-message-ordering/view)
-- [Ordering, Grouping and Consistency in Messaging systems](https://www.architecture-weekly.com/p/ordering-grouping-and-consistency)
-- [How to Fix Message Ordering Issues in Event-Driven Systems 2026](https://oneuptime.com/blog/post/2026-01-24-message-ordering-event-driven/view)
+- **Phase 3 (Page Migration):** Migrate ALL pages before marking phase complete
+- **Phase 4 (Enforcement):** Only enable ESLint rules after 100% migration verified
+- **Pre-deployment:** Visual consistency audit across all routes
 
 ---
 
-### Pitfall 7: Redlock Anti-Pattern for Channel Ownership
+### Pitfall 7: Insufficient Testing of Dynamic Class Construction
 
 **What goes wrong:**
-Team uses Redlock (distributed Redis locks across multiple Redis instances) for channel assignment, believing it provides stronger guarantees. In practice:
-- Adds operational complexity (must run 3+ Redis instances)
-- Doesn't solve fundamental problems (clock skew causes false lock acquisitions)
-- No fencing tokens (can't prevent stale pod from acting on expired lock)
-- Fails during network partitions (minority partition loses locks immediately)
+Codebase contains dynamic Tailwind class construction patterns like `className={'bg-' + platform + '-500'}` for platform colors. Tailwind v4's just-in-time engine doesn't detect these dynamically constructed classes, resulting in missing styles. Platform badges render without background colors, status indicators disappear.
 
 **Why it happens:**
-Redlock marketing suggests it's "safer" than single-instance locks. Martin Kleppmann's famous critique explains why it's actually worse than alternatives (etcd with fencing tokens, or single Redis with proper TTLs).
+- Tailwind's JIT compiler only detects static class strings
+- Dynamic construction was working in v3 due to different compilation strategy
+- PurgeCSS safelist not updated for v4
+- Developers test with hardcoded examples, miss dynamic edge cases
+- TypeScript doesn't validate Tailwind class strings
 
 **How to avoid:**
-- Use Kubernetes Lease API with fencing tokens (built-in, battle-tested)
-- If using Redis: single instance with proper lock patterns:
-  - SET with NX (only if not exists) + PX (expiry)
-  - Store unique token (UUID) as value
-  - Delete only if value matches (Lua script for atomicity)
-  - Renew lock periodically (before expiry)
-- Add fencing tokens: monotonic counter that increments with each lock acquisition, pods include token in all operations, operations with stale tokens are rejected
-- Avoid Redlock entirely - it solves problems you don't have and introduces ones you do
+1. **Static Class Mapping**: Replace dynamic construction with explicit mapping objects:
+   ```tsx
+   const platformColors = {
+     twitch: 'bg-purple-500',
+     youtube: 'bg-red-500',
+     // ... (as shown in DESIGN_SYSTEM.md line 543-569)
+   }
+   ```
+2. **Safelist Configuration**: Add dynamic patterns to `tailwind.config.ts`:
+   ```ts
+   safelist: [
+     { pattern: /^bg-(purple|red|green|slate)-(500|400)/ },
+   ]
+   ```
+3. **TypeScript Validation**: Use `clsx` or `classnames` with TypeScript to catch invalid classes
+4. **Grep Audit**: Search for `className.*\+.*` and `className.*\$\{` patterns before migration
+5. **E2E Tests**: Add tests for all platform badge variations, verify colors render
 
 **Warning signs:**
-- Multiple Redis instances in architecture for "distributed locking"
-- No fencing token implementation
-- Locks being acquired by multiple pods simultaneously (clock skew)
-- Operations succeeding with expired locks (zombie pods)
+- Visual diff shows missing platform colors after Tailwind upgrade
+- Badge components render with no background (just borders)
+- Browser console warnings: "Class not found" or similar
+- Users report: "Can't tell which platform a message is from"
+- Dynamic class patterns found in `git grep "className.*+" frontend/`
 
 **Phase to address:**
-Phase 1 (Sharding Infrastructure) - Choose locking mechanism correctly from start. Redlock is a rewrite-level mistake.
-
-**Severity:** MAJOR - Doesn't fail immediately but causes subtle split-brain scenarios under network partitions or clock skew.
-
-**Sources:**
-- [How to do distributed locking - Martin Kleppmann](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
-- [Distributed Locks with Redis (Official Docs)](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)
-- [10 Hidden Pitfalls of Using Redis Distributed Locks](https://leapcell.medium.com/10-hidden-pitfalls-of-using-redis-distributed-locks-b5234ddd6349)
-- [How to Implement Distributed Locks with Redis 2026](https://oneuptime.com/blog/post/2026-01-21-redis-distributed-locks/view)
+- **Phase 1 (Design Tokens):** Audit all dynamic class construction, create static mappings
+- **Phase 2 (Component Library):** Refactor to use `platformColors` mapping from DESIGN_SYSTEM.md
+- **Phase 3 (Page Migration):** Add E2E tests for all dynamic color variations
+- **Phase 4 (Enforcement):** Add ESLint rule forbidding string concatenation in className
 
 ---
 
@@ -283,32 +269,29 @@ Shortcuts that seem reasonable but create long-term problems.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Skip overlap migration, use disconnect→reconnect | Simpler implementation, faster to ship | Message loss during every migration. Users complain. | NEVER - core product requirement is zero message loss |
-| Use simple mod-N hashing instead of consistent hashing | Easy to implement, no library needed | Adding/removing pods causes 90%+ channels to migrate, causing thundering herd | Only if: single pod only, no autoscaling planned |
-| Single Redis instance (no clustering) | Simple setup, no cluster coordination | Single point of failure, scaling bottleneck at ~50k channels | Acceptable for MVP if: <10k channels, staged rollout plan exists |
-| Skip platform-specific state migration | Generic implementation works for all platforms | Silent failures after migration, requires manual intervention | NEVER - each platform is different, generic approach will break |
-| Store channel→pod mapping in memory (not Redis) | Lower latency, no network calls | Lost on pod restart, no coordination during split-brain | Only if: single pod only (defeats purpose of sharding) |
-| Use leader election without fencing tokens | Simpler implementation, one less counter | Split-brain possible during network partition, duplicate connections | NEVER - fencing tokens are critical for safety |
-| Skip observability (metrics, traces, logs) | Faster to ship, less code | Impossible to debug production issues, blind to problems until users complain | Only for: proof-of-concept (not MVP) |
-
----
+| Using `!important` to fix specificity issues | Quick fix for override conflicts | CSS maintenance nightmare, cascade layers broken, marketplace themes conflict | Never — use cascade layers or increase specificity properly |
+| Inline styles for "just this one case" | Faster than creating component variant | Inconsistent design, hard to theme, no design system compliance | Only for dynamic runtime values (e.g., user-configurable positions) |
+| Copy-paste shadcn/ui without customization | Get components quickly | Generic look, doesn't match StreamElements aesthetic, harder to change later | Phase 2 initial exploration only — must customize before Phase 3 |
+| Skip accessibility testing "for now" | Move faster on visual implementation | ADA compliance violations, April 2026 deadline missed, lawsuits | Never — April 24, 2026 deadline is HARD |
+| Migrate only user-facing pages | Reduce scope, ship faster | Inconsistent UI, brand perception damage, tech debt for later | Never — creates "half-finished" perception |
+| Dynamic Tailwind class construction | DRY principle, fewer lines of code | JIT compilation fails, styles disappear, hard to debug | Never — use static mappings |
+| Using gray-* instead of slate-* "by accident" | Works fine, minor difference | Design system violation, visual inconsistency, fails ESLint later | Never — enforce during code review |
+| Skipping bundle size analysis | One less tool to run | Performance regressions undetected, 50-100KB bloat | Never — critical for real-time performance |
 
 ## Integration Gotchas
 
-Common mistakes when connecting to external platforms during sharding.
+Common mistakes when connecting design system to existing architecture.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| **Twitch IRC** | Connecting to each channel as separate IRC connection | Single IRC connection per pod, JOIN multiple channels on same connection (Twitch allows ~50 channels/connection) |
-| **YouTube API** | Each pod has independent quota tracking | Centralized quota tracking in Redis, pods reserve quota before making API call (reserve→use→confirm or rollback) |
-| **YouTube API** | Not handling quota exceeded gracefully | Implement quota circuit breaker: when approaching limit (90%), throttle polling rate globally, prioritize high-traffic channels |
-| **Kick WebSocket** | Reconnecting with new subscription IDs after migration | Store subscription IDs in Redis, reuse same IDs on new pod (Kick may maintain state server-side) |
-| **Kick WebSocket** | Not handling Pusher channel limits | Track total subscribed channels across all pods, stay under Pusher plan limits (varies by plan) |
-| **TikTok (unofficial)** | Assuming API stability | Implement aggressive error handling + graceful degradation, TikTok may block/change endpoints without notice |
-| **All Platforms** | Not implementing exponential backoff on reconnect | Use exponential backoff with jitter: 1s, 2s, 4s, 8s, max 30s (prevents thundering herd on platform outages) |
-| **All Platforms** | Storing OAuth tokens in pod memory | Store tokens in PostgreSQL, refresh proactively before expiry, use existing token-refresh-service |
-
----
+| shadcn/ui + Tailwind v4 | Installing shadcn before Tailwind v4 upgrade, version conflicts | Upgrade Tailwind v4 FIRST, then install shadcn/ui configured for v4 |
+| Design tokens + CSS variables | Defining tokens in CSS without TypeScript types | Generate TypeScript types from design tokens, enable autocomplete |
+| Radix UI + Real-time overlays | Using Radix primitives in high-frequency render components | Isolate overlays from Radix, use plain HTML/CSS for messages |
+| CSS layers + existing !important | Adding layers but keeping !important flags | Remove ALL !important before defining layers (line-by-line refactor) |
+| Next.js App Router + shadcn | Using shadcn components in Server Components without 'use client' | Add 'use client' to all shadcn components or mark as client-only |
+| Marketplace themes + Tailwind JIT | Expecting JIT to detect marketplace CSS classes | Add marketplace class patterns to safelist configuration |
+| ESLint rules + gradual migration | Enabling all rules immediately, blocking all PRs | Enable rules per-phase: Phase 1 warnings, Phase 4 errors |
+| Bundle splitting + design system | Importing entire shadcn/ui library in single chunk | Tree-shake: only import used components, analyze per-route bundles |
 
 ## Performance Traps
 
@@ -316,40 +299,60 @@ Patterns that work at small scale but fail as usage grows.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| **N+1 Redis calls during rebalancing** | Rebalancing takes 30+ seconds for 1000 channels | Use Redis pipelines: batch channel assignments into single multi-exec transaction | >500 channels per rebalance |
-| **Polling every channel at same interval** | YouTube quota exhausted in first hour of day (quota resets midnight PT) | Implement staggered polling: offset each channel by (channelIndex * interval / totalChannels) | >100 YouTube channels |
-| **No connection pooling for HTTP clients** | Memory usage spikes during migrations, TCP connections exhausted | Reuse http.Client instances, set MaxIdleConns and MaxConnsPerHost limits | >200 concurrent HTTP connections |
-| **Synchronous channel assignment** | HPA scale-up blocked waiting for channels to connect (30+ seconds) | Async channel assignment: pod becomes ready immediately, establishes connections in background | >50 channels assigned at once |
-| **Full channel list broadcast on any change** | Redis pub/sub saturated, pods can't keep up with updates | Use incremental updates: only broadcast changed channels, not entire list | >1000 active channels |
-| **Leader doing all coordination work** | Leader pod at 100% CPU while followers idle | Distribute work: leader assigns, followers validate and report back | Leader managing >2000 channels |
-| **No caching of platform metadata** | Emote API rate limits hit (7TV, BTTV, FFZ) | Cache emote sets in Redis with TTL, share across all pods | >500 unique channels (each queries emotes) |
+| Re-rendering entire message list on each WebSocket update | Smooth at 1-5 msg/sec, stutters at 20+ msg/sec (raids) | Use `React.memo()` + virtualization (react-window), requestAnimationFrame batching | >10 messages/second sustained (typical raid scenario) |
+| Loading all shadcn components upfront | Fine for dashboard (<1s load), slow for overlays (3-5s) | Code split by route, lazy load modal/dialog components | Overlay bundle >200KB (affects OBS load time) |
+| CSS-in-JS theme calculation on every render | Imperceptible with 10 components, laggy with 100+ messages | Use CSS variables, compute theme once at mount | >50 simultaneous chat messages on screen |
+| Unoptimized Radix animations | Smooth with 1-2 modals, janky with rapid state changes | Disable animations for real-time components, use CSS transforms only | Rapid open/close cycles (e.g., toast notifications) |
+| Not code-splitting design system | 5s initial load acceptable for dashboard, terrible for overlays | Separate bundles: app.js (design system) + overlay.js (minimal) | Overlay users have slower internet, 5s load unacceptable |
+| Importing entire Lucide icon set | Works until 20+ icons added, then bundle bloats | Use `lucide-react/icons/IconName` for tree-shaking | Bundle includes >50 unused icons (check with webpack-bundle-analyzer) |
 
----
+## Security Mistakes
 
-## Observability Gaps
+Domain-specific security issues beyond general web security.
 
-Critical metrics/logs needed for debugging distributed sharding in production.
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Allowing unsanitized marketplace CSS | XSS via `background: url('javascript:...')` or `expression()` | CSP headers blocking unsafe-inline, CSS sanitization library |
+| Design system exposes internal routes via debug tools | Admin pages leaked in Storybook build | Separate Storybook config for public components only |
+| Theme customization allows arbitrary URLs | SSRF via `@import url('http://attacker.com')` | Validate all URLs against allowlist, block external resources |
+| Client-side theme loading without validation | Malicious themes injected via localStorage tampering | Validate theme JSON schema, sanitize before applying |
+| Exposing API keys in CSS custom properties | Credentials leaked in DevTools | Never store secrets in CSS variables, use server-side only |
+| Marketplace themes executing JavaScript via CSS | Old IE expression() or behavior: url() still works in some contexts | Strict CSP, remove all `<script>` from theme uploads |
 
-| What to Measure | Why Critical | How to Detect Problems |
-|-----------------|--------------|------------------------|
-| **Per-pod channel count** | Detect uneven distribution (hot spots) | Alert: max(channels_per_pod) > 2 * avg(channels_per_pod) |
-| **Channel migration events** | Track migration frequency and success rate | Alert: migration_failure_rate > 5% OR migration_events > 10/min (thrashing) |
-| **Connection establishment time** | Detect platform slowdowns or network issues | Alert: p95(connection_time) > 10s (should be <3s) |
-| **Message gap duration** | Detect message loss during migration | Alert: gap_duration > 5s (overlap migration should eliminate gaps) |
-| **Redis lock contention** | Detect thundering herd or lock timeouts | Alert: lock_timeout_rate > 1% OR lock_wait_time p95 > 1s |
-| **Platform API errors per pod** | Detect quota issues or rate limits | Alert: api_error_rate > 5% OR error_count_diff between pods > 50 (uneven load) |
-| **Leader election changes** | Detect split-brain or network instability | Alert: leader_changes > 2 per hour (should be ~0 in steady state) |
-| **Message sequence gaps** | Detect ordering violations | Alert: sequence_gap_events > 0 (should never happen with proper implementation) |
-| **Graceful shutdown duration** | Detect pods not draining properly | Alert: shutdown_duration p95 > 20s (K8s terminationGracePeriod is 30s) |
-| **Distributed trace for message flow** | Debug end-to-end latency issues | Use OpenTelemetry: platform→listener→Redis→processor→gateway→overlay |
+## UX Pitfalls
 
-**Missing Observability Consequences:**
-- Without per-pod metrics: Can't detect uneven sharding (hot spots)
-- Without migration tracking: Blind to message loss during deployments
-- Without distributed tracing: Can't debug "why is overlay laggy?" questions
-- Without lock contention metrics: Thundering herd appears as "pods crashing randomly"
+Common user experience mistakes in this domain.
 
----
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Changing overlay class names without deprecation period | All custom themes break immediately, user panic, negative reviews | 6+ month deprecation notice, automated migration tool, email notifications |
+| Making low-contrast focus states "prettier" | Keyboard users can't navigate, accessibility violations, ADA non-compliance | Test focus states with high-contrast mode enabled, ensure 3:1 ratio minimum |
+| Migrating dashboard but not settings | Users see professional UI, then jarring old styles, app feels broken | Migrate all pages together, or delay rollout until 100% complete |
+| Auto-applying design system updates to overlays | User's carefully crafted overlay suddenly changes appearance on stream | Version-lock overlay styles, require explicit opt-in to updates |
+| Removing animation controls for "consistency" | Power users lose customization they depend on, switch to competitors | Provide "advanced" toggle for animation preferences |
+| Not providing migration guide for marketplace creators | Theme creators abandoned, marketplace dies, users lose content | Write migration guide FIRST, provide migration CLI tool, offer support channel |
+| Changing platform badge colors for aesthetics | Users can't quickly identify platforms they're monitoring (muscle memory) | Preserve exact platform brand colors, only adjust transparency/borders |
+| Focus trap in modals without escape | Users get stuck in dialogs, frustration, appears broken | Always provide ESC key, click-outside, and visible close button |
+
+## "Looks Done But Isn't" Checklist
+
+Things that appear complete but are missing critical pieces.
+
+- [ ] **Tailwind v4 Migration:** Often missing dynamic class construction fixes — verify `git grep "className.*+" frontend/` returns zero results
+- [ ] **shadcn/ui Integration:** Often missing customization to match design system — verify all components use slate (not zinc) colors
+- [ ] **Focus States:** Often missing on custom components — verify Tab navigation works on ALL interactive elements
+- [ ] **Bundle Size:** Often missing route-level splitting — verify each route <100KB via `yarn analyze`
+- [ ] **Marketplace Compatibility:** Often missing migration guide — verify `MARKETPLACE_CSS_MIGRATION.md` exists and is tested
+- [ ] **Performance Budget:** Often missing real-world load testing — verify 20 msg/sec WebSocket test passes <16ms render time
+- [ ] **Accessibility Audit:** Often missing keyboard-only testing — verify entire app navigable without mouse
+- [ ] **Visual Consistency:** Often missing admin/settings pages — verify ALL routes use design system (screenshot diff)
+- [ ] **CSS Layers:** Often missing layer definitions — verify `@layer` declarations in `globals.css`
+- [ ] **Color Contrast:** Often missing dark mode testing — verify all text meets WCAG AA (4.5:1 normal, 3:1 large)
+- [ ] **Platform Color Mapping:** Often missing static object — verify no dynamic `'bg-' + platform` construction
+- [ ] **Event Class Stability:** Often missing public API documentation — verify `events.css` classes documented as stable
+- [ ] **Responsive Testing:** Often missing mobile overlay testing — verify overlays render correctly at 375px, 768px, 1920px
+- [ ] **Animation Performance:** Often missing frame rate validation — verify 60fps maintained during rapid updates
+- [ ] **Theme Override API:** Often missing CSS variable documentation — verify all themeable values use `var(--marketplace-*, default)`
 
 ## Recovery Strategies
 
@@ -357,212 +360,78 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| **Split-brain (duplicate connections)** | MEDIUM | 1. Identify duplicate channels (check platform connection logs)<br>2. Force leader re-election: delete Lease resource in K8s<br>3. Implement fencing tokens before restarting pods<br>4. Clear Redis channel assignments: `DEL channel_assignments`<br>5. Rolling restart all pods to reassign cleanly |
-| **Message loss during migration** | LOW | 1. Implement replay buffer in Message Processor (60s retention)<br>2. For affected overlays: trigger replay from last known offset<br>3. If no replay buffer: message loss is permanent (notify users) |
-| **Thundering herd (quota exhausted)** | HIGH | 1. YouTube quota exhausted = 24h lockout (no recovery)<br>2. Temporarily disable autoscaling to prevent more pods joining<br>3. Implement rate limiter before re-enabling<br>4. Reduce polling frequency for all channels until quota resets<br>5. Request quota increase from Google (takes 2-5 business days) |
-| **Hot spots (uneven sharding)** | LOW | 1. Identify hot channels (sort by message rate)<br>2. Manually reassign hot channels to underloaded pods<br>3. Implement virtual nodes (150-200 per pod) for better distribution<br>4. Use "hot key eviction" pattern: detect hot keys, move to dedicated pods |
-| **Platform connection state lost** | MEDIUM | 1. Implement connection snapshot/restore (see Pitfall 5)<br>2. Short-term: monitor for "zombie connections" (connected but not receiving)<br>3. Add health check: if message_rate=0 for 60s, force reconnect<br>4. Store pageToken/subscription IDs in Redis before next migration |
-| **Out-of-order messages** | LOW | 1. Add sequence numbers to messages<br>2. Message Processor buffers out-of-order (max 30s buffer)<br>3. If gap doesn't fill: log warning + deliver what we have (stale better than stuck) |
-| **Redlock causing split-brain** | HIGH (REWRITE) | 1. Immediate: switch to single-Redis locks with proper patterns<br>2. Long-term: migrate to Kubernetes Lease API<br>3. No in-place fix - Redlock is fundamentally broken design |
+| Breaking marketplace themes | HIGH (user trust, support load, potential revenue loss) | 1. Hotfix: revert class changes immediately 2. Deploy compatibility shim 3. Publish migration tool 4. Email all theme creators 5. Extend deprecation 6 months |
+| Tailwind v4 gradient breaking | MEDIUM (visual regression, no functionality lost) | 1. Run `npx @tailwindcss/upgrade` 2. Manual audit of CSS files 3. Visual regression test suite 4. Deploy fix within 24h 5. Document in post-mortem |
+| Performance regression | MEDIUM (user complaints, not immediate breakage) | 1. Rollback to previous version 2. Profile with Chrome DevTools 3. Add React.memo() to message components 4. Implement RAF batching 5. Deploy with monitoring |
+| CSS specificity conflicts | LOW (theme customization broken, not core functionality) | 1. Add `@layer marketplace-themes` with higher precedence 2. Document override API 3. Provide CSS variable escape hatch 4. Update theme documentation |
+| Accessibility violations | HIGH (legal risk, ADA deadline) | 1. Audit with axe-core immediately 2. Prioritize WCAG A violations 3. Add focus states to all interactive elements 4. Deploy fix before April 24, 2026 deadline 5. Document compliance |
+| Incomplete migration | LOW (perception issue, not broken) | 1. Prioritize remaining pages 2. Apply temporary styling to un-migrated pages 3. Complete migration in next sprint 4. Deploy all-at-once |
+| Dynamic class construction failing | LOW (missing styles, easy to spot) | 1. Create static `platformColors` mapping object 2. Replace all dynamic construction 3. Add safelist for edge cases 4. Deploy with E2E tests |
+| Bundle size bloat | MEDIUM (performance degradation) | 1. Run webpack-bundle-analyzer 2. Identify largest dependencies 3. Lazy load non-critical components 4. Remove unused Radix primitives 5. Deploy optimized bundle |
 
-**Prevention > Recovery:**
-Most critical pitfalls (split-brain, message loss, thundering herd) have HIGH recovery costs or no recovery at all. Prevention through proper design is mandatory.
-
----
-
-## Phase-Specific Warnings
+## Pitfall-to-Phase Mapping
 
 How roadmap phases should address these pitfalls.
 
-| Phase | Topic | Pitfalls to Prevent | How to Verify |
-|-------|-------|---------------------|---------------|
-| **Phase 1** | Sharding Infrastructure | Split-brain, Redlock anti-pattern, Inconsistent hashing | Chaos test: network partition between pods, verify only one pod owns each channel |
-| **Phase 1** | Leader Election | Election storms, missing fencing tokens | Verify: `kubectl delete pod <leader>` → new leader elected in <5s, no duplicate assignments |
-| **Phase 2** | Connection Migration | Message loss, platform state not migrated, out-of-order messages | E2E test: migrate channel mid-stream, verify zero message loss and ordering preserved |
-| **Phase 2** | Graceful Shutdown | Connections not drained, message gaps | Test: send SIGTERM to pod, verify continues processing for 20s, clean handoff to new pod |
-| **Phase 3** | HPA Scaling | Thundering herd, quota exhaustion | Load test: trigger HPA scale-up 2→10 pods, verify staggered startup, no lock contention |
-| **Phase 3** | Load Distribution | Hot spots, uneven sharding | Run with 1000 channels for 24h, verify: max/avg channel count per pod <1.5x |
-| **Phase 4** | Observability | Blind spots in metrics/logs | Simulate failure scenarios, verify: can identify root cause from metrics alone in <5 min |
-| **Phase 4** | Debugging | Missing distributed traces | Generate artificial lag, verify: can trace message from platform→overlay with OpenTelemetry |
-
----
-
-## "Looks Done But Isn't" Checklist
-
-Features that appear complete but are missing critical pieces.
-
-- [ ] **Channel migration:** Works in happy path but not tested with:
-  - Network partition during migration (simulated with tc/iptables)
-  - Pod crash mid-migration (kill -9 during handoff)
-  - Multiple simultaneous migrations (HPA scaling 2→10 pods)
-
-- [ ] **Leader election:** Works but missing:
-  - Fencing tokens (pods must include token in all operations)
-  - Monitoring for election frequency (should alert if >2/hour)
-  - Automatic leader re-election on leader pod crash (<5s recovery)
-
-- [ ] **Connection management:** Connects successfully but missing:
-  - Platform-specific state migration (YouTube pageToken, Kick subscription IDs)
-  - Exponential backoff on reconnect failures
-  - Circuit breaker for quota/rate limit protection
-
-- [ ] **Message ordering:** Messages delivered but not tested with:
-  - Out-of-order scenarios (late-arriving messages during migration)
-  - Sequence gap detection and buffering
-  - Timeout for gaps that never fill (deliver what we have after 30s)
-
-- [ ] **Observability:** Basic metrics exist but missing:
-  - Per-pod channel count distribution (detect hot spots)
-  - Migration success/failure rate per platform
-  - Distributed tracing for end-to-end message flow
-  - Lock contention and wait time metrics
-
-- [ ] **Error handling:** Basic retries but missing:
-  - Graceful degradation when quota exhausted (throttle polling, prioritize channels)
-  - Platform-specific error handling (YouTube quota vs network error vs auth failure)
-  - Dead letter queue for messages that can't be processed
-
-- [ ] **Load testing:** Works with 10 channels but not validated:
-  - 1000+ channels across 10 pods
-  - HPA scale up/down (2→10→2 pods)
-  - 24+ hour soak test (detect memory leaks, connection exhaustion)
-  - Platform outage recovery (all channels reconnect simultaneously)
-
----
-
-## All-Chat Specific Warnings
-
-Pitfalls unique to All-Chat's architecture.
-
-### YouTube Quota is Non-Negotiable
-
-**Problem:** YouTube quota is a HARD LIMIT. Once exhausted, ALL users are affected for 24 hours.
-
-**Why critical for sharding:**
-- Thundering herd during HPA scale-up can exhaust quota in minutes
-- Duplicate connections (split-brain) double quota consumption
-- Naive sharding: each pod independently polls = N*quota usage
-
-**Prevention specific to All-Chat:**
-- Centralized quota tracking in Redis (existing quota-manager service)
-- Before any YouTube API call: `RESERVE_QUOTA → USE → CONFIRM or ROLLBACK`
-- Circuit breaker at 90% quota: throttle polling rate globally
-- During rebalancing: pause new YouTube connections until complete
-
-**Phase to address:** Phase 1 (integrate with existing quota-manager), Phase 3 (test under load)
-
-### IRC Connection Limits (Twitch)
-
-**Problem:** Twitch allows ~50 channels per IRC connection, but limits total connections per IP.
-
-**Why critical for sharding:**
-- Naive approach: one connection per channel = hit connection limit at 50 channels
-- Multiple pods from same IP (Kubernetes node) count toward same limit
-
-**Prevention specific to All-Chat:**
-- Existing twitch-listener uses single connection per pod (correct approach)
-- Sharding must preserve this: each pod has 1 IRC connection, JOINs multiple channels
-- During migration: new pod JOINs channel BEFORE old pod PARTs (brief overlap, not duplicate connection)
-
-**Phase to address:** Phase 2 (connection migration must handle multi-channel IRC connections)
-
-### Redis Streams Consumer Groups
-
-**Problem:** All-Chat uses Redis Streams consumer groups for message delivery. Sharding adds coordination layer.
-
-**Why critical for sharding:**
-- Each listener pod publishes to same Redis Stream (`chat:raw`)
-- Message Processor consumes via consumer group (exactly-once delivery)
-- During migration: old pod stops publishing, new pod starts → no coordination needed at Redis level
-
-**Simplification:** Redis Streams consumer groups already handle multiple publishers correctly. Sharding doesn't complicate this.
-
-**What to watch:** Message ordering during migration (see Pitfall 6)
-
-### Emote Service Load
-
-**Problem:** Emote enrichment (7TV, BTTV, FFZ) queries external APIs per channel.
-
-**Why critical for sharding:**
-- More pods = more emote API calls (each pod independently caches)
-- Emote APIs have rate limits (lower than platform limits)
-
-**Prevention specific to All-Chat:**
-- Centralized emote cache in Redis (shared across all pods)
-- TTL: 5 minutes (emotes rarely change)
-- Cache key: `emotes:{platform}:{channelID}`
-- Only leader pod refreshes cache (followers read-only)
-
-**Phase to address:** Phase 1 (shared cache architecture), Phase 3 (test under load)
-
----
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Breaking marketplace themes | Phase 1 (Design Tokens) | Document all `events.css` classes as public API, create stability contract |
+| Tailwind v4 gradient renames | Phase 1 (Design Tokens) | Run upgrade tool, audit dynamic construction, visual regression tests pass |
+| Performance regression | Phase 2 (Component Library) | Bundle size <100KB increase, message render time <16ms at 20 msg/sec |
+| CSS specificity conflicts | Phase 2 (Component Library) | Marketplace theme test suite passes, no `!important` added |
+| Accessibility violations | Phase 3 (Page Migration) | axe-core CI tests pass, keyboard navigation works on all pages |
+| Incomplete migration | Phase 3 (Page Migration) | Visual consistency audit shows 100% pages using design system |
+| Dynamic class construction | Phase 1 (Design Tokens) | Zero results for `git grep "className.*+" frontend/` |
+| Bundle size bloat | Phase 4 (Enforcement) | CI blocks PRs adding >20KB without justification |
+| Focus state missing | Phase 4 (Enforcement) | ESLint rule `focus-visible-required` enabled, no violations |
+| Gray vs slate confusion | Phase 4 (Enforcement) | ESLint rule `no-gray-colors` blocks gray-* usage |
+| Animation performance | Phase 3 (Page Migration) | Frame rate monitoring shows sustained 60fps during raids |
+| Theme override breaking | Phase 2 (Component Library) | `THEMING_API.md` published, CSS variable override tests pass |
 
 ## Sources
 
-### Core Distributed Systems Concepts
-- [A Guide to Large-Scale Distributed Systems (2026)](https://www.systemdesignhandbook.com/blog/large-scale-distributed-systems/)
-- [Distributed System Distributed Messaging](https://www.meegle.com/en_us/topics/distributed-system/distributed-system-distributed-messaging)
-- [Distributed Messaging System | System Design - GeeksforGeeks](https://www.geeksforgeeks.org/system-design/distributed-messaging-system-system-design/)
+### Tailwind CSS v4 Migration & Breaking Changes
+- [Tailwind CSS v4 2026: Migration Best Practices](https://www.digitalapplied.com/blog/tailwind-css-v4-2026-migration-best-practices) — HIGH confidence
+- [Tailwind CSS v4 Migration: New Features Guide 2026](https://www.digitalapplied.com/blog/tailwind-css-v4-migration-new-features-guide) — HIGH confidence
+- [What's New in Tailwind CSS 4.0: Migration Guide (2026) | DesignRevision](https://designrevision.com/blog/tailwind-4-migration) — HIGH confidence
+- [Upgrading to Tailwind CSS v4: A Migration Guide](https://typescript.tv/hands-on/upgrading-to-tailwind-css-v4-a-migration-guide/) — MEDIUM confidence
 
-### Split-Brain & Leader Election
-- [Split-Brain in Distributed Systems (DZone)](https://dzone.com/articles/split-brain-in-distributed-systems)
-- [Split brain in distributed systems | Medium](https://medium.com/nerd-for-tech/split-brain-in-distributed-systems-252b0d4d122e)
-- [Understanding Split-Brain Scenarios with etcd](https://sithara-wanigasooriya.medium.com/understanding-split-brain-scenarios-in-distributed-systems-and-how-etcd-mitigates-them-e3007acd506d)
-- [Leader Election in Distributed Systems: Complete Guide 2026](https://www.devahmedali.click/post/leader-election-in-distributed-systems-complete-guide)
-- [How to Implement Leader Election in Kubernetes Pods](https://oneuptime.com/blog/post/2026-01-19-kubernetes-leader-election-pods/view)
-- [How to Implement Kubernetes Leader Election](https://oneuptime.com/blog/post/2026-01-30-kubernetes-leader-election/view)
+### shadcn/ui + Tailwind v4 Integration
+- [Tailwind v4 - shadcn/ui](https://ui.shadcn.com/docs/tailwind-v4) — HIGH confidence (official docs)
+- [Shadcn/ui upgrade to Tailwindcss v.4 · Discussion #2996](https://github.com/shadcn-ui/ui/discussions/2996) — HIGH confidence
+- [Migrating from Tailwind 3 to Tailwind 4 with shadcn/ui](https://zippystarter.com/blog/guides/migrating-tailwind3-to-tailwind4-with-shadcn) — MEDIUM confidence
+- [Updating shadcn/ui to Tailwind 4 at Shadcnblocks](https://www.shadcnblocks.com/blog/tailwind4-shadcn-themeing) — MEDIUM confidence
 
-### Consistent Hashing & Sharding
-- [How to Build Consistent Hashing Implementation](https://oneuptime.com/blog/post/2026-01-30-consistent-hashing-implementation/view)
-- [Consistent Hashing 101: How Modern Systems Handle Growth](https://blog.bytebytego.com/p/consistent-hashing-101-how-modern)
-- [The "Hot Key" Crisis in Consistent Hashing](https://systemdr.substack.com/p/the-hot-key-crisis-in-consistent)
-- [Understanding Consistent Hashing](https://www.pubnub.com/blog/consistent-hashing-in-distributed-systems/)
+### Performance & Bundle Size
+- [React & Next.js Best Practices in 2026: Performance, Scale & Cleaner Code](https://fabwebstudio.com/blog/react-nextjs-best-practices-2026-performance-scale) — MEDIUM confidence
+- [Reducing NextJS Bundle Size by 30%: A Practical Guide](https://www.coteries.com/en/articles/reduce-size-nextjs-bundle) — MEDIUM confidence
+- [React Performance and Bundle Size Optimization in 2025](https://www.averagedevs.com/blog/optimize-react-apps-performance) — MEDIUM confidence
+- [Optimizing Real-Time Performance: WebSockets and React.js Integration Part II](https://medium.com/@SanchezAllanManuel/optimizing-real-time-performance-websockets-and-react-js-integration-part-ii-4a3ada319630) — MEDIUM confidence
+- [Streaming Backends & React: Controlling Re-render Chaos in High-Frequency Data](https://www.sitepoint.com/streaming-backends-react-controlling-re-render-chaos/) — HIGH confidence
 
-### Stateful Migration & Zero Downtime
-- [Stateful Microservice Migration in Kubernetes](https://cloudnativenow.com/features/stateful-microservice-migration-the-live-state-challenge-in-kubernetes/)
-- [Migrate Stateful Workloads with Zero Downtime](https://cast.ai/blog/how-to-migrate-stateful-workloads-on-kubernetes-with-zero-downtime/)
-- [Container Live Migration: Zero Downtime](https://cast.ai/blog/introducing-container-live-migration-zero-downtime-for-stateful-kubernetes-workloads/)
-- [How to Migrate Workloads Between Kubernetes Clusters](https://oneuptime.com/blog/post/2026-01-06-kubernetes-migrate-workloads-zero-downtime/view)
+### CSS Specificity & Naming Conflicts
+- [Naming - Nord Design System](https://nordhealth.design/naming/) — HIGH confidence
+- [BEM Methodology: A Step-by-Step Guide for Beginners](https://www.valoremreply.com/resources/insights/guide/bem-methodology-a-step-by-step-guide-for-beginners/) — MEDIUM confidence
+- [Tailwind CSS: !important & Selector Guide](https://tailkits.com/blog/tailwind-important-selector/) — MEDIUM confidence
+- [Using the important modifier in Tailwind CSS](https://windybase.com/blog/using-the-important-modifier-in-tailwind-css) — MEDIUM confidence
 
-### WebSocket & Connection Management
-- [How to Handle Graceful Shutdown for WebSocket Servers](https://oneuptime.com/blog/post/2026-02-02-websocket-graceful-shutdown/view)
-- [How to Handle WebSocket Connection Pooling](https://oneuptime.com/blog/post/2026-01-24-websocket-connection-pooling/view)
-- [Effective Strategies for Managing WebSockets in Kubernetes](https://wafatech.sa/blog/devops/kubernetes/effective-strategies-for-managing-websockets-in-kubernetes-environments/)
-- [Kubernetes: zero-downtime rolling updates](https://www.driftrock.com/blog/kubernetes-zero-downtime-rolling-updates)
+### Accessibility & WCAG Compliance
+- [WebAIM: 2026 Predictions: The Next Big Shifts in Web Accessibility](https://webaim.org/blog/2026-predictions/) — HIGH confidence
+- [WCAG 3.0 Updates Explained: Accessibility Guidelines 2026-2030](https://rubyroidlabs.com/blog/2025/10/how-to-prepare-for-wcag-3-0/) — MEDIUM confidence
+- [WCAG 2.2 AA: Why Accessibility Is Now a Required Part of Your 2026 Digital Roadmap](https://www.stauffer.com/news/blog/wcag-is-no-longer-optional-and-what-that-means-for-your-organization) — HIGH confidence
+- [ADA Title II Digital Accessibility 2026: WCAG 2.1 AA](https://www.sdettech.com/blogs/ada-title-ii-digital-accessibility-2026-wcag-2-1-aa) — HIGH confidence
 
-### Distributed Locking
-- [How to do distributed locking — Martin Kleppmann](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
-- [Distributed Locks with Redis (Official Docs)](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)
-- [10 Hidden Pitfalls of Using Redis Distributed Locks](https://leapcell.medium.com/10-hidden-pitfalls-of-using-redis-distributed-locks-b5234ddd6349)
-- [How to Implement Distributed Locks with Redis (Redlock)](https://oneuptime.com/blog/post/2026-01-21-redis-distributed-locks/view)
-- [Distributed Locking: A Practical Guide](https://www.architecture-weekly.com/p/distributed-locking-a-practical-guide)
+### Design System Migration Best Practices
+- [How to Implement a Design System: Reasons, Approach, and Migration Path](https://www.designsystemscollective.com/how-to-implement-a-design-system-reasons-approach-and-migration-path-051c41734caf) — MEDIUM confidence
+- [Migrating to USWDS 3.0](https://designsystem.digital.gov/documentation/migration/) — HIGH confidence (official government design system)
+- [Telerik and Kendo UI Themes v13.0.0 Breaking Changes](https://www.telerik.com/design-system/docs/themes/release-notes/breaking-changes/v13-0-0/) — MEDIUM confidence
 
-### Thundering Herd & Scaling
-- [Distributed Systems Horror Stories: The Thundering Herd Problem](https://encore.dev/blog/thundering-herd-problem)
-- [The Thundering Herd Problem and Its Solutions](https://singhajit.com/thundering-herd-problem/)
-- [The Thundering Herd Problem Explained 2025](https://medium.com/@work.dhairya.singla/the-thundering-herd-problem-explained-causes-examples-and-solutions-7166b7e26c0c)
-- [Thundering Herds: The Scalability Killer](https://docs.aonnis.com/blog/thundering-herds-the-scalability-killer)
-
-### Message Ordering & Duplicates
-- [How to Guarantee Message Order in Kafka 2026](https://oneuptime.com/blog/post/2026-01-26-kafka-message-ordering/view)
-- [Ordering, Grouping and Consistency in Messaging systems](https://www.architecture-weekly.com/p/ordering-grouping-and-consistency)
-- [How to Fix Message Ordering Issues in Event-Driven Systems 2026](https://oneuptime.com/blog/post/2026-01-24-message-ordering-event-driven/view)
-- [Handling Duplicate Messages in Distributed Systems](https://www.geeksforgeeks.org/system-design/handling-duplicate-messages-in-distributed-systems/)
-- [Idempotency in Distributed Systems](https://medium.com/javarevisited/idempotency-in-distributed-systems-preventing-duplicate-operations-85ce4468d161)
-
-### Observability
-- [Kubernetes Observability and Monitoring Trends in 2026](https://www.usdsi.org/data-science-insights/kubernetes-observability-and-monitoring-trends-in-2026)
-- [Building a Production Ready Observability Stack: 2026](https://medium.com/@krishnafattepurkar/building-a-production-ready-observability-stack-the-complete-2026-guide-9ec6e7e06da2)
-- [11 Key Observability Best Practices 2026](https://spacelift.io/blog/observability-best-practices)
-- [Distributed Systems Observability Explained 2025](https://edgedelta.com/company/knowledge-center/distributed-systems-observability)
-
-### Rate Limiting & Load Balancing
-- [How to Implement Load Balancer Rate Limiting](https://oneuptime.com/blog/post/2026-01-27-load-balancer-rate-limiting/view)
-- [Rate Limiting Fundamentals](https://blog.bytebytego.com/p/rate-limiting-fundamentals)
-- [Scale Your Live Streaming App for 1 Million Users: 2026](https://scalevista.com/blog/scaling-live-streaming-app/)
+### Project-Specific Knowledge
+- `/home/caesar/git/all-chat/frontend/DESIGN_SYSTEM.md` — HIGH confidence (project spec)
+- `/home/caesar/git/all-chat/frontend/src/styles/events.css` — HIGH confidence (existing overlay CSS)
+- `/home/caesar/git/all-chat/.planning/PROJECT.md` — HIGH confidence (project context)
 
 ---
-
-*Pitfalls research for: All-Chat Distributed Channel Sharding*
-*Researched: 2026-02-19*
-*Focus: Subsequent milestone adding load balancing to existing real-time messaging system*
+*Pitfalls research for: All-Chat Frontend Design System Integration*
+*Researched: 2026-03-09*
+*Confidence: HIGH (verified against official docs, current project code, and 2026 best practices)*

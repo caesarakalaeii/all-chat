@@ -20,6 +20,11 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { apiClient } from '@/lib/api/client';
 import { formatDistanceToNow } from 'date-fns';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog } from '@/components/ui/dialog';
+import { toastManager } from '@/lib/toast';
 
 interface ViewerSession {
   id: string;
@@ -46,6 +51,7 @@ export default function AdminViewersPage() {
   const [banReason, setBanReason] = useState('');
   const [showBanModal, setShowBanModal] = useState(false);
   const [selectedViewer, setSelectedViewer] = useState<ViewerSession | null>(null);
+  const [unbanDialogViewer, setUnbanDialogViewer] = useState<ViewerSession | null>(null);
 
   useEffect(() => {
     if (!user?.is_admin) {
@@ -63,7 +69,7 @@ export default function AdminViewersPage() {
       setViewers(response.viewers);
     } catch (error) {
       console.error('Failed to fetch viewers:', error);
-      alert('Failed to load viewers');
+      toastManager.add({ title: 'Failed to load viewers', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -83,210 +89,230 @@ export default function AdminViewersPage() {
       await apiClient.post(`/api/v1/admin/viewers/${selectedViewer.id}/ban`, {
         reason: banReason || 'No reason provided'
       });
+      toastManager.add({ title: `${selectedViewer.username} banned successfully`, type: 'success' });
       setShowBanModal(false);
       setSelectedViewer(null);
       setBanReason('');
       fetchViewers();
     } catch (error) {
       console.error('Failed to ban viewer:', error);
-      alert('Failed to ban viewer');
+      toastManager.add({ title: 'Failed to ban viewer', type: 'error' });
     } finally {
       setBanningId(null);
     }
   };
 
-  const handleUnban = async (viewerId: string) => {
-    if (!confirm('Are you sure you want to unban this viewer?')) return;
-
+  const handleUnban = async (viewerId: string, username: string) => {
     try {
       setBanningId(viewerId);
       await apiClient.post(`/api/v1/admin/viewers/${viewerId}/unban`, {});
+      toastManager.add({ title: `${username} unbanned successfully`, type: 'success' });
+      setUnbanDialogViewer(null);
       fetchViewers();
     } catch (error) {
       console.error('Failed to unban viewer:', error);
-      alert('Failed to unban viewer');
+      toastManager.add({ title: 'Failed to unban viewer', type: 'error' });
     } finally {
       setBanningId(null);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
-      </div>
-    );
-  }
+  const bannedCount = viewers.filter((v) => v.is_banned).length;
+  const activeCount = viewers.filter((v) => !v.is_banned).length;
 
   return (
-    <div className="min-h-screen bg-gray-900">
-      {/* Navbar */}
-      <nav className="bg-gray-800 border-b border-gray-700">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <a href="/admin" className="text-2xl font-bold text-white">
-            All-Chat Admin
-          </a>
-          <div className="flex items-center gap-4">
-            <a href="/admin/users" className="text-gray-400 hover:text-white">Users</a>
-            <a href="/admin/overlays" className="text-gray-400 hover:text-white">Overlays</a>
-            <a href="/admin/sources" className="text-gray-400 hover:text-white">Sources</a>
-            <a href="/admin/viewers" className="text-white font-semibold">Viewers</a>
-            <a href="/dashboard" className="text-gray-400 hover:text-white">Dashboard</a>
-          </div>
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-text">Viewer Management</h1>
+          <p className="mt-1 text-sm text-text-sub">Manage viewer sessions and bans</p>
         </div>
-      </nav>
-
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-white mb-2">Viewer Management</h1>
-          <p className="text-gray-400">Manage viewer sessions and bans</p>
-        </div>
-
-        {/* Viewers Table */}
-        <div className="bg-gray-800 rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-700">
-              <tr>
-                <th className="px-4 py-3 text-left text-gray-300">Username</th>
-                <th className="px-4 py-3 text-left text-gray-300">Platform</th>
-                <th className="px-4 py-3 text-left text-gray-300">Last Message</th>
-                <th className="px-4 py-3 text-left text-gray-300">Msg Count (1m/1h)</th>
-                <th className="px-4 py-3 text-left text-gray-300">Status</th>
-                <th className="px-4 py-3 text-left text-gray-300">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {viewers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                    No viewer sessions found
-                  </td>
-                </tr>
-              ) : (
-                viewers.map((viewer) => (
-                  <tr key={viewer.id} className="border-t border-gray-700">
-                    <td className="px-4 py-3">
-                      <div className="text-white font-semibold">{viewer.username}</div>
-                      <div className="text-gray-400 text-sm">{viewer.display_name}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-gray-300 capitalize">{viewer.platform}</span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 text-sm">
-                      {viewer.last_message_at
-                        ? formatDistanceToNow(new Date(viewer.last_message_at), { addSuffix: true })
-                        : 'Never'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-400">
-                      {viewer.message_count_1min}/{viewer.message_count_1hour}
-                    </td>
-                    <td className="px-4 py-3">
-                      {viewer.is_banned ? (
-                        <div>
-                          <span className="inline-block bg-red-900 text-red-200 px-2 py-1 rounded text-sm">
-                            BANNED
-                          </span>
-                          {viewer.banned_reason && (
-                            <div className="text-gray-400 text-xs mt-1">
-                              Reason: {viewer.banned_reason}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="inline-block bg-green-900 text-green-200 px-2 py-1 rounded text-sm">
-                          Active
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {viewer.is_banned ? (
-                        <button
-                          onClick={() => handleUnban(viewer.id)}
-                          disabled={banningId === viewer.id}
-                          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors"
-                        >
-                          {banningId === viewer.id ? 'Unbanning...' : 'Unban'}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleBanClick(viewer)}
-                          disabled={banningId === viewer.id}
-                          className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors"
-                        >
-                          Ban
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Stats */}
-        <div className="mt-6 grid grid-cols-3 gap-4">
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-gray-400 text-sm">Total Viewers</div>
-            <div className="text-white text-2xl font-bold">{viewers.length}</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-gray-400 text-sm">Banned</div>
-            <div className="text-red-400 text-2xl font-bold">
-              {viewers.filter((v) => v.is_banned).length}
-            </div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-gray-400 text-sm">Active</div>
-            <div className="text-green-400 text-2xl font-bold">
-              {viewers.filter((v) => !v.is_banned).length}
-            </div>
-          </div>
-        </div>
+        <span className="text-text-sub text-sm">{viewers.length} total</span>
       </div>
 
-      {/* Ban Modal */}
-      {showBanModal && selectedViewer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold text-white mb-4">Ban Viewer</h2>
-            <p className="text-gray-300 mb-4">
-              Ban <span className="font-semibold">{selectedViewer.username}</span> from sending messages?
-            </p>
-            <div className="mb-4">
-              <label className="block text-gray-400 text-sm mb-2">
-                Reason (optional)
-              </label>
-              <textarea
-                value={banReason}
-                onChange={(e) => setBanReason(e.target.value)}
-                placeholder="Enter reason for ban..."
-                className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
-                rows={3}
-              />
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={handleBan}
-                disabled={banningId === selectedViewer.id}
-                className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white px-4 py-2 rounded font-semibold transition-colors"
-              >
-                {banningId === selectedViewer.id ? 'Banning...' : 'Ban Viewer'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowBanModal(false);
-                  setSelectedViewer(null);
-                }}
-                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-semibold transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <Card className="p-4">
+          <div className="text-xs text-text-sub">Total Viewers</div>
+          <div className="text-2xl font-bold text-text">{viewers.length}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs text-text-sub">Banned</div>
+          <div className="text-2xl font-bold text-destructive">{bannedCount}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs text-text-sub">Active</div>
+          <div className="text-2xl font-bold text-kick">{activeCount}</div>
+        </Card>
+      </div>
+
+      {/* Viewers Table */}
+      {loading ? (
+        <Card className="p-6 space-y-3">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded-lg" />
+          ))}
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-surface-2 border-b border-border">
+                <tr>
+                  <th className="text-left px-4 py-3 text-text-sub font-medium">Username</th>
+                  <th className="text-left px-4 py-3 text-text-sub font-medium">Platform</th>
+                  <th className="text-left px-4 py-3 text-text-sub font-medium">Last Message</th>
+                  <th className="text-left px-4 py-3 text-text-sub font-medium">Msg Count (1m/1h)</th>
+                  <th className="text-left px-4 py-3 text-text-sub font-medium">Status</th>
+                  <th className="text-left px-4 py-3 text-text-sub font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {viewers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-text-dim">
+                      No viewer sessions found
+                    </td>
+                  </tr>
+                ) : (
+                  viewers.map((viewer) => (
+                    <tr key={viewer.id} className="hover:bg-surface-2 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-text">{viewer.username}</div>
+                        <div className="text-xs text-text-sub">{viewer.display_name}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-text-sub capitalize">{viewer.platform}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-text-sub">
+                        {viewer.last_message_at
+                          ? formatDistanceToNow(new Date(viewer.last_message_at), { addSuffix: true })
+                          : 'Never'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-text-sub">
+                        {viewer.message_count_1min}/{viewer.message_count_1hour}
+                      </td>
+                      <td className="px-4 py-3">
+                        {viewer.is_banned ? (
+                          <div>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-destructive/10 text-destructive">
+                              BANNED
+                            </span>
+                            {viewer.banned_reason && (
+                              <div className="text-xs text-text-dim mt-1">
+                                Reason: {viewer.banned_reason}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-kick/10 text-kick">
+                            Active
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {viewer.is_banned ? (
+                          <Dialog.Root
+                            open={unbanDialogViewer?.id === viewer.id}
+                            onOpenChange={(open) => {
+                              if (!open) setUnbanDialogViewer(null);
+                            }}
+                          >
+                            <Dialog.Trigger
+                              render={
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={banningId === viewer.id}
+                                  onClick={() => setUnbanDialogViewer(viewer)}
+                                >
+                                  {banningId === viewer.id ? 'Unbanning...' : 'Unban'}
+                                </Button>
+                              }
+                            />
+                            <Dialog.Content showCloseButton={false}>
+                              <Dialog.Title>Unban &ldquo;{viewer.username}&rdquo;?</Dialog.Title>
+                              <Dialog.Description>
+                                This will restore their ability to send messages.
+                              </Dialog.Description>
+                              <div className="flex gap-3 justify-end mt-6">
+                                <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                                <Button
+                                  variant="default"
+                                  disabled={banningId === viewer.id}
+                                  onClick={() => handleUnban(viewer.id, viewer.username)}
+                                >
+                                  Unban Viewer
+                                </Button>
+                              </div>
+                            </Dialog.Content>
+                          </Dialog.Root>
+                        ) : (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={banningId === viewer.id}
+                            onClick={() => handleBanClick(viewer)}
+                          >
+                            Ban
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </Card>
       )}
+
+      {/* Ban Modal — Dialog with reason textarea */}
+      <Dialog.Root
+        open={showBanModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowBanModal(false);
+            setSelectedViewer(null);
+            setBanReason('');
+          }
+        }}
+      >
+        <Dialog.Content showCloseButton={false}>
+          <Dialog.Title>Ban Viewer &ldquo;{selectedViewer?.username}&rdquo;?</Dialog.Title>
+          <Dialog.Description>
+            This will prevent {selectedViewer?.username} from sending messages.
+          </Dialog.Description>
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-text-sub mb-2">
+              Reason (optional)
+            </label>
+            <textarea
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
+              placeholder="Enter reason for ban..."
+              className="w-full bg-surface-2 text-text border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-text-dim resize-none"
+              rows={3}
+            />
+          </div>
+          <div className="flex gap-3 justify-end mt-6">
+            <Dialog.Close
+              render={
+                <Button variant="outline" disabled={banningId === selectedViewer?.id}>
+                  Cancel
+                </Button>
+              }
+            />
+            <Button
+              variant="destructive"
+              disabled={banningId === selectedViewer?.id}
+              onClick={handleBan}
+            >
+              {banningId === selectedViewer?.id ? 'Banning...' : 'Ban Viewer'}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
     </div>
   );
 }
