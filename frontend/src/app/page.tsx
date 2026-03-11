@@ -381,13 +381,16 @@ export default function LandingPage() {
             Sign in with YouTube
           </button>
 
-          {/* Kick — brand green, dark text */}
+          {/* Kick — brand green, dark text + official block-K logo */}
           <button
             onClick={handleKickLogin}
             className="flex items-center gap-2.5 px-6 py-3 rounded-lg text-bg font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
             style={{ backgroundColor: 'var(--color-kick)' }}
             aria-label="Sign in with Kick"
           >
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill="currentColor" d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z" />
+            </svg>
             Sign in with Kick
           </button>
         </div>
