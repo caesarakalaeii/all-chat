@@ -12,7 +12,7 @@ function ToastPreview({ title, description, type }: {
   description?: string
   type: 'success' | 'error' | 'info'
 }) {
-  const borderClass = type === 'success' ? 'border-l-kick' : type === 'error' ? 'border-l-destructive' : 'border-l-ring'
+  const borderClass = type === 'success' ? 'border-l-kick' : type === 'error' ? 'border-l-youtube' : 'border-l-tiktok'
   return (
     <div className={cn(
       "bg-surface-2 border border-border rounded-xl px-4 py-3 shadow-xl min-w-[280px]",

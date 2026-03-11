@@ -17,8 +17,8 @@ function ToastList() {
             "bg-surface-2 border border-border rounded-xl px-4 py-3 shadow-xl min-w-[280px]",
             "border-l-4 animate-fade-in",
             toast.type === "success" && "border-l-kick",
-            toast.type === "error" && "border-l-destructive",
-            toast.type === "info" && "border-l-ring",
+            toast.type === "error" && "border-l-youtube",
+            toast.type === "info" && "border-l-tiktok",
             (!toast.type || toast.type === "warning") && "border-l-border",
           )}
         >
