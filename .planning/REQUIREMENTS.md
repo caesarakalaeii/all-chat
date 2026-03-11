@@ -38,7 +38,7 @@ Requirements for Frontend Redesign milestone. Each maps to roadmap phases.
 - [x] **PAGE-06**: Admin pages redesigned (users, overlays, sources, viewers - visual consistency)
 - [x] **PAGE-07**: Responsive layouts validated across breakpoints (375px, 768px, 1920px)
 - [x] **PAGE-08**: Accessibility compliance achieved (WCAG 2.1 AA, keyboard navigation, focus states)
-- [ ] **PAGE-09**: Loading states implemented for all data fetching scenarios
+- [x] **PAGE-09**: Loading states implemented for all data fetching scenarios
 - [ ] **PAGE-10**: Empty states implemented with illustrations and clear CTAs
 
 ### Split-view Live Preview
@@ -127,7 +127,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PAGE-06 | Phase 25 | Complete |
 | PAGE-07 | Phase 25 | Complete |
 | PAGE-08 | Phase 25 | Complete |
-| PAGE-09 | Phase 25 | Pending |
+| PAGE-09 | Phase 25 | Complete |
 | PAGE-10 | Phase 25 | Pending |
 | FEAT-01 | Phase 25 | Pending |
 | FEAT-02 | Phase 25 | Pending |
