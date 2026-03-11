@@ -82,20 +82,20 @@ function AuthCallbackContent() {
   }, [searchParams, setToken, setUser, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900">
+    <div className="min-h-screen flex items-center justify-center bg-bg">
       {loading ? (
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-twitch mx-auto mb-4"></div>
-          <p className="text-white text-lg">Authenticating...</p>
-          <p className="text-gray-400 text-sm mt-2">Please wait</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-2 border-transparent border-t-twitch mx-auto mb-4"></div>
+          <p className="text-text text-lg">Authenticating...</p>
+          <p className="text-text-sub text-sm mt-2">Please wait</p>
         </div>
       ) : error ? (
         <div className="text-center">
-          <div className="text-6xl mb-4">⚠️</div>
-          <p className="text-red-500 text-lg mb-4">{error}</p>
+          <div className="text-5xl mb-4">⚠️</div>
+          <p className="text-youtube text-lg mb-4">{error}</p>
           <a
             href="/"
-            className="inline-block bg-twitch hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+            className="inline-block bg-twitch hover:opacity-90 text-white font-semibold py-2 px-6 rounded-lg transition-opacity"
           >
             Return to Home
           </a>
@@ -109,8 +109,8 @@ export default function AuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-900">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-twitch"></div>
+        <div className="min-h-screen flex items-center justify-center bg-bg">
+          <div className="animate-spin rounded-full h-16 w-16 border-2 border-transparent border-t-twitch"></div>
         </div>
       }
     >
