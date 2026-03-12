@@ -102,6 +102,11 @@ func (m *MockRepository) GetSourceIDsForChannels(ctx context.Context, channels [
 	return result
 }
 
+func (m *MockRepository) GetOverlayIDsForChannel(ctx context.Context, channelName string) ([]string, error) {
+	// Return a test overlay ID for cross-platform event testing
+	return []string{"test-overlay-" + channelName}, nil
+}
+
 func TestManager_SyncChannels_InitialJoin(t *testing.T) {
 	ctx := context.Background()
 	logger := zaptest.NewLogger(t)
