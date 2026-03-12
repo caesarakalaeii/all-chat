@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -392,15 +393,37 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 
 // verifyCoverageComplete checks if all database sources have coordinator assignments
 // Returns false if any source lacks assignment (prevents message loss)
+// Queries Redis for global assignment coverage across all pods
 func (m *Manager) verifyCoverageComplete(ctx context.Context, sourceIDMap map[string]string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
+	// Query all assignments from Redis for global coverage check
+	globalAssignedIDs := make(map[string]bool)
+	iter := m.redisClient.Scan(ctx, 0, "shard:assignment:*", 0).Iterator()
+	for iter.Next(ctx) {
+		key := iter.Val()
+		// Extract source ID from key (may be composite like "uuid:platform")
+		sourceID := key[len("shard:assignment:"):]
+		// Strip platform suffix if present (e.g., "abc123:twitch" → "abc123")
+		if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
+			sourceID = sourceID[:colonIdx]
+		}
+		globalAssignedIDs[sourceID] = true
+	}
+	if err := iter.Err(); err != nil {
+		m.logger.Warn("Failed to scan Redis assignments for coverage check, using local assignments",
+			zap.Error(err),
+		)
+		// Fallback to local assignments on error
+		globalAssignedIDs = m.assignedSourceIDs
+	}
 
 	unassignedSources := make([]string, 0)
 	unassignedUUIDs := make([]string, 0)
 
 	for channelName, uuid := range sourceIDMap {
-		if !m.assignedSourceIDs[uuid] {
+		if !globalAssignedIDs[uuid] {
 			unassignedSources = append(unassignedSources, channelName)
 			unassignedUUIDs = append(unassignedUUIDs, uuid)
 		}
