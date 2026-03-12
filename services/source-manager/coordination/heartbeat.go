@@ -3,6 +3,7 @@ package coordination
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/source-manager/models"
@@ -199,7 +200,13 @@ func (h *HeartbeatMonitor) RemoveOrphanedAssignments(ctx context.Context, regist
 	// Check each assignment and remove orphans
 	orphanedCount := 0
 	for sourceID := range allAssignments {
-		if !activeSourceIDs[sourceID] {
+		// Extract real source ID from composite keys (format: "{uuid}:{platform}")
+		realSourceID := sourceID
+		if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
+			realSourceID = sourceID[:colonIdx]
+		}
+
+		if !activeSourceIDs[realSourceID] {
 			// Source no longer exists in DB - delete assignment
 			if err := registry.DeleteAssignment(ctx, sourceID); err != nil {
 				h.logger.Error("Failed to delete orphaned assignment",
