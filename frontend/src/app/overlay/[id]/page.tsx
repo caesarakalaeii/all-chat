@@ -340,7 +340,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         ws.close();
       }
     };
-  }, [id, maxMessages, forceReconnect, configuredChannels]);
+  }, [id, maxMessages, forceReconnect]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
