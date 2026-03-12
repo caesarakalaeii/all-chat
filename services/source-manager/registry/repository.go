@@ -145,3 +145,19 @@ func (r *Repository) GetAllActiveSources(ctx context.Context) ([]*models.ActiveS
 
 	return sources, nil
 }
+
+// ActivateSource marks a source as active and refreshes updated_at.
+// Called by listeners when they start polling a channel, to prevent the cleanup
+// job from marking the source inactive due to staleness.
+func (r *Repository) ActivateSource(ctx context.Context, platform, channelID string) (int64, error) {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = true, updated_at = NOW()
+		WHERE platform = $1 AND channel_id = $2
+	`
+	result, err := r.db.Exec(ctx, query, platform, channelID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to activate source: %w", err)
+	}
+	return result.RowsAffected(), nil
+}
