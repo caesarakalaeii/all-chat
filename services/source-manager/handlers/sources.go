@@ -50,6 +50,7 @@ func (h *SourceHandler) ClaimLeadership(c *gin.Context) {
 	var req struct {
 		Platform string `json:"platform" binding:"required"`
 		StreamID string `json:"stream_id" binding:"required"`
+		CallerID string `json:"caller_id"` // stable identity of the requesting service instance
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -59,7 +60,7 @@ func (h *SourceHandler) ClaimLeadership(c *gin.Context) {
 		return
 	}
 
-	acquired, err := h.leaderManager.TryAcquireLeadership(c.Request.Context(), req.Platform, req.StreamID)
+	acquired, err := h.leaderManager.TryAcquireLeadership(c.Request.Context(), req.Platform, req.StreamID, req.CallerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to claim leadership",
@@ -68,10 +69,9 @@ func (h *SourceHandler) ClaimLeadership(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"acquired":    acquired,
-		"instance_id": h.leaderManager.GetInstanceID(),
-		"platform":    req.Platform,
-		"stream_id":   req.StreamID,
+		"acquired":  acquired,
+		"platform":  req.Platform,
+		"stream_id": req.StreamID,
 	})
 }
 
@@ -80,6 +80,7 @@ func (h *SourceHandler) RenewLeadership(c *gin.Context) {
 	var req struct {
 		Platform string `json:"platform" binding:"required"`
 		StreamID string `json:"stream_id" binding:"required"`
+		CallerID string `json:"caller_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -89,7 +90,7 @@ func (h *SourceHandler) RenewLeadership(c *gin.Context) {
 		return
 	}
 
-	renewed, err := h.leaderManager.RenewLeadership(c.Request.Context(), req.Platform, req.StreamID)
+	renewed, err := h.leaderManager.RenewLeadership(c.Request.Context(), req.Platform, req.StreamID, req.CallerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to renew leadership",
@@ -106,10 +107,9 @@ func (h *SourceHandler) RenewLeadership(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"renewed":     true,
-		"instance_id": h.leaderManager.GetInstanceID(),
-		"platform":    req.Platform,
-		"stream_id":   req.StreamID,
+		"renewed":   true,
+		"platform":  req.Platform,
+		"stream_id": req.StreamID,
 	})
 }
 
@@ -118,6 +118,7 @@ func (h *SourceHandler) ReleaseLeadership(c *gin.Context) {
 	var req struct {
 		Platform string `json:"platform" binding:"required"`
 		StreamID string `json:"stream_id" binding:"required"`
+		CallerID string `json:"caller_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -127,7 +128,7 @@ func (h *SourceHandler) ReleaseLeadership(c *gin.Context) {
 		return
 	}
 
-	err := h.leaderManager.ReleaseLeadership(c.Request.Context(), req.Platform, req.StreamID)
+	err := h.leaderManager.ReleaseLeadership(c.Request.Context(), req.Platform, req.StreamID, req.CallerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to release leadership",

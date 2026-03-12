@@ -46,13 +46,18 @@ func (m *Manager) GetInstanceID() string {
 	return m.instanceID
 }
 
-// TryAcquireLeadership attempts to acquire leadership for a stream
-// Returns true if leadership was acquired, false if someone else is leader
-func (m *Manager) TryAcquireLeadership(ctx context.Context, platform, streamID string) (bool, error) {
+// TryAcquireLeadership attempts to acquire leadership for a stream.
+// callerID is the stable identity of the requesting service instance; it is stored
+// in Redis so that renew/release from the same caller succeed regardless of which
+// source-manager pod handles each request.
+func (m *Manager) TryAcquireLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error) {
 	key := m.leaderKey(platform, streamID)
+	if callerID == "" {
+		callerID = m.instanceID
+	}
 
 	// Try to set the key with NX (only if not exists) and EX (expiry)
-	success, err := m.client.SetNX(ctx, key, m.instanceID, m.lockTTL).Result()
+	success, err := m.client.SetNX(ctx, key, callerID, m.lockTTL).Result()
 	if err != nil {
 		m.logger.Error("Failed to acquire leadership",
 			zap.String("platform", platform),
@@ -66,7 +71,7 @@ func (m *Manager) TryAcquireLeadership(ctx context.Context, platform, streamID s
 		m.logger.Info("Acquired leadership",
 			zap.String("platform", platform),
 			zap.String("stream_id", streamID),
-			zap.String("instance_id", m.instanceID),
+			zap.String("caller_id", callerID),
 		)
 	}
 
@@ -75,8 +80,11 @@ func (m *Manager) TryAcquireLeadership(ctx context.Context, platform, streamID s
 
 // RenewLeadership renews the leadership lock (heartbeat)
 // Returns true if renewal was successful, false if lost leadership
-func (m *Manager) RenewLeadership(ctx context.Context, platform, streamID string) (bool, error) {
+func (m *Manager) RenewLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error) {
 	key := m.leaderKey(platform, streamID)
+	if callerID == "" {
+		callerID = m.instanceID
+	}
 
 	// Check if we are still the leader
 	currentLeader, err := m.client.Get(ctx, key).Result()
@@ -93,13 +101,13 @@ func (m *Manager) RenewLeadership(ctx context.Context, platform, streamID string
 		return false, fmt.Errorf("failed to check leadership: %w", err)
 	}
 
-	if currentLeader != m.instanceID {
+	if currentLeader != callerID {
 		// Someone else is leader
 		m.logger.Warn("Lost leadership",
 			zap.String("platform", platform),
 			zap.String("stream_id", streamID),
 			zap.String("current_leader", currentLeader),
-			zap.String("instance_id", m.instanceID),
+			zap.String("caller_id", callerID),
 		)
 		return false, nil
 	}
@@ -124,8 +132,11 @@ func (m *Manager) RenewLeadership(ctx context.Context, platform, streamID string
 }
 
 // ReleaseLeadership releases leadership for a stream
-func (m *Manager) ReleaseLeadership(ctx context.Context, platform, streamID string) error {
+func (m *Manager) ReleaseLeadership(ctx context.Context, platform, streamID, callerID string) error {
 	key := m.leaderKey(platform, streamID)
+	if callerID == "" {
+		callerID = m.instanceID
+	}
 
 	// Only delete if we are the leader (using Lua script for atomicity)
 	script := redis.NewScript(`
@@ -136,7 +147,7 @@ func (m *Manager) ReleaseLeadership(ctx context.Context, platform, streamID stri
 		end
 	`)
 
-	result, err := script.Run(ctx, m.client, []string{key}, m.instanceID).Result()
+	result, err := script.Run(ctx, m.client, []string{key}, callerID).Result()
 	if err != nil {
 		m.logger.Error("Failed to release leadership",
 			zap.String("platform", platform),
