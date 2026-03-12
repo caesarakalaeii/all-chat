@@ -721,7 +721,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
         )})}
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} className="scroll-anchor" />
       </div>
     </div>
   );

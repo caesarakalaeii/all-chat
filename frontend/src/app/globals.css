@@ -167,3 +167,20 @@
 @keyframes ring-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Scroll anchor — invisible sentinel div used for auto-scrolling in overlay pages.
+   Must never be styled by theme CSS. Use a higher-specificity selector so this
+   overrides broad theme rules like `.space-y-3 > div { ... !important }`. */
+.space-y-3 > div.scroll-anchor,
+.scroll-anchor {
+  display: block !important;
+  height: 0 !important;
+  width: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  animation: none !important;
+}

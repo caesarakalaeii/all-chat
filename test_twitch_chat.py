@@ -82,9 +82,9 @@ def main():
         messages = [
             "Test message #1 - Basic message",
             "Test message #2 - With emoji 😀",
-            "Test message #3 - With Kappa emote",
-            "Test message #4 - PogChamp",
-            "Test message #5 - LUL testing overlay",
+            "Test message #3 - 7TV emotes KEKW WHERE",
+            "Test message #4 - More emotes KEKW KEKW WHERE",
+            "Test message #5 - Mixed Kappa KEKW WHERE LUL",
         ]
 
         for i, msg in enumerate(messages, 1):
