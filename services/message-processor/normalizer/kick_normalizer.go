@@ -3,12 +3,16 @@ package normalizer
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
 )
+
+// kickEmoteTokenRe matches [emote:ID:name] tokens in Kick message text
+var kickEmoteTokenRe = regexp.MustCompile(`\[emote:(\d+):([^\]]+)\]`)
 
 // KickNormalizer normalizes Kick chat messages to unified format
 type KickNormalizer struct{}
@@ -66,7 +70,14 @@ func (n *KickNormalizer) Normalize(raw *models.RawChatMessage, overlayID string)
 
 	badges := n.extractBadges(raw, kickMsg)
 	metadata := n.extractMetadata(raw, kickMsg)
-	emotes := extractKickEmotes(kickMsg)
+
+	// Parse [emote:ID:name] tokens from text, replacing them with just the name
+	// and extracting positioned emotes with Kick CDN URLs.
+	cleanText, emotes := parseKickEmotesFromText(text)
+	// Fall back to MessageParts-based extraction if token parsing found nothing
+	if len(emotes) == 0 {
+		emotes = extractKickEmotes(kickMsg)
+	}
 
 	unified := &models.UnifiedChatMessage{
 		ID:          messageID,
@@ -83,7 +94,7 @@ func (n *KickNormalizer) Normalize(raw *models.RawChatMessage, overlayID string)
 			Color:       color,
 		},
 		Message: models.MessageInfo{
-			Text:   text,
+			Text:   cleanText,
 			Emotes: emotes,
 		},
 		Timestamp: timestamp,
@@ -109,31 +120,41 @@ func (n *KickNormalizer) resolveTimestamp(ts time.Time, kickMsg *kickChatMessage
 
 func (n *KickNormalizer) extractBadges(raw *models.RawChatMessage, kickMsg *kickChatMessage) []models.Badge {
 	badges := make([]models.Badge, 0)
+	seen := map[string]struct{}{}
 
-	if raw.Tags != nil {
-		if badgeList := raw.Tags["badges"]; badgeList != "" {
-			for _, name := range strings.Split(badgeList, ",") {
-				name = strings.TrimSpace(name)
-				if name == "" {
-					continue
-				}
-				badges = append(badges, models.Badge{
-					Name:    name,
-					Version: "1",
-				})
-			}
+	addBadge := func(name, version string) {
+		key := name + "/" + version
+		if _, ok := seen[key]; ok {
+			return
 		}
+		seen[key] = struct{}{}
+		// Kick doesn't expose public badge image URLs; icon_url stays empty
+		// and the frontend renders a text chip fallback.
+		badges = append(badges, models.Badge{
+			Name:    name,
+			Version: version,
+		})
 	}
 
+	// Prefer structured badges from the raw Kick message (most reliable)
 	if kickMsg != nil {
 		for _, badge := range kickMsg.Sender.Identity.Badges {
 			if badge.Type == "" {
 				continue
 			}
-			badges = append(badges, models.Badge{
-				Name:    badge.Type,
-				Version: badge.Text,
-			})
+			addBadge(badge.Type, badge.Text)
+		}
+	}
+
+	// Fall back to tag-based badges
+	if len(badges) == 0 && raw.Tags != nil {
+		if badgeList := raw.Tags["badges"]; badgeList != "" {
+			for _, name := range strings.Split(badgeList, ",") {
+				name = strings.TrimSpace(name)
+				if name != "" {
+					addBadge(name, "1")
+				}
+			}
 		}
 	}
 
@@ -216,6 +237,102 @@ func parseKickMessage(raw json.RawMessage) (*kickChatMessage, error) {
 	}
 
 	return &msg, nil
+}
+
+// parseKickEmotesFromText parses [emote:ID:name] tokens from Kick message text,
+// returns the emotes with positions and the cleaned text with tokens replaced by emote names.
+// Kick CDN URL pattern: https://files.kick.com/emotes/{ID}/fullsize
+func parseKickEmotesFromText(text string) (cleanText string, emotes []models.Emote) {
+	if text == "" {
+		return text, nil
+	}
+
+	type token struct {
+		id    string
+		name  string
+		start int
+		end   int // inclusive
+	}
+
+	// Find all tokens and record their positions in the original text
+	matches := kickEmoteTokenRe.FindAllStringSubmatchIndex(text, -1)
+	if len(matches) == 0 {
+		return text, nil
+	}
+
+	var tokens []token
+	for _, m := range matches {
+		// m[0]:m[1] = full match, m[2]:m[3] = ID, m[4]:m[5] = name
+		tokens = append(tokens, token{
+			id:    text[m[2]:m[3]],
+			name:  text[m[4]:m[5]],
+			start: m[0],
+			end:   m[1] - 1,
+		})
+	}
+
+	// Build cleaned text: replace each token with just the emote name
+	var sb strings.Builder
+	cursor := 0
+	// offset tracks how the positions shift as we replace tokens
+	offset := 0
+	type adjustedToken struct {
+		name  string
+		id    string
+		start int
+		end   int
+	}
+	var adjusted []adjustedToken
+
+	for _, tok := range tokens {
+		sb.WriteString(text[cursor:tok.start])
+		newStart := tok.start - offset
+		sb.WriteString(tok.name)
+		newEnd := newStart + len(tok.name) - 1
+		adjusted = append(adjusted, adjustedToken{
+			name:  tok.name,
+			id:    tok.id,
+			start: newStart,
+			end:   newEnd,
+		})
+		// original token length vs replacement (name) length
+		offset += (tok.end + 1 - tok.start) - len(tok.name)
+		cursor = tok.end + 1
+	}
+	sb.WriteString(text[cursor:])
+	cleanText = sb.String()
+
+	// Build emotes list, merging duplicate codes into multiple positions
+	type emoteEntry struct {
+		id        string
+		positions [][]int
+	}
+	seen := map[string]*emoteEntry{}
+	order := []string{}
+
+	for _, adj := range adjusted {
+		if e, ok := seen[adj.name]; ok {
+			e.positions = append(e.positions, []int{adj.start, adj.end})
+		} else {
+			seen[adj.name] = &emoteEntry{
+				id:        adj.id,
+				positions: [][]int{{adj.start, adj.end}},
+			}
+			order = append(order, adj.name)
+		}
+	}
+
+	for _, name := range order {
+		e := seen[name]
+		emotes = append(emotes, models.Emote{
+			Code:      name,
+			Provider:  "kick",
+			URL:       fmt.Sprintf("https://files.kick.com/emotes/%s/fullsize", e.id),
+			Positions: e.positions,
+		})
+	}
+
+	return cleanText, emotes
 }
 
 func extractKickEmotes(msg *kickChatMessage) []models.Emote {

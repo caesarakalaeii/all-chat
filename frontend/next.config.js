@@ -23,6 +23,7 @@ const nextConfig = {
       'cdn.7tv.app', // 7TV emotes
       'cdn.betterttv.net', // BTTV emotes
       'cdn.frankerfacez.com', // FFZ emotes
+      'files.kick.com', // Kick emotes
       'ui-avatars.com' // Generated avatar fallbacks
     ]
   },
