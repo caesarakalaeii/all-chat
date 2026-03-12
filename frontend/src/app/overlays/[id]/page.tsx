@@ -21,9 +21,9 @@
 
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronLeft, X, Clipboard } from 'lucide-react'
+import { ChevronLeft, X, Clipboard, Share2 } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { overlaysApi } from '@/lib/api/overlays'
 import { sharesApi } from '@/lib/api/shares'
@@ -489,6 +489,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
 
+  // --- Share overlay state ---
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [showPremiumRequired, setShowPremiumRequired] = useState(false)
+  const [shareRecipient, setShareRecipient] = useState('')
+  const [shareLoading, setShareLoading] = useState(false)
+  const shareInputRef = useRef<HTMLInputElement>(null)
+
   // Load overlay, sources, accepted shares and config
   useEffect(() => {
     if (!token) {
@@ -690,6 +697,33 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setCopiedObs(true)
       setTimeout(() => setCopiedObs(false), 2000)
     })
+  }
+
+  function handleShareClick() {
+    if (!user?.is_premium) {
+      setShowPremiumRequired(true)
+    } else {
+      setShareRecipient('')
+      setShowShareModal(true)
+      setTimeout(() => shareInputRef.current?.focus(), 50)
+    }
+  }
+
+  async function handleSendShareRequest() {
+    const username = shareRecipient.trim()
+    if (!username) return
+    setShareLoading(true)
+    try {
+      await sharesApi.createRequest(username, id)
+      toastManager.add({ title: `Share request sent to ${username}`, type: 'success' })
+      setShowShareModal(false)
+      setShareRecipient('')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send share request'
+      toastManager.add({ title: msg, type: 'error' })
+    } finally {
+      setShareLoading(false)
+    }
   }
 
   // --- Mock message handlers ---
@@ -902,6 +936,83 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             <Clipboard className="size-4" />
             {copiedObs ? 'Copied!' : 'Copy OBS URL'}
           </Button>
+
+          {/* 2b. Share overlay */}
+          <Button
+            variant="outline"
+            className="w-full flex items-center gap-2 justify-center"
+            onClick={handleShareClick}
+          >
+            <Share2 className="size-4" />
+            Share Overlay
+          </Button>
+
+          {/* Premium required dialog */}
+          {showPremiumRequired && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowPremiumRequired(false)}>
+              <div className="bg-surface border border-border rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-start justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-text">Premium Feature</h2>
+                  <button onClick={() => setShowPremiumRequired(false)} className="text-text-sub hover:text-text"><X className="size-4" /></button>
+                </div>
+                <p className="text-sm text-text-sub mb-4">
+                  Sharing your overlay is a premium feature. Upgrade your account to share your chat with other streamers.
+                </p>
+                <p className="text-sm text-text-sub mb-5">
+                  For more information and to get access, join our Discord community.
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setShowPremiumRequired(false)}>Close</Button>
+                  <a
+                    href="https://discord.gg/xCGBSuz39P"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1"
+                  >
+                    <Button className="w-full">Join Discord</Button>
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Share overlay modal */}
+          {showShareModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowShareModal(false)}>
+              <div className="bg-surface border border-border rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-start justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-text">Share Overlay</h2>
+                  <button onClick={() => setShowShareModal(false)} className="text-text-sub hover:text-text"><X className="size-4" /></button>
+                </div>
+                <p className="text-sm text-text-sub mb-4">
+                  Enter the Twitch username of the person you want to share <strong>{overlay?.name}</strong> with. They&apos;ll receive a request they can accept or decline.
+                </p>
+                <div className="mb-4">
+                  <label className="text-xs text-text-sub mb-1 block">Twitch username</label>
+                  <input
+                    ref={shareInputRef}
+                    type="text"
+                    value={shareRecipient}
+                    onChange={e => setShareRecipient(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSendShareRequest()}
+                    placeholder="e.g. somestreamer"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-2 text-text placeholder:text-text-sub focus:outline-none focus:ring-2 focus:ring-twitch/50"
+                    disabled={shareLoading}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setShowShareModal(false)} disabled={shareLoading}>Cancel</Button>
+                  <Button
+                    className="flex-1"
+                    onClick={handleSendShareRequest}
+                    disabled={shareLoading || !shareRecipient.trim()}
+                  >
+                    {shareLoading ? 'Sending...' : 'Send Request'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 3. Sources section */}
           <section aria-label="Chat sources">

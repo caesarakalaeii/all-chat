@@ -15,6 +15,7 @@ export interface User {
   display_name: string;
   profile_image_url?: string;
   is_admin: boolean;
+  is_premium: boolean;
   created_at: string;
   updated_at: string;
 }
