@@ -33,6 +33,7 @@ const (
 	// LeaderElectionKey is the Redis key for global leader election
 	LeaderElectionKey = "leader:twitch-eventsub"
 
+	// Rebuild trigger
 	// LeaderLockTTL is the TTL for the leader lock
 	LeaderLockTTL = 10 * time.Second
 
