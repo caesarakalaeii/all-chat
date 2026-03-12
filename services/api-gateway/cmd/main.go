@@ -425,7 +425,7 @@ func main() {
 		protectedAPI.POST("/shares/:id/reject", proxyHandler.ForwardRequest)              // -> share-service
 		protectedAPI.POST("/shares/:id/revoke", proxyHandler.ForwardRequest)              // -> share-service
 		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)           // -> share-service
-		protectedAPI.POST("/admin/users/:id/premium", proxyHandler.ForwardRequest)        // -> share-service
+		protectedAPI.POST("/admin/premium/users/:id", proxyHandler.ForwardRequest)         // -> share-service
 
 		// Admin routes (protected - TODO: add admin role check)
 		protectedAPI.GET("/admin/users", proxyHandler.ForwardRequest)           // -> auth-service

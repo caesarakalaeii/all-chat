@@ -103,6 +103,14 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		PathPrefix:  "/api/v1/users",
 		StripPrefix: false,
 	}
+	// Admin premium routes — separate prefix to avoid conflict with admin-users → auth-service
+	registry.Services["share-service-admin-premium"] = &ServiceConfig{
+		Name:        "share-service-admin-premium",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/admin/premium",
+		StripPrefix: false,
+	}
 
 	// Validate all service URLs are set
 	for name, service := range registry.Services {
