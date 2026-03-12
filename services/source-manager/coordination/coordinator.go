@@ -400,19 +400,32 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 			hashSpan.End()
 
 			// Store assignment in Redis registry
+			// For Twitch sources assigned to both IRC and EventSub listeners, use composite key
+			// to prevent the second assignment from overwriting the first
+			assignmentKey := source.ID
+			if source.Platform == "twitch" {
+				// Create platform-specific key: {source_id}:{platform}
+				// Example: "abc123:twitch" and "abc123:twitch-eventsub"
+				assignmentKey = source.ID + ":" + platform
+			}
+
 			ctx, updateSpan := tracer.Start(ctx, "update-assignment-registry",
 				trace.WithAttributes(
 					attribute.String("source_id", source.ID),
+					attribute.String("assignment_key", assignmentKey),
+					attribute.String("platform", platform),
 					attribute.String("pod_id", podID),
 				),
 			)
-			_, err = c.registry.StoreAssignment(ctx, source.ID, podID)
+			_, err = c.registry.StoreAssignment(ctx, assignmentKey, podID)
 			if err != nil {
 				updateSpan.RecordError(err)
 				updateSpan.SetStatus(codes.Error, "failed to update registry")
 				updateSpan.End()
 				c.logger.Error("Failed to store assignment",
 					zap.String("source_id", source.ID),
+					zap.String("assignment_key", assignmentKey),
+					zap.String("platform", platform),
 					zap.String("pod_id", podID),
 					zap.Error(err),
 				)

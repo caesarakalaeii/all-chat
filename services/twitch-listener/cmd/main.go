@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -255,9 +256,15 @@ func main() {
 				}
 
 				// Update assignedSourceIDs map
+				// Extract real source ID from composite keys (format: "{uuid}:{platform}")
 				newAssignedIDs := make(map[string]bool)
 				for _, a := range newAssignments {
-					newAssignedIDs[a.SourceID] = true
+					sourceID := a.SourceID
+					// Strip platform suffix if present (e.g., "abc123:twitch" → "abc123")
+					if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
+						sourceID = sourceID[:colonIdx]
+					}
+					newAssignedIDs[sourceID] = true
 				}
 
 				channelMgr.UpdateAssignedSourceIDs(newAssignedIDs)
