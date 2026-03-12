@@ -19,10 +19,11 @@ export default function OverlayLayout({
 }) {
   return (
     <>
-      {/* Override body background to be transparent for OBS */}
+      {/* Override body and html background to be transparent for OBS */}
       <style dangerouslySetInnerHTML={{ __html: `
-        body {
+        html, body {
           background: transparent !important;
+          background-image: none !important;
         }
       ` }} />
       {children}
