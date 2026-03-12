@@ -211,25 +211,11 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 			h.wsManager.RemoveConnection(wsConn)
 			h.subscriber.Unsubscribe(context.Background(), overlayID)
 
-			// Deactivate sources only if no connections remain after removal.
-			// Use HasPool (not GetPoolSize) because RemoveConnection deletes the pool
-			// entry when it empties, so a reconnecting client that called AddConnection
-			// concurrently will have already recreated the pool — HasPool returns true
-			// and we correctly skip deactivation, preventing the source activation race.
-			if !h.wsManager.HasPool(overlayID) {
-				deactivatedCount, err := h.repo.DeactivateSourcesForOverlay(context.Background(), overlayID)
-				if err != nil {
-					h.logger.Error("Failed to deactivate sources for overlay",
-						zap.String("overlay_id", overlayID),
-						zap.Error(err),
-					)
-				} else if deactivatedCount > 0 {
-					h.logger.Info("Auto-deactivated sources (last connection closed)",
-						zap.String("overlay_id", overlayID),
-						zap.Int("count", deactivatedCount),
-					)
-				}
-			}
+			// Sources are NOT deactivated on disconnect here.
+			// With multiple api-gateway replicas, HasPool is per-pod so a disconnect
+			// on pod A with reconnect on pod B would falsely deactivate sources.
+			// Sources are activated on connect and deactivated by the source-manager
+			// cleanup job (24h stale threshold) or when the overlay is deleted.
 
 			h.logger.Info("WebSocket connection closed",
 				zap.String("overlay_id", overlayID),
