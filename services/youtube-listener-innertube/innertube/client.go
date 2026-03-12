@@ -32,24 +32,29 @@ const (
 
 // Client handles communication with the InnerTube API
 type Client struct {
-	httpClient *http.Client
-	apiKey     string
-	logger     *zap.Logger
-	metrics    *metrics.InnerTubeMetrics
+	httpClient    *http.Client
+	apiKey        string
+	clientVersion string
+	logger        *zap.Logger
+	metrics       *metrics.InnerTubeMetrics
 }
 
 // ClientOptions configures the InnerTube client
 type ClientOptions struct {
-	APIKey     string
-	Timeout    time.Duration
-	Logger     *zap.Logger
-	Metrics    *metrics.InnerTubeMetrics
+	APIKey        string
+	ClientVersion string
+	Timeout       time.Duration
+	Logger        *zap.Logger
+	Metrics       *metrics.InnerTubeMetrics
 }
 
 // NewClient creates a new InnerTube API client
 func NewClient(opts ClientOptions) *Client {
 	if opts.APIKey == "" {
 		opts.APIKey = DefaultAPIKey
+	}
+	if opts.ClientVersion == "" {
+		opts.ClientVersion = DefaultClientVersion
 	}
 	if opts.Timeout == 0 {
 		opts.Timeout = DefaultTimeout
@@ -62,9 +67,10 @@ func NewClient(opts ClientOptions) *Client {
 		httpClient: &http.Client{
 			Timeout: opts.Timeout,
 		},
-		apiKey:  opts.APIKey,
-		logger:  opts.Logger,
-		metrics: opts.Metrics,
+		apiKey:        opts.APIKey,
+		clientVersion: opts.ClientVersion,
+		logger:        opts.Logger,
+		metrics:       opts.Metrics,
 	}
 }
 
@@ -84,7 +90,7 @@ func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string) (*L
 		"context": map[string]interface{}{
 			"client": map[string]interface{}{
 				"clientName":    "WEB",
-				"clientVersion": DefaultClientVersion,
+				"clientVersion": c.clientVersion,
 			},
 		},
 	}

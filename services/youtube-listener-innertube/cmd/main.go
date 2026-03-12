@@ -101,17 +101,21 @@ func main() {
 		zap.String("addr", fmt.Sprintf("%s:%s", redisHost, redisPort)))
 
 	// 5. Initialize components
-	// InnerTube client (hardcoded API key for MVP)
+	// Fetch current InnerTube client version + API key from YouTube at startup.
+	// Falls back to compiled-in defaults if the fetch fails.
+	innertubeConfig := innertube.FetchClientConfig(ctx, logger)
+
 	innertubeClient := innertube.NewClient(innertube.ClientOptions{
-		APIKey:  innertube.DefaultAPIKey,
-		Timeout: 10 * time.Second,
-		Logger:  logger,
-		Metrics: innertubeMetrics,
+		APIKey:        innertubeConfig.APIKey,
+		ClientVersion: innertubeConfig.ClientVersion,
+		Timeout:       10 * time.Second,
+		Logger:        logger,
+		Metrics:       innertubeMetrics,
 	})
 
 	// Discovery
 	httpClient := &http.Client{Timeout: 10 * time.Second}
-	discovery := innertube.NewDiscovery(httpClient, logger)
+	discovery := innertube.NewDiscovery(httpClient, logger, innertubeConfig)
 
 	// Repository for Redis persistence
 	repository := streams.NewRepository(redisClient, logger)

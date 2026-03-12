@@ -13,15 +13,25 @@ import (
 
 // Discovery handles YouTube live stream discovery from channel pages
 type Discovery struct {
-	httpClient *http.Client
-	logger     *zap.Logger
+	httpClient    *http.Client
+	logger        *zap.Logger
+	apiKey        string
+	clientVersion string
 }
 
 // NewDiscovery creates a new Discovery instance
-func NewDiscovery(httpClient *http.Client, logger *zap.Logger) *Discovery {
+func NewDiscovery(httpClient *http.Client, logger *zap.Logger, cfg ClientConfig) *Discovery {
+	if cfg.APIKey == "" {
+		cfg.APIKey = DefaultAPIKey
+	}
+	if cfg.ClientVersion == "" {
+		cfg.ClientVersion = DefaultClientVersion
+	}
 	return &Discovery{
-		httpClient: httpClient,
-		logger:     logger,
+		httpClient:    httpClient,
+		logger:        logger,
+		apiKey:        cfg.APIKey,
+		clientVersion: cfg.ClientVersion,
 	}
 }
 
@@ -34,12 +44,12 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 	)
 
 	// Use InnerTube Browse API to get channel's streams tab
-	browseURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", DefaultAPIKey)
+	browseURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", d.apiKey)
 	payload := map[string]interface{}{
 		"context": map[string]interface{}{
 			"client": map[string]interface{}{
 				"clientName":    "WEB",
-				"clientVersion": DefaultClientVersion,
+				"clientVersion": d.clientVersion,
 			},
 		},
 		"browseId": channelID,
@@ -100,12 +110,12 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 // Returns true only when videoDetails.isLive is explicitly true.
 // Works for restricted/members-only channels (returns isLive even when status=UNPLAYABLE).
 func (d *Discovery) checkIsLiveViaPlayer(ctx context.Context, videoID string) (bool, error) {
-	playerURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/player?key=%s", DefaultAPIKey)
+	playerURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/player?key=%s", d.apiKey)
 	payload := map[string]interface{}{
 		"context": map[string]interface{}{
 			"client": map[string]interface{}{
 				"clientName":    "WEB",
-				"clientVersion": DefaultClientVersion,
+				"clientVersion": d.clientVersion,
 			},
 		},
 		"videoId": videoID,
@@ -230,12 +240,12 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 		zap.String("video_id", videoID),
 	)
 
-	nextURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/next?key=%s", DefaultAPIKey)
+	nextURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/next?key=%s", d.apiKey)
 	payload := map[string]interface{}{
 		"context": map[string]interface{}{
 			"client": map[string]interface{}{
 				"clientName":    "WEB",
-				"clientVersion": DefaultClientVersion,
+				"clientVersion": d.clientVersion,
 			},
 		},
 		"videoId": videoID,
