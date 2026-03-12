@@ -151,8 +151,9 @@ func (h *ConfigHandler) HandleGetPublicConfig(c *gin.Context) {
 	sourceStatus := make([]map[string]interface{}, 0, len(sources))
 	for _, source := range sources {
 		sourceStatus = append(sourceStatus, map[string]interface{}{
-			"platform":  source.Platform,
-			"is_active": source.IsActive,
+			"platform":   source.Platform,
+			"channel_id": source.ChannelID,
+			"is_active":  source.IsActive,
 		})
 	}
 
