@@ -147,6 +147,12 @@ func (r *Registry) GetSource(sourceID string) (*models.ActiveSource, error) {
 	return source, nil
 }
 
+// ActivateSource marks a source active in the DB and refreshes updated_at.
+// Listeners call this when they start polling, preventing cleanup from deactivating it.
+func (r *Registry) ActivateSource(ctx context.Context, platform, channelID string) (int64, error) {
+	return r.repository.ActivateSource(ctx, platform, channelID)
+}
+
 // GetStats returns registry statistics
 func (r *Registry) GetStats() map[string]interface{} {
 	r.mu.RLock()
