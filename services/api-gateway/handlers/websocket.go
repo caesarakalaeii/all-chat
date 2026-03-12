@@ -211,9 +211,12 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 			h.wsManager.RemoveConnection(wsConn)
 			h.subscriber.Unsubscribe(context.Background(), overlayID)
 
-			// Deactivate sources if this is the last connection for this overlay
-			// Check connection count after removal
-			if h.wsManager.GetPoolSize(overlayID) == 0 {
+			// Deactivate sources only if no connections remain after removal.
+			// Use HasPool (not GetPoolSize) because RemoveConnection deletes the pool
+			// entry when it empties, so a reconnecting client that called AddConnection
+			// concurrently will have already recreated the pool — HasPool returns true
+			// and we correctly skip deactivation, preventing the source activation race.
+			if !h.wsManager.HasPool(overlayID) {
 				deactivatedCount, err := h.repo.DeactivateSourcesForOverlay(context.Background(), overlayID)
 				if err != nil {
 					h.logger.Error("Failed to deactivate sources for overlay",
