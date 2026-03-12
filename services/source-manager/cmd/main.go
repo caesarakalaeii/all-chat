@@ -31,6 +31,7 @@ func main() {
 	log := logger.NewLogger("source-manager", logLevel)
 	defer log.Sync()
 
+	// Rebuild trigger
 	log.Info("Starting Source Manager",
 		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
 	)

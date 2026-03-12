@@ -35,6 +35,7 @@ func main() {
 	log := logger.NewLogger("twitch-listener", logLevel)
 	defer log.Sync()
 
+	// Rebuild trigger
 	log.Info("Starting Twitch Listener",
 		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
 	)
