@@ -78,35 +78,22 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 		return "", fmt.Errorf("parse browse response: %w", err)
 	}
 
-	// Collect all video IDs from the streams tab (may include ended streams)
-	videoIDs := collectVideoIDsFromBrowse(browseResponse)
+	// Collect live video IDs directly from the browse response using the LIVE badge.
+	// The player API (/youtubei/v1/player) is blocked by YouTube bot-detection on
+	// datacenter IPs (returns LOGIN_REQUIRED with no videoDetails), so we rely on the
+	// thumbnailOverlayTimeStatusRenderer.style == "LIVE" field present in the browse
+	// response for each currently-live stream.
+	videoIDs := collectLiveVideoIDsFromBrowse(browseResponse)
 	if len(videoIDs) == 0 {
-		return "", fmt.Errorf("no streams found for channel %s", channelID)
+		return "", fmt.Errorf("no live stream found for channel %s", channelID)
 	}
 
-	// Verify liveness via the player API (videoDetails.isLive).
-	// The player API returns isLive=true for live streams even when status=UNPLAYABLE
-	// (restricted/members-only channels). It's lightweight JSON with no rate-limit issues.
-	for _, videoID := range videoIDs {
-		isLive, err := d.checkIsLiveViaPlayer(ctx, videoID)
-		if err != nil {
-			d.logger.Debug("failed to check liveness via player API",
-				zap.String("video_id", videoID),
-				zap.Error(err),
-			)
-			continue
-		}
-		if !isLive {
-			continue
-		}
-		d.logger.Info("discovered live stream",
-			zap.String("channel_id", channelID),
-			zap.String("video_id", videoID),
-		)
-		return videoID, nil
-	}
-
-	return "", fmt.Errorf("no live stream found for channel %s", channelID)
+	videoID := videoIDs[0]
+	d.logger.Info("discovered live stream",
+		zap.String("channel_id", channelID),
+		zap.String("video_id", videoID),
+	)
+	return videoID, nil
 }
 
 // checkIsLiveViaPlayer uses the InnerTube player API to check if a video is currently live.
@@ -153,6 +140,54 @@ func (d *Discovery) checkIsLiveViaPlayer(ctx context.Context, videoID string) (b
 	videoDetails, _ := playerResp["videoDetails"].(map[string]interface{})
 	isLive, _ := videoDetails["isLive"].(bool)
 	return isLive, nil
+}
+
+// collectLiveVideoIDsFromBrowse recursively finds video IDs that are currently live
+// by checking for thumbnailOverlayTimeStatusRenderer.style == "LIVE" in the browse response.
+// This avoids calling the player API which is blocked on datacenter IPs by YouTube bot-detection.
+func collectLiveVideoIDsFromBrowse(data interface{}) []string {
+	var ids []string
+	seen := map[string]struct{}{}
+	var collect func(interface{})
+	collect = func(data interface{}) {
+		if len(ids) >= 5 {
+			return
+		}
+		switch v := data.(type) {
+		case map[string]interface{}:
+			// Check if this map is a videoRenderer with a LIVE overlay
+			if videoID, ok := v["videoId"].(string); ok && videoID != "" {
+				if overlays, ok := v["thumbnailOverlays"].([]interface{}); ok {
+					for _, overlay := range overlays {
+						ovMap, ok := overlay.(map[string]interface{})
+						if !ok {
+							continue
+						}
+						ts, ok := ovMap["thumbnailOverlayTimeStatusRenderer"].(map[string]interface{})
+						if !ok {
+							continue
+						}
+						if style, _ := ts["style"].(string); style == "LIVE" {
+							if _, exists := seen[videoID]; !exists {
+								seen[videoID] = struct{}{}
+								ids = append(ids, videoID)
+							}
+							break
+						}
+					}
+				}
+			}
+			for _, val := range v {
+				collect(val)
+			}
+		case []interface{}:
+			for _, item := range v {
+				collect(item)
+			}
+		}
+	}
+	collect(data)
+	return ids
 }
 
 // collectVideoIDsFromBrowse recursively collects all unique video IDs from a browse response.
