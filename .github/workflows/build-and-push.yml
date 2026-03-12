@@ -39,6 +39,7 @@ jobs:
       message-processor: ${{ steps.changes.outputs.message-processor }}
       source-manager: ${{ steps.changes.outputs.source-manager }}
       token-refresh-service: ${{ steps.changes.outputs.token-refresh-service }}
+      share-service: ${{ steps.changes.outputs.share-service }}
       discord-bot: ${{ steps.changes.outputs.discord-bot }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
@@ -90,6 +91,9 @@ jobs:
               - 'services/token-refresh-service/**'
               - 'shared/**'
               - 'services/auth-service/oauth/**'
+            share-service:
+              - 'services/share-service/**'
+              - 'shared/**'
             discord-bot:
               - 'services/discord-bot/**'
             frontend:
@@ -148,6 +152,9 @@ jobs:
           - name: token-refresh-service
             changed: ${{ needs.detect-changes.outputs.token-refresh-service }}
             path: services/token-refresh-service
+          - name: share-service
+            changed: ${{ needs.detect-changes.outputs.share-service }}
+            path: services/share-service
           - name: discord-bot
             changed: ${{ needs.detect-changes.outputs.discord-bot }}
             path: services/discord-bot
@@ -221,6 +228,7 @@ jobs:
           - twitch-listener
           - youtube-listener
           - message-processor
+          - share-service
           - source-manager
           - token-refresh-service
 
