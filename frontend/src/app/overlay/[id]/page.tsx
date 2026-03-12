@@ -652,17 +652,23 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
                   {/* Regular Badges (before username when position is 'before') */}
                   {platformBadgePosition === 'before' && message.user?.badges && message.user.badges.length > 0 && (
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 items-center">
                       {message.user.badges.map((badge, idx) => (
-                        <Image
-                          key={idx}
-                          src={badge.icon_url}
-                          alt={badge.name}
-                          width={16}
-                          height={16}
-                          className="w-4 h-4 object-contain"
-                          title={`${badge.name} (receiving channel)`}
-                        />
+                        badge.icon_url ? (
+                          <Image
+                            key={idx}
+                            src={badge.icon_url}
+                            alt={badge.name}
+                            width={16}
+                            height={16}
+                            className="w-4 h-4 object-contain"
+                            title={badge.name}
+                          />
+                        ) : (
+                          <span key={idx} className="text-xs px-1 py-0.5 rounded bg-gray-700 text-gray-300 leading-none" title={badge.name}>
+                            {badge.name}
+                          </span>
+                        )
                       ))}
                     </div>
                   )}
@@ -697,17 +703,23 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
                   {/* Regular Badges (after username when position is 'after') */}
                   {platformBadgePosition === 'after' && message.user?.badges && message.user.badges.length > 0 && (
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 items-center">
                       {message.user.badges.map((badge, idx) => (
-                        <Image
-                          key={idx}
-                          src={badge.icon_url}
-                          alt={badge.name}
-                          width={16}
-                          height={16}
-                          className="w-4 h-4 object-contain"
-                          title={`${badge.name} (receiving channel)`}
-                        />
+                        badge.icon_url ? (
+                          <Image
+                            key={idx}
+                            src={badge.icon_url}
+                            alt={badge.name}
+                            width={16}
+                            height={16}
+                            className="w-4 h-4 object-contain"
+                            title={badge.name}
+                          />
+                        ) : (
+                          <span key={idx} className="text-xs px-1 py-0.5 rounded bg-gray-700 text-gray-300 leading-none" title={badge.name}>
+                            {badge.name}
+                          </span>
+                        )
                       ))}
                     </div>
                   )}
