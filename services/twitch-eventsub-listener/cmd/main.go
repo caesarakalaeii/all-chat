@@ -186,9 +186,15 @@ func main() {
 	)
 
 	// Extract assigned source IDs into map for filtering
+	// Extract real source ID from composite keys (format: "{uuid}:{platform}")
 	assignedSourceIDs := make(map[string]bool)
 	for _, a := range assignments {
-		assignedSourceIDs[a.SourceID] = true
+		sourceID := a.SourceID
+		// Strip platform suffix if present (e.g., "abc123:twitch-eventsub" → "abc123")
+		if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
+			sourceID = sourceID[:colonIdx]
+		}
+		assignedSourceIDs[sourceID] = true
 	}
 
 	// Initialize components
@@ -479,9 +485,15 @@ func main() {
 				}
 
 				// Update assignedSourceIDs map
+				// Extract real source ID from composite keys (format: "{uuid}:{platform}")
 				newAssignedIDs := make(map[string]bool)
 				for _, a := range newAssignments {
-					newAssignedIDs[a.SourceID] = true
+					sourceID := a.SourceID
+					// Strip platform suffix if present (e.g., "abc123:twitch-eventsub" → "abc123")
+					if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
+						sourceID = sourceID[:colonIdx]
+					}
+					newAssignedIDs[sourceID] = true
 				}
 
 				channelManager.UpdateAssignedSourceIDs(newAssignedIDs)
