@@ -236,9 +236,7 @@ func (h *Handler) routeEvent(ctx context.Context, subscriptionType string, event
 	case "stream.offline":
 		return h.handleStreamOffline(ctx, eventData)
 	case "stream.online":
-		// stream.online: cancel any pending debounced expiry (no-op for MVP — debounce is in subscriber)
-		h.logger.Debug("Stream online event received", zap.String("type", subscriptionType))
-		return nil
+		return h.handleStreamOnline(ctx, eventData)
 	default:
 		h.logger.Warn("Unhandled subscription type", zap.String("type", subscriptionType))
 		return nil
@@ -291,6 +289,69 @@ func (h *Handler) handleStreamOffline(ctx context.Context, eventData json.RawMes
 	h.logger.Info("Published stream end lifecycle event",
 		zap.String("user_id", userID),
 		zap.String("broadcaster_id", event.BroadcasterUserID))
+	return nil
+}
+
+// handleStreamOnline publishes cross-platform event to trigger YouTube discovery reset
+// when Twitch stream goes live
+func (h *Handler) handleStreamOnline(ctx context.Context, eventData json.RawMessage) error {
+	var event struct {
+		BroadcasterUserID   string `json:"broadcaster_user_id"`
+		BroadcasterUserName string `json:"broadcaster_user_name"`
+	}
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal stream.online event: %w", err)
+	}
+
+	if event.BroadcasterUserID == "" {
+		h.logger.Warn("stream.online event missing broadcaster_user_id")
+		return nil
+	}
+
+	// Query which overlays have this Twitch channel as a source
+	query := `
+		SELECT DISTINCT overlay_id
+		FROM overlay_chat_sources
+		WHERE platform = 'twitch'
+		  AND channel_id = $1
+		  AND is_active = true
+	`
+
+	rows, err := h.db.Query(ctx, query, event.BroadcasterUserID)
+	if err != nil {
+		return fmt.Errorf("failed to query overlays for stream.online: %w", err)
+	}
+	defer rows.Close()
+
+	var overlayIDs []string
+	for rows.Next() {
+		var overlayID string
+		if err := rows.Scan(&overlayID); err != nil {
+			continue
+		}
+		overlayIDs = append(overlayIDs, overlayID)
+	}
+
+	// Publish cross-platform event for each overlay
+	for _, overlayID := range overlayIDs {
+		eventChannel := fmt.Sprintf("platform:event:%s", overlayID)
+		eventPayload := fmt.Sprintf(`{"platform":"twitch","channel":"%s","event":"stream.online","timestamp":"%s"}`,
+			event.BroadcasterUserName, time.Now().Format(time.RFC3339))
+
+		if err := h.redis.Publish(ctx, eventChannel, eventPayload).Err(); err != nil {
+			h.logger.Warn("Failed to publish cross-platform stream.online event",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		h.logger.Info("Published cross-platform stream.online event",
+			zap.String("overlay_id", overlayID),
+			zap.String("broadcaster", event.BroadcasterUserName),
+		)
+	}
+
 	return nil
 }
 
