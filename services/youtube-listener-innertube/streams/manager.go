@@ -2,6 +2,7 @@ package streams
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -18,6 +19,11 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// errLeadershipHeld is returned by startPoller when another instance holds leadership
+// for the stream. It is NOT a real error — the caller should fall through to discovery
+// to check if the cached video ID is stale (i.e. the old stream ended and a new one started).
+var errLeadershipHeld = errors.New("leadership held by another instance")
 
 // Source represents a YouTube source configuration from source-manager
 type Source struct {
@@ -211,14 +217,20 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
 			zap.String("channel_id", channelID),
 			zap.String("video_id", cachedVideoID),
 		)
-		// Start poller with cached video ID
+		// Start poller with cached video ID.
+		// If another instance already holds leadership (errLeadershipHeld) we still fall
+		// through to async discovery: the other instance might be polling a stale/ended
+		// stream whose video ID was never evicted from the cache (e.g. stream ended without
+		// a liveChatEnded error). Discovery will find the new video ID and overwrite the cache.
 		if err := m.startPoller(ctx, channelID, cachedVideoID, overlayID); err != nil {
-			m.logger.Error("Failed to start poller with cached video ID, falling back to discovery",
-				zap.String("channel_id", channelID),
-				zap.String("video_id", cachedVideoID),
-				zap.Error(err),
-			)
-			// Fall through to async discovery below
+			if !errors.Is(err, errLeadershipHeld) {
+				m.logger.Error("Failed to start poller with cached video ID, falling back to discovery",
+					zap.String("channel_id", channelID),
+					zap.String("video_id", cachedVideoID),
+					zap.Error(err),
+				)
+			}
+			// Fall through to async discovery below (covers both real errors and leadership contention)
 		} else {
 			return
 		}
@@ -310,6 +322,16 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 
 			// Start poller
 			if err := m.startPoller(ctx, state.ChannelID, videoID, state.OverlayID); err != nil {
+				if errors.Is(err, errLeadershipHeld) {
+					// Another instance claimed this video ID first (e.g. two pods discovered
+					// the same stream simultaneously). This is fine — that pod will poll it.
+					m.logger.Info("Another instance claimed leadership for newly-discovered stream",
+						zap.String("channel_id", state.ChannelID),
+						zap.String("video_id", videoID),
+					)
+					m.cleanupDiscoveryState(state.ChannelID)
+					return
+				}
 				m.logger.Error("Failed to start poller after discovery, will retry",
 					zap.String("channel_id", state.ChannelID),
 					zap.String("video_id", videoID),
@@ -432,7 +454,7 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 			m.logger.Debug("Leadership held by another instance",
 				zap.String("video_id", videoID),
 			)
-			return nil
+			return errLeadershipHeld
 		}
 	}
 
