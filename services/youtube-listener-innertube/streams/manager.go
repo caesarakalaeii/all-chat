@@ -254,37 +254,27 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
 func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 	defer m.wg.Done()
 
+	// Exponential backoff capped at 10 minutes to respect YouTube rate limits
+	// Keep polling indefinitely until stream is discovered or source is deactivated
 	backoffSequence := []time.Duration{
 		30 * time.Second,
 		1 * time.Minute,
 		2 * time.Minute,
 		5 * time.Minute,
-		10 * time.Minute,
+		10 * time.Minute, // Max backoff - continue at 10m intervals
 	}
-	timeout := 15 * time.Minute
-
-	deadline := time.Now().Add(timeout)
 
 	for {
-		// Check if context cancelled or deadline exceeded
+		// Check if context cancelled (source deactivated or service shutdown)
 		select {
 		case <-ctx.Done():
 			m.logger.Info("Discovery cancelled",
 				zap.String("channel_id", state.ChannelID),
-			)
-			m.cleanupDiscoveryState(state.ChannelID)
-			return
-		default:
-		}
-
-		if time.Now().After(deadline) {
-			m.logger.Error("Discovery timeout exceeded",
-				zap.String("channel_id", state.ChannelID),
-				zap.Duration("timeout", timeout),
 				zap.Int("attempts", state.Attempts),
 			)
 			m.cleanupDiscoveryState(state.ChannelID)
 			return
+		default:
 		}
 
 		// Attempt discovery
