@@ -87,19 +87,15 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
 
-        // Load active platforms and configured channel IDs from sources
+        // Load configured channel IDs from sources
+        // Note: activePlatforms is only set by live platform_status messages (status === 'connected')
+        // so that the indicator reflects actual live connection state, not DB is_active flag.
         if (Array.isArray(data.sources)) {
-          const active = new Set<string>();
           const channels = new Map<string, Set<string>>();
           data.sources.forEach((source: { platform: string; channel_id: string; is_active: boolean }) => {
-            if (source.is_active) {
-              active.add(source.platform);
-            }
-            // Track all configured channel IDs regardless of is_active (listener manages active state)
             if (!channels.has(source.platform)) channels.set(source.platform, new Set());
             channels.get(source.platform)!.add(source.channel_id);
           });
-          setActivePlatforms(active);
           setConfiguredChannels(channels);
         }
       } catch (error) {
