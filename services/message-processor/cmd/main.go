@@ -258,7 +258,11 @@ func main() {
 			}()
 		}
 
-		// Process message for each overlay
+		// Process message for each overlay.
+		// publishedToAnyOverlay tracks whether the message was successfully
+		// delivered to at least one overlay so the stats counter is only
+		// incremented once per unique message, not once per overlay.
+		publishedToAnyOverlay := false
 		for _, overlay := range overlays {
 			var unified *models.UnifiedChatMessage
 			var err error
@@ -520,9 +524,13 @@ func main() {
 			}
 			processorMetrics.RecordMessagePublished("message-processor", overlay.OverlayID, rawMsg.Platform, "success")
 			processorMetrics.FanoutDuration.WithLabelValues("message-processor").Observe(time.Since(startPublish).Seconds())
+			publishedToAnyOverlay = true
+		}
 
-			// Increment 24h platform message counter (for public stats endpoint).
-			// Key expires 24h after first write; EXPIRE NX avoids resetting the window.
+		// Increment 24h platform message counter once per unique message.
+		// Placed after the overlay loop so multi-overlay fanout counts as one message.
+		// Key expires 24h after first write; EXPIRE NX avoids resetting the window.
+		if publishedToAnyOverlay {
 			statsKey := "chat:stats:24h:" + rawMsg.Platform
 			if redisClient.Incr(ctx, statsKey).Err() == nil {
 				redisClient.ExpireNX(ctx, statsKey, 24*time.Hour)
