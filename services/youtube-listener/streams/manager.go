@@ -1103,19 +1103,33 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 	defer m.mu.Unlock()
 
 	// Check if poller already exists
-	if _, exists := m.pollers[stream.StreamID]; exists {
-		m.logger.Debug("Poller already running for stream",
-			zap.String("stream_id", stream.StreamID),
-		)
-		// Update database status even when poller already exists
-		// This ensures database reflects actual polling state
-		if err := m.repository.SetSourceActive(ctx, stream.ChannelID, true); err != nil {
-			m.logger.Error("Failed to update source status for existing poller",
+	if existing, exists := m.pollers[stream.StreamID]; exists {
+		// Check if the existing poller's goroutine has exited (zombie poller).
+		// This happens when the poller stopped itself due to a perceived overlay
+		// disconnect but was never removed from the map, so the manager never
+		// restarted it. Remove it so we can create a fresh poller below.
+		select {
+		case <-existing.IsDone():
+			m.logger.Info("Detected zombie poller (exited but not removed), replacing",
+				zap.String("stream_id", stream.StreamID),
 				zap.String("channel_id", stream.ChannelID),
-				zap.Error(err),
 			)
+			delete(m.pollers, stream.StreamID)
+			delete(m.activeStreams, stream.StreamID)
+		default:
+			m.logger.Debug("Poller already running for stream",
+				zap.String("stream_id", stream.StreamID),
+			)
+			// Update database status even when poller already exists
+			// This ensures database reflects actual polling state
+			if err := m.repository.SetSourceActive(ctx, stream.ChannelID, true); err != nil {
+				m.logger.Error("Failed to update source status for existing poller",
+					zap.String("channel_id", stream.ChannelID),
+					zap.Error(err),
+				)
+			}
+			return nil
 		}
-		return nil
 	}
 
 	if m.leader != nil {
@@ -1207,6 +1221,22 @@ func (m *Manager) cleanupInactivePollers(ctx context.Context, activeChannels map
 		stream := m.activeStreams[streamID]
 		if stream == nil {
 			continue
+		}
+
+		// Remove zombie pollers (goroutine exited but still in map).
+		// startPoller handles restarting them on the next sync.
+		select {
+		case <-poller.IsDone():
+			m.logger.Info("Removing zombie poller from map (will be restarted by syncStreams)",
+				zap.String("stream_id", streamID),
+				zap.String("channel_id", stream.ChannelID),
+			)
+			delete(m.pollers, streamID)
+			delete(m.activeStreams, streamID)
+			// Don't release leadership here — the poller may have exited due to a
+			// transient disconnect and we want the same replica to reclaim it quickly
+			continue
+		default:
 		}
 
 		// Check if channel is still active
@@ -1627,19 +1657,32 @@ func (m *Manager) handleOverlayDisconnected(ctx context.Context, overlayID strin
 // IsChannelConnected checks if any overlay is connected for a channel.
 // Implements ConnectionChecker interface for connection-aware polling.
 // Queries Redis directly for real-time connection state to avoid stale in-memory state.
+// Uses channelConnectedOverlays (all overlays for this channel) rather than the single
+// OverlayID stored on the stream, so pollers survive when one of multiple overlays disconnects.
 func (m *Manager) IsChannelConnected(ctx context.Context, channelID string) (bool, error) {
-	// Get all active streams for this channel
-	m.mu.RLock()
-	var streamOverlayIDs []string
-	for _, stream := range m.activeStreams {
-		if stream.ChannelID == channelID {
-			streamOverlayIDs = append(streamOverlayIDs, stream.OverlayID)
-		}
+	// Get all overlays connected for this channel (not just the one that triggered detection)
+	m.connMu.RLock()
+	overlaySet := m.channelConnectedOverlays[channelID]
+	overlayIDs := make([]string, 0, len(overlaySet))
+	for overlayID := range overlaySet {
+		overlayIDs = append(overlayIDs, overlayID)
 	}
-	m.mu.RUnlock()
+	m.connMu.RUnlock()
+
+	// Fall back to the stream's OverlayID if channelConnectedOverlays has no entry yet
+	// (e.g., on first poll before syncStreams has run)
+	if len(overlayIDs) == 0 {
+		m.mu.RLock()
+		for _, stream := range m.activeStreams {
+			if stream.ChannelID == channelID && stream.OverlayID != "" {
+				overlayIDs = append(overlayIDs, stream.OverlayID)
+			}
+		}
+		m.mu.RUnlock()
+	}
 
 	// Check if any of these overlays are connected (query Redis directly for real-time state)
-	for _, overlayID := range streamOverlayIDs {
+	for _, overlayID := range overlayIDs {
 		key := "overlay:connected:" + overlayID
 		exists, err := m.redisClient.Exists(ctx, key).Result()
 
