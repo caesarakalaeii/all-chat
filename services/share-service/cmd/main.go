@@ -170,10 +170,11 @@ func main() {
 		api.POST("/shares/:id/reject", shareHandler.RejectRequest)
 
 		// Admin routes — requires valid JWT + admin role
-		adminRoutes := api.Group("/admin")
+		// NOTE: mounted at /admin/premium/... to avoid routing conflict with auth-service /admin/users
+		adminRoutes := api.Group("/admin/premium")
 		adminRoutes.Use(middleware.AdminOnly())
 		{
-			adminRoutes.POST("/users/:id/premium", adminHandler.SetUserPremium)
+			adminRoutes.POST("/users/:id", adminHandler.SetUserPremium)
 		}
 	}
 

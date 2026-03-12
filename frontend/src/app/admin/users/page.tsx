@@ -234,7 +234,7 @@ export default function UsersPage() {
     setPremiumLoading(true);
     try {
       const token = localStorage.getItem('jwt_token');
-      const response = await fetch(`/api/v1/admin/users/${userId}/premium`, {
+      const response = await fetch(`/api/v1/admin/premium/users/${userId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
