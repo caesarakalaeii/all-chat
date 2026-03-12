@@ -5,12 +5,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 // LeadershipCoordinator maintains leadership leases per stream ID.
 type LeadershipCoordinator struct {
 	platform string
+	callerID string // stable identity for this process, passed to source-manager
 	client   LeadershipClient
 	logger   *zap.Logger
 
@@ -26,12 +28,15 @@ type leaseEntry struct {
 }
 
 // NewLeadershipCoordinator returns a coordinator for a specific platform.
+// A stable callerID is generated once per process so claim/renew/release always
+// carry the same identity regardless of which source-manager pod handles the request.
 func NewLeadershipCoordinator(platform string, client LeadershipClient, interval time.Duration, logger *zap.Logger) *LeadershipCoordinator {
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
 	coord := &LeadershipCoordinator{
 		platform: platform,
+		callerID: uuid.New().String(),
 		client:   client,
 		logger:   logger,
 		interval: interval,
@@ -58,7 +63,7 @@ func (c *LeadershipCoordinator) EnsureLeadership(ctx context.Context, streamID s
 	}
 	c.mu.Unlock()
 
-	acquired, err := c.client.ClaimLeadership(ctx, c.platform, streamID)
+	acquired, err := c.client.ClaimLeadership(ctx, c.platform, streamID, c.callerID)
 	if err != nil {
 		c.observe("claim_error")
 		return false, err
@@ -106,7 +111,7 @@ func (c *LeadershipCoordinator) Release(streamID string) {
 	}
 
 	go func() {
-		if err := c.client.ReleaseLeadership(context.Background(), c.platform, streamID); err != nil {
+		if err := c.client.ReleaseLeadership(context.Background(), c.platform, streamID, c.callerID); err != nil {
 			if c.logger != nil {
 				c.logger.Warn("Failed to release leadership",
 					zap.String("platform", c.platform),
@@ -139,7 +144,7 @@ func (c *LeadershipCoordinator) Stop() {
 
 	for _, id := range streams {
 		go func(streamID string) {
-			if err := c.client.ReleaseLeadership(context.Background(), c.platform, streamID); err != nil {
+			if err := c.client.ReleaseLeadership(context.Background(), c.platform, streamID, c.callerID); err != nil {
 				if c.logger != nil {
 					c.logger.Warn("Failed to release leadership",
 						zap.String("platform", c.platform),
@@ -234,7 +239,7 @@ func (c *LeadershipCoordinator) tryRenewWithRetry(entry *leaseEntry) bool {
 	const baseDelay = 100 * time.Millisecond
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		ok, err := c.client.RenewLeadership(context.Background(), c.platform, entry.streamID)
+		ok, err := c.client.RenewLeadership(context.Background(), c.platform, entry.streamID, c.callerID)
 
 		if err == nil {
 			if !ok {
