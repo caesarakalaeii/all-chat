@@ -515,6 +515,19 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		Status:    "connected",
 	})
 
+	// Mark source active in the DB so the cleanup job doesn't deactivate it.
+	// Fire-and-forget: log on failure but don't block poller startup.
+	if m.smClient != nil {
+		go func() {
+			if err := m.smClient.ActivateSource(context.Background(), "youtube", channelID); err != nil {
+				m.logger.Warn("Failed to activate source in DB",
+					zap.String("channel_id", channelID),
+					zap.Error(err),
+				)
+			}
+		}()
+	}
+
 	return nil
 }
 

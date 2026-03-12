@@ -143,6 +143,28 @@ func (h *SourceHandler) ReleaseLeadership(c *gin.Context) {
 	})
 }
 
+// ActivateSource marks a source as active and refreshes its updated_at timestamp.
+// Listeners POST to this when they start polling a channel so the cleanup job
+// doesn't deactivate the source due to staleness.
+func (h *SourceHandler) ActivateSource(c *gin.Context) {
+	var req struct {
+		Platform  string `json:"platform" binding:"required"`
+		ChannelID string `json:"channel_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	n, err := h.registry.ActivateSource(c.Request.Context(), req.Platform, req.ChannelID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to activate source"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"activated": n > 0, "rows_updated": n})
+}
+
 // GetLeadershipStatus returns leadership status
 func (h *SourceHandler) GetLeadershipStatus(c *gin.Context) {
 	platform := c.Query("platform")

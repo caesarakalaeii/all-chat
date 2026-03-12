@@ -206,6 +206,32 @@ func (c *Client) ReleaseLeadership(ctx context.Context, platform, streamID, call
 	return nil
 }
 
+// ActivateSource marks a channel's source as active in the DB.
+// Listeners call this when they start polling to prevent the cleanup job from
+// deactivating the source due to staleness.
+func (c *Client) ActivateSource(ctx context.Context, platform, channelID string) error {
+	reqBody := map[string]string{
+		"platform":   platform,
+		"channel_id": channelID,
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, "/sources/activate", nil, reqBody)
+	if err != nil {
+		return err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return ErrUnauthorized
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.decodeError(resp)
+	}
+	return nil
+}
+
 func (c *Client) newRequest(ctx context.Context, method, endpoint string, query url.Values, body interface{}) (*http.Request, error) {
 	if c.tokenSource == nil {
 		return nil, fmt.Errorf("token source is required")

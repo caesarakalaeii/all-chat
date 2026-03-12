@@ -178,6 +178,7 @@ func main() {
 	// Source handlers
 	sourceHandler := handlers.NewSourceHandler(sourceRegistry, leaderManager)
 	protected.GET("/sources", sourceHandler.GetSources)
+	protected.POST("/sources/activate", sourceHandler.ActivateSource)
 	protected.POST("/leadership/claim", sourceHandler.ClaimLeadership)
 	protected.POST("/leadership/renew", sourceHandler.RenewLeadership)
 	protected.POST("/leadership/release", sourceHandler.ReleaseLeadership)

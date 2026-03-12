@@ -10,8 +10,10 @@ import (
 )
 
 const (
-	// DefaultStaleThreshold - sources not updated in this time are marked inactive
-	DefaultStaleThreshold = 5 * time.Minute
+	// DefaultStaleThreshold - sources not updated in this time are marked inactive.
+	// Must be long enough that manual activations and future listener heartbeats aren't
+	// prematurely cleaned up. Set to 24h until all listeners implement proper heartbeating.
+	DefaultStaleThreshold = 24 * time.Hour
 
 	// DefaultCleanupInterval - how often to run cleanup
 	DefaultCleanupInterval = 2 * time.Minute
