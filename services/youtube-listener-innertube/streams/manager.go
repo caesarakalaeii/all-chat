@@ -748,13 +748,28 @@ func (m *Manager) syncSources(ctx context.Context) {
 		m.mu.RUnlock()
 
 		if !isDiscovering && !isPolling {
-			// Start async discovery for this channel
-			m.logger.Info("Starting async discovery for new YouTube source",
-				zap.String("channel_id", channelID),
-				zap.Strings("overlay_ids", overlayIDs),
-			)
-			// Use first overlay ID for discovery (all overlays will get messages once polling starts)
-			m.startAsyncDiscovery(channelID, overlayIDs[0])
+			// Before starting discovery, check if another pod already holds leadership
+			// for a known video ID. If so, skip — we don't need to discover or publish
+			// spurious "reconnecting" statuses when another replica is actively polling.
+			anotherPodPolling := false
+			if cachedVideoID, err := m.repository.GetChannelVideoMapping(ctx, channelID); err == nil && cachedVideoID != "" {
+				leaderKey := "leader:youtube:" + cachedVideoID
+				if val, err := m.redisClient.Get(ctx, leaderKey).Result(); err == nil && val != "" {
+					anotherPodPolling = true
+					m.logger.Debug("Another pod holds leadership for channel, skipping discovery",
+						zap.String("channel_id", channelID),
+						zap.String("video_id", cachedVideoID),
+					)
+				}
+			}
+
+			if !anotherPodPolling {
+				m.logger.Info("Starting async discovery for new YouTube source",
+					zap.String("channel_id", channelID),
+					zap.Strings("overlay_ids", overlayIDs),
+				)
+				m.startAsyncDiscovery(channelID, overlayIDs[0])
+			}
 		}
 	}
 }
