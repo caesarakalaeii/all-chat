@@ -158,14 +158,16 @@ func main() {
 		api.POST("/shares/:id/mark-seen", shareHandler.MarkAcceptanceSeen)       // No premium - all senders can mark seen
 		api.POST("/shares/:id/revoke", shareHandler.RevokeShareRequest)          // No premium - revoking should always be allowed
 
-		// Premium-only routes (create and accept share requests)
+		// Premium-only routes (only creating a share requires premium)
 		premiumRoutes := api.Group("")
 		premiumRoutes.Use(localMiddleware.RequirePremium(dbPool, log)) // Premium middleware
 		{
 			premiumRoutes.POST("/shares", shareHandler.CreateRequest)
-			premiumRoutes.POST("/shares/:id/accept", shareHandler.AcceptRequest)
-			premiumRoutes.POST("/shares/:id/reject", shareHandler.RejectRequest)
 		}
+
+		// Non-premium routes for receivers (accept/reject should not require premium)
+		api.POST("/shares/:id/accept", shareHandler.AcceptRequest)
+		api.POST("/shares/:id/reject", shareHandler.RejectRequest)
 
 		// Admin routes — requires valid JWT + admin role
 		adminRoutes := api.Group("/admin")
