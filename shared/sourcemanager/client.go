@@ -27,9 +27,9 @@ var (
 
 // LeadershipClient describes the subset of client functionality used for leadership.
 type LeadershipClient interface {
-	ClaimLeadership(ctx context.Context, platform, streamID string) (bool, error)
-	RenewLeadership(ctx context.Context, platform, streamID string) (bool, error)
-	ReleaseLeadership(ctx context.Context, platform, streamID string) error
+	ClaimLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error)
+	RenewLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error)
+	ReleaseLeadership(ctx context.Context, platform, streamID, callerID string) error
 }
 
 // Client talks to the Source Manager HTTP API.
@@ -107,10 +107,11 @@ func (c *Client) GetSources(ctx context.Context, platform string) ([]*ActiveSour
 }
 
 // ClaimLeadership attempts to become leader for the given stream ID.
-func (c *Client) ClaimLeadership(ctx context.Context, platform, streamID string) (bool, error) {
+func (c *Client) ClaimLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error) {
 	reqBody := map[string]string{
 		"platform":  platform,
 		"stream_id": streamID,
+		"caller_id": callerID,
 	}
 
 	req, err := c.newRequest(ctx, http.MethodPost, "/leadership/claim", nil, reqBody)
@@ -140,10 +141,11 @@ func (c *Client) ClaimLeadership(ctx context.Context, platform, streamID string)
 }
 
 // RenewLeadership refreshes an existing leadership claim.
-func (c *Client) RenewLeadership(ctx context.Context, platform, streamID string) (bool, error) {
+func (c *Client) RenewLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error) {
 	reqBody := map[string]string{
 		"platform":  platform,
 		"stream_id": streamID,
+		"caller_id": callerID,
 	}
 
 	req, err := c.newRequest(ctx, http.MethodPost, "/leadership/renew", nil, reqBody)
@@ -176,10 +178,11 @@ func (c *Client) RenewLeadership(ctx context.Context, platform, streamID string)
 }
 
 // ReleaseLeadership releases a leadership claim.
-func (c *Client) ReleaseLeadership(ctx context.Context, platform, streamID string) error {
+func (c *Client) ReleaseLeadership(ctx context.Context, platform, streamID, callerID string) error {
 	reqBody := map[string]string{
 		"platform":  platform,
 		"stream_id": streamID,
+		"caller_id": callerID,
 	}
 
 	req, err := c.newRequest(ctx, http.MethodPost, "/leadership/release", nil, reqBody)
