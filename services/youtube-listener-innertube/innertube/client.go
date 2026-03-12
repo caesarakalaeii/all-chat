@@ -24,7 +24,7 @@ const (
 
 	// DefaultClientVersion is the YouTube web client version
 	// Update periodically to match current YouTube web client
-	DefaultClientVersion = "2.20250221.00.00"
+	DefaultClientVersion = "2.20260312.01.00"
 
 	// DefaultTimeout for HTTP requests
 	DefaultTimeout = 10 * time.Second
