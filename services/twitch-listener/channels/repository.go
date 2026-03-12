@@ -13,6 +13,7 @@ type RepositoryInterface interface {
 	GetActiveChannels(ctx context.Context) ([]models.ChannelSource, error)
 	GetUniqueChannels(ctx context.Context) ([]string, error)
 	GetSourceIDsForChannels(ctx context.Context, channels []string) map[string]string
+	GetOverlayIDsForChannel(ctx context.Context, channelName string) ([]string, error)
 	SetSourceActive(ctx context.Context, channelName string, isActive bool) error
 }
 
@@ -130,6 +131,35 @@ func (r *Repository) GetSourceIDsForChannels(ctx context.Context, channels []str
 	}
 
 	return result
+}
+
+// GetOverlayIDsForChannel returns all overlay IDs that have this channel as a source
+// Used for cross-platform event publishing
+func (r *Repository) GetOverlayIDsForChannel(ctx context.Context, channelName string) ([]string, error) {
+	query := `
+		SELECT DISTINCT overlay_id
+		FROM overlay_chat_sources
+		WHERE platform = 'twitch'
+		  AND channel_name = $1
+		  AND is_active = true
+	`
+
+	rows, err := r.db.Query(ctx, query, channelName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query overlay IDs: %w", err)
+	}
+	defer rows.Close()
+
+	var overlayIDs []string
+	for rows.Next() {
+		var overlayID string
+		if err := rows.Scan(&overlayID); err != nil {
+			return nil, fmt.Errorf("failed to scan overlay ID: %w", err)
+		}
+		overlayIDs = append(overlayIDs, overlayID)
+	}
+
+	return overlayIDs, rows.Err()
 }
 
 // SetSourceActive updates the is_active flag for all Twitch sources with the given channel name

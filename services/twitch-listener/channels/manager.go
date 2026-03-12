@@ -474,6 +474,29 @@ func (m *Manager) joinChannel(ctx context.Context, channel string) {
 	m.logger.Info("Joined channel",
 		zap.String("channel", channel),
 	)
+
+	// Publish cross-platform event to notify YouTube listener (YOUTUBE-DISCOVERY-TRIGGER)
+	// This allows YouTube to reset its discovery backoff when Twitch goes live
+	overlayIDs, err := m.repo.GetOverlayIDsForChannel(ctx, channel)
+	if err != nil {
+		m.logger.Warn("Failed to get overlay IDs for cross-platform event",
+			zap.String("channel", channel),
+			zap.Error(err),
+		)
+		return
+	}
+
+	for _, overlayID := range overlayIDs {
+		eventChannel := fmt.Sprintf("platform:event:%s", overlayID)
+		event := fmt.Sprintf(`{"platform":"twitch","channel":"%s","timestamp":"%s"}`,
+			channel, time.Now().Format(time.RFC3339))
+		if err := m.redisClient.Publish(ctx, eventChannel, event).Err(); err != nil {
+			m.logger.Warn("Failed to publish cross-platform event",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		}
+	}
 }
 
 // partChannelLocked parts a channel and removes from tracking. Caller must hold m.mu.

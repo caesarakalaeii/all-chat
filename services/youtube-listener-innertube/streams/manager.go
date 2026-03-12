@@ -36,11 +36,12 @@ type Stream struct {
 
 // DiscoveryState tracks ongoing discovery attempts for a channel
 type DiscoveryState struct {
-	ChannelID  string
-	OverlayID  string
-	StartedAt  time.Time
-	Attempts   int
-	CancelFunc context.CancelFunc
+	ChannelID        string
+	OverlayID        string
+	StartedAt        time.Time
+	Attempts         int
+	CancelFunc       context.CancelFunc
+	ResetBackoffChan chan struct{} // Signal to reset backoff when other platforms go live
 }
 
 // Manager manages active YouTube streams and coordinates with source-manager
@@ -232,16 +233,21 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
 	// Create discovery state with cancellable context
 	discoveryCtx, cancel := context.WithCancel(context.Background())
 	state := &DiscoveryState{
-		ChannelID:  channelID,
-		OverlayID:  overlayID,
-		StartedAt:  time.Now(),
-		Attempts:   0,
-		CancelFunc: cancel,
+		ChannelID:        channelID,
+		OverlayID:        overlayID,
+		StartedAt:        time.Now(),
+		Attempts:         0,
+		CancelFunc:       cancel,
+		ResetBackoffChan: make(chan struct{}, 1), // Buffered to prevent blocking
 	}
 
 	m.mu.Lock()
 	m.discovering[channelID] = state
 	m.mu.Unlock()
+
+	// Subscribe to cross-platform events for this overlay
+	m.wg.Add(1)
+	go m.subscribeToPlatformEvents(discoveryCtx, state)
 
 	// Start discovery loop in background
 	m.wg.Add(1)
@@ -339,15 +345,60 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			NextRetryAt: &nextRetry,
 		})
 
-		// Wait with backoff or context cancellation
+		// Wait with backoff, reset signal, or context cancellation
 		timer := time.NewTimer(backoffDuration)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			m.cleanupDiscoveryState(state.ChannelID)
 			return
+		case <-state.ResetBackoffChan:
+			// Cross-platform trigger: another platform went live, retry immediately
+			timer.Stop()
+			m.logger.Info("Backoff reset by cross-platform event, retrying discovery immediately",
+				zap.String("channel_id", state.ChannelID),
+				zap.String("overlay_id", state.OverlayID),
+			)
+			// Continue to next attempt immediately
 		case <-timer.C:
-			// Continue to next attempt
+			// Backoff elapsed, continue to next attempt
+		}
+	}
+}
+
+// subscribeToPlatformEvents subscribes to cross-platform events for an overlay
+// and signals backoff reset when other platforms go live
+func (m *Manager) subscribeToPlatformEvents(ctx context.Context, state *DiscoveryState) {
+	defer m.wg.Done()
+
+	eventChannel := fmt.Sprintf("platform:event:%s", state.OverlayID)
+	pubsub := m.redisClient.Subscribe(ctx, eventChannel)
+	defer pubsub.Close()
+
+	m.logger.Info("Subscribed to cross-platform events",
+		zap.String("channel_id", state.ChannelID),
+		zap.String("overlay_id", state.OverlayID),
+		zap.String("event_channel", eventChannel),
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-pubsub.Channel():
+			// Another platform went live on this overlay - signal backoff reset
+			m.logger.Info("Cross-platform event received, signaling backoff reset",
+				zap.String("channel_id", state.ChannelID),
+				zap.String("overlay_id", state.OverlayID),
+				zap.String("event", msg.Payload),
+			)
+
+			// Non-blocking send to avoid deadlock
+			select {
+			case state.ResetBackoffChan <- struct{}{}:
+			default:
+				// Channel full or discovery not waiting - ignore
+			}
 		}
 	}
 }
