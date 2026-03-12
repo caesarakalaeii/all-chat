@@ -18,6 +18,12 @@ type ClientInterface interface {
 	GetPollInterval(resp *innertube.LiveChatResponse) time.Duration
 }
 
+// ContinuationRefresher can fetch a fresh continuation token for a video.
+// Used to recover when a continuation goes stale (persistent zero-action responses).
+type ContinuationRefresher interface {
+	GetInitialContinuation(ctx context.Context, videoID string) (string, error)
+}
+
 // MessageCallback is called with parsed messages after each successful poll
 type MessageCallback func(messages []*innertube.RawChatMessage)
 
@@ -48,6 +54,11 @@ type Poller struct {
 	logLevel        string // "debug" or "info"
 	messageCallback MessageCallback
 	metrics         *metrics.InnerTubeMetrics
+	refresher       ContinuationRefresher // Optional: re-fetches continuation when stale
+
+	// Stale-continuation detection: refresh after this many consecutive zero-action polls
+	zeroActionCount      int
+	zeroActionThreshold  int
 
 	// Graceful shutdown
 	ctx    context.Context
@@ -57,7 +68,8 @@ type Poller struct {
 
 // PollerOptions configures the Poller
 type PollerOptions struct {
-	// Interval is the fixed polling interval (default: 2s)
+	// Interval is the minimum polling interval (default: 2s).
+	// The actual interval will be max(Interval, YouTube's recommended timeoutDurationMillis).
 	Interval time.Duration
 
 	// LogLevel controls verbosity: "debug" or "info" (default: "info")
@@ -74,6 +86,15 @@ type PollerOptions struct {
 
 	// Metrics for Prometheus instrumentation (optional)
 	Metrics *metrics.InnerTubeMetrics
+
+	// Refresher fetches a fresh continuation token when the current one goes stale.
+	// When ZeroActionThreshold consecutive polls return 0 actions, the continuation
+	// is re-fetched from the YouTube /next API so the poller re-anchors to live position.
+	Refresher ContinuationRefresher
+
+	// ZeroActionThreshold is the number of consecutive zero-action polls before
+	// attempting a continuation refresh (default: 150, ~5 minutes at 2s interval).
+	ZeroActionThreshold int
 }
 
 // NewPoller creates a new polling loop manager
@@ -99,7 +120,7 @@ func NewPoller(
 		opts = &PollerOptions{}
 	}
 
-	// Default interval: 2 seconds (user decision: fixed, not adaptive)
+	// Default interval: 2 seconds minimum
 	interval := opts.Interval
 	if interval == 0 {
 		interval = 2 * time.Second
@@ -111,19 +132,27 @@ func NewPoller(
 		logLevel = "info"
 	}
 
+	// Default zero-action threshold: 150 polls (~5 minutes at 2s)
+	zeroActionThreshold := opts.ZeroActionThreshold
+	if zeroActionThreshold == 0 {
+		zeroActionThreshold = 150
+	}
+
 	return &Poller{
-		client:       client,
-		continuation: initialContinuation,
-		channelID:    channelID,
-		videoID:      opts.VideoID,
-		interval:     interval,
-		backoff:      NewBackoff(logger),
-		state:        NewState(),
-		repository:   opts.Repository,
-		publisher:    opts.Publisher,
-		logger:       logger,
-		logLevel:     logLevel,
-		metrics:      opts.Metrics,
+		client:              client,
+		continuation:        initialContinuation,
+		channelID:           channelID,
+		videoID:             opts.VideoID,
+		interval:            interval,
+		backoff:             NewBackoff(logger),
+		state:               NewState(),
+		repository:          opts.Repository,
+		publisher:           opts.Publisher,
+		logger:              logger,
+		logLevel:            logLevel,
+		metrics:             opts.Metrics,
+		refresher:           opts.Refresher,
+		zeroActionThreshold: zeroActionThreshold,
 	}
 }
 
@@ -198,48 +227,35 @@ func (p *Poller) SetMessageCallback(callback MessageCallback) {
 func (p *Poller) pollingLoop() {
 	defer p.wg.Done()
 
-	ticker := time.NewTicker(p.interval)
-	defer ticker.Stop()
-
 	p.logger.Debug("Polling loop started")
 
 	for {
 		select {
 		case <-p.ctx.Done():
-			// Graceful shutdown requested
 			p.logger.Info("Polling loop shutting down",
 				zap.String("reason", "context_cancelled"))
 			return
-
-		case <-ticker.C:
-			// Execute poll iteration
-			p.poll()
+		default:
 		}
+
+		p.poll()
 	}
 }
 
-// poll executes a single poll iteration
+// poll executes a single poll iteration, then sleeps for the YouTube-recommended interval.
 func (p *Poller) poll() {
-	if p.logLevel == "debug" {
-		// Debug mode: log every poll attempt
-		continuationPreview := p.continuation
-		if len(continuationPreview) > 20 {
-			continuationPreview = continuationPreview[:20] + "..."
-		}
-		p.logger.Debug("Polling InnerTube",
-			zap.String("continuation", continuationPreview))
-	}
-
 	// Call InnerTube API
 	resp, err := p.client.GetLiveChatReplay(p.ctx, p.continuation)
 	if err != nil {
 		p.handleError(err)
+		p.sleep(p.interval)
 		return
 	}
 
 	// Nil response check
 	if resp == nil {
 		p.logger.Warn("Received nil response from InnerTube API")
+		p.sleep(p.interval)
 		return
 	}
 
@@ -252,7 +268,6 @@ func (p *Poller) poll() {
 		p.state.SetState(StateOffline)
 		p.state.SetError(nil)
 
-		// Handle offline event: delete Redis mapping if repository available
 		if p.repository != nil && p.videoID != "" {
 			if err := HandleStreamOffline(p.ctx, p.channelID, p.videoID, p.repository, p.publisher, p.logger); err != nil {
 				p.logger.Debug("HandleStreamOffline completed",
@@ -260,7 +275,6 @@ func (p *Poller) poll() {
 			}
 		}
 
-		// Stop polling loop (context cancel)
 		if p.cancel != nil {
 			p.cancel()
 		}
@@ -270,25 +284,27 @@ func (p *Poller) poll() {
 	// Extract continuation token for next poll
 	nextContinuation := p.client.ExtractContinuation(resp)
 	if nextContinuation == "" {
-		// No continuation token = stream ended (fallback detection)
 		p.logger.Info("Stream ended (no continuation token)")
 		p.state.SetState(StateOffline)
 		p.state.SetError(nil)
 
-		// Handle offline event
 		if p.repository != nil && p.videoID != "" {
 			_ = HandleStreamOffline(p.ctx, p.channelID, p.videoID, p.repository, p.publisher, p.logger)
 		}
 
-		// Stop polling loop
 		if p.cancel != nil {
 			p.cancel()
 		}
 		return
 	}
 
-	// Parse messages using package-level ParseMessages function
-	// Check if continuation contents exist before parsing
+	// Determine sleep interval: respect YouTube's recommended timeout, floor at p.interval
+	sleepDuration := p.interval
+	if ytInterval := p.client.GetPollInterval(resp); ytInterval > sleepDuration {
+		sleepDuration = ytInterval
+	}
+
+	// Parse messages
 	var actions []innertube.ChatAction
 	if resp.ContinuationContents.LiveChatContinuation.Actions != nil {
 		actions = resp.ContinuationContents.LiveChatContinuation.Actions
@@ -298,13 +314,10 @@ func (p *Poller) poll() {
 		p.logger.Warn("Failed to parse messages",
 			zap.Error(err),
 			zap.Int("action_count", len(actions)))
-		// Continue polling despite parse errors (non-fatal)
 	}
 
-	// Log parsed messages in debug mode
 	if p.logLevel == "debug" && len(messages) > 0 {
-		p.logger.Debug("Parsed messages",
-			zap.Int("count", len(messages)))
+		p.logger.Debug("Parsed messages", zap.Int("count", len(messages)))
 		for _, msg := range messages {
 			p.logger.Debug("Message",
 				zap.String("user", msg.Username),
@@ -312,16 +325,53 @@ func (p *Poller) poll() {
 		}
 	}
 
-	// Update state after successful poll
+	// Update state
 	p.continuation = nextContinuation
 	p.state.SetState(StateActive)
 	p.state.SetError(nil)
 	p.state.UpdatePollTime()
 	p.backoff.Reset()
 
-	// Call message callback with parsed messages (if callback is set)
+	// Track consecutive zero-action polls and refresh continuation if stale
+	if len(actions) == 0 {
+		p.zeroActionCount++
+		if p.refresher != nil && p.videoID != "" && p.zeroActionCount >= p.zeroActionThreshold {
+			p.zeroActionCount = 0
+			p.logger.Info("Continuation appears stale, refreshing from YouTube /next API",
+				zap.String("channel_id", p.channelID),
+				zap.String("video_id", p.videoID),
+				zap.Int("zero_action_polls", p.zeroActionThreshold),
+			)
+			if fresh, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID); err != nil {
+				p.logger.Warn("Failed to refresh continuation, continuing with current token",
+					zap.String("video_id", p.videoID),
+					zap.Error(err),
+				)
+			} else {
+				p.continuation = fresh
+				p.logger.Info("Continuation refreshed successfully",
+					zap.String("channel_id", p.channelID),
+					zap.String("video_id", p.videoID),
+				)
+			}
+		}
+	} else {
+		p.zeroActionCount = 0
+	}
+
+	// Call message callback
 	if p.messageCallback != nil && len(messages) > 0 {
 		p.messageCallback(messages)
+	}
+
+	p.sleep(sleepDuration)
+}
+
+// sleep blocks for d or until context is cancelled.
+func (p *Poller) sleep(d time.Duration) {
+	select {
+	case <-time.After(d):
+	case <-p.ctx.Done():
 	}
 }
 

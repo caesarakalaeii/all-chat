@@ -494,9 +494,11 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		channelID,
 		m.logger,
 		&poller.PollerOptions{
-			Interval: 2 * time.Second,
-			VideoID:  videoID,
-			Metrics:  m.metrics,
+			Interval:            2 * time.Second,
+			VideoID:             videoID,
+			Metrics:             m.metrics,
+			Refresher:           m.discovery,
+			ZeroActionThreshold: 150, // ~5 minutes at 2s floor interval
 		},
 	)
 
