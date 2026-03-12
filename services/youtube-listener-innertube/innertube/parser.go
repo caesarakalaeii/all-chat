@@ -167,6 +167,11 @@ func parseTextMessage(renderer *LiveChatTextMessageRenderer, channelID string) (
 		Tags:      make(map[string]string),
 	}
 
+	// Add avatar URL from AuthorPhoto thumbnails
+	if avatarURL := bestThumbnailURL(renderer.AuthorPhoto); avatarURL != "" {
+		msg.Tags["profile_image"] = avatarURL
+	}
+
 	// Add badges to tags if present
 	if len(renderer.AuthorBadges) > 0 {
 		badges := extractBadges(renderer.AuthorBadges)
@@ -224,6 +229,10 @@ func parsePaidMessage(renderer *LiveChatPaidMessageRenderer, channelID string) (
 		Tags:      make(map[string]string),
 		EventType: "super_chat",
 		EventData: eventData,
+	}
+
+	if avatarURL := bestThumbnailURL(renderer.AuthorPhoto); avatarURL != "" {
+		msg.Tags["profile_image"] = avatarURL
 	}
 
 	return msg, nil
@@ -284,6 +293,10 @@ func parseMembershipMessage(renderer *LiveChatMembershipItemRenderer, channelID 
 		EventData: eventData,
 	}
 
+	if avatarURL := bestThumbnailURL(renderer.AuthorPhoto); avatarURL != "" {
+		msg.Tags["profile_image"] = avatarURL
+	}
+
 	return msg, nil
 }
 
@@ -327,6 +340,10 @@ func parsePaidSticker(renderer *LiveChatPaidStickerRenderer, channelID string) (
 		Tags:      make(map[string]string),
 		EventType: "super_sticker",
 		EventData: eventData,
+	}
+
+	if avatarURL := bestThumbnailURL(renderer.AuthorPhoto); avatarURL != "" {
+		msg.Tags["profile_image"] = avatarURL
 	}
 
 	return msg, nil
@@ -418,6 +435,21 @@ func extractMilestoneMonths(text string) int {
 	}
 
 	return 0
+}
+
+// bestThumbnailURL returns the URL of the largest thumbnail from a Thumbnails list,
+// or the last one if dimensions are not available. Returns "" if the list is empty.
+func bestThumbnailURL(t Thumbnails) string {
+	if len(t.Thumbnails) == 0 {
+		return ""
+	}
+	best := t.Thumbnails[0]
+	for _, thumb := range t.Thumbnails[1:] {
+		if thumb.Width*thumb.Height > best.Width*best.Height {
+			best = thumb
+		}
+	}
+	return best.URL
 }
 
 // parseTimestampUsec converts a timestampUsec string to time.Time
