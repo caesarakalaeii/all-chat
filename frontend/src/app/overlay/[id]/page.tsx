@@ -38,6 +38,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [disableMessageFade, setDisableMessageFade] = useState(false);
   const [customCss, setCustomCss] = useState('');
   const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set());
+  const [configuredChannels, setConfiguredChannels] = useState<Map<string, Set<string>>>(new Map()); // platform → Set<channel_id>
   const [platformStatuses, setPlatformStatuses] = useState<Map<string, PlatformStatus>>(new Map());
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [forceReconnect, setForceReconnect] = useState(0);
@@ -86,15 +87,20 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
 
-        // Load active platforms from sources
+        // Load active platforms and configured channel IDs from sources
         if (Array.isArray(data.sources)) {
           const active = new Set<string>();
-          data.sources.forEach((source: { platform: string; is_active: boolean }) => {
+          const channels = new Map<string, Set<string>>();
+          data.sources.forEach((source: { platform: string; channel_id: string; is_active: boolean }) => {
             if (source.is_active) {
               active.add(source.platform);
             }
+            // Track all configured channel IDs regardless of is_active (listener manages active state)
+            if (!channels.has(source.platform)) channels.set(source.platform, new Set());
+            channels.get(source.platform)!.add(source.channel_id);
           });
           setActivePlatforms(active);
+          setConfiguredChannels(channels);
         }
       } catch (error) {
         console.warn('[OBS Overlay] Failed to load config', error);
@@ -269,14 +275,33 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           });
         }
 
-        // Handle platform status updates
+        // Handle platform status updates - only for channels configured on this overlay
         if (envelope.type === 'platform_status' && envelope.data) {
           const statusData = envelope.data as PlatformStatus;
-          setPlatformStatuses((prev) => {
-            const next = new Map(prev);
-            next.set(statusData.platform, statusData);
-            return next;
-          });
+          const channelId = (envelope.data as { channel_id?: string }).channel_id;
+          const platformChannels = configuredChannels.get(statusData.platform);
+          // Accept if no channel filter loaded yet, or if this channel is configured here
+          if (!channelId || !platformChannels || platformChannels.has(channelId)) {
+            // Mark platform as active when listener reports connected
+            if (statusData.status === 'connected') {
+              setActivePlatforms((prev) => {
+                if (prev.has(statusData.platform)) return prev;
+                const next = new Set(prev);
+                next.add(statusData.platform);
+                return next;
+              });
+            }
+            setPlatformStatuses((prev) => {
+              const next = new Map(prev);
+              // Don't overwrite connected with reconnecting from a different channel
+              const existing = prev.get(statusData.platform);
+              if (existing?.status === 'connected' && statusData.status === 'reconnecting') {
+                return prev;
+              }
+              next.set(statusData.platform, statusData);
+              return next;
+            });
+          }
         }
       } catch (error) {
         console.error('[OBS Overlay] Failed to parse message:', error);
@@ -315,7 +340,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         ws.close();
       }
     };
-  }, [id, maxMessages, forceReconnect]);
+  }, [id, maxMessages, forceReconnect, configuredChannels]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
