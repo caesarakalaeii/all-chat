@@ -43,7 +43,7 @@ func (r *Repository) FindOverlaysForMessage(ctx context.Context, platform, chann
 		    AND ocs.platform = 'shared_overlay'
 		    AND ocs.is_active = true
 		JOIN share_requests sr
-		    ON sr.sender_overlay_id = ocs.channel_id
+		    ON sr.sender_overlay_id = ocs.channel_id::uuid
 		    AND sr.status = 'accepted'
 		WHERE o.is_active = true
 		  AND sr.sender_overlay_id IN (
