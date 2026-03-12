@@ -47,6 +47,7 @@ type Poller struct {
 
 	mu                sync.RWMutex
 	stopChan          chan struct{}
+	doneChan          chan struct{} // closed when pollLoop exits (allows caller to detect dead pollers)
 	wg                sync.WaitGroup
 	lastStreamRequest time.Time
 
@@ -74,6 +75,7 @@ func NewPoller(
 		tokenStore:        tokenStore,
 		statusPublisher:   statusPublisher,
 		stopChan:          make(chan struct{}),
+		doneChan:          make(chan struct{}),
 		maxBackoff:        5 * time.Minute, // Maximum backoff of 5 minutes (only for errors)
 		backoffDuration:   0,               // Start with no backoff
 		consecutiveErrors: 0,
@@ -170,8 +172,15 @@ func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// IsDone returns a channel that is closed when the poller's poll loop has exited.
+// This allows the Manager to detect zombie pollers (exited but not removed from map).
+func (p *Poller) IsDone() <-chan struct{} {
+	return p.doneChan
+}
+
 // pollLoop continuously streams for new messages with exponential backoff only on errors
 func (p *Poller) pollLoop(ctx context.Context) {
+	defer close(p.doneChan)
 	defer p.wg.Done()
 
 	// CRITICAL FIX: Initialize local page token that Manager cannot overwrite
