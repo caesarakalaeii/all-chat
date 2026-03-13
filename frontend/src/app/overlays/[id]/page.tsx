@@ -470,6 +470,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
+  const [isPublicForViewers, setIsPublicForViewers] = useState(false)
   const [configLoaded, setConfigLoaded] = useState(false)
   const [isSavingConfig, setIsSavingConfig] = useState(false)
   const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -503,6 +504,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
       try {
         const overlayData = await overlaysApi.get(id)
         setOverlay(overlayData)
+        setIsPublicForViewers(overlayData.is_public_for_viewers)
 
         try {
           const sourcesData = await overlaysApi.getSources(id)
@@ -828,18 +830,21 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
     setIsSavingConfig(true)
     setConfigAlert(null)
     try {
-      await overlaysApi.updateConfig(id, {
-        display_settings: {
-          font_size: fontSize,
-          message_duration: messageDuration,
-          max_messages: maxMessages,
-          disable_message_fade: disableMessageFade,
-          platform_badge_position: platformBadgePosition,
-          platform_badge_style: platformBadgeStyle,
-          show_platform_badge: showPlatformBadge,
-        },
-        custom_css: useCustomCss ? customCss : '',
-      })
+      await Promise.all([
+        overlaysApi.updateConfig(id, {
+          display_settings: {
+            font_size: fontSize,
+            message_duration: messageDuration,
+            max_messages: maxMessages,
+            disable_message_fade: disableMessageFade,
+            platform_badge_position: platformBadgePosition,
+            platform_badge_style: platformBadgeStyle,
+            show_platform_badge: showPlatformBadge,
+          },
+          custom_css: useCustomCss ? customCss : '',
+        }),
+        overlaysApi.update(id, { is_public_for_viewers: isPublicForViewers }),
+      ])
       setConfigAlert({ type: 'success', message: 'Configuration saved!' })
     } catch (error) {
       console.error('[Editor] Failed to save config', error)
@@ -1127,6 +1132,22 @@ onAddManual={handleAddManual}
                 </label>
                 <p className="text-xs text-text-sub mt-1 ml-5">
                   Messages stay visible until max is reached
+                </p>
+              </div>
+
+              {/* Public Overlay */}
+              <div>
+                <label className="flex items-center gap-2 text-xs text-text-sub">
+                  <input
+                    type="checkbox"
+                    checked={isPublicForViewers}
+                    onChange={e => setIsPublicForViewers(e.target.checked)}
+                    className="accent-twitch"
+                  />
+                  Public Overlay
+                </label>
+                <p className="text-xs text-text-sub mt-1 ml-5">
+                  Allow viewers to see this overlay without logging in
                 </p>
               </div>
 
