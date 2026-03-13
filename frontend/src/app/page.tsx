@@ -13,7 +13,6 @@ import Link from 'next/link'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { BetaWarning } from '@/components/BetaWarning'
 import { InfinityLogo } from '@/components/InfinityLogo'
 import { PlatformBadge } from '@/components/ui/badge'
 import { PLATFORM_COLORS } from '@/lib/platform-colors'
@@ -151,7 +150,6 @@ const FEATURE_CARDS = [
 export default function LandingPage() {
   const router = useRouter()
   const { user, token } = useAuthStore()
-  const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | null>(null)
   const [msgCounts, setMsgCounts] = useState<Record<Platform, number> | null>(null)
 
   const { cardRefs, glowRefs } = useMagneticGlow(TOTAL_CARDS)
@@ -184,8 +182,18 @@ export default function LandingPage() {
     }
   }
 
-  const handleYouTubeLogin = () => {
-    setShowBetaWarning('youtube')
+  const handleYouTubeLogin = async () => {
+    try {
+      const response = await fetch('/api/v1/auth/youtube/login')
+      const data = await response.json()
+      if (data.auth_url) {
+        window.location.href = data.auth_url
+      } else {
+        toastManager.add({ title: 'Login failed', description: 'No auth URL returned. Try again.' })
+      }
+    } catch {
+      toastManager.add({ title: 'Login error', description: 'Failed to initiate YouTube login.' })
+    }
   }
 
   const handleKickLogin = async () => {
@@ -199,21 +207,6 @@ export default function LandingPage() {
       }
     } catch {
       toastManager.add({ title: 'Login error', description: 'Failed to initiate Kick login.' })
-    }
-  }
-
-  const proceedWithYouTubeLogin = async () => {
-    setShowBetaWarning(null)
-    try {
-      const response = await fetch('/api/v1/auth/youtube/login')
-      const data = await response.json()
-      if (data.auth_url) {
-        window.location.href = data.auth_url
-      } else {
-        toastManager.add({ title: 'Login failed', description: 'No auth URL returned. Try again.' })
-      }
-    } catch {
-      toastManager.add({ title: 'Login error', description: 'Failed to initiate YouTube login.' })
     }
   }
 
@@ -392,17 +385,6 @@ export default function LandingPage() {
         </p>
       </footer>
 
-      {/* Beta Warning Dialog */}
-      {showBetaWarning && (
-        <BetaWarning
-          platform={showBetaWarning}
-          onCancel={() => setShowBetaWarning(null)}
-          onContinue={() => {
-            setShowBetaWarning(null)
-            proceedWithYouTubeLogin()
-          }}
-        />
-      )}
     </main>
   )
 }
