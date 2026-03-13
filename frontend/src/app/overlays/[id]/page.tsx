@@ -863,6 +863,17 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
     }
   }
 
+  async function handleUnsetExtensionOverlay() {
+    try {
+      const updated = await overlaysApi.update(id, { is_public_for_viewers: false })
+      setIsPublicForViewers(false)
+      setOverlay(updated)
+      toastManager.add({ title: 'Extension overlay deactivated', type: 'success' })
+    } catch {
+      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
+    }
+  }
+
   // --- Loading / error states ---
 
   if (isLoading) {
@@ -975,7 +986,16 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
                     : 'Set this as the overlay shown to viewers via the browser extension.'}
                 </p>
               </div>
-              {!isPublicForViewers && (
+              {isPublicForViewers ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 text-xs text-text-sub hover:text-destructive"
+                  onClick={handleUnsetExtensionOverlay}
+                >
+                  Deactivate
+                </Button>
+              ) : (
                 <Button
                   variant="outline"
                   size="sm"
