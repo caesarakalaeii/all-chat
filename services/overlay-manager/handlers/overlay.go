@@ -16,6 +16,7 @@ type OverlayRepository interface {
 	ListByUserID(ctx context.Context, userID string) ([]*models.Overlay, error)
 	Update(ctx context.Context, overlay *models.Overlay) error
 	Delete(ctx context.Context, id string) error
+	UnsetAllPublicForUser(ctx context.Context, userID, excludeID string) error
 }
 
 // OverlayHandler handles HTTP requests for overlays
@@ -168,6 +169,15 @@ func (h *OverlayHandler) HandleUpdateOverlay(c *gin.Context) {
 	if err := overlay.Validate(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// If making this overlay public, unset all other public overlays for this user
+	// (only one public overlay per user is allowed)
+	if overlay.IsPublicForViewers {
+		if err := h.repo.UnsetAllPublicForUser(c.Request.Context(), userID.(string), overlayID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update overlay"})
+			return
+		}
 	}
 
 	// Update in database

@@ -23,7 +23,7 @@
 
 import { use, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronLeft, X, Clipboard, Share2 } from 'lucide-react'
+import { ChevronLeft, X, Clipboard, Share2, Puzzle } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { overlaysApi } from '@/lib/api/overlays'
 import { sharesApi } from '@/lib/api/shares'
@@ -830,21 +830,18 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
     setIsSavingConfig(true)
     setConfigAlert(null)
     try {
-      await Promise.all([
-        overlaysApi.updateConfig(id, {
-          display_settings: {
-            font_size: fontSize,
-            message_duration: messageDuration,
-            max_messages: maxMessages,
-            disable_message_fade: disableMessageFade,
-            platform_badge_position: platformBadgePosition,
-            platform_badge_style: platformBadgeStyle,
-            show_platform_badge: showPlatformBadge,
-          },
-          custom_css: useCustomCss ? customCss : '',
-        }),
-        overlaysApi.update(id, { is_public_for_viewers: isPublicForViewers }),
-      ])
+      await overlaysApi.updateConfig(id, {
+        display_settings: {
+          font_size: fontSize,
+          message_duration: messageDuration,
+          max_messages: maxMessages,
+          disable_message_fade: disableMessageFade,
+          platform_badge_position: platformBadgePosition,
+          platform_badge_style: platformBadgeStyle,
+          show_platform_badge: showPlatformBadge,
+        },
+        custom_css: useCustomCss ? customCss : '',
+      })
       setConfigAlert({ type: 'success', message: 'Configuration saved!' })
     } catch (error) {
       console.error('[Editor] Failed to save config', error)
@@ -852,6 +849,17 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
     } finally {
       setIsSavingConfig(false)
       setTimeout(() => setConfigAlert(null), 5000)
+    }
+  }
+
+  async function handleSetAsExtensionOverlay() {
+    try {
+      const updated = await overlaysApi.update(id, { is_public_for_viewers: true })
+      setIsPublicForViewers(true)
+      setOverlay(updated)
+      toastManager.add({ title: 'Extension overlay set', description: 'This overlay will be shown in the browser extension.', type: 'success' })
+    } catch {
+      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
     }
   }
 
@@ -947,6 +955,38 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
             <Share2 className="size-4" />
             Share Overlay
           </Button>
+
+          {/* 2c. Extension overlay */}
+          <Card className="p-4">
+            <div className="flex items-start gap-3">
+              <Puzzle className="size-4 text-twitch shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <p className="text-sm font-semibold text-text">Browser Extension Overlay</p>
+                  {isPublicForViewers && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-twitch/15 text-twitch border border-twitch/30">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-text-sub">
+                  {isPublicForViewers
+                    ? 'This overlay is shown to viewers via the browser extension at allch.at/c/caesarlp.'
+                    : 'Set this as the overlay shown to viewers via the browser extension.'}
+                </p>
+              </div>
+              {!isPublicForViewers && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 text-xs"
+                  onClick={handleSetAsExtensionOverlay}
+                >
+                  Set Active
+                </Button>
+              )}
+            </div>
+          </Card>
 
           {/* Premium required dialog */}
           {showPremiumRequired && (
@@ -1132,22 +1172,6 @@ onAddManual={handleAddManual}
                 </label>
                 <p className="text-xs text-text-sub mt-1 ml-5">
                   Messages stay visible until max is reached
-                </p>
-              </div>
-
-              {/* Public Overlay */}
-              <div>
-                <label className="flex items-center gap-2 text-xs text-text-sub">
-                  <input
-                    type="checkbox"
-                    checked={isPublicForViewers}
-                    onChange={e => setIsPublicForViewers(e.target.checked)}
-                    className="accent-twitch"
-                  />
-                  Public Overlay
-                </label>
-                <p className="text-xs text-text-sub mt-1 ml-5">
-                  Allow viewers to see this overlay without logging in
                 </p>
               </div>
 
