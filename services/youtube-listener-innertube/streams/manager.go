@@ -747,7 +747,22 @@ func (m *Manager) syncSources(ctx context.Context) {
 		}
 		m.mu.RUnlock()
 
-		if !isDiscovering && !isPolling {
+		if isPolling {
+			// Heartbeat: keep ocs.is_active = true in the DB while we are actively polling.
+			// This ensures (a) new overlay sources added while the poller is already running
+			// get activated, and (b) the cleanup job doesn't mark sources stale after 24 h.
+			go func(chID string, ids []string) {
+				if err := m.smClient.ActivateSource(context.Background(), "youtube", chID); err != nil {
+					m.logger.Warn("Failed to heartbeat-activate source",
+						zap.String("channel_id", chID),
+						zap.Error(err),
+					)
+				}
+			}(channelID, overlayIDs)
+			continue
+		}
+
+		if !isDiscovering {
 			// Before starting discovery, check if another pod already holds leadership
 			// for a known video ID. If so, skip — we don't need to discover or publish
 			// spurious "reconnecting" statuses when another replica is actively polling.
