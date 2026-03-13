@@ -180,6 +180,16 @@ function DashboardContent() {
     }
   }
 
+  async function handleUnsetPublic(id: string) {
+    try {
+      await overlaysApi.update(id, { is_public_for_viewers: false })
+      await fetchOverlays()
+      toastManager.add({ title: 'Extension overlay deactivated', type: 'success' })
+    } catch {
+      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
+    }
+  }
+
   const overlaysWithSources: OverlayWithSources[] = overlays.map(o => ({
     ...o,
     sources: sourcesByOverlay[o.id],
@@ -253,7 +263,19 @@ function DashboardContent() {
                       {overlay.sources?.length ?? 0} source
                       {(overlay.sources?.length ?? 0) !== 1 ? 's' : ''}
                     </p>
-                    {!overlay.is_public_for_viewers && (
+                    {overlay.is_public_for_viewers ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-text-sub hover:text-destructive gap-1.5 -mr-2"
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation()
+                          handleUnsetPublic(overlay.id)
+                        }}
+                      >
+                        Deactivate Extension
+                      </Button>
+                    ) : (
                       <Button
                         variant="ghost"
                         size="sm"
