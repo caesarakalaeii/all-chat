@@ -474,6 +474,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
+  const [layout, setLayout] = useState<'vertical' | 'ticker'>('vertical')
+  const [tickerSpeed, setTickerSpeed] = useState(150)
   const [configLoaded, setConfigLoaded] = useState(false)
   const [isSavingConfig, setIsSavingConfig] = useState(false)
   const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -539,6 +541,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             setPlatformBadgeStyle(display.platform_badge_style)
           }
           if (typeof display.show_platform_badge === 'boolean') setShowPlatformBadge(display.show_platform_badge)
+          if (display.layout === 'vertical' || display.layout === 'ticker') setLayout(display.layout)
+          if (typeof display.ticker_speed === 'number' && display.ticker_speed > 0) setTickerSpeed(display.ticker_speed)
 
           const css = config.custom_css || ''
           setCustomCss(css)
@@ -841,6 +845,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           platform_badge_position: platformBadgePosition,
           platform_badge_style: platformBadgeStyle,
           show_platform_badge: showPlatformBadge,
+          layout,
+          ticker_speed: tickerSpeed,
         },
         custom_css: useCustomCss ? customCss : '',
       })
@@ -1134,6 +1140,56 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   Messages stay visible until max is reached
                 </p>
               </div>
+
+              {/* Layout */}
+              <div>
+                <p className="text-xs text-text-sub mb-2">Layout</p>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-1.5 text-xs text-text-sub cursor-pointer">
+                    <input
+                      type="radio"
+                      name="layout"
+                      value="vertical"
+                      checked={layout === 'vertical'}
+                      onChange={() => setLayout('vertical')}
+                      className="accent-twitch"
+                    />
+                    Vertical (default)
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-text-sub cursor-pointer">
+                    <input
+                      type="radio"
+                      name="layout"
+                      value="ticker"
+                      checked={layout === 'ticker'}
+                      onChange={() => setLayout('ticker')}
+                      className="accent-twitch"
+                    />
+                    Ticker (horizontal)
+                  </label>
+                </div>
+              </div>
+
+              {/* Ticker Speed — only shown when ticker layout is active */}
+              {layout === 'ticker' && (
+                <div>
+                  <label className="block text-xs text-text-sub mb-1">
+                    Ticker Speed: <span className="text-twitch">{tickerSpeed}px/s</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="50"
+                    max="400"
+                    step="10"
+                    value={tickerSpeed}
+                    onChange={e => setTickerSpeed(parseInt(e.target.value))}
+                    className="w-full accent-twitch"
+                  />
+                  <p className="text-xs text-text-sub mt-1">
+                    How fast messages scroll across the screen
+                  </p>
+                </div>
+              )}
 
               {/* Platform Badge */}
               <div>

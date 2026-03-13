@@ -43,6 +43,8 @@ export interface DisplaySettings {
   show_platform_badge?: boolean;
   platform_badge_position?: 'before' | 'after';
   platform_badge_style?: 'text' | 'icon';
+  layout?: 'vertical' | 'ticker';
+  ticker_speed?: number; // px per second, default 150
 }
 
 export interface FilterSettings {

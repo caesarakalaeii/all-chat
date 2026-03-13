@@ -27,6 +27,7 @@ import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
+import TickerOverlay from '@/components/TickerOverlay';
 import '@/styles/events.css';
 
 export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
@@ -45,6 +46,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text');
   const [showPlatformBadge, setShowPlatformBadge] = useState(true);
+  const [layout, setLayout] = useState<'vertical' | 'ticker'>('vertical');
+  const [tickerSpeed, setTickerSpeed] = useState(150);
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -83,6 +86,12 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         }
         if (typeof display.show_platform_badge === 'boolean') {
           setShowPlatformBadge(display.show_platform_badge);
+        }
+        if (display.layout === 'vertical' || display.layout === 'ticker') {
+          setLayout(display.layout);
+        }
+        if (typeof display.ticker_speed === 'number' && display.ticker_speed > 0) {
+          setTickerSpeed(display.ticker_speed);
         }
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
@@ -345,8 +354,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
   // Auto-remove old messages based on duration (if fade is enabled)
   // Events have tier-based durations, chat uses configured duration
+  // In ticker mode the ticker component manages its own lifecycle — skip this timer
   useEffect(() => {
-    if (messages.length === 0 || disableMessageFade) return;
+    if (messages.length === 0 || disableMessageFade || layout === 'ticker') return;
 
     const firstMessage = messages[0];
 
@@ -363,7 +373,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     }, duration * 1000);
 
     return () => clearTimeout(timer);
-  }, [messages, messageDuration, disableMessageFade]);
+  }, [messages, messageDuration, disableMessageFade, layout]);
 
   // Helper function to get default duration based on event tier
   const getTierDuration = (tier: EventTier): number => {
@@ -559,6 +569,20 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         return null;
     }
   };
+
+  if (layout === 'ticker') {
+    return (
+      <TickerOverlay
+        messages={messages}
+        speed={tickerSpeed}
+        fontSize={fontSize}
+        customCss={customCss}
+        showPlatformBadge={showPlatformBadge}
+        platformBadgeStyle={platformBadgeStyle}
+        platformBadgePosition={platformBadgePosition}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen w-full p-4 bg-transparent">
