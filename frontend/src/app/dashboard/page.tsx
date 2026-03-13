@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { overlaysApi } from '@/lib/api/overlays'
 import { useRouter } from 'next/navigation'
-import { MonitorPlay, Plus, Trash2 } from 'lucide-react'
+import { MonitorPlay, Plus, Trash2, Puzzle } from 'lucide-react'
 import { useOverlayStore } from '@/lib/stores/overlay-store'
 import { toastManager } from '@/lib/toast'
 import { AppNav } from '@/components/AppNav'
@@ -19,6 +19,7 @@ import type { ChatSource } from '@/lib/types/overlay'
 interface OverlayWithSources {
   id: string
   name: string
+  is_public_for_viewers: boolean
   sources?: ChatSource[]
 }
 
@@ -169,6 +170,16 @@ function DashboardContent() {
     }
   }
 
+  async function handleSetPublic(id: string) {
+    try {
+      await overlaysApi.update(id, { is_public_for_viewers: true })
+      await fetchOverlays()
+      toastManager.add({ title: 'Extension overlay updated', type: 'success' })
+    } catch {
+      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
+    }
+  }
+
   const overlaysWithSources: OverlayWithSources[] = overlays.map(o => ({
     ...o,
     sources: sourcesByOverlay[o.id],
@@ -202,7 +213,15 @@ function DashboardContent() {
                 <div style={{ height: '3px', ...getTopBorderStyle(overlay.sources ?? []) }} />
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-3">
-                    <h3 className="font-semibold text-text truncate pr-2">{overlay.name}</h3>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h3 className="font-semibold text-text truncate">{overlay.name}</h3>
+                      {overlay.is_public_for_viewers && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-twitch/15 text-twitch border border-twitch/30 shrink-0">
+                          <Puzzle className="size-2.5" />
+                          Extension
+                        </span>
+                      )}
+                    </div>
                     <DeleteOverlayDialog
                       overlayName={overlay.name}
                       onDelete={() => handleDelete(overlay.id)}
@@ -229,10 +248,26 @@ function DashboardContent() {
                       />
                     ))}
                   </div>
-                  <p className="text-xs text-text-dim">
-                    {overlay.sources?.length ?? 0} source
-                    {(overlay.sources?.length ?? 0) !== 1 ? 's' : ''}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-text-dim">
+                      {overlay.sources?.length ?? 0} source
+                      {(overlay.sources?.length ?? 0) !== 1 ? 's' : ''}
+                    </p>
+                    {!overlay.is_public_for_viewers && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-text-sub hover:text-twitch gap-1.5 -mr-2"
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation()
+                          handleSetPublic(overlay.id)
+                        }}
+                      >
+                        <Puzzle className="size-3" />
+                        Set as Extension Overlay
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </Card>
             ))}
