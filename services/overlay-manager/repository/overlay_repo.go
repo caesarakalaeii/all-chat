@@ -199,6 +199,21 @@ func (r *OverlayRepository) Update(ctx context.Context, overlay *models.Overlay)
 	return nil
 }
 
+// UnsetAllPublicForUser sets is_public_for_viewers = false for all overlays owned by the user
+// except the one with excludeID. Used to enforce the one-public-overlay-per-user constraint.
+func (r *OverlayRepository) UnsetAllPublicForUser(ctx context.Context, userID, excludeID string) error {
+	query := `
+		UPDATE overlays
+		SET is_public_for_viewers = false, updated_at = NOW()
+		WHERE user_id = $1 AND id != $2 AND is_public_for_viewers = true
+	`
+	_, err := r.pool.Exec(ctx, query, userID, excludeID)
+	if err != nil {
+		return fmt.Errorf("failed to unset public overlays: %w", err)
+	}
+	return nil
+}
+
 // Delete deletes an overlay by ID
 func (r *OverlayRepository) Delete(ctx context.Context, id string) error {
 	query := `DELETE FROM overlays WHERE id = $1`
