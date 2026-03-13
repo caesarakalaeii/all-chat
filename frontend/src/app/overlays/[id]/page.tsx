@@ -32,7 +32,6 @@ import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
 import { toastManager } from '@/lib/toast'
 import { AppNav } from '@/components/AppNav'
-import { BetaWarning } from '@/components/BetaWarning'
 import { SplitView } from '@/components/SplitView'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -299,14 +298,12 @@ function AddSourceForm({
   overlayId,
   token,
   onAddTikTok,
-  onYouTubeClick,
   onAddManual,
   isAdmin = false,
 }: {
   overlayId: string
   token: string
   onAddTikTok: (username: string) => void
-  onYouTubeClick: () => void
   onAddManual?: (platform: string, channelId: string) => void
   isAdmin?: boolean
 }) {
@@ -364,7 +361,7 @@ function AddSourceForm({
         </button>
 
         <button
-          onClick={onYouTubeClick}
+          onClick={() => startOAuth(`/api/v1/auth/youtube/add-source/${overlayId}`)}
           className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-white text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           style={{ backgroundColor: '#FF0000', '--tw-ring-color': '#FF0000' } as React.CSSProperties}
         >
@@ -462,8 +459,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [overlay, setOverlay] = useState<Overlay | null>(null)
   const [sources, setSources] = useState<ChatSource[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [showBetaWarning, setShowBetaWarning] = useState<'youtube' | null>(null)
-  const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
+const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
   const [revokeTarget, setRevokeTarget] = useState<ChatSource | null>(null)
 
   // --- Customization state ---
@@ -1062,8 +1058,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               overlayId={id}
               token={token ?? ''}
               onAddTikTok={handleAddTikTokSource}
-              onYouTubeClick={() => setShowBetaWarning('youtube')}
-              onAddManual={handleAddManual}
+onAddManual={handleAddManual}
               isAdmin={user?.is_admin === true}
             />
           </section>
@@ -1408,26 +1403,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
         </div>
       </SplitView>
-
-      {/* Beta Warning Modal */}
-      {showBetaWarning && (
-        <BetaWarning
-          platform={showBetaWarning}
-          onCancel={() => setShowBetaWarning(null)}
-          onContinue={async () => {
-            setShowBetaWarning(null)
-            try {
-              const res = await fetch(`/api/v1/auth/youtube/add-source/${id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              })
-              const data = await res.json()
-              if (data.auth_url) window.location.href = data.auth_url
-            } catch (err) {
-              toastManager.add({ title: 'Failed to start YouTube OAuth', type: 'error' })
-            }
-          }}
-        />
-      )}
 
       {/* Revocation Confirm Modal */}
       {revokeTarget && (
