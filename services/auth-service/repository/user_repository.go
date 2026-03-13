@@ -351,11 +351,25 @@ func (r *UserRepository) decryptToken(token string) (string, error) {
 // GetAllUsers retrieves all users (admin only)
 func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) {
 	query := `
-SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, is_premium, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
-FROM users
-ORDER BY created_at DESC
+SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u.display_name, u.profile_image_url,
+       u.is_admin, u.is_premium,
+       (u.is_banned OR bpi.platform_id IS NOT NULL) AS is_banned,
+       COALESCE(u.banned_at, bpi.banned_at) AS banned_at,
+       COALESCE(u.banned_reason, bpi.reason) AS banned_reason,
+       COALESCE(u.banned_by, bpi.banned_by) AS banned_by,
+       u.access_token, u.refresh_token, u.token_expires_at, u.created_at, u.updated_at
+FROM users u
+LEFT JOIN LATERAL (
+  SELECT bpi.platform_id, bpi.banned_at, bpi.reason, bpi.banned_by
+  FROM banned_platform_ids bpi
+  WHERE bpi.is_active = true AND (
+    (bpi.platform = 'twitch' AND bpi.platform_id = u.twitch_id) OR
+    (bpi.platform = 'youtube' AND bpi.platform_id = u.google_id) OR
+    (bpi.platform = 'kick' AND bpi.platform_id = u.kick_id)
+  )
+  LIMIT 1
+) bpi ON true
+ORDER BY u.created_at DESC
 `
 
 	rows, err := r.db.Query(ctx, query)
@@ -383,11 +397,25 @@ ORDER BY created_at DESC
 // GetUserByID retrieves a user by their ID (admin only)
 func (r *UserRepository) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	query := `
-SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-           is_admin, is_premium, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
-FROM users
-WHERE id = $1
+SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u.display_name, u.profile_image_url,
+       u.is_admin, u.is_premium,
+       (u.is_banned OR bpi.platform_id IS NOT NULL) AS is_banned,
+       COALESCE(u.banned_at, bpi.banned_at) AS banned_at,
+       COALESCE(u.banned_reason, bpi.reason) AS banned_reason,
+       COALESCE(u.banned_by, bpi.banned_by) AS banned_by,
+       u.access_token, u.refresh_token, u.token_expires_at, u.created_at, u.updated_at
+FROM users u
+LEFT JOIN LATERAL (
+  SELECT bpi.platform_id, bpi.banned_at, bpi.reason, bpi.banned_by
+  FROM banned_platform_ids bpi
+  WHERE bpi.is_active = true AND (
+    (bpi.platform = 'twitch' AND bpi.platform_id = u.twitch_id) OR
+    (bpi.platform = 'youtube' AND bpi.platform_id = u.google_id) OR
+    (bpi.platform = 'kick' AND bpi.platform_id = u.kick_id)
+  )
+  LIMIT 1
+) bpi ON true
+WHERE u.id = $1
 `
 
 	user, err := r.scanUser(r.db.QueryRow(ctx, query, userID))
@@ -478,7 +506,13 @@ func (r *UserRepository) BanUser(ctx context.Context, userID, adminID, reason st
 
 // UnbanUser removes ban from user account (overlays remain inactive - manual reactivation)
 func (r *UserRepository) UnbanUser(ctx context.Context, userID string) error {
-	_, err := r.db.Exec(ctx, `
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `
 		UPDATE users
 		SET is_banned = false,
 			banned_at = NULL,
@@ -489,7 +523,25 @@ func (r *UserRepository) UnbanUser(ctx context.Context, userID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to unban user: %w", err)
 	}
-	return nil
+
+	// Also deactivate any active platform-level bans for this user's platform IDs
+	_, err = tx.Exec(ctx, `
+		UPDATE banned_platform_ids bpi
+		SET is_active = false, unbanned_at = NOW()
+		FROM users u
+		WHERE u.id = $1
+		  AND bpi.is_active = true
+		  AND (
+		    (bpi.platform = 'twitch'   AND bpi.platform_id = u.twitch_id) OR
+		    (bpi.platform = 'youtube'  AND bpi.platform_id = u.google_id) OR
+		    (bpi.platform = 'kick'     AND bpi.platform_id = u.kick_id)
+		  )
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("failed to deactivate platform bans: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 // GetBannedUsers returns list of banned users with pagination
