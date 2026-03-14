@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
 status: Defining requirements
-stopped_at: Completed 27-01-PLAN.md
-last_updated: "2026-03-14T12:06:45.098Z"
+stopped_at: Completed 27-02-PLAN.md
+last_updated: "2026-03-14T12:13:57.171Z"
 last_activity: 2026-03-14 — Milestone v1.4 started
 progress:
   total_phases: 21
   completed_phases: 9
   total_plans: 47
-  completed_plans: 45
+  completed_plans: 46
 ---
 
 # Project State
@@ -41,6 +41,7 @@ Last activity: 2026-03-14 — Milestone v1.4 started
 | v1.3 Overlay Sharing + Frontend Redesign | 23-26 | 44 | Complete |
 | v1.4 Viewer Identity & YouTube Enrichment | 27+ | TBD | In progress |
 | Phase 27-innertube-enrichment-badges-emotes P01 | 367 | 5 tasks | 9 files |
+| Phase 27-innertube-enrichment-badges-emotes P02 | 4 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -49,6 +50,8 @@ Last activity: 2026-03-14 — Milestone v1.4 started
 Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 27-innertube-enrichment-badges-emotes]: TDD RED state: innertube tests reference non-existent symbols causing compile-time failures (intentional); go build passes while go test fails for new test files
 - [Phase 27-innertube-enrichment-badges-emotes]: yt_emote_cache stub package created with empty cache.go to allow go mod tidy to retain miniredis dependency
+- [Phase 27-innertube-enrichment-badges-emotes]: extractBadgesRich return order follows Plan 01 test signature (memberURL, memberTooltip, badgeTooltips) not plan spec order
+- [Phase 27-innertube-enrichment-badges-emotes]: EmoteEntry struct duplicated in innertube and yt_emote_cache packages to avoid cross-package coupling
 
 ### Pending Todos
 
@@ -60,8 +63,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T12:06:45.094Z
-Stopped at: Completed 27-01-PLAN.md
+Last session: 2026-03-14T12:13:57.167Z
+Stopped at: Completed 27-02-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to start execution after roadmap is created
