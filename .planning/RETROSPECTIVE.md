@@ -46,6 +46,50 @@
 
 ---
 
+## Milestone: v1.3 — Frontend Redesign
+
+**Shipped:** 2026-03-14
+**Phases:** 4 (23-26) | **Plans:** 20 | **Tasks:** 46 | **Commits:** 70
+
+### What Was Built
+- Tailwind v4 three-tier design token system (`@layer base, design-system, marketplace-themes, user-overrides`) with static platform color map — eliminates all !important from events.css
+- @base-ui/react + shadcn/ui component library: Button, Card, Input, Badge, Dialog, Toast, Skeleton with CVA variants, micro-interactions, platform-color glow dots
+- All 6 pages redesigned in streaming dark aesthetic (landing, dashboard, editor, settings, admin + sub-pages) — zero legacy gray-* classes
+- Draggable SplitView component for live overlay preview (pointer-capture drag, 25–70% range, keyboard navigation, responsive column stacking)
+- ESLint v10 flat config (`eslint.config.mjs`) + Prettier with prettier-plugin-tailwindcss — 345 pre-existing violations fixed across 43 files
+- 7-gate GitHub Actions CI pipeline: ESLint, Prettier, tsc, Next.js build, bundle analysis (20KB budget), Storybook vitest (45/45 pass), Chromatic visual regression baseline
+
+### What Worked
+- **Wave parallelization across design work** — Plans 26-01 and 26-03 ran simultaneously (ESLint and bundle analysis are independent). Wave 2 (Husky) correctly blocked on Wave 1 outputs.
+- **Storybook-first component development** — Building story stubs before components (24-01) forced API design clarity and caught a11y issues before page integration
+- **Cascade layers over !important** — All 14 `!important` declarations in events.css removed cleanly. Marketplace themes continue to override via layer ordering, no behavioral change.
+- **Static PLATFORM_COLORS map** — Enforced from day 1. Zero dynamic class construction across the codebase. Tailwind JIT scans cleanly.
+- **Checkpoint for Chromatic setup** — Plan 26-04 used `autonomous: false` to pause for the human to configure the GitHub secret. The right call for an external service dependency.
+
+### What Was Inefficient
+- **Pre-existing ESLint violations** — 345 violations across 43 files needed to be fixed as part of Plan 26-01. More expensive than expected; could have enforced sooner in Phase 24.
+- **A11y failures discovered at enforcement phase** — 5 Storybook a11y failures (heading-order h1→h3, color-contrast, null pathname crash) were caught in Phase 26 rather than Phase 24/25. Should have run vitest storybook earlier.
+- **Prettier formatting chase** — Performance.stories.tsx needed Prettier formatting after execution. Minor but indicates the executor didn't run Prettier before committing.
+
+### Patterns Established
+- **ESLint no-restricted-syntax for design token enforcement** — Using AST-level rules to ban `bg-gray-*`, bare `focus:`, and template literals in `className`. Portable pattern for any token system.
+- **`nextBundleAnalysis` budget config in package.json** — 20KB threshold on top-level and individual pages. Baseline established; CI alerts on regressions without blocking unless threshold exceeded.
+- **Storybook vitest as a11y enforcement** — `a11y: { test: 'error' }` in preview.ts + `npx vitest --project storybook` in CI. Catches real bugs (null crashes, heading hierarchy, contrast ratios).
+- **`text-bg` for accessible platform buttons** — Platform colors (Twitch #A37BFF, YouTube #FF4444) don't meet 4.5:1 with white text. Using `text-bg` (near-black) consistently with the Kick button pattern.
+
+### Key Lessons
+1. **ESLint v9 flat config is a breaking change** — `.eslintrc.json` is silently ignored by ESLint v10. Never rely on legacy config format in new projects; use `eslint.config.mjs` from the start.
+2. **Enforce linting early, not at the gate phase** — Installing ESLint in Phase 24 but not enforcing it meant 345 violations accumulated across Phases 24-25. Pre-commit hooks should go in with the first linting config.
+3. **WCAG contrast ratios for platform brand colors** — All 4 platform colors need WCAG AA verification before use in text contexts. Twitch required lightening (#9146FF → #A37BFF), YouTube/Kick need dark text.
+4. **`usePathname()` returns null outside Next.js router** — Any component using `usePathname()` must guard with `?.` for Storybook compatibility (and for any non-router context).
+
+### Cost Observations
+- Model mix: ~100% sonnet (balanced profile)
+- Sessions: 2 sessions across 3 days
+- Notable: All 4 plans executed in a single `/gsd:execute-phase 26` session with 3 waves. Parallelization in Wave 1 saved ~30 min.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -55,7 +99,8 @@
 | v1.0 | 3 | 11 | 1 | Initial deletion support |
 | v1.1 | 4 | 21 | 3 | Load balancing infrastructure |
 | v1.2 | 5 | 21 | 13 | InnerTube + production rollout |
-| v1.3 | 6 | 23 | 3 | Cross-service feature with new microservice |
+| v1.3 (Sharing) | 6 | 23 | 3 | Cross-service feature with new microservice |
+| v1.3 (Frontend) | 4 | 20 | 3 | Full frontend redesign + design system |
 
 ### Cumulative Quality
 
@@ -64,7 +109,8 @@
 | v1.0 | 88.5% deletion coverage | Integration tests for pipeline |
 | v1.1 | 16 tracing spans | Observability-first approach |
 | v1.2 | 69 automated tests | Contract validation before prod |
-| v1.3 | Nyquist RED stubs + modal TDD | Test scaffolding before implementation |
+| v1.3 (Sharing) | Nyquist RED stubs + modal TDD | Test scaffolding before implementation |
+| v1.3 (Frontend) | 45 Storybook vitest tests | a11y 'error' mode as CI gate |
 
 ### Top Lessons (Verified Across Milestones)
 
