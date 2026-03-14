@@ -8,6 +8,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import clsx from 'clsx';
 
 interface CreditRollThemePreviewProps {
   css: string;
@@ -100,13 +101,13 @@ export default function CreditRollThemePreview({ css, themeId = 'preview' }: Cre
       <style dangerouslySetInnerHTML={{ __html: scopedCss }} />
 
       {/* Credit roll preview container */}
-      <div className="min-h-full overflow-y-auto p-4 bg-linear-to-b from-gray-900 to-black">
+      <div className="min-h-full overflow-y-auto p-4 bg-linear-to-b from-slate-900 to-black">
         {/* Header */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold text-white mb-2">
             🎬 Stream Credits
           </h1>
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-slate-300">
             Thank you for your support!
           </p>
         </div>
@@ -121,26 +122,31 @@ export default function CreditRollThemePreview({ css, themeId = 'preview' }: Cre
             {SAMPLE_LEADERBOARD_DATA.map((entry) => (
               <div
                 key={entry.rank}
-                className={`flex items-center gap-4 p-4 rounded-lg ${
-                  entry.rank === 1 ? 'bg-yellow-500/20 border-2 border-yellow-500' :
-                  entry.rank === 2 ? 'bg-gray-400/20 border-2 border-gray-400' :
-                  entry.rank === 3 ? 'bg-orange-600/20 border-2 border-orange-600' :
-                  'bg-gray-800/50 border border-gray-700'
-                }`}
+                className={clsx(
+                  'flex items-center gap-4 rounded-lg p-4',
+                  entry.rank === 1 && 'border-2 border-yellow-500 bg-yellow-500/20',
+                  entry.rank === 2 && 'border-2 border-slate-400 bg-slate-400/20',
+                  entry.rank === 3 && 'border-2 border-orange-600 bg-orange-600/20',
+                  entry.rank > 3 && 'border border-slate-700 bg-slate-800/50'
+                )}
               >
-                <div className={`text-3xl font-bold w-12 text-center ${
-                  entry.rank === 1 ? 'text-yellow-400' :
-                  entry.rank === 2 ? 'text-gray-300' :
-                  entry.rank === 3 ? 'text-orange-500' :
-                  'text-gray-500'
-                }`}>
+                <div
+                  className={clsx(
+                    'w-12 text-center text-3xl font-bold',
+                    entry.rank === 1 && 'text-yellow-400',
+                    entry.rank === 2 && 'text-slate-300',
+                    entry.rank === 3 && 'text-orange-500',
+                    entry.rank > 3 && 'text-slate-500'
+                  )}
+                >
                   #{entry.rank}
                 </div>
-                <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-700">
+                <div className="relative h-12 w-12 overflow-hidden rounded-full bg-slate-700">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={entry.avatar_url}
                     alt={entry.display_name}
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="48" height="48"%3E%3Crect fill="%23374151" width="48" height="48"/%3E%3C/svg%3E';
                     }}
@@ -148,7 +154,7 @@ export default function CreditRollThemePreview({ css, themeId = 'preview' }: Cre
                 </div>
                 <div className="flex-1">
                   <div className="text-xl font-semibold text-white">{entry.display_name}</div>
-                  <div className="text-sm text-gray-400 capitalize">{entry.platform}</div>
+                  <div className="text-sm text-slate-400 capitalize">{entry.platform}</div>
                 </div>
                 <div className="text-2xl font-bold text-white">
                   ${entry.total_value.toFixed(2)}
@@ -163,7 +169,7 @@ export default function CreditRollThemePreview({ css, themeId = 'preview' }: Cre
           <div className="text-2xl font-bold text-white mb-2">
             Thank you! ❤️
           </div>
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-slate-300">
             See you next stream!
           </p>
         </div>

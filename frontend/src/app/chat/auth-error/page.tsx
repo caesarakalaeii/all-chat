@@ -10,6 +10,7 @@
 'use client';
 
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
 function AuthErrorContent() {
@@ -17,25 +18,25 @@ function AuthErrorContent() {
   const error = searchParams.get('error') || 'Authentication failed';
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900">
-      <div className="text-center max-w-md">
-        <div className="text-6xl mb-6">❌</div>
-        <h1 className="text-3xl font-bold text-white mb-4">Authentication Failed</h1>
-        <p className="text-red-400 text-lg mb-6">{error}</p>
-        <p className="text-gray-400 mb-8">
-          There was an error authenticating with your Twitch account.
-          Please try again or contact support if the problem persists.
+    <div className="flex min-h-screen items-center justify-center bg-slate-900">
+      <div className="max-w-md text-center">
+        <div className="mb-6 text-6xl">❌</div>
+        <h1 className="mb-4 text-3xl font-bold text-white">Authentication Failed</h1>
+        <p className="mb-6 text-lg text-red-400">{error}</p>
+        <p className="mb-8 text-slate-400">
+          There was an error authenticating with your Twitch account. Please try again or contact
+          support if the problem persists.
         </p>
         <div className="space-y-4">
-          <a
+          <Link
             href="/"
-            className="block bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+            className="block rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-purple-700"
           >
             Return to Home
-          </a>
+          </Link>
           <button
             onClick={() => window.history.back()}
-            className="block w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+            className="block w-full rounded-lg bg-slate-700 px-6 py-3 font-semibold text-white transition-colors hover:bg-slate-600"
           >
             Go Back
           </button>
@@ -49,8 +50,8 @@ export default function AuthErrorPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-900">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500"></div>
+        <div className="flex min-h-screen items-center justify-center bg-slate-900">
+          <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-purple-500"></div>
         </div>
       }
     >

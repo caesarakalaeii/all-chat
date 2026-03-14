@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import clsx from 'clsx';
 import { sharesApi } from '@/lib/api/shares';
 import { ShareRequest } from '@/lib/types/share';
 import { ShareRequestCard } from './components/ShareRequestCard';
@@ -110,21 +111,23 @@ export default function ShareRequestsPage() {
       <div className="flex space-x-4 border-b border-border mb-6">
         <button
           onClick={() => setFilter('pending')}
-          className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+          className={clsx(
+            'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
             filter === 'pending'
               ? 'border-blue-500 text-text'
               : 'border-transparent text-text-sub hover:text-text'
-          }`}
+          )}
         >
           Pending ({pendingCount})
         </button>
         <button
           onClick={() => setFilter('history')}
-          className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+          className={clsx(
+            'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
             filter === 'history'
               ? 'border-blue-500 text-text'
               : 'border-transparent text-text-sub hover:text-text'
-          }`}
+          )}
         >
           History ({historyCount})
         </button>

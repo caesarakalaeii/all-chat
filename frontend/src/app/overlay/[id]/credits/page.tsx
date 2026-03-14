@@ -18,6 +18,7 @@
 
 import Image from 'next/image';
 import { use, useEffect, useState, useRef } from 'react';
+import clsx from 'clsx';
 import Script from 'next/script';
 import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay';
 
@@ -134,19 +135,23 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           {entries.map((entry, index) => (
             <div
               key={index}
-              className={`flex items-center gap-4 p-4 rounded-lg ${
-                index === 0 ? 'bg-yellow-500/20 border-2 border-yellow-500' :
-                index === 1 ? 'bg-gray-400/20 border-2 border-gray-400' :
-                index === 2 ? 'bg-orange-600/20 border-2 border-orange-600' :
-                'bg-gray-800/50 border border-gray-700'
-              }`}
+              className={clsx(
+                'flex items-center gap-4 rounded-lg p-4',
+                index === 0 && 'border-2 border-yellow-500 bg-yellow-500/20',
+                index === 1 && 'border-2 border-slate-400 bg-slate-400/20',
+                index === 2 && 'border-2 border-orange-600 bg-orange-600/20',
+                index > 2 && 'border border-slate-700 bg-slate-800/50'
+              )}
             >
-              <div className={`text-3xl font-bold w-12 text-center ${
-                index === 0 ? 'text-yellow-400' :
-                index === 1 ? 'text-gray-300' :
-                index === 2 ? 'text-orange-500' :
-                'text-gray-500'
-              }`}>
+              <div
+                className={clsx(
+                  'w-12 text-center text-3xl font-bold',
+                  index === 0 && 'text-yellow-400',
+                  index === 1 && 'text-slate-300',
+                  index === 2 && 'text-orange-500',
+                  index > 2 && 'text-slate-500'
+                )}
+              >
                 #{entry.rank}
               </div>
               {entry.avatar_url && (
@@ -161,7 +166,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
               )}
               <div className="flex-1">
                 <div className="text-xl font-semibold text-white">{entry.display_name}</div>
-                <div className="text-sm text-gray-400 capitalize">{entry.platform}</div>
+                <div className="text-sm text-slate-400 capitalize">{entry.platform}</div>
               </div>
               <div className="text-2xl font-bold text-white">
                 {entry.total_value !== undefined && entry.total_value > 0
@@ -177,7 +182,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-gray-900 to-black">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-slate-900 to-black">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white mx-auto mb-4"></div>
           <p className="text-white text-xl">Loading Credits...</p>
@@ -188,12 +193,12 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-gray-900 to-black">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-slate-900 to-black">
         <div className="text-center">
           <div className="text-6xl mb-4">⚠️</div>
           <p className="text-white text-xl mb-2">Unable to Load Credit Roll</p>
-          <p className="text-gray-400 text-sm">{error}</p>
-          <p className="text-gray-500 text-xs mt-4">Make sure you have an active streaming session</p>
+          <p className="text-slate-400 text-sm">{error}</p>
+          <p className="text-slate-500 text-xs mt-4">Make sure you have an active streaming session</p>
         </div>
       </div>
     );
@@ -201,7 +206,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   if (!creditData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-gray-900 to-black">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-slate-900 to-black">
         <div className="text-center">
           <p className="text-white text-xl">No credit roll data available</p>
         </div>
@@ -265,10 +270,10 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
             <h1 className="text-6xl font-bold text-white mb-4 animate-fade-in">
               🎬 Stream Credits
             </h1>
-            <p className="text-2xl text-gray-300">
+            <p className="text-2xl text-slate-300">
               Thank you to everyone who supported the stream!
             </p>
-            <div className="mt-4 text-gray-400">
+            <div className="mt-4 text-slate-400">
               <p>Session: {new Date(creditData.session_started_at).toLocaleDateString()}</p>
               <p>Duration: {Math.floor(creditData.session_duration_seconds / 60)} minutes</p>
             </div>
@@ -288,13 +293,13 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           {/* Now Playing Indicator */}
           {config?.clips_enabled && currentClip && (
             <div className="fixed bottom-8 right-8 z-50">
-              <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4 border border-gray-700 shadow-2xl max-w-sm">
+              <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4 border border-slate-700 shadow-2xl max-w-sm">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-2xl">🎥</span>
                   <span className="text-white font-semibold">Now Playing</span>
                 </div>
                 <div className="text-lg text-white font-medium mb-1">{currentClip.title}</div>
-                <div className="flex items-center justify-between text-sm text-gray-400">
+                <div className="flex items-center justify-between text-sm text-slate-400">
                   <span>{currentClip.view_count.toLocaleString()} views</span>
                   <span>Clip {currentClipIndex + 1}/{creditData?.clips?.length || 0}</span>
                 </div>
@@ -307,7 +312,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
             <div className="text-4xl font-bold text-white mb-4">
               Thank you for watching! ❤️
             </div>
-            <p className="text-xl text-gray-300">
+            <p className="text-xl text-slate-300">
               See you next stream!
             </p>
           </div>

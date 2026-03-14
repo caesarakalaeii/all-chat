@@ -6,7 +6,8 @@
 
 'use client';
 
-import { useEffect, useState, useMemo, useId } from 'react';
+import { useEffect, useState } from 'react';
+import clsx from 'clsx';
 import type { ChatMessagePreview } from '@/lib/theme-marketplace/types';
 import { PLATFORM_COLORS, type Platform } from '@/lib/platform-colors';
 
@@ -42,8 +43,7 @@ const scopeCustomCss = (
       }
 
       const isKeyframeStep =
-        ['from', 'to'].includes(trimmed.toLowerCase()) ||
-        /^\d+\.?\d*%$/i.test(trimmed);
+        ['from', 'to'].includes(trimmed.toLowerCase()) || /^\d+\.?\d*%$/i.test(trimmed);
       if (isKeyframeStep) {
         return `${prefix} ${trimmed} {`;
       }
@@ -52,11 +52,7 @@ const scopeCustomCss = (
         .split(',')
         .map((selector: string) => {
           const sel = selector.trim();
-          if (
-            !sel ||
-            sel.startsWith(scopeSelector) ||
-            sel.startsWith(bodySelector)
-          ) {
+          if (!sel || sel.startsWith(scopeSelector) || sel.startsWith(bodySelector)) {
             return sel;
           }
           return `${scopeSelector} ${sel}`;
@@ -69,29 +65,22 @@ const scopeCustomCss = (
   );
 };
 
-
 export default function ThemePreview({ css, messages, themeId }: ThemePreviewProps) {
   const [scopedCss, setScopedCss] = useState('');
   const uniqueId = `theme-preview-${themeId}`;
 
   // Scope CSS when it changes
   useEffect(() => {
-    const scoped = scopeCustomCss(
-      css,
-      `.${uniqueId}`,
-      `.${uniqueId} .theme-preview-body`
-    );
+    const scoped = scopeCustomCss(css, `.${uniqueId}`, `.${uniqueId} .theme-preview-body`);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setScopedCss(scoped);
   }, [css, uniqueId]);
 
   return (
-    <div className="theme-preview-wrapper bg-gray-800 border border-gray-700 rounded-t-lg overflow-hidden">
+    <div className="theme-preview-wrapper overflow-hidden rounded-t-lg border border-slate-700 bg-slate-800">
       {/* Scoped styles - use data attribute to create unique scope */}
       {scopedCss && (
-        <style
-          dangerouslySetInnerHTML={{ __html: scopedCss }}
-          data-theme-id={themeId}
-        />
+        <style dangerouslySetInnerHTML={{ __html: scopedCss }} data-theme-id={themeId} />
       )}
 
       {/* Preview container with unique data attribute */}
@@ -106,63 +95,62 @@ export default function ThemePreview({ css, messages, themeId }: ThemePreviewPro
           isolation: 'isolate',
         }}
       >
-        <div className="theme-preview-body h-full overflow-y-auto p-2 space-y-3">
+        <div className="theme-preview-body h-full space-y-3 overflow-y-auto p-2">
           {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className="rounded-lg p-3 shadow-lg bg-gray-900"
-            >
+            <div key={msg.id} className="rounded-lg bg-slate-900 p-3 shadow-lg">
               <div className="flex items-start gap-3">
                 {/* Avatar */}
                 <div className="flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={msg.user.avatar_url}
                     alt={msg.user.display_name}
-                    className="w-10 h-10 rounded-full"
+                    className="h-10 w-10 rounded-full"
                   />
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
                     {/* Platform indicator */}
                     <span
-                      className={`text-xs font-semibold uppercase ${PLATFORM_COLORS[msg.platform as Platform]?.text ?? PLATFORM_COLORS.system.text}`}
+                      className={clsx(
+                        'text-xs font-semibold uppercase',
+                        PLATFORM_COLORS[msg.platform as Platform]?.text ?? PLATFORM_COLORS.system.text
+                      )}
                     >
                       {msg.platform}
                     </span>
 
                     {/* Username */}
-                    <span
-                      className="font-semibold text-sm"
-                      style={{ color: msg.user.color }}
-                    >
+                    <span className="text-sm font-semibold" style={{ color: msg.user.color }}>
                       {msg.user.display_name}
                     </span>
 
                     {/* Badges */}
-                    {msg.user.badges.length > 0 && msg.user.badges.some(b => b.icon_url && !b.icon_url.startsWith('/')) && (
-                      <div className="flex gap-1">
-                        {msg.user.badges.filter(b => b.icon_url && !b.icon_url.startsWith('/')).map((badge, idx) => (
-                          <img
-                            key={idx}
-                            src={badge.icon_url}
-                            alt={badge.name}
-                            className="w-4 h-4"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
+                    {msg.user.badges.length > 0 &&
+                      msg.user.badges.some((b) => b.icon_url && !b.icon_url.startsWith('/')) && (
+                        <div className="flex gap-1">
+                          {msg.user.badges
+                            .filter((b) => b.icon_url && !b.icon_url.startsWith('/'))
+                            .map((badge, idx) => (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                key={idx}
+                                src={badge.icon_url}
+                                alt={badge.name}
+                                className="h-4 w-4"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            ))}
+                        </div>
+                      )}
                   </div>
 
                   {/* Message text */}
-                  <div
-                    className="text-white break-words"
-                    style={{ fontSize: '16px' }}
-                  >
+                  <div className="break-words text-white" style={{ fontSize: '16px' }}>
                     {msg.message.text}
                   </div>
                 </div>

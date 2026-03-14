@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { PlatformBadge } from '@/components/ui/badge'
 import { PLATFORM_COLORS } from '@/lib/platform-colors'
 import { LayoutGrid, Zap, Palette } from 'lucide-react'
@@ -15,7 +15,7 @@ function LandingHeroCards() {
         {(['twitch', 'youtube', 'kick', 'tiktok'] as const).map(platform => (
           <div key={platform} className="rounded-xl border border-border bg-surface p-6">
             <PlatformBadge platform={platform} className="mb-3" />
-            <div className={`text-xl font-bold ${PLATFORM_COLORS[platform].text}`}>Live</div>
+            <div className={['text-xl font-bold', PLATFORM_COLORS[platform].text].join(' ')}>Live</div>
           </div>
         ))}
       </div>

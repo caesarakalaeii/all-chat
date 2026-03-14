@@ -99,7 +99,7 @@ export function AddSourceModal({ senderName, senderOverlayId, onClose, onAdded }
                 id="target-overlay-select"
                 value={selectedOverlay}
                 onChange={(e) => setSelectedOverlay(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text transition-all duration-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text transition-all duration-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20"
               >
                 {overlays.map((overlay) => (
                   <option key={overlay.id} value={overlay.id}>

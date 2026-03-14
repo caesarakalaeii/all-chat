@@ -40,5 +40,4 @@ export const AllPlatformsSmall: Story = {
 export const GenericBadge: Story = {
   args: { platform: 'twitch' },
   render: () => React.createElement(Badge, null, 'Generic Badge'),
-  name: 'Generic Badge',
 }

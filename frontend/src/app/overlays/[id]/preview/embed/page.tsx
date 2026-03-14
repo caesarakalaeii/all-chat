@@ -15,6 +15,7 @@
 
 import Image from 'next/image';
 import { use, useEffect, useState, useRef, useMemo } from 'react';
+import clsx from 'clsx';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { WebSocketClient } from '@/lib/api/websocket';
 import { overlaysApi } from '@/lib/api/overlays';
@@ -74,7 +75,7 @@ const getPlatformColor = (platform: string): string => {
     case 'kick':
       return 'text-green-400';
     default:
-      return 'text-gray-400';
+      return 'text-slate-400';
   }
 };
 
@@ -196,6 +197,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
   // Trim buffer when maxMessages changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev));
   }, [maxMessages]);
 
@@ -294,7 +296,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           )}
         </div>
         {message.message.text && (
-          <div className="text-sm event-message-text text-gray-200 ml-14">
+          <div className="text-sm event-message-text text-slate-200 ml-14">
             {message.message.text}
           </div>
         )}
@@ -309,7 +311,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           if (m.like_count) parts.push(`${String(m.like_count)} likes`);
           if (m.diamonds) parts.push(`${String(m.diamonds)} diamonds`);
           return parts.length > 0 ? (
-            <div className="text-xs event-metadata text-gray-400 mt-1 ml-14">
+            <div className="text-xs event-metadata text-slate-400 mt-1 ml-14">
               {parts.join(' • ')}
             </div>
           ) : null;
@@ -330,7 +332,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
       <div
         id="overlay-preview-root"
-        className={`overlay-preview-root h-screen overflow-hidden relative ${useCustomCss ? 'overlay-preview' : ''}`}
+        className={clsx('overlay-preview-root relative h-screen overflow-hidden', useCustomCss && 'overlay-preview')}
       >
         <div
           className="overlay-preview-body h-full overflow-y-auto space-y-3 p-4"
@@ -341,7 +343,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         >
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center text-gray-600">
+              <div className="text-center text-slate-600">
                 <svg
                   className="w-16 h-16 mx-auto mb-4"
                   fill="none"
@@ -373,8 +375,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                     data-event-type={isEvent ? message.event?.type : undefined}
                     className={
                       isEvent
-                        ? `event-message ${eventTierClass} ${eventTypeClass}`
-                        : 'backdrop-blur-sm rounded-lg p-3 shadow-lg bg-gray-900/90'
+                        ? clsx('event-message', eventTierClass, eventTypeClass)
+                        : 'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm'
                     }
                   >
                     <div className="flex items-start gap-3">
@@ -394,7 +396,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             }}
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-semibold">
+                          <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-semibold">
                             {message.user.display_name?.slice(0, 2).toUpperCase() || '?'}
                           </div>
                         )}
@@ -411,7 +413,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                                 <PlatformIcon platform={message.platform} />
                               </span>
                             ) : (
-                              <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                              <span className={clsx('platform-badge platform-badge-text text-xs font-semibold uppercase', getPlatformColor(message.platform))}>
                                 {message.platform}
                               </span>
                             )
@@ -452,7 +454,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                                 <PlatformIcon platform={message.platform} />
                               </span>
                             ) : (
-                              <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                              <span className={clsx('platform-badge platform-badge-text text-xs font-semibold uppercase', getPlatformColor(message.platform))}>
                                 {message.platform}
                               </span>
                             )
@@ -488,7 +490,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                         </div>
 
                         {/* Timestamp */}
-                        <div className="text-xs text-gray-500 mt-1">
+                        <div className="text-xs text-slate-500 mt-1">
                           {new Date(message.timestamp).toLocaleTimeString()}
                         </div>
                       </div>

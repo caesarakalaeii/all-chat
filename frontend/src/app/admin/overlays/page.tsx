@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import clsx from 'clsx';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlatformBadge } from '@/components/ui/badge';
@@ -156,7 +157,7 @@ export default function OverlaysPage() {
                     placeholder="Search by overlay name, ID, or user ID..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border border-border rounded-lg bg-surface-2 text-text placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </div>
               </div>
@@ -164,9 +165,10 @@ export default function OverlaysPage() {
                 {filteredOverlays.map((overlay) => (
                   <li
                     key={overlay.id}
-                    className={`px-4 py-4 hover:bg-surface-2 cursor-pointer transition-colors ${
-                      selectedOverlay?.id === overlay.id ? 'bg-surface-2' : ''
-                    }`}
+                    className={clsx(
+                      'cursor-pointer px-4 py-4 transition-colors hover:bg-surface-2',
+                      selectedOverlay?.id === overlay.id && 'bg-surface-2'
+                    )}
                     onClick={() => setSelectedOverlay(overlay)}
                   >
                     <div className="flex items-center justify-between">

@@ -22,6 +22,7 @@
 
 import Image from 'next/image';
 import { use, useEffect, useState, useRef } from 'react';
+import clsx from 'clsx';
 import type { ChatMessage, EventTier, PlatformStatus, DeletionMetadata } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
@@ -336,6 +337,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         ws.close();
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, maxMessages, forceReconnect]);
 
   // Auto-scroll to bottom when new messages arrive
@@ -481,7 +483,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           )}
         </div>
         {message.message.text && (
-          <div className="text-sm event-message-text text-gray-200 ml-14">
+          <div className="text-sm event-message-text text-slate-200 ml-14">
             {message.message.text}
           </div>
         )}
@@ -499,7 +501,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           </div>
         )}
         {event.metadata && Object.keys(event.metadata).length > 0 && (
-          <div className="text-xs event-metadata text-gray-400 mt-1 ml-14">
+          <div className="text-xs event-metadata text-slate-400 mt-1 ml-14">
             {(event.metadata as any).viewer_count && `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
             {(event.metadata as any).months && `${(event.metadata as any).months} months`}
             {(event.metadata as any).streak && ` • ${(event.metadata as any).streak} month streak`}
@@ -522,7 +524,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       case 'kick':
         return 'text-green-400';
       default:
-        return 'text-gray-400';
+        return 'text-slate-400';
     }
   };
 
@@ -598,12 +600,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             data-event-type={isEvent ? message.event?.type : undefined}
             className={
               isEvent
-                ? `event-message ${eventTierClass} ${eventTypeClass}`
-                : `backdrop-blur-sm rounded-lg p-3 shadow-lg animate-in slide-in-from-bottom-2 duration-300 chat-message ${
-                    isSharedChat
-                      ? 'bg-purple-900/40 border-2 border-purple-500/50'
-                      : 'bg-gray-900/90'
-                  }`
+                ? clsx('event-message', eventTierClass, eventTypeClass)
+                : clsx(
+                    'animate-in slide-in-from-bottom-2 chat-message rounded-lg p-3 shadow-lg backdrop-blur-sm duration-300',
+                    isSharedChat ? 'border-2 border-purple-500/50 bg-purple-900/40' : 'bg-slate-900/90'
+                  )
             }
           >
             <div className="flex items-start gap-3">
@@ -623,7 +624,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                     }}
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-semibold">
+                  <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-semibold">
                     {message.user?.username?.slice(0, 2).toUpperCase() || '?'}
                   </div>
                 )}
@@ -640,7 +641,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         <PlatformIcon platform={message.platform} />
                       </span>
                     ) : (
-                      <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                      <span className={clsx('platform-badge platform-badge-text text-xs font-semibold uppercase', getPlatformColor(message.platform))}>
                         {message.platform}
                       </span>
                     )
@@ -661,7 +662,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                             title={badge.name}
                           />
                         ) : (
-                          <span key={idx} className="text-xs px-1 py-0.5 rounded bg-gray-700 text-gray-300 leading-none" title={badge.name}>
+                          <span key={idx} className="text-xs px-1 py-0.5 rounded bg-slate-700 text-slate-300 leading-none" title={badge.name}>
                             {badge.name}
                           </span>
                         )
@@ -684,7 +685,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         <PlatformIcon platform={message.platform} />
                       </span>
                     ) : (
-                      <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                      <span className={clsx('platform-badge platform-badge-text text-xs font-semibold uppercase', getPlatformColor(message.platform))}>
                         {message.platform}
                       </span>
                     )
@@ -712,7 +713,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                             title={badge.name}
                           />
                         ) : (
-                          <span key={idx} className="text-xs px-1 py-0.5 rounded bg-gray-700 text-gray-300 leading-none" title={badge.name}>
+                          <span key={idx} className="text-xs px-1 py-0.5 rounded bg-slate-700 text-slate-300 leading-none" title={badge.name}>
                             {badge.name}
                           </span>
                         )
@@ -747,7 +748,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                 </div>
 
                 {/* Timestamp */}
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {new Date(message.timestamp).toLocaleTimeString()}
                 </div>
               </div>

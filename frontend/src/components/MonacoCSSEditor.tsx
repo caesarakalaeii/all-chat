@@ -64,7 +64,7 @@ export default function MonacoCSSEditor({
   }, [value]);
 
   return (
-    <div className="border border-gray-700 rounded-lg overflow-hidden">
+    <div className="overflow-hidden rounded-lg border border-slate-700">
       <Editor
         height={height}
         defaultLanguage="css"
@@ -85,8 +85,8 @@ export default function MonacoCSSEditor({
           wrappingIndent: 'indent'
         }}
         loading={
-          <div className="flex items-center justify-center h-full bg-gray-900">
-            <div className="text-gray-400 text-sm">Loading editor...</div>
+          <div className="flex h-full items-center justify-center bg-slate-900">
+            <div className="text-sm text-slate-400">Loading editor...</div>
           </div>
         }
       />

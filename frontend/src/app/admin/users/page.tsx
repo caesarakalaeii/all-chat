@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import clsx from 'clsx';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -336,7 +337,7 @@ export default function UsersPage() {
                     placeholder="Search by username, display name, or platform ID..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border border-border rounded-lg bg-surface-2 text-text placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </div>
 
@@ -344,41 +345,45 @@ export default function UsersPage() {
                 <div className="mt-4 flex space-x-4 border-b border-border">
                   <button
                     onClick={() => setFilter('all')}
-                    className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                    className={clsx(
+                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
                       filter === 'all'
                         ? 'border-primary text-primary'
-                        : 'border-transparent text-text-sub hover:text-text hover:border-border'
-                    }`}
+                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
+                    )}
                   >
                     All ({users.length})
                   </button>
                   <button
                     onClick={() => setFilter('active')}
-                    className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                    className={clsx(
+                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
                       filter === 'active'
                         ? 'border-primary text-primary'
-                        : 'border-transparent text-text-sub hover:text-text hover:border-border'
-                    }`}
+                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
+                    )}
                   >
                     Active ({activeCount})
                   </button>
                   <button
                     onClick={() => setFilter('banned')}
-                    className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                    className={clsx(
+                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
                       filter === 'banned'
                         ? 'border-primary text-primary'
-                        : 'border-transparent text-text-sub hover:text-text hover:border-border'
-                    }`}
+                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
+                    )}
                   >
                     Banned ({bannedCount})
                   </button>
                   <button
                     onClick={() => setFilter('premium')}
-                    className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                    className={clsx(
+                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
                       filter === 'premium'
                         ? 'border-amber-400 text-amber-400'
-                        : 'border-transparent text-text-sub hover:text-text hover:border-border'
-                    }`}
+                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
+                    )}
                   >
                     Premium ({premiumCount})
                   </button>
@@ -388,9 +393,10 @@ export default function UsersPage() {
                 {displayUsers.map((user) => (
                   <li
                     key={user.id}
-                    className={`px-4 py-4 hover:bg-surface-2 cursor-pointer transition-colors ${
-                      selectedUser?.id === user.id ? 'bg-surface-2' : ''
-                    }`}
+                    className={clsx(
+                      'cursor-pointer px-4 py-4 transition-colors hover:bg-surface-2',
+                      selectedUser?.id === user.id && 'bg-surface-2'
+                    )}
                     onClick={() => setSelectedUser(user)}
                   >
                     <div className="flex items-center justify-between">
@@ -751,7 +757,7 @@ export default function UsersPage() {
             <textarea
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-lg bg-surface-2 text-text placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              className="w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               rows={3}
               placeholder="Spam, abuse, ToS violation, etc..."
             />

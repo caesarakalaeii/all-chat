@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
+import clsx from 'clsx'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PlatformBadge } from '@/components/ui/badge'
@@ -33,7 +34,7 @@ function OverlayEditorPreview() {
         <h2 className="text-base font-semibold text-text mb-4">Sources</h2>
         <div className="space-y-3 mb-6">
           {SAMPLE_SOURCES.map(source => (
-            <Card key={source.id} className={`p-4 border-l-2 ${source.borderClass}`}>
+            <Card key={source.id} className={clsx('border-l-2 p-4', source.borderClass)}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <PlatformBadge platform={source.platform} />

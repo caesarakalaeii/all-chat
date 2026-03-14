@@ -7,6 +7,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import clsx from 'clsx';
 import { sharesApi } from '@/lib/api/shares';
 import { overlaysApi } from '@/lib/api/overlays';
 import { PlatformBadge } from './PlatformBadge';
@@ -38,7 +39,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
     if (isKickUser && expiryOption === 'this_stream') {
       setExpiryOption('unlimited');
     }
-  }, [isKickUser]);
+  }, [isKickUser, expiryOption]);
 
   // Fetch user's overlays on mount
   useEffect(() => {
@@ -150,7 +151,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                 id="overlay-select"
                 value={selectedOverlay}
                 onChange={(e) => setSelectedOverlay(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder-text-dim transition-all duration-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder-text-dim transition-all duration-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20"
               >
                 {overlays.map((overlay) => (
                   <option key={overlay.id} value={overlay.id}>
@@ -167,7 +168,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
               </label>
               <div className="space-y-2">
                 {/* This stream */}
-                <label className={`flex items-start cursor-pointer${isKickUser ? ' opacity-50 cursor-not-allowed' : ''}`}>
+                <label className={clsx('flex cursor-pointer items-start', isKickUser && 'cursor-not-allowed opacity-50')}>
                   <input
                     type="radio"
                     name="expiry"
@@ -212,9 +213,12 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                             value={customHours}
                             onChange={(e) => setCustomHours(e.target.value)}
                             placeholder="hours"
-                            className={`w-24 rounded-lg px-2 py-1 text-sm text-text bg-surface-2 border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                              !isValidCustomHours() ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-blue-500'
-                            }`}
+                            className={clsx(
+                              'w-24 rounded-lg border bg-surface-2 px-2 py-1 text-sm text-text transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20',
+                              !isValidCustomHours()
+                                ? 'border-red-500 focus-visible:border-red-500'
+                                : 'border-border focus-visible:border-blue-500'
+                            )}
                           />
                           <span className="text-sm text-text-sub">hours (1-168)</span>
                         </div>

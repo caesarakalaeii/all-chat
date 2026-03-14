@@ -423,7 +423,7 @@ function AddSourceForm({
               <select
                 value={adminPlatform}
                 onChange={e => setAdminPlatform(e.target.value)}
-                className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch"
               >
                 <option value="twitch">Twitch</option>
                 <option value="youtube">YouTube</option>
@@ -1057,7 +1057,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
                     onChange={e => setShareRecipient(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSendShareRequest()}
                     placeholder="e.g. somestreamer"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-2 text-text placeholder:text-text-sub focus:outline-none focus:ring-2 focus:ring-twitch/50"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-2 text-text placeholder:text-text-sub focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch/50"
                     disabled={shareLoading}
                   />
                 </div>
@@ -1303,7 +1303,7 @@ onAddManual={handleAddManual}
                 <select
                   value={mockForm.platform}
                   onChange={e => handleMockInputChange('platform', e.target.value as MockMessageFormState['platform'])}
-                  className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                  className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch"
                 >
                   <option value="twitch">Twitch</option>
                   <option value="youtube">YouTube</option>
@@ -1318,7 +1318,7 @@ onAddManual={handleAddManual}
                     type="text"
                     value={mockForm.displayName}
                     onChange={e => handleMockInputChange('displayName', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch"
                   />
                 </div>
                 <div>
@@ -1327,7 +1327,7 @@ onAddManual={handleAddManual}
                     type="text"
                     value={mockForm.username}
                     onChange={e => handleMockInputChange('username', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch"
                   />
                 </div>
               </div>
@@ -1339,7 +1339,7 @@ onAddManual={handleAddManual}
                     value={mockForm.avatarUrl}
                     onChange={e => handleMockInputChange('avatarUrl', e.target.value)}
                     placeholder="https://..."
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch"
                   />
                 </div>
                 <div>
@@ -1357,7 +1357,7 @@ onAddManual={handleAddManual}
                 <textarea
                   value={mockForm.message}
                   onChange={e => handleMockInputChange('message', e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text h-16 focus:outline-none focus:ring-2 focus:ring-twitch resize-none"
+                  className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text h-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch resize-none"
                   placeholder="Type something fun..."
                 />
               </div>
