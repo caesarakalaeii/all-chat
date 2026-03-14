@@ -78,11 +78,22 @@ func (n *YouTubeNormalizer) extractBadges(tags map[string]string) []models.Badge
 		})
 	}
 
-	// Sponsor (channel member) - Star icon
-	if tags["is_sponsor"] == "true" {
+	// Member badge: prefer real image URL from InnerTube, fall back to SVG for old listener
+	if tags["badge_member_url"] != "" {
+		tooltip := tags["badge_member_tooltip"]
+		if tooltip == "" {
+			tooltip = "Member"
+		}
 		badges = append(badges, models.Badge{
 			Name:    "member",
-			Version: "1",
+			Version: tooltip,
+			IconURL: tags["badge_member_url"],
+		})
+	} else if tags["is_sponsor"] == "true" {
+		// Backward compatibility: old youtube-listener sets is_sponsor without badge_member_url
+		badges = append(badges, models.Badge{
+			Name:    "member",
+			Version: "Member",
 			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2300FF00'%3E%3Cpath d='M8 1l2 5h5l-4 3.5 1.5 5.5-4.5-3.5-4.5 3.5 1.5-5.5-4-3.5h5z'/%3E%3C/svg%3E",
 		})
 	}
