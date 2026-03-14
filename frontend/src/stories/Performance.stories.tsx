@@ -14,13 +14,7 @@ import { expect, within } from 'storybook/test'
 // Use a lightweight component to isolate render time (not network/data fetching)
 // Badge is the simplest component in the library — representative of a single
 // message element render cycle.
-const TestComponent = ({
-  iteration,
-  platform,
-}: {
-  iteration: number
-  platform: string
-}) => (
+const TestComponent = ({ iteration, platform }: { iteration: number; platform: string }) => (
   <div
     data-testid={`render-${iteration}`}
     className="flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-100"

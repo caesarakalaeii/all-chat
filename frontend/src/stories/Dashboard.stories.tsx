@@ -120,7 +120,7 @@ function DashboardDefaultStory() {
             <Card key={overlay.id} interactive className="cursor-pointer overflow-hidden">
               <div style={{ height: '3px', ...getBorder(overlay.sources) }} />
               <div className="p-6">
-                <h3 className="mb-3 font-semibold text-text">{overlay.name}</h3>
+                <h2 className="mb-3 font-semibold text-text">{overlay.name}</h2>
                 <div className="flex flex-wrap gap-1.5">
                   {overlay.sources.map((s, i) => (
                     <PlatformBadge
