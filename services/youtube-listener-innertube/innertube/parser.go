@@ -147,7 +147,7 @@ func parseTextMessage(renderer *LiveChatTextMessageRenderer, channelID string) (
 		return nil, fmt.Errorf("parse timestamp: %w", err)
 	}
 
-	text := extractMessageText(renderer.Message)
+	text, emotes := extractMessageText(renderer.Message)
 
 	// Strip @ prefix from username if present (YouTube returns @username)
 	username := renderer.AuthorName.SimpleText
@@ -174,9 +174,20 @@ func parseTextMessage(renderer *LiveChatTextMessageRenderer, channelID string) (
 
 	// Add badges to tags if present
 	if len(renderer.AuthorBadges) > 0 {
-		badges := extractBadges(renderer.AuthorBadges)
-		if len(badges) > 0 {
-			msg.Tags["badges"] = strings.Join(badges, ",")
+		memberURL, memberTooltip, badgeTooltips := extractBadgesRich(renderer.AuthorBadges)
+		if len(badgeTooltips) > 0 {
+			msg.Tags["badges"] = strings.Join(badgeTooltips, ",")
+		}
+		if memberURL != "" {
+			msg.Tags["badge_member_url"] = memberURL
+			msg.Tags["badge_member_tooltip"] = memberTooltip
+		}
+	}
+
+	// Marshal custom emotes to JSON and store in tags
+	if len(emotes) > 0 {
+		if emoteJSON, err := json.Marshal(emotes); err == nil {
+			msg.Tags["emote_data"] = string(emoteJSON)
 		}
 	}
 
@@ -193,7 +204,7 @@ func parsePaidMessage(renderer *LiveChatPaidMessageRenderer, channelID string) (
 	// Message may be empty for some Super Chats
 	text := ""
 	if renderer.Message.Runs != nil {
-		text = extractMessageText(renderer.Message)
+		text, _ = extractMessageText(renderer.Message)
 	}
 
 	// Build rich event data
@@ -248,7 +259,7 @@ func parseMembershipMessage(renderer *LiveChatMembershipItemRenderer, channelID 
 	// Extract message from header subtext
 	text := ""
 	if renderer.HeaderSubtext.Runs != nil {
-		text = extractMessageText(renderer.HeaderSubtext)
+		text, _ = extractMessageText(renderer.HeaderSubtext)
 	}
 
 	// Distinguish between welcome and milestone based on text content
@@ -383,18 +394,50 @@ func parseTickerEvent(ticker *AddLiveChatTickerItem, channelID string) (*RawChat
 	return msg, nil
 }
 
-// extractMessageText concatenates all text runs into a single string
-func extractMessageText(message MessageContent) string {
+// extractMessageText concatenates all text runs into a single string and
+// collects EmoteEntry data for custom emoji runs.
+func extractMessageText(message MessageContent) (string, []EmoteEntry) {
 	var parts []string
+	var emotes []EmoteEntry
 	for _, run := range message.Runs {
 		if run.Text != "" {
 			parts = append(parts, run.Text)
-		} else if run.Emoji != nil && len(run.Emoji.Shortcuts) > 0 {
-			// Use first shortcut as emoji text representation
-			parts = append(parts, run.Emoji.Shortcuts[0])
+		} else if run.Emoji != nil {
+			if run.Emoji.IsCustomEmoji {
+				// Custom emoji: add text placeholder + collect emote entry
+				code := ""
+				if len(run.Emoji.Shortcuts) > 0 {
+					code = run.Emoji.Shortcuts[0]
+				} else if run.Emoji.EmojiID != "" {
+					code = ":" + run.Emoji.EmojiID + ":"
+				}
+				if code != "" {
+					parts = append(parts, code)
+				}
+				// Pick 48px thumbnail (index 1) with fallback to index 0
+				url := ""
+				thumbs := run.Emoji.Image.Thumbnails
+				if len(thumbs) > 1 {
+					url = thumbs[1].URL
+				} else if len(thumbs) == 1 {
+					url = thumbs[0].URL
+				}
+				if run.Emoji.EmojiID != "" {
+					emotes = append(emotes, EmoteEntry{
+						Code: code,
+						URL:  url,
+						ID:   run.Emoji.EmojiID,
+					})
+				}
+			} else {
+				// Unicode emoji: text placeholder only, no image entry
+				if len(run.Emoji.Shortcuts) > 0 {
+					parts = append(parts, run.Emoji.Shortcuts[0])
+				}
+			}
 		}
 	}
-	return strings.Join(parts, "")
+	return strings.Join(parts, ""), emotes
 }
 
 // extractBadges extracts badge types from author badges
@@ -406,6 +449,35 @@ func extractBadges(badges []AuthorBadge) []string {
 		}
 	}
 	return badgeTypes
+}
+
+// EmoteEntry represents a custom emoji extracted from a YouTube message run.
+// Passed to tags["emote_data"] as a JSON array for downstream processing.
+type EmoteEntry struct {
+	Code string `json:"code"` // shortcut text (e.g. ":custom:") or ":emojiId:"
+	URL  string `json:"url"`  // 48px thumbnail URL
+	ID   string `json:"id"`   // raw emojiId for cache keying
+}
+
+// extractBadgesRich extracts badge information from author badges, returning
+// the member badge image URL and tooltip separately for downstream enrichment.
+// Returns (memberURL, memberTooltip, badgeTooltips).
+func extractBadgesRich(badges []AuthorBadge) (memberURL string, memberTooltip string, badgeTooltips []string) {
+	for _, badge := range badges {
+		r := badge.LiveChatAuthorBadgeRenderer
+		if len(r.CustomThumbnail.Thumbnails) > 0 {
+			idx := 0
+			if len(r.CustomThumbnail.Thumbnails) > 1 {
+				idx = 1
+			}
+			memberURL = r.CustomThumbnail.Thumbnails[idx].URL
+			memberTooltip = r.Tooltip
+		}
+		if r.Tooltip != "" {
+			badgeTooltips = append(badgeTooltips, r.Tooltip)
+		}
+	}
+	return
 }
 
 // formatColorFromInt converts an integer color value to hex string
