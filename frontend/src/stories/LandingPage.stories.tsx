@@ -25,13 +25,13 @@ function LandingHeroCards() {
       {/* Login buttons — aria-label required for a11y audit */}
       <div className="mb-12 flex flex-col justify-center gap-3 sm:flex-row">
         <button
-          className="rounded-lg bg-twitch px-6 py-3 font-semibold text-white focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          className="rounded-lg bg-twitch px-6 py-3 font-semibold text-bg focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           aria-label="Sign in with Twitch"
         >
           Sign in with Twitch
         </button>
         <button
-          className="rounded-lg bg-youtube px-6 py-3 font-semibold text-white focus-visible:ring-2 focus-visible:ring-youtube focus-visible:outline-none"
+          className="rounded-lg bg-youtube px-6 py-3 font-semibold text-bg focus-visible:ring-2 focus-visible:ring-youtube focus-visible:outline-none"
           aria-label="Sign in with YouTube"
         >
           Sign in with YouTube
@@ -54,7 +54,7 @@ function LandingHeroCards() {
         ].map(({ icon: Icon, title, desc }) => (
           <div key={title} className="rounded-xl border border-border bg-surface p-6">
             <Icon className="mb-4 h-7 w-7 text-text-sub" aria-hidden="true" />
-            <h3 className="mb-2 text-lg font-semibold text-text">{title}</h3>
+            <h2 className="mb-2 text-lg font-semibold text-text">{title}</h2>
             <p className="text-sm text-text-sub">{desc}</p>
           </div>
         ))}
