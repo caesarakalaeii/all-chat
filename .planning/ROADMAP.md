@@ -224,7 +224,12 @@ Plans:
   4. Emote cache per channel stored in Redis keyed by `yt:emote:{channel_id}:{emoji_id}` (TTL 24h), populated as messages arrive
   5. Unicode emoji (non-custom) continue to render as text — no regression
   6. Old quota-based youtube-listener unaffected (backward compatible)
-**Plans**: TBD (target ~3 plans)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 27-01-PLAN.md — Test scaffolds: failing tests for all badge and emote requirements (Wave 0, TDD)
+- [ ] 27-02-PLAN.md — InnerTube parser: IsCustomEmoji, extractBadgesRich, extractMessageText emote extraction, yt_emote_cache
+- [ ] 27-03-PLAN.md — Message-processor normalizer: badge_member_url handling, emote_data tag merge
 
 ### Phase 28: Viewer Identity Foundation — Auth & Platform Linking
 **Goal**: Establish viewer account model, OAuth flow from browser extension, and platform identity linking so All-Chat knows which platform user corresponds to which viewer
