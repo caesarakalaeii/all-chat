@@ -27,7 +27,8 @@
 }
 
 @keyframes high-tier-glow {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow:
       0 0 30px rgba(255, 215, 0, 0.5),
       0 8px 32px rgba(0, 0, 0, 0.4),
@@ -42,7 +43,8 @@
 }
 
 @keyframes event-icon-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1) rotate(0deg);
     filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.3));
   }
@@ -53,10 +55,12 @@
 }
 
 @keyframes heartbeat {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
   }
-  25%, 75% {
+  25%,
+  75% {
     transform: scale(1.2);
   }
   50% {
@@ -89,7 +93,8 @@
 }
 
 @keyframes warning-pulse {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow:
       0 0 30px rgba(239, 68, 68, 0.5),
       0 8px 32px rgba(0, 0, 0, 0.4);
@@ -102,13 +107,19 @@
 }
 
 @keyframes warning-shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-3px); }
-  75% { transform: translateX(3px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
 }
 
 @layer marketplace-themes {
-
   /* Base event message styling - make events MUCH larger and more prominent */
   .event-message {
     position: relative;
@@ -127,10 +138,8 @@
 
   /* Event tier styling - visual importance hierarchy */
   .event-tier-high {
-    background: linear-gradient(135deg,
-      rgba(255, 215, 0, 0.25) 0%,
-      rgba(255, 140, 0, 0.15) 100%);
-    border: 3px solid #FFD700;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(255, 140, 0, 0.15) 100%);
+    border: 3px solid #ffd700;
     box-shadow:
       0 0 30px rgba(255, 215, 0, 0.5),
       0 8px 32px rgba(0, 0, 0, 0.4),
@@ -139,15 +148,14 @@
 
   /* Pulsing glow for high-tier events */
   .event-tier-high {
-    animation: event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55),
-               high-tier-glow 2s ease-in-out infinite;
+    animation:
+      event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55),
+      high-tier-glow 2s ease-in-out infinite;
   }
 
   .event-tier-medium {
-    background: linear-gradient(135deg,
-      rgba(147, 51, 234, 0.2) 0%,
-      rgba(79, 70, 229, 0.15) 100%);
-    border: 3px solid #9333EA;
+    background: linear-gradient(135deg, rgba(147, 51, 234, 0.2) 0%, rgba(79, 70, 229, 0.15) 100%);
+    border: 3px solid #9333ea;
     box-shadow:
       0 0 25px rgba(147, 51, 234, 0.4),
       0 6px 24px rgba(0, 0, 0, 0.3);
@@ -155,7 +163,7 @@
 
   .event-tier-low {
     background: rgba(59, 130, 246, 0.15);
-    border: 2px solid #3B82F6;
+    border: 2px solid #3b82f6;
     box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
   }
 
@@ -175,57 +183,45 @@
   }
 
   /* Platform-specific event colors */
-  .event-message[class*="subscription"],
-  .event-message[class*="gift_subscription"] {
-    border-left: 8px solid #9146FF; /* Thicker Twitch purple */
+  .event-message[class*='subscription'],
+  .event-message[class*='gift_subscription'] {
+    border-left: 8px solid #9146ff; /* Thicker Twitch purple */
   }
 
-  .event-message[class*="super_chat"],
-  .event-message[class*="super_sticker"] {
-    border-left: 8px solid #FFD700; /* Gold */
-    background: linear-gradient(
-      135deg,
-      rgba(255, 215, 0, 0.2),
-      rgba(255, 0, 0, 0.1)
-    );
+  .event-message[class*='super_chat'],
+  .event-message[class*='super_sticker'] {
+    border-left: 8px solid #ffd700; /* Gold */
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 0, 0, 0.1));
   }
 
-  .event-message[class*="raid"] {
-    border-left: 8px solid #FF4500; /* Orangered */
-    background: linear-gradient(
-      135deg,
-      rgba(255, 69, 0, 0.25),
-      rgba(138, 43, 226, 0.15)
-    );
+  .event-message[class*='raid'] {
+    border-left: 8px solid #ff4500; /* Orangered */
+    background: linear-gradient(135deg, rgba(255, 69, 0, 0.25), rgba(138, 43, 226, 0.15));
   }
 
-  .event-message[class*="bits"] {
-    border-left: 8px solid #9146FF; /* Twitch purple */
-    background: linear-gradient(
-      135deg,
-      rgba(145, 70, 255, 0.2),
-      rgba(0, 200, 255, 0.1)
-    );
+  .event-message[class*='bits'] {
+    border-left: 8px solid #9146ff; /* Twitch purple */
+    background: linear-gradient(135deg, rgba(145, 70, 255, 0.2), rgba(0, 200, 255, 0.1));
   }
 
-  .event-message[class*="channel_points"] {
-    border-left: 8px solid #00C8FF; /* Channel points blue */
+  .event-message[class*='channel_points'] {
+    border-left: 8px solid #00c8ff; /* Channel points blue */
   }
 
-  .event-message[class*="gift"] {
-    border-left: 8px solid #FF69B4; /* Hot pink for gifts */
+  .event-message[class*='gift'] {
+    border-left: 8px solid #ff69b4; /* Hot pink for gifts */
   }
 
-  .event-message[class*="follow"] {
-    border-left: 8px solid #1DA1F2; /* Twitter blue */
+  .event-message[class*='follow'] {
+    border-left: 8px solid #1da1f2; /* Twitter blue */
   }
 
-  .event-message[class*="like_aggregate"] {
-    border-left: 8px solid #FE2C55; /* TikTok pink */
+  .event-message[class*='like_aggregate'] {
+    border-left: 8px solid #fe2c55; /* TikTok pink */
   }
 
-  .event-message[class*="member"] {
-    border-left: 8px solid #00FF00; /* Green for memberships */
+  .event-message[class*='member'] {
+    border-left: 8px solid #00ff00; /* Green for memberships */
   }
 
   /* Event icon animations - more dramatic */
@@ -260,12 +256,8 @@
 
   /* Super Chat tier colors (based on YouTube's official tiers) */
   .event-type-super_chat.event-tier-high {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 0, 0, 0.2),
-      rgba(255, 215, 0, 0.15)
-    );
-    border-color: #FFD700;
+    background: linear-gradient(135deg, rgba(255, 0, 0, 0.2), rgba(255, 215, 0, 0.15));
+    border-color: #ffd700;
   }
 
   /* Subscription gift bomb animation */
@@ -275,13 +267,9 @@
 
   /* Token expiration warning styling */
   .event-type-token_expiration_warning {
-    background: linear-gradient(
-      135deg,
-      rgba(239, 68, 68, 0.25) 0%,
-      rgba(220, 38, 38, 0.15) 100%
-    );
-    border: 3px solid #EF4444;
-    border-left: 8px solid #DC2626;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(220, 38, 38, 0.15) 100%);
+    border: 3px solid #ef4444;
+    border-left: 8px solid #dc2626;
     box-shadow:
       0 0 30px rgba(239, 68, 68, 0.5),
       0 8px 32px rgba(0, 0, 0, 0.4);
@@ -305,10 +293,14 @@
   }
 
   /* Support for custom CSS overrides */
-  .event-message[data-platform="twitch"] {}
-  .event-message[data-platform="youtube"] {}
-  .event-message[data-platform="kick"] {}
-  .event-message[data-platform="tiktok"] {}
-  .event-message[data-platform="system"] {}
-
+  .event-message[data-platform='twitch'] {
+  }
+  .event-message[data-platform='youtube'] {
+  }
+  .event-message[data-platform='kick'] {
+  }
+  .event-message[data-platform='tiktok'] {
+  }
+  .event-message[data-platform='system'] {
+  }
 }

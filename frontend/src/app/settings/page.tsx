@@ -14,8 +14,8 @@ import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 function SettingsContent() {
   const router = useRouter()
-  const user = useAuthStore(state => state.user)
-  const logout = useAuthStore(state => state.logout)
+  const user = useAuthStore((state) => state.user)
+  const logout = useAuthStore((state) => state.logout)
 
   async function handleDeleteAccount() {
     try {
@@ -37,15 +37,15 @@ function SettingsContent() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="max-w-2xl mx-auto px-4 py-12 space-y-6">
+      <main className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <h1 className="text-2xl font-bold text-text">Settings</h1>
 
         {/* Profile section */}
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text mb-4">Profile</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">Profile</h2>
           <div className="space-y-3">
             {user.profile_image_url && (
-              <div className="flex items-center gap-3 mb-4">
+              <div className="mb-4 flex items-center gap-3">
                 <Image
                   src={user.profile_image_url}
                   alt={user.display_name}
@@ -53,38 +53,38 @@ function SettingsContent() {
                   height={48}
                   className="rounded-full object-cover"
                 />
-                <span className="text-text font-medium text-lg">{user.display_name}</span>
+                <span className="text-lg font-medium text-text">{user.display_name}</span>
               </div>
             )}
             <div>
               <span className="text-sm text-text-sub">Username</span>
-              <p className="text-text font-medium">{user.username}</p>
+              <p className="font-medium text-text">{user.username}</p>
             </div>
             <div>
               <span className="text-sm text-text-sub">Primary Platform</span>
-              <p className="text-text font-medium capitalize">{user.auth_provider ?? 'Unknown'}</p>
+              <p className="font-medium text-text capitalize">{user.auth_provider ?? 'Unknown'}</p>
             </div>
           </div>
         </Card>
 
         {/* Data & Privacy section */}
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text mb-4">Data &amp; Privacy</h2>
-          <p className="text-text-sub text-sm mb-4">
+          <h2 className="mb-4 text-lg font-semibold text-text">Data &amp; Privacy</h2>
+          <p className="mb-4 text-sm text-text-sub">
             We keep data collection minimal and transparent. Review the policies below for details
             about how tokens, overlays, and chat metadata are processed.
           </p>
           <div className="flex flex-col gap-3">
             <Link
               href="/legal/privacy"
-              className="inline-flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm text-text hover:bg-surface-2 transition-colors"
+              className="inline-flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm text-text transition-colors hover:bg-surface-2"
             >
               <span>Privacy Policy</span>
               <span aria-hidden="true">→</span>
             </Link>
             <Link
               href="/legal/terms"
-              className="inline-flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm text-text hover:bg-surface-2 transition-colors"
+              className="inline-flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm text-text transition-colors hover:bg-surface-2"
             >
               <span>Terms of Service</span>
               <span aria-hidden="true">→</span>
@@ -93,9 +93,9 @@ function SettingsContent() {
         </Card>
 
         {/* Danger zone */}
-        <Card className="p-6 border-destructive/20">
-          <h2 className="text-lg font-semibold text-destructive mb-2">Danger Zone</h2>
-          <p className="text-text-sub text-sm mb-4">
+        <Card className="border-destructive/20 p-6">
+          <h2 className="text-destructive mb-2 text-lg font-semibold">Danger Zone</h2>
+          <p className="mb-4 text-sm text-text-sub">
             Deleting your account removes all overlays, OAuth grants, and cached chat sources. This
             action is permanent and cannot be undone.
           </p>
@@ -107,7 +107,7 @@ function SettingsContent() {
                 This permanently deletes your account and all overlays. This action cannot be
                 undone.
               </Dialog.Description>
-              <div className="flex gap-3 justify-end mt-6">
+              <div className="mt-6 flex justify-end gap-3">
                 <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
                 <Button variant="destructive" onClick={handleDeleteAccount}>
                   Yes, delete my account

@@ -1,25 +1,25 @@
-import Link from 'next/link';
-import LegalLayout from '@/components/legal/LegalLayout';
+import Link from 'next/link'
+import LegalLayout from '@/components/legal/LegalLayout'
 
 export const metadata = {
   title: 'Privacy Policy | All-Chat',
-  description: 'Learn how All-Chat collects, processes, and protects your information.'
-};
+  description: 'Learn how All-Chat collects, processes, and protects your information.',
+}
 
-const listClasses = 'list-disc pl-6 space-y-1 text-slate-700';
+const listClasses = 'list-disc pl-6 space-y-1 text-slate-700'
 
 export default function PrivacyPolicyPage() {
   return (
     <LegalLayout title="Privacy Policy" lastUpdated="November 15, 2025">
       <div className="space-y-4">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900">
-          <strong>TL;DR:</strong> All-Chat only collects the information we need to authenticate with your
-          streaming platforms and render chat in your overlays. Tokens are encrypted, chat messages are
-          processed in-memory, and we never sell your data.
+          <strong>TL;DR:</strong> All-Chat only collects the information we need to authenticate
+          with your streaming platforms and render chat in your overlays. Tokens are encrypted, chat
+          messages are processed in-memory, and we never sell your data.
         </div>
         <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sky-900">
-          <strong>Open Source Transparency:</strong> All-Chat is licensed under AGPL-3.0. Review the entire
-          codebase—including how we store and process your data—on{' '}
+          <strong>Open Source Transparency:</strong> All-Chat is licensed under AGPL-3.0. Review the
+          entire codebase—including how we store and process your data—on{' '}
           <a
             href="https://github.com/caesarakalaeii/all-chat"
             target="_blank"
@@ -38,8 +38,8 @@ export default function PrivacyPolicyPage() {
         <div>
           <h3 className="text-lg font-semibold text-slate-800">1.1 Authentication Information</h3>
           <p>
-            When you connect Twitch, YouTube, TikTok, or Kick we store the minimum data required to create
-            overlays and reconnect later:
+            When you connect Twitch, YouTube, TikTok, or Kick we store the minimum data required to
+            create overlays and reconnect later:
           </p>
           <ul className={listClasses}>
             <li>Platform identifiers (user ID, username, display name)</li>
@@ -110,8 +110,8 @@ export default function PrivacyPolicyPage() {
           <li>Regular dependency upgrades and security patching</li>
         </ul>
         <p className="text-sm text-slate-500">
-          No storage system is perfectly secure, but we follow industry best practices to keep your tokens
-          and overlays safe.
+          No storage system is perfectly secure, but we follow industry best practices to keep your
+          tokens and overlays safe.
         </p>
       </section>
 
@@ -124,9 +124,13 @@ export default function PrivacyPolicyPage() {
           <li>TikTok Live APIs (beta) and Kick APIs</li>
           <li>7TV, BTTV, FFZ for emote metadata</li>
         </ul>
-        <p>Every integration remains subject to the platform&apos;s own policies and scopes you approve.</p>
+        <p>
+          Every integration remains subject to the platform&apos;s own policies and scopes you
+          approve.
+        </p>
         <p className="font-semibold text-slate-800">
-          YouTube Integration: Your use of All-Chat&apos;s YouTube integration is also governed by the{' '}
+          YouTube Integration: Your use of All-Chat&apos;s YouTube integration is also governed by
+          the{' '}
           <a
             href="http://www.google.com/policies/privacy"
             target="_blank"
@@ -138,8 +142,8 @@ export default function PrivacyPolicyPage() {
           .
         </p>
         <p className="text-sm text-slate-500">
-          We never sell or rent your data, but we may disclose information when required by law or to respond
-          to legitimate security incidents.
+          We never sell or rent your data, but we may disclose information when required by law or
+          to respond to legitimate security incidents.
         </p>
       </section>
 
@@ -150,7 +154,8 @@ export default function PrivacyPolicyPage() {
             <strong>Account & overlay data:</strong> kept until you delete your account
           </li>
           <li>
-            <strong>OAuth tokens:</strong> deleted when you disconnect a platform or when they expire
+            <strong>OAuth tokens:</strong> deleted when you disconnect a platform or when they
+            expire
           </li>
           <li>
             <strong>Chat messages:</strong> never written to disk; cleared after sessions end
@@ -169,7 +174,12 @@ export default function PrivacyPolicyPage() {
           <li>Correct inaccurate information</li>
           <li>Disconnect platforms or delete your account from the Settings page</li>
           <li>Export overlay configuration JSON</li>
-          <li>Contact us at <a href="mailto:allchat@caes.ar" className="underline">allchat@caes.ar</a></li>
+          <li>
+            Contact us at{' '}
+            <a href="mailto:allchat@caes.ar" className="underline">
+              allchat@caes.ar
+            </a>
+          </li>
         </ul>
         <p className="font-semibold text-slate-800">
           For YouTube Data: You can revoke All-Chat&apos;s access to your YouTube data via the{' '}
@@ -181,7 +191,8 @@ export default function PrivacyPolicyPage() {
           >
             Google security settings page
           </a>
-          . Disconnecting YouTube from Settings will delete your OAuth tokens. Chat messages are processed in real-time and not stored permanently.
+          . Disconnecting YouTube from Settings will delete your OAuth tokens. Chat messages are
+          processed in real-time and not stored permanently.
         </p>
       </section>
 
@@ -198,8 +209,8 @@ export default function PrivacyPolicyPage() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-slate-900">8. Children&apos;s Privacy</h2>
         <p>
-          All-Chat is not intended for children under 13. If we discover data belonging to a minor we will
-          delete it immediately.
+          All-Chat is not intended for children under 13. If we discover data belonging to a minor
+          we will delete it immediately.
         </p>
       </section>
 
@@ -214,7 +225,7 @@ export default function PrivacyPolicyPage() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-slate-900">10. Updates</h2>
         <p>
-          We&apos;ll post updates to this page when the policy changes and include a new{" "}
+          We&apos;ll post updates to this page when the policy changes and include a new{' '}
           <em>Last Updated</em> date. Significant changes will be announced inside the dashboard.
         </p>
         <p>
@@ -227,9 +238,13 @@ export default function PrivacyPolicyPage() {
           >
             our repository
           </Link>{' '}
-          or reach out to <a href="mailto:allchat@caes.ar" className="underline">allchat@caes.ar</a>.
+          or reach out to{' '}
+          <a href="mailto:allchat@caes.ar" className="underline">
+            allchat@caes.ar
+          </a>
+          .
         </p>
       </section>
     </LegalLayout>
-  );
+  )
 }

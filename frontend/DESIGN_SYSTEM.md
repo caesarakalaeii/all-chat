@@ -9,6 +9,7 @@
 ## Philosophy
 
 All-Chat is a **professional creator tool** for streamers aggregating multi-platform chat. The UI should feel:
+
 - **Polished** (creators expect professional tools)
 - **Approachable** (not sterile or intimidating)
 - **Functional** (tool-first, not decoration)
@@ -22,38 +23,24 @@ All-Chat is a **professional creator tool** for streamers aggregating multi-plat
 ## Color System
 
 ### Base Palette
+
 ```css
 /* Backgrounds */
---bg-primary: #0f172a     /* slate-900 - page background */
---bg-secondary: #1a2332   /* slate-850 - card background */
---bg-tertiary: #1e293b    /* slate-800 - elevated cards */
-
-/* Borders */
---border-default: rgb(51 65 85 / 0.5)  /* slate-700/50 - subtle borders */
---border-focus: #3b82f6   /* blue-500 - focus rings */
-
-/* Text */
---text-primary: #f8fafc   /* slate-50 - headings, primary content */
---text-secondary: #94a3b8 /* slate-400 - secondary content */
---text-tertiary: #64748b  /* slate-500 - labels, metadata */
-
-/* Platform Colors (use as accents only) */
---color-twitch: #9146FF
---color-youtube: #FF0000
---color-kick: #53FC18
---color-tiktok: #000000
-
-/* Accent Gradient (primary CTAs) */
---accent-gradient: linear-gradient(to right, #a855f7, #3b82f6)  /* purple-500 → blue-500 */
-
-/* Status Colors */
---status-success: #10b981  /* green-500 */
---status-warning: #f59e0b  /* amber-500 */
---status-error: #ef4444    /* red-500 */
---status-info: #3b82f6     /* blue-500 */
+--bg-primary: #0f172a /* slate-900 - page background */ --bg-secondary: #1a2332
+  /* slate-850 - card background */ --bg-tertiary: #1e293b /* slate-800 - elevated cards */
+  /* Borders */ --border-default: rgb(51 65 85 / 0.5) /* slate-700/50 - subtle borders */
+  --border-focus: #3b82f6 /* blue-500 - focus rings */ /* Text */ --text-primary: #f8fafc
+  /* slate-50 - headings, primary content */ --text-secondary: #94a3b8
+  /* slate-400 - secondary content */ --text-tertiary: #64748b /* slate-500 - labels, metadata */
+  /* Platform Colors (use as accents only) */ --color-twitch: #9146ff --color-youtube: #ff0000
+  --color-kick: #53fc18 --color-tiktok: #000000 /* Accent Gradient (primary CTAs) */
+  --accent-gradient: linear-gradient(to right, #a855f7, #3b82f6) /* purple-500 → blue-500 */
+  /* Status Colors */ --status-success: #10b981 /* green-500 */ --status-warning: #f59e0b
+  /* amber-500 */ --status-error: #ef4444 /* red-500 */ --status-info: #3b82f6 /* blue-500 */;
 ```
 
 ### Usage Rules
+
 ```
 ✅ DO:
 - Use slate-900/850/800 for backgrounds (not gray-900)
@@ -73,12 +60,14 @@ All-Chat is a **professional creator tool** for streamers aggregating multi-plat
 ## Typography
 
 ### Font Stack
+
 ```css
 --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 --font-mono: 'SF Mono', 'Consolas', monospace;
 ```
 
 ### Scale
+
 ```
 /* Headings */
 --text-4xl: 2.25rem (36px) - Page titles
@@ -99,6 +88,7 @@ All-Chat is a **professional creator tool** for streamers aggregating multi-plat
 ```
 
 ### Usage Rules
+
 ```
 ✅ DO:
 - Page titles: text-3xl font-semibold text-slate-50
@@ -120,6 +110,7 @@ All-Chat is a **professional creator tool** for streamers aggregating multi-plat
 ## Spacing & Layout
 
 ### Container System
+
 ```
 /* Max widths */
 --container-sm: 640px   /* Forms, focused content */
@@ -133,6 +124,7 @@ All-Chat is a **professional creator tool** for streamers aggregating multi-plat
 ```
 
 ### Spacing Scale
+
 ```
 /* Use Tailwind scale consistently */
 gap-2  (0.5rem / 8px)   - Icon + text
@@ -155,6 +147,7 @@ mb-8   - Major section breaks
 ```
 
 ### Usage Rules
+
 ```
 ✅ DO:
 - Use even numbers (gap-2, gap-4, gap-6, gap-8)
@@ -175,6 +168,7 @@ mb-8   - Major section breaks
 ### Buttons
 
 **Variants:**
+
 ```tsx
 // Primary (main actions)
 <button className="rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:shadow-lg hover:scale-[1.02]">
@@ -203,6 +197,7 @@ mb-8   - Major section breaks
 ```
 
 **Rules:**
+
 ```
 ✅ DO:
 - Use gradient only for primary CTAs
@@ -221,6 +216,7 @@ mb-8   - Major section breaks
 ### Cards
 
 **Variants:**
+
 ```tsx
 // Standard card
 <div className="rounded-xl border border-slate-700/50 bg-slate-850 p-6 shadow-lg">
@@ -244,6 +240,7 @@ mb-8   - Major section breaks
 ```
 
 **Rules:**
+
 ```
 ✅ DO:
 - Default: rounded-xl, p-6, shadow-lg
@@ -262,6 +259,7 @@ mb-8   - Major section breaks
 ### Form Inputs
 
 **Text inputs:**
+
 ```tsx
 <div className="space-y-2">
   <label className="block text-sm font-medium text-slate-400">
@@ -280,6 +278,7 @@ mb-8   - Major section breaks
 ```
 
 **Rules:**
+
 ```
 ✅ DO:
 - Label: text-sm font-medium text-slate-400
@@ -299,6 +298,7 @@ mb-8   - Major section breaks
 ### Badges
 
 **Platform badges:**
+
 ```tsx
 // Twitch
 <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-500/10 px-2.5 py-0.5 text-xs font-medium text-purple-400 border border-purple-500/20">
@@ -320,6 +320,7 @@ mb-8   - Major section breaks
 ```
 
 **Rules:**
+
 ```
 ✅ DO:
 - rounded-full (not rounded-lg)
@@ -340,8 +341,9 @@ mb-8   - Major section breaks
 ### Modals & Overlays
 
 **Modal backdrop:**
+
 ```tsx
-<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
   <div className="relative w-full max-w-lg rounded-xl border border-slate-700/50 bg-slate-800 p-6 shadow-2xl">
     {children}
   </div>
@@ -349,6 +351,7 @@ mb-8   - Major section breaks
 ```
 
 **Rules:**
+
 ```
 ✅ DO:
 - Backdrop: bg-black/60 backdrop-blur-sm
@@ -368,6 +371,7 @@ mb-8   - Major section breaks
 ## Layout Patterns
 
 ### Dashboard Grid
+
 ```tsx
 <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
   <Card>Overlay 1</Card>
@@ -377,18 +381,16 @@ mb-8   - Major section breaks
 ```
 
 ### Sidebar + Content
+
 ```tsx
 <div className="flex min-h-screen">
-  <aside className="w-64 border-r border-slate-700/50 bg-slate-900 p-6">
-    Navigation
-  </aside>
-  <main className="flex-1 p-8">
-    Content
-  </main>
+  <aside className="w-64 border-r border-slate-700/50 bg-slate-900 p-6">Navigation</aside>
+  <main className="flex-1 p-8">Content</main>
 </div>
 ```
 
 ### Split Preview
+
 ```tsx
 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
   <div>Configuration</div>
@@ -401,6 +403,7 @@ mb-8   - Major section breaks
 ## Animation & Transitions
 
 ### Standard Transitions
+
 ```css
 /* Default (most components) */
 transition-all duration-200
@@ -413,6 +416,7 @@ transition-all duration-300
 ```
 
 ### Hover States
+
 ```css
 /* Cards */
 hover:shadow-xl hover:scale-[1.02]
@@ -428,6 +432,7 @@ hover:bg-slate-800
 ```
 
 ### Rules
+
 ```
 ✅ DO:
 - Use duration-200 (default)
@@ -449,6 +454,7 @@ hover:bg-slate-800
 **Library**: Lucide React (already installed)
 
 **Sizing:**
+
 ```
 size={16} - Inline with text (text-sm)
 size={20} - Default (text-base)
@@ -457,6 +463,7 @@ size={32} - Large icons (hero sections)
 ```
 
 **Usage:**
+
 ```tsx
 // Inline with text
 <button className="inline-flex items-center gap-2">
@@ -477,6 +484,7 @@ size={32} - Large icons (hero sections)
 ```
 
 **Rules:**
+
 ```
 ✅ DO:
 - Use size prop (not className="w-5 h-5")
@@ -495,6 +503,7 @@ size={32} - Large icons (hero sections)
 ## Responsive Design
 
 ### Breakpoints
+
 ```
 sm: 640px   - Mobile landscape
 md: 768px   - Tablet
@@ -504,6 +513,7 @@ xl: 1280px  - Large desktop
 ```
 
 ### Patterns
+
 ```tsx
 // Grid columns
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -522,6 +532,7 @@ xl: 1280px  - Large desktop
 ```
 
 **Rules:**
+
 ```
 ✅ DO:
 - Design mobile-first (default styles for mobile)
@@ -540,36 +551,38 @@ xl: 1280px  - Large desktop
 ## Platform Color Usage
 
 ### Color Mapping
+
 ```tsx
 const platformColors = {
   twitch: {
     bg: 'bg-purple-500/10',
     border: 'border-purple-500/20',
     text: 'text-purple-400',
-    badge: 'bg-purple-500'
+    badge: 'bg-purple-500',
   },
   youtube: {
     bg: 'bg-red-500/10',
     border: 'border-red-500/20',
     text: 'text-red-400',
-    badge: 'bg-red-500'
+    badge: 'bg-red-500',
   },
   kick: {
     bg: 'bg-green-500/10',
     border: 'border-green-500/20',
     text: 'text-green-400',
-    badge: 'bg-green-500'
+    badge: 'bg-green-500',
   },
   tiktok: {
     bg: 'bg-slate-700/10',
     border: 'border-slate-600/20',
     text: 'text-slate-300',
-    badge: 'bg-slate-600'
-  }
+    badge: 'bg-slate-600',
+  },
 }
 ```
 
 ### Usage Examples
+
 ```tsx
 // Source card with platform accent
 <div className="rounded-xl border-l-4 border-l-purple-500 bg-slate-850 p-6">
@@ -583,6 +596,7 @@ const platformColors = {
 ```
 
 **Rules:**
+
 ```
 ✅ DO:
 - Use platform colors for badges, borders, status indicators
@@ -601,12 +615,14 @@ const platformColors = {
 ## Accessibility
 
 ### Focus States
+
 ```css
 /* All interactive elements MUST have visible focus */
 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
 ```
 
 ### Color Contrast
+
 ```
 ✅ Required contrast ratios:
 - Normal text (16px): 4.5:1
@@ -620,6 +636,7 @@ focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
 ```
 
 ### Keyboard Navigation
+
 ```
 ✅ DO:
 - All interactive elements: cursor-pointer
@@ -645,12 +662,14 @@ focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
 **Docs + Testing**: Storybook 10 (`npm run storybook`) — every component must have a story
 
 **Why @base-ui/react over Radix UI:**
+
 - More modern API, built on floating-ui
 - Native data-slot attributes (design system friendly)
 - Same accessible-first philosophy
 - Already installed and used in `components/ui/button.tsx`
 
 **Add components:**
+
 ```bash
 npx shadcn@latest add card
 npx shadcn@latest add input
@@ -661,6 +680,7 @@ npx shadcn@latest add toast
 ```
 
 **Every component must have a Storybook story:**
+
 ```bash
 # Start Storybook
 npm run storybook
@@ -699,12 +719,14 @@ When implementing UI changes, **validate against these rules:**
 ```
 
 **Before committing:**
+
 1. Run checklist above
 2. Open Storybook (`npm run storybook`) and check a11y tab for new components
 3. Test mobile (375px), tablet (768px), desktop (1280px)
 4. Run `npm run lint` — zero ESLint errors
 
 **Development workflow for page changes:**
+
 ```bash
 make frontend-dev    # Start minimal backend (postgres, redis, gateway, overlay-manager, message-processor)
 make frontend-seed   # Create test overlay and sources
@@ -719,16 +741,19 @@ cd frontend && npm run dev  # Start frontend at localhost:3000
 See: `/home/caesar/git/all-chat/.planning/ROADMAP.md` (Phase XX)
 
 **Phase 1: Design Tokens** (current)
+
 - ✓ Create DESIGN_SYSTEM.md
 - Create Tailwind theme config
 - Audit existing colors/spacing
 
 **Phase 2: Component Library**
+
 - Install shadcn/ui
 - Customize components to match design system
 - Document in Storybook (optional)
 
 **Phase 3: Page-by-Page Migration**
+
 - Landing page → new design system
 - Dashboard → new design system
 - Overlay editor → new design system
@@ -736,6 +761,7 @@ See: `/home/caesar/git/all-chat/.planning/ROADMAP.md` (Phase XX)
 - Admin pages → new design system
 
 **Phase 4: Enforcement**
+
 - Add ESLint rules for Tailwind (no gray-900, etc.)
 - Pre-commit hook to validate design system
 - Update CI to check for violations
@@ -745,26 +771,27 @@ See: `/home/caesar/git/all-chat/.planning/ROADMAP.md` (Phase XX)
 ## Examples
 
 ### Before (Current "Claude Code" feeling)
+
 ```tsx
-<div className="bg-gray-800 p-6 rounded shadow">
+<div className="rounded bg-gray-800 p-6 shadow">
   <h2 className="text-xl font-bold">My Overlay</h2>
-  <button className="bg-purple-600 px-4 py-2 rounded">
-    Edit
-  </button>
+  <button className="rounded bg-purple-600 px-4 py-2">Edit</button>
 </div>
 ```
 
 ### After (StreamElements Modern)
+
 ```tsx
-<div className="rounded-xl border border-slate-700/50 bg-slate-850 p-6 shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-[1.02]">
+<div className="bg-slate-850 rounded-xl border border-slate-700/50 p-6 shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-xl">
   <h2 className="text-lg font-semibold text-slate-50">My Overlay</h2>
-  <button className="mt-4 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:shadow-lg hover:scale-[1.02]">
+  <button className="mt-4 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:shadow-lg">
     Edit
   </button>
 </div>
 ```
 
 **Key differences:**
+
 1. slate instead of gray (warmer, more refined)
 2. Border + shadow for depth
 3. Gradient CTA (distinctive, not flat purple)

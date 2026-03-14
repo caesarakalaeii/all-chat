@@ -27,7 +27,7 @@ export function InfinityLogo({ size = 36 }: { size?: number }) {
       const head = ((now / LOOP_MS) * total) % total
       segs.forEach((path, ci) => {
         const colourOffset = ci * piece
-        const t = ((head - colourOffset) % total + total) % total
+        const t = (((head - colourOffset) % total) + total) % total
         path.style.strokeDasharray = `${piece} ${total * 2}`
         path.style.strokeDashoffset = `${-t}`
         const b = segBs[ci]
@@ -47,7 +47,7 @@ export function InfinityLogo({ size = 36 }: { size?: number }) {
 
   return (
     <div
-      className="relative flex items-center justify-center shrink-0"
+      className="relative flex shrink-0 items-center justify-center"
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
@@ -74,14 +74,62 @@ export function InfinityLogo({ size = 36 }: { size?: number }) {
         fill="none"
       >
         <path d={inf} stroke="rgba(255,255,255,0.08)" strokeWidth="2.5" strokeLinecap="round" />
-        <path className="inf-seg" d={inf} stroke="#9146FF" strokeWidth="2.5" strokeLinecap="round" />
-        <path className="inf-seg-b" d={inf} stroke="#9146FF" strokeWidth="2.5" strokeLinecap="round" />
-        <path className="inf-seg" d={inf} stroke="#FF0000" strokeWidth="2.5" strokeLinecap="round" />
-        <path className="inf-seg-b" d={inf} stroke="#FF0000" strokeWidth="2.5" strokeLinecap="round" />
-        <path className="inf-seg" d={inf} stroke="#53FC18" strokeWidth="2.5" strokeLinecap="round" />
-        <path className="inf-seg-b" d={inf} stroke="#53FC18" strokeWidth="2.5" strokeLinecap="round" />
-        <path className="inf-seg" d={inf} stroke="#69C9D0" strokeWidth="2.5" strokeLinecap="round" />
-        <path className="inf-seg-b" d={inf} stroke="#69C9D0" strokeWidth="2.5" strokeLinecap="round" />
+        <path
+          className="inf-seg"
+          d={inf}
+          stroke="#9146FF"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+        <path
+          className="inf-seg-b"
+          d={inf}
+          stroke="#9146FF"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+        <path
+          className="inf-seg"
+          d={inf}
+          stroke="#FF0000"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+        <path
+          className="inf-seg-b"
+          d={inf}
+          stroke="#FF0000"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+        <path
+          className="inf-seg"
+          d={inf}
+          stroke="#53FC18"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+        <path
+          className="inf-seg-b"
+          d={inf}
+          stroke="#53FC18"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+        <path
+          className="inf-seg"
+          d={inf}
+          stroke="#69C9D0"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+        <path
+          className="inf-seg-b"
+          d={inf}
+          stroke="#69C9D0"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
       </svg>
     </div>
   )

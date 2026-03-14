@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test'
 
 /**
  * Overlay Editor Tests
@@ -14,8 +14,8 @@ import { test, expect } from '@playwright/test';
 test.describe('Overlay Editor Page', () => {
   test.beforeEach(async ({ page, context }) => {
     // Mock authentication
-    await context.addCookies([]);
-    await page.goto('/overlays/test-overlay-id');
+    await context.addCookies([])
+    await page.goto('/overlays/test-overlay-id')
 
     await page.evaluate(() => {
       const mockAuthState = {
@@ -28,10 +28,10 @@ test.describe('Overlay Editor Page', () => {
           token: 'mock-jwt-token',
         },
         version: 0,
-      };
-      localStorage.setItem('auth-store', JSON.stringify(mockAuthState));
-    });
-  });
+      }
+      localStorage.setItem('auth-store', JSON.stringify(mockAuthState))
+    })
+  })
 
   test('should load and display overlay information', async ({ page }) => {
     // Mock overlay API response
@@ -48,8 +48,8 @@ test.describe('Overlay Editor Page', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }),
-      });
-    });
+      })
+    })
 
     // Mock sources API response
     await page.route('**/api/v1/overlays/test-overlay-id/sources', async (route) => {
@@ -57,14 +57,14 @@ test.describe('Overlay Editor Page', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([]),
-      });
-    });
+      })
+    })
 
-    await page.reload();
+    await page.reload()
 
     // Check overlay name is displayed
-    await expect(page.locator('text=Test Gaming Overlay')).toBeVisible();
-  });
+    await expect(page.locator('text=Test Gaming Overlay')).toBeVisible()
+  })
 
   test('should display existing chat sources', async ({ page }) => {
     // Mock overlay and sources
@@ -77,8 +77,8 @@ test.describe('Overlay Editor Page', () => {
           name: 'Test Overlay',
           is_active: true,
         }),
-      });
-    });
+      })
+    })
 
     await page.route('**/api/v1/overlays/test-overlay-id/sources', async (route) => {
       await route.fulfill({
@@ -102,17 +102,17 @@ test.describe('Overlay Editor Page', () => {
             is_active: true,
           },
         ]),
-      });
-    });
+      })
+    })
 
-    await page.reload();
+    await page.reload()
 
     // Check sources are displayed
-    await expect(page.locator('text=xQc')).toBeVisible();
-    await expect(page.locator('text=Test YouTube Channel')).toBeVisible();
-    await expect(page.locator('text=twitch')).toBeVisible();
-    await expect(page.locator('text=youtube')).toBeVisible();
-  });
+    await expect(page.locator('text=xQc')).toBeVisible()
+    await expect(page.locator('text=Test YouTube Channel')).toBeVisible()
+    await expect(page.locator('text=twitch')).toBeVisible()
+    await expect(page.locator('text=youtube')).toBeVisible()
+  })
 
   test('should show add source form when button is clicked', async ({ page }) => {
     await page.route('**/api/v1/overlays/test-overlay-id', async (route) => {
@@ -120,28 +120,28 @@ test.describe('Overlay Editor Page', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ id: 'test-overlay-id', name: 'Test Overlay' }),
-      });
-    });
+      })
+    })
 
     await page.route('**/api/v1/overlays/test-overlay-id/sources', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([]),
-      });
-    });
+      })
+    })
 
-    await page.reload();
+    await page.reload()
 
     // Click add source button
-    const addButton = page.locator('button', { hasText: /Add.*Source/i });
+    const addButton = page.locator('button', { hasText: /Add.*Source/i })
     if (await addButton.isVisible()) {
-      await addButton.click();
+      await addButton.click()
 
       // Check form is visible
-      await expect(page.locator('input[type="text"]')).toBeVisible();
+      await expect(page.locator('input[type="text"]')).toBeVisible()
     }
-  });
+  })
 
   test('should add a new chat source', async ({ page }) => {
     await page.route('**/api/v1/overlays/test-overlay-id', async (route) => {
@@ -149,8 +149,8 @@ test.describe('Overlay Editor Page', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ id: 'test-overlay-id', name: 'Test Overlay' }),
-      });
-    });
+      })
+    })
 
     await page.route('**/api/v1/overlays/test-overlay-id/sources', async (route) => {
       if (route.request().method() === 'GET') {
@@ -158,7 +158,7 @@ test.describe('Overlay Editor Page', () => {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify([]),
-        });
+        })
       } else if (route.request().method() === 'POST') {
         // Mock successful source addition
         await route.fulfill({
@@ -172,29 +172,29 @@ test.describe('Overlay Editor Page', () => {
             channel_name: 'shroud',
             is_active: true,
           }),
-        });
+        })
       }
-    });
+    })
 
-    await page.reload();
+    await page.reload()
 
     // Open add source form
-    const addButton = page.locator('button', { hasText: /Add.*Source/i });
+    const addButton = page.locator('button', { hasText: /Add.*Source/i })
     if (await addButton.isVisible()) {
-      await addButton.click();
+      await addButton.click()
 
       // Fill in channel name
-      const channelInput = page.locator('input[type="text"]').first();
-      await channelInput.fill('shroud');
+      const channelInput = page.locator('input[type="text"]').first()
+      await channelInput.fill('shroud')
 
       // Submit form
-      const submitButton = page.locator('button', { hasText: /Add|Save/i }).last();
-      await submitButton.click();
+      const submitButton = page.locator('button', { hasText: /Add|Save/i }).last()
+      await submitButton.click()
 
       // Verify source was added (should see it in the list after reload)
-      await expect(page.locator('text=shroud')).toBeVisible();
+      await expect(page.locator('text=shroud')).toBeVisible()
     }
-  });
+  })
 
   test('should navigate to preview page', async ({ page }) => {
     await page.route('**/api/v1/overlays/test-overlay-id', async (route) => {
@@ -202,26 +202,26 @@ test.describe('Overlay Editor Page', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ id: 'test-overlay-id', name: 'Test Overlay' }),
-      });
-    });
+      })
+    })
 
     await page.route('**/api/v1/overlays/test-overlay-id/sources', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([]),
-      });
-    });
+      })
+    })
 
-    await page.reload();
+    await page.reload()
 
     // Click preview button
-    const previewButton = page.locator('button, a', { hasText: /Preview/i });
+    const previewButton = page.locator('button, a', { hasText: /Preview/i })
     if (await previewButton.isVisible()) {
-      await previewButton.click();
+      await previewButton.click()
 
       // Should navigate to preview page
-      await expect(page).toHaveURL('/overlays/test-overlay-id/preview');
+      await expect(page).toHaveURL('/overlays/test-overlay-id/preview')
     }
-  });
-});
+  })
+})

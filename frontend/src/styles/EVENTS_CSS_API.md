@@ -20,55 +20,55 @@ The following class names are part of the public API. They must not be renamed o
 
 These classes are applied to every event message element:
 
-| Class | Applied to | Description |
-|-------|-----------|-------------|
-| `.event-message` | Root element | Every platform event (subscription, raid, Super Chat, etc.) |
-| `.event-content` | Content wrapper | Inner content area of the event |
-| `.event-icon` | Icon element | Event type icon (e.g., heart, star, sword) |
-| `.event-title` | Title element | Bold uppercase event label (e.g., "NEW SUBSCRIBER") |
-| `.event-value` | Value element | Monetary or numeric value (e.g., "$50.00", "x1000 bits") |
+| Class            | Applied to      | Description                                                 |
+| ---------------- | --------------- | ----------------------------------------------------------- |
+| `.event-message` | Root element    | Every platform event (subscription, raid, Super Chat, etc.) |
+| `.event-content` | Content wrapper | Inner content area of the event                             |
+| `.event-icon`    | Icon element    | Event type icon (e.g., heart, star, sword)                  |
+| `.event-title`   | Title element   | Bold uppercase event label (e.g., "NEW SUBSCRIBER")         |
+| `.event-value`   | Value element   | Monetary or numeric value (e.g., "$50.00", "x1000 bits")    |
 
 ### Tier Classes
 
 Applied alongside `.event-message` to indicate visual importance:
 
-| Class | Tier | Usage |
-|-------|------|-------|
-| `.event-tier-high` | High | Large Super Chats, raids, gift bombs — gold glow |
-| `.event-tier-medium` | Medium | Subscriptions, medium Super Chats — purple glow |
-| `.event-tier-low` | Low | Follows, small events — blue glow |
+| Class                | Tier   | Usage                                            |
+| -------------------- | ------ | ------------------------------------------------ |
+| `.event-tier-high`   | High   | Large Super Chats, raids, gift bombs — gold glow |
+| `.event-tier-medium` | Medium | Subscriptions, medium Super Chats — purple glow  |
+| `.event-tier-low`    | Low    | Follows, small events — blue glow                |
 
 ### Event Type Classes
 
 Applied alongside `.event-message` to identify the specific event type:
 
-| Class | Event |
-|-------|-------|
-| `.event-type-subscription` | Twitch subscription |
-| `.event-type-gift_subscription` | Gifted Twitch subscription |
-| `.event-type-super_chat` | YouTube Super Chat |
-| `.event-type-super_sticker` | YouTube Super Sticker |
-| `.event-type-raid` | Twitch raid |
-| `.event-type-bits` | Twitch bits (cheer) |
-| `.event-type-channel_points` | Twitch channel point redemption |
-| `.event-type-gift` | Generic gift event |
-| `.event-type-mystery_gift` | Gift subscription bomb (multiple gifts at once) |
-| `.event-type-follow` | New follow |
-| `.event-type-like_aggregate` | TikTok like count milestone |
-| `.event-type-member` | YouTube membership |
+| Class                                  | Event                                               |
+| -------------------------------------- | --------------------------------------------------- |
+| `.event-type-subscription`             | Twitch subscription                                 |
+| `.event-type-gift_subscription`        | Gifted Twitch subscription                          |
+| `.event-type-super_chat`               | YouTube Super Chat                                  |
+| `.event-type-super_sticker`            | YouTube Super Sticker                               |
+| `.event-type-raid`                     | Twitch raid                                         |
+| `.event-type-bits`                     | Twitch bits (cheer)                                 |
+| `.event-type-channel_points`           | Twitch channel point redemption                     |
+| `.event-type-gift`                     | Generic gift event                                  |
+| `.event-type-mystery_gift`             | Gift subscription bomb (multiple gifts at once)     |
+| `.event-type-follow`                   | New follow                                          |
+| `.event-type-like_aggregate`           | TikTok like count milestone                         |
+| `.event-type-member`                   | YouTube membership                                  |
 | `.event-type-token_expiration_warning` | Platform OAuth token about to expire (system event) |
 
 ### Attribute Selectors
 
 These `data-platform` attribute selectors are also part of the frozen public API:
 
-| Selector | Platform |
-|----------|----------|
-| `.event-message[data-platform="twitch"]` | Twitch events |
-| `.event-message[data-platform="youtube"]` | YouTube events |
-| `.event-message[data-platform="kick"]` | Kick events |
-| `.event-message[data-platform="tiktok"]` | TikTok events |
-| `.event-message[data-platform="system"]` | Internal system events |
+| Selector                                  | Platform               |
+| ----------------------------------------- | ---------------------- |
+| `.event-message[data-platform="twitch"]`  | Twitch events          |
+| `.event-message[data-platform="youtube"]` | YouTube events         |
+| `.event-message[data-platform="kick"]`    | Kick events            |
+| `.event-message[data-platform="tiktok"]`  | TikTok events          |
+| `.event-message[data-platform="system"]`  | Internal system events |
 
 ---
 
@@ -82,12 +82,12 @@ These `data-platform` attribute selectors are also part of the frozen public API
 
 Higher layers in this list win over lower layers at equal specificity:
 
-| Layer | Priority | Who writes it |
-|-------|----------|---------------|
-| `user-overrides` | Highest | Theme authors |
-| `marketplace-themes` | High | This file (events.css) |
-| `design-system` | Medium | Design token system |
-| `base` | Lowest | Browser normalization, CSS reset |
+| Layer                | Priority | Who writes it                    |
+| -------------------- | -------- | -------------------------------- |
+| `user-overrides`     | Highest  | Theme authors                    |
+| `marketplace-themes` | High     | This file (events.css)           |
+| `design-system`      | Medium   | Design token system              |
+| `base`               | Lowest   | Browser normalization, CSS reset |
 
 This means `events.css` rules already win over `design-system` rules without needing `!important`. Theme authors writing overrides should place their CSS in `@layer user-overrides` for the highest cascade priority — no `!important` needed.
 
@@ -101,15 +101,15 @@ Minimal theme override targeting the frozen public API:
 /* In your custom overlay CSS — use @layer user-overrides for highest priority */
 @layer user-overrides {
   .event-message {
-    border-radius: 0;  /* override the default 16px */
+    border-radius: 0; /* override the default 16px */
   }
 
   .event-tier-high {
     border-color: hotpink;
   }
 
-  .event-message[data-platform="twitch"] {
-    border-left-color: #9146FF;
+  .event-message[data-platform='twitch'] {
+    border-left-color: #9146ff;
   }
 }
 ```

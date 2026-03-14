@@ -90,15 +90,13 @@ export default defineConfig([
         'error',
         // Rule 1: No gray-* Tailwind classes — use slate-* (design system uses slate scale)
         {
-          selector:
-            'JSXAttribute[name.name="className"] Literal[value=/\\bgray-/]',
+          selector: 'JSXAttribute[name.name="className"] Literal[value=/\\bgray-/]',
           message:
             'Use slate-* instead of gray-* (design system uses slate scale). See DESIGN_SYSTEM.md.',
         },
         // Also catch gray-* inside clsx(), cn(), cva() calls
         {
-          selector:
-            'CallExpression[callee.name=/^(clsx|cn|cva)$/] Literal[value=/\\bgray-/]',
+          selector: 'CallExpression[callee.name=/^(clsx|cn|cva)$/] Literal[value=/\\bgray-/]',
           message:
             'Use slate-* instead of gray-* inside utility functions (design system uses slate scale).',
         },
@@ -111,8 +109,7 @@ export default defineConfig([
         // Rule 3: No bare focus: — must use focus-visible: for keyboard a11y
         // Negative lookbehind prevents matching focus-visible: and focus-within:
         {
-          selector:
-            'JSXAttribute[name.name="className"] Literal[value=/(?<![\\w-])focus:/]',
+          selector: 'JSXAttribute[name.name="className"] Literal[value=/(?<![\\w-])focus:/]',
           message:
             'Use focus-visible: instead of focus: for keyboard navigation accessibility. See DESIGN_SYSTEM.md.',
         },

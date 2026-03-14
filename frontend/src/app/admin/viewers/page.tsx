@@ -13,132 +13,134 @@
  * Route: /admin/viewers
  */
 
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/lib/stores/auth-store';
-import { apiClient } from '@/lib/api/client';
-import { formatDistanceToNow } from 'date-fns';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog } from '@/components/ui/dialog';
-import { toastManager } from '@/lib/toast';
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { apiClient } from '@/lib/api/client'
+import { formatDistanceToNow } from 'date-fns'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Dialog } from '@/components/ui/dialog'
+import { toastManager } from '@/lib/toast'
 
 interface ViewerSession {
-  id: string;
-  platform: string;
-  platform_user_id: string;
-  username: string;
-  display_name: string;
-  last_message_at: string | null;
-  message_count_1min: number;
-  message_count_1hour: number;
-  is_banned: boolean;
-  banned_at: string | null;
-  banned_reason: string | null;
-  created_at: string;
+  id: string
+  platform: string
+  platform_user_id: string
+  username: string
+  display_name: string
+  last_message_at: string | null
+  message_count_1min: number
+  message_count_1hour: number
+  is_banned: boolean
+  banned_at: string | null
+  banned_reason: string | null
+  created_at: string
 }
 
 export default function AdminViewersPage() {
-  const router = useRouter();
-  const { user } = useAuthStore();
+  const router = useRouter()
+  const { user } = useAuthStore()
 
-  const [viewers, setViewers] = useState<ViewerSession[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [banningId, setBanningId] = useState<string | null>(null);
-  const [banReason, setBanReason] = useState('');
-  const [showBanModal, setShowBanModal] = useState(false);
-  const [selectedViewer, setSelectedViewer] = useState<ViewerSession | null>(null);
-  const [unbanDialogViewer, setUnbanDialogViewer] = useState<ViewerSession | null>(null);
+  const [viewers, setViewers] = useState<ViewerSession[]>([])
+  const [loading, setLoading] = useState(true)
+  const [banningId, setBanningId] = useState<string | null>(null)
+  const [banReason, setBanReason] = useState('')
+  const [showBanModal, setShowBanModal] = useState(false)
+  const [selectedViewer, setSelectedViewer] = useState<ViewerSession | null>(null)
+  const [unbanDialogViewer, setUnbanDialogViewer] = useState<ViewerSession | null>(null)
 
   useEffect(() => {
     if (!user?.is_admin) {
-      router.push('/dashboard');
-      return;
+      router.push('/dashboard')
+      return
     }
 
-    fetchViewers();
-  }, [user, router]);
+    fetchViewers()
+  }, [user, router])
 
   const fetchViewers = async () => {
     try {
-      setLoading(true);
-      const response = await apiClient.get<{ viewers: ViewerSession[] }>('/api/v1/admin/viewers?limit=100');
-      setViewers(response.viewers);
+      setLoading(true)
+      const response = await apiClient.get<{ viewers: ViewerSession[] }>(
+        '/api/v1/admin/viewers?limit=100'
+      )
+      setViewers(response.viewers)
     } catch (error) {
-      console.error('Failed to fetch viewers:', error);
-      toastManager.add({ title: 'Failed to load viewers', type: 'error' });
+      console.error('Failed to fetch viewers:', error)
+      toastManager.add({ title: 'Failed to load viewers', type: 'error' })
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleBanClick = (viewer: ViewerSession) => {
-    setSelectedViewer(viewer);
-    setBanReason('');
-    setShowBanModal(true);
-  };
+    setSelectedViewer(viewer)
+    setBanReason('')
+    setShowBanModal(true)
+  }
 
   const handleBan = async () => {
-    if (!selectedViewer) return;
+    if (!selectedViewer) return
 
     try {
-      setBanningId(selectedViewer.id);
+      setBanningId(selectedViewer.id)
       await apiClient.post(`/api/v1/admin/viewers/${selectedViewer.id}/ban`, {
-        reason: banReason || 'No reason provided'
-      });
-      toastManager.add({ title: `${selectedViewer.username} banned successfully`, type: 'success' });
-      setShowBanModal(false);
-      setSelectedViewer(null);
-      setBanReason('');
-      fetchViewers();
+        reason: banReason || 'No reason provided',
+      })
+      toastManager.add({ title: `${selectedViewer.username} banned successfully`, type: 'success' })
+      setShowBanModal(false)
+      setSelectedViewer(null)
+      setBanReason('')
+      fetchViewers()
     } catch (error) {
-      console.error('Failed to ban viewer:', error);
-      toastManager.add({ title: 'Failed to ban viewer', type: 'error' });
+      console.error('Failed to ban viewer:', error)
+      toastManager.add({ title: 'Failed to ban viewer', type: 'error' })
     } finally {
-      setBanningId(null);
+      setBanningId(null)
     }
-  };
+  }
 
   const handleUnban = async (viewerId: string, username: string) => {
     try {
-      setBanningId(viewerId);
-      await apiClient.post(`/api/v1/admin/viewers/${viewerId}/unban`, {});
-      toastManager.add({ title: `${username} unbanned successfully`, type: 'success' });
-      setUnbanDialogViewer(null);
-      fetchViewers();
+      setBanningId(viewerId)
+      await apiClient.post(`/api/v1/admin/viewers/${viewerId}/unban`, {})
+      toastManager.add({ title: `${username} unbanned successfully`, type: 'success' })
+      setUnbanDialogViewer(null)
+      fetchViewers()
     } catch (error) {
-      console.error('Failed to unban viewer:', error);
-      toastManager.add({ title: 'Failed to unban viewer', type: 'error' });
+      console.error('Failed to unban viewer:', error)
+      toastManager.add({ title: 'Failed to unban viewer', type: 'error' })
     } finally {
-      setBanningId(null);
+      setBanningId(null)
     }
-  };
+  }
 
-  const bannedCount = viewers.filter((v) => v.is_banned).length;
-  const activeCount = viewers.filter((v) => !v.is_banned).length;
+  const bannedCount = viewers.filter((v) => v.is_banned).length
+  const activeCount = viewers.filter((v) => !v.is_banned).length
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">Viewer Management</h1>
           <p className="mt-1 text-sm text-text-sub">Manage viewer sessions and bans</p>
         </div>
-        <span className="text-text-sub text-sm">{viewers.length} total</span>
+        <span className="text-sm text-text-sub">{viewers.length} total</span>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-3 gap-4">
         <Card className="p-4">
           <div className="text-xs text-text-sub">Total Viewers</div>
           <div className="text-2xl font-bold text-text">{viewers.length}</div>
         </Card>
         <Card className="p-4">
           <div className="text-xs text-text-sub">Banned</div>
-          <div className="text-2xl font-bold text-destructive">{bannedCount}</div>
+          <div className="text-destructive text-2xl font-bold">{bannedCount}</div>
         </Card>
         <Card className="p-4">
           <div className="text-xs text-text-sub">Active</div>
@@ -148,7 +150,7 @@ export default function AdminViewersPage() {
 
       {/* Viewers Table */}
       {loading ? (
-        <Card className="p-6 space-y-3">
+        <Card className="space-y-3 p-6">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-10 w-full rounded-lg" />
           ))}
@@ -157,14 +159,16 @@ export default function AdminViewersPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-surface-2 border-b border-border">
+              <thead className="border-b border-border bg-surface-2">
                 <tr>
-                  <th className="text-left px-4 py-3 text-text-sub font-medium">Username</th>
-                  <th className="text-left px-4 py-3 text-text-sub font-medium">Platform</th>
-                  <th className="text-left px-4 py-3 text-text-sub font-medium">Last Message</th>
-                  <th className="text-left px-4 py-3 text-text-sub font-medium">Msg Count (1m/1h)</th>
-                  <th className="text-left px-4 py-3 text-text-sub font-medium">Status</th>
-                  <th className="text-left px-4 py-3 text-text-sub font-medium">Actions</th>
+                  <th className="px-4 py-3 text-left font-medium text-text-sub">Username</th>
+                  <th className="px-4 py-3 text-left font-medium text-text-sub">Platform</th>
+                  <th className="px-4 py-3 text-left font-medium text-text-sub">Last Message</th>
+                  <th className="px-4 py-3 text-left font-medium text-text-sub">
+                    Msg Count (1m/1h)
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-text-sub">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-text-sub">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -176,7 +180,7 @@ export default function AdminViewersPage() {
                   </tr>
                 ) : (
                   viewers.map((viewer) => (
-                    <tr key={viewer.id} className="hover:bg-surface-2 transition-colors">
+                    <tr key={viewer.id} className="transition-colors hover:bg-surface-2">
                       <td className="px-4 py-3">
                         <div className="text-sm font-medium text-text">{viewer.username}</div>
                         <div className="text-xs text-text-sub">{viewer.display_name}</div>
@@ -186,7 +190,9 @@ export default function AdminViewersPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-text-sub">
                         {viewer.last_message_at
-                          ? formatDistanceToNow(new Date(viewer.last_message_at), { addSuffix: true })
+                          ? formatDistanceToNow(new Date(viewer.last_message_at), {
+                              addSuffix: true,
+                            })
                           : 'Never'}
                       </td>
                       <td className="px-4 py-3 text-sm text-text-sub">
@@ -195,17 +201,17 @@ export default function AdminViewersPage() {
                       <td className="px-4 py-3">
                         {viewer.is_banned ? (
                           <div>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-destructive/10 text-destructive">
+                            <span className="bg-destructive/10 text-destructive inline-flex items-center rounded px-2 py-0.5 text-xs font-medium">
                               BANNED
                             </span>
                             {viewer.banned_reason && (
-                              <div className="text-xs text-text-dim mt-1">
+                              <div className="mt-1 text-xs text-text-dim">
                                 Reason: {viewer.banned_reason}
                               </div>
                             )}
                           </div>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-kick/10 text-kick">
+                          <span className="inline-flex items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
                             Active
                           </span>
                         )}
@@ -215,7 +221,7 @@ export default function AdminViewersPage() {
                           <Dialog.Root
                             open={unbanDialogViewer?.id === viewer.id}
                             onOpenChange={(open) => {
-                              if (!open) setUnbanDialogViewer(null);
+                              if (!open) setUnbanDialogViewer(null)
                             }}
                           >
                             <Dialog.Trigger
@@ -235,7 +241,7 @@ export default function AdminViewersPage() {
                               <Dialog.Description>
                                 This will restore their ability to send messages.
                               </Dialog.Description>
-                              <div className="flex gap-3 justify-end mt-6">
+                              <div className="mt-6 flex justify-end gap-3">
                                 <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
                                 <Button
                                   variant="default"
@@ -272,9 +278,9 @@ export default function AdminViewersPage() {
         open={showBanModal}
         onOpenChange={(open) => {
           if (!open) {
-            setShowBanModal(false);
-            setSelectedViewer(null);
-            setBanReason('');
+            setShowBanModal(false)
+            setSelectedViewer(null)
+            setBanReason('')
           }
         }}
       >
@@ -284,18 +290,18 @@ export default function AdminViewersPage() {
             This will prevent {selectedViewer?.username} from sending messages.
           </Dialog.Description>
           <div className="mt-4">
-            <label className="block text-sm font-medium text-text-sub mb-2">
+            <label className="mb-2 block text-sm font-medium text-text-sub">
               Reason (optional)
             </label>
             <textarea
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
               placeholder="Enter reason for ban..."
-              className="w-full bg-surface-2 text-text border border-border rounded-lg px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring placeholder:text-text-dim resize-none"
+              className="focus-visible:ring-ring w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
               rows={3}
             />
           </div>
-          <div className="flex gap-3 justify-end mt-6">
+          <div className="mt-6 flex justify-end gap-3">
             <Dialog.Close
               render={
                 <Button variant="outline" disabled={banningId === selectedViewer?.id}>
@@ -314,5 +320,5 @@ export default function AdminViewersPage() {
         </Dialog.Content>
       </Dialog.Root>
     </div>
-  );
+  )
 }

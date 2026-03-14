@@ -4,23 +4,23 @@
  * Fetches theme files from the GitHub repository.
  */
 
-import type { Theme } from './types';
-import { parseThemeMetadata } from './metadata-parser';
+import type { Theme } from './types'
+import { parseThemeMetadata } from './metadata-parser'
 
-const GITHUB_REPO = 'caesarakalaeii/all-chat';
-const THEMES_PATH = 'docs/overlay-themes';
-const GITHUB_RAW_BASE = `https://raw.githubusercontent.com/${GITHUB_REPO}/main`;
+const GITHUB_REPO = 'caesarakalaeii/all-chat'
+const THEMES_PATH = 'docs/overlay-themes'
+const GITHUB_RAW_BASE = `https://raw.githubusercontent.com/${GITHUB_REPO}/main`
 
 interface GitHubContent {
-  name: string;
-  path: string;
-  sha: string;
-  size: number;
-  url: string;
-  html_url: string;
-  git_url: string;
-  download_url: string;
-  type: 'file' | 'dir';
+  name: string
+  path: string
+  sha: string
+  size: number
+  url: string
+  html_url: string
+  git_url: string
+  download_url: string
+  type: 'file' | 'dir'
 }
 
 /**
@@ -34,33 +34,31 @@ export async function fetchThemeList(): Promise<string[]> {
         Accept: 'application/vnd.github.v3+json',
       },
     }
-  );
+  )
 
   if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.status}`);
+    throw new Error(`GitHub API error: ${response.status}`)
   }
 
-  const files = (await response.json()) as GitHubContent[];
+  const files = (await response.json()) as GitHubContent[]
 
   // Filter for CSS files only
   return files
     .filter((file) => file.type === 'file' && file.name.endsWith('.css'))
-    .map((file) => file.name);
+    .map((file) => file.name)
 }
 
 /**
  * Fetch raw CSS content from GitHub
  */
 export async function fetchThemeContent(filename: string): Promise<string> {
-  const response = await fetch(
-    `${GITHUB_RAW_BASE}/${THEMES_PATH}/${filename}`
-  );
+  const response = await fetch(`${GITHUB_RAW_BASE}/${THEMES_PATH}/${filename}`)
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch ${filename}: ${response.status}`);
+    throw new Error(`Failed to fetch ${filename}: ${response.status}`)
   }
 
-  return response.text();
+  return response.text()
 }
 
 /**
@@ -69,26 +67,26 @@ export async function fetchThemeContent(filename: string): Promise<string> {
 export async function fetchAllThemes(): Promise<Theme[]> {
   try {
     // Get list of theme files
-    const filenames = await fetchThemeList();
+    const filenames = await fetchThemeList()
 
     // Fetch each theme's CSS content in parallel
     const themes = await Promise.all(
       filenames.map(async (filename) => {
-        const css = await fetchThemeContent(filename);
-        const metadata = parseThemeMetadata(css, filename);
+        const css = await fetchThemeContent(filename)
+        const metadata = parseThemeMetadata(css, filename)
 
         return {
           id: filename.replace('.css', ''),
           filename,
           css,
           ...metadata,
-        };
+        }
       })
-    );
+    )
 
-    return themes;
+    return themes
   } catch (error) {
-    console.error('Failed to fetch themes from GitHub:', error);
-    throw error;
+    console.error('Failed to fetch themes from GitHub:', error)
+    throw error
   }
 }
