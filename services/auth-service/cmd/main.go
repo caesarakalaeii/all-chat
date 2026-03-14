@@ -195,6 +195,7 @@ func main() {
 	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, jwtSecret)
+	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
@@ -291,6 +292,7 @@ func main() {
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
 		viewerProtected.POST("/chat/send", chatSendHandler.HandleSendMessage)
+		viewerProtected.PATCH("/cosmetics", viewerCosmeticsHandler.HandlePatchCosmetics)
 	}
 
 	// Admin routes (JWT + Admin role required)

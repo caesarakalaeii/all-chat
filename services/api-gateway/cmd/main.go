@@ -354,10 +354,13 @@ func main() {
 		// Viewer OAuth routes (for sending messages)
 		publicAPI.GET("/auth/viewer/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/twitch/callback", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/twitch/exchange", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/callback", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/youtube/exchange", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/kick/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/kick/callback", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/kick/exchange", proxyHandler.ForwardRequest)
 
 		// Streamer info (public)
 		publicAPI.GET("/auth/streamers/:username", proxyHandler.ForwardRequest)
@@ -388,6 +391,7 @@ func main() {
 		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/viewer/logout", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/viewer/chat/send", proxyHandler.ForwardRequest)
+		protectedAPI.PATCH("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)
