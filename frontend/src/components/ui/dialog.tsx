@@ -1,21 +1,21 @@
-"use client"
+'use client'
 
-import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { X } from "lucide-react"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@/lib/utils"
+import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
+import { X } from 'lucide-react'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { cn } from '@/lib/utils'
 
 const dialogContentVariants = cva(
-  "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full rounded-xl border border-border bg-surface p-6 shadow-xl text-text",
+  'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full rounded-xl border border-border bg-surface p-6 shadow-xl text-text',
   {
     variants: {
       size: {
-        sm: "max-w-sm",
-        default: "max-w-md",
-        lg: "max-w-lg",
+        sm: 'max-w-sm',
+        default: 'max-w-md',
+        lg: 'max-w-lg',
       },
     },
-    defaultVariants: { size: "default" },
+    defaultVariants: { size: 'default' },
   }
 )
 
@@ -31,7 +31,7 @@ function DialogTitle({
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
-      className={cn("text-lg font-semibold text-text", className)}
+      className={cn('text-lg font-semibold text-text', className)}
       {...props}
     />
   )
@@ -43,7 +43,7 @@ function DialogDescription({
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
-      className={cn("mt-2 text-sm text-text-sub", className)}
+      className={cn('mt-2 text-sm text-text-sub', className)}
       {...props}
     />
   )
@@ -56,7 +56,7 @@ function DialogBackdrop({
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Backdrop>) {
   return (
     <DialogPrimitive.Backdrop
-      className={cn("fixed inset-0 bg-black/60 backdrop-blur-[8px] z-40", className)}
+      className={cn('fixed inset-0 z-40 bg-black/60 backdrop-blur-[8px]', className)}
       {...props}
     />
   )
@@ -83,7 +83,7 @@ function DialogContent({
       >
         {showCloseButton && (
           <DialogPrimitive.Close
-            className="absolute top-4 right-4 rounded-md p-1 text-text-sub hover:bg-surface-2 hover:text-text transition-colors"
+            className="absolute top-4 right-4 rounded-md p-1 text-text-sub transition-colors hover:bg-surface-2 hover:text-text"
             aria-label="Close dialog"
           >
             <X className="size-4" />

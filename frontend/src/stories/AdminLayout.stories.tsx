@@ -16,7 +16,7 @@ function StatCard({
 }) {
   return (
     <Card className="p-6">
-      <div className="flex items-center gap-3 mb-2">
+      <div className="mb-2 flex items-center gap-3">
         <Icon className="size-5 text-text-sub" aria-hidden="true" />
         <span className="text-sm text-text-sub">{label}</span>
       </div>
@@ -37,9 +37,9 @@ function AdminLayoutPreview() {
   return (
     <div className="min-h-screen bg-bg">
       <AdminNav />
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-text mb-8">Admin Dashboard</h1>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <h1 className="mb-8 text-2xl font-bold text-text">Admin Dashboard</h1>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {STATS.map(({ label, value, Icon }) => (
             <StatCard key={label} label={label} value={value} icon={Icon} />
           ))}
@@ -54,12 +54,12 @@ function AdminLayoutLoading() {
   return (
     <div className="min-h-screen bg-bg">
       <AdminNav />
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <Skeleton className="h-8 w-48 mb-8" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <Skeleton className="mb-8 h-8 w-48" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="p-6">
-              <Skeleton className="h-5 w-24 mb-2" />
+              <Skeleton className="mb-2 h-5 w-24" />
               <Skeleton className="h-8 w-16" />
             </Card>
           ))}

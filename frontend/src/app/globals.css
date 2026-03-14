@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
 
 /* Cascade layer order — must be declared before any @layer body */
 @layer base, design-system, marketplace-themes, user-overrides;
@@ -22,86 +22,86 @@
   /* Platform colors — WCAG AA-accessible on dark backgrounds (#020204)
      Twitch: #A37BFF (lightened from brand #9146FF for 4.5:1 contrast)
      Others already pass: YouTube #FF4444, Kick #53FC18, TikTok #69C9D0 */
-  --color-twitch:  #A37BFF;
-  --color-youtube: #FF4444;
-  --color-kick:    #53FC18;
-  --color-tiktok:  #69C9D0;
+  --color-twitch: #a37bff;
+  --color-youtube: #ff4444;
+  --color-kick: #53fc18;
+  --color-tiktok: #69c9d0;
 
   /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
-  --color-neutral-950: oklch(0.09 0.007 270);   /* #07070a — bg */
-  --color-neutral-900: oklch(0.11 0.009 270);   /* #0d0d12 — surface */
-  --color-neutral-800: oklch(0.14 0.008 270);   /* surface-2 */
-  --color-neutral-700: oklch(0.22 0.007 270);   /* elevated border */
-  --color-neutral-600: oklch(0.35 0.007 270);   /* muted text */
-  --color-neutral-400: oklch(0.58 0.007 270);   /* secondary text */
-  --color-neutral-200: oklch(0.78 0.005 270);   /* tertiary text */
-  --color-neutral-100: oklch(0.91 0.003 270);   /* primary text */
+  --color-neutral-950: oklch(0.09 0.007 270); /* #07070a — bg */
+  --color-neutral-900: oklch(0.11 0.009 270); /* #0d0d12 — surface */
+  --color-neutral-800: oklch(0.14 0.008 270); /* surface-2 */
+  --color-neutral-700: oklch(0.22 0.007 270); /* elevated border */
+  --color-neutral-600: oklch(0.35 0.007 270); /* muted text */
+  --color-neutral-400: oklch(0.58 0.007 270); /* secondary text */
+  --color-neutral-200: oklch(0.78 0.005 270); /* tertiary text */
+  --color-neutral-100: oklch(0.91 0.003 270); /* primary text */
 
   /* --------------------------------------------------
      TIER 2: SEMANTIC TOKENS (purpose-named)
      -------------------------------------------------- */
-  --color-bg:        var(--color-neutral-950);
-  --color-surface:   var(--color-neutral-900);
+  --color-bg: var(--color-neutral-950);
+  --color-surface: var(--color-neutral-900);
   --color-surface-2: var(--color-neutral-800);
-  --color-border:    oklch(from var(--color-neutral-100) l c h / 0.06);
-  --color-border-md: oklch(from var(--color-neutral-100) l c h / 0.10);
-  --color-text:      var(--color-neutral-100);
-  --color-text-sub:  var(--color-neutral-400);
-  --color-text-dim:  var(--color-neutral-600);
+  --color-border: oklch(from var(--color-neutral-100) l c h / 0.06);
+  --color-border-md: oklch(from var(--color-neutral-100) l c h / 0.1);
+  --color-text: var(--color-neutral-100);
+  --color-text-sub: var(--color-neutral-400);
+  --color-text-dim: var(--color-neutral-600);
 
   /* --------------------------------------------------
      TIER 3: COMPONENT TOKENS (specific-use)
      -------------------------------------------------- */
 
   /* Stat card glows — 25% alpha versions of platform colors */
-  --color-stat-glow-twitch:  color-mix(in oklch, var(--color-twitch) 25%, transparent);
+  --color-stat-glow-twitch: color-mix(in oklch, var(--color-twitch) 25%, transparent);
   --color-stat-glow-youtube: color-mix(in oklch, var(--color-youtube) 25%, transparent);
-  --color-stat-glow-kick:    color-mix(in oklch, var(--color-kick) 25%, transparent);
-  --color-stat-glow-tiktok:  color-mix(in oklch, var(--color-tiktok) 25%, transparent);
+  --color-stat-glow-kick: color-mix(in oklch, var(--color-kick) 25%, transparent);
+  --color-stat-glow-tiktok: color-mix(in oklch, var(--color-tiktok) 25%, transparent);
 
   /* Shadow glows for platform elements */
-  --shadow-glow-twitch:  0 0 20px color-mix(in oklch, var(--color-twitch) 40%, transparent);
+  --shadow-glow-twitch: 0 0 20px color-mix(in oklch, var(--color-twitch) 40%, transparent);
   --shadow-glow-youtube: 0 0 20px color-mix(in oklch, var(--color-youtube) 40%, transparent);
-  --shadow-glow-kick:    0 0 20px color-mix(in oklch, var(--color-kick) 40%, transparent);
-  --shadow-glow-tiktok:  0 0 20px color-mix(in oklch, var(--color-tiktok) 40%, transparent);
+  --shadow-glow-kick: 0 0 20px color-mix(in oklch, var(--color-kick) 40%, transparent);
+  --shadow-glow-tiktok: 0 0 20px color-mix(in oklch, var(--color-tiktok) 40%, transparent);
 
   /* Badge background */
   --color-badge-bg: oklch(from var(--color-neutral-100) l c h / 0.07);
 
   /* Nav */
-  --color-nav-bg: oklch(from var(--color-neutral-950) l c h / 0.80);
+  --color-nav-bg: oklch(from var(--color-neutral-950) l c h / 0.8);
 
   /* --------------------------------------------------
      TYPOGRAPHY
      -------------------------------------------------- */
-  --text-xs:   0.6875rem;   /* 11px */
-  --text-sm:   0.8125rem;   /* 13px */
-  --text-base: 0.875rem;    /* 14px */
-  --text-lg:   1rem;        /* 16px */
-  --text-xl:   1.25rem;     /* 20px */
-  --text-2xl:  1.5rem;      /* 24px */
-  --text-3xl:  2rem;        /* 32px */
+  --text-xs: 0.6875rem; /* 11px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-base: 0.875rem; /* 14px */
+  --text-lg: 1rem; /* 16px */
+  --text-xl: 1.25rem; /* 20px */
+  --text-2xl: 1.5rem; /* 24px */
+  --text-3xl: 2rem; /* 32px */
 
   /* --------------------------------------------------
      SPACING
      -------------------------------------------------- */
-  --spacing-1:  0.25rem;
-  --spacing-2:  0.5rem;
-  --spacing-3:  0.75rem;
-  --spacing-4:  1rem;
-  --spacing-6:  1.5rem;
-  --spacing-8:  2rem;
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
   --spacing-12: 3rem;
   --spacing-16: 4rem;
 
   /* --------------------------------------------------
      BORDER RADIUS
      -------------------------------------------------- */
-  --radius-sm:   4px;
-  --radius-md:   8px;
-  --radius-lg:   12px;
-  --radius-xl:   16px;
-  --radius-2xl:  24px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
   --radius-full: 9999px;
 }
 
@@ -109,7 +109,9 @@
    BASE LAYER — resets and default element styles
    ============================================================ */
 @layer base {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     box-sizing: border-box;
   }
   html {
@@ -122,8 +124,8 @@
   body {
     background-color: var(--color-bg);
     background-image:
-      linear-gradient(rgba(255,255,255,0.013) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.013) 1px, transparent 1px);
+      linear-gradient(rgba(255, 255, 255, 0.013) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.013) 1px, transparent 1px);
     background-size: 40px 40px;
     color: var(--color-text);
     min-height: 100vh;
@@ -135,8 +137,14 @@
    ============================================================ */
 @layer design-system {
   @keyframes slide-up {
-    from { transform: translateY(100%); opacity: 0; }
-    to   { transform: translateY(0);    opacity: 1; }
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
   .animate-slide-up {
     animation: slide-up 0.4s ease-out;
@@ -146,7 +154,12 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: conic-gradient(from 0deg, var(--color-twitch), var(--color-tiktok), var(--color-twitch));
+    background: conic-gradient(
+      from 0deg,
+      var(--color-twitch),
+      var(--color-tiktok),
+      var(--color-twitch)
+    );
     animation: ring-spin 12s linear infinite;
     box-shadow: 0 0 12px oklch(from var(--color-twitch) l c h / 0.4);
   }
@@ -165,7 +178,9 @@
 /* @keyframes ring-spin — kept at document scope (outside @layer) per Phase 23-03 decision:
    animation names are globally scoped regardless of cascade layer context */
 @keyframes ring-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Scroll anchor — invisible sentinel div used for auto-scrolling in overlay pages.

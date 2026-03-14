@@ -4,7 +4,7 @@
  * Contains fallback themes and sample messages.
  */
 
-import type { Theme, ChatMessagePreview } from './types';
+import type { Theme, ChatMessagePreview } from './types'
 
 /**
  * Sample messages for theme previews
@@ -86,7 +86,7 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
     timestamp: new Date().toISOString(),
     metadata: {},
   },
-];
+]
 
 /**
  * Embedded fallback themes
@@ -97,8 +97,7 @@ export const EMBEDDED_FALLBACK_THEMES: Theme[] = [
     id: 'minimal-theme',
     filename: 'minimal-theme.css',
     name: 'Minimal Clean Theme',
-    description:
-      'Inline layout with colorful usernames, no backgrounds or avatars',
+    description: 'Inline layout with colorful usernames, no backgrounds or avatars',
     tags: ['minimal', 'clean', 'inline', 'simple'],
     author: 'All-Chat Team',
     version: '1.0.0',
@@ -131,8 +130,7 @@ body {
     id: 'win98-theme',
     filename: 'win98-theme.css',
     name: 'Windows 98 Retro Theme',
-    description:
-      'Nostalgic Windows 98 styling with 3D borders and inset containers',
+    description: 'Nostalgic Windows 98 styling with 3D borders and inset containers',
     tags: ['retro', 'nostalgic', '90s', 'classic'],
     author: 'All-Chat Team',
     version: '1.0.0',
@@ -149,4 +147,4 @@ body {
   box-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff !important;
 }`,
   },
-];
+]

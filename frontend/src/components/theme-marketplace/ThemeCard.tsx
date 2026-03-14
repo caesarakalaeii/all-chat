@@ -4,20 +4,20 @@
  * Displays a single theme with preview, metadata, and actions.
  */
 
-'use client';
+'use client'
 
-import clsx from 'clsx';
-import type { Theme, ChatMessagePreview } from '@/lib/theme-marketplace/types';
-import ThemePreview from './ThemePreview';
-import CreditRollThemePreview from './CreditRollThemePreview';
+import clsx from 'clsx'
+import type { Theme, ChatMessagePreview } from '@/lib/theme-marketplace/types'
+import ThemePreview from './ThemePreview'
+import CreditRollThemePreview from './CreditRollThemePreview'
 
 interface ThemeCardProps {
-  theme: Theme;
-  isFavorite: boolean;
-  messages: ChatMessagePreview[];
-  onToggleFavorite: (themeId: string) => void;
-  onApply: (css: string) => void;
-  themeType?: 'overlay' | 'creditroll';
+  theme: Theme
+  isFavorite: boolean
+  messages: ChatMessagePreview[]
+  onToggleFavorite: (themeId: string) => void
+  onApply: (css: string) => void
+  themeType?: 'overlay' | 'creditroll'
 }
 
 /**
@@ -35,9 +35,9 @@ function getTagColor(tag: string): string {
     '90s': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
     inline: 'bg-green-500/20 text-green-400 border-green-500/30',
     simple: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
-  };
+  }
 
-  return colors[tag.toLowerCase()] || 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+  return colors[tag.toLowerCase()] || 'bg-slate-500/20 text-slate-400 border-slate-500/30'
 }
 
 export default function ThemeCard({
@@ -49,10 +49,7 @@ export default function ThemeCard({
   themeType = 'overlay',
 }: ThemeCardProps) {
   return (
-    <div
-      className="theme-card flex flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900
-                 transition-all duration-200 hover:-translate-y-1 hover:border-purple-500/50 hover:shadow-lg"
-    >
+    <div className="theme-card flex flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900 transition-all duration-200 hover:-translate-y-1 hover:border-purple-500/50 hover:shadow-lg">
       {/* Preview */}
       {themeType === 'creditroll' ? (
         <CreditRollThemePreview css={theme.css} themeId={theme.id} />
@@ -64,7 +61,7 @@ export default function ThemeCard({
       <div className="flex flex-1 flex-col p-4">
         {/* Name and Favorite */}
         <div className="mb-2 flex items-start justify-between gap-2">
-          <h3 className="flex-1 text-lg font-semibold leading-tight text-white">{theme.name}</h3>
+          <h3 className="flex-1 text-lg leading-tight font-semibold text-white">{theme.name}</h3>
           <button
             onClick={() => onToggleFavorite(theme.id)}
             className="flex-shrink-0 text-2xl transition-transform hover:scale-110"
@@ -81,10 +78,7 @@ export default function ThemeCard({
         {/* Tags */}
         <div className="mb-4 flex flex-wrap gap-2">
           {theme.tags.map((tag) => (
-            <span
-              key={tag}
-              className={clsx('rounded border px-2 py-1 text-xs', getTagColor(tag))}
-            >
+            <span key={tag} className={clsx('rounded border px-2 py-1 text-xs', getTagColor(tag))}>
               {tag}
             </span>
           ))}
@@ -93,8 +87,7 @@ export default function ThemeCard({
         {/* Apply Button */}
         <button
           onClick={() => onApply(theme.css)}
-          className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2
-                     font-semibold text-white transition-colors hover:bg-purple-700"
+          className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-purple-700"
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -103,5 +96,5 @@ export default function ThemeCard({
         </button>
       </div>
     </div>
-  );
+  )
 }

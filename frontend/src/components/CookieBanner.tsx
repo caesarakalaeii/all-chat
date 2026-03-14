@@ -1,4 +1,4 @@
-'use client';
+'use client'
 
 /**
  * GDPR-Compliant Cookie Banner
@@ -15,40 +15,40 @@
  * privacy policy and terms of service as required by GDPR.
  */
 
-import { useState, useEffect } from 'react';
-import { useHydrated } from '@/hooks/useHydrated';
+import { useState, useEffect } from 'react'
+import { useHydrated } from '@/hooks/useHydrated'
 
 export default function CookieBanner() {
-  const isHydrated = useHydrated();
-  const [showBanner, setShowBanner] = useState(false);
+  const isHydrated = useHydrated()
+  const [showBanner, setShowBanner] = useState(false)
 
   useEffect(() => {
-    if (!isHydrated) return; // Wait for hydration
+    if (!isHydrated) return // Wait for hydration
 
     // Do not render the banner on public overlays where it obstructs the chat view
     if (window.location.pathname.startsWith('/overlay')) {
-      return;
+      return
     }
 
     // Check if user has already acknowledged the banner
-    const acknowledged = localStorage.getItem('cookieBannerAcknowledged');
+    const acknowledged = localStorage.getItem('cookieBannerAcknowledged')
     if (!acknowledged) {
       // Show banner after a short delay for better UX
-      const timer = setTimeout(() => setShowBanner(true), 1000);
-      return () => clearTimeout(timer);
+      const timer = setTimeout(() => setShowBanner(true), 1000)
+      return () => clearTimeout(timer)
     }
-  }, [isHydrated]);
+  }, [isHydrated])
 
   const acknowledgeBanner = () => {
-    localStorage.setItem('cookieBannerAcknowledged', 'true');
-    setShowBanner(false);
-  };
+    localStorage.setItem('cookieBannerAcknowledged', 'true')
+    setShowBanner(false)
+  }
 
-  if (!isHydrated || !showBanner) return null;
+  if (!isHydrated || !showBanner) return null
 
   return (
     <div className="pointer-events-none fixed inset-0 z-50 flex items-end justify-center p-4">
-      <div className="pointer-events-auto w-full max-w-4xl animate-slide-up rounded-lg border-2 border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+      <div className="animate-slide-up pointer-events-auto w-full max-w-4xl rounded-lg border-2 border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800">
         {/* Main Banner */}
         <div className="p-6">
           <div className="flex items-start gap-4">
@@ -135,7 +135,7 @@ export default function CookieBanner() {
               <div className="flex flex-wrap gap-3">
                 <button
                   onClick={acknowledgeBanner}
-                  className="rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  className="rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white transition-colors hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:outline-none"
                 >
                   I Understand
                 </button>
@@ -143,7 +143,7 @@ export default function CookieBanner() {
                   href="/legal/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-lg bg-slate-200 px-6 py-2.5 font-medium text-slate-900 transition-colors hover:bg-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
+                  className="inline-flex items-center justify-center rounded-lg bg-slate-200 px-6 py-2.5 font-medium text-slate-900 transition-colors hover:bg-slate-300 focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 focus-visible:outline-none dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
                 >
                   Learn More
                 </a>
@@ -160,5 +160,5 @@ export default function CookieBanner() {
         </div>
       </div>
     </div>
-  );
+  )
 }

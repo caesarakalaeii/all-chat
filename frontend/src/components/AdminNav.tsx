@@ -30,15 +30,15 @@ export function AdminNav() {
   }
 
   return (
-    <nav className="sticky top-0 z-50 flex h-[60px] items-center px-8 bg-nav-bg backdrop-blur-[20px] border-b border-border">
+    <nav className="sticky top-0 z-50 flex h-[60px] items-center border-b border-border bg-nav-bg px-8 backdrop-blur-[20px]">
       <Link
         href="/dashboard"
-        className="flex items-center gap-2.5 mr-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch rounded-sm"
+        className="mr-6 flex items-center gap-2.5 rounded-sm focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
       >
         <InfinityLogo size={28} />
         <span className="text-base font-extrabold tracking-tight text-text">all-chat</span>
       </Link>
-      <span className="text-text-sub text-sm mr-6">Admin</span>
+      <span className="mr-6 text-sm text-text-sub">Admin</span>
       <div className="flex h-full gap-0.5">
         {ADMIN_LINKS.map((link) => (
           <Link

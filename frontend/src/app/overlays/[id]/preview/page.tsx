@@ -20,47 +20,47 @@
  * - Handles user interactions
  */
 
-'use client';
+'use client'
 
-import Image from 'next/image';
-import { use, useEffect, useState, useRef, useMemo } from 'react';
-import clsx from 'clsx';
-import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/lib/stores/auth-store';
-import { WebSocketClient } from '@/lib/api/websocket';
-import { overlaysApi } from '@/lib/api/overlays';
-import type { ChatMessage } from '@/lib/types/message';
-import type { ChatSource } from '@/lib/types/overlay';
-import { renderMessageContent } from '@/lib/renderMessage';
-import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
-import { sortMessageBadges } from '@/lib/badgeOrder';
-import dynamic from 'next/dynamic';
-import '@/styles/events.css';
+import Image from 'next/image'
+import { use, useEffect, useState, useRef, useMemo } from 'react'
+import clsx from 'clsx'
+import { useRouter } from 'next/navigation'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { WebSocketClient } from '@/lib/api/websocket'
+import { overlaysApi } from '@/lib/api/overlays'
+import type { ChatMessage } from '@/lib/types/message'
+import type { ChatSource } from '@/lib/types/overlay'
+import { renderMessageContent } from '@/lib/renderMessage'
+import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
+import { sortMessageBadges } from '@/lib/badgeOrder'
+import dynamic from 'next/dynamic'
+import '@/styles/events.css'
 
 // Dynamically import Monaco Editor to avoid SSR issues
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
   ssr: false,
   loading: () => (
-    <div className="h-[300px] bg-slate-900 border border-slate-700 rounded-lg flex items-center justify-center">
-      <div className="text-slate-400 text-sm">Loading editor...</div>
+    <div className="flex h-[300px] items-center justify-center rounded-lg border border-slate-700 bg-slate-900">
+      <div className="text-sm text-slate-400">Loading editor...</div>
     </div>
-  )
-});
+  ),
+})
 
 // Dynamically import Theme Marketplace Modal
 const ThemeMarketplaceModal = dynamic(
   () => import('@/components/theme-marketplace/ThemeMarketplaceModal'),
   { ssr: false }
-);
+)
 
 type MockMessageFormState = {
-  platform: ChatMessage['platform'];
-  displayName: string;
-  username: string;
-  avatarUrl: string;
-  message: string;
-  color: string;
-};
+  platform: ChatMessage['platform']
+  displayName: string
+  username: string
+  avatarUrl: string
+  message: string
+  color: string
+}
 
 const DEFAULT_MOCK_FORM: MockMessageFormState = {
   platform: 'twitch',
@@ -68,8 +68,8 @@ const DEFAULT_MOCK_FORM: MockMessageFormState = {
   username: 'overlayfan',
   avatarUrl: '',
   message: 'This overlay looks great! PogChamp',
-  color: '#9146ff'
-};
+  color: '#9146ff',
+}
 
 const SAMPLE_MOCK_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overlay_id'>> = [
   {
@@ -82,13 +82,13 @@ const SAMPLE_MOCK_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overla
       display_name: 'RetroMod',
       avatar_url: 'https://i.pravatar.cc/100?img=13',
       badges: [],
-      color: '#fbbf24'
+      color: '#fbbf24',
     },
     message: {
       text: 'Welcome to the overlay preview! PogChamp',
-      emotes: []
+      emotes: [],
     },
-    metadata: { mock: true }
+    metadata: { mock: true },
   },
   {
     platform: 'youtube',
@@ -100,13 +100,13 @@ const SAMPLE_MOCK_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overla
       display_name: 'CyberCritic',
       avatar_url: 'https://i.pravatar.cc/100?img=32',
       badges: [],
-      color: '#f87171'
+      color: '#f87171',
     },
     message: {
       text: 'Picked up the neon CSS preset and it SLAPS 🔥',
-      emotes: []
+      emotes: [],
     },
-    metadata: { mock: true }
+    metadata: { mock: true },
   },
   {
     platform: 'kick',
@@ -118,15 +118,15 @@ const SAMPLE_MOCK_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overla
       display_name: 'EmoteMaster',
       avatar_url: 'https://i.pravatar.cc/100?img=56',
       badges: [],
-      color: '#4ade80'
+      color: '#4ade80',
     },
     message: {
       text: 'Drop your favorite emotes in chat 😎',
-      emotes: []
+      emotes: [],
     },
-    metadata: { mock: true }
-  }
-];
+    metadata: { mock: true },
+  },
+]
 
 const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overlay_id'>> = [
   // High-tier Twitch subscription
@@ -140,11 +140,11 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       display_name: 'GenerousViewer',
       avatar_url: 'https://i.pravatar.cc/100?img=45',
       badges: [],
-      color: '#ff6b6b'
+      color: '#ff6b6b',
     },
     message: {
       text: 'Love the stream! Keep it up!',
-      emotes: []
+      emotes: [],
     },
     event: {
       type: 'subscription',
@@ -154,10 +154,10 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       metadata: {
         sub_tier: '1000',
         months: 1,
-        streak: 1
-      }
+        streak: 1,
+      },
     },
-    metadata: { mock: true, event: true }
+    metadata: { mock: true, event: true },
   },
   // High-tier YouTube Super Chat
   {
@@ -170,11 +170,11 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       display_name: 'SuperFan',
       avatar_url: 'https://i.pravatar.cc/100?img=67',
       badges: [],
-      color: '#e91e63'
+      color: '#e91e63',
     },
     message: {
       text: 'Amazing content! Thanks for all you do!',
-      emotes: []
+      emotes: [],
     },
     event: {
       type: 'super_chat',
@@ -182,13 +182,13 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       value: {
         amount: 50,
         currency: 'USD',
-        display_text: '$50.00'
+        display_text: '$50.00',
       },
       duration: 60,
       is_update: false,
-      metadata: {}
+      metadata: {},
     },
-    metadata: { mock: true, event: true }
+    metadata: { mock: true, event: true },
   },
   // High-tier Twitch raid
   {
@@ -201,11 +201,11 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       display_name: 'BigStreamer',
       avatar_url: 'https://i.pravatar.cc/100?img=23',
       badges: [],
-      color: '#9146ff'
+      color: '#9146ff',
     },
     message: {
       text: 'is raiding with 2,500 viewers!',
-      emotes: []
+      emotes: [],
     },
     event: {
       type: 'raid',
@@ -213,10 +213,10 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       duration: 40,
       is_update: false,
       metadata: {
-        viewer_count: 2500
-      }
+        viewer_count: 2500,
+      },
     },
-    metadata: { mock: true, event: true }
+    metadata: { mock: true, event: true },
   },
   // Medium-tier gift subscription
   {
@@ -229,11 +229,11 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       display_name: 'KindPerson',
       avatar_url: 'https://i.pravatar.cc/100?img=89',
       badges: [],
-      color: '#f59e0b'
+      color: '#f59e0b',
     },
     message: {
       text: 'gifted 5 subs to the community!',
-      emotes: []
+      emotes: [],
     },
     event: {
       type: 'gift_subscription',
@@ -242,10 +242,10 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       is_update: false,
       metadata: {
         gift_count: 5,
-        sub_tier: '1000'
-      }
+        sub_tier: '1000',
+      },
     },
-    metadata: { mock: true, event: true }
+    metadata: { mock: true, event: true },
   },
   // Medium-tier TikTok gift
   {
@@ -258,11 +258,11 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       display_name: 'TikTokFan',
       avatar_url: 'https://i.pravatar.cc/100?img=34',
       badges: [],
-      color: '#00f2ea'
+      color: '#00f2ea',
     },
     message: {
       text: 'sent a Rose (1 diamonds)',
-      emotes: []
+      emotes: [],
     },
     event: {
       type: 'gift',
@@ -272,10 +272,10 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       metadata: {
         gift_name: 'Rose',
         diamonds: 1,
-        gift_count: 1
-      }
+        gift_count: 1,
+      },
     },
-    metadata: { mock: true, event: true }
+    metadata: { mock: true, event: true },
   },
   // Low-tier TikTok likes (aggregated)
   {
@@ -288,11 +288,11 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       display_name: 'Liker123',
       avatar_url: 'https://i.pravatar.cc/100?img=78',
       badges: [],
-      color: '#10b981'
+      color: '#10b981',
     },
     message: {
       text: 'sent 47 likes',
-      emotes: []
+      emotes: [],
     },
     event: {
       type: 'like_aggregate',
@@ -301,10 +301,10 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       is_update: false,
       aggregation_id: 'sample-agg-1',
       metadata: {
-        like_count: 47
-      }
+        like_count: 47,
+      },
     },
-    metadata: { mock: true, event: true }
+    metadata: { mock: true, event: true },
   },
   // Low-tier TikTok follow
   {
@@ -317,20 +317,20 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       display_name: 'NewFollower',
       avatar_url: 'https://i.pravatar.cc/100?img=91',
       badges: [],
-      color: '#8b5cf6'
+      color: '#8b5cf6',
     },
     message: {
       text: 'followed',
-      emotes: []
+      emotes: [],
     },
     event: {
       type: 'follow',
       tier: 'low',
       duration: 10,
       is_update: false,
-      metadata: {}
+      metadata: {},
     },
-    metadata: { mock: true, event: true }
+    metadata: { mock: true, event: true },
   },
   // Medium-tier bits
   {
@@ -343,11 +343,11 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       display_name: 'CheerLeader',
       avatar_url: 'https://i.pravatar.cc/100?img=55',
       badges: [],
-      color: '#06b6d4'
+      color: '#06b6d4',
     },
     message: {
       text: 'Cheer100 Love the vibes!',
-      emotes: []
+      emotes: [],
     },
     event: {
       type: 'bits',
@@ -355,12 +355,12 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       duration: 15,
       is_update: false,
       metadata: {
-        bits: 100
-      }
+        bits: 100,
+      },
     },
-    metadata: { mock: true, event: true }
-  }
-];
+    metadata: { mock: true, event: true },
+  },
+]
 
 const EXAMPLE_CUSTOM_CSS = `/* Example neon glass theme */
 body {
@@ -391,195 +391,203 @@ body {
   color: #fff1f2 !important;
   text-shadow: 0 0 12px rgba(236, 72, 153, 0.65) !important;
 }
-`;
+`
 
 const isMockMessage = (message: ChatMessage): boolean => {
-  const data = message.metadata as { mock?: boolean };
-  return Boolean(data?.mock);
-};
+  const data = message.metadata as { mock?: boolean }
+  return Boolean(data?.mock)
+}
 
 const scopeCustomCss = (css: string, scopeSelector: string, bodySelector: string): string => {
   if (!css.trim()) {
-    return '';
+    return ''
   }
 
-  const replaceBody = css
-    .replace(/:root/gi, scopeSelector)
-    .replace(/\bbody\b/gi, bodySelector);
+  const replaceBody = css.replace(/:root/gi, scopeSelector).replace(/\bbody\b/gi, bodySelector)
 
   return replaceBody.replace(/(^|}|{)\s*([^@}{]+)\s*{/g, (match, prefix, selectorGroup) => {
-    const trimmed = selectorGroup.trim();
+    const trimmed = selectorGroup.trim()
     if (!trimmed) {
-      return match;
+      return match
     }
 
     const isKeyframeStep =
-      ['from', 'to'].includes(trimmed.toLowerCase()) || /^\d+\.?\d*%$/i.test(trimmed);
+      ['from', 'to'].includes(trimmed.toLowerCase()) || /^\d+\.?\d*%$/i.test(trimmed)
     if (isKeyframeStep) {
-      return `${prefix} ${trimmed} {`;
+      return `${prefix} ${trimmed} {`
     }
 
     const scopedSelectors = trimmed
       .split(',')
       .map((selector: string) => {
-        const sel = selector.trim();
+        const sel = selector.trim()
         if (!sel || sel.startsWith(scopeSelector) || sel.startsWith(bodySelector)) {
-          return sel;
+          return sel
         }
-        return `${scopeSelector} ${sel}`;
+        return `${scopeSelector} ${sel}`
       })
       .filter(Boolean)
-      .join(', ');
+      .join(', ')
 
-    return `${prefix} ${scopedSelectors} {`;
-  });
-};
+    return `${prefix} ${scopedSelectors} {`
+  })
+}
 
 export default function OverlayPreviewPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const router = useRouter();
-  const { token } = useAuthStore();
+  const { id } = use(params)
+  const router = useRouter()
+  const { token } = useAuthStore()
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [connected, setConnected] = useState(false);
-  const [maxMessages, setMaxMessages] = useState(50);
-  const [fontSize, setFontSize] = useState(16);
-  const [messageDuration, setMessageDuration] = useState(15);
-  const [disableMessageFade, setDisableMessageFade] = useState(false);
-  const [mockForm, setMockForm] = useState<MockMessageFormState>(DEFAULT_MOCK_FORM);
-  const [customCss, setCustomCss] = useState('');
-  const [useCustomCss, setUseCustomCss] = useState(false);
-  const [configLoaded, setConfigLoaded] = useState(false);
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [sources, setSources] = useState<ChatSource[]>([]);
-  const [showThemeMarketplace, setShowThemeMarketplace] = useState(false);
-  const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
-  const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text');
-  const [showPlatformBadge, setShowPlatformBadge] = useState(true);
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [connected, setConnected] = useState(false)
+  const [maxMessages, setMaxMessages] = useState(50)
+  const [fontSize, setFontSize] = useState(16)
+  const [messageDuration, setMessageDuration] = useState(15)
+  const [disableMessageFade, setDisableMessageFade] = useState(false)
+  const [mockForm, setMockForm] = useState<MockMessageFormState>(DEFAULT_MOCK_FORM)
+  const [customCss, setCustomCss] = useState('')
+  const [useCustomCss, setUseCustomCss] = useState(false)
+  const [configLoaded, setConfigLoaded] = useState(false)
+  const [isSavingConfig, setIsSavingConfig] = useState(false)
+  const [configAlert, setConfigAlert] = useState<{
+    type: 'success' | 'error'
+    message: string
+  } | null>(null)
+  const [sources, setSources] = useState<ChatSource[]>([])
+  const [showThemeMarketplace, setShowThemeMarketplace] = useState(false)
+  const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
+  const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
+  const [showPlatformBadge, setShowPlatformBadge] = useState(true)
 
-  const wsClientRef = useRef<WebSocketClient | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsClientRef = useRef<WebSocketClient | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   const scopedPreviewCss = useMemo(() => {
     if (!useCustomCss || !customCss.trim()) {
-      return '';
+      return ''
     }
-    return scopeCustomCss(customCss, '#overlay-preview-root', '#overlay-preview-root .overlay-preview-body');
-  }, [customCss, useCustomCss]);
+    return scopeCustomCss(
+      customCss,
+      '#overlay-preview-root',
+      '#overlay-preview-root .overlay-preview-body'
+    )
+  }, [customCss, useCustomCss])
 
   // Fetch overlay config for customization defaults
   useEffect(() => {
     if (!token) {
-      return;
+      return
     }
 
     const loadConfig = async () => {
       try {
-        const config = await overlaysApi.getConfig(id);
-        const display = config.display_settings || {};
+        const config = await overlaysApi.getConfig(id)
+        const display = config.display_settings || {}
 
         if (typeof display.max_messages === 'number') {
-          setMaxMessages(display.max_messages);
+          setMaxMessages(display.max_messages)
         }
         if (typeof display.font_size === 'number') {
-          setFontSize(display.font_size);
+          setFontSize(display.font_size)
         }
         if (typeof display.message_duration === 'number') {
-          setMessageDuration(display.message_duration);
+          setMessageDuration(display.message_duration)
         }
         if (typeof display.disable_message_fade === 'boolean') {
-          setDisableMessageFade(display.disable_message_fade);
+          setDisableMessageFade(display.disable_message_fade)
         }
-        if (display.platform_badge_position === 'before' || display.platform_badge_position === 'after') {
-          setPlatformBadgePosition(display.platform_badge_position);
+        if (
+          display.platform_badge_position === 'before' ||
+          display.platform_badge_position === 'after'
+        ) {
+          setPlatformBadgePosition(display.platform_badge_position)
         }
         if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
-          setPlatformBadgeStyle(display.platform_badge_style);
+          setPlatformBadgeStyle(display.platform_badge_style)
         }
         if (typeof display.show_platform_badge === 'boolean') {
-          setShowPlatformBadge(display.show_platform_badge);
+          setShowPlatformBadge(display.show_platform_badge)
         }
 
-        const css = config.custom_css || '';
-        setCustomCss(css);
-        setUseCustomCss(Boolean(css.trim().length));
+        const css = config.custom_css || ''
+        setCustomCss(css)
+        setUseCustomCss(Boolean(css.trim().length))
       } catch (error) {
-        console.warn('Failed to load overlay config', error);
+        console.warn('Failed to load overlay config', error)
       } finally {
-        setConfigLoaded(true);
+        setConfigLoaded(true)
       }
-    };
+    }
 
-    loadConfig();
-  }, [id, token]);
+    loadConfig()
+  }, [id, token])
 
   // Load overlay sources for determining mock targets
   useEffect(() => {
     const loadSources = async () => {
       try {
-        const loadedSources = await overlaysApi.getSources(id);
-        setSources(loadedSources);
+        const loadedSources = await overlaysApi.getSources(id)
+        setSources(loadedSources)
       } catch (error) {
-        console.error('[Preview] Failed to load sources:', error);
+        console.error('[Preview] Failed to load sources:', error)
       }
-    };
+    }
 
-    loadSources();
-  }, [id]);
+    loadSources()
+  }, [id])
 
   // Initialize WebSocket connection
   useEffect(() => {
     if (!token) {
-      router.push('/');
-      return;
+      router.push('/')
+      return
     }
 
     // Create WebSocket client
-    const wsClient = new WebSocketClient();
-    wsClientRef.current = wsClient;
+    const wsClient = new WebSocketClient()
+    wsClientRef.current = wsClient
 
     // Connect to overlay WebSocket
-    wsClient.connect(id, token);
+    wsClient.connect(id, token)
 
     // Listen for messages
     const unsubscribe = wsClient.onMessage(async (incoming) => {
-      const message = sortMessageBadges(await resolveTwitchBadgeIcons(incoming));
-      setMessages((prev) => [...prev, message].slice(-maxMessages));
-      setConnected(true);
-    });
+      const message = sortMessageBadges(await resolveTwitchBadgeIcons(incoming))
+      setMessages((prev) => [...prev, message].slice(-maxMessages))
+      setConnected(true)
+    })
 
     // Check connection status periodically
     const interval = setInterval(() => {
-      setConnected(wsClient.isConnected());
-    }, 1000);
+      setConnected(wsClient.isConnected())
+    }, 1000)
 
     // Cleanup on unmount
     return () => {
-      unsubscribe();
-      wsClient.disconnect();
-      clearInterval(interval);
-    };
-  }, [id, token, maxMessages, router]);
+      unsubscribe()
+      wsClient.disconnect()
+      clearInterval(interval)
+    }
+  }, [id, token, maxMessages, router])
 
   // Trim message buffer when maxMessages changes
   useEffect(() => {
-    setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev));
-  }, [maxMessages]);
+    setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev))
+  }, [maxMessages])
 
   // Automatically send sample messages on initial load
   useEffect(() => {
     if (!token || !configLoaded) {
-      return;
+      return
     }
 
     // Send sample messages after a short delay to ensure WebSocket is connected
     const timer = setTimeout(() => {
-      void handleAddSampleTranscript();
-    }, 1500);
+      void handleAddSampleTranscript()
+    }, 1500)
 
-    return () => clearTimeout(timer);
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configLoaded, token]);
+  }, [configLoaded, token])
 
   // Auto-scroll to bottom when new messages arrive (disabled for preview to avoid annoying scroll jumps)
   // useEffect(() => {
@@ -587,14 +595,14 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
   // }, [messages]);
 
   const copyOverlayUrl = () => {
-    const url = `${window.location.origin}/overlay/${id}`;
-    navigator.clipboard.writeText(url);
-    alert('Overlay URL copied to clipboard!\n\nAdd this as a Browser Source in OBS.');
-  };
+    const url = `${window.location.origin}/overlay/${id}`
+    navigator.clipboard.writeText(url)
+    alert('Overlay URL copied to clipboard!\n\nAdd this as a Browser Source in OBS.')
+  }
 
   // Helper function to render event-specific content
   const renderEventContent = (message: ChatMessage): React.ReactNode => {
-    const event = message.event!;
+    const event = message.event!
 
     // Event icon based on type
     const getEventIcon = () => {
@@ -604,98 +612,102 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
         case 'gift_subscription':
         case 'kick_subscription':
         case 'new_sponsor':
-          return '⭐';
+          return '⭐'
         case 'bits':
-          return '💎';
+          return '💎'
         case 'raid':
-          return '🚀';
+          return '🚀'
         case 'channel_points':
-          return '🎁';
+          return '🎁'
         case 'super_chat':
-          return '💰';
+          return '💰'
         case 'super_sticker':
-          return '🎨';
+          return '🎨'
         case 'gift':
-          return '🎁';
+          return '🎁'
         case 'follow':
-          return '❤️';
+          return '❤️'
         case 'like_aggregate':
-          return '👍';
+          return '👍'
         case 'share':
-          return '🔗';
+          return '🔗'
         case 'member_milestone':
-          return '🎂';
+          return '🎂'
         case 'membership_gift':
-          return '🎁';
+          return '🎁'
         default:
-          return '✨';
+          return '✨'
       }
-    };
+    }
 
     // Event title based on type
     const getEventTitle = () => {
       switch (event.type) {
         case 'subscription':
-          return 'New Subscriber!';
+          return 'New Subscriber!'
         case 'resubscription':
-          return 'Resubscribed!';
+          return 'Resubscribed!'
         case 'gift_subscription':
-          return 'Gift Subscription!';
+          return 'Gift Subscription!'
         case 'mystery_gift':
-          return 'Mystery Gift Bomb!';
+          return 'Mystery Gift Bomb!'
         case 'bits':
-          return 'Bits Cheered!';
+          return 'Bits Cheered!'
         case 'raid':
-          return 'Raid Incoming!';
+          return 'Raid Incoming!'
         case 'channel_points':
-          return 'Channel Points Redeemed!';
+          return 'Channel Points Redeemed!'
         case 'super_chat':
-          return 'Super Chat!';
+          return 'Super Chat!'
         case 'super_sticker':
-          return 'Super Sticker!';
+          return 'Super Sticker!'
         case 'new_sponsor':
-          return 'New Member!';
+          return 'New Member!'
         case 'member_milestone':
-          return 'Member Milestone!';
+          return 'Member Milestone!'
         case 'membership_gift':
-          return 'Membership Gift!';
+          return 'Membership Gift!'
         case 'gift':
-          return 'Gift Received!';
+          return 'Gift Received!'
         case 'follow':
-          return 'New Follower!';
+          return 'New Follower!'
         case 'like_aggregate':
-          return 'Likes!';
+          return 'Likes!'
         case 'share':
-          return 'Stream Shared!';
+          return 'Stream Shared!'
         default:
-          return 'Event!';
+          return 'Event!'
       }
-    };
+    }
 
     return (
       <div className="event-content">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="text-4xl event-icon leading-none">{getEventIcon()}</span>
+        <div className="mb-1 flex items-center gap-3">
+          <span className="event-icon text-4xl leading-none">{getEventIcon()}</span>
           <div className="flex-1">
-            <div className="text-lg font-bold event-title text-white">{getEventTitle()}</div>
-            <div className="text-sm font-semibold event-user" style={{ color: message.user?.color || '#FFFFFF' }}>
+            <div className="event-title text-lg font-bold text-white">{getEventTitle()}</div>
+            <div
+              className="event-user text-sm font-semibold"
+              style={{ color: message.user?.color || '#FFFFFF' }}
+            >
               {message.user?.display_name || message.user?.username}
             </div>
           </div>
           {event.value && (
-            <div className="text-2xl font-bold event-value text-yellow-300">
+            <div className="event-value text-2xl font-bold text-yellow-300">
               {event.value.display_text}
             </div>
           )}
         </div>
         {message.message.text && (
-          <div className="text-sm event-message-text text-slate-200 ml-14">
+          <div className="event-message-text ml-14 text-sm text-slate-200">
             {message.message.text}
           </div>
         )}
         {event.metadata && Object.keys(event.metadata).length > 0 && (
-          <div className="text-xs event-metadata text-slate-400 mt-1 ml-14">
-            {(event.metadata as any).viewer_count && `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
+          <div className="event-metadata mt-1 ml-14 text-xs text-slate-400">
+            {(event.metadata as any).viewer_count &&
+              `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
             {(event.metadata as any).months && `${(event.metadata as any).months} months`}
             {(event.metadata as any).streak && ` • ${(event.metadata as any).streak} month streak`}
             {(event.metadata as any).gift_count && `${(event.metadata as any).gift_count} gifts`}
@@ -705,91 +717,113 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
           </div>
         )}
       </div>
-    );
-  };
+    )
+  }
 
   const getPlatformColor = (platform: string): string => {
     switch (platform) {
       case 'twitch':
-        return 'text-purple-400';
+        return 'text-purple-400'
       case 'youtube':
-        return 'text-red-400';
+        return 'text-red-400'
       case 'kick':
-        return 'text-green-400';
+        return 'text-green-400'
       default:
-        return 'text-slate-400';
+        return 'text-slate-400'
     }
-  };
+  }
 
   // Platform icon components
   const PlatformIcon = ({ platform }: { platform: string }) => {
-    const iconClass = "inline-block w-4 h-4";
+    const iconClass = 'inline-block w-4 h-4'
 
     switch (platform) {
       case 'twitch':
         return (
           <svg viewBox="0 0 24 24" className={iconClass}>
-            <path fill="#9146FF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+            <path
+              fill="#9146FF"
+              d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"
+            />
           </svg>
-        );
+        )
       case 'youtube':
         return (
           <svg viewBox="0 0 24 24" className={iconClass}>
-            <path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            <path
+              fill="#FF0000"
+              d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
+            />
           </svg>
-        );
+        )
       case 'kick':
         return (
           <svg viewBox="0 0 24 24" className={iconClass} style={{ imageRendering: 'pixelated' }}>
-            <text x="12" y="18" fontSize="20" fontWeight="bold" fill="#00E701" textAnchor="middle" fontFamily="monospace">K</text>
+            <text
+              x="12"
+              y="18"
+              fontSize="20"
+              fontWeight="bold"
+              fill="#00E701"
+              textAnchor="middle"
+              fontFamily="monospace"
+            >
+              K
+            </text>
           </svg>
-        );
+        )
       case 'tiktok':
         return (
           <svg viewBox="0 0 24 24" className={iconClass}>
-            <path fill="#000000" d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+            <path
+              fill="#000000"
+              d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"
+            />
           </svg>
-        );
+        )
       default:
-        return null;
+        return null
     }
-  };
+  }
 
-  const handleMockInputChange = <K extends keyof MockMessageFormState>(field: K, value: MockMessageFormState[K]) => {
+  const handleMockInputChange = <K extends keyof MockMessageFormState>(
+    field: K,
+    value: MockMessageFormState[K]
+  ) => {
     setMockForm((prev) => ({
       ...prev,
-      [field]: value
-    }));
-  };
+      [field]: value,
+    }))
+  }
 
   const resolveMockTarget = (requestedPlatform?: ChatMessage['platform']) => {
     const preferred = sources.find((source) =>
       requestedPlatform ? source.platform === requestedPlatform : true
-    );
+    )
 
     // If a specific platform was requested but not found in sources,
     // don't fallback to other platform's sources - use undefined
     if (!preferred) {
       return {
         platform: requestedPlatform || 'twitch',
-        channel_id: undefined,  // Let backend handle default
-        channel_name: undefined
-      };
+        channel_id: undefined, // Let backend handle default
+        channel_name: undefined,
+      }
     }
 
     return {
       platform: requestedPlatform || (preferred.platform as ChatMessage['platform']),
       channel_id: preferred.channel_id,
-      channel_name: preferred.channel_name || preferred.channel_id
-    };
-  };
+      channel_name: preferred.channel_name || preferred.channel_id,
+    }
+  }
 
   const handleAddMockMessage = async () => {
     if (!mockForm.message.trim()) {
-      return;
+      return
     }
 
-    const target = resolveMockTarget(mockForm.platform);
+    const target = resolveMockTarget(mockForm.platform)
 
     try {
       await overlaysApi.sendMockMessage(id, {
@@ -798,28 +832,26 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
         channel_name: target.channel_name,
         text: mockForm.message,
         username:
-          mockForm.username ||
-          mockForm.displayName.toLowerCase().replace(/\s+/g, '') ||
-          'mockuser',
+          mockForm.username || mockForm.displayName.toLowerCase().replace(/\s+/g, '') || 'mockuser',
         display_name: mockForm.displayName || mockForm.username || 'Mock Viewer',
         avatar_url: mockForm.avatarUrl || undefined,
         color: mockForm.color || undefined,
-        metadata: { mock: true, source: 'preview-form' }
-      });
+        metadata: { mock: true, source: 'preview-form' },
+      })
 
       setMockForm((prev) => ({
         ...prev,
-        message: ''
-      }));
+        message: '',
+      }))
     } catch (error) {
-      console.error('[Preview] Failed to send mock message:', error);
-      alert('Failed to send mock message. Check console for details.');
+      console.error('[Preview] Failed to send mock message:', error)
+      alert('Failed to send mock message. Check console for details.')
     }
-  };
+  }
 
   const handleAddSampleTranscript = async () => {
     for (const [index, sample] of SAMPLE_MOCK_MESSAGES.entries()) {
-      const target = resolveMockTarget(sample.platform);
+      const target = resolveMockTarget(sample.platform)
 
       try {
         await overlaysApi.sendMockMessage(id, {
@@ -836,20 +868,20 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
             ...(sample.metadata || {}),
             mock: true,
             preset: true,
-            order: index
-          }
-        });
+            order: index,
+          },
+        })
       } catch (error) {
-        console.error('[Preview] Failed to send sample message:', error);
-        alert('Failed to send sample messages. Check console for details.');
-        break;
+        console.error('[Preview] Failed to send sample message:', error)
+        alert('Failed to send sample messages. Check console for details.')
+        break
       }
     }
-  };
+  }
 
   const handleAddSampleEvents = async () => {
     for (const [index, sample] of SAMPLE_EVENT_MESSAGES.entries()) {
-      const target = resolveMockTarget(sample.platform);
+      const target = resolveMockTarget(sample.platform)
 
       try {
         await overlaysApi.sendMockMessage(id, {
@@ -867,27 +899,27 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
             ...(sample.metadata || {}),
             mock: true,
             preset: true,
-            order: index
-          }
-        });
+            order: index,
+          },
+        })
 
         // Add delay between events so they don't all arrive at once
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise((resolve) => setTimeout(resolve, 800))
       } catch (error) {
-        console.error('[Preview] Failed to send sample event:', error);
-        alert('Failed to send sample events. Check console for details.');
-        break;
+        console.error('[Preview] Failed to send sample event:', error)
+        alert('Failed to send sample events. Check console for details.')
+        break
       }
     }
-  };
+  }
 
   const handleClearMockMessages = () => {
-    setMessages((prev) => prev.filter((message) => !isMockMessage(message)));
-  };
+    setMessages((prev) => prev.filter((message) => !isMockMessage(message)))
+  }
 
   const handleSaveCustomization = async () => {
-    setIsSavingConfig(true);
-    setConfigAlert(null);
+    setIsSavingConfig(true)
+    setConfigAlert(null)
 
     try {
       await overlaysApi.updateConfig(id, {
@@ -898,20 +930,20 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
           disable_message_fade: disableMessageFade,
           platform_badge_position: platformBadgePosition,
           platform_badge_style: platformBadgeStyle,
-          show_platform_badge: showPlatformBadge
+          show_platform_badge: showPlatformBadge,
         },
-        custom_css: useCustomCss ? customCss : ''
-      });
+        custom_css: useCustomCss ? customCss : '',
+      })
 
-      setConfigAlert({ type: 'success', message: 'Customization saved!' });
+      setConfigAlert({ type: 'success', message: 'Customization saved!' })
     } catch (error) {
-      console.error('Failed to save overlay config', error);
-      setConfigAlert({ type: 'error', message: 'Failed to save customization' });
+      console.error('Failed to save overlay config', error)
+      setConfigAlert({ type: 'error', message: 'Failed to save customization' })
     } finally {
-      setIsSavingConfig(false);
-      setTimeout(() => setConfigAlert(null), 5000);
+      setIsSavingConfig(false)
+      setTimeout(() => setConfigAlert(null), 5000)
     }
-  };
+  }
 
   return (
     <div className="min-h-screen bg-slate-900">
@@ -923,12 +955,12 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
         />
       )}
       {/* Header */}
-      <div className="bg-slate-800 border-b border-slate-700 px-4 py-3">
-        <div className="container mx-auto flex justify-between items-center">
+      <div className="border-b border-slate-700 bg-slate-800 px-4 py-3">
+        <div className="container mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push(`/overlays/${id}`)}
-              className="text-slate-400 hover:text-white transition-colors"
+              className="text-slate-400 transition-colors hover:text-white"
             >
               ← Back
             </button>
@@ -945,7 +977,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
 
           <button
             onClick={copyOverlayUrl}
-            className="bg-twitch hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
+            className="rounded-lg bg-twitch px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
           >
             📋 Copy OBS URL
           </button>
@@ -954,7 +986,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
 
       <div className="container mx-auto px-4 py-6">
         {/* Top Row: Preview and Customization */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Preview Area (Main) */}
           <div className="lg:col-span-2">
             <div
@@ -965,17 +997,17 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
               )}
             >
               <div
-                className="overlay-preview-body h-full overflow-y-auto space-y-3"
+                className="overlay-preview-body h-full space-y-3 overflow-y-auto"
                 style={{
                   scrollbarWidth: 'thin',
-                  scrollbarColor: '#374151 transparent'
+                  scrollbarColor: '#374151 transparent',
                 }}
               >
                 {messages.length === 0 ? (
-                  <div className="flex items-center justify-center h-full">
+                  <div className="flex h-full items-center justify-center">
                     <div className="text-center text-slate-600">
                       <svg
-                        className="w-16 h-16 mx-auto mb-4"
+                        className="mx-auto mb-4 h-16 w-16"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -987,148 +1019,171 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                           d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                         />
                       </svg>
-                      <p className="text-lg font-medium mb-2">Waiting for messages...</p>
+                      <p className="mb-2 text-lg font-medium">Waiting for messages...</p>
                       <p className="text-sm">Messages will appear here when chat is active</p>
                     </div>
                   </div>
                 ) : (
                   <>
                     {messages.map((message) => {
-                      const isEvent = message.event != null;
-                      const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : '';
-                      const eventTypeClass = isEvent ? `event-type-${message.event?.type}` : '';
+                      const isEvent = message.event != null
+                      const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : ''
+                      const eventTypeClass = isEvent ? `event-type-${message.event?.type}` : ''
 
                       return (
-                      <div
-                        key={message.id}
-                        data-platform={message.platform}
-                        data-event-type={isEvent ? message.event?.type : undefined}
-                        className={
-                          isEvent
-                            ? clsx('event-message', eventTierClass, eventTypeClass)
-                            : 'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm'
-                        }
-                      >
-                        <div className="flex items-start gap-3">
-                          {/* Avatar */}
-                          <div className="flex-shrink-0">
-                            {message.user.avatar_url ? (
-                              <Image
-                                src={message.user.avatar_url}
-                                alt={message.user.display_name}
-                                width={40}
-                                height={40}
-                                className="w-10 h-10 rounded-full object-cover"
-                                onError={(e) => {
-                                  e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                    message.user.display_name
-                                  )}&background=6b7280&color=fff&size=40`;
-                                }}
-                              />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-semibold">
-                                {message.user.display_name?.slice(0, 2).toUpperCase() || '?'}
+                        <div
+                          key={message.id}
+                          data-platform={message.platform}
+                          data-event-type={isEvent ? message.event?.type : undefined}
+                          className={
+                            isEvent
+                              ? clsx('event-message', eventTierClass, eventTypeClass)
+                              : 'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm'
+                          }
+                        >
+                          <div className="flex items-start gap-3">
+                            {/* Avatar */}
+                            <div className="flex-shrink-0">
+                              {message.user.avatar_url ? (
+                                <Image
+                                  src={message.user.avatar_url}
+                                  alt={message.user.display_name}
+                                  width={40}
+                                  height={40}
+                                  className="h-10 w-10 rounded-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                      message.user.display_name
+                                    )}&background=6b7280&color=fff&size=40`
+                                  }}
+                                />
+                              ) : (
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-700 font-semibold text-white">
+                                  {message.user.display_name?.slice(0, 2).toUpperCase() || '?'}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Message Content */}
+                            <div className="min-w-0 flex-1">
+                              {/* User Info */}
+                              <div className="mb-1 flex flex-wrap items-center gap-2">
+                                {/* Platform badge before username */}
+                                {showPlatformBadge &&
+                                  platformBadgePosition === 'before' &&
+                                  (platformBadgeStyle === 'icon' ? (
+                                    <span
+                                      className="platform-badge platform-badge-icon flex items-center"
+                                      title={message.platform}
+                                    >
+                                      <PlatformIcon platform={message.platform} />
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={clsx(
+                                        'platform-badge platform-badge-text text-xs font-semibold uppercase',
+                                        getPlatformColor(message.platform)
+                                      )}
+                                    >
+                                      {message.platform}
+                                    </span>
+                                  ))}
+
+                                {/* Badges before username when position is 'before' */}
+                                {platformBadgePosition === 'before' &&
+                                  message.user.badges &&
+                                  message.user.badges.length > 0 && (
+                                    <div className="flex gap-1">
+                                      {message.user.badges.map((badge, index) => (
+                                        <Image
+                                          key={`${badge.name}-${index}`}
+                                          src={badge.icon_url}
+                                          alt={badge.name}
+                                          title={`${badge.name} (${badge.version})`}
+                                          width={16}
+                                          height={16}
+                                          className="h-4 w-4 object-contain"
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = 'none'
+                                          }}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
+
+                                {/* Username */}
+                                <span
+                                  className="text-sm font-semibold"
+                                  style={{
+                                    color: message.user.color || '#FFFFFF',
+                                  }}
+                                >
+                                  {message.user.display_name}
+                                </span>
+
+                                {/* Platform badge after username */}
+                                {showPlatformBadge &&
+                                  platformBadgePosition === 'after' &&
+                                  (platformBadgeStyle === 'icon' ? (
+                                    <span
+                                      className="platform-badge platform-badge-icon flex items-center"
+                                      title={message.platform}
+                                    >
+                                      <PlatformIcon platform={message.platform} />
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={clsx(
+                                        'platform-badge platform-badge-text text-xs font-semibold uppercase',
+                                        getPlatformColor(message.platform)
+                                      )}
+                                    >
+                                      {message.platform}
+                                    </span>
+                                  ))}
+
+                                {/* Badges after username when position is 'after' */}
+                                {platformBadgePosition === 'after' &&
+                                  message.user.badges &&
+                                  message.user.badges.length > 0 && (
+                                    <div className="flex gap-1">
+                                      {message.user.badges.map((badge, index) => (
+                                        <Image
+                                          key={`${badge.name}-${index}`}
+                                          src={badge.icon_url}
+                                          alt={badge.name}
+                                          title={`${badge.name} (${badge.version})`}
+                                          width={16}
+                                          height={16}
+                                          className="h-4 w-4 object-contain"
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = 'none'
+                                          }}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
                               </div>
-                            )}
-                          </div>
 
-                          {/* Message Content */}
-                          <div className="flex-1 min-w-0">
-                            {/* User Info */}
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              {/* Platform badge before username */}
-                              {showPlatformBadge && platformBadgePosition === 'before' && (
-                                platformBadgeStyle === 'icon' ? (
-                                  <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
-                                    <PlatformIcon platform={message.platform} />
-                                  </span>
-                                ) : (
-                                  <span className={clsx('platform-badge platform-badge-text text-xs font-semibold uppercase', getPlatformColor(message.platform))}>
-                                    {message.platform}
-                                  </span>
-                                )
-                              )}
-
-                              {/* Badges before username when position is 'before' */}
-                              {platformBadgePosition === 'before' && message.user.badges && message.user.badges.length > 0 && (
-                                <div className="flex gap-1">
-                                  {message.user.badges.map((badge, index) => (
-                                    <Image
-                                      key={`${badge.name}-${index}`}
-                                      src={badge.icon_url}
-                                      alt={badge.name}
-                                      title={`${badge.name} (${badge.version})`}
-                                      width={16}
-                                      height={16}
-                                      className="w-4 h-4 object-contain"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                              )}
-
-                              {/* Username */}
-                              <span
-                                className="font-semibold text-sm"
-                                style={{
-                                  color: message.user.color || '#FFFFFF'
-                                }}
+                              {/* Message Text or Event Content */}
+                              <div
+                                className="break-words text-white"
+                                style={{ fontSize: `${fontSize}px` }}
                               >
-                                {message.user.display_name}
-                              </span>
+                                {message.event
+                                  ? renderEventContent(message)
+                                  : renderMessageContent(message)}
+                              </div>
 
-                              {/* Platform badge after username */}
-                              {showPlatformBadge && platformBadgePosition === 'after' && (
-                                platformBadgeStyle === 'icon' ? (
-                                  <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
-                                    <PlatformIcon platform={message.platform} />
-                                  </span>
-                                ) : (
-                                  <span className={clsx('platform-badge platform-badge-text text-xs font-semibold uppercase', getPlatformColor(message.platform))}>
-                                    {message.platform}
-                                  </span>
-                                )
-                              )}
-
-                              {/* Badges after username when position is 'after' */}
-                              {platformBadgePosition === 'after' && message.user.badges && message.user.badges.length > 0 && (
-                                <div className="flex gap-1">
-                                  {message.user.badges.map((badge, index) => (
-                                    <Image
-                                      key={`${badge.name}-${index}`}
-                                      src={badge.icon_url}
-                                      alt={badge.name}
-                                      title={`${badge.name} (${badge.version})`}
-                                      width={16}
-                                      height={16}
-                                      className="w-4 h-4 object-contain"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Message Text or Event Content */}
-                            <div
-                              className="text-white break-words"
-                              style={{ fontSize: `${fontSize}px` }}
-                            >
-                              {message.event ? renderEventContent(message) : renderMessageContent(message)}
-                            </div>
-
-                            {/* Timestamp */}
-                            <div className="text-xs text-slate-500 mt-1">
-                              {new Date(message.timestamp).toLocaleTimeString()}
+                              {/* Timestamp */}
+                              <div className="mt-1 text-xs text-slate-500">
+                                {new Date(message.timestamp).toLocaleTimeString()}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    )})}
+                      )
+                    })}
                     <div ref={messagesEndRef} />
                   </>
                 )}
@@ -1138,330 +1193,338 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
 
           {/* Customization Panel (Sidebar) */}
           <div className="lg:col-span-1">
-            <div className="bg-slate-800 rounded-lg border border-slate-700 h-[800px] overflow-y-auto flex flex-col">
-              <div className="p-6 flex-shrink-0">
-                <h2 className="text-lg font-semibold text-white mb-6">Customization</h2>
+            <div className="flex h-[800px] flex-col overflow-y-auto rounded-lg border border-slate-700 bg-slate-800">
+              <div className="flex-shrink-0 p-6">
+                <h2 className="mb-6 text-lg font-semibold text-white">Customization</h2>
               </div>
-              <div className="px-6 pb-6 flex-1 overflow-y-auto"
+              <div
+                className="flex-1 overflow-y-auto px-6 pb-6"
                 style={{
                   scrollbarWidth: 'thin',
-                  scrollbarColor: '#374151 transparent'
+                  scrollbarColor: '#374151 transparent',
                 }}
               >
-
-              <div className="space-y-6">
-                {/* Font Size */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Font Size: <span className="text-twitch">{fontSize}px</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="12"
-                    max="32"
-                    value={fontSize}
-                    onChange={(e) => setFontSize(parseInt(e.target.value))}
-                    className="w-full accent-twitch"
-                  />
-                </div>
-
-                {/* Max Messages */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Max Messages: <span className="text-twitch">{maxMessages}</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="100"
-                    value={maxMessages}
-                    onChange={(e) => setMaxMessages(parseInt(e.target.value))}
-                    className="w-full accent-twitch"
-                  />
-                </div>
-
-                {/* Message Duration */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Message Duration: <span className="text-twitch">{messageDuration}s</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="5"
-                    max="60"
-                    value={messageDuration}
-                    onChange={(e) => setMessageDuration(parseInt(e.target.value))}
-                    className="w-full accent-twitch"
-                    disabled={disableMessageFade}
-                  />
-                </div>
-
-                {/* Disable Message Fade Toggle */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                <div className="space-y-6">
+                  {/* Font Size */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-300">
+                      Font Size: <span className="text-twitch">{fontSize}px</span>
+                    </label>
                     <input
-                      type="checkbox"
-                      checked={disableMessageFade}
-                      onChange={(e) => setDisableMessageFade(e.target.checked)}
-                      className="accent-twitch"
+                      type="range"
+                      min="12"
+                      max="32"
+                      value={fontSize}
+                      onChange={(e) => setFontSize(parseInt(e.target.value))}
+                      className="w-full accent-twitch"
                     />
-                    Disable Message Fade Out
-                  </label>
-                  <p className="text-xs text-slate-400 mt-1 ml-6">
-                    When enabled, messages will not automatically fade out and will remain visible until max messages is reached
-                  </p>
-                </div>
+                  </div>
 
-                {/* Platform Badge Settings */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-3">
-                    Platform Badge
-                  </label>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="flex items-center gap-2 text-sm text-slate-300 mb-3">
-                        <input
-                          type="checkbox"
-                          checked={showPlatformBadge}
-                          onChange={(e) => setShowPlatformBadge(e.target.checked)}
-                          className="accent-twitch"
-                        />
-                        Show Platform Badge
+                  {/* Max Messages */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-300">
+                      Max Messages: <span className="text-twitch">{maxMessages}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="10"
+                      max="100"
+                      value={maxMessages}
+                      onChange={(e) => setMaxMessages(parseInt(e.target.value))}
+                      className="w-full accent-twitch"
+                    />
+                  </div>
+
+                  {/* Message Duration */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-300">
+                      Message Duration: <span className="text-twitch">{messageDuration}s</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="5"
+                      max="60"
+                      value={messageDuration}
+                      onChange={(e) => setMessageDuration(parseInt(e.target.value))}
+                      className="w-full accent-twitch"
+                      disabled={disableMessageFade}
+                    />
+                  </div>
+
+                  {/* Disable Message Fade Toggle */}
+                  <div>
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={disableMessageFade}
+                        onChange={(e) => setDisableMessageFade(e.target.checked)}
+                        className="accent-twitch"
+                      />
+                      Disable Message Fade Out
+                    </label>
+                    <p className="mt-1 ml-6 text-xs text-slate-400">
+                      When enabled, messages will not automatically fade out and will remain visible
+                      until max messages is reached
+                    </p>
+                  </div>
+
+                  {/* Platform Badge Settings */}
+                  <div>
+                    <label className="mb-3 block text-sm font-medium text-slate-300">
+                      Platform Badge
+                    </label>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="mb-3 flex items-center gap-2 text-sm text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={showPlatformBadge}
+                            onChange={(e) => setShowPlatformBadge(e.target.checked)}
+                            className="accent-twitch"
+                          />
+                          Show Platform Badge
+                        </label>
+                      </div>
+                      <div className={!showPlatformBadge ? 'pointer-events-none opacity-50' : ''}>
+                        <label className="mb-2 block text-xs text-slate-400">Position</label>
+                        <div className="flex gap-3">
+                          <label className="flex cursor-pointer items-center gap-2 text-slate-300">
+                            <input
+                              type="radio"
+                              name="platformBadgePosition"
+                              value="before"
+                              checked={platformBadgePosition === 'before'}
+                              onChange={(e) => setPlatformBadgePosition(e.target.value as 'before')}
+                              className="accent-twitch"
+                              disabled={!showPlatformBadge}
+                            />
+                            Before username
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-2 text-slate-300">
+                            <input
+                              type="radio"
+                              name="platformBadgePosition"
+                              value="after"
+                              checked={platformBadgePosition === 'after'}
+                              onChange={(e) => setPlatformBadgePosition(e.target.value as 'after')}
+                              className="accent-twitch"
+                              disabled={!showPlatformBadge}
+                            />
+                            After username
+                          </label>
+                        </div>
+                      </div>
+                      <div className={!showPlatformBadge ? 'pointer-events-none opacity-50' : ''}>
+                        <label className="mb-2 block text-xs text-slate-400">Style</label>
+                        <div className="flex gap-3">
+                          <label className="flex cursor-pointer items-center gap-2 text-slate-300">
+                            <input
+                              type="radio"
+                              name="platformBadgeStyle"
+                              value="text"
+                              checked={platformBadgeStyle === 'text'}
+                              onChange={(e) => setPlatformBadgeStyle(e.target.value as 'text')}
+                              className="accent-twitch"
+                              disabled={!showPlatformBadge}
+                            />
+                            Text (TWITCH)
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-2 text-slate-300">
+                            <input
+                              type="radio"
+                              name="platformBadgeStyle"
+                              value="icon"
+                              checked={platformBadgeStyle === 'icon'}
+                              onChange={(e) => setPlatformBadgeStyle(e.target.value as 'icon')}
+                              className="accent-twitch"
+                              disabled={!showPlatformBadge}
+                            />
+                            Icon (logo)
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Emote Providers */}
+                  <div>
+                    <label className="mb-3 block text-sm font-medium text-slate-300">
+                      Emote Providers
+                    </label>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-slate-300">
+                        <input type="checkbox" defaultChecked className="accent-twitch" />
+                        7TV
+                      </label>
+                      <label className="flex items-center gap-2 text-slate-300">
+                        <input type="checkbox" defaultChecked className="accent-twitch" />
+                        BetterTTV
+                      </label>
+                      <label className="flex items-center gap-2 text-slate-300">
+                        <input type="checkbox" defaultChecked className="accent-twitch" />
+                        FrankerFaceZ
                       </label>
                     </div>
-                    <div className={!showPlatformBadge ? 'opacity-50 pointer-events-none' : ''}>
-                      <label className="block text-xs text-slate-400 mb-2">Position</label>
-                      <div className="flex gap-3">
-                        <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="platformBadgePosition"
-                            value="before"
-                            checked={platformBadgePosition === 'before'}
-                            onChange={(e) => setPlatformBadgePosition(e.target.value as 'before')}
-                            className="accent-twitch"
-                            disabled={!showPlatformBadge}
-                          />
-                          Before username
-                        </label>
-                        <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="platformBadgePosition"
-                            value="after"
-                            checked={platformBadgePosition === 'after'}
-                            onChange={(e) => setPlatformBadgePosition(e.target.value as 'after')}
-                            className="accent-twitch"
-                            disabled={!showPlatformBadge}
-                          />
-                          After username
-                        </label>
-                      </div>
-                    </div>
-                    <div className={!showPlatformBadge ? 'opacity-50 pointer-events-none' : ''}>
-                      <label className="block text-xs text-slate-400 mb-2">Style</label>
-                      <div className="flex gap-3">
-                        <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="platformBadgeStyle"
-                            value="text"
-                            checked={platformBadgeStyle === 'text'}
-                            onChange={(e) => setPlatformBadgeStyle(e.target.value as 'text')}
-                            className="accent-twitch"
-                            disabled={!showPlatformBadge}
-                          />
-                          Text (TWITCH)
-                        </label>
-                        <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="platformBadgeStyle"
-                            value="icon"
-                            checked={platformBadgeStyle === 'icon'}
-                            onChange={(e) => setPlatformBadgeStyle(e.target.value as 'icon')}
-                            className="accent-twitch"
-                            disabled={!showPlatformBadge}
-                          />
-                          Icon (logo)
-                        </label>
-                      </div>
-                    </div>
                   </div>
-                </div>
 
-                {/* Emote Providers */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-3">
-                    Emote Providers
-                  </label>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-slate-300">
-                      <input type="checkbox" defaultChecked className="accent-twitch" />
-                      7TV
-                    </label>
-                    <label className="flex items-center gap-2 text-slate-300">
-                      <input type="checkbox" defaultChecked className="accent-twitch" />
-                      BetterTTV
-                    </label>
-                    <label className="flex items-center gap-2 text-slate-300">
-                      <input type="checkbox" defaultChecked className="accent-twitch" />
-                      FrankerFaceZ
-                    </label>
-                  </div>
-                </div>
-
-                {/* Mock Messages */}
-                <div className="border border-slate-700 rounded-lg p-4 bg-slate-900/40">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-white">Mock Messages</h3>
-                    <button
-                      type="button"
-                      onClick={handleClearMockMessages}
-                      className="text-xs text-slate-400 hover:text-white"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">Platform</label>
-                      <select
-                        value={mockForm.platform}
-                        onChange={(e) => handleMockInputChange('platform', e.target.value as MockMessageFormState['platform'])}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white"
-                      >
-                        <option value="twitch">Twitch</option>
-                        <option value="youtube">YouTube</option>
-                        <option value="kick">Kick</option>
-                        <option value="tiktok">TikTok</option>
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1">Display Name</label>
-                        <input
-                          type="text"
-                          value={mockForm.displayName}
-                          onChange={(e) => handleMockInputChange('displayName', e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1">Username</label>
-                        <input
-                          type="text"
-                          value={mockForm.username}
-                          onChange={(e) => handleMockInputChange('username', e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1">Avatar URL (optional)</label>
-                        <input
-                          type="text"
-                          value={mockForm.avatarUrl}
-                          onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white"
-                          placeholder="https://..."
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1">Name Color</label>
-                        <input
-                          type="color"
-                          value={mockForm.color}
-                          onChange={(e) => handleMockInputChange('color', e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">Message</label>
-                      <textarea
-                        value={mockForm.message}
-                        onChange={(e) => handleMockInputChange('message', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white h-20"
-                        placeholder="Type something fun..."
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
+                  {/* Mock Messages */}
+                  <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-white">Mock Messages</h3>
                       <button
                         type="button"
-                        onClick={() => void handleAddMockMessage()}
-                        className="w-full bg-twitch hover:bg-purple-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors disabled:opacity-60"
-                        disabled={!mockForm.message.trim()}
+                        onClick={handleClearMockMessages}
+                        className="text-xs text-slate-400 hover:text-white"
                       >
-                        Inject Message
+                        Clear
                       </button>
-                      <div className="flex gap-2">
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="mb-1 block text-xs text-slate-400">Platform</label>
+                        <select
+                          value={mockForm.platform}
+                          onChange={(e) =>
+                            handleMockInputChange(
+                              'platform',
+                              e.target.value as MockMessageFormState['platform']
+                            )
+                          }
+                          className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white"
+                        >
+                          <option value="twitch">Twitch</option>
+                          <option value="youtube">YouTube</option>
+                          <option value="kick">Kick</option>
+                          <option value="tiktok">TikTok</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-400">Display Name</label>
+                          <input
+                            type="text"
+                            value={mockForm.displayName}
+                            onChange={(e) => handleMockInputChange('displayName', e.target.value)}
+                            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-400">Username</label>
+                          <input
+                            type="text"
+                            value={mockForm.username}
+                            onChange={(e) => handleMockInputChange('username', e.target.value)}
+                            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-400">
+                            Avatar URL (optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={mockForm.avatarUrl}
+                            onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
+                            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white"
+                            placeholder="https://..."
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-400">Name Color</label>
+                          <input
+                            type="color"
+                            value={mockForm.color}
+                            onChange={(e) => handleMockInputChange('color', e.target.value)}
+                            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-slate-400">Message</label>
+                        <textarea
+                          value={mockForm.message}
+                          onChange={(e) => handleMockInputChange('message', e.target.value)}
+                          className="h-20 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white"
+                          placeholder="Type something fun..."
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
                         <button
                           type="button"
-                          onClick={() => void handleAddSampleTranscript()}
-                          className="flex-1 px-3 py-2 text-xs border border-slate-600 rounded-lg text-slate-200 hover:bg-slate-700"
+                          onClick={() => void handleAddMockMessage()}
+                          className="w-full rounded-lg bg-twitch py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700 disabled:opacity-60"
+                          disabled={!mockForm.message.trim()}
                         >
-                          💬 Sample Chat
+                          Inject Message
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleAddSampleEvents()}
-                          className="flex-1 px-3 py-2 text-xs border border-yellow-600 rounded-lg text-yellow-200 hover:bg-yellow-900/30"
-                        >
-                          ⭐ Sample Events
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleAddSampleTranscript()}
+                            className="flex-1 rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700"
+                          >
+                            💬 Sample Chat
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleAddSampleEvents()}
+                            className="flex-1 rounded-lg border border-yellow-600 px-3 py-2 text-xs text-yellow-200 hover:bg-yellow-900/30"
+                          >
+                            ⭐ Sample Events
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleSaveCustomization}
+                      disabled={!configLoaded || isSavingConfig}
+                      className="w-full rounded-lg bg-twitch px-4 py-2 font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isSavingConfig ? 'Saving...' : 'Save Configuration'}
+                    </button>
+                    {configAlert && (
+                      <p
+                        className={clsx(
+                          'text-sm',
+                          configAlert.type === 'success' ? 'text-green-400' : 'text-red-400'
+                        )}
+                      >
+                        {configAlert.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Stats */}
+                  <div className="mt-6 border-t border-slate-700 pt-6">
+                    <h3 className="mb-3 text-sm font-medium text-slate-400">Statistics</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between text-slate-300">
+                        <span>Messages:</span>
+                        <span className="font-medium text-white">{messages.length}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-300">
+                        <span>Status:</span>
+                        <span className={connected ? 'text-green-400' : 'text-red-400'}>
+                          {connected ? 'Connected' : 'Disconnected'}
+                        </span>
                       </div>
                     </div>
                   </div>
                 </div>
-
-                {/* Save Button */}
-                <div className="space-y-3">
-                  <button
-                    onClick={handleSaveCustomization}
-                    disabled={!configLoaded || isSavingConfig}
-                    className="w-full bg-twitch hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                  >
-                    {isSavingConfig ? 'Saving...' : 'Save Configuration'}
-                  </button>
-                  {configAlert && (
-                    <p
-                      className={clsx(
-                        'text-sm',
-                        configAlert.type === 'success' ? 'text-green-400' : 'text-red-400'
-                      )}
-                    >
-                      {configAlert.message}
-                    </p>
-                  )}
-                </div>
-
-                {/* Stats */}
-                <div className="mt-6 pt-6 border-t border-slate-700">
-                  <h3 className="text-sm font-medium text-slate-400 mb-3">Statistics</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between text-slate-300">
-                      <span>Messages:</span>
-                      <span className="text-white font-medium">{messages.length}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Status:</span>
-                      <span className={connected ? 'text-green-400' : 'text-red-400'}>
-                        {connected ? 'Connected' : 'Disconnected'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Bottom Row: Full-Width CSS Editor */}
-        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
-          <div className="flex items-center justify-between mb-4">
+        <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
+          <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-white">Custom CSS Editor</h2>
               <label className="flex items-center gap-2 text-sm text-slate-300">
@@ -1478,14 +1541,9 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
               <button
                 type="button"
                 onClick={() => setShowThemeMarketplace(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -1498,10 +1556,10 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
               <button
                 type="button"
                 onClick={() => {
-                  setCustomCss('');
-                  setUseCustomCss(false);
+                  setCustomCss('')
+                  setUseCustomCss(false)
                 }}
-                className="px-4 py-2 text-sm border border-slate-600 rounded-lg text-slate-200 hover:bg-slate-700 transition-colors"
+                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-700"
               >
                 Reset
               </button>
@@ -1515,7 +1573,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
             placeholder="/* Enter your custom CSS here */"
           />
 
-          <p className="text-sm text-slate-400 mt-4">
+          <p className="mt-4 text-sm text-slate-400">
             Need inspiration? Explore{' '}
             <a
               href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
@@ -1535,11 +1593,11 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
         isOpen={showThemeMarketplace}
         onClose={() => setShowThemeMarketplace(false)}
         onApplyTheme={(css) => {
-          setCustomCss(css);
-          setUseCustomCss(true);
-          setShowThemeMarketplace(false);
+          setCustomCss(css)
+          setUseCustomCss(true)
+          setShowThemeMarketplace(false)
         }}
       />
     </div>
-  );
+  )
 }

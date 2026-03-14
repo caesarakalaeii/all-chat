@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server'
 
 /**
  * Health check endpoint for Kubernetes probes
@@ -10,7 +10,7 @@ export async function GET() {
     timestamp: new Date().toISOString(),
     build: {
       date: process.env.NEXT_PUBLIC_BUILD_DATE || 'unknown',
-      commit: process.env.NEXT_PUBLIC_GIT_COMMIT || 'unknown'
-    }
-  });
+      commit: process.env.NEXT_PUBLIC_GIT_COMMIT || 'unknown',
+    },
+  })
 }

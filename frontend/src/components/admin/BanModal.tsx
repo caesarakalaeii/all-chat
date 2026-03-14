@@ -1,45 +1,42 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
+import { useState } from 'react'
 
 interface BanModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: (reason: string) => Promise<void>;
-  username: string;
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: (reason: string) => Promise<void>
+  username: string
 }
 
 export function BanModal({ isOpen, onClose, onConfirm, username }: BanModalProps) {
-  const [reason, setReason] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [reason, setReason] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reason.trim()) return;
+    e.preventDefault()
+    if (!reason.trim()) return
 
-    setLoading(true);
+    setLoading(true)
     try {
-      await onConfirm(reason);
-      onClose();
-      setReason('');
+      await onConfirm(reason)
+      onClose()
+      setReason('')
     } catch (error) {
       // Error handled by parent
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+      className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black"
       onClick={onClose}
     >
-      <div
-        className="w-full max-w-md rounded-lg bg-white p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="w-full max-w-md rounded-lg bg-white p-6" onClick={(e) => e.stopPropagation()}>
         <h2 className="mb-4 text-xl font-bold">Ban User: {username}</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
@@ -47,7 +44,7 @@ export function BanModal({ isOpen, onClose, onConfirm, username }: BanModalProps
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               rows={3}
               placeholder="Spam, abuse, ToS violation, etc..."
               required
@@ -73,5 +70,5 @@ export function BanModal({ isOpen, onClose, onConfirm, username }: BanModalProps
         </form>
       </div>
     </div>
-  );
+  )
 }

@@ -4,22 +4,22 @@
  * Main modal container for browsing and applying themes.
  */
 
-'use client';
+'use client'
 
-import { useEffect } from 'react';
-import ThemeCard from './ThemeCard';
-import ThemeFilters from './ThemeFilters';
-import { useThemeMarketplace } from '@/hooks/useThemeMarketplace';
-import { useCreditRollThemeMarketplace } from '@/hooks/useCreditRollThemeMarketplace';
-import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants';
-import { useAuthStore } from '@/lib/stores/auth-store';
-import { clearCache } from '@/lib/theme-marketplace/cache';
+import { useEffect } from 'react'
+import ThemeCard from './ThemeCard'
+import ThemeFilters from './ThemeFilters'
+import { useThemeMarketplace } from '@/hooks/useThemeMarketplace'
+import { useCreditRollThemeMarketplace } from '@/hooks/useCreditRollThemeMarketplace'
+import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { clearCache } from '@/lib/theme-marketplace/cache'
 
 interface ThemeMarketplaceModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onApplyTheme: (css: string) => void;
-  themeType?: 'overlay' | 'creditroll';
+  isOpen: boolean
+  onClose: () => void
+  onApplyTheme: (css: string) => void
+  themeType?: 'overlay' | 'creditroll'
 }
 
 export default function ThemeMarketplaceModal({
@@ -28,15 +28,15 @@ export default function ThemeMarketplaceModal({
   onApplyTheme,
   themeType = 'overlay',
 }: ThemeMarketplaceModalProps) {
-  const { user } = useAuthStore();
-  const isAdmin = user?.is_admin || false;
+  const { user } = useAuthStore()
+  const isAdmin = user?.is_admin || false
 
   // Add custom scrollbar styles
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) return
 
-    const style = document.createElement('style');
-    style.id = 'theme-marketplace-scrollbar';
+    const style = document.createElement('style')
+    style.id = 'theme-marketplace-scrollbar'
     style.textContent = `
       .custom-scrollbar::-webkit-scrollbar {
         width: 12px;
@@ -66,20 +66,20 @@ export default function ThemeMarketplaceModal({
       .theme-preview-body::-webkit-scrollbar-thumb:hover {
         background: rgba(107, 114, 128, 0.7);
       }
-    `;
-    document.head.appendChild(style);
+    `
+    document.head.appendChild(style)
 
     return () => {
-      const existingStyle = document.getElementById('theme-marketplace-scrollbar');
+      const existingStyle = document.getElementById('theme-marketplace-scrollbar')
       if (existingStyle) {
-        existingStyle.remove();
+        existingStyle.remove()
       }
-    };
-  }, [isOpen]);
+    }
+  }, [isOpen])
 
   // Use appropriate hook based on theme type
-  const overlayThemes = useThemeMarketplace();
-  const creditRollThemes = useCreditRollThemeMarketplace();
+  const overlayThemes = useThemeMarketplace()
+  const creditRollThemes = useCreditRollThemeMarketplace()
 
   const {
     themes,
@@ -97,62 +97,56 @@ export default function ThemeMarketplaceModal({
     totalCount,
     filteredCount,
     refreshThemes,
-  } = themeType === 'creditroll' ? creditRollThemes : overlayThemes;
+  } = themeType === 'creditroll' ? creditRollThemes : overlayThemes
 
   // Handle ESC key to close modal
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) return
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onClose()
       }
-    };
+    }
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [isOpen, onClose])
 
   // Prevent body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden'
     } else {
-      document.body.style.overflow = '';
+      document.body.style.overflow = ''
     }
     return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   const handleApply = (css: string) => {
-    onApplyTheme(css);
-    onClose();
-  };
+    onApplyTheme(css)
+    onClose()
+  }
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div
-        className="bg-slate-800 border border-slate-700 rounded-lg max-w-6xl w-full
-                   max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
-      >
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-800 shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-700">
+        <div className="flex items-center justify-between border-b border-slate-700 p-6">
           <div>
-            <h2
-              id="theme-marketplace-title"
-              className="text-2xl font-bold text-white"
-            >
+            <h2 id="theme-marketplace-title" className="text-2xl font-bold text-white">
               {themeType === 'creditroll' ? 'Credit Roll' : ''} Theme Marketplace
             </h2>
-            <p className="text-slate-400 text-sm mt-1">
+            <p className="mt-1 text-sm text-slate-400">
               {themeType === 'creditroll'
                 ? 'Browse and apply custom CSS themes for your credit roll'
                 : 'Browse and apply custom CSS themes for your overlay'}
@@ -163,20 +157,14 @@ export default function ThemeMarketplaceModal({
             {isAdmin && (
               <button
                 onClick={() => {
-                  clearCache();
-                  refreshThemes();
+                  clearCache()
+                  refreshThemes()
                 }}
-                className="text-slate-400 hover:text-purple-400 transition-colors p-2
-                           hover:bg-slate-700 rounded-lg"
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-purple-400"
                 aria-label="Force refresh themes from GitHub"
                 title="Force refresh themes (Admin)"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -190,16 +178,10 @@ export default function ThemeMarketplaceModal({
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white transition-colors p-2
-                         hover:bg-slate-700 rounded-lg"
+              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
               aria-label="Close theme marketplace"
             >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -212,7 +194,7 @@ export default function ThemeMarketplaceModal({
         </div>
 
         {/* Filters */}
-        <div className="p-6 border-b border-slate-700">
+        <div className="border-b border-slate-700 p-6">
           <ThemeFilters
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -225,12 +207,12 @@ export default function ThemeMarketplaceModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+        <div className="custom-scrollbar flex-1 overflow-y-auto p-6">
           {/* Loading State */}
           {loading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4" />
+                <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-purple-500" />
                 <p className="text-slate-400">Loading themes...</p>
               </div>
             </div>
@@ -238,10 +220,10 @@ export default function ThemeMarketplaceModal({
 
           {/* Error State */}
           {error && !loading && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-4">
+            <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
               <div className="flex items-start gap-3">
                 <svg
-                  className="w-6 h-6 text-yellow-500 flex-shrink-0"
+                  className="h-6 w-6 flex-shrink-0 text-yellow-500"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -254,10 +236,8 @@ export default function ThemeMarketplaceModal({
                   />
                 </svg>
                 <div>
-                  <p className="text-yellow-400 font-semibold">
-                    Error Loading Themes
-                  </p>
-                  <p className="text-yellow-300/80 text-sm">{error}</p>
+                  <p className="font-semibold text-yellow-400">Error Loading Themes</p>
+                  <p className="text-sm text-yellow-300/80">{error}</p>
                 </div>
               </div>
             </div>
@@ -265,9 +245,9 @@ export default function ThemeMarketplaceModal({
 
           {/* Empty State */}
           {!loading && themes.length === 0 && !error && (
-            <div className="text-center py-12">
+            <div className="py-12 text-center">
               <svg
-                className="w-16 h-16 text-slate-600 mx-auto mb-4"
+                className="mx-auto mb-4 h-16 w-16 text-slate-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -279,10 +259,8 @@ export default function ThemeMarketplaceModal({
                   d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <p className="text-slate-400 text-lg">No themes found</p>
-              <p className="text-slate-500 text-sm mt-1">
-                Try adjusting your filters
-              </p>
+              <p className="text-lg text-slate-400">No themes found</p>
+              <p className="mt-1 text-sm text-slate-500">Try adjusting your filters</p>
             </div>
           )}
 
@@ -290,12 +268,12 @@ export default function ThemeMarketplaceModal({
           {!loading && themes.length > 0 && (
             <>
               {/* Count */}
-              <div className="mb-4 text-slate-400 text-sm">
+              <div className="mb-4 text-sm text-slate-400">
                 Showing {filteredCount} of {totalCount} themes
               </div>
 
               {/* Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {themes.map((theme) => (
                   <ThemeCard
                     key={theme.id}
@@ -313,5 +291,5 @@ export default function ThemeMarketplaceModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

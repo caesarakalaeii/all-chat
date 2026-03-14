@@ -7,15 +7,15 @@
  * Route: /chat/auth-error
  */
 
-'use client';
+'use client'
 
-import { Suspense } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 
 function AuthErrorContent() {
-  const searchParams = useSearchParams();
-  const error = searchParams.get('error') || 'Authentication failed';
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error') || 'Authentication failed'
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900">
@@ -43,7 +43,7 @@ function AuthErrorContent() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 export default function AuthErrorPage() {
@@ -57,5 +57,5 @@ export default function AuthErrorPage() {
     >
       <AuthErrorContent />
     </Suspense>
-  );
+  )
 }

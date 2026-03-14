@@ -46,10 +46,10 @@ function NewOverlayContent() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="max-w-lg mx-auto px-4 py-12">
+      <main className="mx-auto max-w-lg px-4 py-12">
         <Card className="p-8">
-          <h1 className="text-2xl font-bold text-text mb-2">Create Overlay</h1>
-          <p className="text-text-sub text-sm mb-8">
+          <h1 className="mb-2 text-2xl font-bold text-text">Create Overlay</h1>
+          <p className="mb-8 text-sm text-text-sub">
             Give your overlay a name. You can add chat sources after creation.
           </p>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -62,31 +62,23 @@ function NewOverlayContent() {
                 type="text"
                 placeholder="e.g. Main Stream, TikTok Only"
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={(e) => setName(e.target.value)}
                 required
                 minLength={1}
                 maxLength={100}
                 aria-describedby={nameError ? 'name-error' : undefined}
               />
               {nameError && (
-                <p id="name-error" className="text-sm text-destructive" role="alert">
+                <p id="name-error" className="text-destructive text-sm" role="alert">
                   {nameError}
                 </p>
               )}
             </div>
-            <div className="flex gap-3 justify-end">
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => router.back()}
-              >
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" type="button" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button
-                variant="gradient"
-                type="submit"
-                disabled={isSubmitting || !name.trim()}
-              >
+              <Button variant="gradient" type="submit" disabled={isSubmitting || !name.trim()}>
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">
                     <Skeleton className="h-4 w-24 rounded" />

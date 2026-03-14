@@ -1,32 +1,35 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { ShareRequest } from '@/lib/types/share';
-import { formatDistanceToNow } from 'date-fns';
-import { PlatformBadge } from './PlatformBadge';
-import { StatusBadge } from './StatusBadge';
-import { AcceptModal } from './AcceptModal';
-import { AddSourceModal } from './AddSourceModal';
-import { RevocationConfirmModal } from './RevocationConfirmModal';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useState } from 'react'
+import { ShareRequest } from '@/lib/types/share'
+import { formatDistanceToNow } from 'date-fns'
+import { PlatformBadge } from './PlatformBadge'
+import { StatusBadge } from './StatusBadge'
+import { AcceptModal } from './AcceptModal'
+import { AddSourceModal } from './AddSourceModal'
+import { RevocationConfirmModal } from './RevocationConfirmModal'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 
 interface ShareRequestCardProps {
-  request: ShareRequest;
-  onUpdate: () => void;
+  request: ShareRequest
+  onUpdate: () => void
 }
 
 export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
-  const [showAcceptModal, setShowAcceptModal] = useState(false);
-  const senderPlatform = request.overlay_sources?.[0]?.platform;
-  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
-  const [showRevokeModal, setShowRevokeModal] = useState(false);
-  const [acceptedShare, setAcceptedShare] = useState<{ senderName: string; senderOverlayId: string } | null>(null);
+  const [showAcceptModal, setShowAcceptModal] = useState(false)
+  const senderPlatform = request.overlay_sources?.[0]?.platform
+  const [showAddSourceModal, setShowAddSourceModal] = useState(false)
+  const [showRevokeModal, setShowRevokeModal] = useState(false)
+  const [acceptedShare, setAcceptedShare] = useState<{
+    senderName: string
+    senderOverlayId: string
+  } | null>(null)
 
   return (
-    <Card className="p-4 shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200">
+    <Card className="p-4 shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-xl">
       {/* User info */}
-      <div className="flex items-center mb-3">
+      <div className="mb-3 flex items-center">
         {request.sender && (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -43,7 +46,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
         )}
         {!request.sender && (
           <div className="flex items-center">
-            <div className="w-10 h-10 rounded-full bg-surface-2"></div>
+            <div className="h-10 w-10 rounded-full bg-surface-2"></div>
             <div className="ml-3">
               <p className="text-sm text-text-sub">Loading user info...</p>
             </div>
@@ -53,7 +56,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
 
       {/* Platform badges */}
       {request.overlay_sources && request.overlay_sources.length > 0 && (
-        <div className="flex gap-2 mb-3 flex-wrap">
+        <div className="mb-3 flex flex-wrap gap-2">
           {request.overlay_sources.map((source, idx) => (
             <PlatformBadge key={idx} source={source} />
           ))}
@@ -66,7 +69,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
       </p>
 
       {/* Status indicator */}
-      <div className="mt-3 pt-3 border-t border-border">
+      <div className="mt-3 border-t border-border pt-3">
         <StatusBadge status={request.status} />
         {request.status === 'accepted' && (
           <Button
@@ -97,7 +100,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
             className="flex-1"
             onClick={() => {
               // Phase 15: Reject action (implement in future plan)
-              console.log('Reject not implemented yet (Phase 15)');
+              console.log('Reject not implemented yet (Phase 15)')
             }}
           >
             Reject
@@ -115,9 +118,9 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
             setAcceptedShare({
               senderName: request.sender?.display_name || 'User',
               senderOverlayId,
-            });
-            setShowAcceptModal(false);
-            setShowAddSourceModal(true);
+            })
+            setShowAcceptModal(false)
+            setShowAddSourceModal(true)
           }}
         />
       )}
@@ -129,8 +132,8 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
           shareId={request.id}
           onClose={() => setShowRevokeModal(false)}
           onRevoked={() => {
-            setShowRevokeModal(false);
-            onUpdate();
+            setShowRevokeModal(false)
+            onUpdate()
           }}
         />
       )}
@@ -141,17 +144,17 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
           senderName={acceptedShare.senderName}
           senderOverlayId={acceptedShare.senderOverlayId}
           onClose={() => {
-            setShowAddSourceModal(false);
-            setAcceptedShare(null);
-            onUpdate();
+            setShowAddSourceModal(false)
+            setAcceptedShare(null)
+            onUpdate()
           }}
           onAdded={() => {
-            setShowAddSourceModal(false);
-            setAcceptedShare(null);
-            onUpdate();
+            setShowAddSourceModal(false)
+            setAcceptedShare(null)
+            onUpdate()
           }}
         />
       )}
     </Card>
-  );
+  )
 }

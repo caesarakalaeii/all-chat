@@ -1,52 +1,46 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import toast from 'react-hot-toast';
-import { sharesApi } from '@/lib/api/shares';
-import { Button } from '@/components/ui/button';
+import { useState } from 'react'
+import toast from 'react-hot-toast'
+import { sharesApi } from '@/lib/api/shares'
+import { Button } from '@/components/ui/button'
 
 interface RevocationConfirmModalProps {
-  partnerName: string;
-  shareId: string;
-  onClose: () => void;
-  onRevoked: () => void;
+  partnerName: string
+  shareId: string
+  onClose: () => void
+  onRevoked: () => void
 }
 
 export function RevocationConfirmModal({
-  partnerName, shareId, onClose, onRevoked
+  partnerName,
+  shareId,
+  onClose,
+  onRevoked,
 }: RevocationConfirmModalProps) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false)
 
   const handleRevoke = async () => {
-    setLoading(true);
+    setLoading(true)
     try {
-      await sharesApi.revokeShare(shareId);
-      toast.success('Share revoked');
-      onRevoked();
-      onClose();
+      await sharesApi.revokeShare(shareId)
+      toast.success('Share revoked')
+      onRevoked()
+      onClose()
     } catch (err) {
-      toast.error('Failed to revoke share');
+      toast.error('Failed to revoke share')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl">
-        <h2 className="text-xl font-semibold text-text mb-4">
-          Revoke share with {partnerName}?
-        </h2>
-        <p className="text-text-sub mb-6">
-          This will stop message delivery immediately.
-        </p>
+        <h2 className="mb-4 text-xl font-semibold text-text">Revoke share with {partnerName}?</h2>
+        <p className="mb-6 text-text-sub">This will stop message delivery immediately.</p>
         <div className="flex gap-3">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={onClose}
-            disabled={loading}
-          >
+          <Button variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
           <Button
@@ -60,5 +54,5 @@ export function RevocationConfirmModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

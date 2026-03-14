@@ -5,11 +5,13 @@ The admin dashboard provides a comprehensive interface for managing users, overl
 ## Features
 
 ### 1. Dashboard Home (`/admin`)
+
 - Quick access cards for Users, Overlays, and Sources
 - Navigation to all admin sections
 - Quick stats overview
 
 ### 2. Users Management (`/admin/users`)
+
 - **User List**: View all registered users with their platform connections
 - **Platform Badges**: Visual indicators for connected platforms (Twitch, YouTube, Kick, TikTok)
 - **User Details Panel**:
@@ -19,6 +21,7 @@ The admin dashboard provides a comprehensive interface for managing users, overl
 - **Selection**: Click on any user to view their details
 
 ### 3. Overlays Management (`/admin/overlays`)
+
 - **Overlay List**: View all overlays across all users
 - **Source Count**: See how many sources are connected to each overlay
 - **Overlay Details Panel**:
@@ -33,6 +36,7 @@ The admin dashboard provides a comprehensive interface for managing users, overl
 - **Quick Actions**: Open overlay in new tab
 
 ### 4. Sources Management (`/admin/sources`)
+
 - **Platform Statistics**: Cards showing count per platform
 - **Advanced Filtering**:
   - Search by channel name or ID
@@ -44,6 +48,7 @@ The admin dashboard provides a comprehensive interface for managing users, overl
 ## Navigation
 
 The admin dashboard uses a consistent navigation bar with:
+
 - **All-Chat Admin** brand/logo (links to dashboard home)
 - **Users** - User management
 - **Overlays** - Overlay and source management
@@ -53,6 +58,7 @@ The admin dashboard uses a consistent navigation bar with:
 ## Data Structure
 
 ### User
+
 ```typescript
 {
   id: string;
@@ -67,6 +73,7 @@ The admin dashboard uses a consistent navigation bar with:
 ```
 
 ### Overlay
+
 ```typescript
 {
   id: string;
@@ -79,17 +86,18 @@ The admin dashboard uses a consistent navigation bar with:
 ```
 
 ### Source
+
 ```typescript
 {
-  id: string;
-  overlay_id: string;
-  overlay_name: string;
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok';
-  channel_id: string;
-  channel_name: string;
-  is_active: boolean;
-  created_at: string;
-  user_id: string;
+  id: string
+  overlay_id: string
+  overlay_name: string
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok'
+  channel_id: string
+  channel_name: string
+  is_active: boolean
+  created_at: string
+  user_id: string
 }
 ```
 
@@ -98,17 +106,18 @@ The admin dashboard uses a consistent navigation bar with:
 Currently using mock data for demonstration. To connect to real APIs:
 
 ### Users API
+
 ```typescript
 // Fetch all users
-GET /api/v1/admin/users
-Authorization: Bearer <token>
+GET / api / v1 / admin / users
+Authorization: Bearer<token>
 
 // Fetch user overlays
-GET /api/v1/overlays?user_id=<user_id>
-Authorization: Bearer <token>
+GET / api / v1 / overlays ? (user_id = <user_id>Authorization) : Bearer<token>
 ```
 
 ### Overlays API
+
 ```typescript
 // Fetch all overlays (admin)
 GET /api/v1/admin/overlays
@@ -120,15 +129,17 @@ Authorization: Bearer <token>
 ```
 
 ### Sources API
+
 ```typescript
 // Fetch all sources (admin)
-GET /api/v1/admin/sources
-Authorization: Bearer <token>
+GET / api / v1 / admin / sources
+Authorization: Bearer<token>
 ```
 
 ## Styling
 
 The admin dashboard uses Tailwind CSS with:
+
 - **Color Scheme**: Clean white backgrounds with gray accents
 - **Platform Colors**:
   - Twitch: Purple (`bg-purple-100 text-purple-800`)

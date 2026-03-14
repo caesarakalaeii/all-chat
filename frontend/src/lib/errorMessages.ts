@@ -5,12 +5,12 @@
  * Designed for easy internationalization in the future.
  */
 
-import { ChatErrorType } from './types/errors';
+import { ChatErrorType } from './types/errors'
 
 export interface ErrorMessageTemplate {
-  title: string;
-  message: string;
-  actionableSteps: string[];
+  title: string
+  message: string
+  actionableSteps: string[]
 }
 
 /**
@@ -39,7 +39,7 @@ export const ERROR_MESSAGES: Record<ChatErrorType, ErrorMessageTemplate> = {
 
   [ChatErrorType.RATE_LIMITED]: {
     title: 'Rate Limit Reached',
-    message: 'You\'re sending messages too quickly. Please slow down.',
+    message: "You're sending messages too quickly. Please slow down.",
     actionableSteps: [
       'Wait a moment before sending another message',
       'Avoid sending messages in rapid succession',
@@ -53,7 +53,7 @@ export const ERROR_MESSAGES: Record<ChatErrorType, ErrorMessageTemplate> = {
     actionableSteps: [
       'Check the reason for the ban below',
       'Contact the streamer or moderators if you believe this is an error',
-      'Wait for the ban to expire if it\'s temporary',
+      "Wait for the ban to expire if it's temporary",
     ],
   },
 
@@ -107,13 +107,13 @@ export const ERROR_MESSAGES: Record<ChatErrorType, ErrorMessageTemplate> = {
       'Contact support if this error continues',
     ],
   },
-};
+}
 
 /**
  * Get error message template for a specific error type
  */
 export function getErrorMessage(errorType: ChatErrorType): ErrorMessageTemplate {
-  return ERROR_MESSAGES[errorType];
+  return ERROR_MESSAGES[errorType]
 }
 
 /**
@@ -123,27 +123,27 @@ export function formatErrorMessage(
   errorType: ChatErrorType,
   platform?: string
 ): ErrorMessageTemplate {
-  const template = ERROR_MESSAGES[errorType];
+  const template = ERROR_MESSAGES[errorType]
 
   if (!platform) {
-    return template;
+    return template
   }
 
   // Replace {platform} placeholder in actionable steps
   const formattedSteps = template.actionableSteps.map((step) =>
     step.replace('{platform}', capitalizeFirst(platform))
-  );
+  )
 
   return {
     ...template,
     actionableSteps: formattedSteps,
-  };
+  }
 }
 
 /**
  * Capitalize first letter of a string
  */
 function capitalizeFirst(str: string): string {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
+  if (!str) return str
+  return str.charAt(0).toUpperCase() + str.slice(1)
 }

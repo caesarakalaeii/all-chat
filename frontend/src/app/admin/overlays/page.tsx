@@ -1,132 +1,132 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import clsx from 'clsx';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { PlatformBadge } from '@/components/ui/badge';
-import type { Platform } from '@/lib/platform-colors';
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import clsx from 'clsx'
+import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { PlatformBadge } from '@/components/ui/badge'
+import type { Platform } from '@/lib/platform-colors'
 
 interface Overlay {
-  id: string;
-  name: string;
-  user_id: string;
-  created_at: string;
-  updated_at: string;
-  sources_count?: number;
+  id: string
+  name: string
+  user_id: string
+  created_at: string
+  updated_at: string
+  sources_count?: number
 }
 
 interface OverlaySource {
-  id: string;
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok';
-  channel_id: string;
-  channel_name: string;
-  is_active: boolean;
-  created_at: string;
+  id: string
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok'
+  channel_id: string
+  channel_name: string
+  is_active: boolean
+  created_at: string
 }
 
 export default function OverlaysPage() {
-  const [overlays, setOverlays] = useState<Overlay[]>([]);
-  const [selectedOverlay, setSelectedOverlay] = useState<Overlay | null>(null);
-  const [sources, setSources] = useState<OverlaySource[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sourcesLoading, setSourcesLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [overlays, setOverlays] = useState<Overlay[]>([])
+  const [selectedOverlay, setSelectedOverlay] = useState<Overlay | null>(null)
+  const [sources, setSources] = useState<OverlaySource[]>([])
+  const [loading, setLoading] = useState(true)
+  const [sourcesLoading, setSourcesLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
 
   // Fetch all overlays
   useEffect(() => {
     async function fetchOverlays() {
       try {
-        const token = localStorage.getItem('jwt_token');
+        const token = localStorage.getItem('jwt_token')
         if (!token) {
-          setError('Not authenticated');
-          setLoading(false);
-          return;
+          setError('Not authenticated')
+          setLoading(false)
+          return
         }
 
         const response = await fetch('/api/v1/admin/overlays', {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
           },
-        });
+        })
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
 
-        const data = await response.json();
-        setOverlays(data);
-        setLoading(false);
+        const data = await response.json()
+        setOverlays(data)
+        setLoading(false)
       } catch (err) {
-        console.error('Failed to load overlays:', err);
-        setError('Failed to load overlays');
-        setLoading(false);
+        console.error('Failed to load overlays:', err)
+        setError('Failed to load overlays')
+        setLoading(false)
       }
     }
 
-    fetchOverlays();
-  }, []);
+    fetchOverlays()
+  }, [])
 
   // Fetch sources for selected overlay
   useEffect(() => {
     async function fetchSources() {
       if (!selectedOverlay) {
-        setSources([]);
-        return;
+        setSources([])
+        return
       }
 
-      setSourcesLoading(true);
+      setSourcesLoading(true)
       try {
-        const token = localStorage.getItem('jwt_token');
+        const token = localStorage.getItem('jwt_token')
         const response = await fetch(`/api/v1/admin/overlays/${selectedOverlay.id}/sources`, {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
           },
-        });
+        })
 
         if (response.ok) {
-          const data = await response.json();
-          setSources(data);
+          const data = await response.json()
+          setSources(data)
         } else {
-          console.error('Failed to fetch sources:', response.statusText);
-          setSources([]);
+          console.error('Failed to fetch sources:', response.statusText)
+          setSources([])
         }
       } catch (err) {
-        console.error('Failed to fetch sources:', err);
-        setSources([]);
+        console.error('Failed to fetch sources:', err)
+        setSources([])
       } finally {
-        setSourcesLoading(false);
+        setSourcesLoading(false)
       }
     }
 
-    fetchSources();
-  }, [selectedOverlay]);
+    fetchSources()
+  }, [selectedOverlay])
 
   // Filter overlays by search term
   const filteredOverlays = overlays.filter((o) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
+    if (!searchTerm) return true
+    const term = searchTerm.toLowerCase()
     return (
       o.name.toLowerCase().includes(term) ||
       o.id.toLowerCase().includes(term) ||
       o.user_id.toLowerCase().includes(term)
-    );
-  });
+    )
+  })
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <Card className="p-4 border-destructive">
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <Card className="border-destructive p-4">
           <p className="text-destructive">{error}</p>
         </Card>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-text">Overlays</h1>
         <p className="mt-1 text-sm text-text-sub">
@@ -134,18 +134,18 @@ export default function OverlaysPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Overlays List */}
         <div className="lg:col-span-2">
           {loading ? (
-            <Card className="p-6 space-y-3">
+            <Card className="space-y-3 p-6">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-14 w-full rounded-lg" />
               ))}
             </Card>
           ) : (
             <Card className="overflow-hidden">
-              <div className="px-4 py-5 border-b border-border">
+              <div className="border-b border-border px-4 py-5">
                 <h3 className="text-base font-medium text-text">
                   All Overlays ({overlays.length})
                 </h3>
@@ -157,7 +157,7 @@ export default function OverlaysPage() {
                     placeholder="Search by overlay name, ID, or user ID..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                   />
                 </div>
               </div>
@@ -174,17 +174,13 @@ export default function OverlaysPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center">
-                          <p className="text-sm font-medium text-text">
-                            {overlay.name}
-                          </p>
-                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-badge-bg text-text-sub">
+                          <p className="text-sm font-medium text-text">{overlay.name}</p>
+                          <span className="ml-2 inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-sub">
                             {overlay.sources_count || 0} sources
                           </span>
                         </div>
-                        <p className="text-xs text-text-sub font-mono mt-1">
-                          ID: {overlay.id}
-                        </p>
-                        <p className="text-xs text-text-dim mt-1">
+                        <p className="mt-1 font-mono text-xs text-text-sub">ID: {overlay.id}</p>
+                        <p className="mt-1 text-xs text-text-dim">
                           Created {new Date(overlay.created_at).toLocaleDateString()}
                         </p>
                       </div>
@@ -192,15 +188,35 @@ export default function OverlaysPage() {
                         <Link
                           href={`/overlay/${overlay.id}`}
                           target="_blank"
-                          className="text-text-sub hover:text-text text-sm transition-colors"
+                          className="text-sm text-text-sub transition-colors hover:text-text"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          <svg
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                            />
                           </svg>
                         </Link>
-                        <svg className="h-5 w-5 text-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                        <svg
+                          className="h-5 w-5 text-text-dim"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M9 5l7 7-7 7"
+                          />
                         </svg>
                       </div>
                     </div>
@@ -217,10 +233,8 @@ export default function OverlaysPage() {
             <div className="space-y-4">
               {/* Overlay Details */}
               <Card className="overflow-hidden">
-                <div className="px-4 py-5 border-b border-border">
-                  <h3 className="text-base font-medium text-text">
-                    Overlay Details
-                  </h3>
+                <div className="border-b border-border px-4 py-5">
+                  <h3 className="text-base font-medium text-text">Overlay Details</h3>
                 </div>
                 <div className="px-4 py-5">
                   <dl className="space-y-4">
@@ -230,11 +244,15 @@ export default function OverlaysPage() {
                     </div>
                     <div>
                       <dt className="text-sm font-medium text-text-sub">ID</dt>
-                      <dd className="mt-1 text-xs text-text font-mono break-all">{selectedOverlay.id}</dd>
+                      <dd className="mt-1 font-mono text-xs break-all text-text">
+                        {selectedOverlay.id}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-sm font-medium text-text-sub">User ID</dt>
-                      <dd className="mt-1 text-xs text-text font-mono break-all">{selectedOverlay.user_id}</dd>
+                      <dd className="mt-1 font-mono text-xs break-all text-text">
+                        {selectedOverlay.user_id}
+                      </dd>
                     </div>
                   </dl>
                 </div>
@@ -242,7 +260,7 @@ export default function OverlaysPage() {
 
               {/* Sources */}
               <Card className="overflow-hidden">
-                <div className="px-4 py-5 border-b border-border">
+                <div className="border-b border-border px-4 py-5">
                   <h3 className="text-base font-medium text-text">
                     Connected Sources ({sources.length})
                   </h3>
@@ -256,17 +274,17 @@ export default function OverlaysPage() {
                   ) : sources.length > 0 ? (
                     <ul className="space-y-3">
                       {sources.map((source) => (
-                        <li key={source.id} className="border border-border rounded-lg p-3">
+                        <li key={source.id} className="rounded-lg border border-border p-3">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center space-x-2">
                                 <PlatformBadge platform={source.platform as Platform} size="sm" />
                                 {source.is_active ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-kick/10 text-kick">
+                                  <span className="inline-flex items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
                                     Active
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-badge-bg text-text-dim">
+                                  <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-dim">
                                     Inactive
                                   </span>
                                 )}
@@ -274,7 +292,7 @@ export default function OverlaysPage() {
                               <p className="mt-1 text-sm font-medium text-text">
                                 {source.channel_name}
                               </p>
-                              <p className="mt-1 text-xs text-text-sub font-mono">
+                              <p className="mt-1 font-mono text-xs text-text-sub">
                                 {source.channel_id}
                               </p>
                               <p className="mt-1 text-xs text-text-dim">
@@ -293,16 +311,24 @@ export default function OverlaysPage() {
             </div>
           ) : (
             <Card className="p-6 text-center">
-              <svg className="mx-auto h-12 w-12 text-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              <svg
+                className="mx-auto h-12 w-12 text-text-dim"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                />
               </svg>
-              <p className="mt-2 text-sm text-text-sub">
-                Select an overlay to view details
-              </p>
+              <p className="mt-2 text-sm text-text-sub">Select an overlay to view details</p>
             </Card>
           )}
         </div>
       </div>
     </div>
-  );
+  )
 }

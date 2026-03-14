@@ -25,7 +25,7 @@ function StatCard({
 }) {
   return (
     <Card className="p-6">
-      <div className="flex items-center gap-3 mb-2">
+      <div className="mb-2 flex items-center gap-3">
         <Icon className="size-5 text-text-sub" aria-hidden="true" />
         <span className="text-sm text-text-sub">{label}</span>
       </div>
@@ -76,11 +76,11 @@ export default function AdminDashboard() {
     : undefined
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl font-bold text-text mb-8">Admin Dashboard</h1>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <h1 className="mb-8 text-2xl font-bold text-text">Admin Dashboard</h1>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           label="Total Users"
           value={loading ? undefined : stats?.total_users}
@@ -96,18 +96,14 @@ export default function AdminDashboard() {
           value={loading ? undefined : stats?.active_overlays}
           icon={LayoutGrid}
         />
-        <StatCard
-          label="Total Sources"
-          value={loading ? undefined : totalSources}
-          icon={Radio}
-        />
+        <StatCard label="Total Sources" value={loading ? undefined : totalSources} icon={Radio} />
       </div>
 
       {/* Navigation cards */}
-      <h2 className="text-lg font-semibold text-text mb-4">Manage</h2>
+      <h2 className="mb-4 text-lg font-semibold text-text">Manage</h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link href="/admin/users">
-          <Card className="p-5 hover:bg-surface-2 transition-colors cursor-pointer">
+          <Card className="cursor-pointer p-5 transition-colors hover:bg-surface-2">
             <div className="flex items-center gap-3">
               <Users className="size-6 text-text-sub" aria-hidden="true" />
               <div>
@@ -119,7 +115,7 @@ export default function AdminDashboard() {
         </Link>
 
         <Link href="/admin/overlays">
-          <Card className="p-5 hover:bg-surface-2 transition-colors cursor-pointer">
+          <Card className="cursor-pointer p-5 transition-colors hover:bg-surface-2">
             <div className="flex items-center gap-3">
               <LayoutGrid className="size-6 text-text-sub" aria-hidden="true" />
               <div>
@@ -131,7 +127,7 @@ export default function AdminDashboard() {
         </Link>
 
         <Link href="/admin/sources">
-          <Card className="p-5 hover:bg-surface-2 transition-colors cursor-pointer">
+          <Card className="cursor-pointer p-5 transition-colors hover:bg-surface-2">
             <div className="flex items-center gap-3">
               <Radio className="size-6 text-text-sub" aria-hidden="true" />
               <div>
@@ -143,7 +139,7 @@ export default function AdminDashboard() {
         </Link>
 
         <Link href="/admin/viewers">
-          <Card className="p-5 hover:bg-surface-2 transition-colors cursor-pointer">
+          <Card className="cursor-pointer p-5 transition-colors hover:bg-surface-2">
             <div className="flex items-center gap-3">
               <Eye className="size-6 text-text-sub" aria-hidden="true" />
               <div>
