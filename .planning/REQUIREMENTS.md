@@ -57,8 +57,8 @@ Requirements for Frontend Redesign milestone. Each maps to roadmap phases.
 - [ ] **ENFORCE-05**: CI/CD quality gates implemented (ESLint errors block PRs, bundle size >20KB requires justification)
 - [ ] **ENFORCE-06**: Visual regression test suite implemented (screenshot diffing all pages)
 - [ ] **ENFORCE-07**: Marketplace CSS migration guide created (class name changes documented)
-- [ ] **ENFORCE-08**: Performance monitoring configured (message render time <16ms at 20 msg/sec)
-- [ ] **ENFORCE-09**: Bundle size analysis baseline established (webpack-bundle-analyzer)
+- [x] **ENFORCE-08**: Performance monitoring configured (message render time <16ms at 20 msg/sec)
+- [x] **ENFORCE-09**: Bundle size analysis baseline established (webpack-bundle-analyzer)
 - [ ] **ENFORCE-10**: Accessibility testing automated (axe-core in CI/CD)
 
 ## v2 Requirements
@@ -140,8 +140,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENFORCE-05 | Phase 26 | Pending |
 | ENFORCE-06 | Phase 26 | Pending |
 | ENFORCE-07 | Phase 26 | Pending |
-| ENFORCE-08 | Phase 26 | Pending |
-| ENFORCE-09 | Phase 26 | Pending |
+| ENFORCE-08 | Phase 26 | Complete |
+| ENFORCE-09 | Phase 26 | Complete |
 | ENFORCE-10 | Phase 26 | Pending |
 
 **Coverage:**
