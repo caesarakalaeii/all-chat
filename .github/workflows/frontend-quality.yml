@@ -1,0 +1,63 @@
+name: Frontend Quality Gates
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['frontend/**']
+  # Also run on pushes to main to establish Chromatic baseline
+  push:
+    branches: [main]
+    paths: ['frontend/**']
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for Chromatic baseline comparison
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npx eslint . --max-warnings 0
+
+      - name: Prettier check
+        run: npx prettier --check .
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Build (for bundle analysis)
+        run: npm run build
+        env:
+          ANALYZE: 'false'
+          # Disable Turbopack for bundle analysis compatibility with hashicorp action
+          NEXT_DISABLE_TURBOPACK: 'true'
+
+      - name: Bundle size analysis
+        uses: hashicorp/nextjs-bundle-analysis@v1
+        with:
+          working-directory: frontend
+
+      - name: Storybook tests (a11y + performance)
+        run: npx vitest --project storybook --run
+
+      - name: Chromatic visual regression
+        uses: chromaui/action@latest
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          workingDir: frontend
+          exitZeroOnChanges: false
+          autoAcceptChanges: 'main'
