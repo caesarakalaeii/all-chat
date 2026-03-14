@@ -4,18 +4,18 @@
  * Search bar and tag filter pills.
  */
 
-'use client';
+'use client'
 
-import clsx from 'clsx';
+import clsx from 'clsx'
 
 interface ThemeFiltersProps {
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
-  availableTags: string[];
-  selectedTags: string[];
-  onToggleTag: (tag: string) => void;
-  onClearFilters: () => void;
-  hasActiveFilters: boolean;
+  searchQuery: string
+  onSearchChange: (query: string) => void
+  availableTags: string[]
+  selectedTags: string[]
+  onToggleTag: (tag: string) => void
+  onClearFilters: () => void
+  hasActiveFilters: boolean
 }
 
 export default function ThemeFilters({
@@ -37,14 +37,11 @@ export default function ThemeFilters({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search themes..."
-            className="w-full rounded-lg border border-slate-600 bg-slate-700
-                       px-4 py-2 pl-10 text-white placeholder-slate-400
-                       transition-colors focus-visible:border-purple-500 focus-visible:outline-none
-                       focus-visible:ring-1 focus-visible:ring-purple-500"
+            className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 pl-10 text-white placeholder-slate-400 transition-colors focus-visible:border-purple-500 focus-visible:ring-1 focus-visible:ring-purple-500 focus-visible:outline-none"
             aria-label="Search themes"
           />
           <svg
-            className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
+            className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-slate-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -62,7 +59,7 @@ export default function ThemeFilters({
         {hasActiveFilters && (
           <button
             onClick={onClearFilters}
-            className="whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 font-medium text-white transition-colors hover:bg-slate-600"
+            className="rounded-lg bg-slate-700 px-4 py-2 font-medium whitespace-nowrap text-white transition-colors hover:bg-slate-600"
           >
             Clear Filters
           </button>
@@ -73,7 +70,7 @@ export default function ThemeFilters({
       {availableTags.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {availableTags.map((tag) => {
-            const isSelected = selectedTags.includes(tag);
+            const isSelected = selectedTags.includes(tag)
             return (
               <button
                 key={tag}
@@ -87,10 +84,10 @@ export default function ThemeFilters({
               >
                 {tag}
               </button>
-            );
+            )
           })}
         </div>
       )}
     </div>
-  );
+  )
 }

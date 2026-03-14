@@ -5,8 +5,8 @@
  * Communicates with the Share Service via API Gateway.
  */
 
-import { apiClient } from './client';
-import type { ShareRequest, UserSearchResult, AcceptedShare } from '../types/share';
+import { apiClient } from './client'
+import type { ShareRequest, UserSearchResult, AcceptedShare } from '../types/share'
 
 export const sharesApi = {
   /**
@@ -15,8 +15,8 @@ export const sharesApi = {
   async searchUsers(platform: string, query: string): Promise<UserSearchResult[]> {
     const response = await apiClient.get<{ users: UserSearchResult[] }>(
       `/api/v1/users/search?platform=${encodeURIComponent(platform)}&query=${encodeURIComponent(query)}`
-    );
-    return response.users || [];
+    )
+    return response.users || []
   },
 
   /**
@@ -26,20 +26,20 @@ export const sharesApi = {
     return apiClient.post<ShareRequest>('/api/v1/shares', {
       recipient_username: recipientUsername,
       overlay_id: overlayId,
-    });
+    })
   },
 
   /**
    * Fetch incoming share requests
    */
   async fetchIncoming(status?: string): Promise<ShareRequest[]> {
-    let url = '/api/v1/shares/incoming';
+    let url = '/api/v1/shares/incoming'
     if (status) {
-      url += `?status=${encodeURIComponent(status)}`;
+      url += `?status=${encodeURIComponent(status)}`
     }
 
-    const response = await apiClient.get<{ requests: ShareRequest[] }>(url);
-    return response.requests || [];
+    const response = await apiClient.get<{ requests: ShareRequest[] }>(url)
+    return response.requests || []
   },
 
   /**
@@ -55,22 +55,24 @@ export const sharesApi = {
       recipient_overlay_id: recipientOverlayId,
       expiry_option: expiryOption,
       expiry_hours: expiryHours,
-    });
+    })
   },
 
   /**
    * Get unseen acceptances for the current user (sender who hasn't seen acceptance notification)
    */
   async getUnseenAcceptances(): Promise<ShareRequest[]> {
-    const response = await apiClient.get<{ requests: ShareRequest[] }>('/api/v1/shares/unseen-acceptances');
-    return response.requests || [];
+    const response = await apiClient.get<{ requests: ShareRequest[] }>(
+      '/api/v1/shares/unseen-acceptances'
+    )
+    return response.requests || []
   },
 
   /**
    * Mark a share request acceptance as seen by the sender
    */
   async markAcceptanceSeen(shareId: string): Promise<void> {
-    await apiClient.post(`/api/v1/shares/${shareId}/mark-seen`, {});
+    await apiClient.post(`/api/v1/shares/${shareId}/mark-seen`, {})
   },
 
   /**
@@ -78,16 +80,14 @@ export const sharesApi = {
    * These are the shared overlays the user can add as a source to their own overlays.
    */
   async getAcceptedShares(): Promise<AcceptedShare[]> {
-    const response = await apiClient.get<{ shares: AcceptedShare[] }>(
-      '/api/v1/shares/accepted'
-    );
-    return response.shares || [];
+    const response = await apiClient.get<{ shares: AcceptedShare[] }>('/api/v1/shares/accepted')
+    return response.shares || []
   },
 
   /**
    * Revoke an active share (either participant can call)
    */
   async revokeShare(shareId: string): Promise<void> {
-    await apiClient.post(`/api/v1/shares/${shareId}/revoke`, {});
+    await apiClient.post(`/api/v1/shares/${shareId}/revoke`, {})
   },
-};
+}

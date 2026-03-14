@@ -6,10 +6,10 @@
  * and collapsible technical details.
  */
 
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import clsx from 'clsx';
+import { useState, useEffect } from 'react'
+import clsx from 'clsx'
 import {
   ChatError,
   ChatErrorType,
@@ -17,13 +17,13 @@ import {
   isBannedError,
   isAuthError,
   isPlatformApiError,
-} from '@/lib/types/errors';
+} from '@/lib/types/errors'
 
 interface ErrorDisplayProps {
-  error: ChatError;
-  onRetry?: () => void;
-  onDismiss?: () => void;
-  className?: string;
+  error: ChatError
+  onRetry?: () => void
+  onDismiss?: () => void
+  className?: string
 }
 
 export default function ErrorDisplay({
@@ -32,44 +32,44 @@ export default function ErrorDisplay({
   onDismiss,
   className = '',
 }: ErrorDisplayProps) {
-  const [showDetails, setShowDetails] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const [showDetails, setShowDetails] = useState(false)
+  const [countdown, setCountdown] = useState<number | null>(null)
 
   // Handle rate limit countdown
   useEffect(() => {
-    if (!isRateLimitedError(error)) return;
+    if (!isRateLimitedError(error)) return
 
     if (error.retryAfter) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCountdown(error.retryAfter);
+      setCountdown(error.retryAfter)
       const interval = setInterval(() => {
         setCountdown((prev) => {
           if (prev === null || prev <= 1) {
-            clearInterval(interval);
-            return null;
+            clearInterval(interval)
+            return null
           }
-          return prev - 1;
-        });
-      }, 1000);
+          return prev - 1
+        })
+      }, 1000)
 
-      return () => clearInterval(interval);
+      return () => clearInterval(interval)
     } else if (error.resetTime) {
-      const resetDate = new Date(error.resetTime);
+      const resetDate = new Date(error.resetTime)
       const updateCountdown = () => {
-        const now = new Date();
-        const diff = Math.floor((resetDate.getTime() - now.getTime()) / 1000);
+        const now = new Date()
+        const diff = Math.floor((resetDate.getTime() - now.getTime()) / 1000)
         if (diff <= 0) {
-          setCountdown(null);
+          setCountdown(null)
         } else {
-          setCountdown(diff);
+          setCountdown(diff)
         }
-      };
+      }
 
-      updateCountdown();
-      const interval = setInterval(updateCountdown, 1000);
-      return () => clearInterval(interval);
+      updateCountdown()
+      const interval = setInterval(updateCountdown, 1000)
+      return () => clearInterval(interval)
     }
-  }, [error]);
+  }, [error])
 
   // Get styling based on error type
   const getErrorStyle = () => {
@@ -82,7 +82,7 @@ export default function ErrorDisplay({
           border: 'border-red-200 dark:border-red-800',
           text: 'text-red-800 dark:text-red-200',
           icon: '🚫',
-        };
+        }
 
       case ChatErrorType.TOKEN_EXPIRED:
       case ChatErrorType.UNAUTHORIZED:
@@ -92,7 +92,7 @@ export default function ErrorDisplay({
           border: 'border-orange-200 dark:border-orange-800',
           text: 'text-orange-800 dark:text-orange-200',
           icon: '⚠️',
-        };
+        }
 
       case ChatErrorType.RATE_LIMITED:
         return {
@@ -100,7 +100,7 @@ export default function ErrorDisplay({
           border: 'border-yellow-200 dark:border-yellow-800',
           text: 'text-yellow-800 dark:text-yellow-200',
           icon: '⏱️',
-        };
+        }
 
       case ChatErrorType.NETWORK_ERROR:
       case ChatErrorType.VALIDATION_ERROR:
@@ -109,7 +109,7 @@ export default function ErrorDisplay({
           border: 'border-slate-200 dark:border-slate-700',
           text: 'text-slate-800 dark:text-slate-200',
           icon: '⚠️',
-        };
+        }
 
       default:
         return {
@@ -117,18 +117,18 @@ export default function ErrorDisplay({
           border: 'border-slate-200 dark:border-slate-700',
           text: 'text-slate-800 dark:text-slate-200',
           icon: '❌',
-        };
+        }
     }
-  };
+  }
 
-  const style = getErrorStyle();
+  const style = getErrorStyle()
 
   // Determine if retry button should be shown
   const canRetry =
     error.type === ChatErrorType.NETWORK_ERROR ||
     error.type === ChatErrorType.PLATFORM_API_ERROR ||
     error.type === ChatErrorType.UNKNOWN_ERROR ||
-    (isRateLimitedError(error) && countdown === null);
+    (isRateLimitedError(error) && countdown === null)
 
   return (
     <div className={clsx('rounded-lg border p-4', style.bg, style.border, className)}>
@@ -247,22 +247,22 @@ export default function ErrorDisplay({
         )}
       </div>
     </div>
-  );
+  )
 }
 
 /**
  * Format countdown in MM:SS format
  */
 function formatCountdown(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
 /**
  * Capitalize first letter
  */
 function capitalizeFirst(str: string): string {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
+  if (!str) return str
+  return str.charAt(0).toUpperCase() + str.slice(1)
 }

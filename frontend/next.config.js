@@ -9,9 +9,11 @@ const nextConfig = {
   // Generate unique build ID to prevent Server Action mismatches
   generateBuildId: async () => {
     // Use git commit hash if available, otherwise use timestamp
-    return process.env.NEXT_PUBLIC_GIT_COMMIT ||
-           process.env.NEXT_PUBLIC_BUILD_DATE ||
-           `build-${Date.now()}`;
+    return (
+      process.env.NEXT_PUBLIC_GIT_COMMIT ||
+      process.env.NEXT_PUBLIC_BUILD_DATE ||
+      `build-${Date.now()}`
+    )
   },
 
   // Image optimization
@@ -24,29 +26,30 @@ const nextConfig = {
       'cdn.betterttv.net', // BTTV emotes
       'cdn.frankerfacez.com', // FFZ emotes
       'files.kick.com', // Kick emotes
-      'ui-avatars.com' // Generated avatar fallbacks
-    ]
+      'ui-avatars.com', // Generated avatar fallbacks
+    ],
   },
 
   // API rewrites - proxy to API Gateway
   // In development: localhost:8080
   // In production: api-gateway service (Docker/K8s networking)
   async rewrites() {
-    const apiGatewayURL = process.env.NODE_ENV === 'production'
-      ? process.env.API_GATEWAY_URL || 'http://api-gateway:8080'
-      : 'http://localhost:8080';
+    const apiGatewayURL =
+      process.env.NODE_ENV === 'production'
+        ? process.env.API_GATEWAY_URL || 'http://api-gateway:8080'
+        : 'http://localhost:8080'
 
     return [
       {
         source: '/api/:path*',
-        destination: `${apiGatewayURL}/api/:path*`
+        destination: `${apiGatewayURL}/api/:path*`,
       },
       {
         source: '/ws/:path*',
-        destination: `${apiGatewayURL}/ws/:path*`
-      }
-    ];
-  }
-};
+        destination: `${apiGatewayURL}/ws/:path*`,
+      },
+    ]
+  },
+}
 
-module.exports = nextConfig;
+module.exports = nextConfig

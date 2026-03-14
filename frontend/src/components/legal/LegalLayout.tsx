@@ -1,9 +1,9 @@
-import Link from 'next/link';
+import Link from 'next/link'
 
 interface LegalLayoutProps {
-  title: string;
-  lastUpdated: string;
-  children: React.ReactNode;
+  title: string
+  lastUpdated: string
+  children: React.ReactNode
 }
 
 export default function LegalLayout({ title, lastUpdated, children }: LegalLayoutProps) {
@@ -11,7 +11,7 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
     <div className="min-h-screen bg-linear-to-b from-slate-50 to-slate-100 px-4 py-12 text-slate-700">
       <div className="mx-auto max-w-4xl rounded-2xl border border-slate-100 bg-white p-8 shadow-xl md:p-12">
         <div className="mb-8 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-500">
+          <p className="text-xs font-semibold tracking-[0.2em] text-indigo-500 uppercase">
             All-Chat Legal
           </p>
           <h1 className="text-4xl font-bold text-slate-900">{title}</h1>
@@ -36,5 +36,5 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -48,10 +48,7 @@ function getTopBorderStyle(sources: Array<{ platform: string }>): React.CSSPrope
     } else if (i === colors.length - 1) {
       stops.push(`${color} calc(${start}% + ${blend}%)`, `${color} 100%`)
     } else {
-      stops.push(
-        `${color} calc(${start}% + ${blend}%)`,
-        `${color} calc(${end}% - ${blend}%)`
-      )
+      stops.push(`${color} calc(${start}% + ${blend}%)`, `${color} calc(${end}% - ${blend}%)`)
     }
   })
   return { background: `linear-gradient(90deg, ${stops.join(', ')})` }
@@ -61,18 +58,18 @@ function getTopBorderStyle(sources: Array<{ platform: string }>): React.CSSPrope
 
 function OverlayGridSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="rounded-xl border border-border bg-surface overflow-hidden">
+        <div key={i} className="overflow-hidden rounded-xl border border-border bg-surface">
           <div className="h-[3px] w-full bg-surface-2" />
-          <div className="p-6 space-y-3">
+          <div className="space-y-3 p-6">
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-3 w-3/4" />
-            <div className="flex gap-1.5 mt-2">
+            <div className="mt-2 flex gap-1.5">
               <Skeleton className="h-4 w-12 rounded-full" />
               <Skeleton className="h-4 w-12 rounded-full" />
             </div>
-            <Skeleton className="h-3 w-1/3 mt-3" />
+            <Skeleton className="mt-3 h-3 w-1/3" />
           </div>
         </div>
       ))}
@@ -84,13 +81,13 @@ function OverlayGridSkeleton() {
 
 function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
   return (
-    <div className="flex flex-col items-center py-24 text-center gap-4">
+    <div className="flex flex-col items-center gap-4 py-24 text-center">
       <MonitorPlay className="size-16 text-text-dim" strokeWidth={1} aria-hidden="true" />
       <h2 className="text-xl font-semibold text-text">No overlays yet</h2>
-      <p className="text-text-sub text-sm max-w-sm">
+      <p className="max-w-sm text-sm text-text-sub">
         Create your first overlay to start aggregating chat across platforms.
       </p>
-      <div className="flex gap-1.5 mt-2" aria-hidden="true">
+      <div className="mt-2 flex gap-1.5" aria-hidden="true">
         {(['twitch', 'youtube', 'kick', 'tiktok'] as const).map((p) => (
           <PlatformBadge key={p} platform={p} size="sm" />
         ))}
@@ -121,7 +118,7 @@ function DeleteOverlayDialog({
         <Dialog.Description>
           This action cannot be undone. All sources will be removed.
         </Dialog.Description>
-        <div className="flex gap-3 justify-end mt-6">
+        <div className="mt-6 flex justify-end gap-3">
           <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
           <Button variant="destructive" onClick={onDelete}>
             Delete
@@ -147,10 +144,10 @@ function DashboardContent() {
   useEffect(() => {
     if (loading || overlays.length === 0) return
     Promise.allSettled(
-      overlays.map(o => overlaysApi.getSources(o.id).then(sources => ({ id: o.id, sources })))
-    ).then(results => {
+      overlays.map((o) => overlaysApi.getSources(o.id).then((sources) => ({ id: o.id, sources })))
+    ).then((results) => {
       const map: Record<string, ChatSource[]> = {}
-      results.forEach(r => {
+      results.forEach((r) => {
         if (r.status === 'fulfilled') map[r.value.id] = r.value.sources
       })
       setSourcesByOverlay(map)
@@ -190,7 +187,7 @@ function DashboardContent() {
     }
   }
 
-  const overlaysWithSources: OverlayWithSources[] = overlays.map(o => ({
+  const overlaysWithSources: OverlayWithSources[] = overlays.map((o) => ({
     ...o,
     sources: sourcesByOverlay[o.id],
   }))
@@ -198,11 +195,11 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-8">
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text">Overlays</h1>
           <Button variant="gradient" onClick={() => router.push('/overlays/new')}>
-            <Plus className="size-4 mr-2" />
+            <Plus className="mr-2 size-4" />
             New Overlay
           </Button>
         </div>
@@ -212,21 +209,21 @@ function DashboardContent() {
         ) : overlaysWithSources.length === 0 ? (
           <DashboardEmptyState onCreateClick={() => router.push('/overlays/new')} />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {overlaysWithSources.map((overlay) => (
               <Card
                 key={overlay.id}
                 interactive
-                className="overflow-hidden cursor-pointer group"
+                className="group cursor-pointer overflow-hidden"
                 onClick={() => router.push(`/overlays/${overlay.id}`)}
               >
                 <div style={{ height: '3px', ...getTopBorderStyle(overlay.sources ?? []) }} />
                 <div className="p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <h3 className="font-semibold text-text truncate">{overlay.name}</h3>
+                  <div className="mb-3 flex items-start justify-between">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h3 className="truncate font-semibold text-text">{overlay.name}</h3>
                       {overlay.is_public_for_viewers && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-twitch/15 text-twitch border border-twitch/30 shrink-0">
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[10px] font-semibold text-twitch">
                           <Puzzle className="size-2.5" />
                           Extension
                         </span>
@@ -241,19 +238,17 @@ function DashboardContent() {
                         size="icon"
                         onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         aria-label={`Delete ${overlay.name}`}
-                        className="text-text-dim hover:text-destructive shrink-0"
+                        className="hover:text-destructive shrink-0 text-text-dim"
                       >
                         <Trash2 className="size-4" />
                       </Button>
                     </DeleteOverlayDialog>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 mb-4">
+                  <div className="mb-4 flex flex-wrap gap-1.5">
                     {overlay.sources?.map((source) => (
                       <PlatformBadge
                         key={source.id}
-                        platform={
-                          source.platform as 'twitch' | 'youtube' | 'kick' | 'tiktok'
-                        }
+                        platform={source.platform as 'twitch' | 'youtube' | 'kick' | 'tiktok'}
                         size="sm"
                       />
                     ))}
@@ -267,7 +262,7 @@ function DashboardContent() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-xs text-text-sub hover:text-destructive gap-1.5 -mr-2"
+                        className="hover:text-destructive -mr-2 gap-1.5 text-xs text-text-sub"
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleUnsetPublic(overlay.id)
@@ -279,7 +274,7 @@ function DashboardContent() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-xs text-text-sub hover:text-twitch gap-1.5 -mr-2"
+                        className="-mr-2 gap-1.5 text-xs text-text-sub hover:text-twitch"
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleSetPublic(overlay.id)

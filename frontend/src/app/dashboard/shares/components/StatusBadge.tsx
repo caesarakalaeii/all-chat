@@ -4,11 +4,11 @@
  * Color-coded status indicator for share requests.
  */
 
-import clsx from 'clsx';
+import clsx from 'clsx'
 
 interface StatusBadgeProps {
-  status: 'pending' | 'accepted' | 'rejected' | 'expired' | 'revoked';
-  size?: 'sm' | 'md';
+  status: 'pending' | 'accepted' | 'rejected' | 'expired' | 'revoked'
+  size?: 'sm' | 'md'
 }
 
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
@@ -38,16 +38,20 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
       className: 'bg-red-500/10 text-red-400 border border-red-500/20',
       icon: '✗',
     },
-  }[status];
+  }[status]
 
-  const sizeClasses = size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-xs px-2.5 py-0.5';
+  const sizeClasses = size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-xs px-2.5 py-0.5'
 
   return (
     <span
-      className={clsx('inline-flex items-center gap-1 rounded-full font-medium', config.className, sizeClasses)}
+      className={clsx(
+        'inline-flex items-center gap-1 rounded-full font-medium',
+        config.className,
+        sizeClasses
+      )}
     >
       <span>{config.icon}</span>
       <span>{config.label}</span>
     </span>
-  );
+  )
 }

@@ -24,33 +24,24 @@ export function AppNav() {
   }
 
   return (
-    <nav className="sticky top-0 z-50 flex h-[60px] items-center px-8 bg-nav-bg backdrop-blur-[20px] border-b border-border">
+    <nav className="sticky top-0 z-50 flex h-[60px] items-center border-b border-border bg-nav-bg px-8 backdrop-blur-[20px]">
       <Link
         href="/dashboard"
-        className="flex items-center gap-2.5 mr-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch rounded-sm"
+        className="mr-10 flex items-center gap-2.5 rounded-sm focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
       >
         <InfinityLogo size={28} />
         <span className="text-base font-extrabold tracking-tight text-text">all-chat</span>
       </Link>
       <div className="flex h-full gap-0.5">
-        <Link
-          href="/dashboard"
-          className={isActive('/dashboard') ? activeClass : inactiveClass}
-        >
+        <Link href="/dashboard" className={isActive('/dashboard') ? activeClass : inactiveClass}>
           Dashboard
         </Link>
         {user?.is_admin && (
-          <Link
-            href="/admin"
-            className={isActive('/admin') ? activeClass : inactiveClass}
-          >
+          <Link href="/admin" className={isActive('/admin') ? activeClass : inactiveClass}>
             Admin
           </Link>
         )}
-        <Link
-          href="/settings"
-          className={isActive('/settings') ? activeClass : inactiveClass}
-        >
+        <Link href="/settings" className={isActive('/settings') ? activeClass : inactiveClass}>
           Settings
         </Link>
       </div>
