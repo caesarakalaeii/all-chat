@@ -50,9 +50,9 @@ Requirements for Frontend Redesign milestone. Each maps to roadmap phases.
 
 ### Enforcement & Migration
 
-- [ ] **ENFORCE-01**: ESLint plugin for Tailwind installed and configured
-- [ ] **ENFORCE-02**: Prettier plugin for Tailwind installed with class ordering
-- [ ] **ENFORCE-03**: ESLint rules defined (no gray-*, focus-visible required, no string concat in className)
+- [x] **ENFORCE-01**: ESLint plugin for Tailwind installed and configured
+- [x] **ENFORCE-02**: Prettier plugin for Tailwind installed with class ordering
+- [x] **ENFORCE-03**: ESLint rules defined (no gray-*, focus-visible required, no string concat in className)
 - [ ] **ENFORCE-04**: Pre-commit hooks configured with Husky (lint + format on changed files)
 - [ ] **ENFORCE-05**: CI/CD quality gates implemented (ESLint errors block PRs, bundle size >20KB requires justification)
 - [ ] **ENFORCE-06**: Visual regression test suite implemented (screenshot diffing all pages)
@@ -133,9 +133,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FEAT-02 | Phase 25 | Complete |
 | FEAT-03 | Phase 25 | Complete |
 | FEAT-04 | Phase 25 | Complete |
-| ENFORCE-01 | Phase 26 | Pending |
-| ENFORCE-02 | Phase 26 | Pending |
-| ENFORCE-03 | Phase 26 | Pending |
+| ENFORCE-01 | Phase 26 | Complete |
+| ENFORCE-02 | Phase 26 | Complete |
+| ENFORCE-03 | Phase 26 | Complete |
 | ENFORCE-04 | Phase 26 | Pending |
 | ENFORCE-05 | Phase 26 | Pending |
 | ENFORCE-06 | Phase 26 | Pending |
