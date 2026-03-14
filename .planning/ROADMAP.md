@@ -200,10 +200,13 @@ Plans:
   7. Performance monitoring configured validating message render time <16ms at 20 msg/sec load
   8. Storybook a11y addon set to 'error' mode (currently 'todo') — CI fails on a11y violations
   9. Bundle size baseline established (Next.js built-in bundle analyzer)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 26-01: TBD
+- [ ] 26-01-PLAN.md — ESLint flat config (eslint.config.mjs) + Prettier setup with prettier-plugin-tailwindcss
+- [ ] 26-02-PLAN.md — Husky v9 pre-commit hooks: lint-staged (staged files) + tsc --noEmit (full project)
+- [ ] 26-03-PLAN.md — Bundle analyzer wrapper for next.config.js + Performance.stories.tsx render timing test
+- [ ] 26-04-PLAN.md — CI/CD frontend-quality.yml workflow + Marketplace migration guide + human Chromatic setup
 
 ## Progress
 
