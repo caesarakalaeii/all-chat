@@ -186,10 +186,13 @@ func main() {
 	// Create viewer repository
 	viewerRepo := repository.NewViewerRepository(db, tokenCipher)
 
+	// Create viewer identity repository (Phase 28: cross-platform viewer linking)
+	viewerIdentityRepo := repository.NewViewerIdentityRepository(db)
+
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log)
 	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
-	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
+	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, jwtSecret)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher)
@@ -253,10 +256,13 @@ func main() {
 	// Viewer auth routes (separate from streamer auth)
 	router.GET("/viewer/twitch/login", viewerAuthHandler.HandleTwitchLogin)
 	router.GET("/viewer/twitch/callback", viewerAuthHandler.HandleTwitchCallback)
+	router.POST("/viewer/twitch/exchange", viewerAuthHandler.HandleTwitchExchange)
 	router.GET("/viewer/youtube/login", viewerAuthHandler.HandleYouTubeLogin)
 	router.GET("/viewer/youtube/callback", viewerAuthHandler.HandleYouTubeCallback)
+	router.POST("/viewer/youtube/exchange", viewerAuthHandler.HandleYouTubeExchange)
 	router.GET("/viewer/kick/login", viewerAuthHandler.HandleKickLogin)
 	router.GET("/viewer/kick/callback", viewerAuthHandler.HandleKickCallback)
+	router.POST("/viewer/kick/exchange", viewerAuthHandler.HandleKickExchange)
 
 	// Public streamer info routes
 	router.GET("/streamers/:username", streamerInfoHandler.HandleGetStreamerInfo)
