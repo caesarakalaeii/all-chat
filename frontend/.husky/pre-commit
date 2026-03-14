@@ -1,1 +1,12 @@
-npm test
+# Pre-commit hook for all-chat frontend
+# Blocks commits with ESLint errors, Prettier violations, or TypeScript errors
+
+# Git hooks run from repo root — navigate to frontend/ first
+cd "$(git rev-parse --show-toplevel)/frontend"
+
+# Step 1: Run ESLint + Prettier on staged files only (fast — only changed files)
+npx lint-staged
+
+# Step 2: TypeScript check on full project (must run on whole project, not per-file)
+# Do NOT use --incremental: it writes .tsbuildinfo which should not be staged
+npx tsc --noEmit
