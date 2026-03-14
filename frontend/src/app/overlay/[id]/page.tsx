@@ -596,6 +596,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             data-message-id={message.id}
             data-platform={message.platform}
             data-event-type={isEvent ? message.event?.type : undefined}
+            data-username={message.user?.username}
             className={
               isEvent
                 ? `event-message ${eventTierClass} ${eventTypeClass}`
