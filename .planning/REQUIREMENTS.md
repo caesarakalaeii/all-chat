@@ -34,18 +34,18 @@
 
 ### YouTube Badges via InnerTube
 
-- [ ] **YTBADGE-01**: YouTube membership badge renders with the real channel-specific image from InnerTube (`customThumbnail.thumbnails[1].URL` at 32px)
-- [ ] **YTBADGE-02**: YouTube membership badge tooltip carries the tier name (e.g. "3-Month Member") from InnerTube `tooltip` field
-- [ ] **YTBADGE-03**: YouTube moderator, owner, and verified badges continue to render (static SVG fallback acceptable — no image URL provided by InnerTube for system badges)
-- [ ] **YTBADGE-04**: Backward compatibility maintained: old youtube-listener (quota-based) still functions without real badge images
+- [x] **YTBADGE-01**: YouTube membership badge renders with the real channel-specific image from InnerTube (`customThumbnail.thumbnails[1].URL` at 32px)
+- [x] **YTBADGE-02**: YouTube membership badge tooltip carries the tier name (e.g. "3-Month Member") from InnerTube `tooltip` field
+- [x] **YTBADGE-03**: YouTube moderator, owner, and verified badges continue to render (static SVG fallback acceptable — no image URL provided by InnerTube for system badges)
+- [x] **YTBADGE-04**: Backward compatibility maintained: old youtube-listener (quota-based) still functions without real badge images
 
 ### YouTube Emotes via InnerTube
 
-- [ ] **YTEMOTE-01**: YouTube channel membership emotes (`isCustomEmoji: true`, `emojiId` starts with `UC`) render as inline images in overlays and extension
-- [ ] **YTEMOTE-02**: YouTube global emotes (`isCustomEmoji: true`, `emojiId` starts with `_`) render as inline images
-- [ ] **YTEMOTE-03**: Standard Unicode emoji in YouTube messages continue to render as text characters (no regression)
-- [ ] **YTEMOTE-04**: Emote images served at 48px (the larger InnerTube thumbnail) for retina clarity
-- [ ] **YTEMOTE-05**: Emotes accumulate in a per-channel Redis cache keyed by `emojiId` (since no catalog endpoint exists)
+- [x] **YTEMOTE-01**: YouTube channel membership emotes (`isCustomEmoji: true`, `emojiId` starts with `UC`) render as inline images in overlays and extension
+- [x] **YTEMOTE-02**: YouTube global emotes (`isCustomEmoji: true`, `emojiId` starts with `_`) render as inline images
+- [x] **YTEMOTE-03**: Standard Unicode emoji in YouTube messages continue to render as text characters (no regression)
+- [x] **YTEMOTE-04**: Emote images served at 48px (the larger InnerTube thumbnail) for retina clarity
+- [x] **YTEMOTE-05**: Emotes accumulate in a per-channel Redis cache keyed by `emojiId` (since no catalog endpoint exists)
 
 ### Extension UX
 
@@ -115,15 +115,15 @@
 | BADGE-02 | Phase 31 | Pending |
 | BADGE-03 | Phase 31 | Pending |
 | BADGE-04 | Phase 31 | Pending |
-| YTBADGE-01 | Phase 27 | Pending |
-| YTBADGE-02 | Phase 27 | Pending |
-| YTBADGE-03 | Phase 27 | Pending |
-| YTBADGE-04 | Phase 27 | Pending |
-| YTEMOTE-01 | Phase 27 | Pending |
-| YTEMOTE-02 | Phase 27 | Pending |
-| YTEMOTE-03 | Phase 27 | Pending |
-| YTEMOTE-04 | Phase 27 | Pending |
-| YTEMOTE-05 | Phase 27 | Pending |
+| YTBADGE-01 | Phase 27 | Complete |
+| YTBADGE-02 | Phase 27 | Complete |
+| YTBADGE-03 | Phase 27 | Complete |
+| YTBADGE-04 | Phase 27 | Complete |
+| YTEMOTE-01 | Phase 27 | Complete |
+| YTEMOTE-02 | Phase 27 | Complete |
+| YTEMOTE-03 | Phase 27 | Complete |
+| YTEMOTE-04 | Phase 27 | Complete |
+| YTEMOTE-05 | Phase 27 | Complete |
 | EXT-01 | Phase 28 | Pending |
 | EXT-02 | Phase 28 | Pending |
 | EXT-03 | Phase 28 | Pending |
