@@ -29,10 +29,11 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
       <div className="flex items-center mb-3">
         {request.sender && (
           <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={request.sender.profile_image_url || '/default-avatar.png'}
               alt={request.sender.username}
-              className="w-10 h-10 rounded-full"
+              className="h-10 w-10 rounded-full"
             />
             <div className="ml-3">
               <p className="font-medium text-text">{request.sender.display_name}</p>

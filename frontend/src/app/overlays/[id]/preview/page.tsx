@@ -24,6 +24,7 @@
 
 import Image from 'next/image';
 import { use, useEffect, useState, useRef, useMemo } from 'react';
+import clsx from 'clsx';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { WebSocketClient } from '@/lib/api/websocket';
@@ -40,8 +41,8 @@ import '@/styles/events.css';
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
   ssr: false,
   loading: () => (
-    <div className="h-[300px] bg-gray-900 border border-gray-700 rounded-lg flex items-center justify-center">
-      <div className="text-gray-400 text-sm">Loading editor...</div>
+    <div className="h-[300px] bg-slate-900 border border-slate-700 rounded-lg flex items-center justify-center">
+      <div className="text-slate-400 text-sm">Loading editor...</div>
     </div>
   )
 });
@@ -368,7 +369,7 @@ body {
 }
 
 /* Target only message containers */
-.space-y-3 > div.bg-gray-900\\/90 {
+.space-y-3 > div.bg-slate-900\\/90 {
   background: rgba(74, 29, 150, 0.45) !important;
   border: 1px solid rgba(236, 72, 153, 0.5) !important;
   border-radius: 16px !important;
@@ -688,12 +689,12 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
           )}
         </div>
         {message.message.text && (
-          <div className="text-sm event-message-text text-gray-200 ml-14">
+          <div className="text-sm event-message-text text-slate-200 ml-14">
             {message.message.text}
           </div>
         )}
         {event.metadata && Object.keys(event.metadata).length > 0 && (
-          <div className="text-xs event-metadata text-gray-400 mt-1 ml-14">
+          <div className="text-xs event-metadata text-slate-400 mt-1 ml-14">
             {(event.metadata as any).viewer_count && `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
             {(event.metadata as any).months && `${(event.metadata as any).months} months`}
             {(event.metadata as any).streak && ` • ${(event.metadata as any).streak} month streak`}
@@ -716,7 +717,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
       case 'kick':
         return 'text-green-400';
       default:
-        return 'text-gray-400';
+        return 'text-slate-400';
     }
   };
 
@@ -913,7 +914,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
   };
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-slate-900">
       {useCustomCss && scopedPreviewCss && (
         <style
           key={scopedPreviewCss}
@@ -922,20 +923,21 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
         />
       )}
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 px-4 py-3">
+      <div className="bg-slate-800 border-b border-slate-700 px-4 py-3">
         <div className="container mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push(`/overlays/${id}`)}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-slate-400 hover:text-white transition-colors"
             >
               ← Back
             </button>
             <h1 className="text-xl font-semibold text-white">Overlay Preview</h1>
             <span
-              className={`px-2 py-1 rounded text-xs ${
+              className={clsx(
+                'rounded px-2 py-1 text-xs',
                 connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-              }`}
+              )}
             >
               {connected ? '● Connected' : '● Disconnected'}
             </span>
@@ -957,9 +959,10 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
           <div className="lg:col-span-2">
             <div
               id="overlay-preview-root"
-              className={`overlay-preview-root bg-black rounded-lg p-4 h-[800px] overflow-hidden relative ${
-                useCustomCss ? 'overlay-preview' : ''
-              }`}
+              className={clsx(
+                'overlay-preview-root relative h-[800px] overflow-hidden rounded-lg bg-black p-4',
+                useCustomCss && 'overlay-preview'
+              )}
             >
               <div
                 className="overlay-preview-body h-full overflow-y-auto space-y-3"
@@ -970,7 +973,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
               >
                 {messages.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
-                    <div className="text-center text-gray-600">
+                    <div className="text-center text-slate-600">
                       <svg
                         className="w-16 h-16 mx-auto mb-4"
                         fill="none"
@@ -1002,8 +1005,8 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                         data-event-type={isEvent ? message.event?.type : undefined}
                         className={
                           isEvent
-                            ? `event-message ${eventTierClass} ${eventTypeClass}`
-                            : 'backdrop-blur-sm rounded-lg p-3 shadow-lg bg-gray-900/90'
+                            ? clsx('event-message', eventTierClass, eventTypeClass)
+                            : 'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm'
                         }
                       >
                         <div className="flex items-start gap-3">
@@ -1023,7 +1026,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                                 }}
                               />
                             ) : (
-                              <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-semibold">
+                              <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-semibold">
                                 {message.user.display_name?.slice(0, 2).toUpperCase() || '?'}
                               </div>
                             )}
@@ -1040,7 +1043,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                                     <PlatformIcon platform={message.platform} />
                                   </span>
                                 ) : (
-                                  <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                                  <span className={clsx('platform-badge platform-badge-text text-xs font-semibold uppercase', getPlatformColor(message.platform))}>
                                     {message.platform}
                                   </span>
                                 )
@@ -1083,7 +1086,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                                     <PlatformIcon platform={message.platform} />
                                   </span>
                                 ) : (
-                                  <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                                  <span className={clsx('platform-badge platform-badge-text text-xs font-semibold uppercase', getPlatformColor(message.platform))}>
                                     {message.platform}
                                   </span>
                                 )
@@ -1119,7 +1122,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                             </div>
 
                             {/* Timestamp */}
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className="text-xs text-slate-500 mt-1">
                               {new Date(message.timestamp).toLocaleTimeString()}
                             </div>
                           </div>
@@ -1135,7 +1138,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
 
           {/* Customization Panel (Sidebar) */}
           <div className="lg:col-span-1">
-            <div className="bg-gray-800 rounded-lg border border-gray-700 h-[800px] overflow-y-auto flex flex-col">
+            <div className="bg-slate-800 rounded-lg border border-slate-700 h-[800px] overflow-y-auto flex flex-col">
               <div className="p-6 flex-shrink-0">
                 <h2 className="text-lg font-semibold text-white mb-6">Customization</h2>
               </div>
@@ -1149,7 +1152,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
               <div className="space-y-6">
                 {/* Font Size */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
                     Font Size: <span className="text-twitch">{fontSize}px</span>
                   </label>
                   <input
@@ -1164,7 +1167,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
 
                 {/* Max Messages */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
                     Max Messages: <span className="text-twitch">{maxMessages}</span>
                   </label>
                   <input
@@ -1179,7 +1182,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
 
                 {/* Message Duration */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
                     Message Duration: <span className="text-twitch">{messageDuration}s</span>
                   </label>
                   <input
@@ -1195,7 +1198,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
 
                 {/* Disable Message Fade Toggle */}
                 <div>
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
                     <input
                       type="checkbox"
                       checked={disableMessageFade}
@@ -1204,19 +1207,19 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                     />
                     Disable Message Fade Out
                   </label>
-                  <p className="text-xs text-gray-400 mt-1 ml-6">
+                  <p className="text-xs text-slate-400 mt-1 ml-6">
                     When enabled, messages will not automatically fade out and will remain visible until max messages is reached
                   </p>
                 </div>
 
                 {/* Platform Badge Settings */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                  <label className="block text-sm font-medium text-slate-300 mb-3">
                     Platform Badge
                   </label>
                   <div className="space-y-3">
                     <div>
-                      <label className="flex items-center gap-2 text-sm text-gray-300 mb-3">
+                      <label className="flex items-center gap-2 text-sm text-slate-300 mb-3">
                         <input
                           type="checkbox"
                           checked={showPlatformBadge}
@@ -1227,9 +1230,9 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                       </label>
                     </div>
                     <div className={!showPlatformBadge ? 'opacity-50 pointer-events-none' : ''}>
-                      <label className="block text-xs text-gray-400 mb-2">Position</label>
+                      <label className="block text-xs text-slate-400 mb-2">Position</label>
                       <div className="flex gap-3">
-                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                        <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
                           <input
                             type="radio"
                             name="platformBadgePosition"
@@ -1241,7 +1244,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                           />
                           Before username
                         </label>
-                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                        <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
                           <input
                             type="radio"
                             name="platformBadgePosition"
@@ -1256,9 +1259,9 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                       </div>
                     </div>
                     <div className={!showPlatformBadge ? 'opacity-50 pointer-events-none' : ''}>
-                      <label className="block text-xs text-gray-400 mb-2">Style</label>
+                      <label className="block text-xs text-slate-400 mb-2">Style</label>
                       <div className="flex gap-3">
-                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                        <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
                           <input
                             type="radio"
                             name="platformBadgeStyle"
@@ -1270,7 +1273,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                           />
                           Text (TWITCH)
                         </label>
-                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                        <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
                           <input
                             type="radio"
                             name="platformBadgeStyle"
@@ -1289,19 +1292,19 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
 
                 {/* Emote Providers */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                  <label className="block text-sm font-medium text-slate-300 mb-3">
                     Emote Providers
                   </label>
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-gray-300">
+                    <label className="flex items-center gap-2 text-slate-300">
                       <input type="checkbox" defaultChecked className="accent-twitch" />
                       7TV
                     </label>
-                    <label className="flex items-center gap-2 text-gray-300">
+                    <label className="flex items-center gap-2 text-slate-300">
                       <input type="checkbox" defaultChecked className="accent-twitch" />
                       BetterTTV
                     </label>
-                    <label className="flex items-center gap-2 text-gray-300">
+                    <label className="flex items-center gap-2 text-slate-300">
                       <input type="checkbox" defaultChecked className="accent-twitch" />
                       FrankerFaceZ
                     </label>
@@ -1309,24 +1312,24 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                 </div>
 
                 {/* Mock Messages */}
-                <div className="border border-gray-700 rounded-lg p-4 bg-gray-900/40">
+                <div className="border border-slate-700 rounded-lg p-4 bg-slate-900/40">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-white">Mock Messages</h3>
                     <button
                       type="button"
                       onClick={handleClearMockMessages}
-                      className="text-xs text-gray-400 hover:text-white"
+                      className="text-xs text-slate-400 hover:text-white"
                     >
                       Clear
                     </button>
                   </div>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Platform</label>
+                      <label className="block text-xs text-slate-400 mb-1">Platform</label>
                       <select
                         value={mockForm.platform}
                         onChange={(e) => handleMockInputChange('platform', e.target.value as MockMessageFormState['platform'])}
-                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white"
                       >
                         <option value="twitch">Twitch</option>
                         <option value="youtube">YouTube</option>
@@ -1336,51 +1339,51 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Display Name</label>
+                        <label className="block text-xs text-slate-400 mb-1">Display Name</label>
                         <input
                           type="text"
                           value={mockForm.displayName}
                           onChange={(e) => handleMockInputChange('displayName', e.target.value)}
-                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Username</label>
+                        <label className="block text-xs text-slate-400 mb-1">Username</label>
                         <input
                           type="text"
                           value={mockForm.username}
                           onChange={(e) => handleMockInputChange('username', e.target.value)}
-                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white"
                         />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Avatar URL (optional)</label>
+                        <label className="block text-xs text-slate-400 mb-1">Avatar URL (optional)</label>
                         <input
                           type="text"
                           value={mockForm.avatarUrl}
                           onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
-                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white"
                           placeholder="https://..."
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Name Color</label>
+                        <label className="block text-xs text-slate-400 mb-1">Name Color</label>
                         <input
                           type="color"
                           value={mockForm.color}
                           onChange={(e) => handleMockInputChange('color', e.target.value)}
-                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Message</label>
+                      <label className="block text-xs text-slate-400 mb-1">Message</label>
                       <textarea
                         value={mockForm.message}
                         onChange={(e) => handleMockInputChange('message', e.target.value)}
-                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white h-20"
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-sm text-white h-20"
                         placeholder="Type something fun..."
                       />
                     </div>
@@ -1397,7 +1400,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                         <button
                           type="button"
                           onClick={() => void handleAddSampleTranscript()}
-                          className="flex-1 px-3 py-2 text-xs border border-gray-600 rounded-lg text-gray-200 hover:bg-gray-700"
+                          className="flex-1 px-3 py-2 text-xs border border-slate-600 rounded-lg text-slate-200 hover:bg-slate-700"
                         >
                           💬 Sample Chat
                         </button>
@@ -1424,9 +1427,10 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                   </button>
                   {configAlert && (
                     <p
-                      className={`text-sm ${
+                      className={clsx(
+                        'text-sm',
                         configAlert.type === 'success' ? 'text-green-400' : 'text-red-400'
-                      }`}
+                      )}
                     >
                       {configAlert.message}
                     </p>
@@ -1434,14 +1438,14 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                 </div>
 
                 {/* Stats */}
-                <div className="mt-6 pt-6 border-t border-gray-700">
-                  <h3 className="text-sm font-medium text-gray-400 mb-3">Statistics</h3>
+                <div className="mt-6 pt-6 border-t border-slate-700">
+                  <h3 className="text-sm font-medium text-slate-400 mb-3">Statistics</h3>
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between text-gray-300">
+                    <div className="flex justify-between text-slate-300">
                       <span>Messages:</span>
                       <span className="text-white font-medium">{messages.length}</span>
                     </div>
-                    <div className="flex justify-between text-gray-300">
+                    <div className="flex justify-between text-slate-300">
                       <span>Status:</span>
                       <span className={connected ? 'text-green-400' : 'text-red-400'}>
                         {connected ? 'Connected' : 'Disconnected'}
@@ -1456,11 +1460,11 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
         </div>
 
         {/* Bottom Row: Full-Width CSS Editor */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-white">Custom CSS Editor</h2>
-              <label className="flex items-center gap-2 text-sm text-gray-300">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input
                   type="checkbox"
                   checked={useCustomCss}
@@ -1497,7 +1501,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                   setCustomCss('');
                   setUseCustomCss(false);
                 }}
-                className="px-4 py-2 text-sm border border-gray-600 rounded-lg text-gray-200 hover:bg-gray-700 transition-colors"
+                className="px-4 py-2 text-sm border border-slate-600 rounded-lg text-slate-200 hover:bg-slate-700 transition-colors"
               >
                 Reset
               </button>
@@ -1511,7 +1515,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
             placeholder="/* Enter your custom CSS here */"
           />
 
-          <p className="text-sm text-gray-400 mt-4">
+          <p className="text-sm text-slate-400 mt-4">
             Need inspiration? Explore{' '}
             <a
               href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"

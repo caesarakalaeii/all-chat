@@ -80,13 +80,7 @@ export function useThemeMarketplace() {
   // Debounce search query
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  // Load themes on mount
-  useEffect(() => {
-    loadThemes();
-    setFavorites(getFavorites());
-  }, []);
-
-  const loadThemes = async () => {
+  const loadThemes = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -112,7 +106,15 @@ export function useThemeMarketplace() {
       setThemes(EMBEDDED_FALLBACK_THEMES);
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Load themes on mount — setState calls here are intentional on mount only
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    loadThemes();
+    setFavorites(getFavorites());
+  }, [loadThemes]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Filter themes
   const filteredThemes = useMemo(

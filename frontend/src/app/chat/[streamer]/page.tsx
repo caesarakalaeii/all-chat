@@ -18,6 +18,8 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import clsx from 'clsx';
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store';
 import { viewerApi } from '@/lib/api/viewer';
 import { apiClient } from '@/lib/api/client';
@@ -195,7 +197,7 @@ export default function ViewerChatPage() {
 
   if (loading || loadingStreamer) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading...</div>
       </div>
     );
@@ -203,34 +205,34 @@ export default function ViewerChatPage() {
 
   if (loadError && !streamerInfo) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-500 text-xl mb-4">{loadError}</div>
-          <a href="/" className="text-blue-400 hover:text-blue-300">
+          <Link href="/" className="text-blue-400 hover:text-blue-300">
             Return to Home
-          </a>
+          </Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-slate-900">
       {/* Header */}
-      <nav className="bg-gray-800 border-b border-gray-700">
+      <nav className="bg-slate-800 border-b border-slate-700">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <a href="/" className="text-2xl font-bold text-white">
+          <Link href="/" className="text-2xl font-bold text-white">
             All-Chat
-          </a>
+          </Link>
           <div className="flex items-center gap-4">
             {viewerInfo ? (
               <>
-                <span className="text-gray-400">
+                <span className="text-slate-400">
                   Logged in as <span className="text-white font-semibold">{viewerInfo.username}</span>
                 </span>
                 <button
                   onClick={viewerLogout}
-                  className="text-gray-400 hover:text-white transition-colors"
+                  className="text-slate-400 hover:text-white transition-colors"
                 >
                   Logout
                 </button>
@@ -258,29 +260,29 @@ export default function ViewerChatPage() {
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         {/* Streamer Info */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
+        <div className="bg-slate-800 rounded-lg p-6 mb-6">
           <h1 className="text-3xl font-bold text-white mb-4">
             Chat with {streamerInfo?.display_name || streamerUsername}
           </h1>
 
           {streamerInfo && streamerInfo.platforms.length > 0 ? (
             <div className="mb-4">
-              <h2 className="text-lg font-semibold text-gray-300 mb-2">Active Platforms:</h2>
+              <h2 className="text-lg font-semibold text-slate-300 mb-2">Active Platforms:</h2>
               <div className="flex gap-3">
                 {streamerInfo.platforms.map((platform) => (
                   <div
                     key={platform.platform}
-                    className="bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"
+                    className="bg-slate-700 px-4 py-2 rounded-lg flex items-center gap-2"
                   >
                     <span className="text-white font-medium capitalize">{platform.platform}</span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-gray-400">{platform.channel_name}</span>
+                    <span className="text-slate-400">•</span>
+                    <span className="text-slate-400">{platform.channel_name}</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="text-gray-400">
+            <div className="text-slate-400">
               No active platforms found for this streamer.
             </div>
           )}
@@ -288,11 +290,11 @@ export default function ViewerChatPage() {
 
         {/* Live Chat Display */}
         {streamerInfo && (
-          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+          <div className="bg-slate-800 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold text-white mb-4">Live Chat</h2>
-            <div className="bg-gray-900 rounded-lg p-4 h-96 overflow-y-auto">
+            <div className="bg-slate-900 rounded-lg p-4 h-96 overflow-y-auto">
               {chatMessages.length === 0 ? (
-                <div className="text-gray-500 text-center py-8">
+                <div className="text-slate-500 text-center py-8">
                   No messages yet. Chat will appear here when streamer is live.
                 </div>
               ) : (
@@ -301,10 +303,11 @@ export default function ViewerChatPage() {
                     <div key={msg.id || `${msg.timestamp}-${msg.user.username}`} className="flex gap-3">
                       <div className="flex-shrink-0">
                         {msg.user.avatar_url && (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={msg.user.avatar_url}
                             alt={msg.user.username}
-                            className="w-8 h-8 rounded-full"
+                            className="h-8 w-8 rounded-full"
                           />
                         )}
                       </div>
@@ -316,11 +319,11 @@ export default function ViewerChatPage() {
                           >
                             {msg.user.display_name || msg.user.username}
                           </span>
-                          <span className="text-xs text-gray-500 uppercase">
+                          <span className="text-xs text-slate-500 uppercase">
                             {msg.platform}
                           </span>
                         </div>
-                        <div className="text-gray-200 break-words">
+                        <div className="text-slate-200 break-words">
                           {msg.message.text}
                         </div>
                       </div>
@@ -335,7 +338,7 @@ export default function ViewerChatPage() {
 
         {/* Message Input Section */}
         {viewerInfo ? (
-          <div className="bg-gray-800 rounded-lg p-6">
+          <div className="bg-slate-800 rounded-lg p-6">
             <h2 className="text-xl font-semibold text-white mb-4">Send a Message</h2>
 
             {error && (
@@ -362,12 +365,12 @@ export default function ViewerChatPage() {
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Type your message here..."
-                  className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                  className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 resize-none"
                   rows={4}
                   maxLength={500}
                   disabled={sending}
                 />
-                <div className="text-right text-gray-400 text-sm mt-1">
+                <div className="text-right text-slate-400 text-sm mt-1">
                   {message.length}/500 characters
                 </div>
               </div>
@@ -375,13 +378,13 @@ export default function ViewerChatPage() {
               <button
                 type="submit"
                 disabled={!message.trim() || sending}
-                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                className="bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold transition-colors"
               >
                 {sending ? 'Sending...' : 'Send Message'}
               </button>
             </form>
 
-            <div className="mt-6 text-gray-400 text-sm">
+            <div className="mt-6 text-slate-400 text-sm">
               <p className="font-semibold mb-2">Rate Limits:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>20 messages per minute</li>
@@ -390,8 +393,8 @@ export default function ViewerChatPage() {
             </div>
           </div>
         ) : (
-          <div className="bg-gray-800 rounded-lg p-6 text-center">
-            <p className="text-gray-300 mb-4">
+          <div className="bg-slate-800 rounded-lg p-6 text-center">
+            <p className="text-slate-300 mb-4">
               Please log in to send messages
             </p>
             <div className="flex gap-3 justify-center">

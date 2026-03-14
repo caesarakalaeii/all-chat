@@ -291,7 +291,7 @@ export default function AdminViewersPage() {
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
               placeholder="Enter reason for ban..."
-              className="w-full bg-surface-2 text-text border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-text-dim resize-none"
+              className="w-full bg-surface-2 text-text border border-border rounded-lg px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring placeholder:text-text-dim resize-none"
               rows={3}
             />
           </div>

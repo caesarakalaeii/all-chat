@@ -21,6 +21,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { authApi } from '@/lib/api/auth';
 import { InfinityLogo } from '@/components/InfinityLogo';
@@ -93,12 +94,12 @@ function AuthCallbackContent() {
         <div className="text-center">
           <div className="text-5xl mb-4">⚠️</div>
           <p className="text-youtube text-lg mb-4">{error}</p>
-          <a
+          <Link
             href="/"
-            className="inline-block bg-twitch hover:opacity-90 text-white font-semibold py-2 px-6 rounded-lg transition-opacity"
+            className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-white transition-opacity hover:opacity-90"
           >
             Return to Home
-          </a>
+          </Link>
         </div>
       ) : null}
     </div>
