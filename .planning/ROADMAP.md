@@ -244,7 +244,14 @@ Plans:
   5. Extension popup has "Open Settings" button navigating to `/settings/viewer` on the website
   6. `viewer_cosmetics` table exists: stores `name_color (VARCHAR(7))` per viewer
   7. Message processor `ViewerBadgeEnricher` resolves platform user → viewer_id via Redis cache (5min TTL) and injects viewer's `name_color` into `UserInfo.Color` when the platform provides none
-**Plans**: TBD (target ~4 plans)
+**Plans**: 5 plans
+
+Plans:
+- [ ] 28-01-PLAN.md — DB migration 035 + ViewerClaims extension + ViewerIdentityRepository + Wave 0 test scaffolds
+- [ ] 28-02-PLAN.md — Auth-service POST exchange handlers + PATCH cosmetics endpoint + route wiring
+- [ ] 28-03-PLAN.md — message-processor ViewerBadgeEnricher (Redis cache + DB fallback + wiring)
+- [ ] 28-04-PLAN.md — Browser extension: manifest, popup (OAuth + color picker), content script (platform detection + EXT-04)
+- [ ] 28-05-PLAN.md — Frontend /settings/viewer page stub
 
 ### Phase 29: Viewer Color & Gradient Editor
 **Goal**: All-authenticated-users can set a fallback name color; premium users get a full gradient editor with multi-stop color picker and live preview
