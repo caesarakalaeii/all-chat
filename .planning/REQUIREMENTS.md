@@ -13,9 +13,9 @@
 - [ ] **VID-01**: Viewer can set a fallback name color (hex) as a global preference when their platform provides no color
 - [ ] **VID-02**: Viewer's fallback color is applied in all overlays where the platform sends no `color` field (YouTube, Kick, TikTok default)
 - [ ] **VID-03**: Viewer's color preference persists server-side and survives extension reinstall
-- [ ] **VID-04**: Viewer can link one or more platform identities (Twitch, YouTube, Kick) to their All-Chat account to enable cross-platform cosmetics
-- [ ] **VID-05**: Viewer can authenticate from the browser extension popup (sign in with Twitch or YouTube)
-- [ ] **VID-06**: Extension popup shows current auth status and signed-in display name / avatar
+- [x] **VID-04**: Viewer can link one or more platform identities (Twitch, YouTube, Kick) to their All-Chat account to enable cross-platform cosmetics
+- [x] **VID-05**: Viewer can authenticate from the browser extension popup (sign in with Twitch or YouTube)
+- [x] **VID-06**: Extension popup shows current auth status and signed-in display name / avatar
 
 ### Premium Cosmetics
 
@@ -103,9 +103,9 @@
 | VID-01 | Phase 27 | Pending |
 | VID-02 | Phase 27 | Pending |
 | VID-03 | Phase 27 | Pending |
-| VID-04 | Phase 27 | Pending |
-| VID-05 | Phase 28 | Pending |
-| VID-06 | Phase 28 | Pending |
+| VID-04 | Phase 27 | Complete |
+| VID-05 | Phase 28 | Complete |
+| VID-06 | Phase 28 | Complete |
 | PREM-01 | Phase 29 | Pending |
 | PREM-02 | Phase 29 | Pending |
 | PREM-03 | Phase 30 | Pending |

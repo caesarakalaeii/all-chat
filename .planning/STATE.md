@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
 status: Defining requirements
-stopped_at: Phase 28 context gathered
-last_updated: "2026-03-14T14:15:52.329Z"
+stopped_at: Completed 28-viewer-identity-foundation-auth-and-platform-linking-01-PLAN.md
+last_updated: "2026-03-14T15:50:58.977Z"
 last_activity: 2026-03-14 — Milestone v1.4 started
 progress:
   total_phases: 21
   completed_phases: 10
-  total_plans: 47
-  completed_plans: 47
+  total_plans: 52
+  completed_plans: 48
 ---
 
 # Project State
@@ -43,6 +43,7 @@ Last activity: 2026-03-14 — Milestone v1.4 started
 | Phase 27-innertube-enrichment-badges-emotes P01 | 367 | 5 tasks | 9 files |
 | Phase 27-innertube-enrichment-badges-emotes P02 | 4 | 3 tasks | 5 files |
 | Phase 27-innertube-enrichment-badges-emotes P03 | 12 | 3 tasks | 1 files |
+| Phase 28-viewer-identity-foundation-auth-and-platform-linking P01 | 4 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -55,6 +56,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 27-innertube-enrichment-badges-emotes]: EmoteEntry struct duplicated in innertube and yt_emote_cache packages to avoid cross-package coupling
 - [Phase 27-innertube-enrichment-badges-emotes]: badge_member_url presence triggers member badge without is_sponsor; is_sponsor remains as SVG fallback for old youtube-listener compatibility
 - [Phase 27-innertube-enrichment-badges-emotes]: ytEmoteEntry struct duplicated in normalizer to avoid cross-service module coupling
+- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Wave 0 stubs: added HandleTwitchExchange/HandleYouTubeExchange/HandleKickExchange returning 501 so RED tests compile without architecture change — plan 02 replaces with real logic
+- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Integration test build tag: repository tests use //go:build integration + t.Skip on DB unavailable so unit CI stays green while RED scaffolds exist
+- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Cosmetics row pre-created in GetOrCreateViewerByPlatform (ON CONFLICT DO NOTHING) to simplify GetViewerCosmetics callers
 
 ### Pending Todos
 
@@ -66,8 +70,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T14:15:52.325Z
-Stopped at: Phase 28 context gathered
-Resume file: .planning/phases/28-viewer-identity-foundation-auth-and-platform-linking/28-CONTEXT.md
+Last session: 2026-03-14T15:50:58.973Z
+Stopped at: Completed 28-viewer-identity-foundation-auth-and-platform-linking-01-PLAN.md
+Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to start execution after roadmap is created
