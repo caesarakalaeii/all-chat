@@ -539,6 +539,31 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		Status:    "connected",
 	})
 
+	// Watch for self-termination (e.g. stream went offline detected inside poller).
+	// When the poller exits on its own, clean up maps and release leadership so
+	// syncSources can trigger rediscovery.
+	go func() {
+		<-p.IsDone()
+
+		m.mu.Lock()
+		// Only clean up if this specific poller is still the registered one
+		// (it might have already been replaced by stopPollerAfterDebounce).
+		if current, exists := m.pollers[videoID]; exists && current == p {
+			delete(m.pollers, videoID)
+			delete(m.activeStreams, videoID)
+			m.logger.Info("Poller self-terminated, cleaned up state",
+				zap.String("channel_id", channelID),
+				zap.String("video_id", videoID),
+				zap.String("final_state", string(p.GetState())),
+			)
+		}
+		m.mu.Unlock()
+
+		if m.leader != nil {
+			m.leader.Release(videoID)
+		}
+	}()
+
 	// Mark source active in the DB so the cleanup job doesn't deactivate it.
 	// Fire-and-forget: log on failure but don't block poller startup.
 	if m.smClient != nil {

@@ -61,9 +61,10 @@ type Poller struct {
 	zeroActionThreshold  int
 
 	// Graceful shutdown
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+	doneChan chan struct{} // closed when pollingLoop exits
 }
 
 // PollerOptions configures the Poller
@@ -153,6 +154,7 @@ func NewPoller(
 		metrics:             opts.Metrics,
 		refresher:           opts.Refresher,
 		zeroActionThreshold: zeroActionThreshold,
+		doneChan:            make(chan struct{}),
 	}
 }
 
@@ -223,8 +225,15 @@ func (p *Poller) SetMessageCallback(callback MessageCallback) {
 	p.messageCallback = callback
 }
 
+// IsDone returns a channel that is closed when the polling loop has exited.
+// The manager uses this to detect pollers that self-terminated (e.g. stream offline).
+func (p *Poller) IsDone() <-chan struct{} {
+	return p.doneChan
+}
+
 // pollingLoop is the main polling loop (runs in background goroutine)
 func (p *Poller) pollingLoop() {
+	defer close(p.doneChan)
 	defer p.wg.Done()
 
 	p.logger.Debug("Polling loop started")
