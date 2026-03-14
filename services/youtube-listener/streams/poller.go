@@ -55,6 +55,10 @@ type Poller struct {
 	consecutiveErrors int
 	backoffDuration   time.Duration
 	maxBackoff        time.Duration
+
+	// Connection miss tolerance (prevents stopping on transient Redis key loss)
+	consecutiveConnMisses int
+	maxConnMisses         int
 }
 
 // NewPoller creates a new stream poller
@@ -66,6 +70,13 @@ func NewPoller(
 	tokenStore *TokenStore,
 	statusPublisher *status.Publisher,
 ) *Poller {
+	maxConnMisses := 3
+	if envVal := os.Getenv("YOUTUBE_CONN_CHECK_MISS_THRESHOLD"); envVal != "" {
+		if n, err := strconv.Atoi(envVal); err == nil && n > 0 {
+			maxConnMisses = n
+		}
+	}
+
 	return &Poller{
 		stream:            stream,
 		apiClient:         apiClient,
@@ -79,6 +90,7 @@ func NewPoller(
 		maxBackoff:        5 * time.Minute, // Maximum backoff of 5 minutes (only for errors)
 		backoffDuration:   0,               // Start with no backoff
 		consecutiveErrors: 0,
+		maxConnMisses:     maxConnMisses,
 	}
 }
 
@@ -144,16 +156,30 @@ func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 			}
 		}
 
-		if err != nil {
-			p.logger.Warn("Connection check failed, assuming disconnected",
-				zap.String("channel_id", p.channelID),
-				zap.String("stream_id", p.stream.StreamID),
-				zap.Error(err),
-			)
-			return false, fmt.Errorf("connection check failed: %w", err)
-		}
+		if err != nil || !connected {
+			p.consecutiveConnMisses++
 
-		if !connected {
+			if p.consecutiveConnMisses < p.maxConnMisses {
+				p.logger.Warn("Connection check miss, waiting for confirmation before stopping",
+					zap.String("channel_id", p.channelID),
+					zap.String("stream_id", p.stream.StreamID),
+					zap.Int("consecutive_misses", p.consecutiveConnMisses),
+					zap.Int("threshold", p.maxConnMisses),
+					zap.Error(err),
+				)
+				return true, nil
+			}
+
+			if err != nil {
+				p.logger.Warn("Connection check failed consistently, stopping poller",
+					zap.String("channel_id", p.channelID),
+					zap.String("stream_id", p.stream.StreamID),
+					zap.Int("consecutive_misses", p.consecutiveConnMisses),
+					zap.Error(err),
+				)
+				return false, fmt.Errorf("connection check failed: %w", err)
+			}
+
 			// METRICS: Track poller stopped by disconnect and quota saved
 			if p.ytMetrics != nil {
 				p.ytMetrics.PollerStoppedByDisconnect.WithLabelValues(p.stream.ChannelID).Inc()
@@ -166,6 +192,15 @@ func (p *Poller) shouldPoll(ctx context.Context) (bool, error) {
 				zap.String("channel_id", p.stream.ChannelID),
 			)
 			return false, fmt.Errorf("overlay disconnected")
+		}
+
+		// Reset miss counter on successful check
+		if p.consecutiveConnMisses > 0 {
+			p.logger.Info("Connection restored after transient miss(es)",
+				zap.String("channel_id", p.channelID),
+				zap.Int("previous_misses", p.consecutiveConnMisses),
+			)
+			p.consecutiveConnMisses = 0
 		}
 	}
 
