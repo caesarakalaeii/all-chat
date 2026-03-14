@@ -2,8 +2,8 @@
 phase: 28
 slug: viewer-identity-foundation-auth-and-platform-linking
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-03-14
 ---
 
@@ -40,13 +40,13 @@ created: 2026-03-14
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
 | 28-01-01 | 01 | 1 | VID-03, VID-04 | unit | `go test ./repository/... -run TestViewerIdentityCreate` | ❌ W0 | ⬜ pending |
 | 28-01-02 | 01 | 1 | VID-05, VID-06 | unit | `go test ./handlers/... -run TestViewerJWTClaims` | ❌ W0 | ⬜ pending |
-| 28-02-01 | 02 | 1 | VID-05 | unit | `go test ./handlers/... -run TestTwitchExchange` | ❌ W0 | ⬜ pending |
-| 28-02-02 | 02 | 1 | VID-03 | unit | `go test ./handlers/... -run TestPatchCosmetics` | ❌ W0 | ⬜ pending |
-| 28-03-01 | 03 | 2 | EXT-01 | manual | N/A — browser extension UI | manual-only | ⬜ pending |
-| 28-03-02 | 03 | 2 | EXT-02 | manual | N/A — browser extension interaction | manual-only | ⬜ pending |
-| 28-03-03 | 03 | 2 | EXT-03 | manual | N/A — browser extension interaction | manual-only | ⬜ pending |
-| 28-04-01 | 04 | 2 | EXT-04 | manual | N/A — overlay DOM inspection | manual-only | ⬜ pending |
-| 28-04-02 | 04 | 2 | VID-04 | unit | `go test ./enricher/... -run TestViewerBadgeEnricher` | ❌ W0 | ⬜ pending |
+| 28-02-01 | 02 | 2 | VID-05 | unit | `go test ./handlers/... -run TestTwitchExchange` | ❌ W0 | ⬜ pending |
+| 28-02-02 | 02 | 2 | VID-03 | unit | `go test ./handlers/... -run TestPatchCosmetics` | ❌ W0 | ⬜ pending |
+| 28-03-01 | 03 | 2 | VID-04 | unit | `go test ./enricher/... -run TestViewerBadgeEnricher` | ❌ W0 | ⬜ pending |
+| 28-03-02 | 03 | 2 | VID-04 | unit | `go test ./enricher/... -run TestViewerBadgeEnricher` | ❌ W0 | ⬜ pending |
+| 28-04-01 | 04 | 3 | EXT-01, EXT-02, EXT-03 | manual | N/A — browser extension UI | manual-only | ⬜ pending |
+| 28-04-02 | 04 | 3 | EXT-04 | manual | N/A — overlay DOM inspection with live chat | manual-only | ⬜ pending |
+| 28-04-03 | 04 | 3 | VID-05, VID-06 | manual | N/A — browser extension interaction | manual-only | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -54,10 +54,12 @@ created: 2026-03-14
 
 ## Wave 0 Requirements
 
-- [ ] `services/auth-service/handlers/viewer_cosmetics_test.go` — stubs for VID-03 PATCH handler
-- [ ] `services/auth-service/repository/viewer_identity_test.go` — stubs for VID-04 viewer_platform_identities create/lookup
-- [ ] `services/auth-service/handlers/viewer_exchange_test.go` — stubs for VID-05 POST code-exchange (Twitch + YouTube + Kick)
-- [ ] `services/message-processor/enricher/viewer_badge_enricher_test.go` — stubs for ViewerBadgeEnricher Redis cache hit, miss, null sentinel, color injection
+Wave 0 test scaffolds are created by plan 01 Task 2 (repository and handler exchange tests) and plan 02 Task 2 (cosmetics handler tests). These RED scaffolds compile from wave 1 and are made green by plan 02.
+
+- [ ] `services/auth-service/handlers/viewer_cosmetics_test.go` — stubs for VID-03 PATCH handler (created by plan 02 Task 2)
+- [ ] `services/auth-service/repository/viewer_identity_test.go` — stubs for VID-04 viewer_platform_identities create/lookup (created by plan 01 Task 2)
+- [ ] `services/auth-service/handlers/viewer_exchange_test.go` — stubs for VID-05 POST code-exchange (Twitch + YouTube + Kick) (created by plan 01 Task 2)
+- [ ] `services/message-processor/enricher/viewer_badge_enricher_test.go` — stubs for ViewerBadgeEnricher Redis cache hit, miss, null sentinel, color injection (created by plan 03 Task 1)
 
 ---
 
@@ -74,11 +76,11 @@ created: 2026-03-14
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (plans 01 Task 2 and 02 Task 2 create scaffolds)
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
