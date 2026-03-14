@@ -1,12 +1,42 @@
 package normalizer
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/caesar/all-chat/services/message-processor/classifier"
 	"github.com/caesar/all-chat/services/message-processor/models"
 )
+
+// ytEmoteEntry mirrors yt_emote_cache.EmoteEntry for JSON decoding.
+// Duplicated here to avoid coupling services via shared module.
+type ytEmoteEntry struct {
+	Code string `json:"code"`
+	URL  string `json:"url"`
+	ID   string `json:"id"`
+}
+
+// findAllPositions returns all [start, end] byte positions of substr in s.
+func findAllPositions(s, substr string) [][]int {
+	if substr == "" {
+		return nil
+	}
+	var positions [][]int
+	offset := 0
+	for {
+		idx := strings.Index(s[offset:], substr)
+		if idx == -1 {
+			break
+		}
+		start := offset + idx
+		end := start + len(substr)
+		positions = append(positions, []int{start, end})
+		offset = end
+	}
+	return positions
+}
 
 // YouTubeNormalizer normalizes YouTube raw messages to unified format
 type YouTubeNormalizer struct{}
@@ -39,7 +69,7 @@ func (n *YouTubeNormalizer) Normalize(raw *models.RawChatMessage, overlayID stri
 		User:        userInfo,
 		Message: models.MessageInfo{
 			Text:   raw.Text,
-			Emotes: []models.Emote{}, // Will be enriched with third-party emotes
+			Emotes: n.extractYTEmotes(raw),
 		},
 		Timestamp: raw.Timestamp,
 		Metadata:  n.extractMetadata(raw),
@@ -117,6 +147,30 @@ func (n *YouTubeNormalizer) extractBadges(tags map[string]string) []models.Badge
 	}
 
 	return badges
+}
+
+// extractYTEmotes parses the emote_data tag from an InnerTube message into Emote entries.
+// Returns empty slice when tag is absent, empty, or invalid JSON.
+func (n *YouTubeNormalizer) extractYTEmotes(raw *models.RawChatMessage) []models.Emote {
+	emoteDataJSON, ok := raw.Tags["emote_data"]
+	if !ok || emoteDataJSON == "" {
+		return []models.Emote{}
+	}
+	var entries []ytEmoteEntry
+	if err := json.Unmarshal([]byte(emoteDataJSON), &entries); err != nil {
+		// Invalid JSON from tag — graceful degradation, no error propagated
+		return []models.Emote{}
+	}
+	emotes := make([]models.Emote, 0, len(entries))
+	for _, e := range entries {
+		emotes = append(emotes, models.Emote{
+			Code:      e.Code,
+			Provider:  "youtube",
+			URL:       e.URL,
+			Positions: findAllPositions(raw.Text, e.Code),
+		})
+	}
+	return emotes
 }
 
 // extractMetadata extracts additional metadata from tags
