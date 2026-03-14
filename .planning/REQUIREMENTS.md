@@ -1,154 +1,144 @@
-# Requirements: All-Chat
+# Requirements: All-Chat v1.4
 
-**Defined:** 2026-03-09
-**Core Value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
+**Defined:** 2026-03-14
+**Milestone:** v1.4 Viewer Identity & YouTube Enrichment
+**Core Value:** Viewers can personalise how their name appears across all overlays; YouTube chat is enriched with real membership badges and inline emotes from InnerTube.
 
-## v1.3 Requirements
+---
 
-Requirements for Frontend Redesign milestone. Each maps to roadmap phases.
+## v1.4 Requirements
 
-### Design System Foundation
+### Viewer Identity (all users)
 
-- [x] **FOUND-01**: Design token system established with Tailwind v4 @theme directive (colors, spacing, typography, shadows)
-- [x] **FOUND-02**: Three-layer token hierarchy implemented (base → semantic → component)
-- [x] **FOUND-03**: Static platform color mapping object created (no dynamic class construction)
-- [x] **FOUND-04**: Overlay CSS stability contract documented (events.css classes as public API)
-- [x] **FOUND-05**: Tailwind v4 gradient codemod executed (bg-gradient-to-* → bg-linear-to-*)
-- [x] **FOUND-06**: CSS cascade layers defined (@layer base, design-system, marketplace-themes, user-overrides)
+- [ ] **VID-01**: Viewer can set a fallback name color (hex) as a global preference when their platform provides no color
+- [ ] **VID-02**: Viewer's fallback color is applied in all overlays where the platform sends no `color` field (YouTube, Kick, TikTok default)
+- [ ] **VID-03**: Viewer's color preference persists server-side and survives extension reinstall
+- [ ] **VID-04**: Viewer can link one or more platform identities (Twitch, YouTube, Kick) to their All-Chat account to enable cross-platform cosmetics
+- [ ] **VID-05**: Viewer can authenticate from the browser extension popup (sign in with Twitch or YouTube)
+- [ ] **VID-06**: Extension popup shows current auth status and signed-in display name / avatar
 
-### Component Library
+### Premium Cosmetics
 
-- [x] **COMP-01**: shadcn/ui core primitives installed (Button, Card, Input, Badge, Dialog, Toast)
-- [x] **COMP-02**: Components customized with design tokens (slate scale, not zinc)
-- [x] **COMP-03**: Component variant patterns implemented with CVA
-- [x] **COMP-04**: Smooth micro-interactions added (hover scale + shadow transitions)
-- [x] **COMP-05**: Gradient CTAs implemented (purple → blue gradient for primary actions)
-- [x] **COMP-06**: Platform-color coded components created (badges, borders, status indicators)
-- [x] **COMP-07**: Animated loading states and skeletons implemented
-- [x] **COMP-08**: Performance budget established (<16ms message render, <100KB bundle increase)
-- [x] **COMP-09**: All !important removed from events.css (replaced with cascade layers)
+- [ ] **PREM-01**: Premium viewer can set a multi-stop gradient (2–4 colors, angle) as their name color
+- [ ] **PREM-02**: Gradient name renders in overlay using CSS `background-clip: text` — no JavaScript required
+- [ ] **PREM-03**: Premium viewer can select an avatar frame (decorative PNG ring overlaid on their avatar)
+- [ ] **PREM-04**: Premium viewer can select an avatar flair (small corner icon pinned to bottom-right of avatar)
+- [ ] **PREM-05**: Frame and flair catalog is managed by admins (add/remove items, mark as premium-only)
 
-### Page Redesigns
+### Platform Badges (All-Chat)
 
-- [x] **PAGE-01**: Landing page redesigned (hero with gradient CTAs, platform login buttons, feature cards)
-- [x] **PAGE-02**: Dashboard redesigned (overlay grid with hover states, create button, empty states)
-- [x] **PAGE-03**: Overlay editor redesigned (source management cards with platform-color coding)
-- [x] **PAGE-04**: Overlay preview maintained (existing CSS unchanged for marketplace compatibility)
-- [x] **PAGE-05**: Settings page redesigned (account management, profile display)
-- [x] **PAGE-06**: Admin pages redesigned (users, overlays, sources, viewers - visual consistency)
-- [x] **PAGE-07**: Responsive layouts validated across breakpoints (375px, 768px, 1920px)
-- [x] **PAGE-08**: Accessibility compliance achieved (WCAG 2.1 AA, keyboard navigation, focus states)
-- [x] **PAGE-09**: Loading states implemented for all data fetching scenarios
-- [x] **PAGE-10**: Empty states implemented with illustrations and clear CTAs
+- [ ] **BADGE-01**: Admin users automatically receive an All-Chat logo badge shown in overlays
+- [ ] **BADGE-02**: Premium users automatically receive a gem/star icon badge shown in overlays
+- [ ] **BADGE-03**: All-Chat badges are prepended to the badge list (rendered before platform badges)
+- [ ] **BADGE-04**: Badge icon images are served from CDN and specified per badge type in a badge definitions catalog
 
-### Split-view Live Preview
+### YouTube Badges via InnerTube
 
-- [x] **FEAT-01**: Split-view layout implemented (editor configuration + live preview side-by-side)
-- [x] **FEAT-02**: Preview updates in real-time as configuration changes
-- [x] **FEAT-03**: Responsive split-view (stacks vertically on mobile, side-by-side on desktop)
-- [x] **FEAT-04**: Preview window maintains overlay CSS (marketplace theme compatibility)
+- [ ] **YTBADGE-01**: YouTube membership badge renders with the real channel-specific image from InnerTube (`customThumbnail.thumbnails[1].URL` at 32px)
+- [ ] **YTBADGE-02**: YouTube membership badge tooltip carries the tier name (e.g. "3-Month Member") from InnerTube `tooltip` field
+- [ ] **YTBADGE-03**: YouTube moderator, owner, and verified badges continue to render (static SVG fallback acceptable — no image URL provided by InnerTube for system badges)
+- [ ] **YTBADGE-04**: Backward compatibility maintained: old youtube-listener (quota-based) still functions without real badge images
 
-### Enforcement & Migration
+### YouTube Emotes via InnerTube
 
-- [ ] **ENFORCE-01**: ESLint plugin for Tailwind installed and configured
-- [ ] **ENFORCE-02**: Prettier plugin for Tailwind installed with class ordering
-- [ ] **ENFORCE-03**: ESLint rules defined (no gray-*, focus-visible required, no string concat in className)
-- [ ] **ENFORCE-04**: Pre-commit hooks configured with Husky (lint + format on changed files)
-- [ ] **ENFORCE-05**: CI/CD quality gates implemented (ESLint errors block PRs, bundle size >20KB requires justification)
-- [ ] **ENFORCE-06**: Visual regression test suite implemented (screenshot diffing all pages)
-- [ ] **ENFORCE-07**: Marketplace CSS migration guide created (class name changes documented)
-- [ ] **ENFORCE-08**: Performance monitoring configured (message render time <16ms at 20 msg/sec)
-- [ ] **ENFORCE-09**: Bundle size analysis baseline established (webpack-bundle-analyzer)
-- [ ] **ENFORCE-10**: Accessibility testing automated (axe-core in CI/CD)
+- [ ] **YTEMOTE-01**: YouTube channel membership emotes (`isCustomEmoji: true`, `emojiId` starts with `UC`) render as inline images in overlays and extension
+- [ ] **YTEMOTE-02**: YouTube global emotes (`isCustomEmoji: true`, `emojiId` starts with `_`) render as inline images
+- [ ] **YTEMOTE-03**: Standard Unicode emoji in YouTube messages continue to render as text characters (no regression)
+- [ ] **YTEMOTE-04**: Emote images served at 48px (the larger InnerTube thumbnail) for retina clarity
+- [ ] **YTEMOTE-05**: Emotes accumulate in a per-channel Redis cache keyed by `emojiId` (since no catalog endpoint exists)
 
-## v2 Requirements
+### Extension UX
 
-Deferred to future release. Tracked but not in current roadmap.
+- [ ] **EXT-01**: Extension popup shows an inline name color picker (`<input type="color">`) with reset-to-default option
+- [ ] **EXT-02**: Color change saves immediately to server and local storage (no explicit Save button)
+- [ ] **EXT-03**: Extension popup contains an "Open Settings" button that navigates to `/settings/viewer` on the website
+- [ ] **EXT-04**: Extension content scripts apply viewer's `name_color` or `name_gradient` to their own messages rendered in the overlay
 
-### Advanced Interactions
+### Website Cosmetics Editor
 
-- **ADV-01**: Drag-and-drop source reordering (intuitive priority management)
-- **ADV-02**: Command palette (Cmd+K for quick navigation and actions)
-- **ADV-03**: Inline click-to-edit patterns (reduce friction for overlay editing)
-- **ADV-04**: Keyboard shortcuts for common actions (create overlay, preview, settings)
+- [ ] **WEB-01**: Settings page has a "Viewer Identity" section for all authenticated users (color picker, platform linking)
+- [ ] **WEB-02**: Premium users see a "Premium Cosmetics" section with gradient editor (multi-stop, angle control)
+- [ ] **WEB-03**: Premium users can browse and select avatar frame from the frame catalog
+- [ ] **WEB-04**: Premium users can browse and select avatar flair from the flair catalog
+- [ ] **WEB-05**: Live preview of name color, gradient, avatar frame, and flair displayed on the settings page
 
-### Theming Enhancements
+---
 
-- **THEME-01**: Light theme toggle (doubles maintenance burden, defer until dark theme perfected)
-- **THEME-02**: Theme presets (2-3 curated color schemes)
-- **THEME-03**: Component marketplace (user-contributed themes beyond overlay marketplace)
+## v2 Requirements (Deferred)
 
-### Animation Enhancements
+### Animated Gradients
 
-- **ANIM-01**: Advanced animations library integration (Framer Motion vs Tailwind Motion)
-- **ANIM-02**: Complex transitions for modal/dialog appearances
-- **ANIM-03**: Parallax effects for marketing pages
+- **PREM-ADV-01**: Optional shimmer animation on gradient name (CSS `background-position` keyframe)
+- **PREM-ADV-02**: Viewer can control animation speed (slow/medium/fast)
+
+### Streamer-Granted Cosmetics
+
+- **STR-01**: Streamer can assign VIP flair to specific viewers from their dashboard
+- **STR-02**: Streamer can assign a custom per-channel badge image to specific viewers
+
+### Additional Platform Identity Linking
+
+- **VID-TK-01**: Viewer can link TikTok identity (deferred — unofficial library, user ID stability unclear)
+- **VID-KK-01**: Viewer can link Kick identity
+
+---
 
 ## Out of Scope
 
-Explicitly excluded. Documented to prevent scope creep.
-
 | Feature | Reason |
 |---------|--------|
-| Light theme in v1.3 | Streaming tools default to dark (StreamElements, OBS). Perfecting single dark theme is higher value than offering mediocre light theme. |
-| Real-time collaboration editing | High complexity, unclear user need. Chat aggregation is not a collaborative tool. |
-| Per-component animation customization | Creates jarring UX inconsistencies. Design system requires consistent motion patterns. |
-| Customizable everything (colors, fonts, sizes) | Destroys design consistency. User customization limited to overlay marketplace themes only. |
-| Heavy animations (GSAP, complex parallax) | Performance issues in OBS browser sources. Micro-interactions sufficient for professional feel. |
-| Mobile app (iOS/Android) | Web-first approach. Mobile web responsive design covers mobile use cases. |
-| Backend service redesigns | v1.3 scope is frontend only. Backend services (Go microservices) remain unchanged. |
+| Streamer controls over viewer cosmetics (disable all cosmetics on overlay) | Adds overlay config complexity; viewers own their own appearance |
+| Per-overlay cosmetic overrides | Global preference is the simpler UX; per-overlay is v2 at earliest |
+| Animated avatar frames (video/GIF) | Storage and performance cost; static PNG frames sufficient for v1.4 |
+| YouTube emote catalog pre-fetch endpoint | No such endpoint exists in InnerTube; accumulate from live chat only |
+| Name color on other viewers' messages (streamer-side tinting) | Cosmetics apply only to the viewer's own messages |
+| Custom frame upload by viewers | Moderation overhead; admin-curated catalog only for v1.4 |
+
+---
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | Phase 23 | Complete |
-| FOUND-02 | Phase 23 | Complete |
-| FOUND-03 | Phase 23 | Complete |
-| FOUND-04 | Phase 23 | Complete |
-| FOUND-05 | Phase 23 | Complete |
-| FOUND-06 | Phase 23 | Complete |
-| COMP-01 | Phase 24 | Complete |
-| COMP-02 | Phase 24 | Complete |
-| COMP-03 | Phase 24 | Complete |
-| COMP-04 | Phase 24 | Complete |
-| COMP-05 | Phase 24 | Complete |
-| COMP-06 | Phase 24 | Complete |
-| COMP-07 | Phase 24 | Complete |
-| COMP-08 | Phase 24 | Complete |
-| COMP-09 | Phase 24 | Complete |
-| PAGE-01 | Phase 25 | Complete |
-| PAGE-02 | Phase 25 | Complete |
-| PAGE-03 | Phase 25 | Complete |
-| PAGE-04 | Phase 25 | Complete |
-| PAGE-05 | Phase 25 | Complete |
-| PAGE-06 | Phase 25 | Complete |
-| PAGE-07 | Phase 25 | Complete |
-| PAGE-08 | Phase 25 | Complete |
-| PAGE-09 | Phase 25 | Complete |
-| PAGE-10 | Phase 25 | Complete |
-| FEAT-01 | Phase 25 | Complete |
-| FEAT-02 | Phase 25 | Complete |
-| FEAT-03 | Phase 25 | Complete |
-| FEAT-04 | Phase 25 | Complete |
-| ENFORCE-01 | Phase 26 | Pending |
-| ENFORCE-02 | Phase 26 | Pending |
-| ENFORCE-03 | Phase 26 | Pending |
-| ENFORCE-04 | Phase 26 | Pending |
-| ENFORCE-05 | Phase 26 | Pending |
-| ENFORCE-06 | Phase 26 | Pending |
-| ENFORCE-07 | Phase 26 | Pending |
-| ENFORCE-08 | Phase 26 | Pending |
-| ENFORCE-09 | Phase 26 | Pending |
-| ENFORCE-10 | Phase 26 | Pending |
+| VID-01 | Phase 27 | Pending |
+| VID-02 | Phase 27 | Pending |
+| VID-03 | Phase 27 | Pending |
+| VID-04 | Phase 27 | Pending |
+| VID-05 | Phase 28 | Pending |
+| VID-06 | Phase 28 | Pending |
+| PREM-01 | Phase 29 | Pending |
+| PREM-02 | Phase 29 | Pending |
+| PREM-03 | Phase 30 | Pending |
+| PREM-04 | Phase 30 | Pending |
+| PREM-05 | Phase 30 | Pending |
+| BADGE-01 | Phase 31 | Pending |
+| BADGE-02 | Phase 31 | Pending |
+| BADGE-03 | Phase 31 | Pending |
+| BADGE-04 | Phase 31 | Pending |
+| YTBADGE-01 | Phase 27 | Pending |
+| YTBADGE-02 | Phase 27 | Pending |
+| YTBADGE-03 | Phase 27 | Pending |
+| YTBADGE-04 | Phase 27 | Pending |
+| YTEMOTE-01 | Phase 27 | Pending |
+| YTEMOTE-02 | Phase 27 | Pending |
+| YTEMOTE-03 | Phase 27 | Pending |
+| YTEMOTE-04 | Phase 27 | Pending |
+| YTEMOTE-05 | Phase 27 | Pending |
+| EXT-01 | Phase 28 | Pending |
+| EXT-02 | Phase 28 | Pending |
+| EXT-03 | Phase 28 | Pending |
+| EXT-04 | Phase 28 | Pending |
+| WEB-01 | Phase 29 | Pending |
+| WEB-02 | Phase 29 | Pending |
+| WEB-03 | Phase 30 | Pending |
+| WEB-04 | Phase 30 | Pending |
+| WEB-05 | Phase 29 | Pending |
 
 **Coverage:**
-- v1.3 requirements: 39 total
-- Mapped to phases: 39
+- v1.4 requirements: 33 total
+- Mapped to phases: 33
 - Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-03-09*
-*Last updated: 2026-03-09 after roadmap creation (phase numbers updated 23-26)*
+*Requirements defined: 2026-03-14*
+*Last updated: 2026-03-14 after initial v1.4 milestone definition*

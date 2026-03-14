@@ -5,7 +5,8 @@
 - ✅ **v1.0 Message Deletion Support** — Phases 1-3 (partial, shipped 2026-02-18)
 - ✅ **v1.1 Listener Load Balancing** — Phases 4-10 (shipped 2026-02-21)
 - ✅ **v1.2 InnerTube YouTube Listener** — Phases 11-22 (shipped 2026-03-06)
-- 🚧 **v1.3 Frontend Redesign** — Phases 23-26 (in progress)
+- ✅ **v1.3 Overlay Sharing + Frontend Redesign** — Phases 23-26 (shipped 2026-03-11)
+- 🚧 **v1.4 Viewer Identity & YouTube Enrichment** — Phases 27-31 (in progress)
 
 ## Phases
 
@@ -205,20 +206,100 @@ Plans:
 Plans:
 - [ ] 26-01: TBD
 
+---
+
+## 🚧 v1.4 Viewer Identity & YouTube Enrichment
+
+**Milestone Goal:** Give viewers global cosmetic control over how their name appears in overlays, unlock premium identity features (gradients, avatar frames/flairs, badges), and enrich YouTube chat with InnerTube-sourced real membership badge images and inline emotes.
+
+### Phase 27: InnerTube Enrichment — Badges & Emotes
+**Goal**: Extract real membership badge image URLs and inline emote images from InnerTube chat payloads and deliver them through the existing pipeline to overlays
+**Depends on**: Nothing (surgical changes to existing InnerTube service + message-processor)
+**Services affected**: `youtube-listener-innertube`, `message-processor`
+**Requirements**: YTBADGE-01, YTBADGE-02, YTBADGE-03, YTBADGE-04, YTEMOTE-01, YTEMOTE-02, YTEMOTE-03, YTEMOTE-04, YTEMOTE-05
+**Success Criteria** (what must be TRUE):
+  1. `extractBadges()` in innertube parser returns badge image URLs for membership tiers (from `customThumbnail.thumbnails[1].URL`) and passes them via `tags["badge_member_url"]` and `tags["badge_member_tooltip"]`
+  2. `EmojiData` struct gains `IsCustomEmoji bool` field; `extractMessageText()` emits `Emote{}` entries for custom emojis alongside the text placeholder
+  3. YouTube normalizer in message-processor reads `tags["badge_member_url"]` to populate real `Badge.IconURL` (SVG fallback preserved for old listener and system badges)
+  4. Emote cache per channel stored in Redis keyed by `yt:emote:{channel_id}:{emoji_id}` (TTL 24h), populated as messages arrive
+  5. Unicode emoji (non-custom) continue to render as text — no regression
+  6. Old quota-based youtube-listener unaffected (backward compatible)
+**Plans**: TBD (target ~3 plans)
+
+### Phase 28: Viewer Identity Foundation — Auth & Platform Linking
+**Goal**: Establish viewer account model, OAuth flow from browser extension, and platform identity linking so All-Chat knows which platform user corresponds to which viewer
+**Depends on**: Nothing (new feature, no phase dependency)
+**Services affected**: `auth-service`, `api-gateway`, browser extension (`all-chat-extension`)
+**Requirements**: VID-03, VID-04, VID-05, VID-06, EXT-01, EXT-02, EXT-03, EXT-04
+**Success Criteria** (what must be TRUE):
+  1. `viewer_platform_identities` table exists: maps (platform, platform_user_id) → viewer_id
+  2. Extension popup shows auth status (signed-in display name + avatar) and sign-in buttons for Twitch and YouTube
+  3. OAuth sign-in from extension returns a viewer JWT stored in `chrome.storage.local`
+  4. Extension popup has inline `<input type="color">` picker; color change saves to server immediately via PATCH `/api/viewer/cosmetics`
+  5. Extension popup has "Open Settings" button navigating to `/settings/viewer` on the website
+  6. `viewer_cosmetics` table exists: stores `name_color (VARCHAR(7))` per viewer
+  7. Message processor `ViewerBadgeEnricher` resolves platform user → viewer_id via Redis cache (5min TTL) and injects viewer's `name_color` into `UserInfo.Color` when the platform provides none
+**Plans**: TBD (target ~4 plans)
+
+### Phase 29: Viewer Color & Gradient Editor
+**Goal**: All-authenticated-users can set a fallback name color; premium users get a full gradient editor with multi-stop color picker and live preview
+**Depends on**: Phase 28
+**Services affected**: `api-gateway`, `overlay-manager`, frontend (`/settings/viewer`), overlay render component
+**Requirements**: VID-01, VID-02, PREM-01, PREM-02, WEB-01, WEB-02, WEB-05
+**Success Criteria** (what must be TRUE):
+  1. `/settings/viewer` page exists with "Viewer Identity" section visible to all authenticated users
+  2. Color picker (hex input + color swatch) persists `name_color` server-side; overlay applies it when platform provides no color
+  3. Premium users see gradient editor: 2–4 color stops, angle slider (0–360°), live preview of gradient on sample username
+  4. `name_gradient` stored as JSONB `{"type":"linear","colors":["#...","#..."],"angle":90}` in `viewer_cosmetics`
+  5. Overlay chat message component renders gradient name using `bg-clip-text text-transparent` with inline `backgroundImage` style — no JS animation in v1.4
+  6. Non-premium users cannot access gradient controls (gated by `viewer.is_premium` flag)
+**Plans**: TBD (target ~3 plans)
+
+### Phase 30: Avatar Frame & Flair System
+**Goal**: Premium viewers can select an avatar frame (decorative ring) and flair (corner icon) from an admin-curated catalog; changes render live in overlays
+**Depends on**: Phase 29
+**Services affected**: `api-gateway`, `overlay-manager`, frontend (`/settings/viewer`), overlay avatar component, admin pages
+**Requirements**: PREM-03, PREM-04, PREM-05, WEB-03, WEB-04
+**Success Criteria** (what must be TRUE):
+  1. `cosmetic_frames` and `cosmetic_flairs` catalog tables exist; admin page allows adding/removing entries and marking as premium-only
+  2. Premium users can browse frame and flair catalogs in `/settings/viewer` with live preview
+  3. Avatar component renders: base avatar (circle) + frame PNG (centered, 1.4× size, pointer-events-none) + flair PNG (absolute bottom-right, 0.4× avatar size)
+  4. `avatar_frame_id` and `avatar_flair_id` persisted in `viewer_cosmetics`; message processor injects `avatar_frame_url` and `avatar_flair_url` into `UserInfo`
+  5. Non-premium viewers see catalog with items locked (visible but not selectable)
+**Plans**: TBD (target ~4 plans)
+
+### Phase 31: All-Chat Platform Badges
+**Goal**: Admin and premium viewers receive All-Chat-specific badges that appear in all overlays, prepended before platform badges
+**Depends on**: Phase 28 (requires viewer_id resolution in message processor)
+**Services affected**: `message-processor`, `api-gateway`, frontend overlay component, admin pages
+**Requirements**: BADGE-01, BADGE-02, BADGE-03, BADGE-04
+**Success Criteria** (what must be TRUE):
+  1. `badge_definitions` catalog table seeded with two entries: `"allchat"` (logo icon) and `"premium"` (gem/star icon), with 1× and 2× CDN URLs
+  2. `viewer_badges` table assigns badge types to viewer IDs; system auto-assigns `"premium"` badge to viewers with `is_premium=true` and `"allchat"` badge to admins
+  3. `ViewerBadgeEnricher` in message-processor prepends All-Chat badges to `UserInfo.Badges` for resolved viewers
+  4. Badge renders in overlay and extension at 18px height (matching `h-[1em]` pattern) with `title` attribute tooltip
+  5. Admin can manually grant or revoke badges from the admin users page
+**Plans**: TBD (target ~3 plans)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 23 → 24 → 25 → 26
+Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 (28 can start in parallel with 27)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1-3 | v1.0 | 11/11 | Complete | 2026-02-18 |
 | 4-10 | v1.1 | 21/21 | Complete | 2026-02-21 |
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
-| 23. Design Token System & Foundation | 3/3 | Complete    | 2026-03-10 | - |
-| 24. Component Library Setup | 5/5 | Complete   | 2026-03-11 | - |
-| 25. Page Migration & Split-view Preview | 8/8 | Complete   | 2026-03-11 | - |
-| 26. Enforcement & Quality Gates | v1.3 | 0/? | Not started | - |
+| 23 Design Token System & Foundation | v1.3 | 3/3 | Complete | 2026-03-10 |
+| 24 Component Library Setup | v1.3 | 5/5 | Complete | 2026-03-11 |
+| 25 Page Migration & Split-view Preview | v1.3 | 8/8 | Complete | 2026-03-11 |
+| 26 Enforcement & Quality Gates | v1.3 | 0/? | Not started | - |
+| 27 InnerTube Enrichment — Badges & Emotes | v1.4 | 0/? | Not started | - |
+| 28 Viewer Identity Foundation — Auth & Platform Linking | v1.4 | 0/? | Not started | - |
+| 29 Viewer Color & Gradient Editor | v1.4 | 0/? | Not started | - |
+| 30 Avatar Frame & Flair System | v1.4 | 0/? | Not started | - |
+| 31 All-Chat Platform Badges | v1.4 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-03-09 after v1.3 roadmap creation*
+*Last updated: 2026-03-14 after v1.4 milestone roadmap*
