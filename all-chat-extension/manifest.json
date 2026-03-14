@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "All-Chat",
+  "version": "1.0.0",
+  "description": "Personalize your chat identity across all streaming platforms",
+  "permissions": [
+    "identity",
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://chat.allchat.live/*",
+    "http://localhost:8080/*"
+  ],
+  "background": {
+    "service_worker": "background/service_worker.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.twitch.tv/*",
+        "https://www.youtube.com/*",
+        "https://kick.com/*",
+        "https://chat.allchat.live/*",
+        "http://localhost:3000/*"
+      ],
+      "js": ["content/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
