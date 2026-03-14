@@ -118,7 +118,7 @@ function NumberInput({ label, description, value, min, max, step, onChange }: {
         step={step ?? 1}
         value={value}
         onChange={(e) => onChange(step && step < 1 ? parseFloat(e.target.value) : parseInt(e.target.value))}
-        className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch w-28"
+        className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch w-28"
       />
     </div>
   );
@@ -212,10 +212,10 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'px-4 py-3 text-sm font-medium shrink-0 border-b-2 transition-colors focus-visible:outline-none',
+                    'shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none',
                     activeTab === tab.id
-                      ? `${TAB_COLOR[tab.id]} border-current`
-                      : 'text-text-sub border-transparent hover:text-text',
+                      ? cn(TAB_COLOR[tab.id], 'border-current')
+                      : 'border-transparent text-text-sub hover:text-text',
                   )}
                 >
                   {tab.label}

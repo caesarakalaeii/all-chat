@@ -188,7 +188,7 @@ export default function SourcesPage() {
               placeholder="Search by channel name or ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full px-3 py-2 border border-border rounded-lg bg-surface-2 text-text placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
             />
           </div>
           <div>
@@ -196,7 +196,7 @@ export default function SourcesPage() {
             <select
               value={platformFilter}
               onChange={(e) => setPlatformFilter(e.target.value)}
-              className="block w-full px-3 py-2 border border-border rounded-lg bg-surface-2 text-text focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
             >
               <option value="all">All Platforms</option>
               <option value="twitch">Twitch</option>
@@ -210,7 +210,7 @@ export default function SourcesPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="block w-full px-3 py-2 border border-border rounded-lg bg-surface-2 text-text focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>

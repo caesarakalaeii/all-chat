@@ -12,6 +12,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import clsx from 'clsx';
 import type { PlatformStatus } from '@/lib/types/message';
 
 interface PlatformStatusIndicatorsProps {
@@ -99,7 +100,7 @@ export default function PlatformStatusIndicators({ activePlatforms, platformStat
   }, [platformStatuses]);
 
   return (
-    <div className="platform-status-indicators fixed top-4 right-4 flex gap-2 bg-gray-900/80 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg z-50">
+    <div className="platform-status-indicators fixed right-4 top-4 z-50 flex gap-2 rounded-lg bg-slate-900/80 px-3 py-2 shadow-lg backdrop-blur-sm">
       {platforms.map((platform) => {
         const isActive = activePlatforms.has(platform.name);
         const status = platformStatuses.get(platform.name);
@@ -107,7 +108,7 @@ export default function PlatformStatusIndicators({ activePlatforms, platformStat
         const Icon = platform.icon;
 
         // Determine status class
-        let statusClass = isActive ? 'bg-white/10' : 'opacity-40 bg-gray-800/50';
+        let statusClass = isActive ? 'bg-white/10' : 'opacity-40 bg-slate-800/50';
         let tooltipText = `${platform.label} ${isActive ? '(Active)' : '(Inactive)'}`;
 
         if (status) {
@@ -126,7 +127,7 @@ export default function PlatformStatusIndicators({ activePlatforms, platformStat
               statusClass = 'bg-red-500/20 opacity-100 border border-red-500/50';
               tooltipText = `${platform.label} - Auth Required`;
             } else {
-              statusClass = 'opacity-20 bg-gray-800/50';
+              statusClass = 'opacity-20 bg-slate-800/50';
               tooltipText = status.error_message
                 ? `${platform.label} - ${status.error_message}`
                 : `${platform.label} - Offline`;
@@ -140,7 +141,12 @@ export default function PlatformStatusIndicators({ activePlatforms, platformStat
         return (
           <div
             key={platform.name}
-            className={`platform-indicator platform-indicator-${platform.name} relative flex items-center justify-center w-8 h-8 rounded-md transition-all duration-300 ${statusClass}`}
+            className={clsx(
+              'platform-indicator',
+              'relative flex h-8 w-8 items-center justify-center rounded-md transition-all duration-300',
+              statusClass
+            )}
+            data-platform={platform.name}
             title={tooltipText}
           >
             <Icon />
