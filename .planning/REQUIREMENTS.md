@@ -54,12 +54,12 @@ Requirements for Frontend Redesign milestone. Each maps to roadmap phases.
 - [x] **ENFORCE-02**: Prettier plugin for Tailwind installed with class ordering
 - [x] **ENFORCE-03**: ESLint rules defined (no gray-*, focus-visible required, no string concat in className)
 - [x] **ENFORCE-04**: Pre-commit hooks configured with Husky (lint + format on changed files)
-- [ ] **ENFORCE-05**: CI/CD quality gates implemented (ESLint errors block PRs, bundle size >20KB requires justification)
-- [ ] **ENFORCE-06**: Visual regression test suite implemented (screenshot diffing all pages)
-- [ ] **ENFORCE-07**: Marketplace CSS migration guide created (class name changes documented)
+- [x] **ENFORCE-05**: CI/CD quality gates implemented (ESLint errors block PRs, bundle size >20KB requires justification)
+- [x] **ENFORCE-06**: Visual regression test suite implemented (screenshot diffing all pages)
+- [x] **ENFORCE-07**: Marketplace CSS migration guide created (class name changes documented)
 - [x] **ENFORCE-08**: Performance monitoring configured (message render time <16ms at 20 msg/sec)
 - [x] **ENFORCE-09**: Bundle size analysis baseline established (webpack-bundle-analyzer)
-- [ ] **ENFORCE-10**: Accessibility testing automated (axe-core in CI/CD)
+- [x] **ENFORCE-10**: Accessibility testing automated (axe-core in CI/CD)
 
 ## v2 Requirements
 
@@ -137,12 +137,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENFORCE-02 | Phase 26 | Complete |
 | ENFORCE-03 | Phase 26 | Complete |
 | ENFORCE-04 | Phase 26 | Complete |
-| ENFORCE-05 | Phase 26 | Pending |
-| ENFORCE-06 | Phase 26 | Pending |
-| ENFORCE-07 | Phase 26 | Pending |
+| ENFORCE-05 | Phase 26 | Complete |
+| ENFORCE-06 | Phase 26 | Complete |
+| ENFORCE-07 | Phase 26 | Complete |
 | ENFORCE-08 | Phase 26 | Complete |
 | ENFORCE-09 | Phase 26 | Complete |
-| ENFORCE-10 | Phase 26 | Pending |
+| ENFORCE-10 | Phase 26 | Complete |
 
 **Coverage:**
 - v1.3 requirements: 39 total

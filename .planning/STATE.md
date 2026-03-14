@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Frontend Redesign
 status: executing
-stopped_at: Completed 26-02-PLAN.md (Husky pre-commit hooks)
-last_updated: "2026-03-14T12:10:14.432Z"
+stopped_at: "Completed 26-04-PLAN.md tasks 1-2; checkpoint:human-verify pending (Chromatic token setup)"
+last_updated: "2026-03-14T12:13:37.272Z"
 last_activity: 2026-03-10 — 23-03 events.css cascade layer migration complete, human visual verification approved
 progress:
   total_phases: 16
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 48
-  completed_plans: 47
+  completed_plans: 48
   percent: 97
 ---
 
@@ -73,6 +73,7 @@ v1.3 is frontend-focused (React, Tailwind, design system) vs backend microservic
 | Phase 26-enforcement-quality-gates P01 | 31 | 2 tasks | 145 files |
 | Phase 26-enforcement-quality-gates P03 | 7 | 2 tasks | 4 files |
 | Phase 26-enforcement-quality-gates P02 | 5 | 2 tasks | 4 files |
+| Phase 26-enforcement-quality-gates P04 | 1 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,9 @@ Recent decisions affecting v1.3 work:
 - [Phase 26-enforcement-quality-gates]: Import expect/within from 'storybook/test' not '@storybook/test' — storybook v10 package provides this export; @storybook/test is v8-only
 - [Phase 26-enforcement-quality-gates]: Performance regression stories use raw DOM createElement + getBoundingClientRect() to measure layout time; a11y disabled to avoid timing overhead
 - [Phase 26-02]: Husky v9 new-style hook (no deprecated sourcing) used to avoid v10 breakage; git core.hookspath=frontend/.husky scopes hooks to frontend subdirectory
+- [Phase 26-04]: NEXT_DISABLE_TURBOPACK: true in CI build step for hashicorp/nextjs-bundle-analysis compatibility with Next.js 16 Turbopack
+- [Phase 26-04]: exitZeroOnChanges: false on Chromatic — PRs blocked until visual changes reviewed (ENFORCE-06)
+- [Phase 26-04]: nextBundleAnalysis budget: 20480 bytes (20KB) — red CI status on PRs exceeding threshold (ENFORCE-05)
 
 ### Pending Todos
 
@@ -145,8 +149,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T12:10:14.430Z
-Stopped at: Completed 26-02-PLAN.md (Husky pre-commit hooks)
+Last session: 2026-03-14T12:13:37.271Z
+Stopped at: Completed 26-04-PLAN.md tasks 1-2; checkpoint:human-verify pending (Chromatic token setup)
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 24` to plan Phase 24 (Component Library Setup & Customization)
