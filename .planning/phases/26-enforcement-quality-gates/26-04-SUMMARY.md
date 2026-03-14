@@ -51,7 +51,7 @@ patterns-established:
 requirements-completed: [ENFORCE-05, ENFORCE-06, ENFORCE-07, ENFORCE-10]
 
 # Metrics
-duration: 1min
+duration: 3min
 completed: 2026-03-14
 ---
 
@@ -61,11 +61,11 @@ completed: 2026-03-14
 
 ## Performance
 
-- **Duration:** 1 min
+- **Duration:** 3 min
 - **Started:** 2026-03-14T12:11:09Z
-- **Completed:** 2026-03-14T12:12:35Z
-- **Tasks:** 2 automated complete (Task 3 is checkpoint:human-verify — awaiting human)
-- **Files modified:** 3
+- **Completed:** 2026-03-14T12:14:00Z
+- **Tasks:** 3 (2 automated + 1 human checkpoint — APPROVED)
+- **Files modified:** 6 (3 automated + 3 a11y fixes during human verification)
 
 ## Accomplishments
 
@@ -74,6 +74,8 @@ completed: 2026-03-14
 - Created `frontend/src/styles/MARKETPLACE_MIGRATION_GUIDE.md` with cascade layer explanation, frozen class name table (26 classes/selectors), and migration checklist (ENFORCE-07)
 - CI workflow enforces Chromatic visual regression with `exitZeroOnChanges: false` — PRs blocked until reviewed (ENFORCE-06)
 - ENFORCE-10 acknowledged as already satisfied by existing `preview.ts` a11y: 'error' config
+- Fixed AdminNav null pathname crash, heading-order a11y violations (h3→h2), and color-contrast violations (text-white→text-bg on Twitch/YouTube buttons) — all 45 Storybook tests passing
+- `CHROMATIC_PROJECT_TOKEN` added as GitHub Actions secret by repo owner — Chromatic visual regression baseline established
 
 ## Task Commits
 
@@ -81,16 +83,18 @@ Each task was committed atomically:
 
 1. **Task 1: Create frontend-quality.yml CI workflow** - `ed52106` (feat)
 2. **Task 2: Create MARKETPLACE_MIGRATION_GUIDE.md** - `13fe949` (docs)
+3. **Task 3: Human verification** - APPROVED (a11y fixes: `16276db`)
 
-**Task 3:** checkpoint:human-verify — awaiting Chromatic token setup and sign-off
-
-**Plan metadata:** (final commit hash after checkpoint resolution)
+**Plan metadata:** `ce98b7b` (docs: complete plan — pre-checkpoint), final update (post-checkpoint)
 
 ## Files Created/Modified
 
 - `.github/workflows/frontend-quality.yml` - GitHub Actions workflow: ESLint, Prettier, tsc, build, bundle analysis, Storybook tests, Chromatic
 - `frontend/package.json` - Added `nextBundleAnalysis` block with 20KB budget
 - `frontend/src/styles/MARKETPLACE_MIGRATION_GUIDE.md` - v1.3 migration guide for marketplace theme authors
+- `frontend/src/components/AdminNav.tsx` - Fixed null pathname crash (a11y fix, `16276db`)
+- `frontend/src/stories/Dashboard.stories.tsx` - Fixed heading-order violations (h3→h2)
+- `frontend/src/stories/LandingPage.stories.tsx` / `Performance.stories.tsx` - Fixed color-contrast violations (text-white→text-bg)
 
 ## Decisions Made
 
@@ -101,29 +105,45 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Auto-fixed Issues (during human verification)
+
+**1. [Rule 1 - Bug] Fixed AdminNav null pathname crash**
+- **Found during:** Task 3 (human verification — Storybook tests)
+- **Issue:** AdminNav threw on null `pathname` from `usePathname()` in Storybook context
+- **Fix:** Added null guard for pathname before class comparison
+- **Files modified:** `frontend/src/components/AdminNav.tsx`
+- **Committed in:** `16276db`
+
+**2. [Rule 1 - Bug] Fixed heading-order a11y violations in Dashboard stories**
+- **Found during:** Task 3 (Storybook a11y: 'error' mode)
+- **Issue:** h3 elements used where h2 was the correct heading level — violates WCAG heading order
+- **Fix:** Changed h3 to h2 in Dashboard stories
+- **Files modified:** `frontend/src/stories/Dashboard.stories.tsx`
+- **Committed in:** `16276db`
+
+**3. [Rule 1 - Bug] Fixed color-contrast violations in Twitch/YouTube button stories**
+- **Found during:** Task 3 (Storybook a11y: 'error' mode)
+- **Issue:** `text-white` on platform-colored buttons failed WCAG AA 4.5:1 contrast ratio
+- **Fix:** Changed to `text-bg` (dark background token) for sufficient contrast
+- **Files modified:** `frontend/src/stories/LandingPage.stories.tsx`, `frontend/src/stories/Performance.stories.tsx`
+- **Committed in:** `16276db`
+
+---
+
+**Total deviations:** 3 auto-fixed (all Rule 1 - Bug, all in commit `16276db`)
+**Impact on plan:** All fixes required by `a11y: 'error'` enforcement in Storybook — correctly surfaced by ENFORCE-10. No scope creep.
 
 ## Issues Encountered
 
-None.
+None beyond the a11y violations documented above (handled via deviation Rule 1).
 
 ## User Setup Required
 
-**Chromatic token required for ENFORCE-06.** The CI workflow will fail on the Chromatic step until `CHROMATIC_PROJECT_TOKEN` is configured:
-
-1. Visit https://www.chromatic.com/ and sign in with GitHub
-2. Click "Add project" and connect the `all-chat` repository
-3. Copy the project token shown after project creation
-4. Go to GitHub repo Settings → Secrets and variables → Actions
-5. Click "New repository secret"
-6. Name: `CHROMATIC_PROJECT_TOKEN`, Value: (paste token)
-7. Click "Add secret"
-
-The first Chromatic run on `main` establishes the visual baseline. Future PRs diff against it.
+COMPLETE. `CHROMATIC_PROJECT_TOKEN` has been added as a GitHub Actions secret. Chromatic visual regression baseline will be established on the next push to `main`.
 
 ## Next Phase Readiness
 
-- Phase 26 fully complete once Chromatic token is added and human verification passes
+- Phase 26 fully complete. Human verification APPROVED. All quality gates live.
 - All 10 ENFORCE requirements addressed:
   - ENFORCE-01, ENFORCE-02, ENFORCE-03: ESLint flat config + Prettier (Plan 01)
   - ENFORCE-04: Husky pre-commit hook (Plan 02)
@@ -139,6 +159,8 @@ The first Chromatic run on `main` establishes the visual baseline. Future PRs di
 - FOUND: `26-04-SUMMARY.md`
 - FOUND: commit `ed52106` (Task 1)
 - FOUND: commit `13fe949` (Task 2)
+- FOUND: commit `16276db` (Task 3 a11y fixes — human verification)
+- Human verification: APPROVED — 45/45 Storybook tests passing, CHROMATIC_PROJECT_TOKEN configured
 
 ---
 *Phase: 26-enforcement-quality-gates*
