@@ -8,17 +8,21 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
-## Current Milestone: v1.3 Frontend Redesign
+## Current Milestone: v1.4 Viewer Identity & YouTube Enrichment
 
-**Goal:** Transform the frontend from generic Tailwind defaults to a professional, streaming-focused design system with comprehensive component library and enforceable style rules.
+**Goal:** Give viewers global cosmetic control over how their name appears in overlays, unlock premium identity features (gradients, avatar frames/flairs, badges), and enrich YouTube chat with InnerTube-sourced badges and emotes.
 
 **Target features:**
-- Complete design system (StreamElements Modern aesthetic)
-- shadcn/ui component library integration
-- All pages redesigned (landing, dashboard, editor, settings, admin)
-- Full design token system with theming support
-- LLM-enforceable style guidelines
-- Overlay marketplace CSS migration guide
+- Fallback name color picker (all users, global preference)
+- Gradient name color editor (premium + admin)
+- Avatar frame (animated border ring, premium + admin)
+- Avatar flair (corner icon, premium + admin)
+- Admin badge (all-chat logo) and premium badge (gem/star icon)
+- YouTube badges via InnerTube (membership, moderator, verified)
+- YouTube membership emotes rendered inline
+- Global YouTube emotes (source TBD via research)
+- Extension: quick color picker in popup
+- Website: full cosmetics editor (gradient builder, frame/flair picker)
 
 ## Requirements
 
@@ -70,33 +74,30 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 
 ### Active
 
-<!-- Current scope: v1.3 Frontend Redesign -->
+<!-- Current scope: v1.4 Viewer Identity & YouTube Enrichment -->
 
-**Design System Foundation:**
-- [ ] Design tokens (colors, spacing, typography, shadows)
-- [ ] Tailwind configuration aligned with design system
-- [ ] CSS variable system for theming
-- [ ] shadcn/ui component library integration and customization
+**Viewer Cosmetics (all users):**
+- [ ] Fallback name color picker saved as global user preference
+- [ ] Color applied in overlay when platform provides no name color
 
-**Component Library:**
-- [ ] Core UI primitives (Button, Card, Input, Badge, Modal, etc.)
-- [ ] Replace existing components with shadcn/ui versions
-- [ ] Preserve overlay-specific components (event styling, animations)
-- [ ] Component documentation and usage guidelines
+**Premium Cosmetics:**
+- [ ] Gradient name color editor (multi-stop, premium + admin)
+- [ ] Avatar frame (animated border ring, premium + admin)
+- [ ] Avatar flair (small corner icon on avatar, premium + admin)
 
-**Page Redesigns:**
-- [ ] Landing page (hero, features, platform login)
-- [ ] Dashboard (overlay grid, create/edit actions)
-- [ ] Overlay editor (source management, configuration)
-- [ ] Overlay preview (live chat view)
-- [ ] Settings page (account management)
-- [ ] Admin pages (users, overlays, sources, viewers)
+**Platform Badges:**
+- [ ] Admin badge (all-chat logo) shown in overlay
+- [ ] Premium badge (gem/star icon) shown in overlay
+- [ ] YouTube membership badges via InnerTube
+- [ ] YouTube moderator and verified badges via InnerTube
 
-**Enforcement & Migration:**
-- [ ] ESLint rules for design system compliance
-- [ ] Pre-commit hooks for style validation
-- [ ] Marketplace CSS migration guide (class name changes)
-- [ ] LLM agent guidelines and examples
+**YouTube Emotes:**
+- [ ] Membership emotes parsed from InnerTube payload, rendered inline
+- [ ] Global YouTube emotes rendered inline (source TBD via research)
+
+**Extension UX:**
+- [ ] Quick name color picker accessible from extension popup
+- [ ] Full cosmetics editor (gradient, frame, flair) on website settings
 
 ### Out of Scope
 
@@ -179,4 +180,4 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 | **Source-manager leadership coordination** | Reuse existing leader election, single source of truth for active streams | ✓ Good — Async discovery, Redis caching, graceful lifecycle management |
 
 ---
-*Last updated: 2026-03-06 after v1.2 milestone completion*
+*Last updated: 2026-03-14 after v1.4 milestone start*
