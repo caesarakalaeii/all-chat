@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
 status: Defining requirements
-stopped_at: Completed 28-viewer-identity-foundation-auth-and-platform-linking-03-PLAN.md
-last_updated: "2026-03-14T16:07:53.749Z"
+stopped_at: Completed 28-viewer-identity-foundation-auth-and-platform-linking-05-PLAN.md
+last_updated: "2026-03-14T16:11:00.156Z"
 last_activity: 2026-03-14 — Milestone v1.4 started
 progress:
   total_phases: 21
   completed_phases: 10
   total_plans: 52
-  completed_plans: 50
+  completed_plans: 51
 ---
 
 # Project State
@@ -46,6 +46,7 @@ Last activity: 2026-03-14 — Milestone v1.4 started
 | Phase 28-viewer-identity-foundation-auth-and-platform-linking P01 | 4 | 2 tasks | 6 files |
 | Phase 28-viewer-identity-foundation-auth-and-platform-linking P02 | 25 | 2 tasks | 8 files |
 | Phase 28-viewer-identity-foundation-auth-and-platform-linking P03 | 5 | 2 tasks | 3 files |
+| Phase 28-viewer-identity-foundation-auth-and-platform-linking P05 | 2 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Pre-Phase-28 tokens with empty viewer_id return 401 on cosmetics PATCH without fallback DB lookup to avoid unnecessary query cost during migration window
 - [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: JWT middleware updated to set viewer_id, display_name, avatar_url in gin context for viewer tokens (backward-compatible addition)
 - [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: viewerDB interface + pgxPoolAdapter wraps pgxpool.Pool for testability; null sentinel prevents DB stampede for non-registered viewers
+- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Used localStorage key viewer_jwt_token (matching viewer-auth-store.ts) not viewer_jwt as plan spec suggested
+- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Three-state undefined/null/claims hydration guard prevents flash of wrong UI state on /settings/viewer
 
 ### Pending Todos
 
@@ -76,8 +79,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T16:07:53.745Z
-Stopped at: Completed 28-viewer-identity-foundation-auth-and-platform-linking-03-PLAN.md
+Last session: 2026-03-14T16:11:00.152Z
+Stopped at: Completed 28-viewer-identity-foundation-auth-and-platform-linking-05-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to start execution after roadmap is created
