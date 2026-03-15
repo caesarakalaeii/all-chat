@@ -8,7 +8,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react'
 import { expect as jestExpect } from 'vitest'
 import * as matchers from '@testing-library/jest-dom/matchers'
 jestExpect.extend(matchers)
@@ -24,6 +24,9 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/AppNav', () => ({
   AppNav: () => <nav data-testid="app-nav" />,
 }))
+
+// Import the page under test
+import ViewerSettingsPage from '../page'
 
 // Mock fetch globally
 const mockFetch = vi.fn().mockResolvedValue({
@@ -47,10 +50,15 @@ function buildFakeJWT(claims: Record<string, unknown>): string {
   return `${header}.${payload}.${signature}`
 }
 
-// Dynamically import page component so we can reset module state between tests
-async function importPage() {
-  const mod = await import('../page')
-  return mod.default
+// Stub localStorage per-test
+function stubLocalStorage(initialValues: Record<string, string> = {}) {
+  const store: Record<string, string> = { ...initialValues }
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => { store[key] = value },
+    removeItem: (key: string) => { delete store[key] },
+    clear: () => { Object.keys(store).forEach(k => delete store[k]) },
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -61,17 +69,10 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
-    // Clear localStorage before each test using vitest's mock
-    vi.stubGlobal('localStorage', {
-      _store: {} as Record<string, string>,
-      getItem(key: string) { return this._store[key] ?? null },
-      setItem(key: string, value: string) { this._store[key] = value },
-      removeItem(key: string) { delete this._store[key] },
-      clear() { this._store = {} },
-    })
   })
 
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
   })
 
@@ -82,14 +83,13 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       is_viewer: true,
       platform: 'twitch',
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     // Wait for hydration (three-state guard: undefined → claims)
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getAllByText('Viewer Identity').length).toBeGreaterThan(0)
     })
 
     expect(screen.getByRole('button', { name: /Solid Color/i })).toBeInTheDocument()
@@ -101,13 +101,12 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       display_name: 'StreamFan',
       platform: 'twitch',
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Solid Color/i })).toBeInTheDocument()
     })
 
     // Solid Color tab should have active styling (border-b-2 border-primary)
@@ -122,13 +121,12 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       platform: 'twitch',
       is_premium: false,
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     const gradientTab = screen.getByRole('button', { name: /Gradient/i })
@@ -142,13 +140,12 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       platform: 'twitch',
       is_premium: true,
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     const gradientTab = screen.getByRole('button', { name: /Gradient/i })
@@ -162,13 +159,12 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       platform: 'twitch',
       is_premium: false,
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     // "Premium" badge should be visible near the gradient tab
@@ -181,19 +177,18 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       display_name: 'StreamFan',
       platform: 'twitch',
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Solid Color/i })).toBeInTheDocument()
     })
 
     // The preview section should contain the display name
-    // (there may be multiple instances: profile + preview)
-    const previewInstances = screen.getAllByText('StreamFan')
-    expect(previewInstances.length).toBeGreaterThanOrEqual(1)
+    // (multiple instances: profile + preview)
+    const instances = screen.getAllByText('StreamFan')
+    expect(instances.length).toBeGreaterThanOrEqual(1)
   })
 
   it('solid color autosaves on native color input change', async () => {
@@ -202,25 +197,18 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       display_name: 'StreamFan',
       platform: 'twitch',
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Solid Color/i })).toBeInTheDocument()
     })
 
-    // Find the native color input (type="color")
-    const colorInput = screen
-      .getAllByRole('textbox')
-      .find(el => (el as HTMLInputElement).type === 'color') as HTMLInputElement | undefined
-
-    // Get color input by type attribute
-    const allInputs = document.querySelectorAll('input[type="color"]')
-    expect(allInputs.length).toBeGreaterThan(0)
-
-    const nativeColorInput = allInputs[0] as HTMLInputElement
+    // Find the native color input (type="color") — the first one in the solid color tab
+    const colorInputs = document.querySelectorAll('input[type="color"]')
+    expect(colorInputs.length).toBeGreaterThan(0)
+    const nativeColorInput = colorInputs[0] as HTMLInputElement
 
     await act(async () => {
       fireEvent.change(nativeColorInput, { target: { value: '#ff0000' } })
@@ -244,13 +232,12 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       platform: 'twitch',
       is_premium: true,
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     // Switch to gradient tab
@@ -269,13 +256,12 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       platform: 'twitch',
       is_premium: true,
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     // Switch to gradient tab
@@ -283,18 +269,18 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     fireEvent.click(gradientTab)
 
     await waitFor(() => {
-      expect(screen.getByText(/Add stop/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /\+ Add stop/i })).toBeInTheDocument()
     })
 
-    // Start with 2 stops, add 2 more to reach 4
-    const addStopBtn = screen.getByRole('button', { name: /Add stop/i })
+    // Start with 2 stops, add 2 more to reach max 4
+    const addStopBtn = screen.getByRole('button', { name: /\+ Add stop/i })
     expect(addStopBtn).not.toBeDisabled()
 
     fireEvent.click(addStopBtn) // 3 stops
     fireEvent.click(addStopBtn) // 4 stops
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Add stop/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /\+ Add stop/i })).toBeDisabled()
     })
   })
 
@@ -305,13 +291,12 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       platform: 'twitch',
       is_premium: true,
     })
-    localStorage.setItem('viewer_jwt_token', jwt)
+    stubLocalStorage({ viewer_jwt_token: jwt })
 
-    const ViewerSettingsPage = await importPage()
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Viewer Identity')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     // Switch to gradient tab
