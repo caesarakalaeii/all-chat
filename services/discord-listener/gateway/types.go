@@ -67,3 +67,28 @@ type GatewaySession struct {
 	ResumeURL string
 	Seq       int
 }
+
+// MessageCreateData is the payload for the MESSAGE_CREATE dispatch event
+type MessageCreateData struct {
+	ID        string         `json:"id"`
+	ChannelID string         `json:"channel_id"`
+	GuildID   string         `json:"guild_id"`
+	Content   string         `json:"content"`
+	Timestamp string         `json:"timestamp"`
+	Author    DiscordUser    `json:"author"`
+	Member    *DiscordMember `json:"member"`
+}
+
+// DiscordUser represents the author of a Discord message
+type DiscordUser struct {
+	ID         string `json:"id"`
+	Username   string `json:"username"`
+	GlobalName string `json:"global_name"`
+	Bot        bool   `json:"bot"`
+}
+
+// DiscordMember holds the guild-specific member data attached to a MESSAGE_CREATE event
+type DiscordMember struct {
+	Nick  *string  `json:"nick"`
+	Roles []string `json:"roles"`
+}
