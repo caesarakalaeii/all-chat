@@ -44,7 +44,7 @@ created: 2026-03-15
 | 27-01-04 | 01 | 0 | AUTH-03 | unit | `cd services/auth-service && go test ./handlers/... -run TestCheckBotPermissions -v` | ❌ W0 | ⬜ pending |
 | 27-01-05 | 01 | 0 | AUTH-03 | unit | `cd services/auth-service && go test ./handlers/... -run TestHandleDiscordConnect_MissingPerms -v` | ❌ W0 | ⬜ pending |
 | 27-01-06 | 01 | 0 | AUTH-04 | unit | `cd services/auth-service && go test ./handlers/... -run TestHandleDiscordDisconnect_APIFailure -v` | ❌ W0 | ⬜ pending |
-| 27-02-01 | 02 | 0 | AUTH-05 | unit | `cd services/discord-listener && go test ./gateway/... -run TestGatewayClient -v` | ❌ W0 | ⬜ pending |
+| 27-02-01 | 02 | 0 | AUTH-01 | unit | `cd services/discord-listener && go test ./gateway/... -run TestGatewayClient -v` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -64,7 +64,7 @@ created: 2026-03-15
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
 | Bot appears in Discord server after OAuth flow | AUTH-01 | Requires live Discord OAuth round-trip and real server | Click "Add to Server" in UI, complete OAuth, verify bot visible in Discord server member list |
-| MESSAGE_CONTENT intent is non-empty on READY | AUTH-05 | Requires live Gateway connection with real bot token | Start discord-listener, check startup logs for READY event; assert MESSAGE_CONTENT guild count > 0 |
+| MESSAGE_CONTENT intent is non-empty on READY | AUTH-01 | Requires live Gateway connection with real bot token | Start discord-listener, check startup logs for READY event; assert MESSAGE_CONTENT guild count > 0 |
 | Human-readable error shown for missing permissions | AUTH-03 | UI rendering of permission error text | Simulate missing VIEW_CHANNEL, verify error message names the missing permission clearly |
 
 ---
