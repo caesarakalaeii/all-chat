@@ -48,6 +48,7 @@ type UserInfo struct {
 	AvatarURL     string  `json:"avatar_url,omitempty"`
 	Badges        []Badge `json:"badges"`
 	Color         string  `json:"color,omitempty"`
+	NameGradient  string  `json:"name_gradient,omitempty"` // Phase 29: raw JSONB string e.g. {"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}
 	SourceBadges  []Badge `json:"source_badges,omitempty"`  // Badges from source channel (shared chat)
 	SourceUserID  string  `json:"source_user_id,omitempty"` // User ID in source channel (shared chat)
 }

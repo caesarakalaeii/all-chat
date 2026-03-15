@@ -67,6 +67,13 @@ export interface ChatMessage {
   event?: EventInfo; // Present for events, absent for regular chat
 }
 
+// Phase 29: NameGradient represents a CSS linear-gradient definition stored server-side.
+export interface NameGradient {
+  type: 'linear';
+  colors: string[];
+  angle: number;
+}
+
 export interface UserInfo {
   id: string;
   username: string;
@@ -74,6 +81,7 @@ export interface UserInfo {
   avatar_url?: string;
   badges: Badge[];
   color?: string;
+  name_gradient?: NameGradient; // Phase 29: premium gradient replaces color when set
   source_badges?: Badge[];  // Badges from source channel (shared chat)
   source_user_id?: string;  // User ID in source channel (shared chat)
 }

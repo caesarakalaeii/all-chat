@@ -14,21 +14,23 @@ import (
 )
 
 // fakeViewerDB is a test double for the DB pool, executing a callback per query.
+// Phase 29: callback now also returns nameGradient bytes.
 type fakeViewerDB struct {
-	queryFn func(platform, userID string) (viewerID string, nameColor *string, err error)
+	queryFn func(platform, userID string) (viewerID string, nameColor *string, nameGradient []byte, err error)
 }
 
 func (f *fakeViewerDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgxRowScanner {
 	platform := fmt.Sprint(args[0])
 	userID := fmt.Sprint(args[1])
-	vid, nc, err := f.queryFn(platform, userID)
-	return &fakeRow{queryResult{viewerID: vid, nameColor: nc, err: err}}
+	vid, nc, ng, err := f.queryFn(platform, userID)
+	return &fakeRow{queryResult{viewerID: vid, nameColor: nc, nameGradient: ng, err: err}}
 }
 
 type queryResult struct {
-	viewerID  string
-	nameColor *string
-	err       error
+	viewerID     string
+	nameColor    *string
+	nameGradient []byte
+	err          error
 }
 
 type fakeRow struct {
@@ -47,6 +49,12 @@ func (r *fakeRow) Scan(dest ...interface{}) error {
 	if len(dest) >= 2 {
 		if sp, ok := dest[1].(**string); ok {
 			*sp = r.result.nameColor
+		}
+	}
+	// Phase 29: third dest arg is *[]byte for name_gradient
+	if len(dest) >= 3 {
+		if bp, ok := dest[2].(*[]byte); ok {
+			*bp = r.result.nameGradient
 		}
 	}
 	return nil
@@ -75,12 +83,22 @@ func makeMsg(platform, userID, color string) *models.UnifiedChatMessage {
 	}
 }
 
+// noGradient is a convenience wrapper to build fakeViewerDB without gradient.
+func noGradientDB(queryFn func(platform, userID string) (string, *string, error)) *fakeViewerDB {
+	return &fakeViewerDB{
+		queryFn: func(platform, userID string) (string, *string, []byte, error) {
+			vid, nc, err := queryFn(platform, userID)
+			return vid, nc, nil, err
+		},
+	}
+}
+
 func TestViewerBadgeEnricher_CacheHit_WithColor(t *testing.T) {
 	mr := miniredis.RunT(t)
-	db := &fakeViewerDB{queryFn: func(_, _ string) (string, *string, error) {
+	db := noGradientDB(func(_, _ string) (string, *string, error) {
 		t.Error("DB should not be called on cache hit")
 		return "", nil, nil
-	}}
+	})
 	e := newTestEnricher(t, mr, db)
 
 	cacheKey := "viewer:identity:twitch:user123"
@@ -98,10 +116,10 @@ func TestViewerBadgeEnricher_CacheHit_WithColor(t *testing.T) {
 
 func TestViewerBadgeEnricher_CacheHit_NoColor(t *testing.T) {
 	mr := miniredis.RunT(t)
-	db := &fakeViewerDB{queryFn: func(_, _ string) (string, *string, error) {
+	db := noGradientDB(func(_, _ string) (string, *string, error) {
 		t.Error("DB should not be called on cache hit")
 		return "", nil, nil
-	}}
+	})
 	e := newTestEnricher(t, mr, db)
 
 	cacheKey := "viewer:identity:twitch:user456"
@@ -120,10 +138,10 @@ func TestViewerBadgeEnricher_CacheHit_NoColor(t *testing.T) {
 func TestViewerBadgeEnricher_NullSentinel(t *testing.T) {
 	mr := miniredis.RunT(t)
 	dbCalled := false
-	db := &fakeViewerDB{queryFn: func(_, _ string) (string, *string, error) {
+	db := noGradientDB(func(_, _ string) (string, *string, error) {
 		dbCalled = true
 		return "", nil, nil
-	}}
+	})
 	e := newTestEnricher(t, mr, db)
 
 	cacheKey := "viewer:identity:kick:user789"
@@ -143,9 +161,9 @@ func TestViewerBadgeEnricher_NullSentinel(t *testing.T) {
 
 func TestViewerBadgeEnricher_CacheMiss_ViewerFound(t *testing.T) {
 	mr := miniredis.RunT(t)
-	db := &fakeViewerDB{queryFn: func(platform, userID string) (string, *string, error) {
+	db := noGradientDB(func(platform, userID string) (string, *string, error) {
 		return "viewer-uuid", ptr("#aabbcc"), nil
-	}}
+	})
 	e := newTestEnricher(t, mr, db)
 
 	msg := makeMsg("youtube", "yt-user1", "")
@@ -179,9 +197,9 @@ func TestViewerBadgeEnricher_CacheMiss_ViewerFound(t *testing.T) {
 
 func TestViewerBadgeEnricher_CacheMiss_ViewerNotFound(t *testing.T) {
 	mr := miniredis.RunT(t)
-	db := &fakeViewerDB{queryFn: func(platform, userID string) (string, *string, error) {
+	db := noGradientDB(func(platform, userID string) (string, *string, error) {
 		return "", nil, pgxErrNoRows
-	}}
+	})
 	e := newTestEnricher(t, mr, db)
 
 	msg := makeMsg("tiktok", "tt-user1", "green")
@@ -206,10 +224,10 @@ func TestViewerBadgeEnricher_CacheMiss_ViewerNotFound(t *testing.T) {
 func TestViewerBadgeEnricher_EmptyUserID(t *testing.T) {
 	mr := miniredis.RunT(t)
 	dbCalled := false
-	db := &fakeViewerDB{queryFn: func(_, _ string) (string, *string, error) {
+	db := noGradientDB(func(_, _ string) (string, *string, error) {
 		dbCalled = true
 		return "", nil, nil
-	}}
+	})
 	e := newTestEnricher(t, mr, db)
 	// Connect a real redis client but ensure no keys are touched
 	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -235,9 +253,9 @@ func TestViewerBadgeEnricher_EmptyUserID(t *testing.T) {
 func TestViewerBadgeEnricher_PlatformPreservesColor(t *testing.T) {
 	mr := miniredis.RunT(t)
 	storedColor := "#deadbe"
-	db := &fakeViewerDB{queryFn: func(platform, userID string) (string, *string, error) {
+	db := noGradientDB(func(platform, userID string) (string, *string, error) {
 		return "viewer-uuid", ptr(storedColor), nil
-	}}
+	})
 	e := newTestEnricher(t, mr, db)
 
 	msg := makeMsg("twitch", "user-color-test", "original")
@@ -246,5 +264,73 @@ func TestViewerBadgeEnricher_PlatformPreservesColor(t *testing.T) {
 	}
 	if msg.User.Color != storedColor {
 		t.Errorf("expected exact stored color %q, got %q", storedColor, msg.User.Color)
+	}
+}
+
+// Phase 29: gradient propagation test
+
+func TestEnrich_PropagatesNameGradient(t *testing.T) {
+	mr := miniredis.RunT(t)
+	gradientJSON := []byte(`{"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}`)
+	db := &fakeViewerDB{
+		queryFn: func(platform, userID string) (string, *string, []byte, error) {
+			return "viewer-uuid-grad", nil, gradientJSON, nil
+		},
+	}
+	e := newTestEnricher(t, mr, db)
+
+	msg := makeMsg("twitch", "gradient-user", "")
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if msg.User.NameGradient != string(gradientJSON) {
+		t.Errorf("expected NameGradient %q, got %q", string(gradientJSON), msg.User.NameGradient)
+	}
+	// Color should remain unset since no nameColor was returned
+	if msg.User.Color != "" {
+		t.Errorf("expected empty color when only gradient is set, got %q", msg.User.Color)
+	}
+
+	// Verify gradient is also cached correctly
+	cacheKey := "viewer:identity:twitch:gradient-user"
+	cached, err := mr.Get(cacheKey)
+	if err != nil {
+		t.Fatalf("expected cache entry, got error: %v", err)
+	}
+	var identity viewerIdentityCache
+	if jsonErr := json.Unmarshal([]byte(cached), &identity); jsonErr != nil {
+		t.Fatalf("failed to parse cached value: %v", jsonErr)
+	}
+	if string(identity.NameGradient) != string(gradientJSON) {
+		t.Errorf("cached gradient %q != original %q", string(identity.NameGradient), string(gradientJSON))
+	}
+}
+
+func TestEnrich_PropagatesNameGradient_FromCache(t *testing.T) {
+	mr := miniredis.RunT(t)
+	gradientJSON := []byte(`{"type":"linear","colors":["#aabbcc","#112233"],"angle":45}`)
+
+	db := noGradientDB(func(_, _ string) (string, *string, error) {
+		t.Error("DB should not be called on cache hit")
+		return "", nil, nil
+	})
+	e := newTestEnricher(t, mr, db)
+
+	// Pre-populate cache with gradient
+	cacheKey := "viewer:identity:kick:cached-grad-user"
+	val, _ := json.Marshal(viewerIdentityCache{
+		ViewerID:     "uuid-grad",
+		NameColor:    nil,
+		NameGradient: gradientJSON,
+	})
+	mr.Set(cacheKey, string(val))
+
+	msg := makeMsg("kick", "cached-grad-user", "")
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.User.NameGradient != string(gradientJSON) {
+		t.Errorf("expected NameGradient %q from cache, got %q", string(gradientJSON), msg.User.NameGradient)
 	}
 }
