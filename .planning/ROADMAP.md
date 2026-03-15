@@ -244,7 +244,7 @@ Plans:
   5. Extension popup has "Open Settings" button navigating to `/settings/viewer` on the website
   6. `viewer_cosmetics` table exists: stores `name_color (VARCHAR(7))` per viewer
   7. Message processor `ViewerBadgeEnricher` resolves platform user → viewer_id via Redis cache (5min TTL) and injects viewer's `name_color` into `UserInfo.Color` when the platform provides none
-**Plans**: 5 plans
+**Plans**: 6 plans
 
 Plans:
 - [x] 28-01-PLAN.md — DB migration 035 + ViewerClaims extension + ViewerIdentityRepository + Wave 0 test scaffolds
@@ -252,6 +252,7 @@ Plans:
 - [x] 28-03-PLAN.md — message-processor ViewerBadgeEnricher (Redis cache + DB fallback + wiring)
 - [x] 28-04-PLAN.md — Browser extension: manifest, popup (OAuth + color picker), content script (platform detection + EXT-04)
 - [x] 28-05-PLAN.md — Frontend /settings/viewer page stub
+- [ ] 28-06-PLAN.md — Gap closure: content script session writes, context-aware popup buttons, color picker reset
 
 ### Phase 29: Viewer Color & Gradient Editor
 **Goal**: All-authenticated-users can set a fallback name color; premium users get a full gradient editor with multi-stop color picker and live preview
@@ -308,7 +309,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 (28 can start in
 | 25 Page Migration & Split-view Preview | v1.3 | 8/8 | Complete | 2026-03-11 |
 | 26 Enforcement & Quality Gates | v1.3 | 0/? | Not started | - |
 | 27 InnerTube Enrichment — Badges & Emotes | 3/3 | Complete    | 2026-03-14 | - |
-| 28 Viewer Identity Foundation — Auth & Platform Linking | 5/5 | Complete   | 2026-03-15 | - |
+| 28 Viewer Identity Foundation — Auth & Platform Linking | v1.4 | 5/6 | In progress (gap closure) | - |
 | 29 Viewer Color & Gradient Editor | v1.4 | 0/? | Not started | - |
 | 30 Avatar Frame & Flair System | v1.4 | 0/? | Not started | - |
 | 31 All-Chat Platform Badges | v1.4 | 0/? | Not started | - |
