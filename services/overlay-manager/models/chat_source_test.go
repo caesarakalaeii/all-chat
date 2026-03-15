@@ -149,7 +149,7 @@ func TestChatSource_IsValidPlatform(t *testing.T) {
 		{"kick", true},
 		{"tiktok", true},
 		{"shared_overlay", true},
-		{"discord", false},
+		{"discord", true}, // Phase 27: Discord Listener added
 		{"", false},
 		{"TWITCH", false}, // case-sensitive
 		{"twitter", false},
