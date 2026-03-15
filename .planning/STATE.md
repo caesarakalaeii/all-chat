@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
-status: In progress
-stopped_at: Completed 30-01-PLAN.md
-last_updated: "2026-03-16T00:00:00Z"
-last_activity: 2026-03-16 — Phase 30 Plan 01 executed
+status: executing
+stopped_at: Completed 30-02-PLAN.md
+last_updated: "2026-03-15T23:52:23.099Z"
+last_activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contracts)
 progress:
   total_phases: 21
   completed_phases: 12
-  total_plans: 57
-  completed_plans: 57
+  total_plans: 60
+  completed_plans: 58
 ---
 
 # Project State
@@ -53,6 +53,7 @@ Last activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contra
 | Phase 29-viewer-color-gradient-editor P03 | 9min | 2 tasks | 7 files |
 | Phase 29-viewer-color-gradient-editor P02 | 7 | 2 tasks | 4 files |
 | Phase 30-avatar-frame-flair-system P01 | ~2.5min | 2 tasks | 6 files |
+| Phase 30-avatar-frame-flair-system P02 | ~5min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 30-avatar-frame-flair-system]: avatar_frame_id and avatar_flair_id use ON DELETE SET NULL so admin catalog deletes gracefully clear viewer selections
 - [Phase 30-avatar-frame-flair-system]: UpsertViewerCosmetics call site passes nil, nil for new params — Plan 02 expands to pass real values
 - [Phase 30-avatar-frame-flair-system]: name_gradient added to extension UserInfo in Plan 01 (previously missing from extension)
+- [Phase 30-avatar-frame-flair-system]: cosmeticsCatalogDB interface + pgxPoolAdapter pattern mirrors viewerDB approach from Phase 28 for consistent handler testability
+- [Phase 30-avatar-frame-flair-system]: downgrade enforcement passes &uuid.Nil sentinel (not nil pointer) so UPSERT explicitly writes NULL — self-documenting intent
+- [Phase 30-avatar-frame-flair-system]: public catalog endpoints reuse HandleListFrames/HandleListFlairs read-only methods — catalog data is not sensitive
 
 ### Pending Todos
 
@@ -102,8 +106,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T00:00:00Z
-Stopped at: Completed 30-01-PLAN.md
-Resume file: .planning/phases/30-avatar-frame-flair-system/30-01-SUMMARY.md
+Last session: 2026-03-15T23:52:23.096Z
+Stopped at: Completed 30-02-PLAN.md
+Resume file: None
 
 **Next action:** Execute 30-02-PLAN.md (handler extension, test mock fixes, enricher)
