@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Discord Listener
 status: planning
-stopped_at: Completed 28-02-PLAN.md
-last_updated: "2026-03-15T22:33:51.634Z"
+stopped_at: Completed 28-01-PLAN.md
+last_updated: "2026-03-15T22:41:18.466Z"
 last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
   total_phases: 18
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 34
-  completed_plans: 33
+  completed_plans: 34
   percent: 0
 ---
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
 | Phase 27 P03 | 12 | 2 tasks | 6 files |
 | Phase 27 P04 | 9 | 3 tasks | 3 files |
 | Phase 28 P02 | 108s | 2 tasks | 3 files |
+| Phase 28 P01 | 8m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ Key decisions relevant to v1.5:
 - [Phase 27]: discordAPIBase overridable string field on DiscordHandler allows httptest.Server injection without extracting HTTP client interface
 - [Phase 27]: Discord routes conditionally registered — graceful degradation via WARN log when env vars absent, consistent with YouTube/Kick pattern
 - [Phase 28]: firstNonEmpty helper reused from kick_normalizer.go (same package) — no duplication
+- [Phase 28]: gateway.MessagePublisher uses interface{} payload to prevent circular import; publisherAdapter bridges via JSON re-marshal in cmd/main.go
+- [Phase 28]: Pure Redis GET approach for ChannelRegistry — no in-memory set needed at v1.5 scale
+- [Phase 28]: HandleMessageCreate exported for direct unit testing without exposing Connect()
 
 ### Pending Todos
 
@@ -99,8 +103,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T22:33:51.631Z
-Stopped at: Completed 28-02-PLAN.md
+Last session: 2026-03-15T22:41:18.463Z
+Stopped at: Completed 28-01-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)
