@@ -164,11 +164,11 @@ Plans:
   2. Discord messages display with platform label "discord" and author username, consistent with Twitch and YouTube messages in the overlay
   3. Bot messages (author.bot == true) are silently filtered and never appear in overlays
   4. Only messages from the configured inbound channel appear — messages from other channels in the same server are ignored
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 28-01: TBD
-- [ ] 28-02: TBD
+- [ ] 28-01-PLAN.md — MESSAGE_CREATE dispatch + ChannelRegistry + publisher package + overlay-manager Redis wiring (INBD-01)
+- [ ] 28-02-PLAN.md — DiscordNormalizer in message-processor + registration (INBD-02)
 
 ### Phase 29: Inbound Enrichment
 **Goal**: Discord messages carry deletion events and resolved mention text through the existing platform pipelines
@@ -240,11 +240,11 @@ Plans:
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27. Auth and Bot Token Foundation | 4/4 | Complete    | 2026-03-15 | - |
-| 28. Inbound Listener Core | v1.5 | 0/TBD | Not started | - |
+| 28. Inbound Listener Core | v1.5 | 0/2 | Not started | - |
 | 29. Inbound Enrichment | v1.5 | 0/TBD | Not started | - |
 | 30. Outbound Relay | v1.5 | 0/TBD | Not started | - |
 | 31. Load Balancing | v1.5 | 0/TBD | Not started | - |
 | 32. Setup UI | v1.5 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-15 after Phase 27 planning — 4 plans created*
+*Last updated: 2026-03-15 after Phase 28 planning — 2 plans created*
