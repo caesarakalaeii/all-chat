@@ -287,7 +287,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 30-01-PLAN.md — DB migration 037 + type extensions (Go UserInfo, cosmeticsUpsertRepo, TS UserInfo in both repos)
+- [x] 30-01-PLAN.md — DB migration 037 + type extensions (Go UserInfo, cosmeticsUpsertRepo, TS UserInfo in both repos)
 - [ ] 30-02-PLAN.md — Auth-service: AdminCosmeticsHandler, catalog public endpoints, PATCH cosmetics extension + route wiring
 - [ ] 30-03-PLAN.md — Message-processor enricher: extend viewerIdentityCache + DB join + frame/flair URL injection
 - [ ] 30-04-PLAN.md — Frontend: UserAvatar component, AvatarCosmeticsCard, /admin/cosmetics page, overlay integration, extension wiring
@@ -322,7 +322,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 (28 can start in
 | 27 InnerTube Enrichment — Badges & Emotes | 3/3 | Complete    | 2026-03-14 | - |
 | 28 Viewer Identity Foundation — Auth & Platform Linking | 6/6 | Complete    | 2026-03-15 | - |
 | 29 Viewer Color & Gradient Editor | 3/3 | Complete    | 2026-03-15 | - |
-| 30 Avatar Frame & Flair System | v1.4 | 0/? | Not started | - |
+| 30 Avatar Frame & Flair System | v1.4 | 1/4 | In progress | 2026-03-16 |
 | 31 All-Chat Platform Badges | v1.4 | 0/? | Not started | - |
 
 ---

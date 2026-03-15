@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
-status: Defining requirements
-stopped_at: Phase 30 context gathered
-last_updated: "2026-03-15T22:38:01.267Z"
-last_activity: 2026-03-14 — Milestone v1.4 started
+status: In progress
+stopped_at: Completed 30-01-PLAN.md
+last_updated: "2026-03-16T00:00:00Z"
+last_activity: 2026-03-16 — Phase 30 Plan 01 executed
 progress:
   total_phases: 21
   completed_phases: 12
-  total_plans: 56
-  completed_plans: 56
+  total_plans: 57
+  completed_plans: 57
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** Phase: Not started (defining requirements)
+**Current focus:** Phase 30: avatar-frame-flair-system — Plan 01 complete
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-14 — Milestone v1.4 started
+Phase: 30-avatar-frame-flair-system
+Plan: 01 (complete)
+Status: In progress
+Last activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contracts)
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Last activity: 2026-03-14 — Milestone v1.4 started
 | Phase 29-viewer-color-gradient-editor P01 | 451 | 2 tasks | 12 files |
 | Phase 29-viewer-color-gradient-editor P03 | 9min | 2 tasks | 7 files |
 | Phase 29-viewer-color-gradient-editor P02 | 7 | 2 tasks | 4 files |
+| Phase 30-avatar-frame-flair-system P01 | ~2.5min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 29-viewer-color-gradient-editor]: Autosave on native color swatch onChange (immediate), debounce only on hex text input (400ms)
 - [Phase 29-viewer-color-gradient-editor]: Gradient tab re-validates is_premium from localStorage JWT before PATCH (double-check security)
 - [Phase 29-viewer-color-gradient-editor]: vi.stubGlobal localStorage pattern for test isolation; cleanup() in afterEach prevents DOM accumulation
+- [Phase 30-avatar-frame-flair-system]: avatar_frame_id and avatar_flair_id use ON DELETE SET NULL so admin catalog deletes gracefully clear viewer selections
+- [Phase 30-avatar-frame-flair-system]: UpsertViewerCosmetics call site passes nil, nil for new params — Plan 02 expands to pass real values
+- [Phase 30-avatar-frame-flair-system]: name_gradient added to extension UserInfo in Plan 01 (previously missing from extension)
 
 ### Pending Todos
 
@@ -98,8 +102,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T22:38:01.263Z
-Stopped at: Phase 30 context gathered
-Resume file: .planning/phases/30-avatar-frame-flair-system/30-CONTEXT.md
+Last session: 2026-03-16T00:00:00Z
+Stopped at: Completed 30-01-PLAN.md
+Resume file: .planning/phases/30-avatar-frame-flair-system/30-01-SUMMARY.md
 
-**Next action:** `/gsd:plan-phase 27` to start execution after roadmap is created
+**Next action:** Execute 30-02-PLAN.md (handler extension, test mock fixes, enricher)
