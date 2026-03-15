@@ -43,6 +43,7 @@ func JWTAuth(secret string) gin.HandlerFunc {
 			c.Set("platform", viewerClaims.Platform)
 			c.Set("platform_user_id", viewerClaims.PlatformUserID)
 			c.Set("is_viewer", viewerClaims.IsViewer)
+			c.Set("is_premium", viewerClaims.IsPremium) // Phase 29: propagate premium flag for gradient gate
 			c.Next()
 			return
 		}

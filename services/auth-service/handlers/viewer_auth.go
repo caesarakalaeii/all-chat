@@ -346,6 +346,20 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, vie
 		avatarURL = *session.AvatarURL
 	}
 
+	// Phase 29: look up is_premium so the JWT carries the current value.
+	// Soft failure: if DB is unavailable, default to false (safe degradation).
+	var isPremium bool
+	if viewerID != uuid.Nil {
+		var premErr error
+		isPremium, premErr = h.identityRepo.GetViewerIsPremium(context.Background(), viewerID)
+		if premErr != nil {
+			h.logger.Warn("generateViewerJWT: failed to query is_premium, defaulting to false",
+				zap.String("viewer_id", viewerIDStr),
+				zap.Error(premErr),
+			)
+		}
+	}
+
 	claims := sharedAuth.ViewerClaims{
 		ViewerID:       viewerIDStr,
 		SessionID:      session.ID.String(),
@@ -355,6 +369,7 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, vie
 		DisplayName:    session.DisplayName,
 		AvatarURL:      avatarURL,
 		IsViewer:       true,
+		IsPremium:      isPremium,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(now),

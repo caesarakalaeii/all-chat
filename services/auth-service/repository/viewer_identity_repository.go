@@ -105,16 +105,38 @@ func (r *ViewerIdentityRepository) GetViewerCosmetics(ctx context.Context, viewe
 	return nameColor, nil
 }
 
-// UpsertViewerCosmetics sets name_color for a viewer. Pass nil to clear the color.
-func (r *ViewerIdentityRepository) UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string) error {
+// UpsertViewerCosmetics sets name_color and/or name_gradient for a viewer.
+// Pass nil for nameColor to clear it; pass nil for nameGradient to clear it.
+// Gradient and color are stored independently — the caller is responsible for
+// enforcing mutual exclusion before calling this method.
+func (r *ViewerIdentityRepository) UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string, nameGradient []byte) error {
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO viewer_cosmetics (viewer_id, name_color, updated_at)
-		 VALUES ($1, $2, NOW())
-		 ON CONFLICT (viewer_id) DO UPDATE SET name_color = EXCLUDED.name_color, updated_at = NOW()`,
-		viewerID, nameColor,
+		`INSERT INTO viewer_cosmetics (viewer_id, name_color, name_gradient, updated_at)
+		 VALUES ($1, $2, $3, NOW())
+		 ON CONFLICT (viewer_id) DO UPDATE SET
+		     name_color = EXCLUDED.name_color,
+		     name_gradient = EXCLUDED.name_gradient,
+		     updated_at = NOW()`,
+		viewerID, nameColor, nameGradient,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert viewer cosmetics: %w", err)
 	}
 	return nil
+}
+
+// GetViewerIsPremium returns the is_premium flag for a viewer.
+func (r *ViewerIdentityRepository) GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error) {
+	var isPremium bool
+	err := r.db.QueryRow(ctx,
+		`SELECT is_premium FROM viewers WHERE id = $1`,
+		viewerID,
+	).Scan(&isPremium)
+	if err == pgx.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to get viewer is_premium: %w", err)
+	}
+	return isPremium, nil
 }
