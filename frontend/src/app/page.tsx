@@ -388,9 +388,15 @@ export default function LandingPage() {
               Add all-chat overlays directly to any streaming site without OBS. Works in Chrome and
               Firefox.
             </p>
-            <span className="inline-block rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub">
-              Coming soon
-            </span>
+            <a
+              href="https://github.com/caesarakalaeii/all-chat-extension/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub underline-offset-4 hover:text-text hover:underline"
+            >
+              Install beta extension
+            </a>
+            <p className="mt-2 text-xs text-text-sub">Currently in beta — expect ongoing updates.</p>
           </div>
         </div>
       </section>

@@ -47,6 +47,18 @@ test.describe('Landing Page', () => {
     await expect(page.locator('text=Customizable')).toBeVisible()
   })
 
+  test('should link to the browser extension beta release', async ({ page }) => {
+    await page.goto('/')
+
+    const extensionLink = page.getByRole('link', { name: 'Install beta extension' })
+    await expect(extensionLink).toBeVisible()
+    await expect(extensionLink).toHaveAttribute(
+      'href',
+      'https://github.com/caesarakalaeii/all-chat-extension/releases'
+    )
+    await expect(page.locator('text=Currently in beta')).toBeVisible()
+  })
+
   test('should have correct styling and gradient', async ({ page }) => {
     await page.goto('/')
 
