@@ -56,8 +56,8 @@
 
 ### Website Cosmetics Editor
 
-- [ ] **WEB-01**: Settings page has a "Viewer Identity" section for all authenticated users (color picker, platform linking)
-- [ ] **WEB-02**: Premium users see a "Premium Cosmetics" section with gradient editor (multi-stop, angle control)
+- [x] **WEB-01**: Settings page has a "Viewer Identity" section for all authenticated users (color picker, platform linking)
+- [x] **WEB-02**: Premium users see a "Premium Cosmetics" section with gradient editor (multi-stop, angle control)
 - [ ] **WEB-03**: Premium users can browse and select avatar frame from the frame catalog
 - [ ] **WEB-04**: Premium users can browse and select avatar flair from the flair catalog
 - [x] **WEB-05**: Live preview of name color, gradient, avatar frame, and flair displayed on the settings page
@@ -128,8 +128,8 @@
 | EXT-02 | Phase 28 | Complete |
 | EXT-03 | Phase 28 | Complete |
 | EXT-04 | Phase 28 | Complete |
-| WEB-01 | Phase 29 | Pending |
-| WEB-02 | Phase 29 | Pending |
+| WEB-01 | Phase 29 | Complete |
+| WEB-02 | Phase 29 | Complete |
 | WEB-03 | Phase 30 | Pending |
 | WEB-04 | Phase 30 | Pending |
 | WEB-05 | Phase 29 | Complete |
