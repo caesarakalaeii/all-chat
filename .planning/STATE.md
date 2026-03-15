@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
 status: Defining requirements
-stopped_at: Completed 28-viewer-identity-foundation-auth-and-platform-linking-05-PLAN.md
-last_updated: "2026-03-14T16:11:00.156Z"
+stopped_at: "Checkpoint:human-verify — Task 3 of 28-04: Extension loads in Chrome (human must verify popup renders)"
+last_updated: "2026-03-15T19:14:27.272Z"
 last_activity: 2026-03-14 — Milestone v1.4 started
 progress:
   total_phases: 21
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 52
-  completed_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -47,6 +47,7 @@ Last activity: 2026-03-14 — Milestone v1.4 started
 | Phase 28-viewer-identity-foundation-auth-and-platform-linking P02 | 25 | 2 tasks | 8 files |
 | Phase 28-viewer-identity-foundation-auth-and-platform-linking P03 | 5 | 2 tasks | 3 files |
 | Phase 28-viewer-identity-foundation-auth-and-platform-linking P05 | 2 | 1 tasks | 1 files |
+| Phase 28-viewer-identity-foundation-auth-and-platform-linking P04 | 45 | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: viewerDB interface + pgxPoolAdapter wraps pgxpool.Pool for testability; null sentinel prevents DB stampede for non-registered viewers
 - [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Used localStorage key viewer_jwt_token (matching viewer-auth-store.ts) not viewer_jwt as plan spec suggested
 - [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Three-state undefined/null/claims hydration guard prevents flash of wrong UI state on /settings/viewer
+- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Extension work done in caesarakalaeii/all-chat-extension repo (not all-chat monorepo) — scaffolded stub in monorepo was removed
+- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Color injection in ChatContainer React component (not DOM MutationObserver) — overlay chat renders inside iframe injected by extension
+- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Lazy chrome.identity.getRedirectURL — called inside function not at module scope to prevent service worker crash
 
 ### Pending Todos
 
@@ -79,8 +83,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T16:11:00.152Z
-Stopped at: Completed 28-viewer-identity-foundation-auth-and-platform-linking-05-PLAN.md
+Last session: 2026-03-15T19:14:27.268Z
+Stopped at: Checkpoint:human-verify — Task 3 of 28-04: Extension loads in Chrome (human must verify popup renders)
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to start execution after roadmap is created
