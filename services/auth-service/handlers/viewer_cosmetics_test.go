@@ -20,19 +20,23 @@ import (
 // mockCosmeticsUpsertRepo implements cosmeticsUpsertRepo for testing.
 type mockCosmeticsUpsertRepo struct {
 	upsertCalls []struct {
-		viewerID     uuid.UUID
-		nameColor    *string
-		nameGradient []byte
+		viewerID      uuid.UUID
+		nameColor     *string
+		nameGradient  []byte
+		avatarFrameID *uuid.UUID
+		avatarFlairID *uuid.UUID
 	}
 	upsertErr error
 }
 
-func (m *mockCosmeticsUpsertRepo) UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string, nameGradient []byte) error {
+func (m *mockCosmeticsUpsertRepo) UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string, nameGradient []byte, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error {
 	m.upsertCalls = append(m.upsertCalls, struct {
-		viewerID     uuid.UUID
-		nameColor    *string
-		nameGradient []byte
-	}{viewerID, nameColor, nameGradient})
+		viewerID      uuid.UUID
+		nameColor     *string
+		nameGradient  []byte
+		avatarFrameID *uuid.UUID
+		avatarFlairID *uuid.UUID
+	}{viewerID, nameColor, nameGradient, avatarFrameID, avatarFlairID})
 	return m.upsertErr
 }
 
