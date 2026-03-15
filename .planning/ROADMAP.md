@@ -147,12 +147,13 @@
   3. User receives a clear, human-readable error when bot is missing required permissions (VIEW_CHANNEL, READ_MESSAGE_HISTORY, SEND_MESSAGES)
   4. User can disconnect the bot, which removes it from their account and deletes all associated Discord sources
   5. discord-listener establishes a Gateway WebSocket connection with correct intents bitmask and a startup assertion confirms MESSAGE_CONTENT is non-empty on first READY event
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 27-01: TBD
-- [ ] 27-02: TBD
-- [ ] 27-03: TBD
+- [ ] 27-01-PLAN.md — DB migration (discord_guilds) + overlay-manager platform registration
+- [ ] 27-02-PLAN.md — discord-listener service scaffold + Gateway WebSocket connection
+- [ ] 27-03-PLAN.md — Discord OAuth provider + DiscordRepository in auth-service
+- [ ] 27-04-PLAN.md — Discord HTTP handlers + route wiring in auth-service
 
 ### Phase 28: Inbound Listener Core
 **Goal**: Discord channel messages appear in overlays as a real-time, first-class chat source
@@ -238,7 +239,7 @@ Plans:
 | 4-10 | v1.1 | 21/21 | Complete | 2026-02-21 |
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
-| 27. Auth and Bot Token Foundation | v1.5 | 0/TBD | Not started | - |
+| 27. Auth and Bot Token Foundation | v1.5 | 0/4 | Not started | - |
 | 28. Inbound Listener Core | v1.5 | 0/TBD | Not started | - |
 | 29. Inbound Enrichment | v1.5 | 0/TBD | Not started | - |
 | 30. Outbound Relay | v1.5 | 0/TBD | Not started | - |
@@ -246,4 +247,4 @@ Plans:
 | 32. Setup UI | v1.5 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-15 after v1.5 roadmap creation*
+*Last updated: 2026-03-15 after Phase 27 planning — 4 plans created*
