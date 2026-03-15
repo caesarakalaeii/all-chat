@@ -8,6 +8,17 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
+## Current Milestone: v1.5 Discord Listener
+
+**Goal:** Add Discord as a bidirectional chat source — read from Discord channels into overlays, and relay overlay messages back to Discord with loop-safe filtering.
+
+**Target features:**
+- Discord-to-overlay ingestion: managed OAuth2 bot, channel-level source model
+- Overlay-to-Discord relay: configurable per-source outbound channel, Discord messages filtered to prevent loops
+- OAuth2 "Add to Server" bot authorization (consistent with Twitch/YouTube auth UX)
+- Comprehensive setup UI (server connect, channel picker, relay config, overlay editor integration)
+- Full load balancing with hash-based sharding + HPA (consistent with other listeners)
+
 ## Current State (v1.3 shipped 2026-03-14)
 
 Frontend redesigned with professional streaming dark aesthetic: Tailwind v4 design tokens, @base-ui/react component library, all 6 pages redesigned, draggable split-view preview, ESLint/Prettier/Husky enforcement, and 7-gate CI pipeline with Chromatic visual regression.
@@ -74,7 +85,16 @@ Frontend redesigned with professional streaming dark aesthetic: Tailwind v4 desi
 
 ### Active
 
-<!-- Current scope: v1.4 (not yet defined — run /gsd:new-milestone) -->
+<!-- Current scope: v1.5 Discord Listener -->
+
+- [ ] Discord bot reads from a configured channel and pushes messages to overlays as a first-class source
+- [ ] Overlay messages (Discord excluded) are relayed to a user-configured Discord outbound channel
+- [ ] Loop-safe filtering: Discord-sourced messages are never echoed back to Discord
+- [ ] OAuth2 "Add to Server" flow to authorize the bot in a user's Discord server
+- [ ] Setup UI: server connection, inbound channel picker, outbound channel picker, relay toggle
+- [ ] Discord source integrated in overlay editor alongside Twitch/YouTube/Kick/TikTok
+- [ ] discord-listener service with full load balancing (hash-based sharding + HPA)
+- [ ] Architecture decision: single service for inbound+outbound vs separate relay service
 
 ### Out of Scope
 
@@ -165,4 +185,4 @@ Frontend redesigned with professional streaming dark aesthetic: Tailwind v4 desi
 | **Husky v9 new-style hooks (no husky.sh sourcing)** | Deprecated v8 sourcing logs deprecation warnings in v9, fails in v10 | ✓ Good — Clean hook execution, verified tsc + lint-staged exit 0 |
 
 ---
-*Last updated: 2026-03-14 after v1.3 milestone completion*
+*Last updated: 2026-03-15 after v1.5 milestone started*
