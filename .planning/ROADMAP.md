@@ -284,7 +284,13 @@ Plans:
   3. Avatar component renders: base avatar (circle) + frame PNG (centered, 1.4× size, pointer-events-none) + flair PNG (absolute bottom-right, 0.4× avatar size)
   4. `avatar_frame_id` and `avatar_flair_id` persisted in `viewer_cosmetics`; message processor injects `avatar_frame_url` and `avatar_flair_url` into `UserInfo`
   5. Non-premium viewers see catalog with items locked (visible but not selectable)
-**Plans**: TBD (target ~4 plans)
+**Plans**: 4 plans
+
+Plans:
+- [ ] 30-01-PLAN.md — DB migration 037 + type extensions (Go UserInfo, cosmeticsUpsertRepo, TS UserInfo in both repos)
+- [ ] 30-02-PLAN.md — Auth-service: AdminCosmeticsHandler, catalog public endpoints, PATCH cosmetics extension + route wiring
+- [ ] 30-03-PLAN.md — Message-processor enricher: extend viewerIdentityCache + DB join + frame/flair URL injection
+- [ ] 30-04-PLAN.md — Frontend: UserAvatar component, AvatarCosmeticsCard, /admin/cosmetics page, overlay integration, extension wiring
 
 ### Phase 31: All-Chat Platform Badges
 **Goal**: Admin and premium viewers receive All-Chat-specific badges that appear in all overlays, prepended before platform badges
