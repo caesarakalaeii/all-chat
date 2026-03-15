@@ -301,3 +301,122 @@ func TestPatchCosmetics_MutualExclusion(t *testing.T) {
 		t.Errorf("response name_color should be null when gradient is set, got %v", val)
 	}
 }
+
+// Phase 30: avatar frame / flair tests
+
+func TestPatchCosmetics_AvatarFrameID_PremiumAccepted(t *testing.T) {
+	// Premium viewer with a valid avatar_frame_id should get 200.
+	viewerID := uuid.New()
+	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
+
+	frameID := uuid.New()
+	body := `{"avatar_frame_id":"` + frameID.String() + `"}`
+	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for premium avatar_frame_id, got %d body=%s", w.Code, w.Body.String())
+	}
+	if len(mock.upsertCalls) != 1 {
+		t.Fatalf("expected 1 upsert call, got %d", len(mock.upsertCalls))
+	}
+	if mock.upsertCalls[0].avatarFrameID == nil {
+		t.Error("expected avatarFrameID to be non-nil in upsert call")
+	} else if *mock.upsertCalls[0].avatarFrameID != frameID {
+		t.Errorf("expected avatarFrameID=%v, got %v", frameID, *mock.upsertCalls[0].avatarFrameID)
+	}
+}
+
+func TestPatchCosmetics_AvatarFrameID_NonPremiumRejected(t *testing.T) {
+	// Non-premium viewer attempting to set avatar_frame_id should get 403.
+	viewerID := uuid.New()
+	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", false)
+
+	frameID := uuid.New()
+	body := `{"avatar_frame_id":"` + frameID.String() + `"}`
+	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for non-premium avatar_frame_id, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestPatchCosmetics_AvatarFlairID_NonPremiumRejected(t *testing.T) {
+	// Non-premium viewer attempting to set avatar_flair_id should get 403.
+	viewerID := uuid.New()
+	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", false)
+
+	flairID := uuid.New()
+	body := `{"avatar_flair_id":"` + flairID.String() + `"}`
+	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for non-premium avatar_flair_id, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestPatchCosmetics_NonPremium_DowngradeClears(t *testing.T) {
+	// Non-premium viewer sending only name_color: DB call should pass nil, nil for frame/flair
+	// AND the frame/flair clear UPDATE should fire (avatarFrameID = &uuid.Nil in upsert).
+	viewerID := uuid.New()
+	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", false)
+
+	body := `{"name_color":"#00ff00"}`
+	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if len(mock.upsertCalls) != 1 {
+		t.Fatalf("expected 1 upsert call, got %d", len(mock.upsertCalls))
+	}
+	// Downgrade enforcement: avatarFrameID should be &uuid.Nil (clear sentinel)
+	if mock.upsertCalls[0].avatarFrameID == nil {
+		t.Error("expected avatarFrameID=&uuid.Nil for downgrade clear, got nil pointer")
+	} else if *mock.upsertCalls[0].avatarFrameID != uuid.Nil {
+		t.Errorf("expected avatarFrameID=uuid.Nil, got %v", *mock.upsertCalls[0].avatarFrameID)
+	}
+	if mock.upsertCalls[0].avatarFlairID == nil {
+		t.Error("expected avatarFlairID=&uuid.Nil for downgrade clear, got nil pointer")
+	} else if *mock.upsertCalls[0].avatarFlairID != uuid.Nil {
+		t.Errorf("expected avatarFlairID=uuid.Nil, got %v", *mock.upsertCalls[0].avatarFlairID)
+	}
+}
+
+func TestPatchCosmetics_AvatarFrameID_ResponseIncludes(t *testing.T) {
+	// Response JSON must include avatar_frame_id field.
+	viewerID := uuid.New()
+	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
+
+	frameID := uuid.New()
+	body := `{"avatar_frame_id":"` + frameID.String() + `"}`
+	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if _, exists := resp["avatar_frame_id"]; !exists {
+		t.Error("response missing avatar_frame_id field")
+	}
+	if _, exists := resp["avatar_flair_id"]; !exists {
+		t.Error("response missing avatar_flair_id field")
+	}
+}

@@ -80,9 +80,14 @@ type NameGradientReq struct {
 // patchCosmeticsRequest is the expected request body for PATCH /viewer/cosmetics.
 // Using *string allows distinguishing between null and absent name_color.
 // Using *NameGradientReq allows distinguishing between null and absent name_gradient.
+// AvatarFrameID and AvatarFlairID use NO omitempty — JSON null must be distinguishable
+// from absent (absent = field not in body, null = explicit clear, UUID string = set).
+// In v1.4 the UPSERT always overwrites these columns; frontend omits to keep existing.
 type patchCosmeticsRequest struct {
-	NameColor    *string          `json:"name_color"`
-	NameGradient *NameGradientReq `json:"name_gradient"`
+	NameColor     *string          `json:"name_color"`
+	NameGradient  *NameGradientReq `json:"name_gradient"`
+	AvatarFrameID *uuid.UUID       `json:"avatar_frame_id"`
+	AvatarFlairID *uuid.UUID       `json:"avatar_flair_id"`
 }
 
 // handlePatchCosmeticsLogic contains the core business logic for PATCH cosmetics.
@@ -173,9 +178,44 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo) {
 		nameGradientBytes = nil
 	}
 
+	// Step 5b: Validate avatar frame/flair (premium gate + downgrade enforcement)
+	isPremium := false
+	if v, ok := c.Get("is_premium"); ok && v != nil {
+		if b, ok := v.(bool); ok {
+			isPremium = b
+		}
+	}
+
+	var avatarFrameID *uuid.UUID
+	var avatarFlairID *uuid.UUID
+
+	if !isPremium {
+		// Non-premium gate: reject if viewer is trying to set a real (non-zero) frame or flair.
+		if req.AvatarFrameID != nil && *req.AvatarFrameID != uuid.Nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "avatar frames are a premium feature"})
+			return
+		}
+		if req.AvatarFlairID != nil && *req.AvatarFlairID != uuid.Nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "avatar flairs are a premium feature"})
+			return
+		}
+		// Downgrade enforcement: always clear frame/flair for non-premium viewers,
+		// regardless of whether they sent these fields. Pass &uuid.Nil as the
+		// "clear" sentinel so the UPSERT writes NULL to the DB.
+		nilUUID := uuid.Nil
+		avatarFrameID = &nilUUID
+		avatarFlairID = &nilUUID
+	} else {
+		// Premium viewer: pass through whatever was sent.
+		// nil pointer = field absent in request body = UPSERT overwrites with NULL (v1.4 behavior).
+		// &uuid.Nil = explicit clear sent as JSON null.
+		// &<real UUID> = set to that frame/flair.
+		avatarFrameID = req.AvatarFrameID
+		avatarFlairID = req.AvatarFlairID
+	}
+
 	// Step 6: Upsert cosmetics in DB
-	// avatarFrameID and avatarFlairID are passed as nil here — Plan 02 will wire in real values.
-	if err := repo.UpsertViewerCosmetics(c.Request.Context(), viewerID, req.NameColor, nameGradientBytes, nil, nil); err != nil {
+	if err := repo.UpsertViewerCosmetics(c.Request.Context(), viewerID, req.NameColor, nameGradientBytes, avatarFrameID, avatarFlairID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cosmetics"})
 		return
 	}
@@ -186,7 +226,9 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo) {
 		gradientResponse = req.NameGradient
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"name_color":    req.NameColor,
-		"name_gradient": gradientResponse,
+		"name_color":     req.NameColor,
+		"name_gradient":  gradientResponse,
+		"avatar_frame_id": req.AvatarFrameID,
+		"avatar_flair_id": req.AvatarFlairID,
 	})
 }

@@ -199,6 +199,7 @@ func main() {
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
+	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)
 	debugHandler := handlers.NewDebugHandler(log, jwtSecret)
 	riscHandler := handlers.NewRISCHandler(log, db)
 
@@ -285,6 +286,13 @@ func main() {
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
 	}
 
+	// Public viewer catalog routes (no JWT required — cosmetic catalogs are not sensitive)
+	viewerPublic := router.Group("/viewer")
+	{
+		viewerPublic.GET("/catalog/frames", adminCosmeticsHandler.HandleListFrames)
+		viewerPublic.GET("/catalog/flairs", adminCosmeticsHandler.HandleListFlairs)
+	}
+
 	// Viewer protected routes (require viewer JWT)
 	viewerProtected := router.Group("/viewer")
 	viewerProtected.Use(middleware.JWTAuth(jwtSecret))
@@ -316,6 +324,14 @@ func main() {
 		admin.GET("/viewers", adminViewerHandler.HandleListViewers)
 		admin.POST("/viewers/:session_id/ban", adminViewerHandler.HandleBanViewer)
 		admin.POST("/viewers/:session_id/unban", adminViewerHandler.HandleUnbanViewer)
+
+		// Cosmetic catalog management (frames and flairs)
+		admin.GET("/cosmetics/frames", adminCosmeticsHandler.HandleListFrames)
+		admin.POST("/cosmetics/frames", adminCosmeticsHandler.HandleCreateFrame)
+		admin.DELETE("/cosmetics/frames/:id", adminCosmeticsHandler.HandleDeleteFrame)
+		admin.GET("/cosmetics/flairs", adminCosmeticsHandler.HandleListFlairs)
+		admin.POST("/cosmetics/flairs", adminCosmeticsHandler.HandleCreateFlair)
+		admin.DELETE("/cosmetics/flairs/:id", adminCosmeticsHandler.HandleDeleteFlair)
 	}
 
 	// Get port from environment
