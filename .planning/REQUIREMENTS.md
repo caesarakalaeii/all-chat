@@ -20,7 +20,7 @@
 ### Premium Cosmetics
 
 - [x] **PREM-01**: Premium viewer can set a multi-stop gradient (2–4 colors, angle) as their name color
-- [ ] **PREM-02**: Gradient name renders in overlay using CSS `background-clip: text` — no JavaScript required
+- [x] **PREM-02**: Gradient name renders in overlay using CSS `background-clip: text` — no JavaScript required
 - [ ] **PREM-03**: Premium viewer can select an avatar frame (decorative PNG ring overlaid on their avatar)
 - [ ] **PREM-04**: Premium viewer can select an avatar flair (small corner icon pinned to bottom-right of avatar)
 - [ ] **PREM-05**: Frame and flair catalog is managed by admins (add/remove items, mark as premium-only)
@@ -60,7 +60,7 @@
 - [ ] **WEB-02**: Premium users see a "Premium Cosmetics" section with gradient editor (multi-stop, angle control)
 - [ ] **WEB-03**: Premium users can browse and select avatar frame from the frame catalog
 - [ ] **WEB-04**: Premium users can browse and select avatar flair from the flair catalog
-- [ ] **WEB-05**: Live preview of name color, gradient, avatar frame, and flair displayed on the settings page
+- [x] **WEB-05**: Live preview of name color, gradient, avatar frame, and flair displayed on the settings page
 
 ---
 
@@ -107,7 +107,7 @@
 | VID-05 | Phase 28 | Complete |
 | VID-06 | Phase 28 | Complete |
 | PREM-01 | Phase 29 | Complete |
-| PREM-02 | Phase 29 | Pending |
+| PREM-02 | Phase 29 | Complete |
 | PREM-03 | Phase 30 | Pending |
 | PREM-04 | Phase 30 | Pending |
 | PREM-05 | Phase 30 | Pending |
@@ -132,7 +132,7 @@
 | WEB-02 | Phase 29 | Pending |
 | WEB-03 | Phase 30 | Pending |
 | WEB-04 | Phase 30 | Pending |
-| WEB-05 | Phase 29 | Pending |
+| WEB-05 | Phase 29 | Complete |
 
 **Coverage:**
 - v1.4 requirements: 33 total
