@@ -49,10 +49,10 @@
 
 ### Extension UX
 
-- [ ] **EXT-01**: Extension popup shows an inline name color picker (`<input type="color">`) with reset-to-default option
-- [ ] **EXT-02**: Color change saves immediately to server and local storage (no explicit Save button)
-- [ ] **EXT-03**: Extension popup contains an "Open Settings" button that navigates to `/settings/viewer` on the website
-- [ ] **EXT-04**: Extension content scripts apply viewer's `name_color` or `name_gradient` to their own messages rendered in the overlay
+- [x] **EXT-01**: Extension popup shows an inline name color picker (`<input type="color">`) with reset-to-default option
+- [x] **EXT-02**: Color change saves immediately to server and local storage (no explicit Save button)
+- [x] **EXT-03**: Extension popup contains an "Open Settings" button that navigates to `/settings/viewer` on the website
+- [x] **EXT-04**: Extension content scripts apply viewer's `name_color` or `name_gradient` to their own messages rendered in the overlay
 
 ### Website Cosmetics Editor
 
@@ -124,10 +124,10 @@
 | YTEMOTE-03 | Phase 27 | Complete |
 | YTEMOTE-04 | Phase 27 | Complete |
 | YTEMOTE-05 | Phase 27 | Complete |
-| EXT-01 | Phase 28 | Pending |
-| EXT-02 | Phase 28 | Pending |
-| EXT-03 | Phase 28 | Pending |
-| EXT-04 | Phase 28 | Pending |
+| EXT-01 | Phase 28 | Complete |
+| EXT-02 | Phase 28 | Complete |
+| EXT-03 | Phase 28 | Complete |
+| EXT-04 | Phase 28 | Complete |
 | WEB-01 | Phase 29 | Pending |
 | WEB-02 | Phase 29 | Pending |
 | WEB-03 | Phase 30 | Pending |
