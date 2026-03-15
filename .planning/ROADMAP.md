@@ -6,6 +6,7 @@
 - ✅ **v1.1 Listener Load Balancing** — Phases 4-10 (shipped 2026-02-21)
 - ✅ **v1.2 InnerTube YouTube Listener** — Phases 11-22 (shipped 2026-03-06)
 - ✅ **v1.3 Frontend Redesign** — Phases 23-26 (shipped 2026-03-14)
+- 🚧 **v1.5 Discord Listener** — Phases 27-32 (in progress)
 
 ## Phases
 
@@ -130,14 +131,119 @@
 
 </details>
 
+### 🚧 v1.5 Discord Listener (In Progress)
+
+**Milestone Goal:** Add Discord as a bidirectional chat source — read from Discord channels into overlays, and relay overlay messages back to Discord with loop-safe filtering, full OAuth2 bot authorization UX, and production-grade load balancing.
+
+## Phase Details
+
+### Phase 27: Auth and Bot Token Foundation
+**Goal**: Users can authorize the Discord bot into their server and the service has a stable Gateway connection with correct session management
+**Depends on**: Nothing (first phase of v1.5)
+**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04
+**Success Criteria** (what must be TRUE):
+  1. User can click "Add to Server" and complete the OAuth2 flow, resulting in the bot appearing in their Discord server
+  2. After connecting, user sees the list of text channels available in their server (API response from auth-service)
+  3. User receives a clear, human-readable error when bot is missing required permissions (VIEW_CHANNEL, READ_MESSAGE_HISTORY, SEND_MESSAGES)
+  4. User can disconnect the bot, which removes it from their account and deletes all associated Discord sources
+  5. discord-listener establishes a Gateway WebSocket connection with correct intents bitmask and a startup assertion confirms MESSAGE_CONTENT is non-empty on first READY event
+**Plans**: TBD
+
+Plans:
+- [ ] 27-01: TBD
+- [ ] 27-02: TBD
+- [ ] 27-03: TBD
+
+### Phase 28: Inbound Listener Core
+**Goal**: Discord channel messages appear in overlays as a real-time, first-class chat source
+**Depends on**: Phase 27
+**Requirements**: INBD-01, INBD-02
+**Success Criteria** (what must be TRUE):
+  1. A message sent in a configured Discord channel appears in the overlay within one second
+  2. Discord messages display with platform label "discord" and author username, consistent with Twitch and YouTube messages in the overlay
+  3. Bot messages (author.bot == true) are silently filtered and never appear in overlays
+  4. Only messages from the configured inbound channel appear — messages from other channels in the same server are ignored
+**Plans**: TBD
+
+Plans:
+- [ ] 28-01: TBD
+- [ ] 28-02: TBD
+
+### Phase 29: Inbound Enrichment
+**Goal**: Discord messages carry deletion events and resolved mention text through the existing platform pipelines
+**Depends on**: Phase 28
+**Requirements**: INBD-03, INBD-04
+**Success Criteria** (what must be TRUE):
+  1. When a Discord message is deleted, a deletion event propagates through the pipeline and the message disappears from active overlays (consistent with Twitch/YouTube deletion behavior)
+  2. A message containing @username or #channel mentions renders with resolved names (e.g., "@alice" not "@123456789012345678") in the overlay
+**Plans**: TBD
+
+Plans:
+- [ ] 29-01: TBD
+- [ ] 29-02: TBD
+
+### Phase 30: Outbound Relay
+**Goal**: Non-Discord overlay messages are posted to a user-configured Discord channel with no echo loops
+**Depends on**: Phase 28
+**Requirements**: RELY-01, RELY-02, RELY-03, RELY-04
+**Success Criteria** (what must be TRUE):
+  1. A Twitch message that appears in an overlay is relayed to the configured Discord channel within two seconds, formatted as "[emoji] username: text"
+  2. A message that originated from Discord is never posted back to Discord — verified by a test asserting no REST call is made for platform="discord" pub/sub messages
+  3. When relay_enabled is set to false for a source, no messages are relayed for that source even if other sources in the same overlay have relay active
+  4. The relay target channel can be configured independently from the inbound channel (same or different channel ID accepted on save)
+**Plans**: TBD
+
+Plans:
+- [ ] 30-01: TBD
+- [ ] 30-02: TBD
+- [ ] 30-03: TBD
+
+### Phase 31: Load Balancing
+**Goal**: discord-listener runs safely across multiple pods with deterministic shard ownership and auto-scales under load
+**Depends on**: Phase 30
+**Requirements**: LOAD-01, LOAD-02, LOAD-03
+**Success Criteria** (what must be TRUE):
+  1. When two discord-listener pods are running, exactly one pod holds the Gateway connection for each shard — the second pod does not connect until the first fails or releases ownership
+  2. After a pod restart, the Gateway session resumes (RESUME opcode) using the persisted session_id and resume_gateway_url from Redis, avoiding a full re-IDENTIFY
+  3. HPA scales discord-listener pods up when events/sec or active guild count exceeds configured thresholds, and the new pod acquires shard ownership within 60 seconds of the prior pod terminating
+**Plans**: TBD
+
+Plans:
+- [ ] 31-01: TBD
+- [ ] 31-02: TBD
+
+### Phase 32: Setup UI
+**Goal**: Users can configure Discord sources end-to-end from the frontend without leaving the app
+**Depends on**: Phase 31
+**Requirements**: UI-01, UI-02, UI-03, UI-04
+**Success Criteria** (what must be TRUE):
+  1. Settings page shows a Discord server connect card — clicking it initiates the OAuth2 redirect; after completion the card updates to show the connected server name and icon
+  2. Overlay editor allows adding a Discord source by selecting a guild and choosing an inbound channel from a dropdown populated from the channel listing API
+  3. Each Discord source card in the overlay editor shows connection status and a visual indicator of whether relay is active or inactive
+  4. Per-source relay configuration panel lets the user toggle relay on/off and pick an outbound channel; the visual filter indicator updates immediately on toggle
+**Plans**: TBD
+
+Plans:
+- [ ] 32-01: TBD
+- [ ] 32-02: TBD
+- [ ] 32-03: TBD
+
 ## Progress
 
-| Phases | Milestone | Plans | Status | Completed |
-|--------|-----------|-------|--------|-----------|
+**Execution Order:** 27 → 28 → 29 → 30 → 31 → 32
+
+| Phases | Milestone | Plans Complete | Status | Completed |
+|--------|-----------|----------------|--------|-----------|
 | 1-3 | v1.0 | 11/11 | Complete | 2026-02-18 |
 | 4-10 | v1.1 | 21/21 | Complete | 2026-02-21 |
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
+| 27. Auth and Bot Token Foundation | v1.5 | 0/TBD | Not started | - |
+| 28. Inbound Listener Core | v1.5 | 0/TBD | Not started | - |
+| 29. Inbound Enrichment | v1.5 | 0/TBD | Not started | - |
+| 30. Outbound Relay | v1.5 | 0/TBD | Not started | - |
+| 31. Load Balancing | v1.5 | 0/TBD | Not started | - |
+| 32. Setup UI | v1.5 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-14 after v1.3 milestone completion*
+*Last updated: 2026-03-15 after v1.5 roadmap creation*

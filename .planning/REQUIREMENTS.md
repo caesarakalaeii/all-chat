@@ -67,31 +67,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | TBD | Pending |
-| AUTH-02 | TBD | Pending |
-| AUTH-03 | TBD | Pending |
-| AUTH-04 | TBD | Pending |
-| INBD-01 | TBD | Pending |
-| INBD-02 | TBD | Pending |
-| INBD-03 | TBD | Pending |
-| INBD-04 | TBD | Pending |
-| RELY-01 | TBD | Pending |
-| RELY-02 | TBD | Pending |
-| RELY-03 | TBD | Pending |
-| RELY-04 | TBD | Pending |
-| LOAD-01 | TBD | Pending |
-| LOAD-02 | TBD | Pending |
-| LOAD-03 | TBD | Pending |
-| UI-01 | TBD | Pending |
-| UI-02 | TBD | Pending |
-| UI-03 | TBD | Pending |
-| UI-04 | TBD | Pending |
+| AUTH-01 | Phase 27 | Pending |
+| AUTH-02 | Phase 27 | Pending |
+| AUTH-03 | Phase 27 | Pending |
+| AUTH-04 | Phase 27 | Pending |
+| INBD-01 | Phase 28 | Pending |
+| INBD-02 | Phase 28 | Pending |
+| INBD-03 | Phase 29 | Pending |
+| INBD-04 | Phase 29 | Pending |
+| RELY-01 | Phase 30 | Pending |
+| RELY-02 | Phase 30 | Pending |
+| RELY-03 | Phase 30 | Pending |
+| RELY-04 | Phase 30 | Pending |
+| LOAD-01 | Phase 31 | Pending |
+| LOAD-02 | Phase 31 | Pending |
+| LOAD-03 | Phase 31 | Pending |
+| UI-01 | Phase 32 | Pending |
+| UI-02 | Phase 32 | Pending |
+| UI-03 | Phase 32 | Pending |
+| UI-04 | Phase 32 | Pending |
 
 **Coverage:**
 - v1.5 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-15*
-*Last updated: 2026-03-15 after initial definition*
+*Last updated: 2026-03-15 after roadmap creation — traceability complete*
