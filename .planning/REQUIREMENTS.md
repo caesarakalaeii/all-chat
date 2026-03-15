@@ -17,7 +17,7 @@ Requirements for the Discord Listener milestone. Each maps to roadmap phases.
 ### INBD — Inbound (Discord → Overlay)
 
 - [ ] **INBD-01**: Discord channel messages appear in overlays as a first-class chat source
-- [ ] **INBD-02**: Discord messages are normalized to the unified RawChatMessage schema via a discord normalizer in message-processor
+- [x] **INBD-02**: Discord messages are normalized to the unified RawChatMessage schema via a discord normalizer in message-processor
 - [ ] **INBD-03**: Discord message deletions are propagated through the existing deletion pipeline
 - [ ] **INBD-04**: Discord @user and #channel mentions are resolved to human-readable names in message text
 
@@ -72,7 +72,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-03 | Phase 27 | Complete |
 | AUTH-04 | Phase 27 | Complete |
 | INBD-01 | Phase 28 | Pending |
-| INBD-02 | Phase 28 | Pending |
+| INBD-02 | Phase 28 | Complete |
 | INBD-03 | Phase 29 | Pending |
 | INBD-04 | Phase 29 | Pending |
 | RELY-01 | Phase 30 | Pending |

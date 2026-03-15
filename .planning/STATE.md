@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Discord Listener
 status: planning
-stopped_at: Phase 28 context gathered
-last_updated: "2026-03-15T22:07:02.892Z"
+stopped_at: Completed 28-02-PLAN.md
+last_updated: "2026-03-15T22:33:51.634Z"
 last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
   total_phases: 18
   completed_phases: 7
-  total_plans: 32
-  completed_plans: 32
+  total_plans: 34
+  completed_plans: 33
   percent: 0
 ---
 
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
 | Phase 27 P02 | 6 | 2 tasks | 8 files |
 | Phase 27 P03 | 12 | 2 tasks | 6 files |
 | Phase 27 P04 | 9 | 3 tasks | 3 files |
+| Phase 28 P02 | 108s | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,7 @@ Key decisions relevant to v1.5:
 - [Phase 27]: stateStorer interface in discord.go (not _test.go) enables memStateStore injection in tests without _test.go visibility limitation
 - [Phase 27]: discordAPIBase overridable string field on DiscordHandler allows httptest.Server injection without extracting HTTP client interface
 - [Phase 27]: Discord routes conditionally registered — graceful degradation via WARN log when env vars absent, consistent with YouTube/Kick pattern
+- [Phase 28]: firstNonEmpty helper reused from kick_normalizer.go (same package) — no duplication
 
 ### Pending Todos
 
@@ -97,8 +99,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T22:07:02.889Z
-Stopped at: Phase 28 context gathered
-Resume file: .planning/phases/28-inbound-listener-core/28-CONTEXT.md
+Last session: 2026-03-15T22:33:51.631Z
+Stopped at: Completed 28-02-PLAN.md
+Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)
