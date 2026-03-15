@@ -239,7 +239,7 @@ Plans:
 | 4-10 | v1.1 | 21/21 | Complete | 2026-02-21 |
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
-| 27. Auth and Bot Token Foundation | 1/4 | In Progress|  | - |
+| 27. Auth and Bot Token Foundation | 2/4 | In Progress|  | - |
 | 28. Inbound Listener Core | v1.5 | 0/TBD | Not started | - |
 | 29. Inbound Enrichment | v1.5 | 0/TBD | Not started | - |
 | 30. Outbound Relay | v1.5 | 0/TBD | Not started | - |
