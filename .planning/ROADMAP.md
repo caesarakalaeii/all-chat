@@ -257,7 +257,7 @@ Plans:
 ### Phase 29: Viewer Color & Gradient Editor
 **Goal**: All-authenticated-users can set a fallback name color; premium users get a full gradient editor with multi-stop color picker and live preview
 **Depends on**: Phase 28
-**Services affected**: `api-gateway`, `overlay-manager`, frontend (`/settings/viewer`), overlay render component
+**Services affected**: `auth-service`, `message-processor`, frontend (`/settings/viewer`), overlay render component, browser extension
 **Requirements**: VID-01, VID-02, PREM-01, PREM-02, WEB-01, WEB-02, WEB-05
 **Success Criteria** (what must be TRUE):
   1. `/settings/viewer` page exists with "Viewer Identity" section visible to all authenticated users
@@ -266,7 +266,12 @@ Plans:
   4. `name_gradient` stored as JSONB `{"type":"linear","colors":["#...","#..."],"angle":90}` in `viewer_cosmetics`
   5. Overlay chat message component renders gradient name using `bg-clip-text text-transparent` with inline `backgroundImage` style — no JS animation in v1.4
   6. Non-premium users cannot access gradient controls (gated by `viewer.is_premium` flag)
-**Plans**: TBD (target ~3 plans)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 29-01-PLAN.md — DB migration 036 + Go type extensions (ViewerClaims IsPremium, gradient PATCH, enricher, TS types)
+- [ ] 29-02-PLAN.md — Settings page: tabbed card (Solid Color + Gradient), autosave, premium gate, live preview
+- [ ] 29-03-PLAN.md — Overlay + extension gradient render branch (website overlay + ChatContainer)
 
 ### Phase 30: Avatar Frame & Flair System
 **Goal**: Premium viewers can select an avatar frame (decorative ring) and flair (corner icon) from an admin-curated catalog; changes render live in overlays
@@ -310,9 +315,9 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 (28 can start in
 | 26 Enforcement & Quality Gates | v1.3 | 0/? | Not started | - |
 | 27 InnerTube Enrichment — Badges & Emotes | 3/3 | Complete    | 2026-03-14 | - |
 | 28 Viewer Identity Foundation — Auth & Platform Linking | 6/6 | Complete    | 2026-03-15 | - |
-| 29 Viewer Color & Gradient Editor | v1.4 | 0/? | Not started | - |
+| 29 Viewer Color & Gradient Editor | v1.4 | 0/3 | Not started | - |
 | 30 Avatar Frame & Flair System | v1.4 | 0/? | Not started | - |
 | 31 All-Chat Platform Badges | v1.4 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-03-14 after v1.4 milestone roadmap*
+*Last updated: 2026-03-15 after Phase 29 planning*
