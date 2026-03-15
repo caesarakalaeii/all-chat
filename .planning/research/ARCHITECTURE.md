@@ -1,685 +1,699 @@
-# Architecture Patterns: Chat Overlay Sharing
+# Architecture Patterns: Discord Listener + Relay
 
-**Domain:** Chat overlay sharing for All-Chat platform
-**Researched:** 2026-03-08
+**Domain:** Bidirectional Discord integration for All-Chat microservices platform
+**Researched:** 2026-03-15
+**Confidence:** HIGH (inbound listener, sharding model, loop prevention) / MEDIUM (relay rate-limit specifics)
+
+---
+
+## Recommendation: One Service, Two Goroutine Groups
+
+**Use a single `discord-listener` service** that handles both inbound (Gateway WebSocket → Redis Streams) and outbound relay (Redis Pub/Sub → Discord REST). Do not create a separate relay service.
+
+**Rationale:**
+- Both directions share the same Discord bot token and REST client. Splitting means two services managing the same credential lifecycle.
+- Both directions need the same guild/channel membership knowledge. Sharing in-process eliminates a cross-service lookup on every relay message.
+- Loop prevention is simplest with shared state: the in-process source registry can tag relay-exclusion channel IDs without a round-trip.
+- Precedent in codebase: Kick listener handles multiple concerns (subscribe, message, deletion) in one service. No existing service is split purely on direction.
+- The relay workload is modest (one REST POST per non-Discord message per configured relay target), not an independent scaling axis.
+
+**When to reconsider splitting:** If the platform grows to thousands of guilds, relay throughput independently saturates Discord REST rate limits, or separate on-call ownership is needed. At v1.5 scale, that is not the case.
+
+---
 
 ## Recommended Architecture
 
-Chat overlay sharing integrates with the existing All-Chat microservices architecture through a **hybrid approach**: a new `share-service` for share lifecycle management combined with extensions to existing services for message routing and permissions.
-
-### High-Level Integration
-
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     NEW: Share Service (8091)                        │
-│  • Share request CRUD (create, accept, revoke)                      │
-│  • Share lifecycle management (expiry, stream detection)            │
-│  • Permission validation (premium, active status)                   │
-│  • User search by platform username                                 │
-└───────────────┬─────────────────────────────────────────────────────┘
-                │
-                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              EXISTING: Overlay-Manager (8082)                        │
-│  NEW: Share source type in overlay_chat_sources                     │
-│  • platform="share", channel_id=share_id                            │
-│  • Config: {source_overlay_id, source_user_id}                      │
-└───────────────┬─────────────────────────────────────────────────────┘
-                │
-                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│            MODIFIED: Message Processor (8087)                        │
-│  NEW: Share source resolver                                         │
-│  • Detects platform="share" sources                                 │
-│  • Resolves to actual platform sources from source overlay          │
-│  • Publishes to both source and consuming overlay channels          │
-└───────────────┬─────────────────────────────────────────────────────┘
-                │
-                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              EXISTING: Redis Pub/Sub (unchanged)                     │
-│  • overlay:{source_overlay_id} (original messages)                  │
-│  • overlay:{consuming_overlay_id} (shared messages)                 │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     discord-listener (new service)                       │
+│                                                                          │
+│  ┌──────────────────────┐    ┌────────────────────────────────────────┐  │
+│  │  Inbound Goroutine   │    │  Relay Goroutine Group                 │  │
+│  │  Group               │    │                                        │  │
+│  │                      │    │  • Subscribes to overlay:{id} Pub/Sub  │  │
+│  │  • Discord Gateway   │    │  • Filters: skip platform=="discord"   │  │
+│  │    WebSocket (shard) │    │    AND source_channel_id in           │  │
+│  │  • Receives MESSAGE_ │    │    configured_inbound_channels         │  │
+│  │    CREATE events     │    │  • POSTs to Discord REST API           │  │
+│  │  • Ignores bot's own │    │    POST /channels/{id}/messages        │  │
+│  │    messages (author  │    │  • Respects per-channel rate limits    │  │
+│  │    .bot == true)     │    │  • Queues with token bucket per        │  │
+│  │  • Publishes to      │    │    channel_id (5 msg/s)                │  │
+│  │    Redis Streams     │    │                                        │  │
+│  │    chat:raw          │    └────────────────────────────────────────┘  │
+│  └──────────────────────┘                                                │
+│                                                                          │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
+│  │  Channel Registry (in-memory + Redis)                            │    │
+│  │  • guild_id → shard_id mapping                                   │    │
+│  │  • source registry: channel_id → []overlay_id                   │    │
+│  │  • relay registry: overlay_id → outbound_channel_id             │    │
+│  │  • inbound_channel_ids set (for loop-prevention lookup)         │    │
+│  └──────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
+│  │  Shard Manager                                                   │    │
+│  │  • Owns N Gateway WebSocket connections (one per shard)         │    │
+│  │  • Shard ID = guild_id % num_shards                             │    │
+│  │  • Only one pod per shard (source-manager leader election)      │    │
+│  └──────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────┘
+        │ Inbound                              │ Relay
+        ▼                                      │
+Redis Streams (chat:raw)            Redis Pub/Sub (overlay:{id})
+        │                                      ▲
+        ▼                                      │
+Message Processor                   Message Processor
+(adds platform="discord")           (publishes after normalization)
 ```
 
-### Component Boundaries
+---
+
+## Component Boundaries
 
 | Component | Responsibility | Communicates With |
 |-----------|---------------|-------------------|
-| **share-service** (NEW) | Share CRUD, expiry, permissions, user search | PostgreSQL, Redis, auth-service (user lookup), twitch-eventsub-listener (stream status) |
-| **overlay-manager** (EXTEND) | Add share sources to overlays | share-service (validate share exists), PostgreSQL |
-| **message-processor** (EXTEND) | Resolve share sources, duplicate to consuming overlays | PostgreSQL (resolve shares), Redis Pub/Sub |
-| **api-gateway** (EXTEND) | Share endpoints proxy | share-service |
-| **auth-service** (EXTEND) | Premium flag on users table | PostgreSQL |
+| **discord-listener** (NEW) | Gateway WebSocket shards, inbound publish, relay subscribe + POST | Redis Streams (write), Redis Pub/Sub (subscribe), Discord Gateway WS, Discord REST API, source-manager (leadership), PostgreSQL (channel registry), auth-service (bot token storage) |
+| **source-manager** (EXTEND) | Leader election for shard ownership | discord-listener replicas |
+| **auth-service** (EXTEND) | Store Discord bot token (OAuth2 "Add to Server" flow) | PostgreSQL (oauth_tokens), discord-listener |
+| **overlay-manager** (EXTEND) | CRUD for discord sources and relay config | PostgreSQL, discord-listener (via NOTIFY) |
+| **message-processor** (EXTEND) | Add `discord` normalizer, parse MESSAGE_CREATE payload | Redis Streams (read), Redis Pub/Sub (write) |
 
-### Data Flow
+---
+
+## Data Flow: Inbound (Discord → Overlay)
 
 ```
-Share Request Flow:
-1. User A searches for User B by platform username
-   → share-service queries users table
+1. User adds Discord channel as source to overlay
+   overlay-manager inserts:
+   platform="discord", channel_id="{discord_channel_id}",
+   config={"guild_id":"...", "inbound_channel_id":"..."}
 
-2. User A creates share request (overlay_id, recipient_user_id, expiry_type)
-   → share-service validates premium status
-   → share-service inserts to shares table (status="pending")
+2. source-manager detects new discord source
+   → NOTIFY discord_source_changes
 
-3. User B views pending requests
-   → share-service queries WHERE recipient_user_id = B AND status="pending"
+3. discord-listener receives NOTIFY
+   → Channel manager adds channel to in-memory registry
+   → Shard manager ensures shard for guild_id is active
+   → Subscribes to MESSAGE_CREATE events on that channel
 
-4. User B accepts share (selects return overlay, expiry)
-   → share-service validates both users premium
-   → share-service updates share (status="active", return_overlay_id)
-   → share-service inserts bidirectional share record
+4. Discord user posts message
+   → Gateway sends MESSAGE_CREATE on shard for guild_id % num_shards
+   → discord-listener receives event
+   → Tags message with source_channel_id
 
-Share Source Activation Flow:
-5. User A adds User B's shared overlay as source to their overlay
-   → overlay-manager validates share exists and is active
-   → overlay-manager inserts overlay_chat_sources (platform="share", channel_id=share_id, config={source_overlay_id})
+5. discord-listener publishes to Redis Streams chat:raw:
+   {
+     "message_id":   "<discord_message_snowflake>",
+     "platform":     "discord",
+     "overlay_id":   "<overlay_uuid>",
+     "channel_id":   "<discord_channel_id>",
+     "channel_name": "<#channel-name>",
+     "user_id":      "<discord_user_snowflake>",
+     "username":     "<username#discriminator>",
+     "text":         "<message content>",
+     "timestamp":    "<ISO8601>",
+     "tags": {
+       "guild_id":          "<discord_guild_id>",
+       "guild_name":        "<server name>",
+       "inbound_channel_id": "<discord_channel_id>",
+       "is_bot":            "false"
+     },
+     "raw_message":  <full MESSAGE_CREATE JSON>
+   }
 
-6. Source activation triggers listeners
-   → source-manager detects new share source
-   → source-manager publishes control command to message-processor
+6. message-processor normalizes → publishes to overlay:{overlay_id}
 
-Message Delivery Flow:
-7. Message arrives from platform listener (Twitch, YouTube, etc.)
-   → Redis Streams: chat:raw
-
-8. Message processor consumes message
-   → Normalize → Enrich → Publish to overlay:{source_overlay_id}
-   → NEW: Check if source_overlay_id has active shares
-   → Resolve share sources pointing to this overlay
-   → Publish to overlay:{consuming_overlay_id} for each share
-
-9. API Gateway subscribes to both channels
-   → Broadcast to source overlay WebSocket clients
-   → Broadcast to consuming overlay WebSocket clients (shared messages)
+7. API Gateway WebSocket → overlay client receives message
 ```
+
+---
+
+## Data Flow: Outbound Relay (Overlay → Discord)
+
+```
+1. User configures relay: overlay X → discord channel Y
+   overlay-manager inserts config:
+   config={"relay_channel_id": "<discord_channel_id>", "relay_enabled": true}
+
+2. discord-listener subscribes to overlay:{overlay_id} on Redis Pub/Sub
+
+3. Message arrives on overlay:{overlay_id}
+   discord-listener receives UnifiedMessage
+
+4. Loop prevention check (in-process, O(1)):
+   IF message.platform == "discord"
+      AND message.tags["inbound_channel_id"] IN inbound_channel_ids
+   THEN DROP (this message originated from Discord, would echo back)
+
+5. Format relay message:
+   "[platform-emoji] username: text"
+   e.g. "📺 xQcOW: Pepega OMEGALUL"
+
+6. Enqueue in per-channel token bucket (5 msg/s per Discord channel)
+
+7. POST /channels/{relay_channel_id}/messages
+   Authorization: Bot {bot_token}
+   {"content": "<formatted message>"}
+
+8. On 429 Too Many Requests: parse Retry-After header, requeue after delay
+```
+
+---
+
+## Discord Gateway Sharding Model
+
+**Confidence: MEDIUM** (based on training data; verify against https://discord.com/developers/docs/topics/gateway#sharding before implementation)
+
+### How Discord sharding works
+
+Discord requires sharding when a bot is in 2,500+ guilds (servers). Each shard is a separate Gateway WebSocket connection. A guild's events are always delivered to the shard with ID:
+
+```
+shard_id = guild_id % num_shards
+```
+
+The bot sends an `IDENTIFY` payload with `[shard_id, num_shards]` when opening each Gateway connection.
+
+### Sharding vs. existing hash-based load balancing
+
+The existing system uses CRC32 consistent hashing to distribute channels across listener pods. Discord's sharding is fundamentally different: Discord determines which shard receives which guild's events. The service cannot freely redistribute guilds across shards — the shard assignment is imposed by Discord protocol.
+
+**Key implication:** For discord-listener, load balancing across pods means assigning shard ownership, not individual channel ownership. One pod owns one or more shards. All guilds on that shard are handled by that pod.
+
+### At v1.5 scale (small bot, few guilds)
+
+With fewer than 2,500 guilds (likely at launch: single-digit to hundreds), sharding is not required. A single Gateway connection (shard 0 of 1) handles all guilds. The service should:
+
+1. Start with `num_shards=1` (no sharding)
+2. The existing source-manager leader election ensures only one pod holds the single Gateway connection
+3. When the bot grows, increase `num_shards` and assign shard ranges to pods
+
+### Leader election approach for shards
+
+Reuse source-manager's leadership API with a shard-scoped key:
+
+```
+Redis key: leader:discord:shard:{shard_id}
+Value:     "discord-listener-pod-abc123"
+TTL:       60s (renewed every 30s)
+```
+
+One discord-listener pod claims leadership for shard 0 (or shards 0-N if multi-shard). Other pods in standby. This reuses the exact same pattern as youtube-listener-innertube.
+
+### Coordinator-based shard assignment (future, multi-shard)
+
+When `num_shards > 1`, extend the coordinator to distribute shard ranges:
+
+```
+Pod 1: shards [0, 1, 2]    → handles guilds where guild_id % 6 ∈ {0,1,2}
+Pod 2: shards [3, 4, 5]    → handles guilds where guild_id % 6 ∈ {3,4,5}
+```
+
+The bounded-load consistent hashing used for Twitch/Kick/TikTok is not applicable here. Use simple range partitioning for shard assignment.
+
+---
+
+## Loop Prevention
+
+**This is the most critical correctness requirement.**
+
+### Where loop prevention lives
+
+Loop prevention is enforced in the **discord-listener relay goroutine** before any HTTP call is made. It is NOT implemented in message-processor (which doesn't know about relay targets).
+
+### Detection algorithm
+
+A message is a potential echo if ALL of the following are true:
+1. `message.platform == "discord"` (came from Discord originally)
+2. `message.tags["inbound_channel_id"]` is in the set of Discord channels configured as inbound sources for the same overlay
+
+```go
+// In-process check, O(1) hash lookup
+func (r *RelayWorker) isEcho(msg *models.UnifiedMessage, relayConfig RelayConfig) bool {
+    if msg.Platform != "discord" {
+        return false
+    }
+    inboundChannelID, ok := msg.Tags["inbound_channel_id"]
+    if !ok {
+        return false
+    }
+    // Check if the message's source channel is an inbound channel for this overlay
+    return r.channelRegistry.IsInboundChannel(relayConfig.OverlayID, inboundChannelID)
+}
+```
+
+### Why not filter in message-processor
+
+Message-processor does not know which overlays have relay configured, nor which Discord channels are inbound vs outbound. Adding relay awareness to message-processor would couple two concerns that should stay separate. The discord-listener already subscribes to the Pub/Sub channel and can filter before calling Discord REST.
+
+### Scenario table
+
+| Message origin | Relay target | Action |
+|----------------|-------------|--------|
+| Twitch | Discord channel Y | Relay: post to Discord |
+| YouTube | Discord channel Y | Relay: post to Discord |
+| Discord channel X (same overlay, inbound source) | Discord channel Y | DROP (echo) |
+| Discord channel X (different overlay, no inbound source match) | Discord channel Y | Relay: post to Discord |
+| Discord channel Y (the relay target itself) | Discord channel Y | DROP (bot's own message filtered by `author.bot == true` at inbound) |
+
+### Bot self-message filtering
+
+The discord-listener inbound goroutine must always drop `MESSAGE_CREATE` events where `author.bot == true` AND `author.id == bot_application_id`. This prevents the relay's outbound messages from being re-ingested as chat messages.
+
+---
+
+## Integration with Existing Services
+
+### source-manager
+
+Discord channels are registered as sources with:
+- `platform = "discord"`
+- `channel_id = "{discord_channel_snowflake}"`
+- `config = {"guild_id": "...", "inbound_channel_id": "...", "relay_channel_id": "...", "relay_enabled": true}`
+
+Source-manager's existing `/sources?platform=discord` query works without modification. Leadership API is reused with `stream_id = "discord:shard:{shard_id}"`.
+
+Source-manager needs one change: add `"discord"` to the list of known platforms so it includes Discord sources in the active source registry sync.
+
+### auth-service
+
+Discord uses OAuth2 with the "Add to Server" flow (not user-token OAuth). The bot token is a long-lived application token, not a per-user OAuth token. Storage options:
+
+**Option A (Recommended):** Store the bot token in Kubernetes Secret, inject as environment variable `DISCORD_BOT_TOKEN`. The auth-service handles the OAuth2 "Add to Server" web flow (guild authorization for the streamer), but the bot token is global — not per-user.
+
+**Option B:** Store in `oauth_tokens` table with `platform="discord"` and a synthetic `user_id`. More complex, no benefit at v1.5.
+
+**Guild authorization (streamer flow):** When a streamer connects their Discord server, they complete a web OAuth2 flow (not bot token exchange) that grants the bot permission to join their guild. This results in the bot being added to the guild. The auth-service handles the callback and stores the `guild_id` in the user's profile or overlay config — NOT a per-user token.
+
+The auth-service needs a new OAuth endpoint:
+```
+GET /api/v1/auth/discord/authorize   → redirects to Discord OAuth2 "Add to Server" URL
+GET /api/v1/auth/discord/callback    → receives code, exchanges for guild_id confirmation, stores guild membership
+```
+
+### overlay-manager
+
+Add `discord` as a supported platform. The `overlay_chat_sources` table already supports arbitrary `platform` values and `config` JSONB. No schema changes to the table itself.
+
+New validation on source create/update: if `platform="discord"`, verify `guild_id` in config matches a guild the bot has joined (can query Discord REST `GET /guilds/{guild_id}` or rely on startup registry).
+
+### message-processor
+
+Add a Discord normalizer (`normalizer/discord_normalizer.go`). Input is the `raw_message` field from the `chat:raw` stream entry. The normalizer extracts:
+- `user.id` ← `author.id`
+- `user.username` ← `author.username` (+ optional `#discriminator` for legacy accounts)
+- `user.display_name` ← `member.nick` if present, else `author.global_name`, else `author.username`
+- `user.avatar_url` ← constructed from `author.avatar` hash
+- `message.text` ← `content` (with mention resolution if desired)
+- `badges` ← roles mapped to badge names (optional for v1.5)
+
+Discord does not use emote codes in the 7TV/BTTV/FFZ sense. The emote enrichment stage can be skipped (pass-through) for `platform="discord"`.
+
+---
+
+## New Components
+
+### New: discord-listener service
+
+```
+services/discord-listener/
+├── cmd/main.go                    # Entry: DB, Redis, Gateway, Relay, HTTP
+├── gateway/
+│   ├── client.go                  # Discord Gateway WebSocket client
+│   ├── shard.go                   # Shard lifecycle (connect, identify, heartbeat, resume)
+│   ├── types.go                   # Gateway event structs (MESSAGE_CREATE, READY, etc.)
+│   └── handler.go                 # Routes gateway events to message handler
+├── channels/
+│   ├── manager.go                 # Syncs active Discord sources from DB
+│   ├── registry.go                # In-memory channel→overlay mapping + inbound set
+│   └── repository.go              # DB queries for discord sources
+├── relay/
+│   ├── worker.go                  # Subscribes to Pub/Sub, filters, queues relay messages
+│   ├── poster.go                  # Discord REST POST /channels/{id}/messages
+│   └── ratelimit.go               # Token bucket per channel_id, 429 backoff
+├── publisher/
+│   └── redis.go                   # Publishes RawChatMessage to chat:raw
+├── handlers/
+│   └── health.go                  # /health/live, /health/ready, /status
+├── metrics/
+│   └── metrics.go                 # Prometheus counters/histograms
+├── go.mod
+└── Dockerfile
+```
+
+### Modified: source-manager
+
+- Add `"discord"` to `SUPPORTED_PLATFORMS` list
+- Add shard leadership key namespace: `leader:discord:shard:{shard_id}`
+- No API surface changes
+
+### Modified: auth-service
+
+- Add `GET /api/v1/auth/discord/authorize` (redirects to Discord OAuth2 guild authorization URL)
+- Add `GET /api/v1/auth/discord/callback` (stores guild_id, confirms bot membership)
+- Add `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN` env vars
+
+### Modified: message-processor
+
+- Add `normalizer/discord_normalizer.go`
+- Add case `"discord"` in router switch
+- Skip emote enrichment stage for `platform="discord"` (Discord embeds are not third-party emotes)
+
+### Modified: overlay-manager
+
+- Add `"discord"` to supported platforms enum/validation
+- Add validation: if `platform="discord"`, verify `guild_id` in config is known to bot
+
+---
 
 ## Patterns to Follow
 
-### Pattern 1: Share as Virtual Platform Source
+### Pattern 1: Gateway Client Mirrors Kick Pusher Client
 
-**What:** Treat shared overlays as a special "platform" type in overlay_chat_sources
+The Kick listener's `websocket/client.go` is the closest structural analog: it manages a persistent WebSocket, handles reconnects, parses typed events, and calls registered handlers. Discord Gateway is more complex (heartbeat interval from HELLO, sequence numbers for RESUME, zlib decompression optionally), but the same read/write pump goroutine pattern applies.
 
-**When:** User adds a shared overlay to their overlay configuration
+**Key differences from Kick:**
 
-**Implementation:**
+| Aspect | Kick (Pusher) | Discord Gateway |
+|--------|---------------|-----------------|
+| Reconnect | Reconnect and re-subscribe | Reconnect → RESUME if sequence < threshold; else IDENTIFY |
+| Heartbeat | Pusher application-level ping/pong | Send `{"op":1,"d":sequence}` every `heartbeat_interval` ms |
+| Multiple guilds | Multiple Pusher channels per connection | All guilds on the shard on one connection |
+| Auth | App key in URL | `IDENTIFY` payload with bot token |
 
-```sql
--- In overlay_chat_sources table
-INSERT INTO overlay_chat_sources (
-    overlay_id,          -- Consuming overlay
-    platform,            -- "share" (new virtual platform)
-    channel_id,          -- share_id (UUID from shares table)
-    channel_name,        -- "{source_user_display_name}'s chat"
-    config,              -- {"source_overlay_id": "uuid", "source_user_id": "uuid"}
-    is_active
-) VALUES (
-    '...', 'share', '...', 'xQc's chat', '{"source_overlay_id": "..."}', true
-);
-```
-
-**Why:**
-- Reuses existing source activation flow (source-manager)
-- Consistent with other platform sources (Twitch, YouTube, etc.)
-- Automatic activation/deactivation on WebSocket connect/disconnect
-- No changes to frontend overlay configuration UI (just another source type)
-
-**Advantages:**
-- Minimal changes to existing codebase
-- Consistent UX (add share like any other source)
-- Automatic lifecycle management
-
-**Trade-offs:**
-- "platform" field semantics stretched (share is not a platform)
-- Additional lookup required in message processor (resolve share → source overlay)
-
-### Pattern 2: Database-per-Service with Share Table Ownership
-
-**What:** share-service owns the `shares` table, other services query via API
-
-**When:** Other services need to validate share existence or status
-
-**Implementation:**
-
-```sql
--- Owned by share-service
-CREATE TABLE shares (
-    id UUID PRIMARY KEY,
-    requester_user_id UUID NOT NULL,
-    recipient_user_id UUID NOT NULL,
-    requester_overlay_id UUID NOT NULL,
-    recipient_overlay_id UUID,              -- NULL until accepted
-    status VARCHAR(20) NOT NULL,            -- "pending", "active", "expired", "revoked"
-    expiry_type VARCHAR(20) NOT NULL,       -- "this_stream", "duration", "unlimited"
-    expiry_duration INTERVAL,               -- NULL if unlimited or this_stream
-    expires_at TIMESTAMP,                   -- NULL if unlimited
-    created_at TIMESTAMP,
-    accepted_at TIMESTAMP,                  -- NULL if pending
-    revoked_at TIMESTAMP,                   -- NULL if not revoked
-    revoked_by_user_id UUID,                -- Who revoked (NULL if not revoked)
-    CONSTRAINT check_status CHECK (status IN ('pending', 'active', 'expired', 'revoked'))
-);
-
--- Queried by overlay-manager, message-processor
--- Via share-service HTTP API (not direct database access)
-```
-
-**API Contract:**
+### Pattern 2: Relay Worker as Pub/Sub Consumer
 
 ```go
-// share-service provides HTTP endpoints
-GET  /api/v1/shares/:share_id               // Get share details
-GET  /api/v1/shares?user_id=xxx&status=active  // List shares
-POST /api/v1/shares/validate                // Validate share exists and is active
-```
-
-**Why:**
-- Follows microservices principle: each service owns its data
-- Prevents coupling through shared database tables
-- Allows share-service to enforce business rules (premium check, expiry)
-- Changes to share schema don't break other services
-
-**Reference:**
-- [Database Per Service Pattern](https://microservices.io/patterns/data/database-per-service.html)
-- [Microsoft: Data Considerations for Microservices](https://learn.microsoft.com/en-us/azure/architecture/microservices/design/data-considerations)
-
-### Pattern 3: Message Fan-Out at Processor Layer
-
-**What:** Message processor publishes enriched messages to multiple overlay channels when shares exist
-
-**When:** Message arrives for an overlay that has active shares
-
-**Implementation:**
-
-```go
-// message-processor: publisher/pubsub_publisher.go
-func (p *PubSubPublisher) PublishWithShares(ctx context.Context, msg *models.UnifiedChatMessage) error {
-    // Always publish to source overlay
-    overlayIDs := []string{msg.OverlayID}
-
-    // Lookup shares pointing to this overlay (cache in Redis)
-    shares, _ := p.shareResolver.GetActiveShares(ctx, msg.OverlayID)
-    for _, share := range shares {
-        overlayIDs = append(overlayIDs, share.ConsumingOverlayID)
+// relay/worker.go
+func (w *RelayWorker) Start(ctx context.Context) {
+    // Subscribe to all configured overlay channels
+    for _, overlayID := range w.registry.GetRelayOverlayIDs() {
+        w.client.Subscribe("overlay:" + overlayID)
     }
 
-    // Batch publish to all overlay channels
-    return p.PublishToMultiple(ctx, overlayIDs, msg)
-}
-```
-
-**Why:**
-- Messages enriched once, delivered to multiple overlays
-- Avoids duplicate processing (normalization, emote enrichment)
-- Low latency (single Redis pipeline for multiple PUBLISH)
-- No changes to listener services (still publish to chat:raw)
-
-**Caching Strategy:**
-
-```go
-// Redis cache: shares:overlay:{overlay_id} → JSON array of consuming overlay IDs
-// TTL: 5 minutes (short TTL to catch revocations quickly)
-// Invalidated on share accept/revoke
-
-// Example cache value:
-// shares:overlay:source-123 → ["consuming-456", "consuming-789"]
-```
-
-**Performance:**
-- Cache hit: <5ms to resolve shares
-- Cache miss: 10-20ms (database query to shares table)
-- Expected hit rate: >95% (overlays rarely change share config)
-
-### Pattern 4: Stream Lifecycle Detection for Expiry
-
-**What:** Detect stream start/end events to expire "this stream" shares
-
-**When:** Share has `expiry_type="this_stream"`
-
-**Implementation:**
-
-```go
-// share-service subscribes to Twitch EventSub, YouTube activity, Kick/TikTok stream status
-
-// Twitch: Use existing twitch-eventsub-listener
-// - stream.online → record stream session start
-// - stream.offline → expire shares for this user
-
-// YouTube: Use existing stream history tracking (migrations/010_stream_history_tracking.sql)
-// - Check stream_sessions table for active streams
-
-// Kick: Research needed (see PITFALLS.md)
-
-// TikTok: Use existing tiktok-listener stream detection
-```
-
-**Expiry Check Cron:**
-
-```go
-// share-service: runs every 5 minutes
-func (s *ShareService) ExpireThisStreamShares(ctx context.Context) {
-    // Find shares with expiry_type="this_stream" AND status="active"
-    shares, _ := s.repo.GetActiveThisStreamShares(ctx)
-
-    for _, share := range shares {
-        // Check if requester's stream is offline
-        isLive := s.streamDetector.IsStreamLive(ctx, share.RequesterUserID)
-        if !isLive {
-            s.repo.ExpireShare(ctx, share.ID)
-        }
-
-        // Check if recipient's stream is offline
-        isLive = s.streamDetector.IsStreamLive(ctx, share.RecipientUserID)
-        if !isLive {
-            s.repo.ExpireShare(ctx, share.ID)
+    ch := w.client.Channel()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case msg := <-ch:
+            w.handleMessage(msg)
         }
     }
 }
+
+func (w *RelayWorker) handleMessage(msg *redis.Message) {
+    var unified models.UnifiedMessage
+    json.Unmarshal([]byte(msg.Payload), &unified)
+
+    config, ok := w.registry.GetRelayConfig(unified.OverlayID)
+    if !ok || !config.RelayEnabled {
+        return
+    }
+
+    if w.isEcho(&unified, config) {
+        return // loop prevention
+    }
+
+    w.queue.Enqueue(config.RelayChannelID, &unified)
+}
 ```
 
-**Why:**
-- Automatic expiry without manual user action
-- Leverages existing stream detection infrastructure
-- Respects user intent ("share for this stream only")
+### Pattern 3: Token Bucket Rate Limiting for Relay
+
+Discord REST allows ~5 messages/second per channel (confirmed in documentation; MEDIUM confidence — verify exact limits). Use a per-channel token bucket:
+
+```go
+// relay/ratelimit.go
+type ChannelRateLimiter struct {
+    buckets map[string]*rate.Limiter  // channel_id → limiter
+    mu      sync.Mutex
+}
+
+func (l *ChannelRateLimiter) Wait(ctx context.Context, channelID string) error {
+    l.mu.Lock()
+    limiter, ok := l.buckets[channelID]
+    if !ok {
+        limiter = rate.NewLimiter(rate.Limit(5), 5) // 5/s, burst 5
+        l.buckets[channelID] = limiter
+    }
+    l.mu.Unlock()
+    return limiter.Wait(ctx)
+}
+```
+
+Also handle Discord 429 responses:
+```go
+if resp.StatusCode == 429 {
+    var rateLimit DiscordRateLimit
+    json.NewDecoder(resp.Body).Decode(&rateLimit)
+    time.Sleep(time.Duration(rateLimit.RetryAfter * float64(time.Second)))
+    // retry
+}
+```
+
+### Pattern 4: Source Registry with NOTIFY-Driven Updates
+
+Mirror the Twitch/Kick channel manager pattern: query DB on startup for all active Discord sources, then receive `NOTIFY discord_source_changes` from overlay-manager to add/remove channels without full resync.
+
+```go
+// channels/manager.go — same structure as kick-listener/channels/manager.go
+// channels/repository.go — query WHERE platform='discord' AND is_active=true
+```
+
+---
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Direct Database Joins Across Services
+### Anti-Pattern 1: Separate Relay Service
 
-**What:** Message processor directly joining `overlay_chat_sources` with `shares` table
+**What:** Create `discord-relay` as a separate Kubernetes Deployment
+**Why bad:**
+- Both inbound listener and relay need the same Discord bot token and channel registry
+- Loop prevention requires shared knowledge of which channels are inbound sources
+- Two services to deploy, monitor, and maintain for one logical feature
+- No independent scaling benefit at current scale (relay is rate-limit-bound, not CPU-bound)
+
+**Instead:** Single `discord-listener` service with two goroutine groups
+
+### Anti-Pattern 2: Message-Processor-Level Loop Prevention
+
+**What:** Adding a "drop if platform==discord AND is relay echo" filter in message-processor
 
 **Why bad:**
-- Tight coupling between services
-- Schema changes in share-service break message-processor
-- Violates microservices principle (service autonomy)
-- Hard to scale independently (shared database bottleneck)
+- Message-processor does not know which overlays have relay configured
+- Requires message-processor to query relay config on every Discord message (hot path)
+- Couples the relay feature into the general message processing pipeline
+- Loop prevention should be at the relay boundary, not the normalization boundary
 
-**Instead:** API calls or Redis cache for cross-service data
+**Instead:** discord-listener relay worker filters before calling Discord REST
 
-### Anti-Pattern 2: Synchronous Share Validation in Message Path
+### Anti-Pattern 3: Subscribing Relay to chat:raw Stream Instead of Pub/Sub
 
-**What:** Message processor calls share-service API for every message to validate share is active
-
-**Why bad:**
-- Adds 10-50ms latency per message
-- Share service becomes bottleneck (3,000 msg/s × 10ms = 30 concurrent requests)
-- Single point of failure (share-service down = no messages)
-
-**Instead:** Cache active shares in Redis, refresh on share lifecycle events
-
-```go
-// BAD: Synchronous validation
-for each message:
-    shares := callShareServiceAPI(overlayID)  // 10-50ms per message!
-    publishToShares(shares)
-
-// GOOD: Cached shares with event invalidation
-shares := getFromRedisCache(overlayID)  // <5ms
-publishToShares(shares)
-
-// share-service publishes to Redis Pub/Sub on share lifecycle events
-// message-processor subscribes and invalidates cache
-```
-
-### Anti-Pattern 3: Nested Share Chains
-
-**What:** Allowing User A to share their overlay (which contains User B's shared overlay) with User C
+**What:** Relay worker consumes from `chat:raw` Redis Stream to pick up messages to relay
 
 **Why bad:**
-- Infinite loop potential (A shares to B, B shares to A)
-- Permission explosion (transitive sharing violates intent)
-- Complexity in expiry (if B's share expires, does C's share also expire?)
-- Hard to reason about ownership and revocation
+- `chat:raw` contains unnormalized, unenriched messages — the relay would need its own normalization
+- Adds a consumer group to `chat:raw`, increasing stream fan-out
+- Messages in `chat:raw` are not yet filtered by `MESSAGE_AGE_CUTOFF_SECONDS`
+- The relay should send the same human-readable text that appears in the overlay, which is the normalized form
 
-**Instead:** Shares resolve to platform sources only (one level deep)
+**Instead:** Subscribe to `overlay:{overlay_id}` Pub/Sub (post-normalization)
 
-```sql
--- Enforce constraint: shares cannot reference other shares
--- In overlay_chat_sources: if platform="share", verify channel_id points to share with platform sources only
-```
+### Anti-Pattern 4: Hash-Based Sharding Applied to Discord Channels
 
-### Anti-Pattern 4: Share Source as Separate Overlay Type
-
-**What:** Creating a new `shared_overlays` table separate from `overlay_chat_sources`
+**What:** Using CRC32 consistent hashing to distribute individual Discord channels across pods
 
 **Why bad:**
-- Duplicates source management logic (activation, deactivation, lifecycle)
-- Frontend needs separate UI for share sources vs platform sources
-- Source-manager must handle two different data models
-- More complex codebase (two paths for similar functionality)
+- Discord Gateway sharding is guild-based (not channel-based) and imposed by Discord protocol
+- A guild's events all arrive on `shard_id = guild_id % num_shards` — you cannot route individual channels from the same guild to different Gateway connections
+- Applying all-chat's channel-level consistent hashing would require opening one Gateway connection per channel, violating Discord's connection model (one connection per shard, which covers all guilds on that shard)
 
-**Instead:** Treat shares as virtual platform sources (Pattern 1)
+**Instead:** Assign shard ownership to pods. One pod owns one shard (or a range of shards).
+
+### Anti-Pattern 5: Re-using the Existing Node.js discord-bot Service
+
+**What:** Extending `services/discord-bot` (the YouTube quota monitoring Node.js bot) to also handle chat listening/relay
+
+**Why bad:**
+- That service is Node.js, not Go — inconsistent with all other services
+- It is a monitoring-only bot with no message ingestion or Redis Streams publishing
+- Mixing quota monitoring and chat routing concerns increases blast radius
+- The all-chat platform constraint: "No new infrastructure dependencies" — adding Node.js as a pattern for core services violates the Go-only backend decision
+
+**Instead:** New `services/discord-listener` in Go, following Standard Go Layout
+
+---
 
 ## Scalability Considerations
 
-| Concern | At 100 shares | At 10K shares | At 1M shares |
+| Concern | At 100 guilds | At 10K guilds | At 1M guilds |
 |---------|---------------|---------------|--------------|
-| **Share lookup** | In-memory cache (Redis) | Redis cache with partitioning | Redis Cluster with sharding by overlay_id |
-| **Message fan-out** | Single Redis PUBLISH pipeline | Same (pipeline supports 100s of overlays) | Split hot overlays to dedicated Pub/Sub instances |
-| **Expiry checks** | Cron every 5 minutes | Background worker pool (10 workers) | Distributed task queue (BullMQ, Temporal) |
-| **User search** | PostgreSQL LIKE query | PostgreSQL full-text search index | ElasticSearch index on usernames |
+| **Gateway connections** | 1 shard, 1 pod | 4 shards (Discord recommends 2,500/shard), 4 pods | 400 shards, 400 pods |
+| **Relay throughput** | Single REST client, token bucket sufficient | Relay worker pool per overlay, per-channel queue | Dedicated relay service, Redis queue with multiple workers |
+| **Channel registry** | In-memory map, trivial | In-memory + Redis backup | Redis Cluster, region-local replica |
+| **Loop prevention** | In-process set lookup | In-process set (thousands of entries, still trivial) | Bloom filter or Redis SET |
+| **Pub/Sub subscriptions** | One subscription per relay overlay | Standard Redis Pub/Sub handles thousands | Redis Cluster with Pub/Sub sharding |
 
-### Fan-Out Amplification
+**At v1.5 scale:** In-process everything is correct. Redis-backed state as fallback for pod restarts.
 
-**Scenario:** Popular streamer (100K viewers) shares their chat with 1,000 other streamers
+---
 
-**Impact:**
-- Message rate: 500 msg/s (popular channel)
-- Fan-out: 1,000 overlays × 500 msg/s = 500K messages/s published to Redis Pub/Sub
-- Redis Pub/Sub capacity: ~500K msg/s per instance (acceptable, but close to limit)
+## Database Schema
 
-**Mitigation:**
-1. **Cap shares per overlay:** Limit to 10 active shares per overlay (prevent abuse)
-2. **Hot overlay detection:** If overlay has >100 shares, flag for manual review (likely spam)
-3. **Rate limiting:** Throttle share requests (5 requests/hour per user)
-4. **Premium tier limits:** Free tier = 1 share, Premium = 10 shares, Partner = 100 shares
-
-### Share Cache Invalidation
-
-**Challenge:** Cache must be invalidated within seconds of share revocation
-
-**Solution:** Redis Pub/Sub for cache invalidation
-
-```go
-// share-service publishes on share lifecycle events
-redis.Publish("shares:invalidate", json.Marshal({
-    "source_overlay_id": "...",
-    "consuming_overlay_id": "...",
-    "action": "revoke"  // or "activate", "expire"
-}))
-
-// message-processor subscribes
-func (p *MessageProcessor) handleShareInvalidation(msg ShareInvalidationEvent) {
-    // Delete cache entries
-    p.cache.Delete("shares:overlay:" + msg.SourceOverlayID)
-    p.cache.Delete("shares:overlay:" + msg.ConsumingOverlayID)
-}
-```
-
-**Fallback:** If message arrives before cache invalidation, worst case is one extra message delivered to revoked share (acceptable trade-off for low latency)
-
-## Database Schema Extensions
-
-### New Table: shares
+No new tables are required. Discord sources fit the existing `overlay_chat_sources` schema:
 
 ```sql
-CREATE TABLE shares (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-    -- Requester (initiator of share request)
-    requester_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    requester_overlay_id UUID NOT NULL REFERENCES overlays(id) ON DELETE CASCADE,
-
-    -- Recipient (receives share request)
-    recipient_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    recipient_overlay_id UUID REFERENCES overlays(id) ON DELETE CASCADE,  -- NULL until accepted
-
-    -- Status and lifecycle
-    status VARCHAR(20) NOT NULL DEFAULT 'pending',
-    expiry_type VARCHAR(20) NOT NULL,
-    expiry_duration INTERVAL,           -- Used if expiry_type="duration"
-    expires_at TIMESTAMP,                -- Computed expiry timestamp
-
-    -- Timestamps
-    created_at TIMESTAMP DEFAULT NOW(),
-    accepted_at TIMESTAMP,               -- When recipient accepted
-    revoked_at TIMESTAMP,                -- When revoked
-    revoked_by_user_id UUID REFERENCES users(id),  -- Who revoked
-
-    -- Constraints
-    CONSTRAINT check_status CHECK (status IN ('pending', 'active', 'expired', 'revoked')),
-    CONSTRAINT check_expiry_type CHECK (expiry_type IN ('this_stream', 'duration', 'unlimited')),
-    CONSTRAINT check_not_self_share CHECK (requester_user_id != recipient_user_id)
+-- Discord inbound source (read messages from this channel)
+INSERT INTO overlay_chat_sources (
+    overlay_id,
+    platform,           -- 'discord'
+    channel_id,         -- Discord channel snowflake (the inbound text channel)
+    channel_name,       -- '#channel-name'
+    config,             -- JSONB
+    is_active
+) VALUES (
+    '<overlay_uuid>',
+    'discord',
+    '1234567890123456789',  -- channel snowflake
+    '#general',
+    '{
+        "guild_id":          "9876543210987654321",
+        "guild_name":        "xQc Server",
+        "inbound_channel_id": "1234567890123456789",
+        "relay_enabled":     true,
+        "relay_channel_id":  "9999999999999999999"
+    }',
+    true
 );
-
--- Indexes
-CREATE INDEX idx_shares_requester_user_id ON shares(requester_user_id);
-CREATE INDEX idx_shares_recipient_user_id ON shares(recipient_user_id);
-CREATE INDEX idx_shares_status ON shares(status);
-CREATE INDEX idx_shares_requester_overlay_id ON shares(requester_overlay_id) WHERE status = 'active';
-CREATE INDEX idx_shares_recipient_overlay_id ON shares(recipient_overlay_id) WHERE status = 'active';
-
--- Index for expiry checks
-CREATE INDEX idx_shares_expiry ON shares(expires_at) WHERE status = 'active' AND expires_at IS NOT NULL;
 ```
 
-### Modified Table: users
+**Config JSONB fields:**
 
-```sql
--- Add premium flag
-ALTER TABLE users ADD COLUMN is_premium BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE users ADD COLUMN premium_expires_at TIMESTAMP;
+| Field | Type | Purpose |
+|-------|------|---------|
+| `guild_id` | string (snowflake) | Discord server ID — determines shard assignment |
+| `guild_name` | string | Display name (denormalized for UX) |
+| `inbound_channel_id` | string (snowflake) | Channel to read chat from |
+| `relay_enabled` | bool | Whether to relay overlay messages back to Discord |
+| `relay_channel_id` | string (snowflake) | Channel to post relay messages to (can equal `inbound_channel_id`) |
 
--- Index for premium checks
-CREATE INDEX idx_users_is_premium ON users(is_premium) WHERE is_premium = TRUE;
-```
-
-### Modified Table: overlay_chat_sources
-
-```sql
--- No schema changes needed, but add new "share" platform to supported_platforms
-
-INSERT INTO supported_platforms (platform, display_name, is_enabled, requires_oauth)
-VALUES ('share', 'Shared Overlay', TRUE, FALSE)
-ON CONFLICT (platform) DO NOTHING;
-
--- Config JSONB for share sources:
--- {
---   "source_overlay_id": "uuid",
---   "source_user_id": "uuid",
---   "share_id": "uuid"
--- }
-```
-
-## Service Interface Contracts
-
-### share-service API
-
-```go
-// Share Management
-POST   /api/v1/shares                 // Create share request (requires premium)
-GET    /api/v1/shares                 // List shares (filter by status, user)
-GET    /api/v1/shares/:id             // Get share details
-PUT    /api/v1/shares/:id/accept      // Accept share request (requires premium)
-DELETE /api/v1/shares/:id             // Revoke share
-
-// User Search
-GET    /api/v1/users/search?platform=twitch&username=xqc  // Search by platform username
-
-// Internal APIs (service-to-service)
-GET    /internal/shares/validate/:share_id              // Validate share exists and is active
-GET    /internal/shares/resolve/:overlay_id             // Get consuming overlays for source overlay
-POST   /internal/shares/expire                          // Bulk expire shares (cron job)
-```
-
-### overlay-manager Extensions
-
-```go
-// Existing endpoint, modified behavior
-POST /api/v1/overlays/:id/sources
-// New validation: if platform="share", verify share exists and is active via share-service API
-
-// Request body:
-{
-  "platform": "share",
-  "channel_id": "share-uuid-123",        // Share ID from shares table
-  "channel_name": "xQc's chat",
-  "config": {
-    "source_overlay_id": "overlay-uuid",
-    "source_user_id": "user-uuid",
-    "share_id": "share-uuid-123"
-  }
-}
-```
-
-### message-processor Extensions
-
-```go
-// Internal: Share resolver
-type ShareResolver interface {
-    GetActiveShares(ctx context.Context, sourceOverlayID string) ([]Share, error)
-    InvalidateCache(ctx context.Context, overlayID string) error
-}
-
-// Modified publisher
-func (p *PubSubPublisher) PublishWithShares(ctx context.Context, msg *models.UnifiedChatMessage) error
-```
+---
 
 ## Build Order and Dependencies
 
-### Phase 1: Database and Core Share Service (Milestone Foundation)
+### Phase 1: Discord bot token + auth flow (no chat yet)
+**Goal:** Bot can join servers, token stored, auth-service extended
+- `auth-service`: Discord OAuth2 endpoints (authorize, callback, guild membership storage)
+- Kubernetes Secret: `DISCORD_BOT_TOKEN`
+- Database: no schema changes needed
 
-**Goal:** Share CRUD without message delivery
+**Dependencies:** None — standalone auth work
 
-**Components:**
-1. Database migration: `shares` table, `users.is_premium`
-2. share-service: CRUD endpoints, premium validation
-3. share-service: User search endpoint
-4. API Gateway: Route share endpoints
+**Validation:** Bot appears in Discord server after "Add to Server" OAuth flow
 
-**Dependencies:** None (can build in parallel with other work)
+### Phase 2: Inbound listener (Discord → overlay)
+**Goal:** Discord messages appear in overlays
+- `discord-listener/gateway`: WebSocket client, shard manager, inbound goroutine group
+- `discord-listener/channels`: Channel registry, source sync from DB
+- `discord-listener/publisher`: Publish to `chat:raw`
+- `message-processor`: Add Discord normalizer
+- `source-manager`: Add `"discord"` platform
+- `overlay-manager`: Add `"discord"` platform validation
 
-**Validation:** Can create, accept, revoke shares via API
+**Dependencies:** Phase 1 (bot token available)
 
-### Phase 2: Overlay Source Integration (Share as Source)
+**Validation:** Discord message appears in overlay WebSocket stream
 
-**Goal:** Add shared overlays to overlay configuration
+### Phase 3: Outbound relay (overlay → Discord)
+**Goal:** Non-Discord overlay messages are relayed to configured Discord channel
+- `discord-listener/relay`: Pub/Sub consumer, loop prevention, token bucket, REST poster
+- End-to-end test: Twitch message → overlay → Discord relay channel
 
-**Components:**
-1. overlay-manager: Validate share exists when adding share source
-2. Frontend: UI to add share source (select from accepted shares)
-3. share-service: Internal validate endpoint
+**Dependencies:** Phase 2 (inbound working, channel registry established)
 
-**Dependencies:** Phase 1 complete
+**Validation:** Twitch message appears in Discord channel; Discord message does NOT echo back
 
-**Validation:** Can add share source to overlay, shows in source list
+### Phase 4: Load balancing + HPA (production hardening)
+**Goal:** Multiple discord-listener pods, shard ownership via leader election
+- `discord-listener`: Startup jitter, coordinator integration, shard assignment
+- Kubernetes: HPA config, Prometheus metrics, Grafana dashboard
+- `source-manager`: Shard leadership keys
 
-### Phase 3: Message Routing (Actual Chat Delivery)
+**Dependencies:** Phase 2-3 (service functional as single pod)
 
-**Goal:** Messages from shared overlays appear in consuming overlay
+**Validation:** Scale to 3 replicas, one pod owns shard 0, others standby; failover within 60s
 
-**Components:**
-1. message-processor: Share resolver (database query, Redis cache)
-2. message-processor: Modified publisher (fan-out to consuming overlays)
-3. share-service: Cache invalidation events (Redis Pub/Sub)
+### Phase 5: Setup UI
+**Goal:** Streamer can configure Discord sources and relay in overlay editor
+- Frontend: Discord server connect card, channel picker, relay toggle
+- Integrates with Phase 1 auth flow and Phase 2-3 source management
 
-**Dependencies:** Phase 2 complete
+**Dependencies:** Phase 1-3 (backend APIs working)
 
-**Validation:** Messages appear in both source and consuming overlay
+---
 
-### Phase 4: Lifecycle and Expiry (Production Ready)
+## Service Interface Contracts
 
-**Goal:** Automatic share expiry based on rules
-
-**Components:**
-1. share-service: Stream lifecycle detection (Twitch EventSub integration)
-2. share-service: Expiry cron job (5-minute interval)
-3. share-service: Manual revocation (mark inactive, invalidate cache)
-
-**Dependencies:** Phase 3 complete
-
-**Validation:** Shares expire when stream ends, manually revoked shares stop delivering messages
-
-### Phase 5: Premium Enforcement (Business Logic)
-
-**Goal:** Enforce premium requirements, admin overrides
-
-**Components:**
-1. auth-service: Premium flag management (admin endpoint)
-2. share-service: Premium checks on create/accept
-3. Frontend: Premium warning UI
-
-**Dependencies:** Phase 1-4 complete
-
-**Validation:** Non-premium users blocked from creating shares, admins can mark users premium
-
-## New vs Modified Components
-
-### New Components (Build from Scratch)
-
-| Component | Lines of Code (Estimate) | Complexity | Notes |
-|-----------|--------------------------|------------|-------|
-| **share-service** | ~2,000 LOC | Medium | Standard Go service, follows existing patterns |
-| **share-service/handlers** | ~500 LOC | Low | CRUD handlers, premium validation |
-| **share-service/repository** | ~400 LOC | Low | PostgreSQL queries, standard CRUD |
-| **share-service/expiry** | ~300 LOC | Medium | Cron job, stream detection integration |
-| **share-service/search** | ~200 LOC | Low | User search by platform username |
-| **Database migration** | ~100 LOC | Low | CREATE TABLE shares, ALTER users |
-
-**Total New Code:** ~3,500 LOC
-
-### Modified Components (Extend Existing)
-
-| Component | File | Modification | Complexity |
-|-----------|------|--------------|------------|
-| **overlay-manager** | `handlers/sources.go` | Add share validation on source create | Low (~50 LOC) |
-| **message-processor** | `publisher/pubsub_publisher.go` | Add share resolver, fan-out logic | Medium (~200 LOC) |
-| **message-processor** | `share/resolver.go` | NEW FILE: Share resolver with Redis cache | Medium (~300 LOC) |
-| **api-gateway** | `cmd/main.go` | Route /api/v1/shares/* to share-service | Low (~20 LOC) |
-| **frontend** | Multiple files | Share management UI, source selection | High (~1,000 LOC) |
-
-**Total Modified Code:** ~1,570 LOC
-
-### No Changes Required
-
-- Listener services (Twitch, YouTube, Kick, TikTok) - unchanged
-- Emote service - unchanged
-- Auth service - minor addition (premium flag endpoints)
-- Source manager - works with share sources automatically (platform agnostic)
-- Redis Streams/Pub/Sub - no schema changes
-
-## Integration Testing Strategy
-
-### Test 1: End-to-End Share Flow
+### discord-listener HTTP API
 
 ```
-1. User A creates share request for User B
-2. User B accepts share request
-3. User A adds User B's shared overlay to their overlay
-4. Message sent in User B's Twitch chat
-5. Message appears in BOTH User B's overlay AND User A's overlay
-6. User A revokes share
-7. Message sent in User B's Twitch chat
-8. Message appears ONLY in User B's overlay (not User A's)
+GET  /health/live         → 200 always
+GET  /health/ready        → 200 if Gateway connected + Redis reachable
+GET  /status              → JSON: shard status, channel count, relay count
+GET  /metrics             → Prometheus metrics
 ```
 
-### Test 2: Expiry Validation
+### Key Prometheus Metrics
 
 ```
-1. User A creates share with expiry_type="this_stream"
-2. User B accepts
-3. User A's stream goes offline (Twitch EventSub: stream.offline)
-4. share-service expires share (status="expired")
-5. Message sent in User B's Twitch chat
-6. Message appears ONLY in User B's overlay (share expired)
+discord_gateway_messages_total{event_type}       # MESSAGE_CREATE, etc.
+discord_gateway_shard_connected{shard_id}        # 0 or 1
+discord_relay_messages_total{result}             # sent, dropped_echo, dropped_bot, error
+discord_relay_queue_depth{channel_id}            # per-channel relay queue
+discord_relay_rate_limit_waits_total{channel_id} # 429 backoffs
+discord_inbound_messages_published_total         # published to chat:raw
 ```
 
-### Test 3: Premium Enforcement
+---
 
-```
-1. User A (non-premium) attempts to create share request
-2. share-service returns 403 Forbidden (premium required)
-3. Admin marks User A as premium (is_premium=true)
-4. User A creates share request
-5. Request succeeds
+## Environment Variables
+
+```bash
+# Discord credentials
+DISCORD_BOT_TOKEN=Bot.xxxxx          # Long-lived bot token
+DISCORD_APPLICATION_ID=12345...      # Bot's application/user ID (for self-filtering)
+DISCORD_NUM_SHARDS=1                 # Increase when guild count approaches 2500
+
+# Source Manager
+SOURCE_MANAGER_URL=http://source-manager:8088
+SOURCE_MANAGER_SECRET=dev-service-secret
+
+# Standard (shared with all services)
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_USER=allchat
+DATABASE_PASSWORD=allchat_dev_password
+DATABASE_NAME=allchat
+REDIS_HOST=localhost
+REDIS_PORT=6379
+PORT=8092
+LOG_LEVEL=info
+OTEL_ENABLED=false
+APP_VERSION=dev
+ENVIRONMENT=development
 ```
 
-### Test 4: Fan-Out Performance
-
-```
-1. Create 10 shares pointing to same source overlay
-2. Send 100 messages to source overlay Twitch chat
-3. Verify all 100 messages appear in all 11 overlays (source + 10 consumers)
-4. Measure latency: <500ms P95 (same as current system)
-```
+---
 
 ## Sources
 
 Research informed by:
-- Existing All-Chat architecture (services/*/README.md, docs/architecture/*)
-- [Microservices Pattern: Database per service](https://microservices.io/patterns/data/database-per-service.html)
-- [Microsoft: Data Considerations for Microservices](https://learn.microsoft.com/en-us/azure/architecture/microservices/design/data-considerations)
-- [8 Essential Example Microservices Architecture Patterns for 2026](https://www.wondermentapps.com/blog/example-microservices-architecture/)
-- [Data Management Patterns for Microservices Architecture](https://www.dataversity.net/articles/data-management-patterns-for-microservices-architecture/)
+- All-Chat existing service READMEs: `services/*/README.md`
+- All-Chat existing service code: `services/kick-listener/cmd/main.go`, `services/kick-listener/websocket/client.go`
+- All-Chat architecture docs: `CLAUDE.md`, `.planning/PROJECT.md`
+- All-Chat prior research: `.planning/research/ARCHITECTURE.md` (sharing pattern)
+- Discord Gateway API documentation (training data, MEDIUM confidence for specific limits — verify at https://discord.com/developers/docs/topics/gateway before implementation)
+- Discord REST API rate limits (training data: ~5 msg/s per channel, MEDIUM confidence — verify at https://discord.com/developers/docs/topics/rate-limits)
+- Discord Gateway sharding requirement: 2,500 guilds per shard limit (training data, MEDIUM confidence — verify at https://discord.com/developers/docs/topics/gateway#sharding)
