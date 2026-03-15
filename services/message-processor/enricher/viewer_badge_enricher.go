@@ -46,9 +46,11 @@ func (a *pgxPoolAdapter) QueryRow(ctx context.Context, sql string, args ...inter
 
 // viewerIdentityCache is the structure stored in Redis.
 type viewerIdentityCache struct {
-	ViewerID     string  `json:"viewer_id"`
-	NameColor    *string `json:"name_color"`               // nil = viewer registered but no color set
-	NameGradient []byte  `json:"name_gradient,omitempty"` // Phase 29: raw JSONB bytes, nil when not set
+	ViewerID       string  `json:"viewer_id"`
+	NameColor      *string `json:"name_color"`               // nil = viewer registered but no color set
+	NameGradient   []byte  `json:"name_gradient,omitempty"`  // Phase 29: raw JSONB bytes, nil when not set
+	AvatarFrameURL string  `json:"avatar_frame_url,omitempty"` // Phase 30: empty string when not set
+	AvatarFlairURL string  `json:"avatar_flair_url,omitempty"` // Phase 30: empty string when not set
 }
 
 // ViewerBadgeEnricher injects viewer name_color and name_gradient into messages for registered viewers.
@@ -94,23 +96,36 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 			if len(identity.NameGradient) > 0 {
 				msg.User.NameGradient = string(identity.NameGradient)
 			}
+			// Phase 30: propagate frame/flair from cache
+			if identity.AvatarFrameURL != "" {
+				msg.User.AvatarFrameURL = identity.AvatarFrameURL
+			}
+			if identity.AvatarFlairURL != "" {
+				msg.User.AvatarFlairURL = identity.AvatarFlairURL
+			}
 			return nil
 		}
 		// Malformed cache entry — fall through to DB
 	}
 
-	// 2. Cache miss — query DB (Phase 29: include vc.name_gradient in SELECT)
+	// 2. Cache miss — query DB (Phase 30: include frame/flair URLs via LEFT JOIN)
 	var viewerID string
 	var nameColor *string
 	var nameGradientBytes []byte
+	var avatarFrameURL string
+	var avatarFlairURL string
 	row := e.db.QueryRow(ctx, `
-		SELECT vpi.viewer_id::text, vc.name_color, vc.name_gradient
+		SELECT vpi.viewer_id::text, vc.name_color, vc.name_gradient,
+		       COALESCE(cf.image_url, '') AS avatar_frame_url,
+		       COALESCE(cfl.image_url, '') AS avatar_flair_url
 		FROM viewer_platform_identities vpi
 		LEFT JOIN viewer_cosmetics vc ON vc.viewer_id = vpi.viewer_id
+		LEFT JOIN cosmetic_frames cf ON cf.id = vc.avatar_frame_id
+		LEFT JOIN cosmetic_flairs cfl ON cfl.id = vc.avatar_flair_id
 		WHERE vpi.platform = $1 AND vpi.platform_user_id = $2
 	`, msg.Platform, msg.User.ID)
 
-	if scanErr := row.Scan(&viewerID, &nameColor, &nameGradientBytes); scanErr != nil {
+	if scanErr := row.Scan(&viewerID, &nameColor, &nameGradientBytes, &avatarFrameURL, &avatarFlairURL); scanErr != nil {
 		if scanErr == pgx.ErrNoRows {
 			// Viewer not in All-Chat — cache null sentinel
 			e.redis.Set(ctx, cacheKey, viewerNullSentinel, ViewerIdentityCacheTTL)
@@ -126,9 +141,11 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 
 	// 3. Cache the result
 	identity := viewerIdentityCache{
-		ViewerID:     viewerID,
-		NameColor:    nameColor,
-		NameGradient: nameGradientBytes, // nil guard: json omitempty handles nil slice
+		ViewerID:       viewerID,
+		NameColor:      nameColor,
+		NameGradient:   nameGradientBytes, // nil guard: json omitempty handles nil slice
+		AvatarFrameURL: avatarFrameURL,   // Phase 30: COALESCE guarantees non-nil string
+		AvatarFlairURL: avatarFlairURL,
 	}
 	if jsonBytes, jsonErr := json.Marshal(identity); jsonErr == nil {
 		e.redis.Set(ctx, cacheKey, string(jsonBytes), ViewerIdentityCacheTTL)
@@ -142,6 +159,14 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 	// 5. Phase 29: inject gradient if set (guard against nil to avoid empty string pollution)
 	if len(nameGradientBytes) > 0 {
 		msg.User.NameGradient = string(nameGradientBytes)
+	}
+
+	// 6. Phase 30: inject avatar frame/flair URL if set
+	if avatarFrameURL != "" {
+		msg.User.AvatarFrameURL = avatarFrameURL
+	}
+	if avatarFlairURL != "" {
+		msg.User.AvatarFlairURL = avatarFlairURL
 	}
 
 	return nil
