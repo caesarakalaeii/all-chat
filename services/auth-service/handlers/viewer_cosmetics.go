@@ -67,7 +67,7 @@ func (h *ViewerCosmeticsHandler) HandlePatchCosmetics(c *gin.Context) {
 // cosmeticsUpsertRepo is the minimal interface for the cosmetics handler's DB access.
 // This enables unit testing with mock implementations.
 type cosmeticsUpsertRepo interface {
-	UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string, nameGradient []byte) error
+	UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string, nameGradient []byte, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error
 }
 
 // NameGradientReq is the JSON shape for a gradient in the PATCH request body.
@@ -174,7 +174,8 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo) {
 	}
 
 	// Step 6: Upsert cosmetics in DB
-	if err := repo.UpsertViewerCosmetics(c.Request.Context(), viewerID, req.NameColor, nameGradientBytes); err != nil {
+	// avatarFrameID and avatarFlairID are passed as nil here — Plan 02 will wire in real values.
+	if err := repo.UpsertViewerCosmetics(c.Request.Context(), viewerID, req.NameColor, nameGradientBytes, nil, nil); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cosmetics"})
 		return
 	}

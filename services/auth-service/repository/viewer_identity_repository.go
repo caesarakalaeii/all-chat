@@ -105,19 +105,29 @@ func (r *ViewerIdentityRepository) GetViewerCosmetics(ctx context.Context, viewe
 	return nameColor, nil
 }
 
-// UpsertViewerCosmetics sets name_color and/or name_gradient for a viewer.
+// UpsertViewerCosmetics sets name_color, name_gradient, avatar_frame_id, and avatar_flair_id for a viewer.
 // Pass nil for nameColor to clear it; pass nil for nameGradient to clear it.
+// Pass nil for avatarFrameID or avatarFlairID to clear the respective selection.
 // Gradient and color are stored independently — the caller is responsible for
 // enforcing mutual exclusion before calling this method.
-func (r *ViewerIdentityRepository) UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string, nameGradient []byte) error {
+func (r *ViewerIdentityRepository) UpsertViewerCosmetics(
+	ctx context.Context,
+	viewerID uuid.UUID,
+	nameColor *string,
+	nameGradient []byte,
+	avatarFrameID *uuid.UUID, // nil = clear selection
+	avatarFlairID *uuid.UUID, // nil = clear selection
+) error {
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO viewer_cosmetics (viewer_id, name_color, name_gradient, updated_at)
-		 VALUES ($1, $2, $3, NOW())
+		`INSERT INTO viewer_cosmetics (viewer_id, name_color, name_gradient, avatar_frame_id, avatar_flair_id, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, NOW())
 		 ON CONFLICT (viewer_id) DO UPDATE SET
 		     name_color = EXCLUDED.name_color,
 		     name_gradient = EXCLUDED.name_gradient,
+		     avatar_frame_id = EXCLUDED.avatar_frame_id,
+		     avatar_flair_id = EXCLUDED.avatar_flair_id,
 		     updated_at = NOW()`,
-		viewerID, nameColor, nameGradient,
+		viewerID, nameColor, nameGradient, avatarFrameID, avatarFlairID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert viewer cosmetics: %w", err)

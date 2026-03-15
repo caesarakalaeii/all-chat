@@ -84,6 +84,8 @@ export interface UserInfo {
   name_gradient?: NameGradient; // Phase 29: premium gradient replaces color when set
   source_badges?: Badge[];  // Badges from source channel (shared chat)
   source_user_id?: string;  // User ID in source channel (shared chat)
+  avatar_frame_url?: string;  // Phase 30: URL of selected avatar frame
+  avatar_flair_url?: string;  // Phase 30: URL of selected avatar flair
 }
 
 export interface Badge {
