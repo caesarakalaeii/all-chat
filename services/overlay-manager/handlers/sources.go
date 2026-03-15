@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -25,16 +27,76 @@ type SourcesHandler struct {
 	sourceRepo  SourceRepository
 	overlayRepo OverlayRepository
 	db          *pgxpool.Pool
+	redis       redis.Cmdable
 	logger      *zap.Logger
 }
 
-// NewSourcesHandler creates a new sources handler
-func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger) *SourcesHandler {
+// discordChannelEntry is the JSON value stored at discord:channels:{channel_id}.
+type discordChannelEntry struct {
+	OverlayID string `json:"overlay_id"`
+	SourceID  string `json:"source_id"`
+}
+
+// NewSourcesHandler creates a new sources handler.
+// redisClient is used to maintain the Discord channel registry keys.
+// It accepts redis.Cmdable for testability; *redis.Client implements this interface.
+func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger, redisClient redis.Cmdable) *SourcesHandler {
 	return &SourcesHandler{
 		sourceRepo:  sourceRepo,
 		overlayRepo: overlayRepo,
 		db:          db,
+		redis:       redisClient,
 		logger:      logger,
+	}
+}
+
+// setDiscordChannelRegistry writes the channel registry Redis key and publishes an invalidation event.
+// The key is set BEFORE the Pub/Sub publish so discord-listener always sees a consistent state.
+func (h *SourcesHandler) setDiscordChannelRegistry(ctx context.Context, channelID, overlayID, sourceID string) {
+	if h.redis == nil {
+		return
+	}
+	entry := discordChannelEntry{OverlayID: overlayID, SourceID: sourceID}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		h.logger.Warn("Failed to marshal discord channel registry entry",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		return
+	}
+	key := "discord:channels:" + channelID
+	if err := h.redis.Set(ctx, key, string(data), 0).Err(); err != nil {
+		h.logger.Warn("Failed to set discord channel registry key",
+			zap.String("key", key),
+			zap.Error(err),
+		)
+	}
+	if err := h.redis.Publish(ctx, "discord:channel:invalidation", channelID).Err(); err != nil {
+		h.logger.Warn("Failed to publish discord channel invalidation",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+	}
+}
+
+// delDiscordChannelRegistry removes the channel registry Redis key and publishes an invalidation event.
+func (h *SourcesHandler) delDiscordChannelRegistry(ctx context.Context, channelID string) {
+	if h.redis == nil {
+		return
+	}
+	key := "discord:channels:" + channelID
+	if err := h.redis.Del(ctx, key).Err(); err != nil {
+		h.logger.Warn("Failed to delete discord channel registry key",
+			zap.String("key", key),
+			zap.Error(err),
+		)
+	}
+	if err := h.redis.Publish(ctx, "discord:channel:invalidation", channelID).Err(); err != nil {
+		h.logger.Warn("Failed to publish discord channel invalidation",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
 	}
 }
 
@@ -352,6 +414,18 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		return
 	}
 
+	// For Discord sources, register the channel in Redis so discord-listener
+	// can route incoming messages to the correct overlay.
+	// The registry key is written BEFORE the Pub/Sub invalidation event.
+	if req.Platform == "discord" {
+		// Extract inbound_channel_id from the source config (or fall back to channel_id).
+		inboundChannelID := channelID
+		if v, ok := source.Config["inbound_channel_id"].(string); ok && v != "" {
+			inboundChannelID = v
+		}
+		h.setDiscordChannelRegistry(c.Request.Context(), inboundChannelID, overlayID, source.ID)
+	}
+
 	// CRITICAL: For YouTube sources added manually, copy admin's OAuth token
 	// This allows admins to add YouTube channels by link without OAuth flow
 	// The admin's token will be used to poll the new channel
@@ -425,6 +499,16 @@ func (h *SourcesHandler) HandleDeleteSource(c *gin.Context) {
 	if err := h.sourceRepo.Delete(c.Request.Context(), sourceID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete source"})
 		return
+	}
+
+	// For Discord sources, remove the channel registry key from Redis so
+	// discord-listener stops routing messages to the now-deleted overlay.
+	if source.Platform == "discord" {
+		inboundChannelID := source.ChannelID
+		if v, ok := source.Config["inbound_channel_id"].(string); ok && v != "" {
+			inboundChannelID = v
+		}
+		h.delDiscordChannelRegistry(c.Request.Context(), inboundChannelID)
 	}
 
 	c.Status(http.StatusNoContent)

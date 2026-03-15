@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/caesar/all-chat/services/discord-listener/gateway"
 	"github.com/caesar/all-chat/services/discord-listener/handlers"
+	"github.com/caesar/all-chat/services/discord-listener/publisher"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -24,6 +26,55 @@ func (r *redisSessionStore) Set(ctx context.Context, key, value string) error {
 }
 func (r *redisSessionStore) Get(ctx context.Context, key string) (string, error) {
 	return r.client.Get(ctx, key).Result()
+}
+
+// channelRegistryValue is the JSON structure stored at discord:channels:{channel_id}.
+type channelRegistryValue struct {
+	OverlayID string `json:"overlay_id"`
+	SourceID  string `json:"source_id"`
+}
+
+// redisChannelRegistry implements gateway.ChannelRegistry backed by Redis GET calls.
+// Per CONTEXT.md the pure-Redis-GET approach is acceptable at v1.5 scale.
+type redisChannelRegistry struct{ client *redis.Client }
+
+func (r *redisChannelRegistry) GetOverlayForChannel(ctx context.Context, channelID string) (string, bool, error) {
+	key := "discord:channels:" + channelID
+	val, err := r.client.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("channel registry get failed: %w", err)
+	}
+	var v channelRegistryValue
+	if err := json.Unmarshal([]byte(val), &v); err != nil {
+		return "", false, fmt.Errorf("channel registry unmarshal failed: %w", err)
+	}
+	return v.OverlayID, true, nil
+}
+
+func (r *redisChannelRegistry) Subscribe(_ context.Context, _ chan<- string) error {
+	// Not used in the pure-Redis-GET approach — each lookup is a direct GET.
+	return nil
+}
+
+// publisherAdapter adapts *publisher.StreamPublisher to gateway.MessagePublisher.
+// The gateway package uses interface{} to avoid a circular import.
+type publisherAdapter struct{ pub *publisher.StreamPublisher }
+
+func (a *publisherAdapter) Publish(ctx context.Context, msg interface{}) error {
+	// Re-marshal through JSON to build a proper publisher.RawMessage from the
+	// map[string]interface{} that handleMessageCreate constructs.
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal raw message map: %w", err)
+	}
+	var rawMsg publisher.RawMessage
+	if err := json.Unmarshal(data, &rawMsg); err != nil {
+		return fmt.Errorf("failed to unmarshal raw message: %w", err)
+	}
+	return a.pub.Publish(ctx, &rawMsg)
 }
 
 func main() {
@@ -43,8 +94,11 @@ func main() {
 
 	gatewayURL := getEnv("DISCORD_GATEWAY_URL", "wss://gateway.discord.gg/?v=10&encoding=json")
 	store := &redisSessionStore{client: rdb}
+	registry := &redisChannelRegistry{client: rdb}
+	streamPub := publisher.NewStreamPublisher(rdb, log)
+	pubAdapter := &publisherAdapter{pub: streamPub}
 
-	gwClient := gateway.NewGatewayClient(botToken, gatewayURL, store, log)
+	gwClient := gateway.NewGatewayClient(botToken, gatewayURL, store, log, registry, pubAdapter)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
