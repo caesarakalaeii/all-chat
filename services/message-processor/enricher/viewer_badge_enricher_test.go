@@ -14,23 +14,25 @@ import (
 )
 
 // fakeViewerDB is a test double for the DB pool, executing a callback per query.
-// Phase 29: callback now also returns nameGradient bytes.
+// Phase 30: callback now also returns avatarFrameURL and avatarFlairURL strings.
 type fakeViewerDB struct {
-	queryFn func(platform, userID string) (viewerID string, nameColor *string, nameGradient []byte, err error)
+	queryFn func(platform, userID string) (viewerID string, nameColor *string, nameGradient []byte, avatarFrameURL string, avatarFlairURL string, err error)
 }
 
 func (f *fakeViewerDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgxRowScanner {
 	platform := fmt.Sprint(args[0])
 	userID := fmt.Sprint(args[1])
-	vid, nc, ng, err := f.queryFn(platform, userID)
-	return &fakeRow{queryResult{viewerID: vid, nameColor: nc, nameGradient: ng, err: err}}
+	vid, nc, ng, frameURL, flairURL, err := f.queryFn(platform, userID)
+	return &fakeRow{queryResult{viewerID: vid, nameColor: nc, nameGradient: ng, avatarFrameURL: frameURL, avatarFlairURL: flairURL, err: err}}
 }
 
 type queryResult struct {
-	viewerID     string
-	nameColor    *string
-	nameGradient []byte
-	err          error
+	viewerID       string
+	nameColor      *string
+	nameGradient   []byte
+	avatarFrameURL string
+	avatarFlairURL string
+	err            error
 }
 
 type fakeRow struct {
@@ -55,6 +57,18 @@ func (r *fakeRow) Scan(dest ...interface{}) error {
 	if len(dest) >= 3 {
 		if bp, ok := dest[2].(*[]byte); ok {
 			*bp = r.result.nameGradient
+		}
+	}
+	// Phase 30: fourth dest arg is *string for avatar_frame_url
+	if len(dest) >= 4 {
+		if sp, ok := dest[3].(*string); ok {
+			*sp = r.result.avatarFrameURL
+		}
+	}
+	// Phase 30: fifth dest arg is *string for avatar_flair_url
+	if len(dest) >= 5 {
+		if sp, ok := dest[4].(*string); ok {
+			*sp = r.result.avatarFlairURL
 		}
 	}
 	return nil
@@ -83,12 +97,12 @@ func makeMsg(platform, userID, color string) *models.UnifiedChatMessage {
 	}
 }
 
-// noGradient is a convenience wrapper to build fakeViewerDB without gradient.
+// noGradient is a convenience wrapper to build fakeViewerDB without gradient or frame/flair.
 func noGradientDB(queryFn func(platform, userID string) (string, *string, error)) *fakeViewerDB {
 	return &fakeViewerDB{
-		queryFn: func(platform, userID string) (string, *string, []byte, error) {
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, error) {
 			vid, nc, err := queryFn(platform, userID)
-			return vid, nc, nil, err
+			return vid, nc, nil, "", "", err
 		},
 	}
 }
@@ -273,8 +287,8 @@ func TestEnrich_PropagatesNameGradient(t *testing.T) {
 	mr := miniredis.RunT(t)
 	gradientJSON := []byte(`{"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}`)
 	db := &fakeViewerDB{
-		queryFn: func(platform, userID string) (string, *string, []byte, error) {
-			return "viewer-uuid-grad", nil, gradientJSON, nil
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, error) {
+			return "viewer-uuid-grad", nil, gradientJSON, "", "", nil
 		},
 	}
 	e := newTestEnricher(t, mr, db)
@@ -332,5 +346,76 @@ func TestEnrich_PropagatesNameGradient_FromCache(t *testing.T) {
 	}
 	if msg.User.NameGradient != string(gradientJSON) {
 		t.Errorf("expected NameGradient %q from cache, got %q", string(gradientJSON), msg.User.NameGradient)
+	}
+}
+
+// Phase 30: avatar frame and flair URL injection tests
+
+func TestEnrichWithAvatarFrameURL(t *testing.T) {
+	mr := miniredis.RunT(t)
+	db := &fakeViewerDB{
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, error) {
+			return "viewer-uuid-frame", nil, nil, "https://cdn.example.com/frame.png", "", nil
+		},
+	}
+	e := newTestEnricher(t, mr, db)
+
+	msg := makeMsg("twitch", "frame-user", "")
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.User.AvatarFrameURL != "https://cdn.example.com/frame.png" {
+		t.Errorf("expected AvatarFrameURL %q, got %q", "https://cdn.example.com/frame.png", msg.User.AvatarFrameURL)
+	}
+	if msg.User.AvatarFlairURL != "" {
+		t.Errorf("expected empty AvatarFlairURL, got %q", msg.User.AvatarFlairURL)
+	}
+}
+
+func TestEnrichWithNoFrameOrFlair(t *testing.T) {
+	mr := miniredis.RunT(t)
+	db := &fakeViewerDB{
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, error) {
+			// COALESCE returns empty strings when no frame/flair selected
+			return "viewer-uuid-no-cosm", ptr("#336699"), nil, "", "", nil
+		},
+	}
+	e := newTestEnricher(t, mr, db)
+
+	msg := makeMsg("kick", "no-cosm-user", "")
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.User.AvatarFrameURL != "" {
+		t.Errorf("expected empty AvatarFrameURL when no frame selected, got %q", msg.User.AvatarFrameURL)
+	}
+	if msg.User.AvatarFlairURL != "" {
+		t.Errorf("expected empty AvatarFlairURL when no flair selected, got %q", msg.User.AvatarFlairURL)
+	}
+}
+
+func TestEnrichCacheHitWithFrameURL(t *testing.T) {
+	mr := miniredis.RunT(t)
+	db := noGradientDB(func(_, _ string) (string, *string, error) {
+		t.Error("DB should not be called on cache hit")
+		return "", nil, nil
+	})
+	e := newTestEnricher(t, mr, db)
+
+	// Pre-seed cache with frame URL
+	cacheKey := "viewer:identity:twitch:frame-cache-user"
+	val, _ := json.Marshal(viewerIdentityCache{
+		ViewerID:       "uuid-frame-cache",
+		NameColor:      nil,
+		AvatarFrameURL: "https://cdn.example.com/frame2.png",
+	})
+	mr.Set(cacheKey, string(val))
+
+	msg := makeMsg("twitch", "frame-cache-user", "")
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.User.AvatarFrameURL != "https://cdn.example.com/frame2.png" {
+		t.Errorf("expected AvatarFrameURL %q from cache, got %q", "https://cdn.example.com/frame2.png", msg.User.AvatarFrameURL)
 	}
 }
