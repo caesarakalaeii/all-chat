@@ -18,17 +18,17 @@ created: 2026-03-15
 | Property | Value |
 |----------|-------|
 | **Framework** | go test (backend), vitest / jest (frontend) |
-| **Config file** | `services/api-gateway/go.mod`, `frontend/package.json` |
-| **Quick run command** | `cd services/api-gateway && go test ./handlers/... -run TestCosmetics` |
-| **Full suite command** | `cd services/api-gateway && go test ./... && cd ../../frontend && npm test -- --run` |
+| **Config file** | `services/auth-service/go.mod`, `frontend/package.json` |
+| **Quick run command** | `cd services/auth-service && go test ./handlers/... -run TestPatchCosmetics` |
+| **Full suite command** | `cd services/auth-service && go test ./... && cd ../../frontend && npm test -- --run` |
 | **Estimated runtime** | ~30 seconds |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `cd services/api-gateway && go test ./handlers/... -run TestCosmetics`
-- **After every plan wave:** Run `cd services/api-gateway && go test ./... && cd ../../frontend && npm test -- --run`
+- **After every task commit:** Run `cd services/auth-service && go test ./handlers/... -run TestPatchCosmetics`
+- **After every plan wave:** Run `cd services/auth-service && go test ./... && cd ../../frontend && npm test -- --run`
 - **Before `/gsd:verify-work`:** Full suite must be green
 - **Max feedback latency:** 30 seconds
 
@@ -38,9 +38,9 @@ created: 2026-03-15
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 29-01-01 | 01 | 1 | VID-01, VID-02 | unit | `cd services/api-gateway && go test ./handlers/... -run TestCosmetics` | ❌ W0 | ⬜ pending |
-| 29-01-02 | 01 | 1 | VID-01, VID-02 | unit | `cd services/api-gateway && go test ./... -run TestPatchCosmetics` | ❌ W0 | ⬜ pending |
-| 29-01-03 | 01 | 1 | PREM-01 | unit | `cd services/api-gateway && go test ./... -run TestJWTClaims` | ❌ W0 | ⬜ pending |
+| 29-01-01 | 01 | 1 | VID-01, VID-02 | unit | `cd services/auth-service && go build ./... && go test ./handlers/... -run TestPatchCosmetics -v 2>&1 \| tail -20` | ❌ W0 | ⬜ pending |
+| 29-01-02 | 01 | 1 | VID-01, VID-02 | unit | `cd services/auth-service && go test ./handlers/... -run TestPatchCosmetics_MutualExclusion -v 2>&1 \| tail -20` | ❌ W0 | ⬜ pending |
+| 29-01-03 | 01 | 1 | PREM-01 | unit | `cd services/auth-service && go test ./handlers/... -run TestPatchCosmetics_GradientRejectedNonPremium -v 2>&1 \| tail -20` | ❌ W0 | ⬜ pending |
 | 29-02-01 | 02 | 2 | WEB-01, WEB-02 | unit | `cd frontend && npm test -- --run src/app/settings/viewer` | ❌ W0 | ⬜ pending |
 | 29-02-02 | 02 | 2 | PREM-01, PREM-02 | unit | `cd frontend && npm test -- --run src/app/settings/viewer` | ❌ W0 | ⬜ pending |
 | 29-02-03 | 02 | 2 | WEB-05 | manual | Browser: verify gradient editor hidden for non-premium | N/A | ⬜ pending |
@@ -53,8 +53,7 @@ created: 2026-03-15
 
 ## Wave 0 Requirements
 
-- [ ] `services/api-gateway/handlers/cosmetics_test.go` — stubs for gradient PATCH and mutual-exclusion (VID-01, VID-02)
-- [ ] `services/api-gateway/handlers/jwt_test.go` — stubs for `IsPremium` JWT claim (PREM-01)
+- [ ] `services/auth-service/handlers/viewer_cosmetics_test.go` — stubs for gradient PATCH, non-premium 403, validation, and mutual-exclusion (VID-01, VID-02, PREM-01)
 - [ ] `frontend/src/app/settings/viewer/__tests__/page.test.tsx` — stubs for settings page render, color picker, gradient editor visibility (WEB-01, WEB-02, WEB-05)
 
 *Framework already installed; Wave 0 adds test file stubs only.*
