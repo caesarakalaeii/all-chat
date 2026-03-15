@@ -10,8 +10,8 @@
 
 ### Viewer Identity (all users)
 
-- [ ] **VID-01**: Viewer can set a fallback name color (hex) as a global preference when their platform provides no color
-- [ ] **VID-02**: Viewer's fallback color is applied in all overlays where the platform sends no `color` field (YouTube, Kick, TikTok default)
+- [x] **VID-01**: Viewer can set a fallback name color (hex) as a global preference when their platform provides no color
+- [x] **VID-02**: Viewer's fallback color is applied in all overlays where the platform sends no `color` field (YouTube, Kick, TikTok default)
 - [x] **VID-03**: Viewer's color preference persists server-side and survives extension reinstall
 - [x] **VID-04**: Viewer can link one or more platform identities (Twitch, YouTube, Kick) to their All-Chat account to enable cross-platform cosmetics
 - [x] **VID-05**: Viewer can authenticate from the browser extension popup (sign in with Twitch or YouTube)
@@ -19,7 +19,7 @@
 
 ### Premium Cosmetics
 
-- [ ] **PREM-01**: Premium viewer can set a multi-stop gradient (2–4 colors, angle) as their name color
+- [x] **PREM-01**: Premium viewer can set a multi-stop gradient (2–4 colors, angle) as their name color
 - [ ] **PREM-02**: Gradient name renders in overlay using CSS `background-clip: text` — no JavaScript required
 - [ ] **PREM-03**: Premium viewer can select an avatar frame (decorative PNG ring overlaid on their avatar)
 - [ ] **PREM-04**: Premium viewer can select an avatar flair (small corner icon pinned to bottom-right of avatar)
@@ -100,13 +100,13 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VID-01 | Phase 27 | Pending |
-| VID-02 | Phase 27 | Pending |
+| VID-01 | Phase 27 | Complete |
+| VID-02 | Phase 27 | Complete |
 | VID-03 | Phase 27 | Complete |
 | VID-04 | Phase 27 | Complete |
 | VID-05 | Phase 28 | Complete |
 | VID-06 | Phase 28 | Complete |
-| PREM-01 | Phase 29 | Pending |
+| PREM-01 | Phase 29 | Complete |
 | PREM-02 | Phase 29 | Pending |
 | PREM-03 | Phase 30 | Pending |
 | PREM-04 | Phase 30 | Pending |
