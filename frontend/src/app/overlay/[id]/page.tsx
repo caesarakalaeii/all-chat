@@ -27,6 +27,7 @@ import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
+import { buildGradientCSS } from '@/lib/utils/gradient';
 import '@/styles/events.css';
 
 export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
@@ -671,12 +672,21 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   )}
 
                   {/* Username */}
-                  <span
-                    className="font-semibold text-sm"
-                    style={{ color: message.user?.color || '#FFFFFF' }}
-                  >
-                    {message.user?.display_name || message.user?.username}
-                  </span>
+                  {message.user?.name_gradient ? (
+                    <span
+                      className="font-semibold text-sm bg-clip-text text-transparent"
+                      style={{ backgroundImage: buildGradientCSS(message.user.name_gradient) }}
+                    >
+                      {message.user?.display_name || message.user?.username}
+                    </span>
+                  ) : (
+                    <span
+                      className="font-semibold text-sm"
+                      style={{ color: message.user?.color || '#FFFFFF' }}
+                    >
+                      {message.user?.display_name || message.user?.username}
+                    </span>
+                  )}
 
                   {/* Platform badge after username (original position) */}
                   {showPlatformBadge && platformBadgePosition === 'after' && (
