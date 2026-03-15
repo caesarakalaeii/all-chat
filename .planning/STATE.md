@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
 status: executing
-stopped_at: Completed 30-02-PLAN.md
-last_updated: "2026-03-15T23:52:23.099Z"
+stopped_at: Completed 30-03-PLAN.md
+last_updated: "2026-03-15T23:57:16.230Z"
 last_activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contracts)
 progress:
   total_phases: 21
   completed_phases: 12
   total_plans: 60
-  completed_plans: 58
+  completed_plans: 59
 ---
 
 # Project State
@@ -54,6 +54,7 @@ Last activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contra
 | Phase 29-viewer-color-gradient-editor P02 | 7 | 2 tasks | 4 files |
 | Phase 30-avatar-frame-flair-system P01 | ~2.5min | 2 tasks | 6 files |
 | Phase 30-avatar-frame-flair-system P02 | ~5min | 2 tasks | 5 files |
+| Phase 30-avatar-frame-flair-system P03 | 3min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 30-avatar-frame-flair-system]: cosmeticsCatalogDB interface + pgxPoolAdapter pattern mirrors viewerDB approach from Phase 28 for consistent handler testability
 - [Phase 30-avatar-frame-flair-system]: downgrade enforcement passes &uuid.Nil sentinel (not nil pointer) so UPSERT explicitly writes NULL — self-documenting intent
 - [Phase 30-avatar-frame-flair-system]: public catalog endpoints reuse HandleListFrames/HandleListFlairs read-only methods — catalog data is not sensitive
+- [Phase 30-avatar-frame-flair-system]: COALESCE guarantees non-NULL scan into plain string (not *string) — consistent with name_gradient nil-guard pattern
+- [Phase 30-avatar-frame-flair-system]: fakeViewerDB queryFn extended to 6-return signature; noGradientDB helper updated — all existing tests pass unchanged
 
 ### Pending Todos
 
@@ -106,8 +109,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T23:52:23.096Z
-Stopped at: Completed 30-02-PLAN.md
+Last session: 2026-03-15T23:57:16.226Z
+Stopped at: Completed 30-03-PLAN.md
 Resume file: None
 
 **Next action:** Execute 30-02-PLAN.md (handler extension, test mock fixes, enricher)
