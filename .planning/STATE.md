@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Discord Listener
 status: planning
-stopped_at: Completed 27-02-PLAN.md
-last_updated: "2026-03-15T21:08:10.383Z"
+stopped_at: Completed 27-03-PLAN.md
+last_updated: "2026-03-15T21:14:26.362Z"
 last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
   total_phases: 18
   completed_phases: 6
   total_plans: 32
-  completed_plans: 30
+  completed_plans: 31
   percent: 0
 ---
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
 *Updated: 2026-03-15 after roadmap creation*
 | Phase 27 P01 | 2 | 2 tasks | 3 files |
 | Phase 27 P02 | 6 | 2 tasks | 8 files |
+| Phase 27 P03 | 12 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Key decisions relevant to v1.5:
 - [Phase 27]: SessionStore interface in gateway/client.go isolates Redis for unit testability
 - [Phase 27]: WARN log on READY event reminds operator to enable MESSAGE_CONTENT privileged intent in Discord Developer Portal
 - [Phase 27]: Port 8086 for discord-listener HTTP health server (avoids collision with existing services)
+- [Phase 27]: ComputeMissingPermissions exported for testability — avoids HTTP mocking in permission bit logic tests
+- [Phase 27]: GetUserInfo returns error stub — Discord bot auth has no user identity; handlers bypass this method
 
 ### Pending Todos
 
@@ -90,8 +93,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T21:08:10.380Z
-Stopped at: Completed 27-02-PLAN.md
+Last session: 2026-03-15T21:14:26.359Z
+Stopped at: Completed 27-03-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)
