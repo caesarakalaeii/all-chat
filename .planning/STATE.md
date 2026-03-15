@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Discord Listener
 status: planning
-stopped_at: Phase 27 context gathered
-last_updated: "2026-03-15T20:16:22.643Z"
+stopped_at: Completed 27-01-PLAN.md
+last_updated: "2026-03-15T21:01:20.261Z"
 last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
   total_phases: 18
   completed_phases: 6
-  total_plans: 28
-  completed_plans: 28
+  total_plans: 32
+  completed_plans: 29
   percent: 0
 ---
 
@@ -51,6 +51,7 @@ Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
 | v1.5 Discord Listener | 27-32 | TBD | Not started |
 
 *Updated: 2026-03-15 after roadmap creation*
+| Phase 27 P01 | 2 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Key decisions relevant to v1.5:
 - **No new DB tables**: Discord sources use existing `overlay_chat_sources` with `config` JSONB for Discord-specific fields (`guild_id`, `inbound_channel_id`, `relay_channel_id`, `relay_enabled`)
 - **Snowflake IDs as strings**: All Discord Snowflake IDs stored and transmitted as strings to avoid JS safe-integer truncation above 2^53
 - **Single shard (num_shards=1)**: Correct at v1.5 scale (far below 2,500-guild per-shard limit); shard ownership via source-manager leader election
+- [Phase 27]: guild_id stored as VARCHAR(30) not BIGINT — Discord Snowflake IDs exceed JS safe-integer range
+- [Phase 27]: discord platform registered in overlay-manager validPlatforms to unblock Plan 03 and discord-listener
 
 ### Pending Todos
 
@@ -83,8 +86,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T20:16:22.640Z
-Stopped at: Phase 27 context gathered
-Resume file: .planning/phases/27-auth-and-bot-token-foundation/27-CONTEXT.md
+Last session: 2026-03-15T21:01:20.258Z
+Stopped at: Completed 27-01-PLAN.md
+Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)

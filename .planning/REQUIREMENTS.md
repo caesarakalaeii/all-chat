@@ -9,10 +9,10 @@ Requirements for the Discord Listener milestone. Each maps to roadmap phases.
 
 ### AUTH — Bot Setup
 
-- [ ] **AUTH-01**: User can connect a Discord server to All-Chat via OAuth2 "Add to Server" flow
+- [x] **AUTH-01**: User can connect a Discord server to All-Chat via OAuth2 "Add to Server" flow
 - [ ] **AUTH-02**: After connecting, user can view a list of readable text channels in the connected server
 - [ ] **AUTH-03**: Bot permissions are validated on connect (VIEW_CHANNEL, READ_MESSAGE_HISTORY, SEND_MESSAGES) with user-visible errors on failure
-- [ ] **AUTH-04**: User can disconnect the bot from their server, removing all associated Discord sources
+- [x] **AUTH-04**: User can disconnect the bot from their server, removing all associated Discord sources
 
 ### INBD — Inbound (Discord → Overlay)
 
@@ -67,10 +67,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 27 | Pending |
+| AUTH-01 | Phase 27 | Complete |
 | AUTH-02 | Phase 27 | Pending |
 | AUTH-03 | Phase 27 | Pending |
-| AUTH-04 | Phase 27 | Pending |
+| AUTH-04 | Phase 27 | Complete |
 | INBD-01 | Phase 28 | Pending |
 | INBD-02 | Phase 28 | Pending |
 | INBD-03 | Phase 29 | Pending |
