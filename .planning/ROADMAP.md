@@ -177,11 +177,11 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. When a Discord message is deleted, a deletion event propagates through the pipeline and the message disappears from active overlays (consistent with Twitch/YouTube deletion behavior)
   2. A message containing @username or #channel mentions renders with resolved names (e.g., "@alice" not "@123456789012345678") in the overlay
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 29-01: TBD
-- [ ] 29-02: TBD
+- [ ] 29-01-PLAN.md — MESSAGE_DELETE/MESSAGE_DELETE_BULK dispatch + HandleMessageDelete + channel filter (INBD-03)
+- [ ] 29-02-PLAN.md — GuildCache interface + GUILD_CREATE/CHANNEL_*/ROLE_* handlers + mention resolution in HandleMessageCreate (INBD-04)
 
 ### Phase 30: Outbound Relay
 **Goal**: Non-Discord overlay messages are posted to a user-configured Discord channel with no echo loops
@@ -241,10 +241,10 @@ Plans:
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27. Auth and Bot Token Foundation | 4/4 | Complete    | 2026-03-15 | - |
 | 28. Inbound Listener Core | 2/2 | Complete    | 2026-03-15 | - |
-| 29. Inbound Enrichment | v1.5 | 0/TBD | Not started | - |
+| 29. Inbound Enrichment | v1.5 | 0/2 | Not started | - |
 | 30. Outbound Relay | v1.5 | 0/TBD | Not started | - |
 | 31. Load Balancing | v1.5 | 0/TBD | Not started | - |
 | 32. Setup UI | v1.5 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-15 after Phase 28 planning — 2 plans created*
+*Last updated: 2026-03-16 after Phase 29 planning — 2 plans created*
