@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Discord Listener
 status: planning
-stopped_at: Completed 32-03 Tasks 1+2, awaiting Task 3 human-verify checkpoint
-last_updated: "2026-03-16T10:39:44.127Z"
+stopped_at: Completed 32-03-PLAN.md — all 3 tasks done, human approved
+last_updated: "2026-03-16T11:37:53.862Z"
 last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
   total_phases: 18
@@ -113,6 +113,7 @@ Key decisions relevant to v1.5:
 - [Phase 32-setup-ui]: HandleUpdateSourceConfig returns 403 on ownership mismatch (not 404) — distinguishes auth failure from resource absence
 - [Phase 32-setup-ui]: discord platform registered in PLATFORM_COLORS with literal class strings 'text-discord'/'bg-discord' for Tailwind JIT safety
 - [Phase 32-setup-ui]: Controlled Dialog via disconnectTarget state: one Dialog.Root per guild row with open prop avoids mounting multiple portal roots
+- [Phase 32-setup-ui]: guild_name stored in source config JSONB at POST time so SourceCard can render 'GuildName > #channel' label without extra API call
 
 ### Pending Todos
 
@@ -132,8 +133,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T10:39:44.124Z
-Stopped at: Completed 32-03 Tasks 1+2, awaiting Task 3 human-verify checkpoint
+Last session: 2026-03-16T11:37:43.135Z
+Stopped at: Completed 32-03-PLAN.md — all 3 tasks done, human approved
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)
