@@ -13,7 +13,9 @@ import (
 	"github.com/caesar/all-chat/services/discord-listener/gateway"
 	"github.com/caesar/all-chat/services/discord-listener/handlers"
 	"github.com/caesar/all-chat/services/discord-listener/publisher"
+	"github.com/caesar/all-chat/services/discord-listener/relay"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -136,6 +138,19 @@ func main() {
 		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
 	})
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	dbPool, err := pgxpool.New(ctx, buildDatabaseDSN())
+	if err != nil {
+		log.Fatal("failed to connect to database for relay", zap.Error(err))
+	}
+	defer dbPool.Close()
+
+	relayRepo := relay.NewRepository(dbPool)
+	relayPoster := relay.NewHTTPPoster(botToken, &http.Client{Timeout: 10 * time.Second}, log)
+	relayMgr := relay.NewManager(relayRepo, relayPoster, rdb, dbPool, log)
+
 	gatewayURL := getEnv("DISCORD_GATEWAY_URL", "wss://gateway.discord.gg/?v=10&encoding=json")
 	store := &redisSessionStore{client: rdb}
 	registry := &redisChannelRegistry{client: rdb}
@@ -144,9 +159,6 @@ func main() {
 	pubAdapter := &publisherAdapter{pub: streamPub}
 
 	gwClient := gateway.NewGatewayClient(botToken, gatewayURL, store, log, registry, pubAdapter, guildCache)
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	// Start Gateway connection in background with automatic reconnect.
 	// TODO(Phase 31): gate on shard ownership via source-manager leader election
@@ -167,6 +179,12 @@ func main() {
 					return
 				}
 			}
+		}
+	}()
+
+	go func() {
+		if err := relayMgr.Start(ctx); err != nil && ctx.Err() == nil {
+			log.Error("relay manager start failed", zap.Error(err))
 		}
 	}()
 
@@ -197,6 +215,7 @@ func main() {
 	<-ctx.Done()
 	log.Info("Shutting down discord-listener")
 	gwClient.Close()
+	relayMgr.Stop()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
@@ -207,4 +226,13 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func buildDatabaseDSN() string {
+	host := getEnv("DATABASE_HOST", "localhost")
+	port := getEnv("DATABASE_PORT", "5432")
+	name := getEnv("DATABASE_NAME", "allchat")
+	user := getEnv("DATABASE_USER", "allchat")
+	password := getEnv("DATABASE_PASSWORD", "allchat_dev_password")
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s", user, password, host, port, name)
 }
