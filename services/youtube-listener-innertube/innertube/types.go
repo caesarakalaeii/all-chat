@@ -111,9 +111,10 @@ type MessageRun struct {
 
 // EmojiData represents emoji metadata
 type EmojiData struct {
-	EmojiID   string     `json:"emojiId,omitempty"`
-	Shortcuts []string   `json:"shortcuts,omitempty"`
-	Image     Thumbnails `json:"image,omitempty"`
+	EmojiID       string     `json:"emojiId,omitempty"`
+	Shortcuts     []string   `json:"shortcuts,omitempty"`
+	Image         Thumbnails `json:"image,omitempty"`
+	IsCustomEmoji bool       `json:"isCustomEmoji,omitempty"`
 }
 
 // SimpleText represents a simple text field
