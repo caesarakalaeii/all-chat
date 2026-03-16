@@ -51,6 +51,8 @@ type viewerIdentityCache struct {
 	NameGradient   []byte  `json:"name_gradient,omitempty"`  // Phase 29: raw JSONB bytes, nil when not set
 	AvatarFrameURL string  `json:"avatar_frame_url,omitempty"` // Phase 30: empty string when not set
 	AvatarFlairURL string  `json:"avatar_flair_url,omitempty"` // Phase 30: empty string when not set
+	IsAdmin        bool    `json:"is_admin,omitempty"`         // Phase 31: All-Chat admin badge
+	IsPremium      bool    `json:"is_premium,omitempty"`       // Phase 31: All-Chat premium badge
 }
 
 // ViewerBadgeEnricher injects viewer name_color and name_gradient into messages for registered viewers.
@@ -103,29 +105,43 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 			if identity.AvatarFlairURL != "" {
 				msg.User.AvatarFlairURL = identity.AvatarFlairURL
 			}
+			// Phase 31: inject All-Chat badges from cache
+			// Prepend premium first so allchat ends up at index 0 in final slice
+			if identity.IsPremium {
+				msg.User.Badges = append([]models.Badge{{Name: "premium", Version: "1", IconURL: ""}}, msg.User.Badges...)
+			}
+			if identity.IsAdmin {
+				msg.User.Badges = append([]models.Badge{{Name: "allchat", Version: "1", IconURL: ""}}, msg.User.Badges...)
+			}
 			return nil
 		}
 		// Malformed cache entry — fall through to DB
 	}
 
-	// 2. Cache miss — query DB (Phase 30: include frame/flair URLs via LEFT JOIN)
+	// 2. Cache miss — query DB (Phase 31: include is_admin/is_premium via LATERAL viewer_sessions JOIN)
 	var viewerID string
 	var nameColor *string
 	var nameGradientBytes []byte
 	var avatarFrameURL string
 	var avatarFlairURL string
+	var isAdmin bool
+	var isPremium bool
 	row := e.db.QueryRow(ctx, `
 		SELECT vpi.viewer_id::text, vc.name_color, vc.name_gradient,
 		       COALESCE(cf.image_url, '') AS avatar_frame_url,
-		       COALESCE(cfl.image_url, '') AS avatar_flair_url
+		       COALESCE(cfl.image_url, '') AS avatar_flair_url,
+		       COALESCE(u.is_admin, false) AS is_admin,
+		       COALESCE(u.is_premium, false) AS is_premium
 		FROM viewer_platform_identities vpi
 		LEFT JOIN viewer_cosmetics vc ON vc.viewer_id = vpi.viewer_id
 		LEFT JOIN cosmetic_frames cf ON cf.id = vc.avatar_frame_id
 		LEFT JOIN cosmetic_flairs cfl ON cfl.id = vc.avatar_flair_id
+		LEFT JOIN LATERAL (SELECT user_id FROM viewer_sessions WHERE viewer_id = vpi.viewer_id LIMIT 1) vs ON true
+		LEFT JOIN users u ON u.id = vs.user_id
 		WHERE vpi.platform = $1 AND vpi.platform_user_id = $2
 	`, msg.Platform, msg.User.ID)
 
-	if scanErr := row.Scan(&viewerID, &nameColor, &nameGradientBytes, &avatarFrameURL, &avatarFlairURL); scanErr != nil {
+	if scanErr := row.Scan(&viewerID, &nameColor, &nameGradientBytes, &avatarFrameURL, &avatarFlairURL, &isAdmin, &isPremium); scanErr != nil {
 		if scanErr == pgx.ErrNoRows {
 			// Viewer not in All-Chat — cache null sentinel
 			e.redis.Set(ctx, cacheKey, viewerNullSentinel, ViewerIdentityCacheTTL)
@@ -146,6 +162,8 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		NameGradient:   nameGradientBytes, // nil guard: json omitempty handles nil slice
 		AvatarFrameURL: avatarFrameURL,   // Phase 30: COALESCE guarantees non-nil string
 		AvatarFlairURL: avatarFlairURL,
+		IsAdmin:        isAdmin,   // Phase 31
+		IsPremium:      isPremium, // Phase 31
 	}
 	if jsonBytes, jsonErr := json.Marshal(identity); jsonErr == nil {
 		e.redis.Set(ctx, cacheKey, string(jsonBytes), ViewerIdentityCacheTTL)
@@ -167,6 +185,15 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 	}
 	if avatarFlairURL != "" {
 		msg.User.AvatarFlairURL = avatarFlairURL
+	}
+
+	// 7. Phase 31: inject All-Chat badges for resolved viewers
+	// Prepend premium first so allchat ends up at index 0 in final slice
+	if isPremium {
+		msg.User.Badges = append([]models.Badge{{Name: "premium", Version: "1", IconURL: ""}}, msg.User.Badges...)
+	}
+	if isAdmin {
+		msg.User.Badges = append([]models.Badge{{Name: "allchat", Version: "1", IconURL: ""}}, msg.User.Badges...)
 	}
 
 	return nil
