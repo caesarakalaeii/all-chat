@@ -45,6 +45,7 @@ func (n *DiscordNormalizer) Normalize(raw *models.RawChatMessage, overlayID stri
 			DisplayName: displayName,
 			Color:       color,
 			Badges:      badges,
+			AvatarURL:   raw.Tags["avatar_url"],
 		},
 		Message: models.MessageInfo{
 			Text:   raw.Text,

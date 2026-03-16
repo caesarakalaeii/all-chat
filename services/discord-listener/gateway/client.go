@@ -422,7 +422,8 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 
 	// 4. Build tags
 	tags := map[string]string{
-		"author_id": msg.Author.ID,
+		"author_id":  msg.Author.ID,
+		"avatar_url": discordAvatarURL(msg.Author.ID, msg.Author.Avatar, msg.GuildID, msg.Member),
 	}
 	if msg.Member != nil {
 		if msg.Member.Nick != nil {
@@ -585,6 +586,43 @@ func (c *GatewayClient) HandleGuildRoleDelete(ctx context.Context, data GuildRol
 		return nil
 	}
 	return c.guildCache.DeleteRoleName(ctx, data.RoleID)
+}
+
+// discordAvatarURL returns the CDN URL for a Discord user's avatar.
+// Priority: guild member avatar > user avatar > default avatar.
+// Size 64 is sufficient for chat overlays.
+func discordAvatarURL(userID string, userAvatar *string, guildID string, member *DiscordMember) string {
+	const base = "https://cdn.discordapp.com"
+	const size = "?size=64"
+
+	// Guild-specific member avatar takes priority.
+	if member != nil && member.Avatar != nil && *member.Avatar != "" {
+		return base + "/guilds/" + guildID + "/users/" + userID + "/avatars/" + *member.Avatar + ".png" + size
+	}
+
+	// User avatar.
+	if userAvatar != nil && *userAvatar != "" {
+		return base + "/avatars/" + userID + "/" + *userAvatar + ".png" + size
+	}
+
+	// Default avatar — index derived from user ID per Discord docs.
+	// For new-style usernames (no discriminator): (user_id >> 22) % 6.
+	// We compute this from the string by parsing the snowflake.
+	idx := defaultAvatarIndex(userID)
+	return base + "/embed/avatars/" + idx + ".png"
+}
+
+// defaultAvatarIndex returns the default avatar index string for a user ID.
+func defaultAvatarIndex(userID string) string {
+	// Parse the snowflake as uint64, shift right 22 bits, mod 6.
+	var id uint64
+	for _, c := range userID {
+		if c < '0' || c > '9' {
+			return "0"
+		}
+		id = id*10 + uint64(c-'0')
+	}
+	return string(rune('0' + (id>>22)%6))
 }
 
 // reUserMention matches <@USER_ID> and <@!USER_ID> (guild member variant).

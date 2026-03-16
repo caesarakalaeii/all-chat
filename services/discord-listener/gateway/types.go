@@ -106,16 +106,18 @@ type MessageCreateData struct {
 
 // DiscordUser represents the author of a Discord message
 type DiscordUser struct {
-	ID         string `json:"id"`
-	Username   string `json:"username"`
-	GlobalName string `json:"global_name"`
-	Bot        bool   `json:"bot"`
+	ID         string  `json:"id"`
+	Username   string  `json:"username"`
+	GlobalName string  `json:"global_name"`
+	Avatar     *string `json:"avatar"` // nil = no avatar (use default)
+	Bot        bool    `json:"bot"`
 }
 
 // DiscordMember holds the guild-specific member data attached to a MESSAGE_CREATE event
 type DiscordMember struct {
-	Nick  *string  `json:"nick"`
-	Roles []string `json:"roles"`
+	Nick   *string  `json:"nick"`
+	Avatar *string  `json:"avatar"` // guild-specific avatar, overrides user avatar when set
+	Roles  []string `json:"roles"`
 }
 
 // MessageDeleteData is the payload for the MESSAGE_DELETE dispatch event
