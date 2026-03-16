@@ -38,13 +38,13 @@ created: 2026-03-16
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 31-01-01 | 01 | 1 | LOAD-01 | unit | `cd services/discord-listener && go test ./gateway/...` | ❌ W0 | ⬜ pending |
-| 31-01-02 | 01 | 1 | LOAD-01 | unit | `cd services/discord-listener && go test ./gateway/...` | ❌ W0 | ⬜ pending |
+| 31-01-01 | 01 | 1 | LOAD-03 | unit | `cd services/discord-listener && go test ./gateway/...` | ❌ W0 | ⬜ pending |
+| 31-01-02 | 01 | 1 | LOAD-03 | unit | `cd services/discord-listener && go test ./gateway/...` | ❌ W0 | ⬜ pending |
 | 31-01-03 | 01 | 1 | LOAD-03 | unit | `cd services/discord-listener && go test ./gateway/...` | ❌ W0 | ⬜ pending |
 | 31-02-01 | 02 | 2 | LOAD-01 | integration | `cd services/discord-listener && go test ./...` | ❌ W0 | ⬜ pending |
 | 31-02-02 | 02 | 2 | LOAD-02 | unit | `cd services/discord-listener && go test ./...` | ❌ W0 | ⬜ pending |
-| 31-03-01 | 03 | 3 | LOAD-02 | manual | kubectl apply --dry-run=client | ❌ W0 | ⬜ pending |
-| 31-03-02 | 03 | 3 | LOAD-02 | manual | kubectl get hpa | N/A | ⬜ pending |
+| 31-03-01 | 03 | 1 | LOAD-02 | manual | kubectl apply --dry-run=client | ❌ W0 | ⬜ pending |
+| 31-03-02 | 03 | 1 | LOAD-02 | manual | kubectl get hpa | N/A | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
