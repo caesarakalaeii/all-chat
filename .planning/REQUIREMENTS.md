@@ -23,10 +23,10 @@ Requirements for the Discord Listener milestone. Each maps to roadmap phases.
 
 ### RELY — Outbound Relay (Overlay → Discord)
 
-- [ ] **RELY-01**: Overlay messages from non-Discord sources are relayed to a configured Discord channel, with `platform == "discord"` messages unconditionally filtered to prevent loops
-- [ ] **RELY-02**: Each Discord source has a relay_enabled toggle so inbound-only (read-only) mode is supported
-- [ ] **RELY-03**: Relay target channel (outbound) is configurable per-source, can be the same or different from the inbound channel
-- [ ] **RELY-04**: Relayed messages are posted as plain text `[emoji] username: text`
+- [x] **RELY-01**: Overlay messages from non-Discord sources are relayed to a configured Discord channel, with `platform == "discord"` messages unconditionally filtered to prevent loops
+- [x] **RELY-02**: Each Discord source has a relay_enabled toggle so inbound-only (read-only) mode is supported
+- [x] **RELY-03**: Relay target channel (outbound) is configurable per-source, can be the same or different from the inbound channel
+- [x] **RELY-04**: Relayed messages are posted as plain text `[emoji] username: text`
 
 ### LOAD — Load Balancing
 
@@ -75,10 +75,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INBD-02 | Phase 28 | Complete |
 | INBD-03 | Phase 29 | Complete |
 | INBD-04 | Phase 29 | Complete |
-| RELY-01 | Phase 30 | Pending |
-| RELY-02 | Phase 30 | Pending |
-| RELY-03 | Phase 30 | Pending |
-| RELY-04 | Phase 30 | Pending |
+| RELY-01 | Phase 30 | Complete |
+| RELY-02 | Phase 30 | Complete |
+| RELY-03 | Phase 30 | Complete |
+| RELY-04 | Phase 30 | Complete |
 | LOAD-01 | Phase 31 | Pending |
 | LOAD-02 | Phase 31 | Pending |
 | LOAD-03 | Phase 31 | Pending |

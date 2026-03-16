@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Discord Listener
 status: planning
-stopped_at: Phase 30 context gathered
-last_updated: "2026-03-16T08:20:22.726Z"
+stopped_at: Completed 30-outbound-relay-01-PLAN.md
+last_updated: "2026-03-16T08:38:14.671Z"
 last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
   total_phases: 18
   completed_phases: 9
-  total_plans: 36
-  completed_plans: 36
+  total_plans: 38
+  completed_plans: 37
   percent: 0
 ---
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
 | Phase 28 P01 | 8m | 3 tasks | 8 files |
 | Phase 29 P01 | 142s | 2 tasks | 3 files |
 | Phase 29 P02 | 286s | 2 tasks | 7 files |
+| Phase 30-outbound-relay P01 | 129 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,9 @@ Key decisions relevant to v1.5:
 - [Phase 29]: ResolveMentions exported as package-level function (not method) for unit testability without GatewayClient construction
 - [Phase 29]: GuildCache nil-guard in HandleMessageCreate enables graceful degradation — mentions pass through unchanged if cache not wired
 - [Phase 29]: discord:guild:channels: and discord:guild:roles: key prefixes distinct from discord:channels: channel registry to avoid collision
+- [Phase 30-outbound-relay]: httpPoster.baseURL overridable for httptest.Server injection — no HTTP client interface extraction needed
+- [Phase 30-outbound-relay]: HandleMessage exported on relay.Manager for synchronous unit test injection, avoiding Redis Pub/Sub mocking
+- [Phase 30-outbound-relay]: doPost(isRetry bool) helper enforces single-retry contract — public Post always passes false, recursive retry passes true
 
 ### Pending Todos
 
@@ -111,8 +115,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T08:20:22.724Z
-Stopped at: Phase 30 context gathered
-Resume file: .planning/phases/30-outbound-relay/30-CONTEXT.md
+Last session: 2026-03-16T08:38:14.669Z
+Stopped at: Completed 30-outbound-relay-01-PLAN.md
+Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)
