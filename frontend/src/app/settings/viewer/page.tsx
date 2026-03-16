@@ -67,17 +67,36 @@ function UnauthenticatedState() {
           <p className="text-text-sub text-sm mb-6">
             Connect your streaming platform account to set a custom name color and manage your viewer identity.
           </p>
-          <div className="flex flex-col gap-3">
-            {PLATFORMS.map(({ key, label, color }) => (
-              <a
-                key={key}
-                href={`/api/v1/auth/viewer/${key}/login`}
-                className="inline-flex items-center gap-3 rounded-lg border border-border px-4 py-3 text-sm text-text hover:bg-surface-2 transition-colors"
-              >
-                <span className={`w-3 h-3 rounded-full ${color}`} aria-hidden="true" />
-                <span>Sign in with {label}</span>
-              </a>
-            ))}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <a
+              href="/api/v1/auth/viewer/twitch/login"
+              className="flex items-center gap-2.5 rounded-lg bg-twitch px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+            >
+              <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path fill="#FFFFFF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
+              </svg>
+              Sign in with Twitch
+            </a>
+            <a
+              href="/api/v1/auth/viewer/youtube/login"
+              className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+              style={{ backgroundColor: '#FF0000', ['--tw-ring-color' as string]: '#FF0000' }}
+            >
+              <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path fill="#FFFFFF" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+              </svg>
+              Sign in with YouTube
+            </a>
+            <a
+              href="/api/v1/auth/viewer/kick/login"
+              className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+              style={{ backgroundColor: 'var(--color-kick)' }}
+            >
+              <svg className="h-5 w-5 shrink-0" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path fill="currentColor" d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z" />
+              </svg>
+              Sign in with Kick
+            </a>
           </div>
         </Card>
       </main>
