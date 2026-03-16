@@ -670,12 +670,14 @@ func (c *GatewayClient) heartbeatLoop(ctx context.Context, intervalMS int) {
 			c.mu.Lock()
 			seq := c.seq
 			c.mu.Unlock()
-			var seqField *int
+			// Discord heartbeat: {"op":1,"d":SEQ} where d is the last sequence number or null.
+			var d json.RawMessage
 			if seq > 0 {
-				s := seq
-				seqField = &s
+				d, _ = json.Marshal(seq)
+			} else {
+				d = json.RawMessage("null")
 			}
-			payload := GatewayPayload{Op: OpHeartbeat, S: seqField}
+			payload := GatewayPayload{Op: OpHeartbeat, D: d}
 			if err := c.writeJSON(payload); err != nil {
 				c.log.Warn("Heartbeat send failed", zap.Error(err))
 				return
