@@ -222,12 +222,12 @@ Plans:
   2. Overlay editor allows adding a Discord source by selecting a guild and choosing an inbound channel from a dropdown populated from the channel listing API
   3. Each Discord source card in the overlay editor shows connection status and a visual indicator of whether relay is active or inactive
   4. Per-source relay configuration panel lets the user toggle relay on/off and pick an outbound channel; the visual filter indicator updates immediately on toggle
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 32-01: TBD
-- [ ] 32-02: TBD
-- [ ] 32-03: TBD
+- [ ] 32-01-PLAN.md — Backend PATCH endpoint + type system + discord.ts API module + design tokens + test scaffolds
+- [ ] 32-02-PLAN.md — Settings page Discord server connect card (OAuth, guild list, disconnect)
+- [ ] 32-03-PLAN.md — Overlay editor: Discord SourceCard + relay panel + AddSourceForm 2-step dialog
 
 ## Progress
 
