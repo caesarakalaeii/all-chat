@@ -53,7 +53,8 @@ type ViewerClaims struct {
 	DisplayName    string `json:"display_name"`     // for extension popup display
 	AvatarURL      string `json:"avatar_url"`       // for extension popup display
 	IsViewer       bool   `json:"is_viewer"`
-	IsPremium      bool   `json:"is_premium"` // Phase 29: premium tier flag for gradient unlock
+	IsPremium      bool   `json:"is_premium"` // true if viewer OR linked streamer account has premium
+	IsAdmin        bool   `json:"is_admin"`   // true if linked streamer account has admin role
 	jwt.RegisteredClaims
 }
 

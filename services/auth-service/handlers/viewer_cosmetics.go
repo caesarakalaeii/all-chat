@@ -133,9 +133,10 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo) {
 	if req.NameGradient != nil {
 		g := req.NameGradient
 
-		// Premium gate: only premium viewers may set gradients
-		isPremium, _ := c.Get("is_premium")
-		if isPremium == nil || isPremium.(bool) == false {
+		// Premium gate: only premium viewers (or admins) may set gradients
+		isPremiumVal, _ := c.Get("is_premium")
+		isAdminVal, _ := c.Get("is_admin")
+		if (isPremiumVal == nil || !isPremiumVal.(bool)) && (isAdminVal == nil || !isAdminVal.(bool)) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "gradient is a premium feature"})
 			return
 		}
@@ -185,11 +186,18 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo) {
 			isPremium = b
 		}
 	}
+	isAdmin := false
+	if v, ok := c.Get("is_admin"); ok && v != nil {
+		if b, ok := v.(bool); ok {
+			isAdmin = b
+		}
+	}
+	hasAccess := isPremium || isAdmin
 
 	var avatarFrameID *uuid.UUID
 	var avatarFlairID *uuid.UUID
 
-	if !isPremium {
+	if !hasAccess {
 		// Non-premium gate: reject if viewer is trying to set a real (non-zero) frame or flair.
 		if req.AvatarFrameID != nil && *req.AvatarFrameID != uuid.Nil {
 			c.JSON(http.StatusForbidden, gin.H{"error": "avatar frames are a premium feature"})

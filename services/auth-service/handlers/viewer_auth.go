@@ -31,6 +31,7 @@ type ViewerAuthHandler struct {
 	kickProvider    *oauth.ViewerKickOAuth
 	viewerRepo      *repository.ViewerRepository
 	identityRepo    *repository.ViewerIdentityRepository
+	userRepo        *repository.UserRepository
 	redis           *redis.Client
 	jwtSecret       string
 	jwtExpiry       time.Duration
@@ -46,6 +47,7 @@ func NewViewerAuthHandler(
 	kickProvider *oauth.ViewerKickOAuth,
 	viewerRepo *repository.ViewerRepository,
 	identityRepo *repository.ViewerIdentityRepository,
+	userRepo *repository.UserRepository,
 	redisClient *redis.Client,
 	jwtSecret string,
 	jwtExpiryHours int,
@@ -59,6 +61,7 @@ func NewViewerAuthHandler(
 		kickProvider:    kickProvider,
 		viewerRepo:      viewerRepo,
 		identityRepo:    identityRepo,
+		userRepo:        userRepo,
 		redis:           redisClient,
 		jwtSecret:       jwtSecret,
 		jwtExpiry:       time.Duration(jwtExpiryHours) * time.Hour,
@@ -66,6 +69,29 @@ func NewViewerAuthHandler(
 		cipher:          cipher,
 		logger:          logger,
 	}
+}
+
+// findLinkedStreamer returns the streamer (dashboard user) that shares the given platform identity,
+// or nil if no such account exists or the lookup fails.
+func (h *ViewerAuthHandler) findLinkedStreamer(ctx context.Context, platform, platformUserID string) *models.User {
+	var (
+		user *models.User
+		err  error
+	)
+	switch platform {
+	case "twitch":
+		user, err = h.userRepo.GetByTwitchID(ctx, platformUserID)
+	case "youtube":
+		user, err = h.userRepo.GetByGoogleID(ctx, platformUserID)
+	case "kick":
+		user, err = h.userRepo.GetByKickID(ctx, platformUserID)
+	default:
+		return nil
+	}
+	if err != nil {
+		return nil
+	}
+	return user
 }
 
 // HandleTwitchLogin initiates the OAuth flow for viewers on Twitch
@@ -190,6 +216,13 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		return
 	}
 
+	// Check if a linked streamer account exists and is banned
+	linkedStreamer := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
+	if linkedStreamer != nil && linkedStreamer.IsBanned {
+		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+		return
+	}
+
 	// Get or create durable viewer identity (ensures viewer_id is in JWT)
 	viewerID, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
 	if err != nil {
@@ -198,7 +231,7 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 	}
 
 	// Generate JWT for viewer
-	jwtToken, err := h.generateViewerJWT(session, viewerID)
+	jwtToken, err := h.generateViewerJWT(session, viewerID, linkedStreamer)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		h.redirectToFrontendWithError(c, "Failed to generate token")
@@ -332,7 +365,8 @@ func (h *ViewerAuthHandler) getOrCreateViewerSession(
 // generateViewerJWT generates a JWT token for a viewer session.
 // viewerID is the durable viewer UUID from the viewers table.
 // Pass uuid.Nil for pre-Phase-28 compatibility; the viewer_id claim will be an empty string.
-func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, viewerID uuid.UUID) (string, error) {
+// linkedStreamer is the streamer account sharing the same platform identity, or nil if none exists.
+func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, viewerID uuid.UUID, linkedStreamer *models.User) (string, error) {
 	now := time.Now()
 	expiresAt := now.Add(h.jwtExpiry)
 
@@ -346,7 +380,7 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, vie
 		avatarURL = *session.AvatarURL
 	}
 
-	// Phase 29: look up is_premium so the JWT carries the current value.
+	// Look up viewer-level premium flag.
 	// Soft failure: if DB is unavailable, default to false (safe degradation).
 	var isPremium bool
 	if viewerID != uuid.Nil {
@@ -360,6 +394,14 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, vie
 		}
 	}
 
+	// Inherit premium and admin from linked streamer account so users don't
+	// have to purchase premium twice and admins have full access as viewers.
+	var isAdmin bool
+	if linkedStreamer != nil {
+		isPremium = isPremium || linkedStreamer.IsPremium
+		isAdmin = linkedStreamer.IsAdmin
+	}
+
 	claims := sharedAuth.ViewerClaims{
 		ViewerID:       viewerIDStr,
 		SessionID:      session.ID.String(),
@@ -370,6 +412,7 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, vie
 		AvatarURL:      avatarURL,
 		IsViewer:       true,
 		IsPremium:      isPremium,
+		IsAdmin:        isAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -500,6 +543,13 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		}
 	}
 
+	// Check if a linked streamer account exists and is banned
+	linkedStreamerYT := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
+	if linkedStreamerYT != nil && linkedStreamerYT.IsBanned {
+		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+		return
+	}
+
 	// Get or create durable viewer identity (ensures viewer_id is in JWT)
 	viewerIDYT, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
 	if err != nil {
@@ -507,7 +557,7 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		viewerIDYT = uuid.Nil
 	}
 
-	jwtToken, err := h.generateViewerJWT(session, viewerIDYT)
+	jwtToken, err := h.generateViewerJWT(session, viewerIDYT, linkedStreamerYT)
 	if err != nil {
 		h.redirectToFrontendWithError(c, "Failed to generate token")
 		return
@@ -672,6 +722,13 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		}
 	}
 
+	// Check if a linked streamer account exists and is banned
+	linkedStreamerKick := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
+	if linkedStreamerKick != nil && linkedStreamerKick.IsBanned {
+		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+		return
+	}
+
 	// Get or create durable viewer identity (ensures viewer_id is in JWT)
 	viewerIDKick, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
 	if err != nil {
@@ -680,7 +737,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 	}
 
 	// Generate JWT token
-	jwtToken, err := h.generateViewerJWT(session, viewerIDKick)
+	jwtToken, err := h.generateViewerJWT(session, viewerIDKick, linkedStreamerKick)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		h.redirectToFrontendWithError(c, "Failed to generate token")
