@@ -310,10 +310,27 @@ Plans:
 - [ ] 31-02-PLAN.md — Frontend: AllChatBadge + PremiumBadge components, overlay page.tsx name-check render, badgeOrder.ts + tests
 - [ ] 31-03-PLAN.md — Extension: mirror AllChatBadge + PremiumBadge, extend badgeOrder.ts, update ChatContainer name-check render
 
+### Phase 32: Integration Wiring Fixes
+**Goal**: Close all 7 integration-level gaps identified in v1.4 milestone audit — three surgical fixes across enricher SQL, overlay WebSocket handler, and API gateway routing
+**Depends on**: Phases 27-31 (gap closure, no new features)
+**Services affected**: `message-processor`, `api-gateway`, frontend (`/overlay/[id]/page.tsx`)
+**Requirements**: BADGE-02, PREM-02, PREM-03, PREM-04, PREM-05, WEB-03, WEB-04
+**Gap Closure:** Closes all gaps from v1.4-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. `viewer_badge_enricher.go` adds `LEFT JOIN viewers v ON v.id = vpi.viewer_id` and reads `COALESCE(v.is_premium, false)` — premium badge appears for premium viewers in overlays
+  2. `overlay/[id]/page.tsx` `ws.onmessage` handler parses `msg.user.name_gradient` from JSON string to `NameGradient` object before calling `buildGradientCSS` — gradient usernames render without TypeError
+  3. API gateway registers `GET /auth/viewer/catalog/frames` and `GET /auth/viewer/catalog/flairs` in public block; registers all 6 admin cosmetics routes (`GET/POST/DELETE /admin/cosmetics/frames` and `/admin/cosmetics/flairs`) in protected block — catalog and admin pages return 200
+**Plans**: TBD
+
+Plans:
+- [ ] 32-01-PLAN.md — Fix enricher SQL: add viewers JOIN, update scan order, update fakeViewerDB test double (closes BADGE-02)
+- [ ] 32-02-PLAN.md — Fix overlay gradient parse: JSON.parse in ws.onmessage handler (closes PREM-02)
+- [ ] 32-03-PLAN.md — Add 8 proxy routes to API gateway (closes PREM-03, PREM-04, PREM-05, WEB-03, WEB-04)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 (28 can start in parallel with 27)
+Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 (28 can start in parallel with 27)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -329,6 +346,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 (28 can start in
 | 29 Viewer Color & Gradient Editor | 3/3 | Complete    | 2026-03-15 | - |
 | 30 Avatar Frame & Flair System | 4/4 | Complete    | 2026-03-16 | 2026-03-16 |
 | 31 All-Chat Platform Badges | 3/3 | Complete    | 2026-03-16 | - |
+| 32 Integration Wiring Fixes | v1.4 | 0/3 | Not started | - |
 
 ---
 *Last updated: 2026-03-16 after Phase 31 planning*
