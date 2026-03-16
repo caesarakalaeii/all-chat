@@ -206,11 +206,12 @@ Plans:
   1. When two discord-listener pods are running, exactly one pod holds the Gateway connection for each shard — the second pod does not connect until the first fails or releases ownership
   2. After a pod restart, the Gateway session resumes (RESUME opcode) using the persisted session_id and resume_gateway_url from Redis, avoiding a full re-IDENTIFY
   3. HPA scales discord-listener pods up when events/sec or active guild count exceeds configured thresholds, and the new pod acquires shard ownership within 60 seconds of the prior pod terminating
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 31-01: TBD
-- [ ] 31-02: TBD
+- [ ] 31-01-PLAN.md — Gateway RESUME protocol TDD: OpResume types, BuildResumePayload, IDENTIFY/RESUME branch in Connect(), InvalidSession clear logic (LOAD-03)
+- [ ] 31-02-PLAN.md — metrics package + go.mod shared deps + cmd/main.go ownership gating via LeadershipCoordinator + /metrics endpoint (LOAD-01, LOAD-02)
+- [ ] 31-03-PLAN.md — Kubernetes manifests: Deployment+Service, HPA, ServiceMonitor + kustomization.yaml update (LOAD-02)
 
 ### Phase 32: Setup UI
 **Goal**: Users can configure Discord sources end-to-end from the frontend without leaving the app
@@ -242,8 +243,8 @@ Plans:
 | 28. Inbound Listener Core | 2/2 | Complete    | 2026-03-15 | - |
 | 29. Inbound Enrichment | 2/2 | Complete    | 2026-03-16 | - |
 | 30. Outbound Relay | 2/2 | Complete    | 2026-03-16 | - |
-| 31. Load Balancing | v1.5 | 0/TBD | Not started | - |
+| 31. Load Balancing | v1.5 | 0/3 | Not started | - |
 | 32. Setup UI | v1.5 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-16 after Phase 29 planning — 2 plans created*
+*Last updated: 2026-03-16 after Phase 31 planning — 3 plans created*
