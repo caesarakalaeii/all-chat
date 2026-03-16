@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -22,6 +23,7 @@ type DiscordOAuthProvider interface {
 	GetAuthURL(state string) string
 	ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error)
 	CheckBotPermissions(ctx context.Context, guildID string) ([]string, error)
+	GetGuildInfo(ctx context.Context, guildID string) (*oauth.GuildInfo, error)
 }
 
 // DiscordGuildRepo is the interface for guild persistence (allows mocking in tests).
@@ -214,11 +216,23 @@ func (h *DiscordHandler) HandleCallback(c *gin.Context) {
 		h.log.Warn("discord: bot may be missing permissions", zap.String("guild_id", guildID), zap.Strings("missing", missing))
 	}
 
+	// Fetch guild name and icon from Discord API (not provided in callback params)
+	guildInfo, err := h.oauth.GetGuildInfo(ctx, guildID)
+	if err != nil {
+		h.log.Warn("discord: failed to fetch guild info, using fallback", zap.String("guild_id", guildID), zap.Error(err))
+		guildInfo = &oauth.GuildInfo{Name: guildName} // guildName from query param is always "" but keeps it graceful
+	}
+
 	// Store the guild
+	var icon *string
+	if guildInfo.Icon != "" {
+		icon = &guildInfo.Icon
+	}
 	guild := &models.DiscordGuild{
 		UserID:    userID,
 		GuildID:   guildID,
-		GuildName: guildName,
+		GuildName: guildInfo.Name,
+		GuildIcon: icon,
 	}
 	if err := h.repo.UpsertGuild(ctx, guild); err != nil {
 		h.log.Error("discord: failed to upsert guild", zap.String("guild_id", guildID), zap.Error(err))

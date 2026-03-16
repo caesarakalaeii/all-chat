@@ -130,6 +130,41 @@ func (d *DiscordOAuth) GetPlatform() Platform {
 	return PlatformDiscord
 }
 
+// GuildInfo holds the name and icon hash of a Discord guild.
+type GuildInfo struct {
+	Name string
+	Icon string // may be empty
+}
+
+// GetGuildInfo fetches the guild name and icon from Discord using the bot token.
+func (d *DiscordOAuth) GetGuildInfo(ctx context.Context, guildID string) (*GuildInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/guilds/%s", discordAPIBase, guildID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create guild info request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bot "+d.botToken)
+	req.Header.Set("User-Agent", discordUserAgent)
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("guild info request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("guild info returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var g struct {
+		Name string `json:"name"`
+		Icon string `json:"icon"`
+	}
+	if err := json.Unmarshal(body, &g); err != nil {
+		return nil, fmt.Errorf("failed to decode guild info: %w", err)
+	}
+	return &GuildInfo{Name: g.Name, Icon: g.Icon}, nil
+}
+
 // CheckBotPermissions confirms the bot is a member of the guild.
 // Discord enforces the requested permissions (68608) at invite time via the OAuth URL,
 // so we only need to verify the bot joined successfully.
