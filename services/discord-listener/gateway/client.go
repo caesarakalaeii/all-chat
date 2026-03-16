@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
@@ -81,6 +82,7 @@ type GatewayClient struct {
 	store            SessionStore
 	registry         ChannelRegistry
 	publisher        MessagePublisher
+	guildCache       GuildCache
 	log              *zap.Logger
 	conn             *websocket.Conn
 	mu               sync.Mutex
@@ -90,15 +92,16 @@ type GatewayClient struct {
 }
 
 // NewGatewayClient creates a new GatewayClient.
-// registry and publisher may be nil if MESSAGE_CREATE dispatch is not needed (e.g. tests
-// that only exercise heartbeat/READY handling), but both must be set for production use.
-func NewGatewayClient(token, gatewayURL string, store SessionStore, log *zap.Logger, registry ChannelRegistry, pub MessagePublisher) *GatewayClient {
+// registry, publisher, and cache may be nil if the corresponding functionality is not needed
+// (e.g. tests that only exercise heartbeat/READY handling), but all must be set for production use.
+func NewGatewayClient(token, gatewayURL string, store SessionStore, log *zap.Logger, registry ChannelRegistry, pub MessagePublisher, cache GuildCache) *GatewayClient {
 	return &GatewayClient{
 		token:      token,
 		gatewayURL: gatewayURL,
 		store:      store,
 		registry:   registry,
 		publisher:  pub,
+		guildCache: cache,
 		log:        log,
 		done:       make(chan struct{}),
 	}
@@ -218,6 +221,61 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 			}
 		}
 
+		if payload.T != nil && *payload.T == "GUILD_CREATE" {
+			var data GuildCreateData
+			if err := json.Unmarshal(payload.D, &data); err != nil {
+				c.log.Warn("Failed to parse GUILD_CREATE", zap.Error(err))
+				continue
+			}
+			if err := c.HandleGuildCreate(ctx, data); err != nil {
+				c.log.Warn("HandleGuildCreate failed", zap.Error(err))
+			}
+		}
+
+		if payload.T != nil && (*payload.T == "CHANNEL_UPDATE" || *payload.T == "CHANNEL_CREATE") {
+			var data ChannelUpdateData
+			if err := json.Unmarshal(payload.D, &data); err != nil {
+				c.log.Warn("Failed to parse CHANNEL_UPDATE/CREATE", zap.Error(err))
+				continue
+			}
+			if err := c.HandleChannelUpdate(ctx, data); err != nil {
+				c.log.Warn("HandleChannelUpdate failed", zap.Error(err))
+			}
+		}
+
+		if payload.T != nil && *payload.T == "CHANNEL_DELETE" {
+			var data ChannelUpdateData
+			if err := json.Unmarshal(payload.D, &data); err != nil {
+				c.log.Warn("Failed to parse CHANNEL_DELETE", zap.Error(err))
+				continue
+			}
+			if err := c.HandleChannelDelete(ctx, data); err != nil {
+				c.log.Warn("HandleChannelDelete failed", zap.Error(err))
+			}
+		}
+
+		if payload.T != nil && (*payload.T == "GUILD_ROLE_UPDATE" || *payload.T == "GUILD_ROLE_CREATE") {
+			var data GuildRoleUpdateData
+			if err := json.Unmarshal(payload.D, &data); err != nil {
+				c.log.Warn("Failed to parse GUILD_ROLE_UPDATE/CREATE", zap.Error(err))
+				continue
+			}
+			if err := c.HandleGuildRoleUpdate(ctx, data); err != nil {
+				c.log.Warn("HandleGuildRoleUpdate failed", zap.Error(err))
+			}
+		}
+
+		if payload.T != nil && *payload.T == "GUILD_ROLE_DELETE" {
+			var data GuildRoleDeleteData
+			if err := json.Unmarshal(payload.D, &data); err != nil {
+				c.log.Warn("Failed to parse GUILD_ROLE_DELETE", zap.Error(err))
+				continue
+			}
+			if err := c.HandleGuildRoleDelete(ctx, data); err != nil {
+				c.log.Warn("HandleGuildRoleDelete failed", zap.Error(err))
+			}
+		}
+
 	case OpReconnect:
 			c.log.Info("Gateway requested reconnect")
 			return fmt.Errorf("gateway reconnect requested")
@@ -312,13 +370,19 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 		// making a blocking REST call per message.
 	}
 
-	// 5. Parse timestamp
+	// 5. Resolve mentions in message text
+	text := msg.Content
+	if c.guildCache != nil {
+		text = ResolveMentions(ctx, text, msg.Mentions, c.guildCache, c.log)
+	}
+
+	// 6. Parse timestamp
 	ts, parseErr := time.Parse(time.RFC3339, msg.Timestamp)
 	if parseErr != nil {
 		ts = time.Now()
 	}
 
-	// 6. Build RawMessage (using interface{} to avoid circular import with publisher package)
+	// 7. Build RawMessage (using interface{} to avoid circular import with publisher package)
 	rawMsg := map[string]interface{}{
 		"message_id":   msg.ID,
 		"platform":     "discord",
@@ -327,7 +391,7 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 		"channel_name": msg.ChannelID,
 		"user_id":      msg.Author.ID,
 		"username":     msg.Author.Username,
-		"text":         msg.Content,
+		"text":         text,
 		"tags":         tags,
 		"timestamp":    ts,
 	}
@@ -392,6 +456,153 @@ func (c *GatewayClient) HandleMessageDeleteBulk(ctx context.Context, bulk Messag
 		}
 	}
 	return nil
+}
+
+// HandleGuildCreate processes a GUILD_CREATE dispatch event.
+// It populates the GuildCache with channel and role names from the guild payload.
+// Cache population is best-effort: errors are logged at WARN and processing continues.
+func (c *GatewayClient) HandleGuildCreate(ctx context.Context, data GuildCreateData) error {
+	if c.guildCache == nil {
+		return nil
+	}
+	for _, ch := range data.Channels {
+		if err := c.guildCache.SetChannelName(ctx, ch.ID, ch.Name); err != nil {
+			if c.log != nil {
+				c.log.Warn("Failed to cache channel name on GUILD_CREATE",
+					zap.String("channel_id", ch.ID),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+	for _, role := range data.Roles {
+		if err := c.guildCache.SetRoleName(ctx, role.ID, role.Name); err != nil {
+			if c.log != nil {
+				c.log.Warn("Failed to cache role name on GUILD_CREATE",
+					zap.String("role_id", role.ID),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+	return nil
+}
+
+// HandleChannelUpdate processes CHANNEL_UPDATE and CHANNEL_CREATE dispatch events.
+// It updates the channel name cache with the new name.
+func (c *GatewayClient) HandleChannelUpdate(ctx context.Context, data ChannelUpdateData) error {
+	if c.guildCache == nil {
+		return nil
+	}
+	return c.guildCache.SetChannelName(ctx, data.ID, data.Name)
+}
+
+// HandleChannelDelete processes a CHANNEL_DELETE dispatch event.
+// It removes the channel name from the cache.
+func (c *GatewayClient) HandleChannelDelete(ctx context.Context, data ChannelUpdateData) error {
+	if c.guildCache == nil {
+		return nil
+	}
+	return c.guildCache.DeleteChannelName(ctx, data.ID)
+}
+
+// HandleGuildRoleUpdate processes GUILD_ROLE_UPDATE and GUILD_ROLE_CREATE dispatch events.
+// It updates the role name cache.
+func (c *GatewayClient) HandleGuildRoleUpdate(ctx context.Context, data GuildRoleUpdateData) error {
+	if c.guildCache == nil {
+		return nil
+	}
+	return c.guildCache.SetRoleName(ctx, data.Role.ID, data.Role.Name)
+}
+
+// HandleGuildRoleDelete processes a GUILD_ROLE_DELETE dispatch event.
+// It removes the role from the cache.
+func (c *GatewayClient) HandleGuildRoleDelete(ctx context.Context, data GuildRoleDeleteData) error {
+	if c.guildCache == nil {
+		return nil
+	}
+	return c.guildCache.DeleteRoleName(ctx, data.RoleID)
+}
+
+// reUserMention matches <@USER_ID> and <@!USER_ID> (guild member variant).
+var reUserMention = regexp.MustCompile(`<@!?(\d+)>`)
+
+// reChannelMention matches <#CHANNEL_ID>.
+var reChannelMention = regexp.MustCompile(`<#(\d+)>`)
+
+// reRoleMention matches <@&ROLE_ID>.
+var reRoleMention = regexp.MustCompile(`<@&(\d+)>`)
+
+// ResolveMentions replaces Discord mention tokens in text with human-readable names.
+// mentions is the slice from MessageCreateData.Mentions (provides user name resolution).
+// cache provides channel and role name lookups (may be nil — fallbacks used if nil).
+// log may be nil (tests pass nil).
+//
+// Token resolution order: user mentions first, then channel, then role to avoid ambiguity.
+func ResolveMentions(ctx context.Context, text string, mentions []DiscordUser, cache GuildCache, log *zap.Logger) string {
+	// Build O(1) lookup map from the mentions array
+	mentionMap := make(map[string]DiscordUser, len(mentions))
+	for _, u := range mentions {
+		mentionMap[u.ID] = u
+	}
+
+	// 1. Resolve user mentions: <@USER_ID> and <@!USER_ID>
+	text = reUserMention.ReplaceAllStringFunc(text, func(match string) string {
+		sub := reUserMention.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		id := sub[1]
+		if u, ok := mentionMap[id]; ok {
+			name := u.GlobalName
+			if name == "" {
+				name = u.Username
+			}
+			return "@" + name
+		}
+		if log != nil {
+			log.Debug("Unresolvable user mention", zap.String("user_id", id))
+		}
+		return "@unknown"
+	})
+
+	// 2. Resolve channel mentions: <#CHANNEL_ID>
+	text = reChannelMention.ReplaceAllStringFunc(text, func(match string) string {
+		sub := reChannelMention.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		id := sub[1]
+		if cache != nil {
+			if name, found, err := cache.GetChannelName(ctx, id); err == nil && found {
+				return "#" + name
+			}
+		}
+		if log != nil {
+			log.Debug("Unresolvable channel mention", zap.String("channel_id", id))
+		}
+		return "#channel"
+	})
+
+	// 3. Resolve role mentions: <@&ROLE_ID>
+	text = reRoleMention.ReplaceAllStringFunc(text, func(match string) string {
+		sub := reRoleMention.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		id := sub[1]
+		if cache != nil {
+			if name, found, err := cache.GetRoleName(ctx, id); err == nil && found {
+				return "@" + name
+			}
+		}
+		if log != nil {
+			log.Debug("Unresolvable role mention", zap.String("role_id", id))
+		}
+		return "@unknown"
+	})
+
+	return text
 }
 
 // heartbeatLoop sends op=1 HEARTBEAT every interval ms.

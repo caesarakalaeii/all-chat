@@ -56,6 +56,7 @@ func TestHandleMessageCreate_BotFiltered(t *testing.T) {
 		nil, // logger — will panic if called; use in test context
 		reg,
 		pub,
+		nil, // guildCache — not needed for create tests without mentions
 	)
 
 	msg := gateway.MessageCreateData{
@@ -87,6 +88,7 @@ func TestHandleMessageCreate_UnknownChannel(t *testing.T) {
 		nil,
 		reg,
 		pub,
+		nil, // guildCache — not needed for create tests without mentions
 	)
 
 	msg := gateway.MessageCreateData{
@@ -118,6 +120,7 @@ func TestHandleMessageCreate_EmptyContent(t *testing.T) {
 		nil,
 		reg,
 		pub,
+		nil, // guildCache — not needed for create tests without mentions
 	)
 
 	msg := gateway.MessageCreateData{
@@ -149,6 +152,7 @@ func TestHandleMessageCreate_HappyPath(t *testing.T) {
 		nil,
 		reg,
 		pub,
+		nil, // guildCache — not needed for create tests without mentions
 	)
 
 	msg := gateway.MessageCreateData{

@@ -59,6 +59,50 @@ func (r *redisChannelRegistry) Subscribe(_ context.Context, _ chan<- string) err
 	return nil
 }
 
+// redisGuildCache implements gateway.GuildCache backed by Redis.
+// Channel names are stored at discord:guild:channels:{channelID} (distinct from
+// discord:channels:{channelID} used by the channel registry to avoid key collision).
+// Role names are stored at discord:guild:roles:{roleID}.
+type redisGuildCache struct{ client *redis.Client }
+
+func (r *redisGuildCache) SetChannelName(ctx context.Context, channelID, name string) error {
+	return r.client.Set(ctx, "discord:guild:channels:"+channelID, name, 0).Err()
+}
+
+func (r *redisGuildCache) GetChannelName(ctx context.Context, channelID string) (string, bool, error) {
+	val, err := r.client.Get(ctx, "discord:guild:channels:"+channelID).Result()
+	if err == redis.Nil {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return val, true, nil
+}
+
+func (r *redisGuildCache) DeleteChannelName(ctx context.Context, channelID string) error {
+	return r.client.Del(ctx, "discord:guild:channels:"+channelID).Err()
+}
+
+func (r *redisGuildCache) SetRoleName(ctx context.Context, roleID, name string) error {
+	return r.client.Set(ctx, "discord:guild:roles:"+roleID, name, 0).Err()
+}
+
+func (r *redisGuildCache) GetRoleName(ctx context.Context, roleID string) (string, bool, error) {
+	val, err := r.client.Get(ctx, "discord:guild:roles:"+roleID).Result()
+	if err == redis.Nil {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return val, true, nil
+}
+
+func (r *redisGuildCache) DeleteRoleName(ctx context.Context, roleID string) error {
+	return r.client.Del(ctx, "discord:guild:roles:"+roleID).Err()
+}
+
 // publisherAdapter adapts *publisher.StreamPublisher to gateway.MessagePublisher.
 // The gateway package uses interface{} to avoid a circular import.
 type publisherAdapter struct{ pub *publisher.StreamPublisher }
@@ -95,10 +139,11 @@ func main() {
 	gatewayURL := getEnv("DISCORD_GATEWAY_URL", "wss://gateway.discord.gg/?v=10&encoding=json")
 	store := &redisSessionStore{client: rdb}
 	registry := &redisChannelRegistry{client: rdb}
+	guildCache := &redisGuildCache{client: rdb}
 	streamPub := publisher.NewStreamPublisher(rdb, log)
 	pubAdapter := &publisherAdapter{pub: streamPub}
 
-	gwClient := gateway.NewGatewayClient(botToken, gatewayURL, store, log, registry, pubAdapter)
+	gwClient := gateway.NewGatewayClient(botToken, gatewayURL, store, log, registry, pubAdapter, guildCache)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

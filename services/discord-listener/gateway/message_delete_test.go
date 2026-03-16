@@ -36,6 +36,7 @@ func TestHandleMessageDelete_UnknownChannel(t *testing.T) {
 		nil,
 		reg,
 		pub,
+		nil, // guildCache — not needed for delete tests
 	)
 
 	msg := gateway.MessageDeleteData{
@@ -63,6 +64,7 @@ func TestHandleMessageDelete_HappyPath(t *testing.T) {
 		nil,
 		reg,
 		pub,
+		nil, // guildCache — not needed for delete tests
 	)
 
 	msg := gateway.MessageDeleteData{
@@ -101,6 +103,7 @@ func TestHandleMessageDelete_RegistryError(t *testing.T) {
 		nil,
 		reg,
 		pub,
+		nil, // guildCache — not needed for delete tests
 	)
 
 	msg := gateway.MessageDeleteData{
@@ -128,6 +131,7 @@ func TestHandleMessageDeleteBulk_HappyPath(t *testing.T) {
 		nil,
 		reg,
 		pub,
+		nil, // guildCache — not needed for delete tests
 	)
 
 	bulk := gateway.MessageDeleteBulkData{
@@ -172,6 +176,7 @@ func TestHandleMessageDeleteBulk_UnknownChannel(t *testing.T) {
 		nil,
 		reg,
 		pub,
+		nil, // guildCache — not needed for delete tests
 	)
 
 	bulk := gateway.MessageDeleteBulkData{
