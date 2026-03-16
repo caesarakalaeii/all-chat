@@ -145,6 +145,13 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
+			// Close code 4002 (invalid payload) or 4009 (session timeout) means the session is dead.
+			// Clear Redis so the next Connect() falls back to a clean IDENTIFY on the standard URL.
+			if ce, ok := err.(*websocket.CloseError); ok && (ce.Code == 4002 || ce.Code == 4009) {
+				_ = c.store.Set(ctx, RedisKeySessionID, "")
+				_ = c.store.Set(ctx, RedisKeyResumeURL, "")
+				_ = c.store.Set(ctx, RedisKeySeq, "")
+			}
 			return fmt.Errorf("gateway read error: %w", err)
 		}
 
