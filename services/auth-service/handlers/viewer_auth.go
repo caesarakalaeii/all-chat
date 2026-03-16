@@ -30,6 +30,7 @@ type ViewerAuthHandler struct {
 	youtubeProvider *oauth.ViewerYouTubeOAuth
 	kickProvider    *oauth.ViewerKickOAuth
 	viewerRepo      *repository.ViewerRepository
+	identityRepo    *repository.ViewerIdentityRepository
 	redis           *redis.Client
 	jwtSecret       string
 	jwtExpiry       time.Duration
@@ -44,6 +45,7 @@ func NewViewerAuthHandler(
 	youtubeProvider *oauth.ViewerYouTubeOAuth,
 	kickProvider *oauth.ViewerKickOAuth,
 	viewerRepo *repository.ViewerRepository,
+	identityRepo *repository.ViewerIdentityRepository,
 	redisClient *redis.Client,
 	jwtSecret string,
 	jwtExpiryHours int,
@@ -56,6 +58,7 @@ func NewViewerAuthHandler(
 		youtubeProvider: youtubeProvider,
 		kickProvider:    kickProvider,
 		viewerRepo:      viewerRepo,
+		identityRepo:    identityRepo,
 		redis:           redisClient,
 		jwtSecret:       jwtSecret,
 		jwtExpiry:       time.Duration(jwtExpiryHours) * time.Hour,
@@ -187,8 +190,15 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		return
 	}
 
+	// Get or create durable viewer identity (ensures viewer_id is in JWT)
+	viewerID, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
+	if err != nil {
+		h.logger.Error("Failed to get/create viewer identity", zap.Error(err))
+		viewerID = uuid.Nil
+	}
+
 	// Generate JWT for viewer
-	jwtToken, err := h.generateViewerJWT(session)
+	jwtToken, err := h.generateViewerJWT(session, viewerID)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		h.redirectToFrontendWithError(c, "Failed to generate token")
@@ -319,17 +329,47 @@ func (h *ViewerAuthHandler) getOrCreateViewerSession(
 	return session, nil
 }
 
-// generateViewerJWT generates a JWT token for a viewer session
-func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession) (string, error) {
+// generateViewerJWT generates a JWT token for a viewer session.
+// viewerID is the durable viewer UUID from the viewers table.
+// Pass uuid.Nil for pre-Phase-28 compatibility; the viewer_id claim will be an empty string.
+func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, viewerID uuid.UUID) (string, error) {
 	now := time.Now()
 	expiresAt := now.Add(h.jwtExpiry)
 
+	var viewerIDStr string
+	if viewerID != uuid.Nil {
+		viewerIDStr = viewerID.String()
+	}
+
+	var avatarURL string
+	if session.AvatarURL != nil {
+		avatarURL = *session.AvatarURL
+	}
+
+	// Phase 29: look up is_premium so the JWT carries the current value.
+	// Soft failure: if DB is unavailable, default to false (safe degradation).
+	var isPremium bool
+	if viewerID != uuid.Nil {
+		var premErr error
+		isPremium, premErr = h.identityRepo.GetViewerIsPremium(context.Background(), viewerID)
+		if premErr != nil {
+			h.logger.Warn("generateViewerJWT: failed to query is_premium, defaulting to false",
+				zap.String("viewer_id", viewerIDStr),
+				zap.Error(premErr),
+			)
+		}
+	}
+
 	claims := sharedAuth.ViewerClaims{
+		ViewerID:       viewerIDStr,
 		SessionID:      session.ID.String(),
 		Platform:       session.Platform,
 		PlatformUserID: session.PlatformUserID,
 		Username:       session.Username,
+		DisplayName:    session.DisplayName,
+		AvatarURL:      avatarURL,
 		IsViewer:       true,
+		IsPremium:      isPremium,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -460,7 +500,14 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		}
 	}
 
-	jwtToken, err := h.generateViewerJWT(session)
+	// Get or create durable viewer identity (ensures viewer_id is in JWT)
+	viewerIDYT, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
+	if err != nil {
+		h.logger.Error("Failed to get/create viewer identity", zap.Error(err))
+		viewerIDYT = uuid.Nil
+	}
+
+	jwtToken, err := h.generateViewerJWT(session, viewerIDYT)
 	if err != nil {
 		h.redirectToFrontendWithError(c, "Failed to generate token")
 		return
@@ -625,8 +672,15 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		}
 	}
 
+	// Get or create durable viewer identity (ensures viewer_id is in JWT)
+	viewerIDKick, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
+	if err != nil {
+		h.logger.Error("Failed to get/create viewer identity", zap.Error(err))
+		viewerIDKick = uuid.Nil
+	}
+
 	// Generate JWT token
-	jwtToken, err := h.generateViewerJWT(session)
+	jwtToken, err := h.generateViewerJWT(session, viewerIDKick)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		h.redirectToFrontendWithError(c, "Failed to generate token")

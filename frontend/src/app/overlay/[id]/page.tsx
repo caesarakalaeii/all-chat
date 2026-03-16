@@ -18,128 +18,122 @@
  * - Manages real-time state
  */
 
-'use client'
+'use client';
 
-import Image from 'next/image'
-import { use, useEffect, useState, useRef } from 'react'
-import clsx from 'clsx'
-import type { ChatMessage, EventTier, PlatformStatus, DeletionMetadata } from '@/lib/types/message'
-import { renderMessageContent } from '@/lib/renderMessage'
-import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
-import { sortMessageBadges } from '@/lib/badgeOrder'
-import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
-import '@/styles/events.css'
+import Image from 'next/image';
+import { use, useEffect, useState, useRef } from 'react';
+import type { ChatMessage, EventTier, NameGradient, PlatformStatus, DeletionMetadata } from '@/lib/types/message';
+import { renderMessageContent } from '@/lib/renderMessage';
+import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
+import { sortMessageBadges } from '@/lib/badgeOrder';
+import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
+import { buildGradientCSS } from '@/lib/utils/gradient';
+import { UserAvatar } from '@/components/UserAvatar';
+import { AllChatBadge } from '@/components/AllChatBadge';
+import { PremiumBadge } from '@/components/PremiumBadge';
+import '@/styles/events.css';
 
 export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [maxMessages, setMaxMessages] = useState(50)
-  const [fontSize, setFontSize] = useState(16)
-  const [messageDuration, setMessageDuration] = useState(15)
-  const [disableMessageFade, setDisableMessageFade] = useState(false)
-  const [customCss, setCustomCss] = useState('')
-  const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set())
-  const [configuredChannels, setConfiguredChannels] = useState<Map<string, Set<string>>>(new Map()) // platform → Set<channel_id>
-  const [platformStatuses, setPlatformStatuses] = useState<Map<string, PlatformStatus>>(new Map())
-  const [reconnectAttempts, setReconnectAttempts] = useState(0)
-  const [forceReconnect, setForceReconnect] = useState(0)
-  const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
-  const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
-  const [showPlatformBadge, setShowPlatformBadge] = useState(true)
+  const { id } = use(params);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [maxMessages, setMaxMessages] = useState(50);
+  const [fontSize, setFontSize] = useState(16);
+  const [messageDuration, setMessageDuration] = useState(15);
+  const [disableMessageFade, setDisableMessageFade] = useState(false);
+  const [customCss, setCustomCss] = useState('');
+  const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set());
+  const [configuredChannels, setConfiguredChannels] = useState<Map<string, Set<string>>>(new Map()); // platform → Set<channel_id>
+  const [platformStatuses, setPlatformStatuses] = useState<Map<string, PlatformStatus>>(new Map());
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [forceReconnect, setForceReconnect] = useState(0);
+  const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
+  const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text');
+  const [showPlatformBadge, setShowPlatformBadge] = useState(true);
 
-  const wsRef = useRef<WebSocket | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const lastSeenTimestampRef = useRef<number>(0)
+  const wsRef = useRef<WebSocket | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSeenTimestampRef = useRef<number>(0);
 
   // Load overlay display configuration (public endpoint)
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const response = await fetch(`/api/v1/overlays/public/${id}/config`)
+        const response = await fetch(`/api/v1/overlays/public/${id}/config`);
         if (!response.ok) {
-          throw new Error('failed to load config')
+          throw new Error('failed to load config');
         }
 
-        const data = await response.json()
-        const display = data.display_settings || {}
+        const data = await response.json();
+        const display = data.display_settings || {};
 
         if (typeof display.max_messages === 'number') {
-          setMaxMessages(display.max_messages)
+          setMaxMessages(display.max_messages);
         }
         if (typeof display.font_size === 'number') {
-          setFontSize(display.font_size)
+          setFontSize(display.font_size);
         }
         if (typeof display.message_duration === 'number') {
-          setMessageDuration(display.message_duration)
+          setMessageDuration(display.message_duration);
         }
         if (typeof display.disable_message_fade === 'boolean') {
-          setDisableMessageFade(display.disable_message_fade)
+          setDisableMessageFade(display.disable_message_fade);
         }
-        if (
-          display.platform_badge_position === 'before' ||
-          display.platform_badge_position === 'after'
-        ) {
-          setPlatformBadgePosition(display.platform_badge_position)
+        if (display.platform_badge_position === 'before' || display.platform_badge_position === 'after') {
+          setPlatformBadgePosition(display.platform_badge_position);
         }
         if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
-          setPlatformBadgeStyle(display.platform_badge_style)
+          setPlatformBadgeStyle(display.platform_badge_style);
         }
         if (typeof display.show_platform_badge === 'boolean') {
-          setShowPlatformBadge(display.show_platform_badge)
+          setShowPlatformBadge(display.show_platform_badge);
         }
 
-        setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '')
+        setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
 
         // Load configured channel IDs from sources
         // Note: activePlatforms is only set by live platform_status messages (status === 'connected')
         // so that the indicator reflects actual live connection state, not DB is_active flag.
         if (Array.isArray(data.sources)) {
-          const channels = new Map<string, Set<string>>()
-          data.sources.forEach(
-            (source: { platform: string; channel_id: string; is_active: boolean }) => {
-              if (!channels.has(source.platform)) channels.set(source.platform, new Set())
-              channels.get(source.platform)!.add(source.channel_id)
-            }
-          )
-          setConfiguredChannels(channels)
+          const channels = new Map<string, Set<string>>();
+          data.sources.forEach((source: { platform: string; channel_id: string; is_active: boolean }) => {
+            if (!channels.has(source.platform)) channels.set(source.platform, new Set());
+            channels.get(source.platform)!.add(source.channel_id);
+          });
+          setConfiguredChannels(channels);
         }
       } catch (error) {
-        console.warn('[OBS Overlay] Failed to load config', error)
+        console.warn('[OBS Overlay] Failed to load config', error);
       }
-    }
+    };
 
-    loadConfig()
+    loadConfig();
 
     // Refresh source status periodically (every 30 seconds)
-    const interval = setInterval(loadConfig, 30000)
-    return () => clearInterval(interval)
-  }, [id])
+    const interval = setInterval(loadConfig, 30000);
+    return () => clearInterval(interval);
+  }, [id]);
 
   // Initialize WebSocket connection (no auth required)
   useEffect(() => {
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/overlay/${id}`
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/overlay/${id}`;
 
-    console.log(
-      '[OBS Overlay] Connecting to:',
-      wsUrl,
-      reconnectAttempts ? `(attempt ${reconnectAttempts + 1})` : ''
-    )
+    console.log('[OBS Overlay] Connecting to:', wsUrl, reconnectAttempts ? `(attempt ${reconnectAttempts + 1})` : '');
 
     // Load last seen timestamp from localStorage (survives page reload)
-    const storageKey = `ws_last_seen_${id}`
-    const storedTimestamp = localStorage.getItem(storageKey)
+    const storageKey = `ws_last_seen_${id}`;
+    const storedTimestamp = localStorage.getItem(storageKey);
     if (storedTimestamp) {
-      lastSeenTimestampRef.current = parseInt(storedTimestamp, 10)
+      lastSeenTimestampRef.current = parseInt(storedTimestamp, 10);
     }
 
-    const ws = new WebSocket(wsUrl)
-    wsRef.current = ws
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[OBS Overlay] Connected')
+      console.log('[OBS Overlay] Connected');
       // Reset reconnection attempts on successful connection
-      setReconnectAttempts(0)
+      setReconnectAttempts(0);
 
       // Request replay if reconnecting (not first connect)
       if (lastSeenTimestampRef.current > 0) {
@@ -149,257 +143,255 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             since: lastSeenTimestampRef.current,
           },
           timestamp: new Date().toISOString(),
-        }
-        ws.send(JSON.stringify(replayRequest))
-        console.log(
-          '[OBS Overlay] Requested deletion replay since:',
-          new Date(lastSeenTimestampRef.current)
-        )
+        };
+        ws.send(JSON.stringify(replayRequest));
+        console.log('[OBS Overlay] Requested deletion replay since:', new Date(lastSeenTimestampRef.current));
       }
-    }
+    };
 
     ws.onmessage = async (event) => {
       try {
-        const envelope = JSON.parse(event.data)
+        const envelope = JSON.parse(event.data);
 
-        console.log('[OBS Overlay] Received message:', envelope)
+        console.log('[OBS Overlay] Received message:', envelope);
 
         // Handle replay response (batch of missed deletions)
         if (envelope.type === 'replay_response') {
-          const deletions = envelope.data as DeletionMetadata[]
-          console.log(`[OBS Overlay] Replaying ${deletions.length} missed deletions`)
+          const deletions = envelope.data as DeletionMetadata[];
+          console.log(`[OBS Overlay] Replaying ${deletions.length} missed deletions`);
 
           // Apply each deletion
           deletions.forEach((deletion) => {
             setMessages((prev) => {
               switch (deletion.deletion_type) {
                 case 'single':
-                  const targetId = deletion.target_uuid
-                  if (!targetId) return prev
-                  return prev.filter((m) => m.id !== targetId)
+                  const targetId = deletion.target_uuid;
+                  if (!targetId) return prev;
+                  return prev.filter((m) => m.id !== targetId);
 
                 case 'batch':
-                  const targetUserId = deletion.target_user_id
-                  if (!targetUserId) return prev
-                  return prev.filter((m) => m.user.id !== targetUserId)
+                  const targetUserId = deletion.target_user_id;
+                  if (!targetUserId) return prev;
+                  return prev.filter((m) => m.user.id !== targetUserId);
 
                 case 'clear':
-                  return []
+                  return [];
 
                 default:
-                  return prev
+                  return prev;
               }
-            })
-          })
+            });
+          });
 
-          return // Don't process further
+          return; // Don't process further
         }
 
         // Handle deletion events FIRST (before regular messages)
         if (envelope.type === 'chat_message' && envelope.data?.event?.type === 'message_deletion') {
-          const deletion = envelope.data.event.metadata as DeletionMetadata
+          const deletion = envelope.data.event.metadata as DeletionMetadata;
 
           // Update state based on deletion type
           setMessages((prev) => {
             switch (deletion.deletion_type) {
               case 'single':
                 // Remove specific message by internal UUID
-                const targetId = deletion.target_uuid
+                const targetId = deletion.target_uuid;
                 if (!targetId) {
-                  console.warn('[Deletion] Single deletion missing target_uuid')
-                  return prev
+                  console.warn('[Deletion] Single deletion missing target_uuid');
+                  return prev;
                 }
-                console.debug('[Deletion] Removing single message:', targetId)
-                return prev.filter((m) => m.id !== targetId)
+                console.debug('[Deletion] Removing single message:', targetId);
+                return prev.filter((m) => m.id !== targetId);
 
               case 'batch':
                 // Remove all messages from specific user (timeout/ban)
-                const targetUserId = deletion.target_user_id
+                const targetUserId = deletion.target_user_id;
                 if (!targetUserId) {
-                  console.warn('[Deletion] Batch deletion missing target_user_id')
-                  return prev
+                  console.warn('[Deletion] Batch deletion missing target_user_id');
+                  return prev;
                 }
-                console.debug(
-                  '[Deletion] Removing all messages from user:',
-                  targetUserId,
-                  deletion.target_username
-                )
-                return prev.filter((m) => m.user.id !== targetUserId)
+                console.debug('[Deletion] Removing all messages from user:', targetUserId, deletion.target_username);
+                return prev.filter((m) => m.user.id !== targetUserId);
 
               case 'clear':
                 // Remove all messages (full chat clear)
-                console.debug('[Deletion] Clearing all messages')
-                return []
+                console.debug('[Deletion] Clearing all messages');
+                return [];
 
               default:
-                console.warn('[Deletion] Unknown deletion type:', deletion.deletion_type)
-                return prev
+                console.warn('[Deletion] Unknown deletion type:', deletion.deletion_type);
+                return prev;
             }
-          })
+          });
 
           // Update last seen timestamp AFTER processing deletion
-          lastSeenTimestampRef.current = Date.now()
-          localStorage.setItem(`ws_last_seen_${id}`, String(lastSeenTimestampRef.current))
+          lastSeenTimestampRef.current = Date.now();
+          localStorage.setItem(`ws_last_seen_${id}`, String(lastSeenTimestampRef.current));
 
-          return // Don't process as regular message
+          return; // Don't process as regular message
         }
 
         // Handle chat messages and events
         if (envelope.type === 'chat_message' && envelope.data && !envelope.data.event) {
-          let message: ChatMessage = envelope.data
-          message = await resolveTwitchBadgeIcons(message)
-          message = sortMessageBadges(message)
+          let message: ChatMessage = envelope.data;
+          message = await resolveTwitchBadgeIcons(message);
+          message = sortMessageBadges(message);
+          if (message.user?.name_gradient && typeof message.user.name_gradient === 'string') {
+            message.user.name_gradient = JSON.parse(message.user.name_gradient as unknown as string) as NameGradient;
+          }
 
           setMessages((prev) => {
-            const newMessages = [...prev, message]
-            return newMessages.slice(-maxMessages)
-          })
+            const newMessages = [...prev, message];
+            return newMessages.slice(-maxMessages);
+          });
         }
 
         // Handle message updates (TikTok like aggregates)
         if (envelope.type === 'message_update' && envelope.data) {
-          let updatedMessage: ChatMessage = envelope.data
-          updatedMessage = await resolveTwitchBadgeIcons(updatedMessage)
-          updatedMessage = sortMessageBadges(updatedMessage)
+          let updatedMessage: ChatMessage = envelope.data;
+          updatedMessage = await resolveTwitchBadgeIcons(updatedMessage);
+          updatedMessage = sortMessageBadges(updatedMessage);
+          if (updatedMessage.user?.name_gradient && typeof updatedMessage.user.name_gradient === 'string') {
+            updatedMessage.user.name_gradient = JSON.parse(updatedMessage.user.name_gradient as unknown as string) as NameGradient;
+          }
 
           setMessages((prev) => {
             // Find existing message by aggregation_id
-            const aggregationId = updatedMessage.event?.aggregation_id
+            const aggregationId = updatedMessage.event?.aggregation_id;
             if (!aggregationId) {
               // No aggregation ID, treat as new message
-              const newMessages = [...prev, updatedMessage]
-              return newMessages.slice(-maxMessages)
+              const newMessages = [...prev, updatedMessage];
+              return newMessages.slice(-maxMessages);
             }
 
-            const index = prev.findIndex((m) => m.event?.aggregation_id === aggregationId)
+            const index = prev.findIndex(
+              (m) => m.event?.aggregation_id === aggregationId
+            );
 
             if (index === -1) {
               // Original message already faded away, treat as new
-              const newMessages = [...prev, updatedMessage]
-              return newMessages.slice(-maxMessages)
+              const newMessages = [...prev, updatedMessage];
+              return newMessages.slice(-maxMessages);
             }
 
             // Update existing message in place
-            const updated = [...prev]
-            updated[index] = updatedMessage
-            return updated
-          })
+            const updated = [...prev];
+            updated[index] = updatedMessage;
+            return updated;
+          });
         }
 
         // Handle platform status updates - only for channels configured on this overlay
         if (envelope.type === 'platform_status' && envelope.data) {
-          const statusData = envelope.data as PlatformStatus
-          const channelId = (envelope.data as { channel_id?: string }).channel_id
-          const platformChannels = configuredChannels.get(statusData.platform)
+          const statusData = envelope.data as PlatformStatus;
+          const channelId = (envelope.data as { channel_id?: string }).channel_id;
+          const platformChannels = configuredChannels.get(statusData.platform);
           // Accept if no channel filter loaded yet, or if this channel is configured here
           if (!channelId || !platformChannels || platformChannels.has(channelId)) {
             // Mark platform as active when listener reports connected
             if (statusData.status === 'connected') {
               setActivePlatforms((prev) => {
-                if (prev.has(statusData.platform)) return prev
-                const next = new Set(prev)
-                next.add(statusData.platform)
-                return next
-              })
+                if (prev.has(statusData.platform)) return prev;
+                const next = new Set(prev);
+                next.add(statusData.platform);
+                return next;
+              });
             }
             setPlatformStatuses((prev) => {
-              const next = new Map(prev)
+              const next = new Map(prev);
               // Don't overwrite connected with reconnecting from a different channel
-              const existing = prev.get(statusData.platform)
+              const existing = prev.get(statusData.platform);
               if (existing?.status === 'connected' && statusData.status === 'reconnecting') {
-                return prev
+                return prev;
               }
-              next.set(statusData.platform, statusData)
-              return next
-            })
+              next.set(statusData.platform, statusData);
+              return next;
+            });
           }
         }
       } catch (error) {
-        console.error('[OBS Overlay] Failed to parse message:', error)
+        console.error('[OBS Overlay] Failed to parse message:', error);
       }
-    }
+    };
 
     ws.onerror = (error) => {
-      console.error('[OBS Overlay] WebSocket error:', error)
-    }
+      console.error('[OBS Overlay] WebSocket error:', error);
+    };
 
     ws.onclose = (event) => {
-      console.log('[OBS Overlay] Disconnected:', event.code, event.reason)
+      console.log('[OBS Overlay] Disconnected:', event.code, event.reason);
 
       // Calculate exponential backoff with jitter
-      const baseDelay = 1000 // Start at 1 second
-      const maxDelay = 30000 // Cap at 30 seconds
-      const jitter = Math.random() * 1000 // 0-1s jitter to prevent thundering herd
-      const delay = Math.min(baseDelay * Math.pow(1.5, reconnectAttempts), maxDelay) + jitter
+      const baseDelay = 1000; // Start at 1 second
+      const maxDelay = 30000; // Cap at 30 seconds
+      const jitter = Math.random() * 1000; // 0-1s jitter to prevent thundering herd
+      const delay = Math.min(baseDelay * Math.pow(1.5, reconnectAttempts), maxDelay) + jitter;
 
-      console.log(
-        `[OBS Overlay] Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempts + 1})`
-      )
+      console.log(`[OBS Overlay] Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempts + 1})`);
 
       // Schedule reconnection
       reconnectTimeoutRef.current = setTimeout(() => {
-        setReconnectAttempts((prev) => prev + 1)
-        setForceReconnect(Date.now()) // Trigger reconnection via effect dependency
-      }, delay)
-    }
+        setReconnectAttempts(prev => prev + 1);
+        setForceReconnect(Date.now()); // Trigger reconnection via effect dependency
+      }, delay);
+    };
 
     // Cleanup on unmount
     return () => {
       if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close()
+        ws.close();
       }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, maxMessages, forceReconnect])
+    };
+  }, [id, maxMessages, forceReconnect]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   // Auto-remove old messages based on duration (if fade is enabled)
   // Events have tier-based durations, chat uses configured duration
   useEffect(() => {
-    if (messages.length === 0 || disableMessageFade) return
+    if (messages.length === 0 || disableMessageFade) return;
 
-    const firstMessage = messages[0]
+    const firstMessage = messages[0];
 
     // Determine display duration
-    let duration = messageDuration // Default from settings
+    let duration = messageDuration; // Default from settings
 
     if (firstMessage.event) {
       // Event: use event-specific duration or tier-based default
-      duration = firstMessage.event.duration || getTierDuration(firstMessage.event.tier)
+      duration = firstMessage.event.duration || getTierDuration(firstMessage.event.tier);
     }
 
     const timer = setTimeout(() => {
-      setMessages((prev) => prev.slice(1))
-    }, duration * 1000)
+      setMessages((prev) => prev.slice(1));
+    }, duration * 1000);
 
-    return () => clearTimeout(timer)
-  }, [messages, messageDuration, disableMessageFade])
+    return () => clearTimeout(timer);
+  }, [messages, messageDuration, disableMessageFade]);
 
   // Helper function to get default duration based on event tier
   const getTierDuration = (tier: EventTier): number => {
     switch (tier) {
       case 'high':
-        return 30
+        return 30;
       case 'medium':
-        return 15
+        return 15;
       case 'low':
-        return 8
+        return 8;
       default:
-        return 15
+        return 15;
     }
-  }
+  };
 
   // Helper function to render event-specific content
   const renderEventContent = (message: ChatMessage): React.ReactNode => {
-    const event = message.event!
+    const event = message.event!;
 
     // Event icon based on type
     const getEventIcon = () => {
@@ -409,105 +401,102 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         case 'gift_subscription':
         case 'kick_subscription':
         case 'new_sponsor':
-          return '⭐'
+          return '⭐';
         case 'bits':
-          return '💎'
+          return '💎';
         case 'raid':
-          return '🚀'
+          return '🚀';
         case 'channel_points':
-          return '🎁'
+          return '🎁';
         case 'super_chat':
-          return '💰'
+          return '💰';
         case 'super_sticker':
-          return '🎨'
+          return '🎨';
         case 'gift':
-          return '🎁'
+          return '🎁';
         case 'follow':
-          return '❤️'
+          return '❤️';
         case 'like_aggregate':
-          return '👍'
+          return '👍';
         case 'share':
-          return '🔗'
+          return '🔗';
         case 'member_milestone':
-          return '🎂'
+          return '🎂';
         case 'membership_gift':
-          return '🎁'
+          return '🎁';
         case 'token_expiration_warning':
-          return '⚠️'
+          return '⚠️';
         default:
-          return '✨'
+          return '✨';
       }
-    }
+    };
 
     // Event title based on type
     const getEventTitle = () => {
       switch (event.type) {
         case 'subscription':
-          return 'New Subscriber!'
+          return 'New Subscriber!';
         case 'resubscription':
-          return 'Resubscribed!'
+          return 'Resubscribed!';
         case 'gift_subscription':
-          return 'Gift Subscription!'
+          return 'Gift Subscription!';
         case 'mystery_gift':
-          return 'Mystery Gift Bomb!'
+          return 'Mystery Gift Bomb!';
         case 'bits':
-          return 'Bits Cheered!'
+          return 'Bits Cheered!';
         case 'raid':
-          return 'Raid Incoming!'
+          return 'Raid Incoming!';
         case 'channel_points':
-          return 'Channel Points Redeemed!'
+          return 'Channel Points Redeemed!';
         case 'super_chat':
-          return 'Super Chat!'
+          return 'Super Chat!';
         case 'super_sticker':
-          return 'Super Sticker!'
+          return 'Super Sticker!';
         case 'new_sponsor':
-          return 'New Member!'
+          return 'New Member!';
         case 'member_milestone':
-          return 'Member Milestone!'
+          return 'Member Milestone!';
         case 'membership_gift':
-          return 'Membership Gift!'
+          return 'Membership Gift!';
         case 'gift':
-          return 'Gift Received!'
+          return 'Gift Received!';
         case 'follow':
-          return 'New Follower!'
+          return 'New Follower!';
         case 'like_aggregate':
-          return 'Likes!'
+          return 'Likes!';
         case 'share':
-          return 'Stream Shared!'
+          return 'Stream Shared!';
         case 'token_expiration_warning':
-          const platform = (event.metadata?.platform as string) || 'Platform'
-          return `${platform.charAt(0).toUpperCase() + platform.slice(1)} Authentication Error`
+          const platform = (event.metadata?.platform as string) || 'Platform';
+          return `${platform.charAt(0).toUpperCase() + platform.slice(1)} Authentication Error`;
         default:
-          return 'Event!'
+          return 'Event!';
       }
-    }
+    };
 
     return (
       <div className="event-content">
-        <div className="mb-1 flex items-center gap-3">
-          <span className="event-icon text-4xl leading-none">{getEventIcon()}</span>
+        <div className="flex items-center gap-3 mb-1">
+          <span className="text-4xl event-icon leading-none">{getEventIcon()}</span>
           <div className="flex-1">
-            <div className="event-title text-lg font-bold text-white">{getEventTitle()}</div>
-            <div
-              className="event-user text-sm font-semibold"
-              style={{ color: message.user?.color || '#FFFFFF' }}
-            >
+            <div className="text-lg font-bold event-title text-white">{getEventTitle()}</div>
+            <div className="text-sm font-semibold event-user" style={{ color: message.user?.color || '#FFFFFF' }}>
               {message.user?.display_name || message.user?.username}
             </div>
           </div>
           {event.value && (
-            <div className="event-value text-2xl font-bold text-yellow-300">
+            <div className="text-2xl font-bold event-value text-yellow-300">
               {event.value.display_text}
             </div>
           )}
         </div>
         {message.message.text && (
-          <div className="event-message-text ml-14 text-sm text-slate-200">
+          <div className="text-sm event-message-text text-gray-200 ml-14">
             {message.message.text}
           </div>
         )}
         {event.type === 'token_expiration_warning' && (
-          <div className="event-warning-message mt-2 ml-14 space-y-1 text-sm text-orange-200">
+          <div className="text-sm event-warning-message text-orange-200 ml-14 mt-2 space-y-1">
             <div className="font-semibold">
               {event.metadata?.failure_reason === 'expired'
                 ? 'OAuth token has expired'
@@ -520,9 +509,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           </div>
         )}
         {event.metadata && Object.keys(event.metadata).length > 0 && (
-          <div className="event-metadata mt-1 ml-14 text-xs text-slate-400">
-            {(event.metadata as any).viewer_count &&
-              `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
+          <div className="text-xs event-metadata text-gray-400 mt-1 ml-14">
+            {(event.metadata as any).viewer_count && `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
             {(event.metadata as any).months && `${(event.metadata as any).months} months`}
             {(event.metadata as any).streak && ` • ${(event.metadata as any).streak} month streak`}
             {(event.metadata as any).gift_count && `${(event.metadata as any).gift_count} gifts`}
@@ -532,81 +520,60 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           </div>
         )}
       </div>
-    )
-  }
+    );
+  };
 
   const getPlatformColor = (platform: string): string => {
     switch (platform) {
       case 'twitch':
-        return 'text-purple-400'
+        return 'text-purple-400';
       case 'youtube':
-        return 'text-red-400'
+        return 'text-red-400';
       case 'kick':
-        return 'text-green-400'
+        return 'text-green-400';
       default:
-        return 'text-slate-400'
+        return 'text-gray-400';
     }
-  }
+  };
 
   // Platform icon components
   const PlatformIcon = ({ platform }: { platform: string }) => {
-    const iconClass = 'inline-block w-4 h-4'
+    const iconClass = "inline-block w-4 h-4";
 
     switch (platform) {
       case 'twitch':
         return (
           <svg viewBox="0 0 24 24" className={iconClass}>
-            <path
-              fill="#9146FF"
-              d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"
-            />
+            <path fill="#9146FF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
           </svg>
-        )
+        );
       case 'youtube':
         return (
           <svg viewBox="0 0 24 24" className={iconClass}>
-            <path
-              fill="#FF0000"
-              d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
-            />
+            <path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
           </svg>
-        )
+        );
       case 'kick':
         return (
           <svg viewBox="0 0 24 24" className={iconClass} style={{ imageRendering: 'pixelated' }}>
-            <text
-              x="12"
-              y="18"
-              fontSize="20"
-              fontWeight="bold"
-              fill="#00E701"
-              textAnchor="middle"
-              fontFamily="monospace"
-            >
-              K
-            </text>
+            <text x="12" y="18" fontSize="20" fontWeight="bold" fill="#00E701" textAnchor="middle" fontFamily="monospace">K</text>
           </svg>
-        )
+        );
       case 'tiktok':
         return (
           <svg viewBox="0 0 24 24" className={iconClass}>
-            <path
-              fill="#000000"
-              d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"
-            />
+            <path fill="#000000" d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
           </svg>
-        )
+        );
       default:
-        return null
+        return null;
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen w-full bg-transparent p-4">
+    <div className="min-h-screen w-full p-4 bg-transparent">
       {/* Hide scrollbars and ensure transparent background */}
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
+      <style dangerouslySetInnerHTML={{ __html: `
         body {
           overflow: hidden !important;
           background: transparent !important;
@@ -618,222 +585,194 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           scrollbar-width: none !important;
           -ms-overflow-style: none !important;
         }
-      `,
-        }}
-      />
-      {customCss.trim().length > 0 && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+      ` }} />
+      {customCss.trim().length > 0 && (
+        <style dangerouslySetInnerHTML={{ __html: customCss }} />
+      )}
 
       {/* Platform Status Indicators */}
-      <PlatformStatusIndicators
-        activePlatforms={activePlatforms}
-        platformStatuses={platformStatuses}
-      />
+      <PlatformStatusIndicators activePlatforms={activePlatforms} platformStatuses={platformStatuses} />
 
       <div className="space-y-3">
         {messages.map((message, index) => {
-          const isSharedChat = message.metadata?.is_shared_chat === true
-          const isEvent = message.event != null
-          const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : ''
-          const eventTypeClass = isEvent ? `event-type-${message.event?.type}` : ''
+          const isSharedChat = message.metadata?.is_shared_chat === true;
+          const isEvent = message.event != null;
+          const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : '';
+          const eventTypeClass = isEvent ? `event-type-${message.event?.type}` : '';
 
           return (
-            <div
-              key={`${message.id}-${index}`}
-              data-message-id={message.id}
-              data-platform={message.platform}
-              data-event-type={isEvent ? message.event?.type : undefined}
-              className={
-                isEvent
-                  ? clsx('event-message', eventTierClass, eventTypeClass)
-                  : clsx(
-                      'chat-message animate-in rounded-lg p-3 shadow-lg backdrop-blur-sm duration-300 slide-in-from-bottom-2',
-                      isSharedChat
-                        ? 'border-2 border-purple-500/50 bg-purple-900/40'
-                        : 'bg-slate-900/90'
+          <div
+            key={`${message.id}-${index}`}
+            data-message-id={message.id}
+            data-platform={message.platform}
+            data-event-type={isEvent ? message.event?.type : undefined}
+            data-username={message.user?.username}
+            className={
+              isEvent
+                ? `event-message ${eventTierClass} ${eventTypeClass}`
+                : `backdrop-blur-sm rounded-lg p-3 shadow-lg animate-in slide-in-from-bottom-2 duration-300 chat-message ${
+                    isSharedChat
+                      ? 'bg-purple-900/40 border-2 border-purple-500/50'
+                      : 'bg-gray-900/90'
+                  }`
+            }
+          >
+            <div className="flex items-start gap-3">
+              {/* Avatar */}
+              <div className="flex-shrink-0" style={{ overflow: 'visible' }}>
+                <UserAvatar
+                  avatarUrl={message.user?.avatar_url}
+                  frameUrl={message.user?.avatar_frame_url}
+                  flairUrl={message.user?.avatar_flair_url}
+                  size={40}
+                  displayName={message.user?.display_name}
+                />
+              </div>
+
+              {/* Message Content */}
+              <div className="flex-1 min-w-0">
+                {/* Username and Platform */}
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  {/* Platform badge - render based on position and style settings */}
+                  {showPlatformBadge && platformBadgePosition === 'before' && (
+                    platformBadgeStyle === 'icon' ? (
+                      <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
+                        <PlatformIcon platform={message.platform} />
+                      </span>
+                    ) : (
+                      <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                        {message.platform}
+                      </span>
                     )
-              }
-            >
-              <div className="flex items-start gap-3">
-                {/* Avatar */}
-                <div className="flex-shrink-0">
-                  {message.user?.avatar_url ? (
-                    <Image
-                      src={message.user.avatar_url}
-                      alt={message.user.username}
-                      width={40}
-                      height={40}
-                      className="h-10 w-10 rounded-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                          message.user.display_name || message.user.username
-                        )}&background=6b7280&color=fff&size=40`
-                      }}
-                    />
-                  ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-700 font-semibold text-white">
-                      {message.user?.username?.slice(0, 2).toUpperCase() || '?'}
+                  )}
+
+                  {/* Regular Badges (before username when position is 'before') */}
+                  {platformBadgePosition === 'before' && message.user?.badges && message.user.badges.length > 0 && (
+                    <div className="flex gap-1 items-center">
+                      {message.user.badges.map((badge, idx) => (
+                        badge.name === 'allchat' ? (
+                          <AllChatBadge key={idx} size={18} title={badge.name} />
+                        ) : badge.name === 'premium' ? (
+                          <PremiumBadge key={idx} size={18} title={badge.name} />
+                        ) : badge.icon_url ? (
+                          <Image
+                            key={idx}
+                            src={badge.icon_url}
+                            alt={badge.name}
+                            width={18}
+                            height={18}
+                            className="h-[1em] w-auto object-contain"
+                            title={badge.name}
+                          />
+                        ) : (
+                          <span key={idx} className="text-xs px-1 py-0.5 rounded bg-gray-700 text-gray-300 leading-none" title={badge.name}>
+                            {badge.name}
+                          </span>
+                        )
+                      ))}
                     </div>
                   )}
-                </div>
 
-                {/* Message Content */}
-                <div className="min-w-0 flex-1">
-                  {/* Username and Platform */}
-                  <div className="mb-1 flex flex-wrap items-center gap-2">
-                    {/* Platform badge - render based on position and style settings */}
-                    {showPlatformBadge &&
-                      platformBadgePosition === 'before' &&
-                      (platformBadgeStyle === 'icon' ? (
-                        <span
-                          className="platform-badge platform-badge-icon flex items-center"
-                          title={message.platform}
-                        >
-                          <PlatformIcon platform={message.platform} />
-                        </span>
-                      ) : (
-                        <span
-                          className={clsx(
-                            'platform-badge platform-badge-text text-xs font-semibold uppercase',
-                            getPlatformColor(message.platform)
-                          )}
-                        >
-                          {message.platform}
-                        </span>
-                      ))}
-
-                    {/* Regular Badges (before username when position is 'before') */}
-                    {platformBadgePosition === 'before' &&
-                      message.user?.badges &&
-                      message.user.badges.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          {message.user.badges.map((badge, idx) =>
-                            badge.icon_url ? (
-                              <Image
-                                key={idx}
-                                src={badge.icon_url}
-                                alt={badge.name}
-                                width={16}
-                                height={16}
-                                className="h-4 w-4 object-contain"
-                                title={badge.name}
-                              />
-                            ) : (
-                              <span
-                                key={idx}
-                                className="rounded bg-slate-700 px-1 py-0.5 text-xs leading-none text-slate-300"
-                                title={badge.name}
-                              >
-                                {badge.name}
-                              </span>
-                            )
-                          )}
-                        </div>
-                      )}
-
-                    {/* Username */}
+                  {/* Username */}
+                  {message.user?.name_gradient ? (
                     <span
-                      className="text-sm font-semibold"
+                      className="font-semibold text-sm bg-clip-text text-transparent"
+                      style={{ backgroundImage: buildGradientCSS(message.user.name_gradient) }}
+                    >
+                      {message.user?.display_name || message.user?.username}
+                    </span>
+                  ) : (
+                    <span
+                      className="font-semibold text-sm"
                       style={{ color: message.user?.color || '#FFFFFF' }}
                     >
                       {message.user?.display_name || message.user?.username}
                     </span>
+                  )}
 
-                    {/* Platform badge after username (original position) */}
-                    {showPlatformBadge &&
-                      platformBadgePosition === 'after' &&
-                      (platformBadgeStyle === 'icon' ? (
-                        <span
-                          className="platform-badge platform-badge-icon flex items-center"
-                          title={message.platform}
-                        >
-                          <PlatformIcon platform={message.platform} />
-                        </span>
-                      ) : (
-                        <span
-                          className={clsx(
-                            'platform-badge platform-badge-text text-xs font-semibold uppercase',
-                            getPlatformColor(message.platform)
-                          )}
-                        >
-                          {message.platform}
-                        </span>
-                      ))}
-
-                    {/* Shared Chat Indicator */}
-                    {isSharedChat && (
-                      <span className="rounded border border-purple-400/50 bg-purple-600/80 px-1.5 py-0.5 text-xs font-semibold text-purple-100 uppercase">
-                        Shared Chat
+                  {/* Platform badge after username (original position) */}
+                  {showPlatformBadge && platformBadgePosition === 'after' && (
+                    platformBadgeStyle === 'icon' ? (
+                      <span className="platform-badge platform-badge-icon flex items-center" title={message.platform}>
+                        <PlatformIcon platform={message.platform} />
                       </span>
-                    )}
+                    ) : (
+                      <span className={`platform-badge platform-badge-text text-xs font-semibold uppercase ${getPlatformColor(message.platform)}`}>
+                        {message.platform}
+                      </span>
+                    )
+                  )}
 
-                    {/* Regular Badges (after username when position is 'after') */}
-                    {platformBadgePosition === 'after' &&
-                      message.user?.badges &&
-                      message.user.badges.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          {message.user.badges.map((badge, idx) =>
-                            badge.icon_url ? (
-                              <Image
-                                key={idx}
-                                src={badge.icon_url}
-                                alt={badge.name}
-                                width={16}
-                                height={16}
-                                className="h-4 w-4 object-contain"
-                                title={badge.name}
-                              />
-                            ) : (
-                              <span
-                                key={idx}
-                                className="rounded bg-slate-700 px-1 py-0.5 text-xs leading-none text-slate-300"
-                                title={badge.name}
-                              >
-                                {badge.name}
-                              </span>
-                            )
-                          )}
-                        </div>
-                      )}
+                  {/* Shared Chat Indicator */}
+                  {isSharedChat && (
+                    <span className="text-xs font-semibold uppercase px-1.5 py-0.5 rounded bg-purple-600/80 text-purple-100 border border-purple-400/50">
+                      Shared Chat
+                    </span>
+                  )}
 
-                    {/* Source Channel Badges (for shared chat) */}
-                    {isSharedChat &&
-                      message.user?.source_badges &&
-                      message.user.source_badges.length > 0 && (
-                        <>
-                          <span className="text-xs text-purple-300">|</span>
-                          <div className="flex gap-1">
-                            {message.user.source_badges.map((badge, idx) => (
-                              <Image
-                                key={`source-${idx}`}
-                                src={badge.icon_url}
-                                alt={badge.name}
-                                width={16}
-                                height={16}
-                                className="h-4 w-4 rounded-sm object-contain ring-1 ring-purple-400/50"
-                                title={`${badge.name} (source channel)`}
-                              />
-                            ))}
-                          </div>
-                        </>
-                      )}
-                  </div>
+                  {/* Regular Badges (after username when position is 'after') */}
+                  {platformBadgePosition === 'after' && message.user?.badges && message.user.badges.length > 0 && (
+                    <div className="flex gap-1 items-center">
+                      {message.user.badges.map((badge, idx) => (
+                        badge.name === 'allchat' ? (
+                          <AllChatBadge key={idx} size={18} title={badge.name} />
+                        ) : badge.name === 'premium' ? (
+                          <PremiumBadge key={idx} size={18} title={badge.name} />
+                        ) : badge.icon_url ? (
+                          <Image
+                            key={idx}
+                            src={badge.icon_url}
+                            alt={badge.name}
+                            width={18}
+                            height={18}
+                            className="h-[1em] w-auto object-contain"
+                            title={badge.name}
+                          />
+                        ) : (
+                          <span key={idx} className="text-xs px-1 py-0.5 rounded bg-gray-700 text-gray-300 leading-none" title={badge.name}>
+                            {badge.name}
+                          </span>
+                        )
+                      ))}
+                    </div>
+                  )}
 
-                  {/* Message Text with Emotes (or Event Content) */}
-                  <div className="break-words text-white" style={{ fontSize: `${fontSize}px` }}>
-                    {message.event ? renderEventContent(message) : renderMessageContent(message)}
-                  </div>
+                  {/* Source Channel Badges (for shared chat) */}
+                  {isSharedChat && message.user?.source_badges && message.user.source_badges.length > 0 && (
+                    <>
+                      <span className="text-xs text-purple-300">|</span>
+                      <div className="flex gap-1">
+                        {message.user.source_badges.map((badge, idx) => (
+                          <Image
+                            key={`source-${idx}`}
+                            src={badge.icon_url}
+                            alt={badge.name}
+                            width={16}
+                            height={16}
+                            className="w-4 h-4 object-contain ring-1 ring-purple-400/50 rounded-sm"
+                            title={`${badge.name} (source channel)`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
 
-                  {/* Timestamp */}
-                  <div className="mt-1 text-xs text-slate-500">
-                    {new Date(message.timestamp).toLocaleTimeString()}
-                  </div>
+                {/* Message Text with Emotes (or Event Content) */}
+                <div className="text-white break-words" style={{ fontSize: `${fontSize}px` }}>
+                  {message.event ? renderEventContent(message) : renderMessageContent(message)}
+                </div>
+
+                {/* Timestamp */}
+                <div className="text-xs text-gray-500 mt-1">
+                  {new Date(message.timestamp).toLocaleTimeString()}
                 </div>
               </div>
             </div>
-          )
-        })}
+          </div>
+        )})}
         <div ref={messagesEndRef} className="scroll-anchor" />
       </div>
     </div>
-  )
+  );
 }

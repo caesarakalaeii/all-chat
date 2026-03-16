@@ -354,10 +354,13 @@ func main() {
 		// Viewer OAuth routes (for sending messages)
 		publicAPI.GET("/auth/viewer/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/twitch/callback", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/twitch/exchange", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/callback", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/youtube/exchange", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/kick/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/kick/callback", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/kick/exchange", proxyHandler.ForwardRequest)
 
 		// Streamer info (public)
 		publicAPI.GET("/auth/streamers/:username", proxyHandler.ForwardRequest)
@@ -369,6 +372,10 @@ func main() {
 		publicAPI.GET("/overlays/public/:id/config", proxyHandler.ForwardRequest)
 		publicAPI.GET("/overlays/public/:id/creditroll", proxyHandler.ForwardRequest)
 		publicAPI.GET("/overlays/public/:id/credit-roll", proxyHandler.ForwardRequest)
+
+		// Viewer cosmetics catalog (public — no auth required)
+		publicAPI.GET("/auth/viewer/catalog/frames", proxyHandler.ForwardRequest) // -> auth-service
+		publicAPI.GET("/auth/viewer/catalog/flairs", proxyHandler.ForwardRequest) // -> auth-service
 	}
 
 	// Twitch badge proxy endpoints (public, but not part of /api/v1 service registry)
@@ -388,6 +395,7 @@ func main() {
 		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/viewer/logout", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/viewer/chat/send", proxyHandler.ForwardRequest)
+		protectedAPI.PATCH("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)
@@ -447,6 +455,14 @@ func main() {
 		protectedAPI.GET("/admin/overlays", proxyHandler.ForwardRequest)        // -> overlay-manager
 		protectedAPI.GET("/admin/overlays/:id/sources", proxyHandler.ForwardRequest) // -> overlay-manager
 		protectedAPI.GET("/admin/sources", proxyHandler.ForwardRequest)         // -> overlay-manager
+
+		// Admin cosmetics catalog management (protected — JWT auth; admin role enforced at auth-service)
+		protectedAPI.GET("/admin/cosmetics/frames", proxyHandler.ForwardRequest)          // -> auth-service
+		protectedAPI.POST("/admin/cosmetics/frames", proxyHandler.ForwardRequest)         // -> auth-service
+		protectedAPI.DELETE("/admin/cosmetics/frames/:id", proxyHandler.ForwardRequest)   // -> auth-service
+		protectedAPI.GET("/admin/cosmetics/flairs", proxyHandler.ForwardRequest)          // -> auth-service
+		protectedAPI.POST("/admin/cosmetics/flairs", proxyHandler.ForwardRequest)         // -> auth-service
+		protectedAPI.DELETE("/admin/cosmetics/flairs/:id", proxyHandler.ForwardRequest)   // -> auth-service
 	}
 
 	// Internal routes (service-to-service, no auth for MVP - rely on network isolation)

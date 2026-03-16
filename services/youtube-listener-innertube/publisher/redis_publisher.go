@@ -9,6 +9,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/deletion"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/yt_emote_cache"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -142,6 +143,20 @@ func (p *StreamPublisher) publishToRedis(ctx context.Context, msg *innertube.Raw
 		zap.String("channel", msg.ChannelID),
 		zap.String("username", msg.Username),
 	)
+
+	// Cache YouTube custom emotes (best-effort, non-blocking)
+	if emoteData := msg.Tags["emote_data"]; emoteData != "" {
+		var emotes []yt_emote_cache.EmoteEntry
+		if err := json.Unmarshal([]byte(emoteData), &emotes); err == nil && len(emotes) > 0 {
+			if cacheErr := yt_emote_cache.CacheYTEmotes(ctx, p.client, msg.ChannelID, emotes); cacheErr != nil {
+				// Best-effort: log warning but do not fail the publish
+				p.logger.Warn("Failed to cache YouTube emotes",
+					zap.String("channel_id", msg.ChannelID),
+					zap.Error(cacheErr),
+				)
+			}
+		}
+	}
 
 	return nil
 }
