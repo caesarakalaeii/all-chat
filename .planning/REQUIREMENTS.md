@@ -28,7 +28,7 @@
 ### Platform Badges (All-Chat)
 
 - [x] **BADGE-01**: Admin users automatically receive an All-Chat logo badge shown in overlays
-- [ ] **BADGE-02**: Premium users automatically receive a gem/star icon badge shown in overlays
+- [x] **BADGE-02**: Premium users automatically receive a gem/star icon badge shown in overlays
 - [x] **BADGE-03**: All-Chat badges are prepended to the badge list (rendered before platform badges)
 - [x] **BADGE-04**: Badge icon images are served from CDN and specified per badge type in a badge definitions catalog
 
@@ -112,7 +112,7 @@
 | PREM-04 | Phase 32 | Pending |
 | PREM-05 | Phase 32 | Pending |
 | BADGE-01 | Phase 31 | Complete |
-| BADGE-02 | Phase 32 | Pending |
+| BADGE-02 | Phase 32 | Complete |
 | BADGE-03 | Phase 31 | Complete |
 | BADGE-04 | Phase 31 | Complete |
 | YTBADGE-01 | Phase 27 | Complete |
