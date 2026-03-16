@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
 status: executing
-stopped_at: Completed 31-01-PLAN.md
-last_updated: "2026-03-16T08:36:27.118Z"
+stopped_at: Completed 31-03-PLAN.md
+last_updated: "2026-03-16T08:39:28.318Z"
 last_activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contracts)
 progress:
   total_phases: 21
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 63
-  completed_plans: 62
+  completed_plans: 63
 ---
 
 # Project State
@@ -58,6 +58,7 @@ Last activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contra
 | Phase 30-avatar-frame-flair-system P04 | 7min | 2 tasks | 8 files |
 | Phase 31-all-chat-platform-badges P02 | 2min | 2 tasks | 5 files |
 | Phase 31-all-chat-platform-badges P01 | 5min | 2 tasks | 3 files |
+| Phase 31-all-chat-platform-badges P03 | 3min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 31-all-chat-platform-badges]: Test file placed in src/lib/__tests__/ to match vitest include pattern; PremiumBadge uses SVG <title> child element (not HTML title attr); Image badge sizing changed from w-4 h-4 to h-[1em] w-auto for overlay font-size responsiveness; AllChatBadge requires use client due to InfinityLogo requestAnimationFrame
 - [Phase 31-all-chat-platform-badges]: Prepend premium first, allchat last — allchat ends up at index 0 in final badge slice
 - [Phase 31-all-chat-platform-badges]: LATERAL + LIMIT 1 pattern for viewer_sessions join prevents duplicate rows without a GROUP BY
+- [Phase 31-all-chat-platform-badges]: Extension AllChatBadge uses inline styles not Tailwind (mirrors Phase 30 UserAvatar decision)
+- [Phase 31-all-chat-platform-badges]: ChatContainer badge render uses 3-way name-check to fix silently-dropped All-Chat badges in extension
 
 ### Pending Todos
 
@@ -118,8 +121,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T08:36:27.115Z
-Stopped at: Completed 31-01-PLAN.md
+Last session: 2026-03-16T08:39:28.315Z
+Stopped at: Completed 31-03-PLAN.md
 Resume file: None
 
 **Next action:** Phase 30 complete. Proceed to next phase or feature.
