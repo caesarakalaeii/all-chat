@@ -295,10 +295,11 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	}
 
 	var req struct {
-		Platform      string `json:"platform" binding:"required"`
-		ChannelID     string `json:"channel_id" binding:"required"`
-		ChannelName   string `json:"channel_name"`
-		ChannelHandle string `json:"channel_handle"`
+		Platform      string                 `json:"platform" binding:"required"`
+		ChannelID     string                 `json:"channel_id" binding:"required"`
+		ChannelName   string                 `json:"channel_name"`
+		ChannelHandle string                 `json:"channel_handle"`
+		Config        map[string]interface{} `json:"config"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -392,6 +393,11 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		channelHandle = &req.ChannelHandle
 	}
 
+	sourceConfig := make(map[string]interface{})
+	if req.Config != nil {
+		sourceConfig = req.Config
+	}
+
 	source := &models.ChatSource{
 		OverlayID:     overlayID,
 		Platform:      req.Platform,
@@ -399,7 +405,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		ChannelName:   channelName,
 		ChannelHandle: channelHandle,
 		AuthRequired:  req.Platform == "youtube", // YouTube requires OAuth
-		Config:        make(map[string]interface{}),
+		Config:        sourceConfig,
 		IsActive:      req.Platform == "shared_overlay", // shared_overlay is immediately active (share already accepted); other platforms activated by listeners
 	}
 
