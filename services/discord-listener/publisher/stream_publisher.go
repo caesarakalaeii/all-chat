@@ -18,17 +18,19 @@ const (
 // RawMessage represents a raw message to be published to Redis Stream.
 // This mirrors the pattern from kick-listener/publisher/redis.go.
 type RawMessage struct {
-	MessageID   string            `json:"message_id,omitempty"`
-	Platform    string            `json:"platform"`
-	OverlayID   string            `json:"overlay_id"`
-	ChannelID   string            `json:"channel_id"`
-	ChannelName string            `json:"channel_name"`
-	UserID      string            `json:"user_id,omitempty"`
-	Username    string            `json:"username,omitempty"`
-	Text        string            `json:"text,omitempty"`
-	Tags        map[string]string `json:"tags,omitempty"`
-	RawMessage  json.RawMessage   `json:"raw_message,omitempty"`
-	Timestamp   time.Time         `json:"timestamp"`
+	MessageID   string                 `json:"message_id,omitempty"`
+	Platform    string                 `json:"platform"`
+	OverlayID   string                 `json:"overlay_id"`
+	ChannelID   string                 `json:"channel_id"`
+	ChannelName string                 `json:"channel_name"`
+	UserID      string                 `json:"user_id,omitempty"`
+	Username    string                 `json:"username,omitempty"`
+	Text        string                 `json:"text,omitempty"`
+	Tags        map[string]string      `json:"tags,omitempty"`
+	RawMessage  json.RawMessage        `json:"raw_message,omitempty"`
+	EventType   string                 `json:"event_type,omitempty"`
+	EventData   map[string]interface{} `json:"event_data,omitempty"`
+	Timestamp   time.Time              `json:"timestamp"`
 }
 
 // Publisher is the interface that wraps the Publish method.
