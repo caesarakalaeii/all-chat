@@ -115,6 +115,9 @@ func (h *ViewerAuthHandler) HandleTwitchLogin(c *gin.Context) {
 	if streamerUsername != "" {
 		stateData["streamer"] = streamerUsername
 	}
+	if redirectTo := sanitizeRedirectPath(c.Query("redirect_to")); redirectTo != "" {
+		stateData["redirect_to"] = redirectTo
+	}
 
 	stateJSON, err := json.Marshal(stateData)
 	if err != nil {
@@ -238,10 +241,13 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		return
 	}
 
-	// Redirect to frontend with JWT token and optional streamer context
+	// Redirect to frontend with JWT token and optional context
 	redirectURL := fmt.Sprintf("%s/chat/auth-success?token=%s", h.frontendURL, jwtToken)
 	if streamer, ok := stateData["streamer"]; ok && streamer != "" {
 		redirectURL += fmt.Sprintf("&streamer=%s", streamer)
+	}
+	if redirectTo, ok := stateData["redirect_to"]; ok && redirectTo != "" {
+		redirectURL += fmt.Sprintf("&redirect_to=%s", redirectTo)
 	}
 
 	c.Redirect(http.StatusFound, redirectURL)
@@ -446,6 +452,9 @@ func (h *ViewerAuthHandler) HandleYouTubeLogin(c *gin.Context) {
 	if streamer != "" {
 		stateData["streamer"] = streamer
 	}
+	if redirectTo := sanitizeRedirectPath(c.Query("redirect_to")); redirectTo != "" {
+		stateData["redirect_to"] = redirectTo
+	}
 
 	stateJSON, _ := json.Marshal(stateData)
 	if err := h.redis.Set(c.Request.Context(), "oauth_state:"+state, stateJSON, 10*time.Minute).Err(); err != nil {
@@ -567,6 +576,9 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	if streamer, ok := storedState["streamer"]; ok {
 		redirectURL += fmt.Sprintf("&streamer=%s", streamer)
 	}
+	if redirectTo, ok := storedState["redirect_to"]; ok && redirectTo != "" {
+		redirectURL += fmt.Sprintf("&redirect_to=%s", redirectTo)
+	}
 
 	c.Redirect(http.StatusFound, redirectURL)
 }
@@ -592,6 +604,9 @@ func (h *ViewerAuthHandler) HandleKickLogin(c *gin.Context) {
 	}
 	if streamer != "" {
 		stateData["streamer"] = streamer
+	}
+	if redirectTo := sanitizeRedirectPath(c.Query("redirect_to")); redirectTo != "" {
+		stateData["redirect_to"] = redirectTo
 	}
 
 	stateJSON, _ := json.Marshal(stateData)
@@ -749,6 +764,27 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 	if streamer, ok := storedState["streamer"]; ok {
 		redirectURL += fmt.Sprintf("&streamer=%s", streamer)
 	}
+	if redirectTo, ok := storedState["redirect_to"]; ok && redirectTo != "" {
+		redirectURL += fmt.Sprintf("&redirect_to=%s", redirectTo)
+	}
 
 	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// sanitizeRedirectPath ensures redirect_to is a safe relative path (starts with /, no scheme).
+// This prevents open redirect attacks.
+func sanitizeRedirectPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	// Must start with / and must not contain :// (no absolute URLs)
+	if len(path) < 1 || path[0] != '/' || len(path) > 200 {
+		return ""
+	}
+	for i := 0; i < len(path)-2; i++ {
+		if path[i] == ':' && path[i+1] == '/' && path[i+2] == '/' {
+			return ""
+		}
+	}
+	return path
 }

@@ -82,14 +82,18 @@ function AuthSuccessContent() {
         const viewerInfo = await viewerApi.getMe()
         setViewerInfo(viewerInfo)
 
-        // Get the streamer username
-        const redirectStreamer = streamer || localStorage.getItem('viewer_streamer')
+        // Explicit redirect_to takes highest priority (e.g. /settings/viewer)
+        const redirectTo = searchParams.get('redirect_to')
+        if (redirectTo && redirectTo.startsWith('/')) {
+          router.push(redirectTo)
+          return
+        }
 
+        // Fall back to streamer chat page
+        const redirectStreamer = streamer || localStorage.getItem('viewer_streamer')
         if (redirectStreamer) {
-          // Redirect to chat page for the streamer
           router.push(`/chat/${redirectStreamer}`)
         } else {
-          // No streamer context, redirect to home
           router.push('/')
         }
       } catch (err) {
