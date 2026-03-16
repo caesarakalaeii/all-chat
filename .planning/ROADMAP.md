@@ -328,7 +328,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 (28 can start in
 | 28 Viewer Identity Foundation — Auth & Platform Linking | 6/6 | Complete    | 2026-03-15 | - |
 | 29 Viewer Color & Gradient Editor | 3/3 | Complete    | 2026-03-15 | - |
 | 30 Avatar Frame & Flair System | 4/4 | Complete    | 2026-03-16 | 2026-03-16 |
-| 31 All-Chat Platform Badges | 3/3 | Complete   | 2026-03-16 | - |
+| 31 All-Chat Platform Badges | 3/3 | Complete    | 2026-03-16 | - |
 
 ---
 *Last updated: 2026-03-16 after Phase 31 planning*
