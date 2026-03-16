@@ -228,6 +228,16 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 
 	// Get or create durable viewer identity (ensures viewer_id is in JWT)
 	viewerID, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
+	if err == nil && viewerID != uuid.Nil && linkedStreamer != nil {
+		// Link viewer session to user account and propagate premium/admin status
+		// so the message enricher can read badges without extra lookups.
+		if linkErr := h.identityRepo.LinkViewerToUser(
+			c.Request.Context(), session.Platform, session.PlatformUserID,
+			linkedStreamer.ID, linkedStreamer.IsPremium,
+		); linkErr != nil {
+			h.logger.Warn("Failed to link viewer to user account", zap.Error(linkErr))
+		}
+	}
 	if err != nil {
 		h.logger.Error("Failed to get/create viewer identity", zap.Error(err))
 		viewerID = uuid.Nil
@@ -561,6 +571,14 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 
 	// Get or create durable viewer identity (ensures viewer_id is in JWT)
 	viewerIDYT, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
+	if err == nil && viewerIDYT != uuid.Nil && linkedStreamerYT != nil {
+		if linkErr := h.identityRepo.LinkViewerToUser(
+			c.Request.Context(), session.Platform, session.PlatformUserID,
+			linkedStreamerYT.ID, linkedStreamerYT.IsPremium,
+		); linkErr != nil {
+			h.logger.Warn("Failed to link viewer to user account", zap.Error(linkErr))
+		}
+	}
 	if err != nil {
 		h.logger.Error("Failed to get/create viewer identity", zap.Error(err))
 		viewerIDYT = uuid.Nil
@@ -746,6 +764,14 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 
 	// Get or create durable viewer identity (ensures viewer_id is in JWT)
 	viewerIDKick, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
+	if err == nil && viewerIDKick != uuid.Nil && linkedStreamerKick != nil {
+		if linkErr := h.identityRepo.LinkViewerToUser(
+			c.Request.Context(), session.Platform, session.PlatformUserID,
+			linkedStreamerKick.ID, linkedStreamerKick.IsPremium,
+		); linkErr != nil {
+			h.logger.Warn("Failed to link viewer to user account", zap.Error(linkErr))
+		}
+	}
 	if err != nil {
 		h.logger.Error("Failed to get/create viewer identity", zap.Error(err))
 		viewerIDKick = uuid.Nil
