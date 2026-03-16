@@ -33,6 +33,11 @@ resources:
   - youtube-listener/deployment.yaml
   - source-manager/deployment.yaml
 
+  # Phase 5 - Discord Listener (v1.5)
+  - discord-listener/deployment.yaml
+  - discord-listener/hpa.yaml
+  - discord-listener/servicemonitor.yaml
+
 commonLabels:
   project: allchat
   managed-by: kustomize
@@ -64,4 +69,7 @@ images:
     newTag: main
   - name: allchat-source-manager:latest
     newName: ghcr.io/caesarakalaeii/allchat-source-manager
+    newTag: main
+  - name: allchat-discord-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-discord-listener
     newTag: main
