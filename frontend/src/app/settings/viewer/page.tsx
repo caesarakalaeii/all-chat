@@ -54,7 +54,8 @@ function PlatformBadge({ platform }: { platform: string }) {
 
 async function viewerLogin(platform: 'twitch' | 'youtube' | 'kick') {
   try {
-    const response = await fetch(`/api/v1/auth/viewer/${platform}/login`)
+    const params = new URLSearchParams({ redirect_to: '/settings/viewer' })
+    const response = await fetch(`/api/v1/auth/viewer/${platform}/login?${params}`)
     const data = await response.json()
     if (data.auth_url) {
       window.location.href = data.auth_url
