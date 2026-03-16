@@ -192,12 +192,11 @@ Plans:
   2. A message that originated from Discord is never posted back to Discord — verified by a test asserting no REST call is made for platform="discord" pub/sub messages
   3. When relay_enabled is set to false for a source, no messages are relayed for that source even if other sources in the same overlay have relay active
   4. The relay target channel can be configured independently from the inbound channel (same or different channel ID accepted on save)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 30-01: TBD
-- [ ] 30-02: TBD
-- [ ] 30-03: TBD
+- [ ] 30-01-PLAN.md — relay package TDD: Manager, Repository, DiscordPoster interface + httpPoster, loop-safety filter, format function (RELY-01 to RELY-04)
+- [ ] 30-02-PLAN.md — pgx/v5 dependency + relay.Manager wiring in cmd/main.go
 
 ### Phase 31: Load Balancing
 **Goal**: discord-listener runs safely across multiple pods with deterministic shard ownership and auto-scales under load
