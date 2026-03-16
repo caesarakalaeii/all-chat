@@ -184,7 +184,29 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 				}
 			}
 
-		case OpReconnect:
+			if payload.T != nil && *payload.T == "MESSAGE_DELETE" {
+			var del MessageDeleteData
+			if err := json.Unmarshal(payload.D, &del); err != nil {
+				c.log.Warn("Failed to parse MESSAGE_DELETE", zap.Error(err))
+				continue
+			}
+			if err := c.HandleMessageDelete(ctx, del); err != nil {
+				return err
+			}
+		}
+
+		if payload.T != nil && *payload.T == "MESSAGE_DELETE_BULK" {
+			var bulk MessageDeleteBulkData
+			if err := json.Unmarshal(payload.D, &bulk); err != nil {
+				c.log.Warn("Failed to parse MESSAGE_DELETE_BULK", zap.Error(err))
+				continue
+			}
+			if err := c.HandleMessageDeleteBulk(ctx, bulk); err != nil {
+				return err
+			}
+		}
+
+	case OpReconnect:
 			c.log.Info("Gateway requested reconnect")
 			return fmt.Errorf("gateway reconnect requested")
 
@@ -306,6 +328,58 @@ func (c *GatewayClient) writeJSON(v interface{}) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.conn.WriteJSON(v)
+}
+
+// HandleMessageDelete processes a MESSAGE_DELETE dispatch event.
+// It applies the channel filter (same registry as HandleMessageCreate) and
+// publishes a deletion event to Redis Streams with EventType=message_deletion.
+// Registry errors and unconfigured channels are silently dropped — the service continues.
+func (c *GatewayClient) HandleMessageDelete(ctx context.Context, msg MessageDeleteData) error {
+	overlayID, found, err := c.registry.GetOverlayForChannel(ctx, msg.ChannelID)
+	if err != nil {
+		if c.log != nil {
+			c.log.Warn("Channel registry lookup failed on MESSAGE_DELETE",
+				zap.String("channel_id", msg.ChannelID),
+				zap.Error(err),
+			)
+		}
+		return nil // registry errors do not halt service
+	}
+	if !found {
+		return nil // not a configured channel
+	}
+
+	deleteEvent := map[string]interface{}{
+		"message_id":   msg.ID + ":del",
+		"platform":     "discord",
+		"overlay_id":   overlayID,
+		"channel_id":   msg.ChannelID,
+		"channel_name": msg.ChannelID,
+		"event_type":   "message_deletion",
+		"event_data": map[string]interface{}{
+			"deletion_type": "single",
+			"target_msg_id": msg.ID,
+		},
+		"timestamp": time.Now(),
+	}
+
+	return c.publisher.Publish(ctx, deleteEvent)
+}
+
+// HandleMessageDeleteBulk processes a MESSAGE_DELETE_BULK dispatch event.
+// It calls HandleMessageDelete once per ID in the IDs slice.
+func (c *GatewayClient) HandleMessageDeleteBulk(ctx context.Context, bulk MessageDeleteBulkData) error {
+	for _, id := range bulk.IDs {
+		del := MessageDeleteData{
+			ID:        id,
+			ChannelID: bulk.ChannelID,
+			GuildID:   bulk.GuildID,
+		}
+		if err := c.HandleMessageDelete(ctx, del); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // heartbeatLoop sends op=1 HEARTBEAT every interval ms.
