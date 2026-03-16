@@ -77,6 +77,8 @@ func mapEventTypeToColumn(platform, eventType string) string {
 			return "enable_twitch_raids"
 		case "channel_points":
 			return "enable_twitch_channel_points"
+		case "follow":
+			return "enable_twitch_follows"
 		default:
 			// Unknown Twitch event, group under subs for now
 			if strings.Contains(normalized, "sub") || strings.Contains(normalized, "gift") {
