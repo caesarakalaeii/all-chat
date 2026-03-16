@@ -92,3 +92,17 @@ type DiscordMember struct {
 	Nick  *string  `json:"nick"`
 	Roles []string `json:"roles"`
 }
+
+// MessageDeleteData is the payload for the MESSAGE_DELETE dispatch event
+type MessageDeleteData struct {
+	ID        string `json:"id"`
+	ChannelID string `json:"channel_id"`
+	GuildID   string `json:"guild_id"`
+}
+
+// MessageDeleteBulkData is the payload for the MESSAGE_DELETE_BULK dispatch event
+type MessageDeleteBulkData struct {
+	IDs       []string `json:"ids"`
+	ChannelID string   `json:"channel_id"`
+	GuildID   string   `json:"guild_id"`
+}
