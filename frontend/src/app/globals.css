@@ -26,6 +26,7 @@
   --color-youtube: #ff4444;
   --color-kick: #53fc18;
   --color-tiktok: #69c9d0;
+  --color-discord: #5865F2;
 
   /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
   --color-neutral-950: oklch(0.09 0.007 270); /* #07070a — bg */

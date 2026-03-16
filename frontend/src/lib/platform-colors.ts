@@ -9,6 +9,7 @@ export const PLATFORM_COLORS = {
   youtube: { text: 'text-youtube', bg: 'bg-youtube' },
   kick: { text: 'text-kick', bg: 'bg-kick' },
   tiktok: { text: 'text-tiktok', bg: 'bg-tiktok' },
+  discord: { text: 'text-discord', bg: 'bg-discord' },
   system: { text: 'text-text-sub', bg: 'bg-surface' },
 } as const
 
