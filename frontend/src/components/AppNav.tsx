@@ -36,12 +36,18 @@ export function AppNav() {
         <Link href="/dashboard" className={isActive('/dashboard') ? activeClass : inactiveClass}>
           Dashboard
         </Link>
+        <Link href="/settings/viewer" className={isActive('/settings/viewer') ? activeClass : inactiveClass}>
+          Flairs
+        </Link>
         {user?.is_admin && (
           <Link href="/admin" className={isActive('/admin') ? activeClass : inactiveClass}>
             Admin
           </Link>
         )}
-        <Link href="/settings" className={isActive('/settings') ? activeClass : inactiveClass}>
+        <Link
+          href="/settings"
+          className={pathname === '/settings' ? activeClass : inactiveClass}
+        >
           Settings
         </Link>
       </div>
