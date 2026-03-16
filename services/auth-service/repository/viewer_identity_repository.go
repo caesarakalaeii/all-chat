@@ -135,6 +135,38 @@ func (r *ViewerIdentityRepository) UpsertViewerCosmetics(
 	return nil
 }
 
+// LinkViewerToUser links a viewer session to a user account and propagates
+// premium status. Called after OAuth when a linked streamer account is found.
+func (r *ViewerIdentityRepository) LinkViewerToUser(ctx context.Context, platform, platformUserID string, userID string, isPremium bool) error {
+	parsedID, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID: %w", err)
+	}
+	// Link the viewer session row to the user account.
+	_, err = r.db.Exec(ctx,
+		`UPDATE viewer_sessions SET user_id = $1 WHERE platform = $2 AND platform_user_id = $3`,
+		parsedID, platform, platformUserID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to link viewer session to user: %w", err)
+	}
+
+	// Propagate premium flag to the viewers table so the enricher can read it
+	// without joining through viewer_sessions → users on every message.
+	if isPremium {
+		_, err = r.db.Exec(ctx,
+			`UPDATE viewers SET is_premium = true
+			 WHERE id = (SELECT viewer_id FROM viewer_platform_identities WHERE platform = $1 AND platform_user_id = $2 LIMIT 1)`,
+			platform, platformUserID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to propagate premium to viewer: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // GetViewerIsPremium returns the is_premium flag for a viewer.
 func (r *ViewerIdentityRepository) GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error) {
 	var isPremium bool
