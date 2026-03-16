@@ -67,6 +67,10 @@ func (m *mockOverlayRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (m *mockOverlayRepository) UnsetAllPublicForUser(ctx context.Context, userID, excludeID string) error {
+	return nil
+}
+
 // Test setup helper
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)

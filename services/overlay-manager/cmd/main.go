@@ -200,6 +200,7 @@ func main() {
 		protected.GET("/:id/sources", sourcesHandler.HandleListSources)
 		protected.POST("/:id/sources", sourcesHandler.HandleAddSource)
 		protected.DELETE("/:id/sources/:source_id", sourcesHandler.HandleDeleteSource)
+		protected.PATCH("/:id/sources/:source_id", sourcesHandler.HandleUpdateSourceConfig)
 
 		protected.GET("/:id/config", configHandler.HandleGetConfig)
 		protected.PUT("/:id/config", configHandler.HandleUpdateConfig)

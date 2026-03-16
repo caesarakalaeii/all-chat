@@ -20,6 +20,7 @@ type SourceRepository interface {
 	ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error)
 	GetByID(ctx context.Context, id string) (*models.ChatSource, error)
 	Delete(ctx context.Context, id string) error
+	UpdateConfig(ctx context.Context, id string, config map[string]interface{}) error
 }
 
 // SourcesHandler handles HTTP requests for overlay chat sources
@@ -512,6 +513,51 @@ func (h *SourcesHandler) HandleDeleteSource(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// HandleUpdateSourceConfig handles PATCH /:id/sources/:source_id
+// It verifies overlay ownership, then updates the config JSONB field.
+func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	overlayID := c.Param("id")
+	sourceID := c.Param("source_id")
+
+	// Verify user owns this overlay
+	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "overlay not found or access denied"})
+		return
+	}
+
+	var req struct {
+		Config map[string]interface{} `json:"config"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Config == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "config is required"})
+		return
+	}
+
+	if err := h.sourceRepo.UpdateConfig(c.Request.Context(), sourceID, req.Config); err != nil {
+		h.logger.Error("Failed to update source config",
+			zap.String("source_id", sourceID),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update config"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "config updated"})
 }
 
 // HandleAddSourceAuto handles POST /internal/overlays/:id/sources/auto
