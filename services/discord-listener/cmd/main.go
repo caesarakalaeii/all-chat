@@ -12,10 +12,13 @@ import (
 
 	"github.com/caesar/all-chat/services/discord-listener/gateway"
 	"github.com/caesar/all-chat/services/discord-listener/handlers"
+	"github.com/caesar/all-chat/services/discord-listener/metrics"
 	"github.com/caesar/all-chat/services/discord-listener/publisher"
 	"github.com/caesar/all-chat/services/discord-listener/relay"
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -151,6 +154,21 @@ func main() {
 	relayPoster := relay.NewHTTPPoster(botToken, &http.Client{Timeout: 10 * time.Second}, log)
 	relayMgr := relay.NewManager(relayRepo, relayPoster, rdb, dbPool, log)
 
+	sourceManagerURL := getEnv("SOURCE_MANAGER_URL", "")
+	sourceManagerSecret := getEnv("SOURCE_MANAGER_SECRET", "")
+	var leaderCoord *sourcemanager.LeadershipCoordinator
+	if sourceManagerURL != "" && sourceManagerSecret != "" {
+		tokenSource := sourcemanager.NewSigningTokenSource("discord-listener", sourceManagerSecret, 15*time.Minute)
+		smClient, err := sourcemanager.NewClient(sourceManagerURL, tokenSource)
+		if err != nil {
+			log.Fatal("Failed to initialize Source Manager client", zap.Error(err))
+		}
+		leaderCoord = sourcemanager.NewLeadershipCoordinator("discord", smClient, 5*time.Second, log)
+		log.Info("Source Manager leadership coordinator initialized")
+	} else {
+		log.Warn("SOURCE_MANAGER_URL or SOURCE_MANAGER_SECRET not set — running without shard ownership gating")
+	}
+
 	gatewayURL := getEnv("DISCORD_GATEWAY_URL", "wss://gateway.discord.gg/?v=10&encoding=json")
 	store := &redisSessionStore{client: rdb}
 	registry := &redisChannelRegistry{client: rdb}
@@ -161,8 +179,8 @@ func main() {
 	gwClient := gateway.NewGatewayClient(botToken, gatewayURL, store, log, registry, pubAdapter, guildCache)
 
 	// Start Gateway connection in background with automatic reconnect.
-	// TODO(Phase 31): gate on shard ownership via source-manager leader election
-	//   Redis lock key: discord:gateway:shard:0:holder
+	// When SOURCE_MANAGER_SECRET is set, EnsureLeadership gates the connection:
+	// only the pod that holds shard:0 ownership will call Connect().
 	go func() {
 		for {
 			select {
@@ -170,9 +188,30 @@ func main() {
 				return
 			default:
 			}
+
+			if leaderCoord != nil {
+				acquired, err := leaderCoord.EnsureLeadership(ctx, "shard:0", func() {
+					log.Warn("Lost gateway shard ownership — disconnecting")
+					metrics.SetShardOwnership(0)
+				})
+				if err != nil || !acquired {
+					log.Info("Waiting for shard ownership...")
+					select {
+					case <-time.After(5 * time.Second):
+					case <-ctx.Done():
+						return
+					}
+					continue
+				}
+				metrics.SetShardOwnership(1)
+			}
+
 			log.Info("Starting Gateway connection")
 			if err := gwClient.Connect(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("Gateway disconnected, reconnecting in 5s", zap.Error(err))
+				if leaderCoord != nil {
+					metrics.SetShardOwnership(0)
+				}
 				select {
 				case <-time.After(5 * time.Second):
 				case <-ctx.Done():
@@ -195,6 +234,7 @@ func main() {
 	healthHandler := handlers.NewHealthHandler(rdb)
 	router.GET("/health/live", healthHandler.CheckLive)
 	router.GET("/health/ready", healthHandler.CheckReady)
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	port := getEnv("PORT", "8086")
 	srv := &http.Server{

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/discord-listener/metrics"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
@@ -174,11 +175,13 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 				if err := c.writeJSON(resume); err != nil {
 					return fmt.Errorf("failed to send RESUME: %w", err)
 				}
+				metrics.IncResumeAttempt("success")
 			} else {
 				identify := BuildIdentifyPayload(c.token)
 				if err := c.writeJSON(identify); err != nil {
 					return fmt.Errorf("failed to send IDENTIFY: %w", err)
 				}
+				metrics.IncResumeAttempt("fallback_identify")
 			}
 
 		case OpDispatch:
