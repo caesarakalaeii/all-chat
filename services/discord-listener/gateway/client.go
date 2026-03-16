@@ -37,6 +37,18 @@ type MessagePublisher interface {
 	Publish(ctx context.Context, msg interface{}) error
 }
 
+// GuildCache provides channel and role name lookups backed by Redis (or an in-memory map for tests).
+// Keys are Discord Snowflake ID strings. The cache is populated on GUILD_CREATE and kept
+// current via CHANNEL_*/GUILD_ROLE_* dispatch events.
+type GuildCache interface {
+	SetChannelName(ctx context.Context, channelID, name string) error
+	GetChannelName(ctx context.Context, channelID string) (string, bool, error)
+	DeleteChannelName(ctx context.Context, channelID string) error
+	SetRoleName(ctx context.Context, roleID, name string) error
+	GetRoleName(ctx context.Context, roleID string) (string, bool, error)
+	DeleteRoleName(ctx context.Context, roleID string) error
+}
+
 // BuildIdentifyPayload constructs the op=2 IDENTIFY payload with the correct intents bitmask.
 func BuildIdentifyPayload(token string) GatewayPayload {
 	d, _ := json.Marshal(IdentifyData{

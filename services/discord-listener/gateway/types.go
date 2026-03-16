@@ -77,6 +77,7 @@ type MessageCreateData struct {
 	Timestamp string         `json:"timestamp"`
 	Author    DiscordUser    `json:"author"`
 	Member    *DiscordMember `json:"member"`
+	Mentions  []DiscordUser  `json:"mentions"`
 }
 
 // DiscordUser represents the author of a Discord message
@@ -105,4 +106,44 @@ type MessageDeleteBulkData struct {
 	IDs       []string `json:"ids"`
 	ChannelID string   `json:"channel_id"`
 	GuildID   string   `json:"guild_id"`
+}
+
+// GuildCreateData is the payload for the GUILD_CREATE dispatch event
+type GuildCreateData struct {
+	ID       string           `json:"id"`
+	Name     string           `json:"name"`
+	Channels []DiscordChannel `json:"channels"`
+	Roles    []DiscordRole    `json:"roles"`
+}
+
+// DiscordChannel represents a Discord channel (from GUILD_CREATE or CHANNEL_* events)
+type DiscordChannel struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type int    `json:"type"` // 0 = GUILD_TEXT; useful to filter to text channels
+}
+
+// DiscordRole represents a Discord role (from GUILD_CREATE or GUILD_ROLE_* events)
+type DiscordRole struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ChannelUpdateData is the payload for CHANNEL_UPDATE, CHANNEL_CREATE, and CHANNEL_DELETE events
+type ChannelUpdateData struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	GuildID string `json:"guild_id"`
+}
+
+// GuildRoleUpdateData is the payload for GUILD_ROLE_UPDATE and GUILD_ROLE_CREATE events
+type GuildRoleUpdateData struct {
+	GuildID string      `json:"guild_id"`
+	Role    DiscordRole `json:"role"`
+}
+
+// GuildRoleDeleteData is the payload for GUILD_ROLE_DELETE events
+type GuildRoleDeleteData struct {
+	GuildID string `json:"guild_id"`
+	RoleID  string `json:"role_id"`
 }
