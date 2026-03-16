@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
 status: executing
-stopped_at: Completed 32-01-PLAN.md
-last_updated: "2026-03-16T09:29:05.963Z"
+stopped_at: Completed 32-02-PLAN.md
+last_updated: "2026-03-16T09:30:33.382Z"
 last_activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contracts)
 progress:
   total_phases: 22
-  completed_phases: 14
+  completed_phases: 15
   total_plans: 66
-  completed_plans: 64
+  completed_plans: 66
 ---
 
 # Project State
@@ -60,6 +60,7 @@ Last activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contra
 | Phase 31-all-chat-platform-badges P01 | 5min | 2 tasks | 3 files |
 | Phase 31-all-chat-platform-badges P03 | 3min | 2 tasks | 4 files |
 | Phase 32-integration-wiring-fixes P01 | 3min | 1 tasks | 1 files |
+| Phase 32-integration-wiring-fixes P02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 31-all-chat-platform-badges]: Extension AllChatBadge uses inline styles not Tailwind (mirrors Phase 30 UserAvatar decision)
 - [Phase 31-all-chat-platform-badges]: ChatContainer badge render uses 3-way name-check to fix silently-dropped All-Chat badges in extension
 - [Phase 32-integration-wiring-fixes]: viewers.is_premium is the viewer cosmetic flag (migration 036); users.is_premium is the streamer/owner account flag — enricher must read from viewers table for premium badge
+- [Phase 32-integration-wiring-fixes]: Parse guard applied inline in overlay ws.onmessage for name_gradient JSON string→NameGradient conversion (both chat_message and message_update branches)
 
 ### Pending Todos
 
@@ -123,8 +125,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T09:29:05.957Z
-Stopped at: Completed 32-01-PLAN.md
+Last session: 2026-03-16T09:30:33.379Z
+Stopped at: Completed 32-02-PLAN.md
 Resume file: None
 
 **Next action:** Phase 30 complete. Proceed to next phase or feature.

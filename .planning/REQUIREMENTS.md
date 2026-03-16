@@ -20,7 +20,7 @@
 ### Premium Cosmetics
 
 - [x] **PREM-01**: Premium viewer can set a multi-stop gradient (2–4 colors, angle) as their name color
-- [ ] **PREM-02**: Gradient name renders in overlay using CSS `background-clip: text` — no JavaScript required
+- [x] **PREM-02**: Gradient name renders in overlay using CSS `background-clip: text` — no JavaScript required
 - [ ] **PREM-03**: Premium viewer can select an avatar frame (decorative PNG ring overlaid on their avatar)
 - [ ] **PREM-04**: Premium viewer can select an avatar flair (small corner icon pinned to bottom-right of avatar)
 - [ ] **PREM-05**: Frame and flair catalog is managed by admins (add/remove items, mark as premium-only)
@@ -107,7 +107,7 @@
 | VID-05 | Phase 28 | Complete |
 | VID-06 | Phase 28 | Complete |
 | PREM-01 | Phase 29 | Complete |
-| PREM-02 | Phase 32 | Pending |
+| PREM-02 | Phase 32 | Complete |
 | PREM-03 | Phase 32 | Pending |
 | PREM-04 | Phase 32 | Pending |
 | PREM-05 | Phase 32 | Pending |
