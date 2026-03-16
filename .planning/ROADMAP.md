@@ -201,7 +201,7 @@ Plans:
   7. Performance monitoring configured validating message render time <16ms at 20 msg/sec load
   8. Storybook a11y addon set to 'error' mode (currently 'todo') — CI fails on a11y violations
   9. Bundle size baseline established (Next.js built-in bundle analyzer)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 26-01: TBD
@@ -320,7 +320,7 @@ Plans:
   1. `viewer_badge_enricher.go` adds `LEFT JOIN viewers v ON v.id = vpi.viewer_id` and reads `COALESCE(v.is_premium, false)` — premium badge appears for premium viewers in overlays
   2. `overlay/[id]/page.tsx` `ws.onmessage` handler parses `msg.user.name_gradient` from JSON string to `NameGradient` object before calling `buildGradientCSS` — gradient usernames render without TypeError
   3. API gateway registers `GET /auth/viewer/catalog/frames` and `GET /auth/viewer/catalog/flairs` in public block; registers all 6 admin cosmetics routes (`GET/POST/DELETE /admin/cosmetics/frames` and `/admin/cosmetics/flairs`) in protected block — catalog and admin pages return 200
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 32-01-PLAN.md — Fix enricher SQL: add viewers JOIN, update scan order, update fakeViewerDB test double (closes BADGE-02)
