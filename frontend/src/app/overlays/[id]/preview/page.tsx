@@ -1176,7 +1176,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                               </div>
 
                               {/* Timestamp */}
-                              <div className="mt-1 text-xs text-slate-500">
+                              <div className="mt-1 text-xs text-gray-500">
                                 {new Date(message.timestamp).toLocaleTimeString()}
                               </div>
                             </div>
