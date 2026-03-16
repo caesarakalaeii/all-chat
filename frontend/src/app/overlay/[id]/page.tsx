@@ -29,6 +29,8 @@ import { sortMessageBadges } from '@/lib/badgeOrder';
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
 import { buildGradientCSS } from '@/lib/utils/gradient';
 import { UserAvatar } from '@/components/UserAvatar';
+import { AllChatBadge } from '@/components/AllChatBadge';
+import { PremiumBadge } from '@/components/PremiumBadge';
 import '@/styles/events.css';
 
 export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
@@ -642,14 +644,18 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   {platformBadgePosition === 'before' && message.user?.badges && message.user.badges.length > 0 && (
                     <div className="flex gap-1 items-center">
                       {message.user.badges.map((badge, idx) => (
-                        badge.icon_url ? (
+                        badge.name === 'allchat' ? (
+                          <AllChatBadge key={idx} size={18} title={badge.name} />
+                        ) : badge.name === 'premium' ? (
+                          <PremiumBadge key={idx} size={18} title={badge.name} />
+                        ) : badge.icon_url ? (
                           <Image
                             key={idx}
                             src={badge.icon_url}
                             alt={badge.name}
-                            width={16}
-                            height={16}
-                            className="w-4 h-4 object-contain"
+                            width={18}
+                            height={18}
+                            className="h-[1em] w-auto object-contain"
                             title={badge.name}
                           />
                         ) : (
@@ -702,14 +708,18 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   {platformBadgePosition === 'after' && message.user?.badges && message.user.badges.length > 0 && (
                     <div className="flex gap-1 items-center">
                       {message.user.badges.map((badge, idx) => (
-                        badge.icon_url ? (
+                        badge.name === 'allchat' ? (
+                          <AllChatBadge key={idx} size={18} title={badge.name} />
+                        ) : badge.name === 'premium' ? (
+                          <PremiumBadge key={idx} size={18} title={badge.name} />
+                        ) : badge.icon_url ? (
                           <Image
                             key={idx}
                             src={badge.icon_url}
                             alt={badge.name}
-                            width={16}
-                            height={16}
-                            className="w-4 h-4 object-contain"
+                            width={18}
+                            height={18}
+                            className="h-[1em] w-auto object-contain"
                             title={badge.name}
                           />
                         ) : (
