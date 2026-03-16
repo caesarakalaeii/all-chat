@@ -322,7 +322,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 (28 can start in
 | 27 InnerTube Enrichment — Badges & Emotes | 3/3 | Complete    | 2026-03-14 | - |
 | 28 Viewer Identity Foundation — Auth & Platform Linking | 6/6 | Complete    | 2026-03-15 | - |
 | 29 Viewer Color & Gradient Editor | 3/3 | Complete    | 2026-03-15 | - |
-| 30 Avatar Frame & Flair System | 4/4 | Complete   | 2026-03-16 | 2026-03-16 |
+| 30 Avatar Frame & Flair System | 4/4 | Complete    | 2026-03-16 | 2026-03-16 |
 | 31 All-Chat Platform Badges | v1.4 | 0/? | Not started | - |
 
 ---
