@@ -13,7 +13,7 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/oauth2 v0.36.0
-	google.golang.org/api v0.269.0
+	google.golang.org/api v0.271.0
 	google.golang.org/grpc v1.79.2
 	google.golang.org/protobuf v1.36.11
 )
@@ -50,7 +50,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/googleapis/enterprise-certificate-proxy v0.3.12 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.14 // indirect
 	github.com/googleapis/gax-go/v2 v2.17.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -86,7 +86,7 @@ require (
 	golang.org/x/arch v0.25.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260226221140-a57be14db171 // indirect
