@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import type { NameGradient } from '@/lib/types/message'
+import { UserAvatar } from '@/components/UserAvatar'
 
 // JWT claims from viewer token
 interface ViewerJWTClaims {
@@ -372,6 +373,199 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
 }
 
 // ---------------------------------------------------------------------------
+// AvatarCosmeticsCard — frame and flair picker
+// ---------------------------------------------------------------------------
+
+interface CatalogItem {
+  id: string | null
+  name: string
+  image_url: string
+  is_premium: boolean
+}
+
+const NONE_ITEM: CatalogItem = { id: null, name: 'None', image_url: '', is_premium: false }
+
+function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
+  const isPremium = claims.is_premium ?? false
+  const [frames, setFrames] = useState<CatalogItem[]>([])
+  const [flairs, setFlairs] = useState<CatalogItem[]>([])
+  const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null)
+  const [selectedFlairId, setSelectedFlairId] = useState<string | null>(null)
+  const [previewFrameUrl, setPreviewFrameUrl] = useState<string>('')
+  const [previewFlairUrl, setPreviewFlairUrl] = useState<string>('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [savedFeedback, setSavedFeedback] = useState(false)
+
+  useEffect(() => {
+    const fetchCatalogs = async () => {
+      try {
+        const [framesRes, flairsRes] = await Promise.all([
+          fetch('/api/v1/auth/viewer/catalog/frames'),
+          fetch('/api/v1/auth/viewer/catalog/flairs'),
+        ])
+        if (framesRes.ok) {
+          const data = await framesRes.json() as { frames: CatalogItem[] }
+          setFrames([NONE_ITEM, ...(data.frames ?? [])])
+        }
+        if (flairsRes.ok) {
+          const data = await flairsRes.json() as { flairs: CatalogItem[] }
+          setFlairs([NONE_ITEM, ...(data.flairs ?? [])])
+        }
+      } catch {
+        // Silently fail — cosmetics catalog is best-effort
+      }
+    }
+    fetchCatalogs()
+  }, [])
+
+  const handleSelectFrame = (item: CatalogItem) => {
+    if (item.is_premium && !isPremium) return
+    setSelectedFrameId(item.id)
+    setPreviewFrameUrl(item.image_url)
+  }
+
+  const handleSelectFlair = (item: CatalogItem) => {
+    if (item.is_premium && !isPremium) return
+    setSelectedFlairId(item.id)
+    setPreviewFlairUrl(item.image_url)
+  }
+
+  const handleSave = async () => {
+    // Re-validate premium from localStorage JWT before PATCH
+    const token = typeof window !== 'undefined' ? localStorage.getItem('viewer_jwt_token') : null
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const res = await fetch('/api/v1/auth/viewer/cosmetics', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          avatar_frame_id: selectedFrameId,
+          avatar_flair_id: selectedFlairId,
+        }),
+      })
+
+      if (!res.ok) {
+        if (res.status === 403) {
+          setSaveError('Premium required')
+        } else {
+          setSaveError('Save failed')
+        }
+      } else {
+        setSavedFeedback(true)
+        setTimeout(() => setSavedFeedback(false), 2000)
+      }
+    } catch {
+      setSaveError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const lockIcon = (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <svg className="w-5 h-5 text-text-sub" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+        <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
+      </svg>
+    </div>
+  )
+
+  return (
+    <Card className="p-6">
+      <h2 className="text-lg font-semibold text-text mb-1">Avatar Cosmetics</h2>
+      <p className="text-text-sub text-sm mb-4">
+        Choose a frame and flair for your avatar
+      </p>
+
+      {/* Avatar Frame section */}
+      <div className="mb-6">
+        <h3 className="text-sm font-medium text-text mb-3">Avatar Frame</h3>
+        <div className="grid grid-cols-4 gap-2">
+          {frames.map((item) => (
+            <button
+              key={item.id ?? 'none-frame'}
+              onClick={() => handleSelectFrame(item)}
+              disabled={item.is_premium && !isPremium}
+              className={`relative p-1 rounded-lg border-2 transition-colors ${
+                selectedFrameId === item.id
+                  ? 'border-twitch bg-surface-2'
+                  : 'border-border hover:border-text-sub'
+              } ${item.is_premium && !isPremium ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {item.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.image_url} alt={item.name} className="w-16 h-16 rounded object-contain" />
+              ) : (
+                <div className="w-16 h-16 rounded bg-surface-2 flex items-center justify-center text-text-sub text-xs">None</div>
+              )}
+              <span className="block text-xs text-center text-text-sub mt-1 truncate">{item.name}</span>
+              {item.is_premium && !isPremium && lockIcon}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Avatar Flair section */}
+      <div className="mb-6">
+        <h3 className="text-sm font-medium text-text mb-3">Avatar Flair</h3>
+        <div className="grid grid-cols-4 gap-2">
+          {flairs.map((item) => (
+            <button
+              key={item.id ?? 'none-flair'}
+              onClick={() => handleSelectFlair(item)}
+              disabled={item.is_premium && !isPremium}
+              className={`relative p-1 rounded-lg border-2 transition-colors ${
+                selectedFlairId === item.id
+                  ? 'border-twitch bg-surface-2'
+                  : 'border-border hover:border-text-sub'
+              } ${item.is_premium && !isPremium ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {item.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.image_url} alt={item.name} className="w-16 h-16 rounded object-contain" />
+              ) : (
+                <div className="w-16 h-16 rounded bg-surface-2 flex items-center justify-center text-text-sub text-xs">None</div>
+              )}
+              <span className="block text-xs text-center text-text-sub mt-1 truncate">{item.name}</span>
+              {item.is_premium && !isPremium && lockIcon}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Live preview */}
+      <div className="mt-4 mb-6">
+        <p className="text-xs text-text-sub mb-2">Preview</p>
+        <UserAvatar
+          avatarUrl={claims.avatar_url}
+          frameUrl={previewFrameUrl}
+          flairUrl={previewFlairUrl}
+          size={48}
+          displayName={claims.display_name}
+        />
+      </div>
+
+      {/* Save button */}
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        {savedFeedback && (
+          <span className="text-xs text-green-400">Saved ✓</span>
+        )}
+        {saveError && (
+          <span className="text-xs text-red-400">{saveError}</span>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // ViewerSettingsContent — main authenticated view
 // ---------------------------------------------------------------------------
 
@@ -413,6 +607,9 @@ function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
 
         {/* Color + Gradient tabbed editor */}
         <ColorGradientCard claims={claims} />
+
+        {/* Avatar Cosmetics — frame and flair picker */}
+        <AvatarCosmeticsCard claims={claims} />
 
         {/* Linked Platforms section */}
         <Card className="p-6">
