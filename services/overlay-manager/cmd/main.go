@@ -135,7 +135,7 @@ func main() {
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, tracingEnabled, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo)
-	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log)
+	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient)
 	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient, log)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)
@@ -200,6 +200,7 @@ func main() {
 		protected.GET("/:id/sources", sourcesHandler.HandleListSources)
 		protected.POST("/:id/sources", sourcesHandler.HandleAddSource)
 		protected.DELETE("/:id/sources/:source_id", sourcesHandler.HandleDeleteSource)
+		protected.PATCH("/:id/sources/:source_id", sourcesHandler.HandleUpdateSourceConfig)
 
 		protected.GET("/:id/config", configHandler.HandleGetConfig)
 		protected.PUT("/:id/config", configHandler.HandleUpdateConfig)
