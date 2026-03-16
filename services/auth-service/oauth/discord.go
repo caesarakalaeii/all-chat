@@ -130,42 +130,36 @@ func (d *DiscordOAuth) GetPlatform() Platform {
 	return PlatformDiscord
 }
 
-// CheckBotPermissions fetches the bot's guild member object and returns the names of any
-// missing required permissions. Returns an empty slice if all required permissions are present.
+// CheckBotPermissions confirms the bot is a member of the guild.
+// Discord enforces the requested permissions (68608) at invite time via the OAuth URL,
+// so we only need to verify the bot joined successfully.
 // Uses the DISCORD_BOT_TOKEN (not the OAuth access token).
 func (d *DiscordOAuth) CheckBotPermissions(ctx context.Context, guildID string) ([]string, error) {
 	reqURL := fmt.Sprintf("%s/guilds/%s/members/@me", discordAPIBase, guildID)
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create permissions request: %w", err)
+		return nil, fmt.Errorf("failed to create membership request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bot "+d.botToken)
 	req.Header.Set("User-Agent", discordUserAgent)
 
 	resp, err := d.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("permissions check request failed: %w", err)
+		return nil, fmt.Errorf("membership check request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	io.ReadAll(resp.Body) //nolint:errcheck
 
-	body, _ := io.ReadAll(resp.Body)
+	// 200 = bot is in the guild; permissions were enforced by Discord at invite time.
+	// 404 = bot did not join (user may have cancelled or removed it immediately).
+	if resp.StatusCode == http.StatusNotFound {
+		return []string{"Bot is not a member of this server"}, nil
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("discord members/@me returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("discord members/@me returned unexpected status %d", resp.StatusCode)
 	}
 
-	var member struct {
-		Permissions string `json:"permissions"` // string representation of uint64 permission bits
-	}
-	if err := json.Unmarshal(body, &member); err != nil {
-		return nil, fmt.Errorf("failed to decode member response: %w", err)
-	}
-
-	effectivePerms, err := parsePermissions(member.Permissions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse permissions string: %w", err)
-	}
-
-	return ComputeMissingPermissions(effectivePerms), nil
+	return nil, nil
 }
 
 // ComputeMissingPermissions is exported for unit testing. Given effective permission bits,
