@@ -156,8 +156,11 @@ body {
    SECTION 6: USERNAME ENHANCEMENT
    ======================================== */
 
-.font-semibold.text-sm,
-.username {
+/* NOTE: :not(.text-transparent) and :not(.username-gradient) exclude spans that are
+   rendering a viewer name gradient — those spans use background-clip:text and need
+   their own background-image intact. Theme authors should follow this pattern. */
+.font-semibold.text-sm:not(.text-transparent):not(.username-gradient),
+.username:not(.text-transparent):not(.username-gradient) {
   font-size: 20px !important;
   font-weight: 800 !important;
   letter-spacing: 0.03em !important;
