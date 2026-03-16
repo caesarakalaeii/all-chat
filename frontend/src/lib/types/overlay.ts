@@ -55,7 +55,7 @@ export interface FilterSettings {
 export interface ChatSource {
   id: string
   overlay_id: string
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'shared_overlay'
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'shared_overlay' | 'discord'
   channel_id: string
   channel_name?: string
   config?: Record<string, unknown>
@@ -63,6 +63,14 @@ export interface ChatSource {
   updated_at: string
   is_active: boolean
   share_status?: 'accepted' | 'revoked' | 'expired' // Only present for shared_overlay sources
+}
+
+export interface DiscordSourceConfig {
+  guild_id: string
+  inbound_channel_id: string
+  relay_enabled: boolean
+  relay_channel_id: string | null
+  [key: string]: unknown
 }
 
 export interface CreateOverlayRequest {
@@ -78,7 +86,7 @@ export interface UpdateOverlayRequest {
 }
 
 export interface AddSourceRequest {
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'shared_overlay'
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'shared_overlay' | 'discord'
   channel_id: string
   channel_name?: string
   config?: Record<string, unknown>

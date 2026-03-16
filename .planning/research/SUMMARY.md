@@ -1,355 +1,187 @@
 # Project Research Summary
 
-**Project:** All-Chat Frontend Redesign (v1.3)
-**Domain:** UI Design System & Component Library for Streaming Platform
-**Researched:** 2026-03-09
+**Project:** All-Chat v1.5 — Discord Listener + Relay
+**Domain:** Bidirectional Discord chat source integration for Go microservices streaming overlay platform
+**Researched:** 2026-03-15
 **Confidence:** HIGH
 
 ## Executive Summary
 
-The All-Chat frontend redesign is a design system integration project, not a greenfield build. The foundation is already solid: Next.js 16, React 19, Tailwind CSS v4, and all major dependencies (shadcn/ui, CVA, tailwind-merge, Lucide icons) are installed and compatible. The challenge is not adding technology, but enforcing consistency, migrating existing pages, and avoiding pitfalls that could break the existing overlay marketplace or degrade real-time performance.
+All-Chat v1.5 adds Discord as a fifth chat source platform — the first platform with a bidirectional relay capability. Unlike the existing Twitch, YouTube, Kick, and TikTok listeners (receive-only), the Discord integration introduces an outbound relay path: normalized overlay messages are posted back to a user-configured Discord channel. This bidirectional topology creates a relay echo loop risk that does not exist in any current service and is the single most important architectural correctness requirement to establish from day one.
 
-The recommended approach is a **phased, design-first migration** that establishes design tokens and enforcement tooling before touching existing pages. Critical success factors include: (1) preserving overlay CSS class stability for marketplace compatibility, (2) migrating all pages together to avoid visual inconsistencies, (3) maintaining real-time message rendering performance (<16ms per message at 20+ msg/sec), and (4) meeting WCAG 2.1 AA accessibility standards before the April 24, 2026 ADA deadline.
+The recommended approach is a single new `discord-listener` Go microservice handling both directions via two goroutine groups. The inbound group connects to the Discord Gateway WebSocket using `bwmarrin/discordgo` (the only full-featured Go Discord library), receives `MESSAGE_CREATE` events, and publishes to the existing `chat:raw` Redis Stream. The outbound group subscribes to `overlay:{overlay_id}` Redis Pub/Sub — exactly as the API Gateway does — and posts non-Discord messages to Discord REST. Both groups share the same bot token, channel registry, and in-process loop prevention state, which is why a single service is strongly preferred over a split architecture. Five existing services require minimal extension: source-manager (add "discord" platform), auth-service (add OAuth2 "Add to Server" endpoints), overlay-manager (add "discord" validation), message-processor (add Discord normalizer), and frontend (add Discord source UI).
 
-Key risks are manageable with proper phase ordering: Tailwind v4 gradient class renames require codemod audit, overlay marketplace themes require CSS class stability contracts, and real-time performance requires selective shadcn/ui adoption (use for static UI, not real-time overlays). The research shows this is a **low-risk, high-polish** project if executed methodically with strong enforcement in Phase 4.
+The top risks are: (1) the `MESSAGE_CONTENT` privileged Gateway Intent, which must be enabled in the Discord Developer Portal — without it, all messages arrive with silent empty content; (2) the relay echo loop, which if triggered causes a bot rate-limit cascade and potential application token ban; (3) Gateway heartbeat implementation, which requires an ACK-before-next-heartbeat pattern plus a single write channel to prevent concurrent-write panics; and (4) the Gateway identify rate limit (1 per 5 seconds per token), which requires startup jitter and RESUME-before-IDENTIFY logic to survive rolling deploys safely. All four risks have deterministic prevention strategies documented in the research.
 
 ## Key Findings
 
 ### Recommended Stack
 
-**Minimal additions required** — the project already has 95% of needed dependencies. Only 3 dev-only packages needed for design system enforcement: `eslint-plugin-tailwindcss`, `prettier-plugin-tailwindcss`, and `prettier`.
+The entire implementation can be built using dependencies already present in the codebase. The only net-new dependency is `bwmarrin/discordgo` (expected v0.28.1+), which must be verified with `go get github.com/bwmarrin/discordgo@latest` before pinning. All other required packages — `gin-gonic/gin`, `redis/go-redis/v9`, `jackc/pgx/v5`, `go.uber.org/zap`, `prometheus/client_golang`, `go.opentelemetry.io/otel`, `golang.org/x/time/rate`, `google/uuid`, and `stretchr/testify` — are already versioned in existing go.mod files and must be pinned to those exact versions.
 
-**Core technologies (already installed):**
-- **Next.js 16.1.6 + React 19.2.4:** Modern framework with App Router, React Server Components — no changes needed
-- **Tailwind CSS 4.1.18:** Already on v4 with @theme directive support — enforcement tooling needed, not upgrades
-- **shadcn/ui 4.0.2:** Copy-paste component library with Radix UI primitives — ready for customization to match design system
-- **CVA 0.7.1:** Type-safe component variants — already powering design system patterns
-- **Lucide React 0.563.0:** Icon library with 1000+ icons — sufficient for all use cases
+Discord API v10 (Gateway v10) is the current stable version and the default in discordgo v0.28.x. The bot authenticates with a static Bot Token stored as a Kubernetes sealed-secret `DISCORD_BOT_TOKEN`. This is NOT a per-user OAuth token; it never expires and is never routed through token-refresh-service. The OAuth2 "Add to Server" flow captures `guild_id` only — no per-user access token or refresh token is issued.
 
-**What to add (Phase 1 enforcement):**
-- **eslint-plugin-tailwindcss:** Enforces design system compliance (no gray-*, no contradicting classes, shorthand alternatives)
-- **prettier-plugin-tailwindcss:** Auto-sorts Tailwind classes in consistent order (requires `tailwindStylesheet` config for v4)
-- **prettier:** Peer dependency for Prettier plugin
+**Core technologies:**
+- `bwmarrin/discordgo` v0.28.1+: Discord Gateway WebSocket client + REST API — the only full-featured Go Discord library. Handles heartbeat, session resume, reconnect, and per-route rate limiting automatically. No meaningful alternative in the Go ecosystem for this use case.
+- `golang.org/x/time/rate` (already present via twitch-listener): Per-channel token bucket for relay REST rate limiting — reuse of existing dependency, no new import.
+- `redis/go-redis/v9` v9.18.0: Redis Streams publish (inbound) and Pub/Sub subscribe (relay) — identical patterns to existing listeners.
+- Discord API v10 / Gateway v10: Default in discordgo v0.28.x. Do not override the API version constant.
+- Bot Token model: Static application credential stored as Kubernetes sealed-secret. Not managed by token-refresh-service.
 
-**What NOT to add:**
-- CSS-in-JS libraries (styled-components, Emotion) — conflicts with Tailwind paradigm
-- Additional icon libraries — Lucide covers all needs
-- Theme-UI or Sass — Tailwind v4 @theme handles design tokens natively
-- Animation libraries in Phase 1 — defer Framer Motion to Phase 2+ for power user features
-
-**Version compatibility:** All packages are React 19 and Tailwind v4 compatible as of March 2026. Zero breaking changes required.
+See `/home/moersener/Hobby/worktree/all-chat/.planning/research/STACK.md` for full dependency table and installation instructions.
 
 ### Expected Features
 
-**Must have (table stakes):**
-- Design token system (colors, spacing, typography) with Tailwind v4 @theme — foundation for consistency
-- Component library with shadcn/ui — accessible, customizable UI primitives
-- Responsive layouts (mobile-first) — streaming tools accessed from multiple devices
-- Dark theme optimized for creators — streaming tools default to dark (like StreamElements, OBS)
-- Platform branding (Twitch purple, YouTube red, etc.) — users expect platform colors for badges, status
-- Accessible focus states and keyboard navigation — WCAG 2.1 AA required by April 24, 2026
-- Consistent spacing and typography scale — prevents visual inconsistency
-- Loading states and skeletons — feedback during data fetching
-- Toast notifications for actions — already implemented inline, needs shadcn/ui toast/sonner
+Discord bot integration follows an established managed-bot pattern. Users expect one-click "Add Bot to Server" authorization — not manual token pasting. Discord's two-token model (static bot token + per-server OAuth2 "Add to Server" flow) is fundamentally different from Twitch/YouTube user OAuth: the OAuth callback captures `guild_id` only; no access token or refresh token is stored or needed. The `MESSAGE_CONTENT` privileged intent must be explicitly enabled in the Discord Developer Portal before any integration testing — this is a common early-stage blocker.
 
-**Should have (competitive differentiators):**
-- Split-view live preview (editor + preview) — immediate visual feedback like Claude Code Desktop 2026
-- Smooth micro-interactions (hover, scale, shadow) — premium feel vs generic templates
-- Gradient CTAs (purple → blue) — distinctive brand identity
-- Platform-color coded sections — visual hierarchy for multi-platform chat sources
-- Animated empty states with illustrations — engaging first-time user experience
-- Click-to-edit inline patterns — reduces friction for overlay editing
-- Drag-and-drop source reordering — intuitive priority management (defer to Phase 2)
-- Command palette (Cmd+K) — power user feature for quick navigation (defer to Phase 2)
+**Must have (table stakes):**
+- OAuth2 "Add Bot to Server" flow — standard managed-bot pattern; users expect one-click connection
+- Inbound channel picker (select which channel to monitor) — raw channel ID configuration is unacceptable UX
+- Real-time Discord messages in overlay — the core value proposition
+- `author.bot` filtering at Gateway inbound — bot spam would immediately pollute overlays
+- Platform label "discord" on all messages — users must distinguish platform origin
+- Relay loop prevention (Discord messages not relayed back) — any visible loop makes the feature unusable
+- Relay toggle per source (inbound-only is a valid use case) — some users want no relay
+- Discord source card in overlay editor — consistent with Twitch/YouTube/Kick/TikTok source cards
+
+**Should have (differentiators):**
+- Rich embed relay (platform color, avatar) — polished relay output vs. raw text dumps
+- Channel hierarchy display in picker (grouped by Discord category) — flat lists are hard to navigate in large servers
+- Separate inbound and outbound channel configuration — flexibility most bridge bots lack
+- Multiple Discord servers per user — multistreaming streamers manage multiple communities
+- `MESSAGE_DELETE` forwarding — consistent with Twitch/YouTube deletion support already in the platform
 
 **Defer (v2+):**
-- Light theme toggle — doubles maintenance, streaming tools are dark by default
-- Theme presets (2-3 options) — perfect single theme first, then variants
-- Component marketplace — users need core functionality before customization
-- Advanced animations (GSAP) — focus on OBS browser source compatibility first
-- Heavy animations (parallax, complex transitions) — performance issues in OBS
+- Slash commands (`/status`, `/sources`)
+- Discord stage channel support
+- Role-based message filtering in overlay
+- Discord verification for `MESSAGE_CONTENT` at scale (ops/deployment concern at 100+ servers, not a code concern)
 
-**Anti-features (don't build):**
-- Customizable everything (colors, fonts, sizes) — destroys design consistency
-- Real-time collaboration editing — complex, unclear user need
-- Per-component animation customization — creates jarring UX
+See `/home/moersener/Hobby/worktree/all-chat/.planning/research/FEATURES.md` for full feature dependency graph and per-feature complexity ratings.
 
 ### Architecture Approach
 
-**Pattern:** Drop-in design system integration with selective component adoption. Use shadcn/ui for **static UI** (dashboard, settings, modals) but **not for real-time overlays** (message rendering, live chat). This preserves real-time performance (<16ms render time at 20+ messages/second) while gaining design system benefits for creator-facing UI.
+A single `discord-listener` service with two goroutine groups handles both directions. The inbound goroutine group manages the Discord Gateway WebSocket connection, filters `author.bot == true` events, maps `MESSAGE_CREATE` events to `RawChatMessage`, and publishes to `chat:raw`. The outbound relay goroutine group subscribes to `overlay:{overlay_id}` Redis Pub/Sub (as a peer of the API Gateway), applies the echo loop filter (`platform != "discord"`), and calls Discord REST `POST /channels/{channel_id}/messages` with per-channel token-bucket rate limiting.
+
+No new database tables are required. Discord sources fit the existing `overlay_chat_sources` schema using the `config` JSONB column for Discord-specific fields (`guild_id`, `inbound_channel_id`, `relay_channel_id`, `relay_enabled`). The source key format is `discord:{guild_id}:{channel_id}`, consistent with the platform-prefixed pattern used by other listeners. All Discord Snowflake IDs must be stored as strings — never as integers — to avoid frontend JavaScript safe-integer truncation for values above 2^53. At v1.5 scale (far below Discord's 2,500-guild single-shard limit), a single Gateway connection (`num_shards=1`) managed by source-manager leader election is correct and sufficient.
 
 **Major components:**
+1. `discord-listener` (NEW) — Gateway WebSocket shards, inbound publish to `chat:raw`, relay subscribe from `overlay:{id}` Pub/Sub, Discord REST posting, per-channel rate limiter, in-memory channel registry
+2. `auth-service` (EXTEND) — Add `GET /api/v1/auth/discord/authorize` and `/callback` endpoints; store `guild_id` on successful bot authorization; bot token stored as Kubernetes secret env var, not in `oauth_tokens` table
+3. `message-processor` (EXTEND) — Add `normalizer/discord_normalizer.go`; skip 7TV/BTTV/FFZ emote enrichment for `platform="discord"`
+4. `source-manager` (EXTEND) — Add `"discord"` to supported platforms; add shard leadership key namespace `leader:discord:shard:{shard_id}`
+5. `overlay-manager` (EXTEND) — Add `"discord"` to `validPlatforms`; validate `guild_id` present in config on source create/update
 
-1. **Design Token System** (Tailwind v4 @theme) — CSS variables with three-layer hierarchy (base → semantic → component), defined in `app/globals.css`, no build-time overhead
-2. **shadcn/ui Component Library** — Accessible primitives (Button, Card, Input, Badge, Dialog, Toast) customized with design tokens, isolated to dashboard/settings
-3. **Overlay CSS Stability Layer** — Existing `events.css` classes treated as immutable public API for marketplace compatibility
-4. **ESLint + Prettier Enforcement** — Design system compliance rules (no gray-*, no arbitrary values, class ordering) enforced in CI/CD
-5. **Responsive Layout System** — Mobile-first breakpoints (375px, 768px, 1920px) with systematic patterns
-
-**Integration patterns:**
-
-- **Component Variants with CVA:** Already available, no new packages needed — pattern defined in design system spec
-- **Design Tokens with @theme:** Native Tailwind v4 feature, CSS variables for runtime theming
-- **Utility Function (cn):** Combines clsx + tailwind-merge for conditional class names
-- **Static Platform Mapping:** Replace dynamic class construction (`'bg-' + platform`) with static objects to ensure JIT compilation
-
-**Data flow:** No changes to existing architecture. Design system is purely presentational layer. WebSocket → Redis → Message Processor → API Gateway → Frontend flow remains identical.
+See `/home/moersener/Hobby/worktree/all-chat/.planning/research/ARCHITECTURE.md` for full service directory structure, data flow diagrams, code patterns, and a definitive anti-pattern list.
 
 ### Critical Pitfalls
 
-1. **Breaking Overlay Marketplace CSS Themes** — Marketplace creators depend on exact class names (`event-message`, `event-tier-high`). Renaming/removing classes breaks all themes simultaneously. **Prevention:** Treat `events.css` classes as immutable public API, use `ac-` prefix for new design system classes, create CSS class stability contract in Phase 1.
+1. **Missing MESSAGE_CONTENT privileged intent — silent empty messages:** Bot receives events, counters increment, Redis fills — but all `content` fields are empty strings with no error from Discord. Must enable in Developer Portal AND declare in `IDENTIFY` intents bitmask `(1<<0)|(1<<9)|(1<<15) = 33281`. Add startup assertion on first `READY` event plus `discord_message_content_empty_total` Prometheus counter. Validate in Phase 1 before writing any integration tests.
 
-2. **Tailwind v4 Gradient Class Renames** — Tailwind v4 renames `bg-gradient-to-*` → `bg-linear-to-*`. Design system spec uses gradients extensively (Button, Card components). **Prevention:** Run `npx @tailwindcss/upgrade` codemod first, manual audit of CSS files, visual regression testing, move CSS-based Tailwind to React components before upgrade.
+2. **Relay echo loop causing bot rate-limit cascade:** Without unconditional `platform != "discord"` filtering in the relay goroutine before any REST call, Discord messages are relayed back to Discord, triggering another `MESSAGE_CREATE`, creating an infinite loop. Unthrottled, this exhausts Discord REST rate limits and can result in bot token ban and hours of downtime. The filter must exist before the relay is ever connected to a live bot. An integration test asserting no REST call is made for a Discord-platform pub/sub message is required before merge.
 
-3. **Real-Time Performance Regression** — Adding shadcn/ui + Radix UI increases bundle size 50-100KB, heavier React reconciliation on WebSocket updates (every 50-100ms). Message rendering slows from <16ms to >50ms, causing stutter during raids (20+ messages/second). **Prevention:** Isolate overlays from Radix UI, use plain HTML/CSS for messages, establish performance budget (<16ms render, <100KB bundle increase), load test with 20 msg/sec feed.
+3. **Gateway heartbeat miss causing zombie connection and message loss:** Common Go mistakes — missing ACK tracking, concurrent WebSocket writes without a mutex — cause Discord to close connections with code 1008. Implement heartbeat with `time.NewTicker`, track a `heartbeatACKed` bool checked before each send, and funnel all WebSocket writes through a single channel to a dedicated writer goroutine. Store `session_id` and `resume_gateway_url` in Redis on every `READY` for session RESUME capability.
 
-4. **CSS Specificity Wars** — Marketplace themes use high-specificity selectors and `!important`. Tailwind v4's highest-precedence layer overrides everything, breaking theme customization. **Prevention:** Define explicit CSS cascade layers (`@layer base, design-system, marketplace-themes, user-overrides`), remove all `!important` from `events.css`, provide CSS custom properties for themeable values.
+4. **Multiple pods connecting on the same shard — session invalidation cascade:** All pods share one bot token. Two concurrent Gateway connections on the same shard cause Discord to invalidate one, triggering a reconnect storm. Gate Gateway connection on source assignment: only pods with at least one Discord source assigned may connect. Use Redis lock `discord:gateway:shard:0:holder` as the connection ownership mechanism.
 
-5. **Accessibility Regression** — Design system defines focus states but migration misses legacy overlay controls. Keyboard users can't navigate overlays, WCAG 2.1 AA compliance breaks, ADA April 24, 2026 deadline missed. **Prevention:** Keyboard-first testing (Tab navigation before mouse), ESLint rule requiring `focus-visible:` on interactive elements, contrast validation (3:1 ratio minimum), axe-core in CI/CD.
+5. **Gateway identify rate limit during rolling deploys — reconnect storm:** Discord enforces 1 identify per 5 seconds per bot token. HPA scale-up or rolling deploys trigger simultaneous identifies from multiple pods. Apply existing 0-30s startup jitter plus Discord-specific stagger (pod ordinal * 6s). Always attempt RESUME before IDENTIFY — successful RESUME bypasses the rate limit entirely.
 
-6. **Incomplete Migration** — Landing page, dashboard, editor migrated to new design system, but settings/admin pages remain on old styles. Users see professional UI then jarring gray-scale generic Tailwind. **Prevention:** All-or-nothing approach, migrate ALL pages in Phase 3 or delay enforcement, visual consistency audit before production deployment.
-
-7. **Dynamic Class Construction Failing** — Codebase uses `className={'bg-' + platform + '-500'}` for platform colors. Tailwind v4 JIT doesn't detect dynamically constructed classes, platform badges render without background colors. **Prevention:** Create static `platformColors` mapping object, grep audit for `className.*\+` patterns, add safelist for edge cases, ESLint rule forbidding string concatenation in className.
+See `/home/moersener/Hobby/worktree/all-chat/.planning/research/PITFALLS.md` for all 15 pitfalls with phase-specific warnings, detection metrics, and recovery procedures.
 
 ## Implications for Roadmap
 
-Based on research, the project should follow a **4-phase structure** focused on foundation-first, enforcement-last:
+Research produced a clear 5-phase build order driven by hard dependency chains: auth must precede inbound (bot must be in guild before Gateway connection is valid), inbound must precede relay (relay loop prevention requires the inbound channel registry), both must precede load balancing hardening (need a correct single-pod service before adding multi-replica complexity), and all backend must precede setup UI (APIs must be stable before frontend calls them). The architecture research file even includes an explicit build order section that aligns with this phase structure.
 
-### Phase 1: Design Token System & Foundation
+### Phase 1: Foundation — Auth, Bot Token, and Gateway Connection
+**Rationale:** All downstream work depends on a working bot token and a bot that can join servers. The auth credential model and Gateway connection ownership architecture are the highest-risk design decisions in the project. Getting the auth model wrong (treating bot token as per-user OAuth, routing through token-refresh-service) is expensive to undo after DB migrations are written. Getting connection ownership wrong (multiple pods on the same shard) causes the session invalidation cascade that makes the service unstable under any rolling deploy.
+**Delivers:** Bot can join Discord servers via "Add to Server" OAuth flow; `DISCORD_BOT_TOKEN` available as Kubernetes sealed-secret; new auth-service Discord OAuth endpoints; guild membership stored in DB; Gateway connection established with correct intents bitmask; session RESUME infrastructure (session_id + resume_gateway_url in Redis); startup jitter and pod-ordinal stagger implemented; `MESSAGE_CONTENT` intent validated at startup with fail-fast assertion.
+**Addresses:** Bot authorization (table stakes), `MESSAGE_CONTENT` intent (table stakes), connection ownership model.
+**Avoids:** Pitfalls 1 (empty messages), 3 (zombie heartbeat), 4 (multiple pods same shard), 6 (shard mismatch), 7 (bot token treated as user OAuth), 12 (session not preserved on SIGTERM), 13 (Snowflakes stored as integers).
 
-**Rationale:** Must establish design tokens and tooling BEFORE touching existing pages. Tailwind v4 @theme directive requires CSS variable setup. Static platform color mappings prevent JIT compilation issues. Overlay CSS stability contract prevents marketplace breakage.
+### Phase 2: Inbound Listener — Discord Gateway to Overlay
+**Rationale:** The inbound direction is simpler than the relay and proves the full message pipeline integration before adding bidirectional relay complexity. A working inbound path validates discordgo event handling, channel filtering, RawChatMessage mapping, Redis Streams publish, the Discord normalizer in message-processor, and platform registration across source-manager and overlay-manager — all against real Discord data.
+**Delivers:** Discord messages appear in overlays in real-time; `platform="discord"` messages flow through the full pipeline; `author.bot` filtering active at the Gateway handler level; channel filtering (only configured inbound channel_id, not all guild channels).
+**Uses:** `bwmarrin/discordgo`, existing Redis Streams publisher pattern from twitch-listener, Discord normalizer (new file, minimal — ~6 field mappings, no emote enrichment).
+**Implements:** Gateway inbound goroutine group, channel registry (in-memory + DB sync on NOTIFY), Redis Streams publisher, message-processor Discord normalizer, source-manager and overlay-manager platform registration.
+**Avoids:** Pitfall 14 (bot receives all guild channels — must filter on channel_id against active source registry).
 
-**Delivers:**
-- Tailwind v4 @theme directive with three-layer token hierarchy (base → semantic → component)
-- CSS variables defined in `app/globals.css`
-- Static `platformColors` mapping object (no dynamic class construction)
-- Overlay CSS stability contract (document all `events.css` classes as public API)
-- ESLint + Prettier tooling installed (configured but not enforced yet)
-- Tailwind v4 gradient codemod executed with visual regression tests
+### Phase 3: Outbound Relay — Overlay to Discord
+**Rationale:** Relay depends on the in-memory inbound channel set established in Phase 2 for correct loop prevention. Rate limiting must be designed from the start — adding it as a post-production fix requires a relay component rewrite. The relay is architecturally the riskiest phase because it introduces the first outbound REST call pattern under load in the entire codebase.
+**Delivers:** Non-Discord overlay messages relayed to configured Discord channel; echo loop prevented by unconditional platform filter; relay queue bounded (50 messages, drop-oldest) with `discord_relay_dropped_total` counter; Discord 429 responses handled by parsing `Retry-After` header; per-channel token bucket rate limiter (2 msg/s default, burst 5); single shared `http.Client` with configured transport; integration test asserting no REST call on Discord-platform pub/sub message.
+**Uses:** Redis Pub/Sub subscriber (api-gateway pattern), `golang.org/x/time/rate` token bucket (existing dependency), single shared `http.Client` with `MaxIdleConnsPerHost: 10`.
+**Implements:** Relay goroutine group (relay/worker.go, relay/poster.go, relay/ratelimit.go), loop prevention filter, bounded message queue.
+**Avoids:** Pitfalls 2 (echo loop), 5 (REST rate limit cascade), 10 (port exhaustion from per-call HTTP client creation), 11 (relay logic inside message-processor pipeline), 15 (webhooks vs. bot REST).
 
-**Addresses (from FEATURES.md):**
-- Design token system (colors, spacing, typography) — table stakes
-- Platform branding (static color mappings) — table stakes
-- Consistent spacing and typography scale — table stakes
+### Phase 4: Production Hardening — Load Balancing and HPA
+**Rationale:** Phases 1-3 produce a correct single-pod service. Phase 4 makes it production-grade by adding multi-replica support with shard ownership via leader election, HPA configuration, full Prometheus metrics surface, and a Grafana dashboard. The shard model is deliberately kept simple at v1.5 scale: `num_shards=1`, single shard leader. The existing source-manager coordinator is reused with a shard-scoped leadership key.
+**Delivers:** Multiple discord-listener pods with shard ownership via source-manager leader election; Gateway connection gated on source assignment; failover within 60 seconds; HPA Kubernetes manifest; full Prometheus metrics (6 key counters/gauges documented in ARCHITECTURE.md); Grafana dashboard; `GET /gateway/bot` startup query to log Discord's recommended shard count.
+**Implements:** Coordinator integration, shard leadership key namespace in source-manager, HPA config, startup jitter refinement (pod-ordinal * 6s stagger verified under rolling deploy).
+**Avoids:** Pitfalls 4 (multiple pods same shard), 6 (shard mismatch), Gateway identify rate limit during HPA scale-up.
 
-**Avoids (from PITFALLS.md):**
-- Breaking marketplace themes (stability contract first)
-- Tailwind v4 gradient renames (codemod + audit)
-- Dynamic class construction failing (static mappings)
-
-**Research needed:** None — well-documented Tailwind v4 @theme patterns, existing design system spec provides complete token definitions.
-
----
-
-### Phase 2: Component Library Setup & Customization
-
-**Rationale:** shadcn/ui requires design tokens for theming. Customization must happen before page migration to avoid rework. Isolation strategy (static UI only, not overlays) prevents performance regression. CSS cascade layers prevent specificity conflicts.
-
-**Delivers:**
-- shadcn/ui components installed and customized with design tokens (slate colors, not zinc)
-- Core primitives ready: Button, Card, Input, Badge, Dialog, Toast
-- CSS cascade layers defined (`@layer base, design-system, marketplace-themes, user-overrides`)
-- All `!important` removed from `events.css`, replaced with cascade layers
-- Component variant patterns with CVA (examples: Button variants, Badge platforms)
-- Performance budget established (<16ms message render, <100KB bundle increase)
-- Bundle size analysis (webpack-bundle-analyzer) baseline
-
-**Addresses (from FEATURES.md):**
-- Component library with shadcn/ui — table stakes
-- Smooth micro-interactions (hover, scale, shadow) — differentiator
-- Gradient CTAs (purple → blue) — differentiator
-- Toast notifications (shadcn/ui toast/sonner) — table stakes
-
-**Avoids (from PITFALLS.md):**
-- CSS specificity wars (cascade layers, remove !important)
-- Real-time performance regression (isolation strategy documented)
-
-**Uses (from STACK.md):**
-- shadcn/ui 4.0.2
-- CVA for variants
-- Radix UI primitives (via shadcn/ui unified package)
-
-**Implements (from ARCHITECTURE.md):**
-- Component variant patterns with CVA
-- Utility function for class names (cn)
-
-**Research needed:** None — shadcn/ui + Tailwind v4 integration well-documented, official migration guide available.
-
----
-
-### Phase 3: Page Migration (All Pages)
-
-**Rationale:** Must migrate ALL pages together to avoid visual inconsistencies. Static pages (dashboard, settings, admin) use shadcn/ui components. Overlay preview remains plain HTML/CSS for performance. Accessibility testing mandatory (April 24, 2026 deadline). Visual regression testing prevents gradient/color breakage.
-
-**Delivers:**
-- Landing page redesign (gradient hero, platform login buttons)
-- Dashboard redesign (overlay grid, hover states, empty states, create button)
-- Overlay editor redesign (source management cards, platform-color coding)
-- Settings page redesign (account management, profile display)
-- Admin pages redesigned (complete visual consistency)
-- Responsive layouts validated (375px, 768px, 1920px)
-- Accessibility compliance (WCAG 2.1 AA, keyboard navigation, focus states, axe-core passing)
-- Visual regression test suite (screenshot diffing all pages)
-- Loading states and skeletons (all data fetching scenarios)
-
-**Addresses (from FEATURES.md):**
-- Landing page redesign — P1
-- Dashboard redesign — P1
-- Overlay editor redesign — P1
-- Settings page redesign — P1
-- Responsive layouts (mobile-first) — table stakes
-- Dark theme optimized — table stakes
-- Accessible focus states — table stakes (legal requirement)
-- Loading states and skeletons — table stakes
-
-**Avoids (from PITFALLS.md):**
-- Incomplete migration (all pages done together)
-- Accessibility violations (keyboard-first testing, axe-core CI)
-- Breaking marketplace themes (overlay preview CSS unchanged)
-
-**Research needed:** None — standard Next.js page migration, established patterns in existing codebase.
-
----
-
-### Phase 4: Enforcement & Quality Gates
-
-**Rationale:** Only enforce design system rules AFTER all pages migrated. Pre-commit hooks prevent regression. CI/CD blocks PRs violating design system. Bundle size monitoring prevents performance degradation.
-
-**Delivers:**
-- ESLint rules enforced (no gray-*, no contradicting classes, no custom classnames, focus-visible required)
-- Prettier auto-formatting enabled (class ordering, consistent code style)
-- Pre-commit hooks (lint + format on changed files)
-- CI/CD quality gates (ESLint errors block PRs, bundle size >20KB requires justification)
-- Performance monitoring (message render time <16ms at 20 msg/sec)
-- Visual consistency audit (screenshot diffing across all routes)
-- Marketplace theme compatibility validation (test suite for override API)
-
-**Addresses (from FEATURES.md):**
-- ESLint + Pre-commit Hooks — P1
-
-**Avoids (from PITFALLS.md):**
-- Design system drift (enforcement prevents violations)
-- Bundle size bloat (CI checks block oversized PRs)
-- Gray vs slate confusion (ESLint blocks gray-* usage)
-- Focus state missing (ESLint requires focus-visible)
-
-**Research needed:** None — standard ESLint + Prettier + Husky setup, well-documented patterns.
-
----
+### Phase 5: Setup UI — Frontend Discord Source Configuration
+**Rationale:** UI is last because it depends on all backend APIs being stable. Building against a moving API surface creates frontend rework. The UI follows established patterns from existing Twitch/YouTube source cards and the current OAuth2 connect button UX — lower technical risk than any of the backend phases.
+**Delivers:** Streamer can connect Discord servers (OAuth2 redirect), pick inbound channels (grouped by Discord category), configure optional relay with outbound channel picker, and manage Discord sources from the overlay editor — with full parity to existing Twitch/YouTube UX. Includes "Disconnect server" soft-delete flow.
+**Implements:** "Connect Discord Server" OAuth2 redirect button, Discord OAuth2 callback page, guild info display (server name + icon), inbound channel picker (hierarchical dropdown grouped by category), relay toggle + outbound channel picker, Discord source card in overlay editor.
+**Avoids:** The hierarchical channel picker (MEDIUM complexity) needs careful implementation — Discord category grouping requires a two-pass channel list transform; a flat list is the fallback if time-constrained.
 
 ### Phase Ordering Rationale
 
-**Why this order:**
-1. **Foundation first (Phase 1):** Design tokens must exist before components can use them. Stability contracts prevent breaking marketplace themes early.
-2. **Components before pages (Phase 2):** Customizing shadcn/ui before migration avoids rework. Isolation strategy (static UI only) prevents performance issues.
-3. **All pages together (Phase 3):** Prevents visual inconsistencies. Accessibility deadline (April 24, 2026) requires comprehensive audit.
-4. **Enforcement last (Phase 4):** Only enforce after 100% migration complete, prevents blocking legitimate migration work.
-
-**Why this grouping:**
-- **Phases 1-2 (non-blocking):** Can proceed without backend changes, pure frontend work
-- **Phase 3 (migration sprint):** Requires focused effort, all pages migrated in one phase
-- **Phase 4 (polish):** Preventive measures after core work complete
-
-**How this avoids pitfalls:**
-- Tailwind v4 codemod in Phase 1 → prevents gradient breakage in Phase 3
-- Stability contract in Phase 1 → prevents marketplace theme breakage throughout
-- Isolation strategy in Phase 2 → prevents real-time performance regression in Phase 3
-- Cascade layers in Phase 2 → prevents specificity wars in Phase 3
-- All-page migration in Phase 3 → prevents incomplete migration
-- Accessibility testing in Phase 3 → meets April 24, 2026 deadline
-- Enforcement in Phase 4 → prevents regression after migration
+- Auth before inbound: the bot must be a guild member before Gateway events for that guild are delivered. Guild membership is established by the Phase 1 "Add to Server" OAuth flow.
+- Inbound before relay: the relay's loop prevention filter depends on the in-memory inbound channel registry, which is only populated once the inbound listener is running and syncing from the database.
+- Both inbound and relay before hardening: the correct single-pod behavior must be verified end-to-end before introducing multi-replica shard ownership complexity. Bugs that surface only at multi-replica scale are significantly harder to diagnose.
+- All backend before UI: the channel picker, relay toggle, and OAuth2 callback page depend on stable API endpoints from Phases 1-3. Frontend-first would require constant API renegotiation.
 
 ### Research Flags
 
-**Phases with standard patterns (skip research-phase):**
-- **Phase 1:** Well-documented Tailwind v4 @theme patterns, existing design system spec is comprehensive
-- **Phase 2:** Official shadcn/ui + Tailwind v4 integration guide, CVA patterns established
-- **Phase 3:** Standard Next.js page migration, existing frontend architecture unchanged
-- **Phase 4:** Standard ESLint + Prettier + Husky setup, no custom tooling needed
+Phases likely needing deeper research during planning:
+- **Phase 1 (Gateway connection ownership model):** The Redis lock approach for shard ownership (`discord:gateway:shard:0:holder`) is the recommended design but has not been validated against the specific source-manager coordinator API. Verify the coordination protocol before writing the startup connection gating logic.
+- **Phase 3 (Relay rate limit bucket values):** Discord REST rate limit specifics (exact per-channel limit, per-route bucket semantics, `X-RateLimit-Bucket` header format) are HIGH-confidence from training data but must be verified against live Discord API headers during Phase 3 implementation before finalizing the token bucket configuration.
+- **Phase 4 (HPA metric selection):** The specific HPA scaling metric (Gateway message throughput vs. relay queue depth vs. connected shard count) needs definition against the actual Prometheus metric surface built in Phases 2-3.
 
-**No phases require additional research** — all patterns are well-documented in official sources and existing codebase.
+Phases with standard patterns (research-phase likely skippable):
+- **Phase 2 (Inbound listener):** The pattern is near-identical to kick-listener. discordgo handles all WebSocket complexity. The normalizer maps ~6 fields. Well-understood after STACK.md research.
+- **Phase 5 (Setup UI):** Follows the established overlay editor source card pattern. The hierarchical channel picker adds MEDIUM complexity but the general approach is clear.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | **HIGH** | All dependencies already installed and compatible with React 19 + Tailwind v4. Only 3 dev packages needed. Zero breaking changes required. |
-| Features | **HIGH** | Design system spec already defines all features. Research validates table stakes vs differentiators. Anti-features clearly identified. |
-| Architecture | **HIGH** | Drop-in integration with existing architecture. No backend changes. Isolation strategy (static UI vs overlays) prevents performance issues. |
-| Pitfalls | **HIGH** | Verified against official Tailwind v4 migration docs, WCAG 2.1 AA requirements, and existing `events.css` analysis. Critical pitfalls have concrete prevention strategies. |
+| Stack | HIGH | All existing dependencies verified from actual go.mod files in the codebase. discordgo version is MEDIUM (verify latest before pinning). Discord API v10 and bot token model are HIGH — stable and unchanged since 2022. |
+| Features | HIGH | Discord API fundamentals (intents, OAuth2 bot scopes, Gateway events, rate limits) are stable and extensively documented. Feature complexity ratings based on direct codebase analysis of existing auth-service and overlay-manager integration patterns. |
+| Architecture | HIGH (inbound) / MEDIUM (relay specifics) | Inbound architecture directly mirrors kick-listener patterns verified in codebase. Relay rate limit specifics (exact per-channel burst limits, bucket header semantics) are MEDIUM — based on training data, must be confirmed against live Discord API headers during Phase 3. |
+| Pitfalls | HIGH | 15 pitfalls derived from direct codebase inspection (source-manager coordinator, twitch-listener IRC connection, architecture docs) combined with stable Discord API documentation. Echo loop risk and heartbeat correctness are logical derivations from the architecture, not speculative. |
 
-**Overall confidence: HIGH**
-
-This is a **low-risk, high-polish** project. The foundation is solid, dependencies are compatible, and pitfalls are well-understood with proven mitigation strategies. Success depends on execution discipline (all-page migration, performance budget, marketplace compatibility) rather than technical unknowns.
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-**No significant gaps identified.** All research areas returned high-confidence results:
-
-- **Tailwind v4 migration:** Official upgrade tool and migration guide available, breaking changes documented
-- **shadcn/ui integration:** Official Tailwind v4 support since February 2026, compatibility confirmed
-- **Accessibility compliance:** WCAG 2.1 AA requirements clear, April 24, 2026 deadline confirmed, axe-core tooling mature
-- **Performance optimization:** React.memo() + requestAnimationFrame batching patterns well-established
-- **Marketplace compatibility:** CSS cascade layers solve specificity conflicts, CSS custom properties provide override API
-
-**Minor validation items during Phase 1:**
-- Verify Tailwind v4 codemod catches all gradient class renames (manual CSS file audit required)
-- Confirm eslint-plugin-tailwindcss beta support for Tailwind v4 (may have edge case false positives)
-- Validate bundle size impact of shadcn/ui components (run webpack-bundle-analyzer baseline)
-
-**Minor validation items during Phase 3:**
-- Test overlay CSS in OBS browser source with real-world streams (performance validation)
-- Confirm axe-core catches all WCAG 2.1 AA violations (manual keyboard navigation audit supplement)
-- Validate responsive layouts on actual mobile devices (Tailwind breakpoints may need adjustment)
-
-These are **validation tasks, not research gaps** — patterns are known, execution details need verification.
+- **discordgo version:** Run `go get github.com/bwmarrin/discordgo@latest` before pinning. Expected v0.28.1+; confirm resolved version in `go.sum` before writing go.mod.
+- **Discord REST rate limit bucket values:** The relay rate limiter design assumes 5 msg/s per channel and 50 req/s global. Verify by inspecting `X-RateLimit-Bucket` and `X-RateLimit-Limit` response headers from a live bot during Phase 3 implementation before finalizing the token bucket configuration.
+- **Discord recommended shard count:** Query `GET /gateway/bot` on first production startup and log the recommended shard count. If it differs from `DISCORD_NUM_SHARDS=1`, log a WARN and document the scale threshold in the service README and a new ADR.
+- **MESSAGE_CONTENT privileged intent at scale:** Bots in 100+ servers require Discord verification to retain this intent. Document the scale threshold in the service README before production launch. No code change is needed — purely an ops/growth planning concern.
+- **READ_MESSAGE_HISTORY permission requirement:** The minimum bot permission integer documents `READ_MESSAGE_HISTORY` as required. Validate whether Gateway inbound actually requires it or whether `VIEW_CHANNEL` alone suffices before generating the authorization URL.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-
-**Official Documentation:**
-- [Tailwind CSS v4.0 Release](https://tailwindcss.com/blog/tailwindcss-v4) — @theme directive, breaking changes
-- [Tailwind CSS Theme Variables](https://tailwindcss.com/docs/theme) — CSS-first configuration
-- [shadcn/ui Tailwind v4 Support](https://ui.shadcn.com/docs/tailwind-v4) — Official migration guide
-- [shadcn/ui React 19 Compatibility](https://ui.shadcn.com/docs/react-19) — Compatibility confirmation
-- [Next.js 16 Release](https://nextjs.org/blog/next-16) — React 19 support, App Router
-- [Radix UI Primitives Releases](https://www.radix-ui.com/primitives/docs/overview/releases) — Unified package update
-- [Class Variance Authority Docs](https://cva.style/docs) — CVA patterns
-
-**Accessibility & Compliance:**
-- [ADA Title II Digital Accessibility 2026: WCAG 2.1 AA](https://www.sdettech.com/blogs/ada-title-ii-digital-accessibility-2026-wcag-2-1-aa) — April 24, 2026 deadline
-- [WCAG 2.2 AA: Digital Roadmap 2026](https://www.stauffer.com/news/blog/wcag-is-no-longer-optional-and-what-that-means-for-your-organization) — Legal requirements
-- [WebAIM: 2026 Predictions](https://webaim.org/blog/2026-predictions/) — Accessibility trends
-
-**Migration & Best Practices:**
-- [Tailwind CSS v4 2026: Migration Best Practices](https://www.digitalapplied.com/blog/tailwind-css-v4-2026-migration-best-practices) — Upgrade strategies
-- [Design Tokens That Scale in 2026 (Tailwind v4 + CSS Variables)](https://www.maviklabs.com/blog/design-tokens-tailwind-v4-2026) — Three-layer token hierarchy
+- Codebase: `services/twitch-listener/go.mod`, `services/kick-listener/go.mod`, `services/auth-service/go.mod`, `shared/go.mod` — all dependency versions verified
+- Codebase: `services/message-processor/models/message.go` — `RawChatMessage` schema verified
+- Codebase: `services/twitch-listener/publisher/stream_publisher.go` — Redis Streams publish pattern (`chat:raw`, XADD, MaxLen 1000000) verified
+- Codebase: `services/auth-service/oauth/platform.go`, `oauth/twitch.go` — `OAuthProvider` interface pattern verified
+- Codebase: `services/overlay-manager/models/chat_source.go` — `validPlatforms` map, `ChatSource.Config` JSONB pattern verified
+- Codebase: `services/source-manager/coordination/coordinator.go`, `assigner.go` — leader election and assignment model verified
+- Codebase: `services/kick-listener/websocket/client.go` — WebSocket read/write pump pattern verified
+- Discord API: Gateway intents (`MESSAGE_CONTENT` privileged since April 2022), bot OAuth2 scope model, heartbeat protocol, rate limit headers — HIGH confidence, stable since 2022
 
 ### Secondary (MEDIUM confidence)
+- `github.com/bwmarrin/discordgo` — v0.28.1 latest as of training cutoff (August 2025); verify before pinning
+- Discord Gateway sharding (2,500 guilds/shard limit) — training knowledge; verify at https://discord.com/developers/docs/topics/gateway#sharding before Phase 4
+- Discord REST rate limits (5 msg/s per channel, 50 req/s global) — training knowledge; verify at https://discord.com/developers/docs/topics/rate-limits before Phase 3 rate limiter finalization
 
-**Component Libraries & Tooling:**
-- [eslint-plugin-tailwindcss - npm](https://www.npmjs.com/package/eslint-plugin-tailwindcss) — Design system enforcement
-- [prettier-plugin-tailwindcss - GitHub](https://github.com/tailwindlabs/prettier-plugin-tailwindcss) — Class ordering
-- [shadcn/ui CLI v4 (March 2026)](https://ui.shadcn.com/docs/changelog/2026-03-cli-v4) — Registry features
-
-**Performance & Bundle Size:**
-- [React & Next.js Best Practices in 2026](https://fabwebstudio.com/blog/react-nextjs-best-practices-2026-performance-scale) — Optimization patterns
-- [Streaming Backends & React: Controlling Re-render Chaos](https://www.sitepoint.com/streaming-backends-react-controlling-re-render-chaos/) — Real-time performance
-- [Reducing NextJS Bundle Size by 30%](https://www.coteries.com/en/articles/reduce-size-nextjs-bundle) — Code splitting strategies
-
-**Design Systems:**
-- [StreamElements Features - Overlays](https://streamelements.com/features/overlays) — Competitor analysis
-- [Dashboard Builder Guide 2026](https://www.weweb.io/blog/dashboard-builder-guide-no-code-ai-best-practices) — Real-time dashboard patterns
-
-### Project-Specific (HIGH confidence)
-
-- `/home/caesar/git/all-chat/frontend/DESIGN_SYSTEM.md` — Complete design token definitions, component patterns
-- `/home/caesar/git/all-chat/frontend/src/styles/events.css` — Existing overlay CSS (public API)
-- `/home/caesar/git/all-chat/.planning/PROJECT.md` — Project context and scope
-- `/home/caesar/git/all-chat/frontend/package.json` — Verified dependency versions
+### Tertiary (LOW confidence — needs live validation)
+- Exact `X-RateLimit-Bucket` header semantics and bucket granularity during relay burst — must be validated against live API during Phase 3
+- `READ_MESSAGE_HISTORY` permission requirement for Gateway inbound — verify against live bot test in Phase 1
 
 ---
-*Research completed: 2026-03-09*
+*Research completed: 2026-03-15*
 *Ready for roadmap: yes*
-*Confidence: HIGH — All stack elements verified compatible, pitfalls have concrete mitigation strategies, phase structure clear*

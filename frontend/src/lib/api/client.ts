@@ -98,6 +98,14 @@ class ApiClient {
     return response.json()
   }
 
+  async patch<T>(endpoint: string, data: unknown): Promise<T> {
+    const response = await this.fetch(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
+    return response.json()
+  }
+
   async delete(endpoint: string): Promise<void> {
     await this.fetch(endpoint, { method: 'DELETE' })
   }

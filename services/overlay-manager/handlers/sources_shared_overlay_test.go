@@ -51,6 +51,10 @@ func (m *mockSourceRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (m *mockSourceRepository) UpdateConfig(ctx context.Context, id string, config map[string]interface{}) error {
+	return nil
+}
+
 // TestHandleAddSource_SharedOverlay_Forbidden tests that posting platform=shared_overlay
 // with a channel_id that has no accepted share returns 403.
 //

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +20,7 @@ type SourceRepository interface {
 	ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error)
 	GetByID(ctx context.Context, id string) (*models.ChatSource, error)
 	Delete(ctx context.Context, id string) error
+	UpdateConfig(ctx context.Context, id string, config map[string]interface{}) error
 }
 
 // SourcesHandler handles HTTP requests for overlay chat sources
@@ -25,16 +28,76 @@ type SourcesHandler struct {
 	sourceRepo  SourceRepository
 	overlayRepo OverlayRepository
 	db          *pgxpool.Pool
+	redis       redis.Cmdable
 	logger      *zap.Logger
 }
 
-// NewSourcesHandler creates a new sources handler
-func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger) *SourcesHandler {
+// discordChannelEntry is the JSON value stored at discord:channels:{channel_id}.
+type discordChannelEntry struct {
+	OverlayID string `json:"overlay_id"`
+	SourceID  string `json:"source_id"`
+}
+
+// NewSourcesHandler creates a new sources handler.
+// redisClient is used to maintain the Discord channel registry keys.
+// It accepts redis.Cmdable for testability; *redis.Client implements this interface.
+func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger, redisClient redis.Cmdable) *SourcesHandler {
 	return &SourcesHandler{
 		sourceRepo:  sourceRepo,
 		overlayRepo: overlayRepo,
 		db:          db,
+		redis:       redisClient,
 		logger:      logger,
+	}
+}
+
+// setDiscordChannelRegistry writes the channel registry Redis key and publishes an invalidation event.
+// The key is set BEFORE the Pub/Sub publish so discord-listener always sees a consistent state.
+func (h *SourcesHandler) setDiscordChannelRegistry(ctx context.Context, channelID, overlayID, sourceID string) {
+	if h.redis == nil {
+		return
+	}
+	entry := discordChannelEntry{OverlayID: overlayID, SourceID: sourceID}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		h.logger.Warn("Failed to marshal discord channel registry entry",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		return
+	}
+	key := "discord:channels:" + channelID
+	if err := h.redis.Set(ctx, key, string(data), 0).Err(); err != nil {
+		h.logger.Warn("Failed to set discord channel registry key",
+			zap.String("key", key),
+			zap.Error(err),
+		)
+	}
+	if err := h.redis.Publish(ctx, "discord:channel:invalidation", channelID).Err(); err != nil {
+		h.logger.Warn("Failed to publish discord channel invalidation",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+	}
+}
+
+// delDiscordChannelRegistry removes the channel registry Redis key and publishes an invalidation event.
+func (h *SourcesHandler) delDiscordChannelRegistry(ctx context.Context, channelID string) {
+	if h.redis == nil {
+		return
+	}
+	key := "discord:channels:" + channelID
+	if err := h.redis.Del(ctx, key).Err(); err != nil {
+		h.logger.Warn("Failed to delete discord channel registry key",
+			zap.String("key", key),
+			zap.Error(err),
+		)
+	}
+	if err := h.redis.Publish(ctx, "discord:channel:invalidation", channelID).Err(); err != nil {
+		h.logger.Warn("Failed to publish discord channel invalidation",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
 	}
 }
 
@@ -232,10 +295,11 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	}
 
 	var req struct {
-		Platform      string `json:"platform" binding:"required"`
-		ChannelID     string `json:"channel_id" binding:"required"`
-		ChannelName   string `json:"channel_name"`
-		ChannelHandle string `json:"channel_handle"`
+		Platform      string                 `json:"platform" binding:"required"`
+		ChannelID     string                 `json:"channel_id" binding:"required"`
+		ChannelName   string                 `json:"channel_name"`
+		ChannelHandle string                 `json:"channel_handle"`
+		Config        map[string]interface{} `json:"config"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -329,6 +393,11 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		channelHandle = &req.ChannelHandle
 	}
 
+	sourceConfig := make(map[string]interface{})
+	if req.Config != nil {
+		sourceConfig = req.Config
+	}
+
 	source := &models.ChatSource{
 		OverlayID:     overlayID,
 		Platform:      req.Platform,
@@ -336,7 +405,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		ChannelName:   channelName,
 		ChannelHandle: channelHandle,
 		AuthRequired:  req.Platform == "youtube", // YouTube requires OAuth
-		Config:        make(map[string]interface{}),
+		Config:        sourceConfig,
 		IsActive:      req.Platform == "shared_overlay", // shared_overlay is immediately active (share already accepted); other platforms activated by listeners
 	}
 
@@ -350,6 +419,18 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	if err := h.sourceRepo.Create(c.Request.Context(), source); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create source"})
 		return
+	}
+
+	// For Discord sources, register the channel in Redis so discord-listener
+	// can route incoming messages to the correct overlay.
+	// The registry key is written BEFORE the Pub/Sub invalidation event.
+	if req.Platform == "discord" {
+		// Extract inbound_channel_id from the source config (or fall back to channel_id).
+		inboundChannelID := channelID
+		if v, ok := source.Config["inbound_channel_id"].(string); ok && v != "" {
+			inboundChannelID = v
+		}
+		h.setDiscordChannelRegistry(c.Request.Context(), inboundChannelID, overlayID, source.ID)
 	}
 
 	// CRITICAL: For YouTube sources added manually, copy admin's OAuth token
@@ -427,7 +508,62 @@ func (h *SourcesHandler) HandleDeleteSource(c *gin.Context) {
 		return
 	}
 
+	// For Discord sources, remove the channel registry key from Redis so
+	// discord-listener stops routing messages to the now-deleted overlay.
+	if source.Platform == "discord" {
+		inboundChannelID := source.ChannelID
+		if v, ok := source.Config["inbound_channel_id"].(string); ok && v != "" {
+			inboundChannelID = v
+		}
+		h.delDiscordChannelRegistry(c.Request.Context(), inboundChannelID)
+	}
+
 	c.Status(http.StatusNoContent)
+}
+
+// HandleUpdateSourceConfig handles PATCH /:id/sources/:source_id
+// It verifies overlay ownership, then updates the config JSONB field.
+func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	overlayID := c.Param("id")
+	sourceID := c.Param("source_id")
+
+	// Verify user owns this overlay
+	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "overlay not found or access denied"})
+		return
+	}
+
+	var req struct {
+		Config map[string]interface{} `json:"config"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Config == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "config is required"})
+		return
+	}
+
+	if err := h.sourceRepo.UpdateConfig(c.Request.Context(), sourceID, req.Config); err != nil {
+		h.logger.Error("Failed to update source config",
+			zap.String("source_id", sourceID),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update config"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "config updated"})
 }
 
 // HandleAddSourceAuto handles POST /internal/overlays/:id/sources/auto

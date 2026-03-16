@@ -31,6 +31,7 @@ const nextConfig = {
       'cdn.frankerfacez.com', // FFZ emotes
       'files.kick.com', // Kick emotes
       'ui-avatars.com', // Generated avatar fallbacks
+      'cdn.discordapp.com', // Discord guild icons
     ],
   },
 

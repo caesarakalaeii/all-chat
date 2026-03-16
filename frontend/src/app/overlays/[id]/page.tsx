@@ -23,11 +23,14 @@
 
 import { use, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronLeft, X, Clipboard, Share2, Puzzle } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronLeft, ChevronRight, X, Clipboard, Share2, Puzzle } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { overlaysApi } from '@/lib/api/overlays'
 import { sharesApi } from '@/lib/api/shares'
-import type { Overlay, ChatSource } from '@/lib/types/overlay'
+import { getGuilds, getGuildChannels, updateSourceConfig } from '@/lib/api/discord'
+import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
+import type { Overlay, ChatSource, DiscordSourceConfig } from '@/lib/types/overlay'
 import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
 import { toastManager } from '@/lib/toast'
@@ -67,6 +70,7 @@ const PLATFORM_BORDER: Record<string, string> = {
   kick: 'border-l-kick',
   tiktok: 'border-l-tiktok',
   shared_overlay: 'border-l-twitch',
+  discord: 'border-l-discord',
 }
 
 // ---- Types -----------------------------------------------------------------
@@ -213,79 +217,243 @@ function SourceCard({
   source,
   onRemove,
   onRevoke,
+  onConfigureRelay,
 }: {
   source: ChatSource
   onRemove: (id: string) => void
   onRevoke?: (source: ChatSource) => void
+  onConfigureRelay?: (source: ChatSource) => void
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const isShared = source.platform === 'shared_overlay'
   const isInactiveShared = isShared && !source.is_active
+  const isDiscord = source.platform === 'discord'
+
+  const discordConfig = isDiscord ? (source.config as DiscordSourceConfig) : null
+  const discordLabel =
+    isDiscord && discordConfig
+      ? `${(source.config as DiscordSourceConfig & { guild_name?: string }).guild_name ?? ''} › #${source.channel_name ?? source.channel_id}`
+      : null
 
   return (
     <Card
       className={cn(
-        'flex items-center justify-between border-l-2 p-4',
+        'border-l-2 p-4',
         PLATFORM_BORDER[source.platform] ?? 'border-l-border',
         isInactiveShared && 'opacity-50'
       )}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <PlatformBadge
-          platform={source.platform as 'twitch' | 'youtube' | 'kick' | 'tiktok'}
-          size="sm"
-        />
-        <span className="truncate text-sm font-medium text-text">
-          {source.channel_name || source.channel_id}
-        </span>
-        {isInactiveShared && source.share_status && (
-          <StatusBadge status={source.share_status} size="sm" />
-        )}
-      </div>
-      <div className="ml-3 flex shrink-0 items-center gap-2">
-        {isShared && source.is_active && onRevoke && (
-          <Button
-            variant="outline"
+      <div className="flex items-center justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <PlatformBadge
+            platform={source.platform as 'twitch' | 'youtube' | 'kick' | 'tiktok'}
             size="sm"
-            className="text-destructive border-destructive/40 hover:bg-destructive/10 text-xs"
-            onClick={() => onRevoke(source)}
-          >
-            Revoke
-          </Button>
-        )}
-        <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
-          <Dialog.Trigger
-            render={
-              <button
-                className="hover:text-destructive rounded text-text-sub transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                aria-label={`Remove ${source.channel_name || source.channel_id}`}
-              >
-                <X className="size-4" />
-              </button>
-            }
           />
-          <Dialog.Content>
-            <Dialog.Title>Remove source?</Dialog.Title>
-            <Dialog.Description>
-              Remove <strong>{source.channel_name || source.channel_id}</strong> from this overlay.
-              Chat messages from this source will stop appearing.
-            </Dialog.Description>
-            <div className="flex justify-end gap-3 pt-2">
-              <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  setConfirmOpen(false)
-                  onRemove(source.id)
-                }}
-              >
-                Remove
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Root>
+          <div className="min-w-0">
+            <span className="truncate text-sm font-medium text-text">
+              {discordLabel ?? source.channel_name ?? source.channel_id}
+            </span>
+            {isDiscord && (
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {/* Connection status badge */}
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
+                    source.is_active
+                      ? 'border-green-500/20 bg-green-500/10 text-green-400'
+                      : 'border-slate-600/20 bg-slate-700/40 text-slate-400'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'size-1.5 rounded-full',
+                      source.is_active ? 'bg-green-400' : 'bg-slate-400'
+                    )}
+                  />
+                  {source.is_active ? 'Connected' : 'Disconnected'}
+                </span>
+                {/* Relay ON/OFF badge */}
+                {discordConfig && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium',
+                      discordConfig.relay_enabled
+                        ? 'border-green-600/30 bg-green-600/20 text-green-300'
+                        : 'border-border bg-surface-2 text-text-sub'
+                    )}
+                  >
+                    {discordConfig.relay_enabled ? 'Relay ON' : 'Relay OFF'}
+                  </span>
+                )}
+              </div>
+            )}
+            {isInactiveShared && source.share_status && (
+              <StatusBadge status={source.share_status} size="sm" />
+            )}
+          </div>
+        </div>
+        <div className="ml-3 flex shrink-0 items-center gap-2">
+          {isShared && source.is_active && onRevoke && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive border-destructive/40 hover:bg-destructive/10 text-xs"
+              onClick={() => onRevoke(source)}
+            >
+              Revoke
+            </Button>
+          )}
+          <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <Dialog.Trigger
+              render={
+                <button
+                  className="hover:text-destructive rounded text-text-sub transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                  aria-label={`Remove ${source.channel_name || source.channel_id}`}
+                >
+                  <X className="size-4" />
+                </button>
+              }
+            />
+            <Dialog.Content>
+              <Dialog.Title>Remove source?</Dialog.Title>
+              <Dialog.Description>
+                Remove <strong>{source.channel_name || source.channel_id}</strong> from this
+                overlay. Chat messages from this source will stop appearing.
+              </Dialog.Description>
+              <div className="flex justify-end gap-3 pt-2">
+                <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setConfirmOpen(false)
+                    onRemove(source.id)
+                  }}
+                >
+                  Remove
+                </Button>
+              </div>
+            </Dialog.Content>
+          </Dialog.Root>
+        </div>
       </div>
+      {/* Configure relay button — Discord only */}
+      {isDiscord && onConfigureRelay && (
+        <button
+          className="mt-2 flex items-center gap-1 rounded text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          onClick={() => onConfigureRelay(source)}
+        >
+          <ChevronRight className="size-3" />
+          Configure relay
+        </button>
+      )}
     </Card>
+  )
+}
+
+// ---- RelayPanel ------------------------------------------------------------
+
+function RelayPanel({
+  source,
+  overlayId,
+  onSaved,
+}: {
+  source: ChatSource
+  overlayId: string
+  onSaved: (updated: ChatSource) => void
+}) {
+  const discordConfig = source.config as DiscordSourceConfig
+  const [relayEnabled, setRelayEnabled] = useState(discordConfig.relay_enabled ?? false)
+  const [relayChannelId, setRelayChannelId] = useState<string>(
+    discordConfig.relay_channel_id ?? ''
+  )
+  const [channels, setChannels] = useState<ChannelCategory[]>([])
+  const [channelsLoading, setChannelsLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setChannelsLoading(true)
+    getGuildChannels(discordConfig.guild_id)
+      .then((res) => setChannels(res.categories))
+      .catch(() => setChannels([]))
+      .finally(() => setChannelsLoading(false))
+  }, [discordConfig.guild_id])
+
+  const handleSave = async () => {
+    setSaving(true)
+    const newConfig: DiscordSourceConfig = {
+      ...discordConfig,
+      relay_enabled: relayEnabled,
+      relay_channel_id: relayEnabled ? relayChannelId : null,
+    }
+    // Optimistic update
+    onSaved({ ...source, config: newConfig })
+    try {
+      await updateSourceConfig(overlayId, source.id, newConfig)
+      toastManager.add({ title: 'Relay settings saved', type: 'success' })
+    } catch {
+      onSaved(source) // rollback
+      toastManager.add({ title: 'Failed to save relay settings', type: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const isSaveDisabled = saving || (relayEnabled && !relayChannelId)
+
+  return (
+    <div className="ml-4 mt-1 rounded-lg border border-border bg-surface-2 p-4 space-y-3">
+      {/* Loop filter info — static */}
+      <p className="text-xs text-text-sub">
+        Loop filter: active — Discord messages are never relayed back to Discord.
+      </p>
+
+      {/* Relay toggle */}
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
+        <input
+          type="checkbox"
+          checked={relayEnabled}
+          onChange={(e) => setRelayEnabled(e.target.checked)}
+          className="accent-discord size-4"
+        />
+        Enable relay
+      </label>
+
+      {/* Outbound channel picker — visible only when relay enabled */}
+      {relayEnabled && (
+        <div>
+          <label className="mb-1 block text-xs text-text-sub">Outbound channel</label>
+          {channelsLoading ? (
+            <Skeleton className="h-9 w-full rounded-lg" />
+          ) : (
+            <select
+              value={relayChannelId}
+              onChange={(e) => setRelayChannelId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            >
+              <option value="">Select a channel...</option>
+              {channels.map((cat) => (
+                <optgroup key={cat.id || 'uncategorized'} label={cat.name}>
+                  {cat.channels.map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      #{ch.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      <Button
+        size="sm"
+        disabled={isSaveDisabled}
+        onClick={() => void handleSave()}
+        className="w-full"
+      >
+        {saving ? 'Saving...' : 'Save'}
+      </Button>
+    </div>
   )
 }
 
@@ -300,24 +468,106 @@ function SourceListSkeleton() {
 }
 
 // Platform source buttons — OAuth redirect for Twitch/YouTube/Kick,
-// text input for TikTok (no OAuth required).
+// text input for TikTok (no OAuth required), dialog for Discord.
 // Admins also get a manual channel ID form for any platform.
 function AddSourceForm({
   overlayId,
   token,
   onAddTikTok,
   onAddManual,
+  onSourceAdded,
   isAdmin = false,
 }: {
   overlayId: string
   token: string
   onAddTikTok: (username: string) => void
   onAddManual?: (platform: string, channelId: string) => void
+  onSourceAdded?: () => void
   isAdmin?: boolean
 }) {
   const [tiktokUsername, setTiktokUsername] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [adminPlatform, setAdminPlatform] = useState('twitch')
+
+  // Discord dialog state
+  const [guilds, setGuilds] = useState<DiscordGuild[]>([])
+  const [guildsLoaded, setGuildsLoaded] = useState(false)
+  const [discordDialogOpen, setDiscordDialogOpen] = useState(false)
+  const [discordStep, setDiscordStep] = useState<1 | 2>(1)
+  const [selectedGuild, setSelectedGuild] = useState<DiscordGuild | null>(null)
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('')
+  const [selectedChannelName, setSelectedChannelName] = useState<string>('')
+  const [guildChannels, setGuildChannels] = useState<ChannelCategory[]>([])
+  const [channelsLoading, setChannelsLoading] = useState(false)
+  const [isAddingDiscord, setIsAddingDiscord] = useState(false)
+
+  useEffect(() => {
+    getGuilds()
+      .then((data) => setGuilds(data))
+      .catch(() => setGuilds([]))
+      .finally(() => setGuildsLoaded(true))
+  }, [])
+
+  const handleDiscordButtonClick = () => {
+    if (guilds.length === 0) return
+    setDiscordStep(1)
+    setSelectedGuild(null)
+    setSelectedChannelId('')
+    setSelectedChannelName('')
+    setGuildChannels([])
+    setDiscordDialogOpen(true)
+  }
+
+  const fetchChannelsForGuild = async (guildId: string) => {
+    setChannelsLoading(true)
+    try {
+      const res = await getGuildChannels(guildId)
+      setGuildChannels(res.categories)
+    } catch {
+      setGuildChannels([])
+    } finally {
+      setChannelsLoading(false)
+    }
+  }
+
+  const handleSelectGuild = (guild: DiscordGuild) => {
+    setSelectedGuild(guild)
+    setSelectedChannelId('')
+    setSelectedChannelName('')
+    setDiscordStep(2)
+    void fetchChannelsForGuild(guild.guild_id)
+  }
+
+  const handleAddDiscordSource = async () => {
+    if (!selectedGuild || !selectedChannelId) return
+    setIsAddingDiscord(true)
+    try {
+      const config: DiscordSourceConfig & { guild_name: string } = {
+        guild_id: selectedGuild.guild_id,
+        guild_name: selectedGuild.guild_name,
+        inbound_channel_id: selectedChannelId,
+        relay_enabled: false,
+        relay_channel_id: null,
+      }
+      await overlaysApi.addSource(overlayId, {
+        platform: 'discord',
+        channel_id: selectedChannelId,
+        channel_name: selectedChannelName,
+        config,
+      })
+      setDiscordDialogOpen(false)
+      setDiscordStep(1)
+      setSelectedGuild(null)
+      setSelectedChannelId('')
+      setSelectedChannelName('')
+      onSourceAdded?.()
+      toastManager.add({ title: 'Discord source added', type: 'success' })
+    } catch {
+      toastManager.add({ title: 'Failed to add Discord source', type: 'error' })
+    } finally {
+      setIsAddingDiscord(false)
+    }
+  }
 
   // Fetch the OAuth auth_url from the backend (with Authorization header),
   // then redirect the browser to it — same pattern as the login flow.
@@ -402,7 +652,143 @@ function AddSourceForm({
           </svg>
           Connect Kick
         </button>
+
+        {/* Discord — guild dialog or settings prompt */}
+        {guildsLoaded && guilds.length === 0 ? (
+          <p className="rounded-lg border border-border bg-surface px-4 py-2.5 text-sm text-text-sub">
+            Connect a Discord server in{' '}
+            <Link href="/settings" className="text-discord underline hover:opacity-80">
+              Settings
+            </Link>{' '}
+            first to add Discord sources.
+          </p>
+        ) : (
+          <button
+            onClick={handleDiscordButtonClick}
+            className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+            style={{ backgroundColor: '#5865F2', '--tw-ring-color': '#5865F2' } as React.CSSProperties}
+          >
+            {/* Discord logo mark */}
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="#FFFFFF"
+                d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.001.022.015.043.03.056a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"
+              />
+            </svg>
+            Connect Discord
+          </button>
+        )}
       </div>
+
+      {/* Discord 2-step dialog */}
+      <Dialog.Root
+        open={discordDialogOpen}
+        onOpenChange={(open) => {
+          setDiscordDialogOpen(open)
+          if (!open) {
+            setDiscordStep(1)
+            setSelectedGuild(null)
+            setSelectedChannelId('')
+            setSelectedChannelName('')
+          }
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Title>
+            {discordStep === 1 ? 'Select a Discord Server' : 'Select a Channel'}
+          </Dialog.Title>
+          <Dialog.Description>
+            {discordStep === 1
+              ? 'Choose which Discord server to add as a source.'
+              : `Picking a channel from ${selectedGuild?.guild_name ?? ''}`}
+          </Dialog.Description>
+
+          {discordStep === 1 && (
+            <div className="mt-3 space-y-2">
+              {guilds.map((guild) => (
+                <button
+                  key={guild.guild_id}
+                  onClick={() => handleSelectGuild(guild)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                >
+                  {guild.guild_icon ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`https://cdn.discordapp.com/icons/${guild.guild_id}/${guild.guild_icon}.png?size=32`}
+                      alt=""
+                      className="size-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-discord/20 text-xs font-bold text-discord">
+                      {guild.guild_name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="truncate font-medium">{guild.guild_name}</span>
+                  <ChevronRight className="ml-auto size-4 shrink-0 text-text-sub" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {discordStep === 2 && (
+            <div className="mt-3 space-y-3">
+              {channelsLoading ? (
+                <Skeleton className="h-9 w-full rounded-lg" />
+              ) : (
+                <div>
+                  <label className="mb-1 block text-xs text-text-sub">Channel</label>
+                  <select
+                    value={selectedChannelId}
+                    onChange={(e) => {
+                      setSelectedChannelId(e.target.value)
+                      const ch = guildChannels
+                        .flatMap((cat) => cat.channels)
+                        .find((c) => c.id === e.target.value)
+                      setSelectedChannelName(ch?.name ?? '')
+                    }}
+                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                  >
+                    <option value="">Select a channel...</option>
+                    {guildChannels.map((cat) => (
+                      <optgroup key={cat.id || 'uncategorized'} label={cat.name}>
+                        {cat.channels.map((ch) => (
+                          <option key={ch.id} value={ch.id}>
+                            #{ch.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 flex justify-end gap-2">
+            {discordStep === 2 && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDiscordStep(1)
+                  setSelectedChannelId('')
+                  setSelectedChannelName('')
+                }}
+              >
+                Back
+              </Button>
+            )}
+            <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+            {discordStep === 2 && (
+              <Button
+                disabled={!selectedChannelId || isAddingDiscord}
+                onClick={() => void handleAddDiscordSource()}
+              >
+                {isAddingDiscord ? 'Adding...' : 'Add'}
+              </Button>
+            )}
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
 
       {/* TikTok — username only, no OAuth */}
       <form onSubmit={handleTikTokSubmit} className="border-t border-border pt-1">
@@ -515,6 +901,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
+
+  // --- Discord relay state ---
+  const [relayExpandedSourceId, setRelayExpandedSourceId] = useState<string | null>(null)
 
   // --- Share overlay state ---
   const [showShareModal, setShowShareModal] = useState(false)
@@ -721,6 +1110,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         type: 'error',
       })
     }
+  }
+
+  // --- Discord relay ---
+
+  function handleRelayConfigSaved(updated: ChatSource) {
+    setSources((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
   }
 
   // --- OBS URL ---
@@ -1159,12 +1554,23 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             ) : (
               <div className="mb-4 space-y-3">
                 {sources.map((source) => (
-                  <SourceCard
-                    key={source.id}
-                    source={source}
-                    onRemove={handleRemoveSource}
-                    onRevoke={setRevokeTarget}
-                  />
+                  <div key={source.id}>
+                    <SourceCard
+                      source={source}
+                      onRemove={handleRemoveSource}
+                      onRevoke={setRevokeTarget}
+                      onConfigureRelay={(s) =>
+                        setRelayExpandedSourceId((prev) => (prev === s.id ? null : s.id))
+                      }
+                    />
+                    {source.id === relayExpandedSourceId && source.platform === 'discord' && (
+                      <RelayPanel
+                        source={source}
+                        overlayId={id}
+                        onSaved={handleRelayConfigSaved}
+                      />
+                    )}
+                  </div>
                 ))}
                 {sources.length === 0 && (
                   <p className="py-2 text-sm text-text-sub">
@@ -1199,6 +1605,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               token={token ?? ''}
               onAddTikTok={handleAddTikTokSource}
               onAddManual={handleAddManual}
+              onSourceAdded={() => overlaysApi.getSources(id).then(setSources).catch(console.error)}
               isAdmin={user?.is_admin === true}
             />
           </section>

@@ -2,20 +2,68 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { authApi } from '@/lib/api/auth'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { AppNav } from '@/components/AppNav'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 import { toastManager } from '@/lib/toast'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { getGuilds, disconnectGuild, startDiscordOAuth } from '@/lib/api/discord'
+import type { DiscordGuild } from '@/lib/api/discord'
 
 function SettingsContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+
+  const [guilds, setGuilds] = useState<DiscordGuild[]>([])
+  const [guildsLoading, setGuildsLoading] = useState(true)
+  const [disconnectTarget, setDisconnectTarget] = useState<DiscordGuild | null>(null)
+
+  async function fetchGuilds() {
+    try {
+      const data = await getGuilds()
+      setGuilds(data)
+    } catch {
+      // silently ignore — user may not have Discord connected
+    } finally {
+      setGuildsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchGuilds()
+  }, [])
+
+  useEffect(() => {
+    if (searchParams.get('discord') === 'connected') {
+      toastManager.add({ title: 'Discord server connected!', type: 'success' })
+      router.replace('/settings')
+      fetchGuilds()
+    }
+  }, [searchParams])
+
+  async function handleDisconnectGuild() {
+    if (!disconnectTarget) return
+    const targetId = disconnectTarget.guild_id
+    setDisconnectTarget(null)
+    try {
+      await disconnectGuild(targetId)
+      setGuilds((prev) => prev.filter((g) => g.guild_id !== targetId))
+    } catch {
+      toastManager.add({
+        title: 'Failed to disconnect server',
+        description: 'Please try again.',
+        type: 'error',
+      })
+    }
+  }
 
   async function handleDeleteAccount() {
     try {
@@ -90,6 +138,77 @@ function SettingsContent() {
               <span aria-hidden="true">→</span>
             </Link>
           </div>
+        </Card>
+
+        {/* Discord section */}
+        <Card className="p-6">
+          <h2 className="mb-4 text-lg font-semibold text-text">Discord</h2>
+
+          {guildsLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : guilds.length === 0 ? (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-text-sub">No Discord server connected.</p>
+              <Button onClick={startDiscordOAuth}>Connect Discord Server</Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {guilds.map((guild) => (
+                <div key={guild.guild_id} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {guild.guild_icon ? (
+                      <Image
+                        src={`https://cdn.discordapp.com/icons/${guild.guild_id}/${guild.guild_icon}.png?size=64`}
+                        alt={guild.guild_name}
+                        width={32}
+                        height={32}
+                        className="rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-sm font-medium text-text-sub">
+                        {guild.guild_name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="font-medium text-text">{guild.guild_name}</span>
+                  </div>
+                  <Dialog.Root
+                    open={disconnectTarget?.guild_id === guild.guild_id}
+                    onOpenChange={(open) => {
+                      if (!open) setDisconnectTarget(null)
+                    }}
+                  >
+                    <Dialog.Trigger
+                      render={
+                        <Button
+                          variant="destructive"
+                          onClick={() => setDisconnectTarget(guild)}
+                        >
+                          Disconnect
+                        </Button>
+                      }
+                    />
+                    <Dialog.Content showCloseButton={false}>
+                      <Dialog.Title>Disconnect {guild.guild_name}?</Dialog.Title>
+                      <Dialog.Description>
+                        This will remove all Discord sources connected to {guild.guild_name}.
+                      </Dialog.Description>
+                      <div className="mt-6 flex justify-end gap-3">
+                        <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                        <Button variant="destructive" onClick={handleDisconnectGuild}>
+                          Yes, disconnect
+                        </Button>
+                      </div>
+                    </Dialog.Content>
+                  </Dialog.Root>
+                </div>
+              ))}
+              <div className="pt-2">
+                <Button variant="ghost" className="text-sm" onClick={startDiscordOAuth}>
+                  Connect another server
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* Danger zone */}

@@ -131,6 +131,7 @@ func main() {
 	tiktokNormalizer := normalizer.NewTikTokNormalizer()
 	kickNormalizer := normalizer.NewKickNormalizer()
 	systemNormalizer := normalizer.NewSystemNormalizer()
+	discordNormalizer := normalizer.NewDiscordNormalizer()
 
 	// Map of platform-specific normalizers
 	normalizers := map[string]normalizer.Normalizer{
@@ -139,6 +140,7 @@ func main() {
 		"tiktok":  tiktokNormalizer,
 		"kick":    kickNormalizer,
 		"system":  systemNormalizer,
+		"discord": discordNormalizer,
 	}
 
 	emoteServiceURL := getEnvOrDefault("EMOTE_SERVICE_URL", "http://localhost:8083")

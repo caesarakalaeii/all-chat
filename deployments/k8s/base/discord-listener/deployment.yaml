@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discord-listener
+  namespace: allchat
+  labels:
+    app: discord-listener
+    component: listener
+    platform: discord
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: discord-listener
+  template:
+    metadata:
+      labels:
+        app: discord-listener
+        component: listener
+        platform: discord
+    spec:
+      containers:
+      - name: discord-listener
+        image: localhost:5000/allchat-discord-listener:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8086
+          name: http
+        env:
+        - name: PORT
+          value: "8086"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: LOG_LEVEL
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_PORT
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_NAME
+        - name: DATABASE_USER
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: DATABASE_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_PORT
+        - name: SOURCE_MANAGER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: SOURCE_MANAGER_URL
+        - name: SOURCE_MANAGER_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: SERVICE_JWT_SECRET
+        - name: DISCORD_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: discord-listener-secrets
+              key: DISCORD_BOT_TOKEN
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8086
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8086
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: discord-listener
+  namespace: allchat
+  labels:
+    app: discord-listener
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8086
+    targetPort: 8086
+    protocol: TCP
+    name: http
+  selector:
+    app: discord-listener

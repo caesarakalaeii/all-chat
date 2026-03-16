@@ -1,437 +1,322 @@
-# Pitfalls Research
+# Domain Pitfalls
 
-**Domain:** Frontend Design System Integration — Adding shadcn/ui and comprehensive design tokens to existing All-Chat streaming overlay platform
-**Researched:** 2026-03-09
+**Domain:** Discord Gateway listener + relay integration into Go microservices platform (v1.5)
+**Researched:** 2026-03-15
 **Confidence:** HIGH
+
+---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Breaking Overlay Marketplace CSS Themes
-
-**What goes wrong:**
-Marketplace theme creators have built custom CSS targeting existing class names (`event-message`, `event-tier-high`, `event-icon`, etc.). When design system migration changes or removes these class names, all marketplace themes break simultaneously, creating support chaos and user frustration.
-
-**Why it happens:**
-- Tailwind v4 renames gradient classes (`bg-gradient-to-r` → `bg-linear-to-r`) which are used in `events.css` line 111
-- shadcn/ui components use different base class structures than current implementation
-- Design tokens replace hardcoded values but marketplace themes depend on those exact values
-- Developers focus on app UI migration and forget overlay CSS is a public API
-
-**How to avoid:**
-1. **Class Name Stability Contract**: Treat all classes in `frontend/src/styles/events.css` as immutable public API
-2. **Parallel Implementation**: Create new design system classes alongside old ones, never rename/remove existing
-3. **Migration Guide First**: Write marketplace CSS migration guide BEFORE any code changes
-4. **Deprecation Timeline**: If class changes are unavoidable, require 6+ month deprecation notice with automated migration tools
-5. **Prefix Isolation**: Use `ac-` prefix for all new design system classes to avoid conflicts (e.g., `ac-button`, `ac-card`)
-
-**Warning signs:**
-- Any `git diff` showing deletions in `events.css`
-- Tailwind v4 upgrade without codemod review
-- shadcn/ui components added without checking for `.event-*` class conflicts
-- Bundle size analysis showing removed CSS that marketplace themes depend on
-- Missing entries in "Breaking Changes" section of release notes
-
-**Phase to address:**
-- **Phase 1 (Design Tokens):** Document all public CSS classes as stable API
-- **Phase 2 (Component Library):** Implement prefix isolation strategy
-- **Phase 3 (Page Migration):** Validate no overlay CSS classes changed
-- **Phase 4 (Enforcement):** Add pre-commit hook to prevent `events.css` modifications
+Mistakes that cause rewrites, data loss, or bot bans.
 
 ---
 
-### Pitfall 2: Tailwind v4 Gradient Class Renames Breaking Production
+### Pitfall 1: Missing MESSAGE_CONTENT Privileged Intent Causes Silent Empty Messages
 
-**What goes wrong:**
-Tailwind v4 renames `bg-gradient-to-*` → `bg-linear-to-*` across ALL gradient utilities. Your design system spec uses `bg-gradient-to-r from-purple-500 to-blue-500` extensively (Button component line 180, Card component line 111 in events.css). After Tailwind v4 migration, all gradients disappear or render as solid colors, breaking visual hierarchy.
+**What goes wrong:** The bot receives `MESSAGE_CREATE` events with an empty `content` field. Events arrive, Prometheus counters increment, Redis Streams fill with messages — but every message has blank text. Discord does not error. It silently omits the field.
 
-**Why it happens:**
-- Tailwind v4 removes all class aliases that don't match underlying CSS properties
-- Automated upgrade tool (`npx @tailwindcss/upgrade`) handles 90% of cases but misses dynamic class construction
-- `events.css` has CSS-in-JS patterns the codemod cannot detect
-- Testing focuses on functionality, not visual regression
+**Why it happens:** Since April 2022, `MESSAGE_CONTENT` is a privileged gateway intent. Bots in fewer than 100 servers receive it automatically during development. Verified bots in 100+ servers must declare the intent in the `IDENTIFY` payload's `intents` bitmask AND enable it in the Discord Developer Portal under Bot > Privileged Gateway Intents. Missing either half means silent content omission.
 
-**How to avoid:**
-1. **Pre-Migration Audit**: Grep entire codebase for `bg-gradient-to-`, `flex-shrink-`, `overflow-ellipsis` (all renamed in v4)
-2. **Run Codemod First**: Execute `npx @tailwindcss/upgrade` before any manual changes
-3. **Visual Regression Tests**: Capture screenshots of all overlay event types before migration, diff after
-4. **Dynamic Class Review**: Manually search for string concatenation patterns like `'bg-gradient-to-' + direction`
-5. **CSS-in-CSS Migration**: Move all Tailwind classes from CSS files to React components before v4 upgrade (codemods work better in JSX)
+**Consequences:** The listener appears functional. Messages are published to Redis Streams with `text: ""`. They flow through message-processor normalization (which passes empty text through), into overlay pub/sub, and render as blank messages on overlays. Silent data corruption that is easy to miss in integration testing if tests use bot-posted messages from a small test server (where the intent is auto-granted).
 
-**Warning signs:**
-- Tailwind v4 appears in `package.json` without corresponding `CHANGELOG.md` entry documenting breaking changes
-- Gradient buttons rendering as solid colors in dev environment
-- Event tier backgrounds (`event-tier-high` line 40-48) losing gradient effects
-- User reports of "flat" or "missing" visual effects after deployment
-- Bundle size decrease from removed gradient classes
+**Prevention:**
+- Declare intents bitmask `33281` in the Gateway `IDENTIFY` payload: `(1 << 0) | (1 << 9) | (1 << 15)` = `GUILDS | GUILD_MESSAGES | MESSAGE_CONTENT`.
+- Enable MESSAGE_CONTENT in the Discord Developer Portal before running any integration tests.
+- Add a startup assertion: on first `READY` event, log the resolved intents value. Assert the `MESSAGE_CONTENT` bit is set. Fail fast if not.
+- Write a contract test: post a message via REST API in a test guild > 100 servers (or a bot that has been through verification flow), verify `content` is non-empty in the received event.
+- Add a Prometheus counter `discord_message_content_empty_total`. Any non-zero value after confirmed message delivery indicates missing intent.
 
-**Phase to address:**
-- **Phase 1 (Design Tokens):** Identify all gradient usage, plan v4 migration
-- **Phase 2 (Component Library):** Refactor `events.css` gradients to CSS variables
-- **Pre-Phase 3:** Run Tailwind v4 upgrade with full visual regression suite
-- **Phase 3 (Page Migration):** Validate all gradients render correctly across browsers
+**Detection:** `discord_message_content_empty_total > 0` after verified message delivery. Log a `WARN` with `intent_value` on every `READY` event.
+
+**Phase:** Must be validated in Phase 1 (Gateway connection), before any integration tests are written. The startup assertion should exist before the first demo.
 
 ---
 
-### Pitfall 3: Real-Time Performance Regression from Design System Overhead
+### Pitfall 2: Relay Echo Loop — Discord Messages Re-relayed Back to Discord
 
-**What goes wrong:**
-Adding shadcn/ui + Radix UI primitives increases bundle size by 50-100KB. Real-time WebSocket updates (every 50-100ms) now trigger heavier React reconciliation due to complex component trees. Message rendering slows from <16ms to >50ms, causing visible stutter in high-traffic streams (raids, 20+ messages/second). Users complain of "laggy chat" and switch to competitors.
+**What goes wrong:** A Discord message arrives in channel A. It flows through: discord-listener → Redis Streams → message-processor (normalizes, sets `platform="discord"`) → Redis Pub/Sub (`overlay:{overlay_id}`) → relay consumer. The relay reads the pub/sub message, sees a new message to forward, and posts it back to Discord (channel A or the configured outbound channel). That post triggers a new `MESSAGE_CREATE` event from the bot itself. The listener ingests it. The cycle repeats. Infinite loop.
 
-**Why it happens:**
-- shadcn/ui components wrap simple elements in Radix UI primitives with accessibility features (focus management, ARIA attributes)
-- Each message re-render now processes deeper component trees (Button → Radix Primitive → slot composition)
-- Design system adds CSS-in-JS or runtime theme calculations
-- Developers test with 1-2 messages/second, not real-world 20+ messages/second during raids
-- No performance budget established before migration
+**Why it happens:** The relay subscribes to `overlay:{overlay_id}` pub/sub, which carries all normalized messages — including Discord-sourced ones. Without an explicit platform-origin guard, the relay cannot distinguish "came from Discord" from "came from Twitch." This is a new architectural pattern with no precedent in the existing codebase (all other listeners are receive-only).
 
-**How to avoid:**
-1. **Performance Budget**: Establish baseline BEFORE migration (target: <16ms per message render, <100KB additional bundle size)
-2. **Selective Adoption**: Use shadcn/ui for static UI (dashboard, settings) NOT for real-time overlays
-3. **Keep Overlay Simple**: Overlay message components should remain plain HTML/CSS without Radix primitives
-4. **Bundle Analysis**: Run `npm run analyze` before/after each phase, flag >20KB increases
-5. **Real-World Load Testing**: Test with 20 messages/second WebSocket feed, measure frame rate
-6. **React.memo() Strategy**: Wrap all message components with `React.memo()` and custom comparison functions
-7. **requestAnimationFrame Batching**: Buffer WebSocket updates in `useRef`, flush once per animation frame (reduce 20 renders/sec to 60fps max)
+**Consequences:** Unthrottled message storm. Discord rate-limits the bot (429s), then throttles all REST calls, then potentially bans the application token. All overlay messages for affected overlays stop. Recovery requires bot token rotation, application reconfiguration in the Discord Developer Portal, and a Kubernetes rollout. Downtime measured in hours.
 
-**Warning signs:**
-- Bundle size increase >50KB after adding first shadcn/ui components
-- Chrome DevTools Performance tab showing >16ms render times for message components
-- Users reporting "choppy" or "laggy" chat during high-traffic events
-- Lighthouse Performance score dropping below 90
-- Frame rate drops below 60fps when WebSocket receives rapid messages
-- `yarn why` showing multiple Radix UI packages totaling >100KB
+**Prevention:**
+- The `RawChatMessage` struct already carries a `Platform` field. Ensure `platform = "discord"` is set on every message published from the discord-listener.
+- In the relay consumer goroutine, filter unconditionally: only forward messages where `platform != "discord"`. This is the loop-safe filter described in the PROJECT.md milestone requirements.
+- Secondary guard: compare the relay's configured outbound `channel_id` against the inbound message's source channel ID. If identical, drop regardless of platform (handles edge cases where platform field is malformed).
+- Write an integration test that injects a Discord-platform message directly into the overlay pub/sub channel and asserts the relay does NOT call the Discord REST endpoint. This test must exist before the relay is ever connected to a live bot.
+- The filter must be present before the relay is merged into any branch connected to a live Discord application.
 
-**Phase to address:**
-- **Phase 1 (Design Tokens):** Establish performance budget and monitoring
-- **Phase 2 (Component Library):** Isolate overlay components from design system (use plain components)
-- **Phase 3 (Page Migration):** Apply design system to static pages only, benchmark before/after
-- **Phase 4 (Enforcement):** Add bundle size CI checks, performance regression tests
+**Detection:** `relay_discord_suppressed_total` counter that increments on every suppressed Discord-sourced message. Alert if this counter is zero after 24 hours with active Discord sources — may indicate the filter is broken and passing everything through.
+
+**Phase:** Architecture decision in Phase 1. Filter implementation in Phase 2 (relay). Integration test in Phase 3. The filter logic must exist before the relay connects to any live bot.
 
 ---
 
-### Pitfall 4: CSS Specificity Wars Between Design System and Marketplace Themes
+### Pitfall 3: Gateway Heartbeat Miss Causes Zombie Connection and Message Loss
 
-**What goes wrong:**
-Marketplace theme creators use high-specificity selectors (`.event-message.event-tier-high`, `!important` flags) to override defaults. Design system introduces Tailwind v4's highest-precedence layer that overrides everything regardless of source order. Marketplace themes stop working, theme customization breaks, users can't personalize overlays.
+**What goes wrong:** The Discord Gateway requires a `Heartbeat` (opcode 1) every `heartbeat_interval` milliseconds (provided in the `HELLO` payload, typically ~41.25 seconds). If the bot sends a heartbeat but does not receive an ACK (opcode 11) before the next heartbeat is due, Discord considers the connection a zombie and closes it with close code 1008. The session may not be resumable depending on how long the zombie persisted.
 
-**Why it happens:**
-- Tailwind v4 utilities are in the highest-precedence layer by design
-- Design system uses `!important` modifiers to force consistency
-- Marketplace themes expect to override with higher specificity
-- No documented override mechanism for theme creators
-- Existing `events.css` uses `!important` extensively (12+ occurrences), setting precedent
+**Why it happens:** Common Go implementation mistakes:
+- Using `time.Sleep` instead of `time.NewTicker`, causing drift under load.
+- Not tracking whether the previous heartbeat was ACK'd before sending the next one.
+- Sharing the WebSocket write path between the heartbeat goroutine and the event-dispatch goroutine without a mutex, causing concurrent-write panics that crash the connection goroutine silently.
+- Not storing `session_id` and `resume_gateway_url` from `READY`, so a reconnect requires full re-IDENTIFY (counts against the identify rate limit).
 
-**How to avoid:**
-1. **CSS Layers Architecture**: Define explicit cascade layers:
-   ```css
-   @layer base, design-system, marketplace-themes, user-overrides;
-   ```
-2. **Remove !important**: Refactor `events.css` to use cascade layers instead of `!important` flags
-3. **Theme Override API**: Provide CSS custom properties for all themeable values:
-   ```css
-   --event-tier-high-border: var(--marketplace-override-border, #FFD700);
-   ```
-4. **Documentation**: Create `THEMING_API.md` documenting all overridable CSS variables
-5. **Escape Hatch**: Provide `data-allow-override` attribute to explicitly allow marketplace CSS to win
+**Consequences:** Connection drops without warning. Pod may not detect the drop for up to one heartbeat interval (~41 seconds). All messages from monitored Discord channels during that window are lost. If session cannot be resumed, a full re-IDENTIFY is required, which costs 5+ seconds and counts against the global identify rate limit (1 per 5 seconds per token).
 
-**Warning signs:**
-- Marketplace theme preview showing default styles instead of custom theme
-- User reports: "My custom CSS stopped working after update"
-- CSS inspector showing Tailwind classes overriding marketplace `.event-*` selectors
-- GitHub issues with "theme broken" or "can't customize" in title
-- Testing reveals `!important` count increasing in codebase
+**Prevention:**
+- Implement heartbeat as a dedicated goroutine with `time.NewTicker(heartbeat_interval)`.
+- Track a boolean `heartbeatACKed`. Before sending each heartbeat: check `heartbeatACKed`. If false, the connection is a zombie — close with code 1000 and initiate session resume.
+- Use a single write channel (`chan []byte`) for all WebSocket writes. Both the heartbeat goroutine and event dispatcher send to this channel. A dedicated writer goroutine drains it and calls `conn.WriteMessage`. This eliminates all concurrent-write races.
+- On receiving `READY`: store `session_id` and `resume_gateway_url` in Redis, keyed by pod ID. On reconnect, always attempt `RESUME` (opcode 6) before `IDENTIFY` (opcode 2). Successful RESUME does not count against the identify rate limit.
 
-**Phase to address:**
-- **Phase 1 (Design Tokens):** Design CSS layers architecture, document override API
-- **Phase 2 (Component Library):** Refactor `events.css` to use layers, remove `!important`
-- **Phase 3 (Page Migration):** Validate marketplace theme compatibility
-- **Phase 4 (Enforcement):** Add ESLint rule forbidding new `!important` usage
+**Detection:** `discord_heartbeat_ack_missed_total` counter. Alert on any value > 0 in a 5-minute window.
+
+**Phase:** Core implementation concern for Phase 1. Session resume storage in Redis must be implemented alongside the initial connection — not deferred to "later."
 
 ---
 
-### Pitfall 5: Accessibility Regression from Insufficient Focus State Testing
+### Pitfall 4: Gateway Identify Rate Limit During HPA Scale-Up or Rolling Deploy
 
-**What goes wrong:**
-Design system defines focus states (`focus:ring-2 focus:ring-blue-500/20`) but existing components lack focus styles. Migration adds focus rings to new components but misses legacy overlay controls. Keyboard users can't navigate overlays, WCAG 2.1 AA compliance breaks, ADA Title II deadline (April 24, 2026) missed.
+**What goes wrong:** On startup, multiple discord-listener pods each open a Gateway connection and send `IDENTIFY`. Discord enforces a global identify rate: 1 per 5 seconds per bot token. If 3 pods start simultaneously (HPA scale-up event or Kubernetes rolling deploy), all 3 send `IDENTIFY` within milliseconds of each other. Discord closes 2 connections with opcode 9 (Invalid Session, not resumable). Those pods retry immediately and hit the rate limit again. Cascading reconnect storm.
 
-**Why it happens:**
-- Design system spec focuses on visual design, accessibility treated as secondary
-- Testing uses mouse/clicks, not keyboard navigation
-- Overlay preview lacks focus indicators (chat messages aren't focusable, skip links missing)
-- Automated tools (axe, Lighthouse) run on dashboard but not overlay iframe
-- Focus states work in dev (high contrast) but invisible in production dark theme
+**Why it happens:** The existing load balancing system applies startup jitter (0-30 seconds random delay) across Twitch/YouTube/Kick/TikTok listeners specifically to prevent the thundering herd pattern (see `PROJECT.md` Key Decisions). This jitter must be applied to the discord-listener. Additionally, the Discord identify rate limit is stricter and more consequential than IRC reconnects — a failed identify cannot simply be retried immediately.
 
-**How to avoid:**
-1. **Keyboard-First Testing**: Test every page with Tab key BEFORE mouse testing
-2. **Focus Visible Enforcement**: Add ESLint rule requiring `focus-visible:` on all interactive elements
-3. **Contrast Validation**: Run contrast checker on `ring-blue-500/20` against `bg-slate-900` (ensure 3:1 ratio)
-4. **Overlay Accessibility**: Add skip links, landmark regions, keyboard shortcuts to overlay preview
-5. **CI/CD Integration**: Run axe-core in Playwright tests against all pages including overlays
-6. **Manual Audit**: Schedule quarterly keyboard-only navigation audit
+**Consequences:** Pods stuck in perpetual identify-fail-wait cycles. No Discord messages ingested during the identify storm. If triggered by a rolling deploy, the entire Discord listener fleet may be offline for the duration of the deploy (potentially minutes).
 
-**Warning signs:**
-- Playwright tests don't include keyboard navigation scenarios
-- `focus:` appears in design system but not in overlay component code
-- Axe violations in CI logs (Focus order, focus visible, color contrast)
-- User reports: "Can't use app with keyboard"
-- Manual Tab navigation reveals invisible focus states on dark backgrounds
+**Prevention:**
+- Apply the same startup jitter (0-30s random delay) already present in other listeners.
+- Add Discord-specific stagger: derive `pod_index * 6 seconds` additional delay from the pod hostname (parse the StatefulSet ordinal or use a Redis-based pod registration sequence). Six seconds safely exceeds the 5-second identify rate limit.
+- On receiving opcode 9 (Invalid Session), wait 1-5 seconds (random) before re-identifying. Never retry opcode 9 immediately.
+- Attempt RESUME before IDENTIFY on every reconnect. Successful RESUME bypasses the identify rate limit entirely.
+- Only pods that have been assigned at least one Discord source by the coordinator should open a Gateway connection. Pods with no assigned Discord sources must not connect.
 
-**Phase to address:**
-- **Phase 1 (Design Tokens):** Validate all focus ring colors meet WCAG AA contrast ratios
-- **Phase 2 (Component Library):** Add focus states to ALL interactive components
-- **Phase 3 (Page Migration):** Keyboard navigation testing for every migrated page
-- **Phase 4 (Enforcement):** Add focus state coverage to CI/CD, block PRs with violations
+**Detection:** `discord_invalid_session_total` counter. Alert on any value > 0 — this should never happen in a healthy deployment.
+
+**Phase:** Phase 1 (startup behavior). The jitter and RESUME logic must be present before any load testing or production deployment.
 
 ---
 
-### Pitfall 6: Incomplete Migration Leaving Visual Inconsistencies
+### Pitfall 5: REST Rate Limit Mismanagement During Relay Bursts
 
-**What goes wrong:**
-Phase 3 migrates landing page, dashboard, editor to new design system. Settings and admin pages remain on old styles due to scope creep fatigue. Users see professional StreamElements-style UI, then jarring gray-scale generic Tailwind on settings page. Brand perception damaged, app feels unfinished.
+**What goes wrong:** The relay posts messages to Discord via REST (`POST /channels/{channel_id}/messages`). Discord enforces two rate limit layers: per-route buckets (typically 5 requests per second per channel for message posting) and a global bucket (50 requests per second across all routes for the bot token). During a high-traffic overlay event such as a Twitch raid, dozens of messages per second flow through. The relay attempts to forward all of them, exhausts the per-channel bucket, and receives 429 responses. A naive retry-immediately loop amplifies toward the global bucket. If the global limit is hit, ALL Discord REST calls are blocked, including calls needed for source management.
 
-**Why it happens:**
-- Migration fatigue after redesigning 3-4 major pages
-- Settings/admin pages seem "low priority" (not user-facing)
-- No visual consistency audit between phases
-- Screenshots in docs show new design, users expect it everywhere
-- Design system enforcement starts before migration complete
+**Why it happens:** No existing service in the codebase makes outbound REST calls under load. The existing `shared/ratelimit/` module handles inbound API Gateway rate limiting only. There is no outbound REST client rate limiter in the shared package. This is a genuinely new pattern.
 
-**How to avoid:**
-1. **All-or-Nothing Approach**: Migrate ALL pages in Phase 3, or delay enforcement until Phase 4
-2. **Transition Stylesheet**: Create temporary `migration.css` that makes old pages acceptable (not perfect) until migration
-3. **Migration Dashboard**: Track completion percentage, visualize inconsistencies
-4. **Staging Environment**: Deploy partial migrations to staging only, block production until 100% complete
-5. **Visual Consistency Tests**: Automated screenshot diffing across all pages, flag style discrepancies >20%
+**Consequences:** 429 errors cascade. Relay queue backs up. If the queue is unbounded, memory grows until the pod OOMs. If the global rate limit is hit, Gateway reconnect calls are also blocked, potentially causing the bot to disconnect.
 
-**Warning signs:**
-- Phase 3 PR shows 3 pages migrated, 5 pages unchanged
-- Design system enforcement PR merged while old components still in use
-- User screenshots showing mix of old/new styles in same session
-- QA testing reveals "This page looks different" observations
-- Analytics showing drop-off on settings page (users confused by style change)
+**Prevention:**
+- Parse `X-RateLimit-Remaining`, `X-RateLimit-Reset-After`, and `X-RateLimit-Bucket` response headers on every Discord REST call. Build a per-bucket leaky bucket that respects these headers rather than relying on a fixed rate.
+- Implement a configurable relay rate cap: max 2 messages per second per outbound channel as the default (well below the 5/second Discord limit, leaving headroom for other REST calls).
+- On 429 response: extract `Retry-After` header. Sleep exactly that duration before retrying. Do not retry sooner.
+- Use a bounded buffered Go channel as the relay queue per outbound channel (suggested capacity: 50 messages). If the queue is full, drop the oldest message (not the newest — prefer recency for live chat relay). Log drops to `discord_relay_dropped_total`.
+- Maintain a separate global rate limit bucket. Count all Discord REST calls against it regardless of per-route bucket.
 
-**Phase to address:**
-- **Phase 3 (Page Migration):** Migrate ALL pages before marking phase complete
-- **Phase 4 (Enforcement):** Only enable ESLint rules after 100% migration verified
-- **Pre-deployment:** Visual consistency audit across all routes
+**Detection:** `discord_relay_429_total` labeled by `{bucket_id, channel_id}`. `discord_relay_dropped_total` for queue overflow. Alert on sustained 429 rate above 1 per minute.
+
+**Phase:** Phase 2 (relay implementation). Must be designed from the start. Adding rate limiting as a fix after hitting limits in production requires a relay rewrite.
 
 ---
 
-### Pitfall 7: Insufficient Testing of Dynamic Class Construction
+### Pitfall 6: Shard Mismatch Causes Silent Event Blackout for Affected Guilds
 
-**What goes wrong:**
-Codebase contains dynamic Tailwind class construction patterns like `className={'bg-' + platform + '-500'}` for platform colors. Tailwind v4's just-in-time engine doesn't detect these dynamically constructed classes, resulting in missing styles. Platform badges render without background colors, status indicators disappear.
+**What goes wrong:** The Discord Gateway sharding model routes each guild to exactly one shard using `guild_id % shard_count`. If a pod connects with `shard_id=0, num_shards=2` but an assigned guild belongs to shard 1, that pod receives zero events for that guild — with no error, no log message, no indication from Discord that anything is wrong. The channel configured as a source simply never produces messages.
 
-**Why it happens:**
-- Tailwind's JIT compiler only detects static class strings
-- Dynamic construction was working in v3 due to different compilation strategy
-- PurgeCSS safelist not updated for v4
-- Developers test with hardcoded examples, miss dynamic edge cases
-- TypeScript doesn't validate Tailwind class strings
+**Why it happens:** At current scale (small bot, few guilds), all guilds fit on a single shard (`shard_id=0, num_shards=1`). This works in development and early production. When the bot grows past approximately 2,500 guilds, Discord requires multiple shards. If someone adds shards by setting `num_shards=N` per pod (matching replica count) without coordinating shard ID assignment, each pod may connect to the wrong shard for its assigned guilds.
 
-**How to avoid:**
-1. **Static Class Mapping**: Replace dynamic construction with explicit mapping objects:
-   ```tsx
-   const platformColors = {
-     twitch: 'bg-purple-500',
-     youtube: 'bg-red-500',
-     // ... (as shown in DESIGN_SYSTEM.md line 543-569)
-   }
-   ```
-2. **Safelist Configuration**: Add dynamic patterns to `tailwind.config.ts`:
-   ```ts
-   safelist: [
-     { pattern: /^bg-(purple|red|green|slate)-(500|400)/ },
-   ]
-   ```
-3. **TypeScript Validation**: Use `clsx` or `classnames` with TypeScript to catch invalid classes
-4. **Grep Audit**: Search for `className.*\+.*` and `className.*\$\{` patterns before migration
-5. **E2E Tests**: Add tests for all platform badge variations, verify colors render
+**Consequences:** Users report "Discord chat not showing up in overlay" for affected guilds. No errors in logs. Extremely difficult to diagnose without understanding the shard routing formula.
 
-**Warning signs:**
-- Visual diff shows missing platform colors after Tailwind upgrade
-- Badge components render with no background (just borders)
-- Browser console warnings: "Class not found" or similar
-- Users report: "Can't tell which platform a message is from"
-- Dynamic class patterns found in `git grep "className.*+" frontend/`
+**Prevention:**
+- For v1.5 (current scale, < 2,500 guilds): hardcode `shard_id=0, num_shards=1` in all pods. Document this limit explicitly in the service README and an ADR.
+- Query `GET /gateway/bot` on startup to obtain Discord's recommended shard count. Log the value. If recommended count differs from configured count, log a WARN.
+- Design the future shard assignment protocol before hitting scale: the source-manager coordinator assigns guild+channel sources to pods; the Discord shard for each guild is `guild_id % total_shards`. Source assignment and shard assignment are separate concerns — do not conflate them.
+- On `READY`, log `unavailable_guilds` count. If non-zero after 60 seconds, a guild has not connected — may indicate a shard routing problem.
 
-**Phase to address:**
-- **Phase 1 (Design Tokens):** Audit all dynamic class construction, create static mappings
-- **Phase 2 (Component Library):** Refactor to use `platformColors` mapping from DESIGN_SYSTEM.md
-- **Phase 3 (Page Migration):** Add E2E tests for all dynamic color variations
-- **Phase 4 (Enforcement):** Add ESLint rule forbidding string concatenation in className
+**Detection:** Log `unavailable_guilds` count from `READY` payload. Alert if count remains > 0 after 60 seconds. Alert if `GET /gateway/bot` returns `shards > 1` and configured `num_shards == 1`.
+
+**Phase:** Phase 1 (document single-shard assumption and scale threshold). Phase 3 (integration with load balancer — do not conflate shard assignment with channel assignment).
 
 ---
 
-## Technical Debt Patterns
+## Moderate Pitfalls
 
-Shortcuts that seem reasonable but create long-term problems.
+---
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Using `!important` to fix specificity issues | Quick fix for override conflicts | CSS maintenance nightmare, cascade layers broken, marketplace themes conflict | Never — use cascade layers or increase specificity properly |
-| Inline styles for "just this one case" | Faster than creating component variant | Inconsistent design, hard to theme, no design system compliance | Only for dynamic runtime values (e.g., user-configurable positions) |
-| Copy-paste shadcn/ui without customization | Get components quickly | Generic look, doesn't match StreamElements aesthetic, harder to change later | Phase 2 initial exploration only — must customize before Phase 3 |
-| Skip accessibility testing "for now" | Move faster on visual implementation | ADA compliance violations, April 2026 deadline missed, lawsuits | Never — April 24, 2026 deadline is HARD |
-| Migrate only user-facing pages | Reduce scope, ship faster | Inconsistent UI, brand perception damage, tech debt for later | Never — creates "half-finished" perception |
-| Dynamic Tailwind class construction | DRY principle, fewer lines of code | JIT compilation fails, styles disappear, hard to debug | Never — use static mappings |
-| Using gray-* instead of slate-* "by accident" | Works fine, minor difference | Design system violation, visual inconsistency, fails ESLint later | Never — enforce during code review |
-| Skipping bundle size analysis | One less tool to run | Performance regressions undetected, 50-100KB bloat | Never — critical for real-time performance |
+### Pitfall 7: Discord Bot OAuth Flow Confused with User OAuth Flow
 
-## Integration Gotchas
+**What goes wrong:** The existing auth-service handles Twitch and YouTube with the standard user OAuth2 flow: authorization code grant, user grants scopes, per-user access token stored encrypted in PostgreSQL, token-refresh-service refreshes it periodically. Discord bot authorization is different: the bot token (from the Discord Developer Portal) is a static application credential that does not expire and does not need refreshing. The user-facing "Add to Server" flow (`scope=bot`) results in the bot being added to a guild — it does not issue a user access token at all.
 
-Common mistakes when connecting design system to existing architecture.
+**Prevention:**
+- Store the Discord bot token as an application environment variable (`DISCORD_BOT_TOKEN`), not in the OAuth tokens table. It is not a per-user credential.
+- Do NOT route the Discord bot token through token-refresh-service. The service will attempt unnecessary refresh calls and likely fail or corrupt the stored value.
+- The "Add to Server" OAuth2 flow (user-facing setup UI) uses `scope=bot+applications.commands` with the `authorization_code` grant. The result is guild membership for the bot, not a token to store. Record guild membership in a new PostgreSQL table: `(user_id, guild_id, authorized_at, inbound_channel_id, outbound_channel_id)`.
+- Model this as the existing systems model bot vs. user: Twitch uses a bot OAuth token for IRC (static credential) separate from the user's Twitch OAuth token. Follow the same separation.
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| shadcn/ui + Tailwind v4 | Installing shadcn before Tailwind v4 upgrade, version conflicts | Upgrade Tailwind v4 FIRST, then install shadcn/ui configured for v4 |
-| Design tokens + CSS variables | Defining tokens in CSS without TypeScript types | Generate TypeScript types from design tokens, enable autocomplete |
-| Radix UI + Real-time overlays | Using Radix primitives in high-frequency render components | Isolate overlays from Radix, use plain HTML/CSS for messages |
-| CSS layers + existing !important | Adding layers but keeping !important flags | Remove ALL !important before defining layers (line-by-line refactor) |
-| Next.js App Router + shadcn | Using shadcn components in Server Components without 'use client' | Add 'use client' to all shadcn components or mark as client-only |
-| Marketplace themes + Tailwind JIT | Expecting JIT to detect marketplace CSS classes | Add marketplace class patterns to safelist configuration |
-| ESLint rules + gradual migration | Enabling all rules immediately, blocking all PRs | Enable rules per-phase: Phase 1 warnings, Phase 4 errors |
-| Bundle splitting + design system | Importing entire shadcn/ui library in single chunk | Tree-shake: only import used components, analyze per-route bundles |
+**Phase:** Phase 1 (auth design and database migration). Wrong direction here is expensive to undo.
 
-## Performance Traps
+---
 
-Patterns that work at small scale but fail as usage grows.
+### Pitfall 8: Source-Manager Assignment Key Must Include Guild ID
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Re-rendering entire message list on each WebSocket update | Smooth at 1-5 msg/sec, stutters at 20+ msg/sec (raids) | Use `React.memo()` + virtualization (react-window), requestAnimationFrame batching | >10 messages/second sustained (typical raid scenario) |
-| Loading all shadcn components upfront | Fine for dashboard (<1s load), slow for overlays (3-5s) | Code split by route, lazy load modal/dialog components | Overlay bundle >200KB (affects OBS load time) |
-| CSS-in-JS theme calculation on every render | Imperceptible with 10 components, laggy with 100+ messages | Use CSS variables, compute theme once at mount | >50 simultaneous chat messages on screen |
-| Unoptimized Radix animations | Smooth with 1-2 modals, janky with rapid state changes | Disable animations for real-time components, use CSS transforms only | Rapid open/close cycles (e.g., toast notifications) |
-| Not code-splitting design system | 5s initial load acceptable for dashboard, terrible for overlays | Separate bundles: app.js (design system) + overlay.js (minimal) | Overlay users have slower internet, 5s load unacceptable |
-| Importing entire Lucide icon set | Works until 20+ icons added, then bundle bloats | Use `lucide-react/icons/IconName` for tree-shaking | Bundle includes >50 unused icons (check with webpack-bundle-analyzer) |
+**What goes wrong:** The existing load balancer hashes on `source_id` (an opaque string) to assign sources to pods. Two Discord channels from different guilds may have similar or identical numeric channel IDs if the system only stores the channel ID without the guild ID. Hash collisions cause incorrect pod assignments. More critically, the `MESSAGE_CREATE` event payload includes `guild_id` — if the source record does not store it, the listener cannot verify that an incoming event matches an active source.
 
-## Security Mistakes
+**Prevention:**
+- Define the Discord source key as `discord:{guild_id}:{channel_id}` for consistent hashing. This matches the existing platform-prefixed pattern used by other listeners.
+- Validate that `guild_id` is present on every `MESSAGE_CREATE` event before publishing to Redis Streams. Direct messages (DMs) do not have `guild_id` — the listener must drop DM events immediately, as they are not a supported source type.
+- The source-manager coordinator, heartbeat, and migration logic all operate on opaque source IDs. No changes to coordinator internals are needed — only to how the discord-listener registers its sources.
 
-Domain-specific security issues beyond general web security.
+**Phase:** Phase 1 (data model and source registration). Must be correct before any load balancing work.
 
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Allowing unsanitized marketplace CSS | XSS via `background: url('javascript:...')` or `expression()` | CSP headers blocking unsafe-inline, CSS sanitization library |
-| Design system exposes internal routes via debug tools | Admin pages leaked in Storybook build | Separate Storybook config for public components only |
-| Theme customization allows arbitrary URLs | SSRF via `@import url('http://attacker.com')` | Validate all URLs against allowlist, block external resources |
-| Client-side theme loading without validation | Malicious themes injected via localStorage tampering | Validate theme JSON schema, sanitize before applying |
-| Exposing API keys in CSS custom properties | Credentials leaked in DevTools | Never store secrets in CSS variables, use server-side only |
-| Marketplace themes executing JavaScript via CSS | Old IE expression() or behavior: url() still works in some contexts | Strict CSP, remove all `<script>` from theme uploads |
+---
 
-## UX Pitfalls
+### Pitfall 9: Multiple Pods Opening Gateway Connections on the Same Shard
 
-Common user experience mistakes in this domain.
+**What goes wrong:** All discord-listener pods share the same `DISCORD_BOT_TOKEN`. At single-shard scale, if two pods both open a Gateway connection, the second `IDENTIFY` from the same bot token causes Discord to invalidate the first connection (opcode 7 Reconnect or opcode 9 Invalid Session). The first pod reconnects. Discord invalidates it again. Neither pod maintains a stable connection.
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Changing overlay class names without deprecation period | All custom themes break immediately, user panic, negative reviews | 6+ month deprecation notice, automated migration tool, email notifications |
-| Making low-contrast focus states "prettier" | Keyboard users can't navigate, accessibility violations, ADA non-compliance | Test focus states with high-contrast mode enabled, ensure 3:1 ratio minimum |
-| Migrating dashboard but not settings | Users see professional UI, then jarring old styles, app feels broken | Migrate all pages together, or delay rollout until 100% complete |
-| Auto-applying design system updates to overlays | User's carefully crafted overlay suddenly changes appearance on stream | Version-lock overlay styles, require explicit opt-in to updates |
-| Removing animation controls for "consistency" | Power users lose customization they depend on, switch to competitors | Provide "advanced" toggle for animation preferences |
-| Not providing migration guide for marketplace creators | Theme creators abandoned, marketplace dies, users lose content | Write migration guide FIRST, provide migration CLI tool, offer support channel |
-| Changing platform badge colors for aesthetics | Users can't quickly identify platforms they're monitoring (muscle memory) | Preserve exact platform brand colors, only adjust transparency/borders |
-| Focus trap in modals without escape | Users get stuck in dialogs, frustration, appears broken | Always provide ESC key, click-outside, and visible close button |
+**Why it happens:** The source-manager assigns channels to specific pods, but does not inherently prevent multiple pods from each opening their own Gateway connection. Other listeners (Twitch IRC, Kick Pusher) handle this by each pod independently managing its assigned channels. This model works for those protocols. For Discord's Gateway, a shard connection covers ALL guilds on that shard — only one connection per shard per token is allowed.
 
-## "Looks Done But Isn't" Checklist
+**Prevention:**
+- Gate Gateway connection on source assignment: a pod must have at least one Discord source assigned by the coordinator before it opens a Gateway connection. Pods with no assigned Discord sources must not connect to the Gateway.
+- For single-shard deployments: at most one pod should hold the active Gateway connection. The coordinator (source-manager leader) assigns all Discord sources to the same pod when possible at single-shard scale.
+- Alternatively, use a Redis-based Gateway connection lock: a pod acquires a Redis key `discord:gateway:shard:0:holder` (TTL: 2x heartbeat interval) before connecting. Only the lock holder connects. Other pods wait and poll for channel assignments to be delivered via a different mechanism (Redis Pub/Sub commands from the connection-holding pod).
+- Store `session_id` and `resume_gateway_url` in Redis immediately after `READY`. The lock holder writes these; if it dies, the next pod to acquire the lock can attempt RESUME with the stored values.
 
-Things that appear complete but are missing critical pieces.
+**Phase:** Phase 1 (architecture decision — connection ownership model). This is the most important architectural question for the discord-listener before any code is written.
 
-- [ ] **Tailwind v4 Migration:** Often missing dynamic class construction fixes — verify `git grep "className.*+" frontend/` returns zero results
-- [ ] **shadcn/ui Integration:** Often missing customization to match design system — verify all components use slate (not zinc) colors
-- [ ] **Focus States:** Often missing on custom components — verify Tab navigation works on ALL interactive elements
-- [ ] **Bundle Size:** Often missing route-level splitting — verify each route <100KB via `yarn analyze`
-- [ ] **Marketplace Compatibility:** Often missing migration guide — verify `MARKETPLACE_CSS_MIGRATION.md` exists and is tested
-- [ ] **Performance Budget:** Often missing real-world load testing — verify 20 msg/sec WebSocket test passes <16ms render time
-- [ ] **Accessibility Audit:** Often missing keyboard-only testing — verify entire app navigable without mouse
-- [ ] **Visual Consistency:** Often missing admin/settings pages — verify ALL routes use design system (screenshot diff)
-- [ ] **CSS Layers:** Often missing layer definitions — verify `@layer` declarations in `globals.css`
-- [ ] **Color Contrast:** Often missing dark mode testing — verify all text meets WCAG AA (4.5:1 normal, 3:1 large)
-- [ ] **Platform Color Mapping:** Often missing static object — verify no dynamic `'bg-' + platform` construction
-- [ ] **Event Class Stability:** Often missing public API documentation — verify `events.css` classes documented as stable
-- [ ] **Responsive Testing:** Often missing mobile overlay testing — verify overlays render correctly at 375px, 768px, 1920px
-- [ ] **Animation Performance:** Often missing frame rate validation — verify 60fps maintained during rapid updates
-- [ ] **Theme Override API:** Often missing CSS variable documentation — verify all themeable values use `var(--marketplace-*, default)`
+---
 
-## Recovery Strategies
+### Pitfall 10: Relay Not Reusing HTTP Client — Port Exhaustion Under Load
 
-When pitfalls occur despite prevention, how to recover.
+**What goes wrong:** Each relay call to Discord REST creates a new `http.Client` instance or new TCP connection. Under relay load (100+ messages per minute), this exhausts ephemeral TCP ports, accumulates TIME_WAIT connections, and adds 3-10ms of TCP handshake latency to every relay call.
 
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Breaking marketplace themes | HIGH (user trust, support load, potential revenue loss) | 1. Hotfix: revert class changes immediately 2. Deploy compatibility shim 3. Publish migration tool 4. Email all theme creators 5. Extend deprecation 6 months |
-| Tailwind v4 gradient breaking | MEDIUM (visual regression, no functionality lost) | 1. Run `npx @tailwindcss/upgrade` 2. Manual audit of CSS files 3. Visual regression test suite 4. Deploy fix within 24h 5. Document in post-mortem |
-| Performance regression | MEDIUM (user complaints, not immediate breakage) | 1. Rollback to previous version 2. Profile with Chrome DevTools 3. Add React.memo() to message components 4. Implement RAF batching 5. Deploy with monitoring |
-| CSS specificity conflicts | LOW (theme customization broken, not core functionality) | 1. Add `@layer marketplace-themes` with higher precedence 2. Document override API 3. Provide CSS variable escape hatch 4. Update theme documentation |
-| Accessibility violations | HIGH (legal risk, ADA deadline) | 1. Audit with axe-core immediately 2. Prioritize WCAG A violations 3. Add focus states to all interactive elements 4. Deploy fix before April 24, 2026 deadline 5. Document compliance |
-| Incomplete migration | LOW (perception issue, not broken) | 1. Prioritize remaining pages 2. Apply temporary styling to un-migrated pages 3. Complete migration in next sprint 4. Deploy all-at-once |
-| Dynamic class construction failing | LOW (missing styles, easy to spot) | 1. Create static `platformColors` mapping object 2. Replace all dynamic construction 3. Add safelist for edge cases 4. Deploy with E2E tests |
-| Bundle size bloat | MEDIUM (performance degradation) | 1. Run webpack-bundle-analyzer 2. Identify largest dependencies 3. Lazy load non-critical components 4. Remove unused Radix primitives 5. Deploy optimized bundle |
+**Prevention:**
+- Create a single `http.Client` with an explicit transport at discord-listener service startup. Inject it into the relay component.
+- Configure `MaxIdleConnsPerHost: 10` and `IdleConnTimeout: 90 * time.Second` on the transport.
+- This follows the existing pattern in emote-service HTTP clients. The relay client is not special.
 
-## Pitfall-to-Phase Mapping
+**Phase:** Phase 2 (relay implementation). Easy to get right from the start, expensive to diagnose in production.
 
-How roadmap phases should address these pitfalls.
+---
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Breaking marketplace themes | Phase 1 (Design Tokens) | Document all `events.css` classes as public API, create stability contract |
-| Tailwind v4 gradient renames | Phase 1 (Design Tokens) | Run upgrade tool, audit dynamic construction, visual regression tests pass |
-| Performance regression | Phase 2 (Component Library) | Bundle size <100KB increase, message render time <16ms at 20 msg/sec |
-| CSS specificity conflicts | Phase 2 (Component Library) | Marketplace theme test suite passes, no `!important` added |
-| Accessibility violations | Phase 3 (Page Migration) | axe-core CI tests pass, keyboard navigation works on all pages |
-| Incomplete migration | Phase 3 (Page Migration) | Visual consistency audit shows 100% pages using design system |
-| Dynamic class construction | Phase 1 (Design Tokens) | Zero results for `git grep "className.*+" frontend/` |
-| Bundle size bloat | Phase 4 (Enforcement) | CI blocks PRs adding >20KB without justification |
-| Focus state missing | Phase 4 (Enforcement) | ESLint rule `focus-visible-required` enabled, no violations |
-| Gray vs slate confusion | Phase 4 (Enforcement) | ESLint rule `no-gray-colors` blocks gray-* usage |
-| Animation performance | Phase 3 (Page Migration) | Frame rate monitoring shows sustained 60fps during raids |
-| Theme override breaking | Phase 2 (Component Library) | `THEMING_API.md` published, CSS variable override tests pass |
+### Pitfall 11: Relay Logic Inside Message-Processor Breaks the Processing Pipeline Contract
+
+**What goes wrong:** If the relay is implemented as logic inside the message-processor (triggered on the processing path, not the pub/sub consumer path), a relay failure (Discord 429, timeout, network error) causes the message-processor to fail to ACK the Redis Streams message. The message gets reprocessed. Every reprocess triggers another relay attempt. The relay failure propagates backward into the core message pipeline.
+
+**Why it happens:** The relay reads from the same pub/sub as the API Gateway. It may seem natural to add relay logic inside the message-processor's publish step. This conflates the processing pipeline (inbound) with the relay (outbound).
+
+**Prevention:**
+- Implement relay as an independent goroutine (or group of goroutines) that subscribes to `overlay:{overlay_id}` pub/sub as a separate consumer, parallel to the API Gateway's subscription. The relay is a peer of the API Gateway, not a component of the message-processor.
+- Relay failures must never affect the message-processor's XACK cadence. Relay errors are logged and counted but do not propagate upstream.
+- Keep the message-processor contract unchanged: normalize → enrich → route → publish to pub/sub → XACK. The relay is downstream of this contract.
+
+**Phase:** Phase 1 (architecture decision). The PROJECT.md already lists "single service for inbound+outbound vs separate relay service" as an open question. The correct answer is: single discord-listener service containing both a Gateway inbound goroutine and a relay outbound goroutine, both operating independently. The relay goroutine subscribes to pub/sub independently; it does not depend on or modify the message-processor.
+
+---
+
+### Pitfall 12: Graceful Shutdown Does Not Preserve Session for Resume
+
+**What goes wrong:** When a pod receives SIGTERM and begins the 25-second graceful shutdown, the Gateway WebSocket connection is dropped without a clean close. Discord's session resume window is typically a few minutes. If the pod restarts slowly (image pull, migration, slow startup) and the resume window expires, a full re-IDENTIFY is required. Worse: if the close code is 1000 (Normal Closure), Discord intentionally invalidates the session — there is nothing to resume.
+
+**Prevention:**
+- On SIGTERM: send WebSocket close frame with code 4000 (Unknown Error — Discord allows session resume after this code) rather than 1000.
+- Store `session_id` and `resume_gateway_url` in Redis immediately after every `READY` event (keyed by pod ID). On startup, always attempt RESUME first using the stored values before falling back to IDENTIFY.
+- The 25-second graceful shutdown window is sufficient: close Gateway with 4000 (instant), drain in-flight Redis Streams publishes (~1-2 seconds), shutdown HTTP server.
+- Note: close code 1000 explicitly invalidates the session. Use 4000 for planned restarts, 1001 (Going Away) for pod eviction.
+
+**Phase:** Phase 1 (connection lifecycle). Session storage in Redis must be present before the service reaches production.
+
+---
+
+## Minor Pitfalls
+
+---
+
+### Pitfall 13: Discord Snowflake IDs Must Be Stored as Strings
+
+**What goes wrong:** Discord entity IDs (guild, channel, message, user) are 64-bit Snowflakes, JSON-encoded as strings. If any part of the pipeline stores them as integers, Go handles int64 correctly, but the frontend (JavaScript/TypeScript) has a 53-bit safe integer limit. Values above 2^53 are truncated silently. Discord message IDs regularly exceed this threshold.
+
+**Prevention:**
+- Store all Discord IDs as strings throughout the pipeline. Never convert Snowflakes to integer types.
+- The system's internal `MessageID` is a UUID generated by the listener. The Discord Snowflake message ID belongs in `Tags["discord_message_id"]` or a dedicated metadata field — not as the primary `MessageID`.
+- The `guild_id` and `channel_id` fields in the source record must be string columns in PostgreSQL (`text`, not `bigint`).
+
+**Phase:** Phase 1 (data model). Cannot be corrected after database migrations are written.
+
+---
+
+### Pitfall 14: Bot Receives Events for All Channels in a Guild, Not Just Subscribed Ones
+
+**What goes wrong:** When the bot is in a guild, it receives `MESSAGE_CREATE` events for every channel it has read permissions for — not just the channels configured as sources. Without explicit channel filtering, messages from non-subscribed channels flow into Redis Streams and appear in overlays.
+
+**Prevention:**
+- In the discord-listener event handler, look up active sources for the incoming event's `guild_id`. Check whether `event.channel_id` matches a registered source's `channel_id`. Drop the event if there is no matching source.
+- This is identical to the pattern in twitch-listener: the IRC client joins only registered channels. The discord-listener must implement the equivalent channel filter at the event handler level.
+- Cache the active sources map in memory (refresh on source assignment changes from coordinator). Do not query PostgreSQL on every `MESSAGE_CREATE` event.
+
+**Phase:** Phase 1 (channel filtering). Must be present from the first working implementation.
+
+---
+
+### Pitfall 15: Bot REST Endpoint vs. Webhook — Using Webhooks for Relay
+
+**What goes wrong:** Discord supports posting messages via incoming webhooks (a separate URL, no bot token required). Using webhooks for relay is tempting because they do not require the `SEND_MESSAGES` permission explicitly — just the webhook URL. However, webhooks cannot post "as" the bot user (they post as a webhook identity), require per-channel webhook creation (an additional setup step and permission), and lack consistent rate limit header semantics across older webhook endpoints.
+
+**Prevention:**
+- Use bot REST (`POST /channels/{channel_id}/messages` with `Authorization: Bot {token}`) for relay. The bot token is already available. Requires `SEND_MESSAGES` permission in the target channel, which is part of standard bot authorization.
+- Do not implement webhooks for relay in v1.5. The additional setup complexity (webhook URL storage, per-channel creation, permission management) exceeds any benefit at current scale.
+
+**Phase:** Phase 2 (relay implementation).
+
+---
+
+## Phase-Specific Warnings
+
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Phase 1: Gateway connection | Missing MESSAGE_CONTENT intent — silent empty messages | Validate intent bitmask on startup; add `discord_message_content_empty_total` counter; contract test against real bot |
+| Phase 1: Gateway connection | Heartbeat goroutine without ACK tracking — zombie connection | Implement `heartbeatACKed` bool; zombie detection before each heartbeat send; single write channel |
+| Phase 1: Connection ownership | Multiple pods connecting on same shard — session invalidation cascade | Gate Gateway connection on source assignment; Redis lock per shard; only connection-holder pod connects |
+| Phase 1: Auth design | Bot token treated as user OAuth token — routed through token-refresh-service | Separate storage path (env var); new guild membership table; no token-refresh-service involvement |
+| Phase 1: Data model | Missing guild_id in source key — incorrect hash assignments | Use `discord:{guild_id}:{channel_id}` as source ID; store all IDs as strings |
+| Phase 1: Session lifecycle | Close code 1000 on SIGTERM invalidates session | Use close code 4000; store session_id + resume_gateway_url in Redis on every READY |
+| Phase 2: Relay | Echo loop — Discord messages re-relayed back to Discord | Filter `platform == "discord"` unconditionally before relay; integration test required before connecting to live bot |
+| Phase 2: Relay | REST 429 during relay burst — cascade to global limit | Per-bucket rate limiter parsing X-RateLimit headers; bounded drop-oldest queue; 2 msg/sec default cap |
+| Phase 2: Relay | New HTTP client per call — port exhaustion | Single `http.Client` at startup; configure transport with `MaxIdleConnsPerHost: 10` |
+| Phase 2: Relay | Relay logic in message-processor — pipeline contamination | Relay as independent pub/sub consumer; relay errors never propagate to XACK path |
+| Phase 3: Load balancing | Shard ID conflated with pod index — event blackout for affected guilds | Document single-shard assumption; shard assignment separate from source assignment |
+| Phase 3: Load balancing | Identify rate limit during HPA scale-up — reconnect storm | Pod-index stagger (pod_ordinal * 6s) on top of existing 0-30s jitter; RESUME before IDENTIFY |
+| Phase 4: Production | Channel filter missing — non-subscribed channels flow into overlays | Filter on channel_id against active sources; cache source map in memory |
+
+---
 
 ## Sources
 
-### Tailwind CSS v4 Migration & Breaking Changes
-- [Tailwind CSS v4 2026: Migration Best Practices](https://www.digitalapplied.com/blog/tailwind-css-v4-2026-migration-best-practices) — HIGH confidence
-- [Tailwind CSS v4 Migration: New Features Guide 2026](https://www.digitalapplied.com/blog/tailwind-css-v4-migration-new-features-guide) — HIGH confidence
-- [What's New in Tailwind CSS 4.0: Migration Guide (2026) | DesignRevision](https://designrevision.com/blog/tailwind-4-migration) — HIGH confidence
-- [Upgrading to Tailwind CSS v4: A Migration Guide](https://typescript.tv/hands-on/upgrading-to-tailwind-css-v4-a-migration-guide/) — MEDIUM confidence
+**Confidence assessment:**
 
-### shadcn/ui + Tailwind v4 Integration
-- [Tailwind v4 - shadcn/ui](https://ui.shadcn.com/docs/tailwind-v4) — HIGH confidence (official docs)
-- [Shadcn/ui upgrade to Tailwindcss v.4 · Discussion #2996](https://github.com/shadcn-ui/ui/discussions/2996) — HIGH confidence
-- [Migrating from Tailwind 3 to Tailwind 4 with shadcn/ui](https://zippystarter.com/blog/guides/migrating-tailwind3-to-tailwind4-with-shadcn) — MEDIUM confidence
-- [Updating shadcn/ui to Tailwind 4 at Shadcnblocks](https://www.shadcnblocks.com/blog/tailwind4-shadcn-themeing) — MEDIUM confidence
+- Discord Gateway protocol (intents, heartbeat, opcodes, sharding, rate limits): HIGH — derived from official Discord developer documentation. Knowledge cutoff August 2025 covers all referenced features: privileged intents mandatory since April 2022, sharding model stable since 2020, rate limit bucket model stable since 2019.
+- Integration pitfalls with existing Redis Streams / source-manager / load balancing: HIGH — derived from direct inspection of `services/source-manager/coordination/coordinator.go`, `assigner.go`, `services/twitch-listener/irc/connection.go`, `.planning/codebase/ARCHITECTURE.md`, `.planning/codebase/CONCERNS.md`, `.planning/PROJECT.md`.
+- Relay echo loop risk: HIGH — logical derivation from system architecture; the pub/sub consumer model is identical to the API Gateway subscription model. No external source needed.
+- REST rate limit bucket model: HIGH — Discord's X-RateLimit header semantics have been stable and are extensively documented.
 
-### Performance & Bundle Size
-- [React & Next.js Best Practices in 2026: Performance, Scale & Cleaner Code](https://fabwebstudio.com/blog/react-nextjs-best-practices-2026-performance-scale) — MEDIUM confidence
-- [Reducing NextJS Bundle Size by 30%: A Practical Guide](https://www.coteries.com/en/articles/reduce-size-nextjs-bundle) — MEDIUM confidence
-- [React Performance and Bundle Size Optimization in 2025](https://www.averagedevs.com/blog/optimize-react-apps-performance) — MEDIUM confidence
-- [Optimizing Real-Time Performance: WebSockets and React.js Integration Part II](https://medium.com/@SanchezAllanManuel/optimizing-real-time-performance-websockets-and-react-js-integration-part-ii-4a3ada319630) — MEDIUM confidence
-- [Streaming Backends & React: Controlling Re-render Chaos in High-Frequency Data](https://www.sitepoint.com/streaming-backends-react-controlling-re-render-chaos/) — HIGH confidence
+**Official reference URLs:**
+- Discord Gateway: https://discord.com/developers/docs/topics/gateway
+- Discord Intents: https://discord.com/developers/docs/topics/gateway#gateway-intents
+- Discord Rate Limits: https://discord.com/developers/docs/topics/rate-limits
+- Discord Sharding: https://discord.com/developers/docs/topics/gateway#sharding
+- Discord OAuth2: https://discord.com/developers/docs/topics/oauth2
 
-### CSS Specificity & Naming Conflicts
-- [Naming - Nord Design System](https://nordhealth.design/naming/) — HIGH confidence
-- [BEM Methodology: A Step-by-Step Guide for Beginners](https://www.valoremreply.com/resources/insights/guide/bem-methodology-a-step-by-step-guide-for-beginners/) — MEDIUM confidence
-- [Tailwind CSS: !important & Selector Guide](https://tailkits.com/blog/tailwind-important-selector/) — MEDIUM confidence
-- [Using the important modifier in Tailwind CSS](https://windybase.com/blog/using-the-important-modifier-in-tailwind-css) — MEDIUM confidence
-
-### Accessibility & WCAG Compliance
-- [WebAIM: 2026 Predictions: The Next Big Shifts in Web Accessibility](https://webaim.org/blog/2026-predictions/) — HIGH confidence
-- [WCAG 3.0 Updates Explained: Accessibility Guidelines 2026-2030](https://rubyroidlabs.com/blog/2025/10/how-to-prepare-for-wcag-3-0/) — MEDIUM confidence
-- [WCAG 2.2 AA: Why Accessibility Is Now a Required Part of Your 2026 Digital Roadmap](https://www.stauffer.com/news/blog/wcag-is-no-longer-optional-and-what-that-means-for-your-organization) — HIGH confidence
-- [ADA Title II Digital Accessibility 2026: WCAG 2.1 AA](https://www.sdettech.com/blogs/ada-title-ii-digital-accessibility-2026-wcag-2-1-aa) — HIGH confidence
-
-### Design System Migration Best Practices
-- [How to Implement a Design System: Reasons, Approach, and Migration Path](https://www.designsystemscollective.com/how-to-implement-a-design-system-reasons-approach-and-migration-path-051c41734caf) — MEDIUM confidence
-- [Migrating to USWDS 3.0](https://designsystem.digital.gov/documentation/migration/) — HIGH confidence (official government design system)
-- [Telerik and Kendo UI Themes v13.0.0 Breaking Changes](https://www.telerik.com/design-system/docs/themes/release-notes/breaking-changes/v13-0-0/) — MEDIUM confidence
-
-### Project-Specific Knowledge
-- `/home/caesar/git/all-chat/frontend/DESIGN_SYSTEM.md` — HIGH confidence (project spec)
-- `/home/caesar/git/all-chat/frontend/src/styles/events.css` — HIGH confidence (existing overlay CSS)
-- `/home/caesar/git/all-chat/.planning/PROJECT.md` — HIGH confidence (project context)
+**Codebase references:**
+- `/home/moersener/Hobby/worktree/all-chat/services/source-manager/coordination/coordinator.go`
+- `/home/moersener/Hobby/worktree/all-chat/services/source-manager/coordination/assigner.go`
+- `/home/moersener/Hobby/worktree/all-chat/services/twitch-listener/irc/connection.go`
+- `/home/moersener/Hobby/worktree/all-chat/.planning/PROJECT.md`
+- `/home/moersener/Hobby/worktree/all-chat/.planning/codebase/ARCHITECTURE.md`
+- `/home/moersener/Hobby/worktree/all-chat/.planning/codebase/CONCERNS.md`
 
 ---
-*Pitfalls research for: All-Chat Frontend Design System Integration*
-*Researched: 2026-03-09*
-*Confidence: HIGH (verified against official docs, current project code, and 2026 best practices)*
+
+*Pitfalls research for: All-Chat v1.5 Discord Listener + Relay*
+*Researched: 2026-03-15*
+*Confidence: HIGH*

@@ -14,6 +14,7 @@ const (
 	PlatformTwitch  Platform = "twitch"
 	PlatformYouTube Platform = "youtube"
 	PlatformKick    Platform = "kick"
+	PlatformDiscord Platform = "discord"
 )
 
 // PlatformUserInfo is a generic user info interface

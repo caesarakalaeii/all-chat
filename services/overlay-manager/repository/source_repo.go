@@ -166,6 +166,13 @@ func (r *SourceRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// UpdateConfig updates the config JSONB field for a source by ID.
+func (r *SourceRepository) UpdateConfig(ctx context.Context, id string, config map[string]interface{}) error {
+	query := `UPDATE overlay_chat_sources SET config = $2, updated_at = NOW() WHERE id = $1`
+	_, err := r.pool.Exec(ctx, query, id, config)
+	return err
+}
+
 // GetAllSources returns all sources across all overlays (admin only)
 func (r *SourceRepository) GetAllSources(ctx context.Context) ([]*models.ChatSource, error) {
 	query := `

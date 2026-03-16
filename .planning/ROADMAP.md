@@ -6,7 +6,7 @@
 - ✅ **v1.1 Listener Load Balancing** — Phases 4-10 (shipped 2026-02-21)
 - ✅ **v1.2 InnerTube YouTube Listener** — Phases 11-22 (shipped 2026-03-06)
 - ✅ **v1.3 Frontend Redesign** — Phases 23-26 (shipped 2026-03-14)
-- ✅ **v1.4 Viewer Identity & YouTube Enrichment** — Phases 27-32 (shipped 2026-03-16)
+- 🚧 **v1.5 Discord Listener** — Phases 27-32 (in progress)
 
 ## Phases
 
@@ -131,147 +131,120 @@
 
 </details>
 
----
+### 🚧 v1.5 Discord Listener (In Progress)
 
-## 🚧 v1.4 Viewer Identity & YouTube Enrichment
+**Milestone Goal:** Add Discord as a bidirectional chat source — read from Discord channels into overlays, and relay overlay messages back to Discord with loop-safe filtering, full OAuth2 bot authorization UX, and production-grade load balancing.
 
-**Milestone Goal:** Give viewers global cosmetic control over how their name appears in overlays, unlock premium identity features (gradients, avatar frames/flairs, badges), and enrich YouTube chat with InnerTube-sourced real membership badge images and inline emotes.
+## Phase Details
 
-### Phase 27: InnerTube Enrichment — Badges & Emotes
-**Goal**: Extract real membership badge image URLs and inline emote images from InnerTube chat payloads and deliver them through the existing pipeline to overlays
-**Depends on**: Nothing (surgical changes to existing InnerTube service + message-processor)
-**Services affected**: `youtube-listener-innertube`, `message-processor`
-**Requirements**: YTBADGE-01, YTBADGE-02, YTBADGE-03, YTBADGE-04, YTEMOTE-01, YTEMOTE-02, YTEMOTE-03, YTEMOTE-04, YTEMOTE-05
+### Phase 27: Auth and Bot Token Foundation
+**Goal**: Users can authorize the Discord bot into their server and the service has a stable Gateway connection with correct session management
+**Depends on**: Nothing (first phase of v1.5)
+**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04
 **Success Criteria** (what must be TRUE):
-  1. `extractBadges()` in innertube parser returns badge image URLs for membership tiers (from `customThumbnail.thumbnails[1].URL`) and passes them via `tags["badge_member_url"]` and `tags["badge_member_tooltip"]`
-  2. `EmojiData` struct gains `IsCustomEmoji bool` field; `extractMessageText()` emits `Emote{}` entries for custom emojis alongside the text placeholder
-  3. YouTube normalizer in message-processor reads `tags["badge_member_url"]` to populate real `Badge.IconURL` (SVG fallback preserved for old listener and system badges)
-  4. Emote cache per channel stored in Redis keyed by `yt:emote:{channel_id}:{emoji_id}` (TTL 24h), populated as messages arrive
-  5. Unicode emoji (non-custom) continue to render as text — no regression
-  6. Old quota-based youtube-listener unaffected (backward compatible)
-**Plans**: 3 plans
-
-Plans:
-- [ ] 27-01-PLAN.md — Test scaffolds: failing tests for all badge and emote requirements (Wave 0, TDD)
-- [ ] 27-02-PLAN.md — InnerTube parser: IsCustomEmoji, extractBadgesRich, extractMessageText emote extraction, yt_emote_cache
-- [ ] 27-03-PLAN.md — Message-processor normalizer: badge_member_url handling, emote_data tag merge
-
-### Phase 28: Viewer Identity Foundation — Auth & Platform Linking
-**Goal**: Establish viewer account model, OAuth flow from browser extension, and platform identity linking so All-Chat knows which platform user corresponds to which viewer
-**Depends on**: Nothing (new feature, no phase dependency)
-**Services affected**: `auth-service`, `api-gateway`, browser extension (`all-chat-extension`)
-**Requirements**: VID-03, VID-04, VID-05, VID-06, EXT-01, EXT-02, EXT-03, EXT-04
-**Success Criteria** (what must be TRUE):
-  1. `viewer_platform_identities` table exists: maps (platform, platform_user_id) → viewer_id
-  2. Extension popup shows auth status (signed-in display name + avatar) and sign-in buttons for Twitch and YouTube
-  3. OAuth sign-in from extension returns a viewer JWT stored in `chrome.storage.local`
-  4. Extension popup has inline `<input type="color">` picker; color change saves to server immediately via PATCH `/api/viewer/cosmetics`
-  5. Extension popup has "Open Settings" button navigating to `/settings/viewer` on the website
-  6. `viewer_cosmetics` table exists: stores `name_color (VARCHAR(7))` per viewer
-  7. Message processor `ViewerBadgeEnricher` resolves platform user → viewer_id via Redis cache (5min TTL) and injects viewer's `name_color` into `UserInfo.Color` when the platform provides none
-**Plans**: 6 plans
-
-Plans:
-- [x] 28-01-PLAN.md — DB migration 035 + ViewerClaims extension + ViewerIdentityRepository + Wave 0 test scaffolds
-- [x] 28-02-PLAN.md — Auth-service POST exchange handlers + PATCH cosmetics endpoint + route wiring
-- [x] 28-03-PLAN.md — message-processor ViewerBadgeEnricher (Redis cache + DB fallback + wiring)
-- [x] 28-04-PLAN.md — Browser extension: manifest, popup (OAuth + color picker), content script (platform detection + EXT-04)
-- [x] 28-05-PLAN.md — Frontend /settings/viewer page stub
-- [ ] 28-06-PLAN.md — Gap closure: content script session writes, context-aware popup buttons, color picker reset
-
-### Phase 29: Viewer Color & Gradient Editor
-**Goal**: All-authenticated-users can set a fallback name color; premium users get a full gradient editor with multi-stop color picker and live preview
-**Depends on**: Phase 28
-**Services affected**: `auth-service`, `message-processor`, frontend (`/settings/viewer`), overlay render component, browser extension
-**Requirements**: VID-01, VID-02, PREM-01, PREM-02, WEB-01, WEB-02, WEB-05
-**Success Criteria** (what must be TRUE):
-  1. `/settings/viewer` page exists with "Viewer Identity" section visible to all authenticated users
-  2. Color picker (hex input + color swatch) persists `name_color` server-side; overlay applies it when platform provides no color
-  3. Premium users see gradient editor: 2–4 color stops, angle slider (0–360°), live preview of gradient on sample username
-  4. `name_gradient` stored as JSONB `{"type":"linear","colors":["#...","#..."],"angle":90}` in `viewer_cosmetics`
-  5. Overlay chat message component renders gradient name using `bg-clip-text text-transparent` with inline `backgroundImage` style — no JS animation in v1.4
-  6. Non-premium users cannot access gradient controls (gated by `viewer.is_premium` flag)
-**Plans**: 3 plans
-
-Plans:
-- [ ] 29-01-PLAN.md — DB migration 036 + Go type extensions (ViewerClaims IsPremium, gradient PATCH, enricher, TS types)
-- [ ] 29-02-PLAN.md — Settings page: tabbed card (Solid Color + Gradient), autosave, premium gate, live preview
-- [ ] 29-03-PLAN.md — Overlay + extension gradient render branch (website overlay + ChatContainer)
-
-### Phase 30: Avatar Frame & Flair System
-**Goal**: Premium viewers can select an avatar frame (decorative ring) and flair (corner icon) from an admin-curated catalog; changes render live in overlays
-**Depends on**: Phase 29
-**Services affected**: `api-gateway`, `overlay-manager`, frontend (`/settings/viewer`), overlay avatar component, admin pages
-**Requirements**: PREM-03, PREM-04, PREM-05, WEB-03, WEB-04
-**Success Criteria** (what must be TRUE):
-  1. `cosmetic_frames` and `cosmetic_flairs` catalog tables exist; admin page allows adding/removing entries and marking as premium-only
-  2. Premium users can browse frame and flair catalogs in `/settings/viewer` with live preview
-  3. Avatar component renders: base avatar (circle) + frame PNG (centered, 1.4× size, pointer-events-none) + flair PNG (absolute bottom-right, 0.4× avatar size)
-  4. `avatar_frame_id` and `avatar_flair_id` persisted in `viewer_cosmetics`; message processor injects `avatar_frame_url` and `avatar_flair_url` into `UserInfo`
-  5. Non-premium viewers see catalog with items locked (visible but not selectable)
+  1. User can click "Add to Server" and complete the OAuth2 flow, resulting in the bot appearing in their Discord server
+  2. After connecting, user sees the list of text channels available in their server (API response from auth-service)
+  3. User receives a clear, human-readable error when bot is missing required permissions (VIEW_CHANNEL, READ_MESSAGE_HISTORY, SEND_MESSAGES)
+  4. User can disconnect the bot, which removes it from their account and deletes all associated Discord sources
+  5. discord-listener establishes a Gateway WebSocket connection with correct intents bitmask and a startup assertion confirms MESSAGE_CONTENT is non-empty on first READY event
 **Plans**: 4 plans
 
 Plans:
-- [x] 30-01-PLAN.md — DB migration 037 + type extensions (Go UserInfo, cosmeticsUpsertRepo, TS UserInfo in both repos)
-- [ ] 30-02-PLAN.md — Auth-service: AdminCosmeticsHandler, catalog public endpoints, PATCH cosmetics extension + route wiring
-- [ ] 30-03-PLAN.md — Message-processor enricher: extend viewerIdentityCache + DB join + frame/flair URL injection
-- [ ] 30-04-PLAN.md — Frontend: UserAvatar component, AvatarCosmeticsCard, /admin/cosmetics page, overlay integration, extension wiring
+- [ ] 27-01-PLAN.md — DB migration (discord_guilds) + overlay-manager platform registration
+- [ ] 27-02-PLAN.md — discord-listener service scaffold + Gateway WebSocket connection
+- [ ] 27-03-PLAN.md — Discord OAuth provider + DiscordRepository in auth-service
+- [ ] 27-04-PLAN.md — Discord HTTP handlers + route wiring in auth-service
 
-### Phase 31: All-Chat Platform Badges
-**Goal**: Admin and premium viewers receive All-Chat-specific badges that appear in all overlays, prepended before platform badges
-**Depends on**: Phase 28 (requires viewer_id resolution in message processor)
-**Services affected**: `message-processor`, frontend overlay component, browser extension
-**Requirements**: BADGE-01, BADGE-02, BADGE-03, BADGE-04
+### Phase 28: Inbound Listener Core
+**Goal**: Discord channel messages appear in overlays as a real-time, first-class chat source
+**Depends on**: Phase 27
+**Requirements**: INBD-01, INBD-02
 **Success Criteria** (what must be TRUE):
-  1. `badge_definitions` catalog table seeded with two entries: `"allchat"` (logo icon) and `"premium"` (gem/star icon)
-  2. `ViewerBadgeEnricher` in message-processor prepends All-Chat badges to `UserInfo.Badges` for resolved viewers (derived from users.is_admin / users.is_premium — no viewer_badges table)
-  3. AllChatBadge (InfinityLogo wrapper) and PremiumBadge (inline SVG gem) components render in overlay and extension
-  4. Badge renders at h-[1em] responsive height with `title` attribute tooltip; allchat sorts at -2, premium at -1 in ROLE_PRIORITIES
-  5. Admin grant/revoke = existing is_admin / is_premium toggles on admin users page (no new badge UI)
+  1. A message sent in a configured Discord channel appears in the overlay within one second
+  2. Discord messages display with platform label "discord" and author username, consistent with Twitch and YouTube messages in the overlay
+  3. Bot messages (author.bot == true) are silently filtered and never appear in overlays
+  4. Only messages from the configured inbound channel appear — messages from other channels in the same server are ignored
+**Plans**: 2 plans
+
+Plans:
+- [ ] 28-01-PLAN.md — MESSAGE_CREATE dispatch + ChannelRegistry + publisher package + overlay-manager Redis wiring (INBD-01)
+- [ ] 28-02-PLAN.md — DiscordNormalizer in message-processor + registration (INBD-02)
+
+### Phase 29: Inbound Enrichment
+**Goal**: Discord messages carry deletion events and resolved mention text through the existing platform pipelines
+**Depends on**: Phase 28
+**Requirements**: INBD-03, INBD-04
+**Success Criteria** (what must be TRUE):
+  1. When a Discord message is deleted, a deletion event propagates through the pipeline and the message disappears from active overlays (consistent with Twitch/YouTube deletion behavior)
+  2. A message containing @username or #channel mentions renders with resolved names (e.g., "@alice" not "@123456789012345678") in the overlay
+**Plans**: 2 plans
+
+Plans:
+- [ ] 29-01-PLAN.md — MESSAGE_DELETE/MESSAGE_DELETE_BULK dispatch + HandleMessageDelete + channel filter (INBD-03)
+- [ ] 29-02-PLAN.md — GuildCache interface + GUILD_CREATE/CHANNEL_*/ROLE_* handlers + mention resolution in HandleMessageCreate (INBD-04)
+
+### Phase 30: Outbound Relay
+**Goal**: Non-Discord overlay messages are posted to a user-configured Discord channel with no echo loops
+**Depends on**: Phase 28
+**Requirements**: RELY-01, RELY-02, RELY-03, RELY-04
+**Success Criteria** (what must be TRUE):
+  1. A Twitch message that appears in an overlay is relayed to the configured Discord channel within two seconds, formatted as "[emoji] username: text"
+  2. A message that originated from Discord is never posted back to Discord — verified by a test asserting no REST call is made for platform="discord" pub/sub messages
+  3. When relay_enabled is set to false for a source, no messages are relayed for that source even if other sources in the same overlay have relay active
+  4. The relay target channel can be configured independently from the inbound channel (same or different channel ID accepted on save)
+**Plans**: 2 plans
+
+Plans:
+- [ ] 30-01-PLAN.md — relay package TDD: Manager, Repository, DiscordPoster interface + httpPoster, loop-safety filter, format function (RELY-01 to RELY-04)
+- [ ] 30-02-PLAN.md — pgx/v5 dependency + relay.Manager wiring in cmd/main.go
+
+### Phase 31: Load Balancing
+**Goal**: discord-listener runs safely across multiple pods with deterministic shard ownership and auto-scales under load
+**Depends on**: Phase 30
+**Requirements**: LOAD-01, LOAD-02, LOAD-03
+**Success Criteria** (what must be TRUE):
+  1. When two discord-listener pods are running, exactly one pod holds the Gateway connection for each shard — the second pod does not connect until the first fails or releases ownership
+  2. After a pod restart, the Gateway session resumes (RESUME opcode) using the persisted session_id and resume_gateway_url from Redis, avoiding a full re-IDENTIFY
+  3. HPA scales discord-listener pods up when events/sec or active guild count exceeds configured thresholds, and the new pod acquires shard ownership within 60 seconds of the prior pod terminating
 **Plans**: 3 plans
 
 Plans:
-- [ ] 31-01-PLAN.md — DB migration 038 + enricher extension (viewerIdentityCache, LATERAL JOIN, badge injection, unit tests)
-- [ ] 31-02-PLAN.md — Frontend: AllChatBadge + PremiumBadge components, overlay page.tsx name-check render, badgeOrder.ts + tests
-- [ ] 31-03-PLAN.md — Extension: mirror AllChatBadge + PremiumBadge, extend badgeOrder.ts, update ChatContainer name-check render
+- [ ] 31-01-PLAN.md — Gateway RESUME protocol TDD: OpResume types, BuildResumePayload, IDENTIFY/RESUME branch in Connect(), InvalidSession clear logic (LOAD-03)
+- [ ] 31-02-PLAN.md — metrics package + go.mod shared deps + cmd/main.go ownership gating via LeadershipCoordinator + /metrics endpoint (LOAD-01, LOAD-02)
+- [ ] 31-03-PLAN.md — Kubernetes manifests: Deployment+Service, HPA, ServiceMonitor + kustomization.yaml update (LOAD-02)
 
-### Phase 32: Integration Wiring Fixes
-**Goal**: Close all 7 integration-level gaps identified in v1.4 milestone audit — three surgical fixes across enricher SQL, overlay WebSocket handler, and API gateway routing
-**Depends on**: Phases 27-31 (gap closure, no new features)
-**Services affected**: `message-processor`, `api-gateway`, frontend (`/overlay/[id]/page.tsx`)
-**Requirements**: BADGE-02, PREM-02, PREM-03, PREM-04, PREM-05, WEB-03, WEB-04
-**Gap Closure:** Closes all gaps from v1.4-MILESTONE-AUDIT.md
+### Phase 32: Setup UI
+**Goal**: Users can configure Discord sources end-to-end from the frontend without leaving the app
+**Depends on**: Phase 31
+**Requirements**: UI-01, UI-02, UI-03, UI-04
 **Success Criteria** (what must be TRUE):
-  1. `viewer_badge_enricher.go` adds `LEFT JOIN viewers v ON v.id = vpi.viewer_id` and reads `COALESCE(v.is_premium, false)` — premium badge appears for premium viewers in overlays
-  2. `overlay/[id]/page.tsx` `ws.onmessage` handler parses `msg.user.name_gradient` from JSON string to `NameGradient` object before calling `buildGradientCSS` — gradient usernames render without TypeError
-  3. API gateway registers `GET /auth/viewer/catalog/frames` and `GET /auth/viewer/catalog/flairs` in public block; registers all 6 admin cosmetics routes (`GET/POST/DELETE /admin/cosmetics/frames` and `/admin/cosmetics/flairs`) in protected block — catalog and admin pages return 200
+  1. Settings page shows a Discord server connect card — clicking it initiates the OAuth2 redirect; after completion the card updates to show the connected server name and icon
+  2. Overlay editor allows adding a Discord source by selecting a guild and choosing an inbound channel from a dropdown populated from the channel listing API
+  3. Each Discord source card in the overlay editor shows connection status and a visual indicator of whether relay is active or inactive
+  4. Per-source relay configuration panel lets the user toggle relay on/off and pick an outbound channel; the visual filter indicator updates immediately on toggle
 **Plans**: 3 plans
 
 Plans:
-- [ ] 32-01-PLAN.md — Fix enricher SQL: add viewers JOIN, update scan order, update fakeViewerDB test double (closes BADGE-02)
-- [ ] 32-02-PLAN.md — Fix overlay gradient parse: JSON.parse in ws.onmessage handler (closes PREM-02)
-- [ ] 32-03-PLAN.md — Add 8 proxy routes to API gateway (closes PREM-03, PREM-04, PREM-05, WEB-03, WEB-04)
+- [ ] 32-01-PLAN.md — Backend PATCH endpoint + type system + discord.ts API module + design tokens + test scaffolds
+- [ ] 32-02-PLAN.md — Settings page Discord server connect card (OAuth, guild list, disconnect)
+- [ ] 32-03-PLAN.md — Overlay editor: Discord SourceCard + relay panel + AddSourceForm 2-step dialog
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 (28 can start in parallel with 27)
+**Execution Order:** 27 → 28 → 29 → 30 → 31 → 32
 
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
+| Phases | Milestone | Plans Complete | Status | Completed |
+|--------|-----------|----------------|--------|-----------|
 | 1-3 | v1.0 | 11/11 | Complete | 2026-02-18 |
 | 4-10 | v1.1 | 21/21 | Complete | 2026-02-21 |
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
-| 23 Design Token System & Foundation | v1.3 | 3/3 | Complete | 2026-03-10 |
-| 24 Component Library Setup | v1.3 | 5/5 | Complete | 2026-03-11 |
-| 25 Page Migration & Split-view Preview | v1.3 | 8/8 | Complete | 2026-03-11 |
-| 26 Enforcement & Quality Gates | v1.3 | 4/4 | Complete | 2026-03-14 |
-| 27 InnerTube Enrichment — Badges & Emotes | 3/3 | Complete    | 2026-03-14 | - |
-| 28 Viewer Identity Foundation — Auth & Platform Linking | 6/6 | Complete    | 2026-03-15 | - |
-| 29 Viewer Color & Gradient Editor | 3/3 | Complete    | 2026-03-15 | - |
-| 30 Avatar Frame & Flair System | 4/4 | Complete    | 2026-03-16 | 2026-03-16 |
-| 31 All-Chat Platform Badges | 3/3 | Complete    | 2026-03-16 | - |
-| 32 Integration Wiring Fixes | 3/3 | Complete    | 2026-03-16 | - |
+| 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
+| 27. Auth and Bot Token Foundation | 4/4 | Complete    | 2026-03-15 | - |
+| 28. Inbound Listener Core | 2/2 | Complete    | 2026-03-15 | - |
+| 29. Inbound Enrichment | 2/2 | Complete    | 2026-03-16 | - |
+| 30. Outbound Relay | 2/2 | Complete    | 2026-03-16 | - |
+| 31. Load Balancing | 3/3 | Complete    | 2026-03-16 | - |
+| 32. Setup UI | 3/3 | Complete    | 2026-03-16 | - |
 
 ---
-*Last updated: 2026-03-16 after v1.4 milestone completion*
+*Last updated: 2026-03-16 after Phase 31 planning — 3 plans created*

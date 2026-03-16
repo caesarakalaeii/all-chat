@@ -28,6 +28,7 @@ var validPlatforms = map[string]bool{
 	"kick":           true,
 	"tiktok":         true,
 	"shared_overlay": true, // Phase 16: shared overlay sources
+	"discord":        true, // Phase 27: Discord Listener
 }
 
 // Validate validates the chat source fields
