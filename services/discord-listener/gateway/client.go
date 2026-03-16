@@ -216,12 +216,6 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 				}
 				c.log.Info("Gateway READY — session established",
 					zap.String("session_id", ready.SessionID))
-				// MESSAGE_CONTENT is a privileged Gateway intent. Log a warning so operators
-				// know to verify it in the Discord Developer Portal. The hard check happens
-				// when the first MESSAGE_CREATE event is processed (empty content = intent missing).
-				c.log.Warn("MESSAGE_CONTENT is a privileged Gateway intent — " +
-					"if Discord messages appear with empty content in overlays, " +
-					"enable 'Message Content Intent' in Discord Developer Portal under Bot settings")
 			}
 
 			if payload.T != nil && *payload.T == "MESSAGE_CREATE" {
@@ -394,18 +388,29 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 	firstSeen := c.firstMessageSeen
 	c.mu.Unlock()
 
-	if !firstSeen && msg.Content == "" {
-		if c.log != nil {
-			c.log.Error("MESSAGE_CREATE with empty content — MESSAGE_CONTENT privileged intent not enabled; halting",
-				zap.String("channel_id", msg.ChannelID),
-			)
+	if !firstSeen {
+		if msg.Content == "" {
+			// Empty content on first MESSAGE_CREATE means MESSAGE_CONTENT privileged intent
+			// is not enabled in the Discord Developer Portal. Log once and drop the message
+			// but keep the service running — halting here causes a reconnect loop that silently
+			// swallows every incoming message.
+			if c.log != nil {
+				c.log.Error("MESSAGE_CREATE with empty content — MESSAGE_CONTENT privileged intent is NOT enabled. "+
+					"Enable it in Discord Developer Portal → Bot → Privileged Gateway Intents. "+
+					"Messages will be dropped until this is fixed.",
+					zap.String("channel_id", msg.ChannelID),
+					zap.String("author_id", msg.Author.ID),
+				)
+			}
+			c.mu.Lock()
+			c.firstMessageSeen = true // suppress further per-message errors
+			c.mu.Unlock()
+			return nil
 		}
-		return fmt.Errorf("missing MESSAGE_CONTENT intent: first MESSAGE_CREATE had empty content")
+		c.mu.Lock()
+		c.firstMessageSeen = true
+		c.mu.Unlock()
 	}
-
-	c.mu.Lock()
-	c.firstMessageSeen = true
-	c.mu.Unlock()
 
 	// 4. Build tags
 	tags := map[string]string{
