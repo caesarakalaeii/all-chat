@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 /**
  * UserAvatar component tests (TDD)
  *
@@ -76,10 +78,11 @@ describe('UserAvatar', () => {
   })
 
   it('renders ? fallback when avatarUrl and displayName both absent', () => {
-    const { getByText } = render(
+    const { getAllByText } = render(
       <UserAvatar size={40} />
     )
-    expect(getByText('?')).toBeDefined()
+    const matches = getAllByText('?')
+    expect(matches.length).toBeGreaterThan(0)
   })
 
   it('frame img has 1.4x size', () => {

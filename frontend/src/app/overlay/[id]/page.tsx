@@ -28,6 +28,7 @@ import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
 import { buildGradientCSS } from '@/lib/utils/gradient';
+import { UserAvatar } from '@/components/UserAvatar';
 import '@/styles/events.css';
 
 export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
@@ -610,25 +611,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           >
             <div className="flex items-start gap-3">
               {/* Avatar */}
-              <div className="flex-shrink-0">
-                {message.user?.avatar_url ? (
-                  <Image
-                    src={message.user.avatar_url}
-                    alt={message.user.username}
-                    width={40}
-                    height={40}
-                    className="w-10 h-10 rounded-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                        message.user.display_name || message.user.username
-                      )}&background=6b7280&color=fff&size=40`;
-                    }}
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-semibold">
-                    {message.user?.username?.slice(0, 2).toUpperCase() || '?'}
-                  </div>
-                )}
+              <div className="flex-shrink-0" style={{ overflow: 'visible' }}>
+                <UserAvatar
+                  avatarUrl={message.user?.avatar_url}
+                  frameUrl={message.user?.avatar_frame_url}
+                  flairUrl={message.user?.avatar_flair_url}
+                  size={40}
+                  displayName={message.user?.display_name}
+                />
               </div>
 
               {/* Message Content */}
