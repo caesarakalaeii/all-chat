@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Discord Listener
 status: planning
-stopped_at: Completed 30-outbound-relay-02-PLAN.md
-last_updated: "2026-03-16T08:51:06.616Z"
+stopped_at: Completed 31-load-balancing-01-PLAN.md
+last_updated: "2026-03-16T09:24:16.607Z"
 last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
   total_phases: 18
   completed_phases: 10
-  total_plans: 38
-  completed_plans: 38
+  total_plans: 41
+  completed_plans: 40
   percent: 0
 ---
 
@@ -61,6 +61,8 @@ Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
 | Phase 29 P02 | 286s | 2 tasks | 7 files |
 | Phase 30-outbound-relay P01 | 129 | 2 tasks | 7 files |
 | Phase 30-outbound-relay P02 | 5 | 1 tasks | 3 files |
+| Phase 31-load-balancing P03 | 2min | 2 tasks | 4 files |
+| Phase 31-load-balancing P01 | 117 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -99,6 +101,10 @@ Key decisions relevant to v1.5:
 - [Phase 30-outbound-relay]: doPost(isRetry bool) helper enforces single-retry contract — public Post always passes false, recursive retry passes true
 - [Phase 30-outbound-relay]: relay.NewHTTPPoster takes logger as third param — actual signature differs from plan spec; called with all three args
 - [Phase 30-outbound-relay]: Shutdown order: gwClient.Close() -> relayMgr.Stop() -> srv.Shutdown() ensures relay goroutines drain before HTTP server closes
+- [Phase 31-load-balancing]: [Phase 31-03]: maxReplicas=3 for discord-listener HPA — single-shard model; extra pods provide fault tolerance standby only
+- [Phase 31-load-balancing]: [Phase 31-03]: scaleUp type=Pods value=1 periodSeconds=30 — prevents Redis shard ownership lock race during scale-up
+- [Phase 31-load-balancing]: [Phase 31-03]: discord-listener-secrets separate Secret for DISCORD_BOT_TOKEN — independent rotation from allchat-secrets
+- [Phase 31-load-balancing]: [Phase 31]: Gateway RESUME protocol — RESUME/IDENTIFY branch in Connect() after OpHello; d=false clears Redis session keys, d=true preserves them
 
 ### Pending Todos
 
@@ -118,8 +124,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T08:41:25.262Z
-Stopped at: Completed 30-outbound-relay-02-PLAN.md
+Last session: 2026-03-16T09:24:16.604Z
+Stopped at: Completed 31-load-balancing-01-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)

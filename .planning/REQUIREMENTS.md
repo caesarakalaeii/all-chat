@@ -31,8 +31,8 @@ Requirements for the Discord Listener milestone. Each maps to roadmap phases.
 ### LOAD — Load Balancing
 
 - [ ] **LOAD-01**: Gateway shard ownership is coordinated via source-manager leader election — one pod holds each shard's connection
-- [ ] **LOAD-02**: discord-listener scales via HPA on Prometheus metrics (events/sec, active guilds)
-- [ ] **LOAD-03**: Gateway session state (session_id + resume_gateway_url) is persisted in Redis so pod restarts resume the session instead of full re-IDENTIFY
+- [x] **LOAD-02**: discord-listener scales via HPA on Prometheus metrics (events/sec, active guilds)
+- [x] **LOAD-03**: Gateway session state (session_id + resume_gateway_url) is persisted in Redis so pod restarts resume the session instead of full re-IDENTIFY
 
 ### UI — Setup UI
 
@@ -80,8 +80,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RELY-03 | Phase 30 | Complete |
 | RELY-04 | Phase 30 | Complete |
 | LOAD-01 | Phase 31 | Pending |
-| LOAD-02 | Phase 31 | Pending |
-| LOAD-03 | Phase 31 | Pending |
+| LOAD-02 | Phase 31 | Complete |
+| LOAD-03 | Phase 31 | Complete |
 | UI-01 | Phase 32 | Pending |
 | UI-02 | Phase 32 | Pending |
 | UI-03 | Phase 32 | Pending |

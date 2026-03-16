@@ -243,7 +243,7 @@ Plans:
 | 28. Inbound Listener Core | 2/2 | Complete    | 2026-03-15 | - |
 | 29. Inbound Enrichment | 2/2 | Complete    | 2026-03-16 | - |
 | 30. Outbound Relay | 2/2 | Complete    | 2026-03-16 | - |
-| 31. Load Balancing | v1.5 | 0/3 | Not started | - |
+| 31. Load Balancing | 2/3 | In Progress|  | - |
 | 32. Setup UI | v1.5 | 0/TBD | Not started | - |
 
 ---
