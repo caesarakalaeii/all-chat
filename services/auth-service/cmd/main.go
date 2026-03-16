@@ -186,15 +186,20 @@ func main() {
 	// Create viewer repository
 	viewerRepo := repository.NewViewerRepository(db, tokenCipher)
 
+	// Create viewer identity repository (Phase 28: cross-platform viewer linking)
+	viewerIdentityRepo := repository.NewViewerIdentityRepository(db)
+
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log)
 	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
-	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
+	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, jwtSecret)
+	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
+	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)
 	debugHandler := handlers.NewDebugHandler(log, jwtSecret)
 	riscHandler := handlers.NewRISCHandler(log, db)
 
@@ -253,10 +258,13 @@ func main() {
 	// Viewer auth routes (separate from streamer auth)
 	router.GET("/viewer/twitch/login", viewerAuthHandler.HandleTwitchLogin)
 	router.GET("/viewer/twitch/callback", viewerAuthHandler.HandleTwitchCallback)
+	router.POST("/viewer/twitch/exchange", viewerAuthHandler.HandleTwitchExchange)
 	router.GET("/viewer/youtube/login", viewerAuthHandler.HandleYouTubeLogin)
 	router.GET("/viewer/youtube/callback", viewerAuthHandler.HandleYouTubeCallback)
+	router.POST("/viewer/youtube/exchange", viewerAuthHandler.HandleYouTubeExchange)
 	router.GET("/viewer/kick/login", viewerAuthHandler.HandleKickLogin)
 	router.GET("/viewer/kick/callback", viewerAuthHandler.HandleKickCallback)
+	router.POST("/viewer/kick/exchange", viewerAuthHandler.HandleKickExchange)
 
 	// Public streamer info routes
 	router.GET("/streamers/:username", streamerInfoHandler.HandleGetStreamerInfo)
@@ -278,6 +286,13 @@ func main() {
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
 	}
 
+	// Public viewer catalog routes (no JWT required — cosmetic catalogs are not sensitive)
+	viewerPublic := router.Group("/viewer")
+	{
+		viewerPublic.GET("/catalog/frames", adminCosmeticsHandler.HandleListFrames)
+		viewerPublic.GET("/catalog/flairs", adminCosmeticsHandler.HandleListFlairs)
+	}
+
 	// Viewer protected routes (require viewer JWT)
 	viewerProtected := router.Group("/viewer")
 	viewerProtected.Use(middleware.JWTAuth(jwtSecret))
@@ -285,6 +300,7 @@ func main() {
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
 		viewerProtected.POST("/chat/send", chatSendHandler.HandleSendMessage)
+		viewerProtected.PATCH("/cosmetics", viewerCosmeticsHandler.HandlePatchCosmetics)
 	}
 
 	// Admin routes (JWT + Admin role required)
@@ -308,6 +324,14 @@ func main() {
 		admin.GET("/viewers", adminViewerHandler.HandleListViewers)
 		admin.POST("/viewers/:session_id/ban", adminViewerHandler.HandleBanViewer)
 		admin.POST("/viewers/:session_id/unban", adminViewerHandler.HandleUnbanViewer)
+
+		// Cosmetic catalog management (frames and flairs)
+		admin.GET("/cosmetics/frames", adminCosmeticsHandler.HandleListFrames)
+		admin.POST("/cosmetics/frames", adminCosmeticsHandler.HandleCreateFrame)
+		admin.DELETE("/cosmetics/frames/:id", adminCosmeticsHandler.HandleDeleteFrame)
+		admin.GET("/cosmetics/flairs", adminCosmeticsHandler.HandleListFlairs)
+		admin.POST("/cosmetics/flairs", adminCosmeticsHandler.HandleCreateFlair)
+		admin.DELETE("/cosmetics/flairs/:id", adminCosmeticsHandler.HandleDeleteFlair)
 	}
 
 	// Get port from environment

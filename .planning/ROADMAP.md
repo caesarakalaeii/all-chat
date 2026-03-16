@@ -6,6 +6,7 @@
 - ✅ **v1.1 Listener Load Balancing** — Phases 4-10 (shipped 2026-02-21)
 - ✅ **v1.2 InnerTube YouTube Listener** — Phases 11-22 (shipped 2026-03-06)
 - ✅ **v1.3 Frontend Redesign** — Phases 23-26 (shipped 2026-03-14)
+- ✅ **v1.4 Viewer Identity & YouTube Enrichment** — Phases 27-32 (shipped 2026-03-16)
 
 ## Phases
 
@@ -130,14 +131,147 @@
 
 </details>
 
+---
+
+## 🚧 v1.4 Viewer Identity & YouTube Enrichment
+
+**Milestone Goal:** Give viewers global cosmetic control over how their name appears in overlays, unlock premium identity features (gradients, avatar frames/flairs, badges), and enrich YouTube chat with InnerTube-sourced real membership badge images and inline emotes.
+
+### Phase 27: InnerTube Enrichment — Badges & Emotes
+**Goal**: Extract real membership badge image URLs and inline emote images from InnerTube chat payloads and deliver them through the existing pipeline to overlays
+**Depends on**: Nothing (surgical changes to existing InnerTube service + message-processor)
+**Services affected**: `youtube-listener-innertube`, `message-processor`
+**Requirements**: YTBADGE-01, YTBADGE-02, YTBADGE-03, YTBADGE-04, YTEMOTE-01, YTEMOTE-02, YTEMOTE-03, YTEMOTE-04, YTEMOTE-05
+**Success Criteria** (what must be TRUE):
+  1. `extractBadges()` in innertube parser returns badge image URLs for membership tiers (from `customThumbnail.thumbnails[1].URL`) and passes them via `tags["badge_member_url"]` and `tags["badge_member_tooltip"]`
+  2. `EmojiData` struct gains `IsCustomEmoji bool` field; `extractMessageText()` emits `Emote{}` entries for custom emojis alongside the text placeholder
+  3. YouTube normalizer in message-processor reads `tags["badge_member_url"]` to populate real `Badge.IconURL` (SVG fallback preserved for old listener and system badges)
+  4. Emote cache per channel stored in Redis keyed by `yt:emote:{channel_id}:{emoji_id}` (TTL 24h), populated as messages arrive
+  5. Unicode emoji (non-custom) continue to render as text — no regression
+  6. Old quota-based youtube-listener unaffected (backward compatible)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 27-01-PLAN.md — Test scaffolds: failing tests for all badge and emote requirements (Wave 0, TDD)
+- [ ] 27-02-PLAN.md — InnerTube parser: IsCustomEmoji, extractBadgesRich, extractMessageText emote extraction, yt_emote_cache
+- [ ] 27-03-PLAN.md — Message-processor normalizer: badge_member_url handling, emote_data tag merge
+
+### Phase 28: Viewer Identity Foundation — Auth & Platform Linking
+**Goal**: Establish viewer account model, OAuth flow from browser extension, and platform identity linking so All-Chat knows which platform user corresponds to which viewer
+**Depends on**: Nothing (new feature, no phase dependency)
+**Services affected**: `auth-service`, `api-gateway`, browser extension (`all-chat-extension`)
+**Requirements**: VID-03, VID-04, VID-05, VID-06, EXT-01, EXT-02, EXT-03, EXT-04
+**Success Criteria** (what must be TRUE):
+  1. `viewer_platform_identities` table exists: maps (platform, platform_user_id) → viewer_id
+  2. Extension popup shows auth status (signed-in display name + avatar) and sign-in buttons for Twitch and YouTube
+  3. OAuth sign-in from extension returns a viewer JWT stored in `chrome.storage.local`
+  4. Extension popup has inline `<input type="color">` picker; color change saves to server immediately via PATCH `/api/viewer/cosmetics`
+  5. Extension popup has "Open Settings" button navigating to `/settings/viewer` on the website
+  6. `viewer_cosmetics` table exists: stores `name_color (VARCHAR(7))` per viewer
+  7. Message processor `ViewerBadgeEnricher` resolves platform user → viewer_id via Redis cache (5min TTL) and injects viewer's `name_color` into `UserInfo.Color` when the platform provides none
+**Plans**: 6 plans
+
+Plans:
+- [x] 28-01-PLAN.md — DB migration 035 + ViewerClaims extension + ViewerIdentityRepository + Wave 0 test scaffolds
+- [x] 28-02-PLAN.md — Auth-service POST exchange handlers + PATCH cosmetics endpoint + route wiring
+- [x] 28-03-PLAN.md — message-processor ViewerBadgeEnricher (Redis cache + DB fallback + wiring)
+- [x] 28-04-PLAN.md — Browser extension: manifest, popup (OAuth + color picker), content script (platform detection + EXT-04)
+- [x] 28-05-PLAN.md — Frontend /settings/viewer page stub
+- [ ] 28-06-PLAN.md — Gap closure: content script session writes, context-aware popup buttons, color picker reset
+
+### Phase 29: Viewer Color & Gradient Editor
+**Goal**: All-authenticated-users can set a fallback name color; premium users get a full gradient editor with multi-stop color picker and live preview
+**Depends on**: Phase 28
+**Services affected**: `auth-service`, `message-processor`, frontend (`/settings/viewer`), overlay render component, browser extension
+**Requirements**: VID-01, VID-02, PREM-01, PREM-02, WEB-01, WEB-02, WEB-05
+**Success Criteria** (what must be TRUE):
+  1. `/settings/viewer` page exists with "Viewer Identity" section visible to all authenticated users
+  2. Color picker (hex input + color swatch) persists `name_color` server-side; overlay applies it when platform provides no color
+  3. Premium users see gradient editor: 2–4 color stops, angle slider (0–360°), live preview of gradient on sample username
+  4. `name_gradient` stored as JSONB `{"type":"linear","colors":["#...","#..."],"angle":90}` in `viewer_cosmetics`
+  5. Overlay chat message component renders gradient name using `bg-clip-text text-transparent` with inline `backgroundImage` style — no JS animation in v1.4
+  6. Non-premium users cannot access gradient controls (gated by `viewer.is_premium` flag)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 29-01-PLAN.md — DB migration 036 + Go type extensions (ViewerClaims IsPremium, gradient PATCH, enricher, TS types)
+- [ ] 29-02-PLAN.md — Settings page: tabbed card (Solid Color + Gradient), autosave, premium gate, live preview
+- [ ] 29-03-PLAN.md — Overlay + extension gradient render branch (website overlay + ChatContainer)
+
+### Phase 30: Avatar Frame & Flair System
+**Goal**: Premium viewers can select an avatar frame (decorative ring) and flair (corner icon) from an admin-curated catalog; changes render live in overlays
+**Depends on**: Phase 29
+**Services affected**: `api-gateway`, `overlay-manager`, frontend (`/settings/viewer`), overlay avatar component, admin pages
+**Requirements**: PREM-03, PREM-04, PREM-05, WEB-03, WEB-04
+**Success Criteria** (what must be TRUE):
+  1. `cosmetic_frames` and `cosmetic_flairs` catalog tables exist; admin page allows adding/removing entries and marking as premium-only
+  2. Premium users can browse frame and flair catalogs in `/settings/viewer` with live preview
+  3. Avatar component renders: base avatar (circle) + frame PNG (centered, 1.4× size, pointer-events-none) + flair PNG (absolute bottom-right, 0.4× avatar size)
+  4. `avatar_frame_id` and `avatar_flair_id` persisted in `viewer_cosmetics`; message processor injects `avatar_frame_url` and `avatar_flair_url` into `UserInfo`
+  5. Non-premium viewers see catalog with items locked (visible but not selectable)
+**Plans**: 4 plans
+
+Plans:
+- [x] 30-01-PLAN.md — DB migration 037 + type extensions (Go UserInfo, cosmeticsUpsertRepo, TS UserInfo in both repos)
+- [ ] 30-02-PLAN.md — Auth-service: AdminCosmeticsHandler, catalog public endpoints, PATCH cosmetics extension + route wiring
+- [ ] 30-03-PLAN.md — Message-processor enricher: extend viewerIdentityCache + DB join + frame/flair URL injection
+- [ ] 30-04-PLAN.md — Frontend: UserAvatar component, AvatarCosmeticsCard, /admin/cosmetics page, overlay integration, extension wiring
+
+### Phase 31: All-Chat Platform Badges
+**Goal**: Admin and premium viewers receive All-Chat-specific badges that appear in all overlays, prepended before platform badges
+**Depends on**: Phase 28 (requires viewer_id resolution in message processor)
+**Services affected**: `message-processor`, frontend overlay component, browser extension
+**Requirements**: BADGE-01, BADGE-02, BADGE-03, BADGE-04
+**Success Criteria** (what must be TRUE):
+  1. `badge_definitions` catalog table seeded with two entries: `"allchat"` (logo icon) and `"premium"` (gem/star icon)
+  2. `ViewerBadgeEnricher` in message-processor prepends All-Chat badges to `UserInfo.Badges` for resolved viewers (derived from users.is_admin / users.is_premium — no viewer_badges table)
+  3. AllChatBadge (InfinityLogo wrapper) and PremiumBadge (inline SVG gem) components render in overlay and extension
+  4. Badge renders at h-[1em] responsive height with `title` attribute tooltip; allchat sorts at -2, premium at -1 in ROLE_PRIORITIES
+  5. Admin grant/revoke = existing is_admin / is_premium toggles on admin users page (no new badge UI)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 31-01-PLAN.md — DB migration 038 + enricher extension (viewerIdentityCache, LATERAL JOIN, badge injection, unit tests)
+- [ ] 31-02-PLAN.md — Frontend: AllChatBadge + PremiumBadge components, overlay page.tsx name-check render, badgeOrder.ts + tests
+- [ ] 31-03-PLAN.md — Extension: mirror AllChatBadge + PremiumBadge, extend badgeOrder.ts, update ChatContainer name-check render
+
+### Phase 32: Integration Wiring Fixes
+**Goal**: Close all 7 integration-level gaps identified in v1.4 milestone audit — three surgical fixes across enricher SQL, overlay WebSocket handler, and API gateway routing
+**Depends on**: Phases 27-31 (gap closure, no new features)
+**Services affected**: `message-processor`, `api-gateway`, frontend (`/overlay/[id]/page.tsx`)
+**Requirements**: BADGE-02, PREM-02, PREM-03, PREM-04, PREM-05, WEB-03, WEB-04
+**Gap Closure:** Closes all gaps from v1.4-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. `viewer_badge_enricher.go` adds `LEFT JOIN viewers v ON v.id = vpi.viewer_id` and reads `COALESCE(v.is_premium, false)` — premium badge appears for premium viewers in overlays
+  2. `overlay/[id]/page.tsx` `ws.onmessage` handler parses `msg.user.name_gradient` from JSON string to `NameGradient` object before calling `buildGradientCSS` — gradient usernames render without TypeError
+  3. API gateway registers `GET /auth/viewer/catalog/frames` and `GET /auth/viewer/catalog/flairs` in public block; registers all 6 admin cosmetics routes (`GET/POST/DELETE /admin/cosmetics/frames` and `/admin/cosmetics/flairs`) in protected block — catalog and admin pages return 200
+**Plans**: 3 plans
+
+Plans:
+- [ ] 32-01-PLAN.md — Fix enricher SQL: add viewers JOIN, update scan order, update fakeViewerDB test double (closes BADGE-02)
+- [ ] 32-02-PLAN.md — Fix overlay gradient parse: JSON.parse in ws.onmessage handler (closes PREM-02)
+- [ ] 32-03-PLAN.md — Add 8 proxy routes to API gateway (closes PREM-03, PREM-04, PREM-05, WEB-03, WEB-04)
+
 ## Progress
 
-| Phases | Milestone | Plans | Status | Completed |
-|--------|-----------|-------|--------|-----------|
+**Execution Order:**
+Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 (28 can start in parallel with 27)
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
 | 1-3 | v1.0 | 11/11 | Complete | 2026-02-18 |
 | 4-10 | v1.1 | 21/21 | Complete | 2026-02-21 |
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
-| 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
+| 23 Design Token System & Foundation | v1.3 | 3/3 | Complete | 2026-03-10 |
+| 24 Component Library Setup | v1.3 | 5/5 | Complete | 2026-03-11 |
+| 25 Page Migration & Split-view Preview | v1.3 | 8/8 | Complete | 2026-03-11 |
+| 26 Enforcement & Quality Gates | v1.3 | 4/4 | Complete | 2026-03-14 |
+| 27 InnerTube Enrichment — Badges & Emotes | 3/3 | Complete    | 2026-03-14 | - |
+| 28 Viewer Identity Foundation — Auth & Platform Linking | 6/6 | Complete    | 2026-03-15 | - |
+| 29 Viewer Color & Gradient Editor | 3/3 | Complete    | 2026-03-15 | - |
+| 30 Avatar Frame & Flair System | 4/4 | Complete    | 2026-03-16 | 2026-03-16 |
+| 31 All-Chat Platform Badges | 3/3 | Complete    | 2026-03-16 | - |
+| 32 Integration Wiring Fixes | 3/3 | Complete    | 2026-03-16 | - |
 
 ---
-*Last updated: 2026-03-14 after v1.3 milestone completion*
+*Last updated: 2026-03-16 after v1.4 milestone completion*

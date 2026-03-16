@@ -14,7 +14,7 @@ func TestDiscoverLiveStream_NetworkError(t *testing.T) {
 	// Create discovery with no server (will cause network error)
 	logger := zap.NewNop()
 	client := &http.Client{}
-	discovery := NewDiscovery(client, logger)
+	discovery := NewDiscovery(client, logger, ClientConfig{})
 
 	ctx := context.Background()
 	_, err := discovery.DiscoverLiveStream(ctx, "UC_invalid_channel")
@@ -148,7 +148,7 @@ func TestDiscoverLiveStream_NotFound(t *testing.T) {
 	defer server.Close()
 
 	logger := zap.NewNop()
-	discovery := NewDiscovery(server.Client(), logger)
+	discovery := NewDiscovery(server.Client(), logger, ClientConfig{})
 
 	ctx := context.Background()
 	_, err := discovery.DiscoverLiveStream(ctx, "UCtest")
