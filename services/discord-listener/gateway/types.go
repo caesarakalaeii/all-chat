@@ -7,6 +7,7 @@ const (
 	OpDispatch       = 0
 	OpHeartbeat      = 1
 	OpIdentify       = 2
+	OpResume         = 6 // client sends to resume a disconnected session
 	OpReconnect      = 7
 	OpInvalidSession = 9
 	OpHello          = 10
@@ -66,6 +67,29 @@ type GatewaySession struct {
 	SessionID string
 	ResumeURL string
 	Seq       int
+}
+
+// ResumeData is the payload for op=6 RESUME
+type ResumeData struct {
+	Token     string `json:"token"`
+	SessionID string `json:"session_id"`
+	Seq       int    `json:"seq"`
+}
+
+// BuildResumePayload constructs the op=6 RESUME payload.
+func BuildResumePayload(token, sessionID string, seq int) GatewayPayload {
+	d, _ := json.Marshal(ResumeData{
+		Token:     token,
+		SessionID: sessionID,
+		Seq:       seq,
+	})
+	return GatewayPayload{Op: OpResume, D: json.RawMessage(d)}
+}
+
+// InvalidSessionData is the payload for op=9 INVALID_SESSION.
+// Resumable is true when the client may attempt RESUME on reconnect; false means IDENTIFY required.
+type InvalidSessionData struct {
+	Resumable bool `json:"d"`
 }
 
 // MessageCreateData is the payload for the MESSAGE_CREATE dispatch event

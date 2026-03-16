@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -162,10 +163,22 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 			// Start heartbeat goroutine with jitter on first beat (Discord requirement)
 			go c.heartbeatLoop(ctx, hello.HeartbeatInterval)
 
-			// Send IDENTIFY
-			identify := BuildIdentifyPayload(c.token)
-			if err := c.writeJSON(identify); err != nil {
-				return fmt.Errorf("failed to send IDENTIFY: %w", err)
+			// Attempt RESUME if a prior session exists in Redis; otherwise IDENTIFY.
+			sessionID, _ := c.store.Get(ctx, RedisKeySessionID)
+			resumeURL, _ := c.store.Get(ctx, RedisKeyResumeURL)
+			seqStr, _ := c.store.Get(ctx, RedisKeySeq)
+			seq, _ := strconv.Atoi(seqStr)
+
+			if sessionID != "" && resumeURL != "" {
+				resume := BuildResumePayload(c.token, sessionID, seq)
+				if err := c.writeJSON(resume); err != nil {
+					return fmt.Errorf("failed to send RESUME: %w", err)
+				}
+			} else {
+				identify := BuildIdentifyPayload(c.token)
+				if err := c.writeJSON(identify); err != nil {
+					return fmt.Errorf("failed to send IDENTIFY: %w", err)
+				}
 			}
 
 		case OpDispatch:
@@ -282,6 +295,20 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 
 		case OpInvalidSession:
 			c.log.Warn("Gateway invalidated session")
+			// Parse d field — a boolean indicating whether the session is resumable.
+			// d=false: must re-IDENTIFY; clear all session keys so the next Connect() does not RESUME.
+			// d=true: may RESUME on next connect; preserve keys.
+			var data InvalidSessionData
+			if payload.D != nil {
+				if parseErr := json.Unmarshal(payload.D, &data.Resumable); parseErr != nil {
+					c.log.Warn("Failed to parse InvalidSession d field", zap.Error(parseErr))
+				}
+			}
+			if !data.Resumable {
+				_ = c.store.Set(ctx, RedisKeySessionID, "")
+				_ = c.store.Set(ctx, RedisKeyResumeURL, "")
+				_ = c.store.Set(ctx, RedisKeySeq, "")
+			}
 			return fmt.Errorf("gateway invalid session")
 
 		case OpHeartbeatACK:
