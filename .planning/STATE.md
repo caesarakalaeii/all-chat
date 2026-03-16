@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Viewer Identity & YouTube Enrichment
 status: executing
-stopped_at: Phase 31 context gathered
-last_updated: "2026-03-16T08:15:07.302Z"
+stopped_at: Completed 31-01-PLAN.md
+last_updated: "2026-03-16T08:36:27.118Z"
 last_activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contracts)
 progress:
   total_phases: 21
   completed_phases: 13
-  total_plans: 60
-  completed_plans: 60
+  total_plans: 63
+  completed_plans: 62
 ---
 
 # Project State
@@ -56,6 +56,8 @@ Last activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contra
 | Phase 30-avatar-frame-flair-system P02 | ~5min | 2 tasks | 5 files |
 | Phase 30-avatar-frame-flair-system P03 | 3min | 1 tasks | 2 files |
 | Phase 30-avatar-frame-flair-system P04 | 7min | 2 tasks | 8 files |
+| Phase 31-all-chat-platform-badges P02 | 2min | 2 tasks | 5 files |
+| Phase 31-all-chat-platform-badges P01 | 5min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -102,6 +104,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 30-avatar-frame-flair-system]: Extension UserAvatar uses inline styles (not Tailwind) for non-Tailwind extension environment
 - [Phase 30-avatar-frame-flair-system]: // @vitest-environment jsdom annotation on test file avoids breaking existing node-environment unit tests in vitest config
 - [Phase 30-avatar-frame-flair-system]: Admin cosmetics page includes AdminNav for consistent admin navigation header
+- [Phase 31-all-chat-platform-badges]: Test file placed in src/lib/__tests__/ to match vitest include pattern; PremiumBadge uses SVG <title> child element (not HTML title attr); Image badge sizing changed from w-4 h-4 to h-[1em] w-auto for overlay font-size responsiveness; AllChatBadge requires use client due to InfinityLogo requestAnimationFrame
+- [Phase 31-all-chat-platform-badges]: Prepend premium first, allchat last — allchat ends up at index 0 in final badge slice
+- [Phase 31-all-chat-platform-badges]: LATERAL + LIMIT 1 pattern for viewer_sessions join prevents duplicate rows without a GROUP BY
 
 ### Pending Todos
 
@@ -113,8 +118,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T08:15:07.300Z
-Stopped at: Phase 31 context gathered
-Resume file: .planning/phases/31-all-chat-platform-badges/31-CONTEXT.md
+Last session: 2026-03-16T08:36:27.115Z
+Stopped at: Completed 31-01-PLAN.md
+Resume file: None
 
 **Next action:** Phase 30 complete. Proceed to next phase or feature.
