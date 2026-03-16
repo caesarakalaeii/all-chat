@@ -82,7 +82,9 @@ func (h *ViewerAuthHandler) HandleTwitchExchange(c *gin.Context) {
 		viewerID = uuid.Nil
 	}
 
-	jwtToken, err := h.generateViewerJWT(session, viewerID)
+	linkedStreamer := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
+
+	jwtToken, err := h.generateViewerJWT(session, viewerID, linkedStreamer)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
@@ -197,7 +199,9 @@ func (h *ViewerAuthHandler) HandleYouTubeExchange(c *gin.Context) {
 		viewerID = uuid.Nil
 	}
 
-	jwtToken, err := h.generateViewerJWT(session, viewerID)
+	linkedStreamer := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
+
+	jwtToken, err := h.generateViewerJWT(session, viewerID, linkedStreamer)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
@@ -320,7 +324,9 @@ func (h *ViewerAuthHandler) HandleKickExchange(c *gin.Context) {
 		viewerID = uuid.Nil
 	}
 
-	jwtToken, err := h.generateViewerJWT(session, viewerID)
+	linkedStreamer := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
+
+	jwtToken, err := h.generateViewerJWT(session, viewerID, linkedStreamer)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
