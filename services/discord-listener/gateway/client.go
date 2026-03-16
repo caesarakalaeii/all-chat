@@ -112,12 +112,19 @@ func NewGatewayClient(token, gatewayURL string, store SessionStore, log *zap.Log
 // Connect opens the Gateway WebSocket, runs HELLO/IDENTIFY/READY, starts heartbeat.
 // This method blocks until the connection closes or ctx is cancelled.
 func (c *GatewayClient) Connect(ctx context.Context) error {
-	c.log.Info("Connecting to Discord Gateway", zap.String("url", c.gatewayURL))
+	// Use resume_gateway_url when a prior session exists — Discord requires RESUME to be sent
+	// to the resume URL, not the standard gateway URL (sending RESUME to the wrong URL → 4002).
+	connectURL := c.gatewayURL
+	if resumeURL, err := c.store.Get(ctx, RedisKeyResumeURL); err == nil && resumeURL != "" {
+		connectURL = resumeURL
+	}
+
+	c.log.Info("Connecting to Discord Gateway", zap.String("url", connectURL))
 
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 	}
-	conn, _, err := dialer.DialContext(ctx, c.gatewayURL, http.Header{})
+	conn, _, err := dialer.DialContext(ctx, connectURL, http.Header{})
 	if err != nil {
 		return fmt.Errorf("failed to dial Gateway: %w", err)
 	}
