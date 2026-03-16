@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: discord-listener
+  namespace: allchat
+  labels:
+    app: discord-listener
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app: discord-listener
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

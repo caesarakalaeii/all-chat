@@ -1,119 +1,119 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: Viewer Identity & YouTube Enrichment
-status: executing
-stopped_at: Completed 32-02-PLAN.md
-last_updated: "2026-03-16T09:37:56.726Z"
-last_activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contracts)
+milestone: v1.5
+milestone_name: Discord Listener
+status: planning
+stopped_at: Completed 32-03-PLAN.md — all 3 tasks done, human approved
+last_updated: "2026-03-16T11:57:00.177Z"
+last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
-  total_phases: 22
-  completed_phases: 15
-  total_plans: 66
-  completed_plans: 66
+  total_phases: 18
+  completed_phases: 12
+  total_plans: 44
+  completed_plans: 44
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-14)
+See: .planning/PROJECT.md (updated 2026-03-15)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** Phase 30: avatar-frame-flair-system — Plan 01 complete
+**Current focus:** v1.5 Discord Listener — Phase 27 (Auth and Bot Token Foundation)
 
 ## Current Position
 
-Phase: 30-avatar-frame-flair-system
-Plan: 01 (complete)
-Status: In progress
-Last activity: 2026-03-16 — Phase 30 Plan 01 executed (DB schema + type contracts)
+Phase: 27 of 32 (Auth and Bot Token Foundation)
+Plan: — (not yet planned)
+Status: Ready to plan
+Last activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
+
+Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
 
 ## Performance Metrics
+
+**Velocity (prior milestones):**
+- v1.0: 11 plans (3 phases)
+- v1.1: 21 plans (7 phases)
+- v1.2: 21 plans (12 phases)
+- v1.3: 20 plans (4 phases)
 
 **By Milestone:**
 
 | Milestone | Phases | Plans | Status |
 |-----------|--------|-------|--------|
-| v1.0 Message Deletion | 1-3 | 11 | Complete (partial - 3/4 phases) |
+| v1.0 Message Deletion | 1-3 | 11 | Complete |
 | v1.1 Load Balancing | 4-10 | 21 | Complete |
 | v1.2 InnerTube Listener | 11-22 | 21 | Complete |
-| v1.3 Overlay Sharing + Frontend Redesign | 23-26 | 44 | Complete |
-| v1.4 Viewer Identity & YouTube Enrichment | 27+ | TBD | In progress |
-| Phase 27-innertube-enrichment-badges-emotes P01 | 367 | 5 tasks | 9 files |
-| Phase 27-innertube-enrichment-badges-emotes P02 | 4 | 3 tasks | 5 files |
-| Phase 27-innertube-enrichment-badges-emotes P03 | 12 | 3 tasks | 1 files |
-| Phase 28-viewer-identity-foundation-auth-and-platform-linking P01 | 4 | 2 tasks | 6 files |
-| Phase 28-viewer-identity-foundation-auth-and-platform-linking P02 | 25 | 2 tasks | 8 files |
-| Phase 28-viewer-identity-foundation-auth-and-platform-linking P03 | 5 | 2 tasks | 3 files |
-| Phase 28-viewer-identity-foundation-auth-and-platform-linking P05 | 2 | 1 tasks | 1 files |
-| Phase 28-viewer-identity-foundation-auth-and-platform-linking P04 | 45 | 2 tasks | 10 files |
-| Phase 28-viewer-identity-foundation-auth-and-platform-linking P06 | 30 | 3 tasks | 4 files |
-| Phase 29-viewer-color-gradient-editor P01 | 451 | 2 tasks | 12 files |
-| Phase 29-viewer-color-gradient-editor P03 | 9min | 2 tasks | 7 files |
-| Phase 29-viewer-color-gradient-editor P02 | 7 | 2 tasks | 4 files |
-| Phase 30-avatar-frame-flair-system P01 | ~2.5min | 2 tasks | 6 files |
-| Phase 30-avatar-frame-flair-system P02 | ~5min | 2 tasks | 5 files |
-| Phase 30-avatar-frame-flair-system P03 | 3min | 1 tasks | 2 files |
-| Phase 30-avatar-frame-flair-system P04 | 7min | 2 tasks | 8 files |
-| Phase 31-all-chat-platform-badges P02 | 2min | 2 tasks | 5 files |
-| Phase 31-all-chat-platform-badges P01 | 5min | 2 tasks | 3 files |
-| Phase 31-all-chat-platform-badges P03 | 3min | 2 tasks | 4 files |
-| Phase 32-integration-wiring-fixes P01 | 3min | 1 tasks | 1 files |
-| Phase 32-integration-wiring-fixes P02 | 2min | 2 tasks | 2 files |
+| v1.3 Frontend Redesign | 23-26 | 20 | Complete |
+| v1.5 Discord Listener | 27-32 | TBD | Not started |
+
+*Updated: 2026-03-15 after roadmap creation*
+| Phase 27 P01 | 2 | 2 tasks | 3 files |
+| Phase 27 P02 | 6 | 2 tasks | 8 files |
+| Phase 27 P03 | 12 | 2 tasks | 6 files |
+| Phase 27 P04 | 9 | 3 tasks | 3 files |
+| Phase 28 P02 | 108s | 2 tasks | 3 files |
+| Phase 28 P01 | 8m | 3 tasks | 8 files |
+| Phase 29 P01 | 142s | 2 tasks | 3 files |
+| Phase 29 P02 | 286s | 2 tasks | 7 files |
+| Phase 30-outbound-relay P01 | 129 | 2 tasks | 7 files |
+| Phase 30-outbound-relay P02 | 5 | 1 tasks | 3 files |
+| Phase 31-load-balancing P03 | 2min | 2 tasks | 4 files |
+| Phase 31-load-balancing P01 | 117 | 2 tasks | 3 files |
+| Phase 31-load-balancing P02 | 3 | 2 tasks | 5 files |
+| Phase 32-setup-ui P01 | 338 | 3 tasks | 15 files |
+| Phase 32-setup-ui P02 | 5 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-- [Phase 27-innertube-enrichment-badges-emotes]: TDD RED state: innertube tests reference non-existent symbols causing compile-time failures (intentional); go build passes while go test fails for new test files
-- [Phase 27-innertube-enrichment-badges-emotes]: yt_emote_cache stub package created with empty cache.go to allow go mod tidy to retain miniredis dependency
-- [Phase 27-innertube-enrichment-badges-emotes]: extractBadgesRich return order follows Plan 01 test signature (memberURL, memberTooltip, badgeTooltips) not plan spec order
-- [Phase 27-innertube-enrichment-badges-emotes]: EmoteEntry struct duplicated in innertube and yt_emote_cache packages to avoid cross-package coupling
-- [Phase 27-innertube-enrichment-badges-emotes]: badge_member_url presence triggers member badge without is_sponsor; is_sponsor remains as SVG fallback for old youtube-listener compatibility
-- [Phase 27-innertube-enrichment-badges-emotes]: ytEmoteEntry struct duplicated in normalizer to avoid cross-service module coupling
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Wave 0 stubs: added HandleTwitchExchange/HandleYouTubeExchange/HandleKickExchange returning 501 so RED tests compile without architecture change — plan 02 replaces with real logic
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Integration test build tag: repository tests use //go:build integration + t.Skip on DB unavailable so unit CI stays green while RED scaffolds exist
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Cosmetics row pre-created in GetOrCreateViewerByPlatform (ON CONFLICT DO NOTHING) to simplify GetViewerCosmetics callers
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: handlePatchCosmeticsLogic extracted as package-private function accepting cosmeticsUpsertRepo interface for unit testing without concrete ViewerIdentityRepository
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Pre-Phase-28 tokens with empty viewer_id return 401 on cosmetics PATCH without fallback DB lookup to avoid unnecessary query cost during migration window
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: JWT middleware updated to set viewer_id, display_name, avatar_url in gin context for viewer tokens (backward-compatible addition)
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: viewerDB interface + pgxPoolAdapter wraps pgxpool.Pool for testability; null sentinel prevents DB stampede for non-registered viewers
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Used localStorage key viewer_jwt_token (matching viewer-auth-store.ts) not viewer_jwt as plan spec suggested
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Three-state undefined/null/claims hydration guard prevents flash of wrong UI state on /settings/viewer
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Extension work done in caesarakalaeii/all-chat-extension repo (not all-chat monorepo) — scaffolded stub in monorepo was removed
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Color injection in ChatContainer React component (not DOM MutationObserver) — overlay chat renders inside iframe injected by extension
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Lazy chrome.identity.getRedirectURL — called inside function not at module scope to prevent service worker crash
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: Session write in content scripts fires even when streamer not configured — signals platform presence not UI injection
-- [Phase 28-viewer-identity-foundation-auth-and-platform-linking]: currentPlatform null sentinel shows all three sign-in buttons as fallback; non-null shows only matching platform button
-- [Phase 29-viewer-color-gradient-editor]: Gradient stored as JSONB bytes, propagated as raw JSON string — avoids double-parse in enricher hot path
-- [Phase 29-viewer-color-gradient-editor]: Mutual exclusion enforced in handler before DB write — gradient presence zeroes nameColor
-- [Phase 29-viewer-color-gradient-editor]: is_premium read from gin context set by JWT middleware, not re-queried in handler
-- [Phase 29-viewer-color-gradient-editor]: GetViewerIsPremium soft-fails to false on DB error to avoid blocking auth flow
-- [Phase 29-viewer-color-gradient-editor]: Extracted getUsernameSpanProps pure helper for TDD in node environment — avoids DOM dependency in unit tests
-- [Phase 29-viewer-color-gradient-editor]: Extension gradient scoped to viewer's own username (local storage only), overlay applies any message name_gradient
-- [Phase 29-viewer-color-gradient-editor]: Autosave on native color swatch onChange (immediate), debounce only on hex text input (400ms)
-- [Phase 29-viewer-color-gradient-editor]: Gradient tab re-validates is_premium from localStorage JWT before PATCH (double-check security)
-- [Phase 29-viewer-color-gradient-editor]: vi.stubGlobal localStorage pattern for test isolation; cleanup() in afterEach prevents DOM accumulation
-- [Phase 30-avatar-frame-flair-system]: avatar_frame_id and avatar_flair_id use ON DELETE SET NULL so admin catalog deletes gracefully clear viewer selections
-- [Phase 30-avatar-frame-flair-system]: UpsertViewerCosmetics call site passes nil, nil for new params — Plan 02 expands to pass real values
-- [Phase 30-avatar-frame-flair-system]: name_gradient added to extension UserInfo in Plan 01 (previously missing from extension)
-- [Phase 30-avatar-frame-flair-system]: cosmeticsCatalogDB interface + pgxPoolAdapter pattern mirrors viewerDB approach from Phase 28 for consistent handler testability
-- [Phase 30-avatar-frame-flair-system]: downgrade enforcement passes &uuid.Nil sentinel (not nil pointer) so UPSERT explicitly writes NULL — self-documenting intent
-- [Phase 30-avatar-frame-flair-system]: public catalog endpoints reuse HandleListFrames/HandleListFlairs read-only methods — catalog data is not sensitive
-- [Phase 30-avatar-frame-flair-system]: COALESCE guarantees non-NULL scan into plain string (not *string) — consistent with name_gradient nil-guard pattern
-- [Phase 30-avatar-frame-flair-system]: fakeViewerDB queryFn extended to 6-return signature; noGradientDB helper updated — all existing tests pass unchanged
-- [Phase 30-avatar-frame-flair-system]: Extension UserAvatar uses inline styles (not Tailwind) for non-Tailwind extension environment
-- [Phase 30-avatar-frame-flair-system]: // @vitest-environment jsdom annotation on test file avoids breaking existing node-environment unit tests in vitest config
-- [Phase 30-avatar-frame-flair-system]: Admin cosmetics page includes AdminNav for consistent admin navigation header
-- [Phase 31-all-chat-platform-badges]: Test file placed in src/lib/__tests__/ to match vitest include pattern; PremiumBadge uses SVG <title> child element (not HTML title attr); Image badge sizing changed from w-4 h-4 to h-[1em] w-auto for overlay font-size responsiveness; AllChatBadge requires use client due to InfinityLogo requestAnimationFrame
-- [Phase 31-all-chat-platform-badges]: Prepend premium first, allchat last — allchat ends up at index 0 in final badge slice
-- [Phase 31-all-chat-platform-badges]: LATERAL + LIMIT 1 pattern for viewer_sessions join prevents duplicate rows without a GROUP BY
-- [Phase 31-all-chat-platform-badges]: Extension AllChatBadge uses inline styles not Tailwind (mirrors Phase 30 UserAvatar decision)
-- [Phase 31-all-chat-platform-badges]: ChatContainer badge render uses 3-way name-check to fix silently-dropped All-Chat badges in extension
-- [Phase 32-integration-wiring-fixes]: viewers.is_premium is the viewer cosmetic flag (migration 036); users.is_premium is the streamer/owner account flag — enricher must read from viewers table for premium badge
-- [Phase 32-integration-wiring-fixes]: Parse guard applied inline in overlay ws.onmessage for name_gradient JSON string→NameGradient conversion (both chat_message and message_update branches)
+Key decisions relevant to v1.5:
+
+- **Single discord-listener service**: Handles both inbound Gateway and outbound relay in two goroutine groups — loop prevention filter requires shared in-memory channel registry
+- **Bot Token model**: Static `DISCORD_BOT_TOKEN` Kubernetes sealed-secret; NOT routed through token-refresh-service; OAuth2 callback captures guild_id only (no per-user token)
+- **No new DB tables**: Discord sources use existing `overlay_chat_sources` with `config` JSONB for Discord-specific fields (`guild_id`, `inbound_channel_id`, `relay_channel_id`, `relay_enabled`)
+- **Snowflake IDs as strings**: All Discord Snowflake IDs stored and transmitted as strings to avoid JS safe-integer truncation above 2^53
+- **Single shard (num_shards=1)**: Correct at v1.5 scale (far below 2,500-guild per-shard limit); shard ownership via source-manager leader election
+- [Phase 27]: guild_id stored as VARCHAR(30) not BIGINT — Discord Snowflake IDs exceed JS safe-integer range
+- [Phase 27]: discord platform registered in overlay-manager validPlatforms to unblock Plan 03 and discord-listener
+- [Phase 27]: SessionStore interface in gateway/client.go isolates Redis for unit testability
+- [Phase 27]: WARN log on READY event reminds operator to enable MESSAGE_CONTENT privileged intent in Discord Developer Portal
+- [Phase 27]: Port 8086 for discord-listener HTTP health server (avoids collision with existing services)
+- [Phase 27]: ComputeMissingPermissions exported for testability — avoids HTTP mocking in permission bit logic tests
+- [Phase 27]: GetUserInfo returns error stub — Discord bot auth has no user identity; handlers bypass this method
+- [Phase 27]: stateStorer interface in discord.go (not _test.go) enables memStateStore injection in tests without _test.go visibility limitation
+- [Phase 27]: discordAPIBase overridable string field on DiscordHandler allows httptest.Server injection without extracting HTTP client interface
+- [Phase 27]: Discord routes conditionally registered — graceful degradation via WARN log when env vars absent, consistent with YouTube/Kick pattern
+- [Phase 28]: firstNonEmpty helper reused from kick_normalizer.go (same package) — no duplication
+- [Phase 28]: gateway.MessagePublisher uses interface{} payload to prevent circular import; publisherAdapter bridges via JSON re-marshal in cmd/main.go
+- [Phase 28]: Pure Redis GET approach for ChannelRegistry — no in-memory set needed at v1.5 scale
+- [Phase 28]: HandleMessageCreate exported for direct unit testing without exposing Connect()
+- [Phase 29]: HandleMessageDeleteBulk delegates to HandleMessageDelete per ID — consistent channel filter, no duplicated registry lookup
+- [Phase 29]: Deletion event message_id uses snowflake+':del' suffix to prevent Redis Stream key collision with create event
+- [Phase 29]: capturePayloadPublisher defined separately in message_delete_test.go — deletion tests need payload inspection, create tests count calls only
+- [Phase 29]: ResolveMentions exported as package-level function (not method) for unit testability without GatewayClient construction
+- [Phase 29]: GuildCache nil-guard in HandleMessageCreate enables graceful degradation — mentions pass through unchanged if cache not wired
+- [Phase 29]: discord:guild:channels: and discord:guild:roles: key prefixes distinct from discord:channels: channel registry to avoid collision
+- [Phase 30-outbound-relay]: httpPoster.baseURL overridable for httptest.Server injection — no HTTP client interface extraction needed
+- [Phase 30-outbound-relay]: HandleMessage exported on relay.Manager for synchronous unit test injection, avoiding Redis Pub/Sub mocking
+- [Phase 30-outbound-relay]: doPost(isRetry bool) helper enforces single-retry contract — public Post always passes false, recursive retry passes true
+- [Phase 30-outbound-relay]: relay.NewHTTPPoster takes logger as third param — actual signature differs from plan spec; called with all three args
+- [Phase 30-outbound-relay]: Shutdown order: gwClient.Close() -> relayMgr.Stop() -> srv.Shutdown() ensures relay goroutines drain before HTTP server closes
+- [Phase 31-load-balancing]: [Phase 31-03]: maxReplicas=3 for discord-listener HPA — single-shard model; extra pods provide fault tolerance standby only
+- [Phase 31-load-balancing]: [Phase 31-03]: scaleUp type=Pods value=1 periodSeconds=30 — prevents Redis shard ownership lock race during scale-up
+- [Phase 31-load-balancing]: [Phase 31-03]: discord-listener-secrets separate Secret for DISCORD_BOT_TOKEN — independent rotation from allchat-secrets
+- [Phase 31-load-balancing]: [Phase 31]: Gateway RESUME protocol — RESUME/IDENTIFY branch in Connect() after OpHello; d=false clears Redis session keys, d=true preserves them
+- [Phase 31-load-balancing]: lostCallback in EnsureLeadership does NOT call gwClient.Close() — re-entrant race with Connect(); next loop iteration re-checks leadership instead
+- [Phase 31-load-balancing]: Graceful degradation when SOURCE_MANAGER_URL/SECRET absent: WARN log + direct connect (nil leaderCoord bypasses gate)
+- [Phase 32-setup-ui]: HandleUpdateSourceConfig returns 403 on ownership mismatch (not 404) — distinguishes auth failure from resource absence
+- [Phase 32-setup-ui]: discord platform registered in PLATFORM_COLORS with literal class strings 'text-discord'/'bg-discord' for Tailwind JIT safety
+- [Phase 32-setup-ui]: Controlled Dialog via disconnectTarget state: one Dialog.Root per guild row with open prop avoids mounting multiple portal roots
+- [Phase 32-setup-ui]: guild_name stored in source config JSONB at POST time so SourceCard can render 'GuildName > #channel' label without extra API call
 
 ### Pending Todos
 
@@ -121,12 +121,20 @@ None yet.
 
 ### Blockers/Concerns
 
-- Global YouTube emote source unknown — research needed to determine InnerTube endpoint or catalog API
+**Phase 27 (Research flags):**
+- Gateway connection ownership model: Redis lock approach (`discord:gateway:shard:0:holder`) must be validated against source-manager coordinator API before writing startup connection gating logic
+- MESSAGE_CONTENT privileged intent: Must be enabled in Discord Developer Portal before any integration testing — silent empty messages if missing
+
+**Phase 30 (Research flags):**
+- Discord REST rate limit bucket values: Verify `X-RateLimit-Bucket` and `X-RateLimit-Limit` headers against live bot before finalizing token bucket configuration
+
+**Phase 31 (Research flags):**
+- HPA metric selection: Define specific scaling metric (Gateway throughput vs. relay queue depth vs. guild count) after Prometheus surface is built in Phases 28-30
 
 ## Session Continuity
 
-Last session: 2026-03-16T09:30:33.379Z
-Stopped at: Completed 32-02-PLAN.md
+Last session: 2026-03-16T11:37:43.135Z
+Stopped at: Completed 32-03-PLAN.md — all 3 tasks done, human approved
 Resume file: None
 
-**Next action:** Phase 30 complete. Proceed to next phase or feature.
+**Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)

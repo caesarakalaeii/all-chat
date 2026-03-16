@@ -76,6 +76,11 @@ func main() {
 	kickClientSecret := os.Getenv("KICK_CLIENT_SECRET")
 	kickRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/kick/callback")
 
+	discordClientID := os.Getenv("DISCORD_CLIENT_ID")
+	discordClientSecret := os.Getenv("DISCORD_CLIENT_SECRET")
+	discordBotToken := os.Getenv("DISCORD_BOT_TOKEN")
+	discordRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/discord/callback")
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)
 	tokenEncryptionKey := os.Getenv("TOKEN_ENCRYPTION_KEY")
@@ -90,6 +95,10 @@ func main() {
 
 	if kickClientID == "" || kickClientSecret == "" {
 		log.Warn("KICK_CLIENT_ID and KICK_CLIENT_SECRET not set, Kick OAuth will not be available")
+	}
+
+	if discordClientID == "" || discordClientSecret == "" || discordBotToken == "" {
+		log.Warn("DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_BOT_TOKEN not set — Discord integration disabled")
 	}
 
 	if jwtSecret == "" {
@@ -157,6 +166,14 @@ func main() {
 	var kickOAuth *oauth.KickOAuth
 	if kickClientID != "" && kickClientSecret != "" {
 		kickOAuth = oauth.NewKickOAuth(kickClientID, kickClientSecret, kickRedirectURL)
+	}
+
+	var discordHandler *handlers.DiscordHandler
+	if discordClientID != "" && discordClientSecret != "" && discordBotToken != "" {
+		discordOAuth := oauth.NewDiscordOAuth(discordClientID, discordClientSecret, discordRedirectURL).
+			WithBotToken(discordBotToken)
+		discordRepo := repository.NewDiscordRepository(db)
+		discordHandler = handlers.NewDiscordHandler(discordOAuth, discordRepo, redisClient, discordBotToken, frontendURL, log)
 	}
 
 	userRepo := repository.NewUserRepository(db, tokenCipher)
@@ -252,6 +269,15 @@ func main() {
 	router.GET("/kick/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformKick))
 	router.GET("/kick/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformKick))
 
+	// Discord bot OAuth callback (public — no JWT required; the CSRF state encodes the user identity)
+	router.GET("/discord/callback", func(c *gin.Context) {
+		if discordHandler == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Discord integration not configured"})
+			return
+		}
+		discordHandler.HandleCallback(c)
+	})
+
 	// Token refresh
 	router.POST("/refresh", legacyAuthHandler.HandleRefresh)
 
@@ -284,6 +310,14 @@ func main() {
 		protected.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))
 		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
+
+		// Discord guild management routes (require JWT)
+		if discordHandler != nil {
+			protected.GET("/discord/connect", discordHandler.HandleConnect)
+			protected.GET("/guilds", discordHandler.HandleGetGuilds)
+			protected.GET("/guilds/:guild_id/channels", discordHandler.HandleGetGuildChannels)
+			protected.DELETE("/guilds/:guild_id", discordHandler.HandleDisconnect)
+		}
 	}
 
 	// Public viewer catalog routes (no JWT required — cosmetic catalogs are not sensitive)

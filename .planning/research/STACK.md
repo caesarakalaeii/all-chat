@@ -1,421 +1,243 @@
-# Stack Research: Frontend Redesign
+# Technology Stack: Discord Listener + Relay
 
-**Domain:** UI Design System & Component Library
-**Researched:** 2026-03-09
-**Confidence:** HIGH
+**Project:** All-Chat v1.5 — Discord Listener
+**Researched:** 2026-03-15
+**Scope:** Additions required for discord-listener service (inbound Gateway WebSocket + outbound REST relay)
 
-## Executive Summary
+---
 
-The All-Chat frontend already has a solid foundation with Next.js 16, React 19, and Tailwind CSS v4. For the v1.3 redesign milestone, the required stack additions are **minimal and targeted** - primarily focused on development tooling and design system enforcement rather than new framework dependencies.
+## Context: What Already Exists (Do Not Re-Introduce)
 
-**Key Finding:** The project already has all major dependencies installed (shadcn/ui, class-variance-authority, tailwind-merge, clsx, lucide-react). The focus should be on adding **enforcement tooling** (ESLint plugins, Prettier) and **configuration** rather than new packages.
+Verified from actual go.mod files in this repository. Pin new dependencies to match these versions:
 
-## Current Stack (Already Validated)
+| Dependency | Version | Source |
+|------------|---------|--------|
+| Go | 1.25.6 | All go.mod files |
+| `redis/go-redis/v9` | v9.18.0 | twitch-listener, kick-listener go.mod |
+| `gin-gonic/gin` | v1.12.0 | All services |
+| `jackc/pgx/v5` | v5.8.0 | All services |
+| `go.uber.org/zap` | v1.27.1 | All services |
+| `prometheus/client_golang` | v1.23.2 | All services |
+| `go.opentelemetry.io/otel` | v1.42.0 | All services |
+| `golang.org/x/oauth2` | v0.36.0 | auth-service go.mod |
+| `golang-jwt/jwt/v5` | v5.3.1 | twitch-listener (indirect), auth-service |
+| `google/uuid` | v1.6.0 | twitch-listener go.mod |
+| `stretchr/testify` | v1.11.1 | twitch-listener go.mod |
+| `golang.org/x/time` | v0.15.0 | twitch-listener go.mod |
 
-### Core Framework
-| Technology | Version | Purpose | Status |
-|------------|---------|---------|--------|
-| Next.js | 16.1.6 | React framework with App Router, RSC | ✓ Installed |
-| React | 19.2.4 | UI library | ✓ Installed |
-| TypeScript | 5.3.3 | Type safety | ✓ Installed |
-| Tailwind CSS | 4.1.18 | Utility-first CSS framework | ✓ Installed |
+---
 
-### Component System
-| Library | Version | Purpose | Status |
-|---------|---------|---------|--------|
-| shadcn/ui | 4.0.2 | Copy-paste component library (Radix UI + Tailwind) | ✓ Installed |
-| Radix UI | 1.2.0 (via @base-ui/react) | Unstyled accessible primitives | ✓ Installed |
-| Lucide React | 0.563.0 | Icon library | ✓ Installed |
+## New Dependencies for discord-listener
 
-### Utility Libraries
-| Library | Version | Purpose | Status |
-|---------|---------|---------|--------|
-| class-variance-authority | 0.7.1 | Type-safe component variants (CVA) | ✓ Installed |
-| tailwind-merge | 3.5.0 | Merge Tailwind classes intelligently | ✓ Installed |
-| clsx | 2.1.1 | Conditional class names | ✓ Installed |
-| zustand | 5.0.11 | State management | ✓ Installed |
+### Core Addition: discordgo
 
-### Development Tools
-| Tool | Version | Purpose | Status |
-|------|---------|---------|--------|
-| Storybook | 10.2.17 | Component documentation | ✓ Installed |
-| Vitest | 4.0.18 | Unit testing | ✓ Installed |
-| Playwright | 1.58.2 | E2E testing | ✓ Installed |
-| ESLint | 10.0.0 | Code linting | ✓ Installed |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `bwmarrin/discordgo` | v0.28.1 | Discord Gateway WebSocket client + REST API | The canonical Go Discord library. Covers Gateway v10 for inbound message events and REST API v10 for outbound message posting. Handles reconnect, heartbeat, session resume, and per-route rate limiting automatically. No meaningful alternative in the Go ecosystem. |
 
-## Required Stack Additions
+**Confidence:** MEDIUM — v0.28.1 was the latest stable release as of training cutoff (August 2025). Run `go get github.com/bwmarrin/discordgo@latest` before pinning to confirm the resolved version.
 
-### 1. Design System Enforcement Tools
+**Why not raw gorilla/websocket + REST?** The kick-listener uses raw `gorilla/websocket` because Kick's protocol is simple Pusher WebSocket with no complex handshake. Discord's Gateway protocol requires: sequence number tracking, heartbeat acknowledgement with `HEARTBEAT_ACK`, session resume on reconnect, optional zlib stream decompression, and ETF or JSON payload selection. discordgo implements all of this correctly. Building it raw would be multiple weeks of protocol work for zero product benefit and high maintenance risk.
 
-These are **essential** for maintaining design system compliance as specified in DESIGN_SYSTEM.md.
+**Why not discord-interactions or other Go libraries?** Libraries built around the "interactions" model target slash commands delivered via HTTP webhooks — they cannot receive `MESSAGE_CREATE` Gateway events at all. discordgo is the only full-featured Go option that covers both Gateway (inbound) and REST (outbound).
 
-| Package | Version | Purpose | Priority |
-|---------|---------|---------|----------|
-| eslint-plugin-tailwindcss | ^3.18.0 | Enforce Tailwind best practices, detect conflicts | HIGH |
-| prettier-plugin-tailwindcss | ^0.6.0 | Auto-sort Tailwind classes in consistent order | HIGH |
-| prettier | ^3.0.0+ | Code formatting (peer dependency for plugins) | HIGH |
+---
 
-**Why These Are Essential:**
+## Discord API Version
 
-1. **eslint-plugin-tailwindcss** - Enforces the rules in DESIGN_SYSTEM.md:
-   - Detects contradicting classes (e.g., `bg-gray-900 bg-slate-900`)
-   - Suggests shorthand alternatives (e.g., `m-4` instead of `mt-4 mb-4 ml-4 mr-4`)
-   - Removes duplicate classes
-   - Validates classes against Tailwind config
-   - **CRITICAL:** Can enforce "no gray-X" rule (use slate-X instead per design system)
+**Use: Discord API v10 (Gateway v10)**
 
-2. **prettier-plugin-tailwindcss** - Automatic class ordering:
-   - Sorts classes in official Tailwind recommended order
-   - Works with Tailwind v4 (requires `tailwindStylesheet` config)
-   - Reduces merge conflicts and improves readability
-   - Eliminates manual class ordering decisions
+discordgo defaults to API v10 as of v0.28.x. Do not override the API version constant.
 
-**Installation:**
-```bash
-cd frontend
-npm install -D eslint-plugin-tailwindcss prettier-plugin-tailwindcss prettier
+- v10 is the current stable and actively maintained version (released February 2022)
+- v6 and v8 are disabled by Discord — connections are rejected
+- v9 is deprecated; Discord recommends migration to v10
+- No v11 has been announced as of the research date
+
+**Confidence:** HIGH — Discord API versioning is stable and well-documented. v10 has been the sole recommended version since 2022.
+
+---
+
+## OAuth2 Scopes for Bot Authorization
+
+Discord bot authorization uses a two-scope grant. This differs fundamentally from Twitch/YouTube OAuth flows where the user authenticates their own account. For Discord, the user authorizes the bot to join their server.
+
+**Required scopes for the "Add to Server" OAuth2 flow:**
+
+| Scope | Required | Why |
+|-------|----------|-----|
+| `bot` | Yes | Grants the bot user presence in the guild; required for all Gateway connections |
+| `applications.commands` | No — include anyway | Allows future slash command registration; costs nothing, avoids needing a second authorization grant later |
+
+**Authorization URL pattern:**
+
+```
+https://discord.com/oauth2/authorize
+  ?client_id={APPLICATION_CLIENT_ID}
+  &permissions={PERMISSION_INTEGER}
+  &scope=bot%20applications.commands
 ```
 
-### 2. Optional But Recommended
+This is NOT a standard `code` exchange flow for per-user access tokens. The user clicks "Authorize", Discord adds the bot to the server, and Discord redirects to `redirect_uri` with a `code`. The code confirms guild membership — it is NOT used to derive an ongoing per-guild token.
 
-| Package | Version | Purpose | Priority |
-|---------|---------|---------|----------|
-| @tailwindcss/eslint-config | Latest | Official Tailwind ESLint config | MEDIUM |
-| style-dictionary | ^4.0.0 | Design token generation (if tokens expand beyond CSS vars) | LOW |
+**The discord-listener service authenticates using a Bot Token** (`DISCORD_BOT_TOKEN` env var), not per-user OAuth tokens. The Bot Token is static, issued once from the Discord Developer Portal, and stored as a Kubernetes sealed-secret. There is no refresh cycle for bot tokens.
 
-**When to Add:**
+**Confidence:** HIGH — Discord's bot authorization scope model has been unchanged since the introduction of Gateway Intents.
 
-- **@tailwindcss/eslint-config** - If the custom ESLint rules become complex
-- **style-dictionary** - Only if design tokens need to be exported to JSON, iOS, Android (currently unnecessary)
+---
 
-## Installation Commands
+## Gateway Intents
 
-### Required
-```bash
-cd frontend
-npm install -D eslint-plugin-tailwindcss prettier-plugin-tailwindcss prettier
+Gateway Intents are mandatory in Discord API v10. Undeclared event types are silently dropped by Discord's Gateway — there is no error, messages simply never arrive.
+
+**Required intents for reading channel messages:**
+
+| Intent | Bit | Value | Type | Required For |
+|--------|-----|-------|------|-------------|
+| `GUILDS` | 1 << 0 | 1 | Non-privileged | Guild and channel metadata; needed to resolve channel names for `RawChatMessage.ChannelName` |
+| `GUILD_MESSAGES` | 1 << 9 | 512 | Non-privileged | Receive `MESSAGE_CREATE` events in guilds (but not message content without the next intent) |
+| `MESSAGE_CONTENT` | 1 << 15 | 32768 | **Privileged** | Receive actual text content of messages; without this, `message.Content` is always empty string |
+
+`MESSAGE_CONTENT` is a privileged intent. It must be explicitly enabled in the Discord Developer Portal under **Bot > Privileged Gateway Intents**. If not enabled in the portal, the bot connects successfully but receives empty message bodies — this failure mode is silent and confusing to debug.
+
+**In discordgo:**
+
+```go
+session.Identify.Intents = discordgo.IntentsGuilds |
+    discordgo.IntentsGuildMessages |
+    discordgo.IntentsMessageContent
 ```
 
-### Verify Existing
-```bash
-# Already installed - no action needed
-npm list class-variance-authority tailwind-merge clsx lucide-react shadcn
-```
+**Confidence:** HIGH — The privileged intent requirement for `MESSAGE_CONTENT` has been enforced by Discord since April 2022. The discordgo constants `IntentsGuilds`, `IntentsGuildMessages`, `IntentsMessageContent` are exported constants in the package. No changes anticipated.
 
-## Configuration Required
+---
 
-### 1. ESLint Configuration (eslint.config.js or .eslintrc)
+## Bot Permissions Integer
 
-**For ESLint 10 (flat config):**
-```javascript
-import tailwind from 'eslint-plugin-tailwindcss'
+The `permissions` parameter in the authorization URL controls what the bot can do in channels. This is a bitmask of Discord permission flags.
 
-export default [
-  ...tailwind.configs['flat/recommended'],
-  {
-    settings: {
-      tailwindcss: {
-        callees: ['cn', 'clsx', 'cva'],
-        config: 'tailwind.config.ts',
-        removeDuplicates: true,
-        classRegex: '^(class(Name)?|tw)$'
-      }
-    },
-    rules: {
-      // Enforce design system rules
-      'tailwindcss/no-custom-classname': 'warn',
-      'tailwindcss/no-contradicting-classname': 'error',
-      'tailwindcss/enforces-shorthand': 'warn',
+**Required permissions for inbound + outbound use case:**
 
-      // Custom rule: Prevent gray scale (use slate)
-      // Note: This requires custom implementation or manual review
-    }
-  }
-]
-```
+| Permission | Bit | Decimal | Required For |
+|------------|-----|---------|-------------|
+| `VIEW_CHANNEL` | 10 | 1024 | Read any channel; required for message ingestion |
+| `READ_MESSAGE_HISTORY` | 16 | 65536 | Access historical messages; useful for context on startup |
+| `SEND_MESSAGES` | 11 | 2048 | Post relay messages to outbound channel |
 
-### 2. Prettier Configuration (.prettierrc)
+**Minimum permission integer:** `1024 + 65536 + 2048 = 68608`
 
-```json
-{
-  "plugins": ["prettier-plugin-tailwindcss"],
-  "tailwindStylesheet": "./app/globals.css",
-  "tailwindFunctions": ["cn", "clsx", "cva"],
-  "printWidth": 100,
-  "semi": true,
-  "singleQuote": true,
-  "trailingComma": "es5"
-}
-```
+Optionally add `EMBED_LINKS` (1 << 14 = 16384) if relay messages use rich embeds: `84992`.
 
-**IMPORTANT for Tailwind v4:** The `tailwindStylesheet` option is **required** to tell Prettier where the @theme directive is defined.
+**Confidence:** HIGH — Permission bit values are stable Discord API constants.
 
-### 3. Pre-commit Hook (Optional but Recommended)
-
-```json
-// package.json
-{
-  "scripts": {
-    "lint:fix": "eslint --fix .",
-    "format": "prettier --write ."
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "npm run lint:fix && npm run format"
-    }
-  }
-}
-```
-
-## Alternatives Considered
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| eslint-plugin-tailwindcss | eslint-plugin-better-tailwindcss | If you need more aggressive formatting rules (has more features but less mature) |
-| shadcn/ui | Radix UI directly | If you want zero abstraction and full control (more verbose, less DX) |
-| shadcn/ui | headless-ui | If already using Headless UI (but shadcn has better TypeScript support) |
-| shadcn/ui | Chakra UI / MUI | If you need pre-styled components (conflicts with custom design system) |
-| class-variance-authority | tailwind-variants | If you prefer a different API (CVA is more widely adopted, powers shadcn/ui) |
+---
 
 ## What NOT to Add
 
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| styled-components | Conflicts with Tailwind CSS paradigm, adds runtime overhead | Tailwind + CSS variables |
-| Emotion | Same as styled-components, unnecessary abstraction | Tailwind + @theme directive |
-| CSS Modules | Redundant with Tailwind, harder to maintain | Tailwind utility classes |
-| Sass/SCSS | Tailwind v4 @theme handles variables, Sass adds complexity | Native CSS with @theme |
-| Additional icon libraries | Lucide has 1000+ icons, covers all needs | Lucide React (already installed) |
-| react-icons | Larger bundle size, inconsistent style | Lucide React (already installed) |
-| Twin.macro | Adds build complexity, conflicts with Tailwind v4 | Native Tailwind classes |
-| Theme-UI | Opinionated theming system incompatible with Tailwind v4 | CSS variables + @theme |
+| Temptation | Why to Avoid |
+|------------|-------------|
+| `gorilla/websocket` as a direct dependency | discordgo bundles its own WebSocket handling internally. Adding gorilla/websocket as a separate dependency creates no benefit and risks version conflicts. The kick-listener uses gorilla/websocket directly only because Kick has no Go library. |
+| Separate relay microservice | The relay (outbound posting) is a single `session.ChannelMessageSend()` REST call. It does not justify a separate deployment. Loop-safe filtering is straightforward: check `msg.Platform != "discord"` on the `UnifiedChatMessage.Platform` field before relaying. One service, two directions. |
+| Discord Webhook API instead of Bot API | Webhooks can only post messages — they cannot receive incoming messages. They also lack centralized auth management. The bot token approach supports both directions with one credential. |
+| Any additional WebSocket library | discordgo already handles the WebSocket connection. No additional WebSocket library is needed. |
+| The existing discord-bot (Node.js) service | The existing `services/discord-bot` is a Node.js YouTube quota monitor that posts to a single hardcoded Discord channel. It has no overlap with the chat listener use case. The discord-listener is an independent Go service. |
+| `nhooyr.io/websocket` | Same rationale as gorilla/websocket — discordgo handles this internally. |
 
-**Critical Rule:** Do NOT install any CSS-in-JS libraries. The design system is built on Tailwind v4's native CSS capabilities.
+---
 
-## Stack Patterns for This Project
+## Integration with Existing Stack
 
-### Pattern 1: Component Variants with CVA
+### Inbound: Discord Gateway → Redis Streams
 
-**Already available** - No new packages needed.
+discordgo fires `MessageCreate` events via registered handler callbacks. Map each event to `RawChatMessage` and publish to the `chat:raw` stream using the identical publisher pattern from twitch-listener (verified: `StreamKey = "chat:raw"`, `XADD` with `MaxLen: 1000000`, `Approx: true`).
 
-```typescript
-// components/ui/button.tsx
-import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '@/lib/utils'
-
-const buttonVariants = cva(
-  'rounded-lg px-6 py-2.5 text-sm font-semibold shadow-md transition-all duration-200',
-  {
-    variants: {
-      variant: {
-        primary: 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:shadow-lg hover:scale-[1.02]',
-        secondary: 'border border-slate-700 bg-slate-850 text-slate-100 hover:bg-slate-800',
-        destructive: 'bg-red-600 text-white hover:bg-red-700'
-      },
-      size: {
-        default: 'px-6 py-2.5',
-        sm: 'px-4 py-2 text-xs',
-        lg: 'px-8 py-3 text-base'
-      }
-    },
-    defaultVariants: {
-      variant: 'primary',
-      size: 'default'
+```
+discordgo AddHandler(MessageCreate)
+  → map to RawChatMessage{
+      MessageID:   m.Message.ID,
+      Platform:    "discord",
+      ChannelID:   m.Message.ChannelID,
+      ChannelName: (resolved from session.State.Channel cache),
+      UserID:      m.Message.Author.ID,
+      Username:    m.Message.Author.Username,
+      Text:        m.Message.Content,
+      Tags:        map[string]string{
+                     "guild_id":   m.Message.GuildID,
+                     "avatar_url": discordgo.EndpointUserAvatar(author.ID, author.Avatar),
+                   },
     }
-  }
-)
+  → StreamPublisher.Publish(ctx, msg)
 ```
 
-### Pattern 2: Design Tokens with Tailwind v4 @theme
+The `RawChatMessage` schema requires no changes — all fields already exist (verified from `services/message-processor/models/message.go`). `Platform: "discord"` is a new platform string value. A `discord_normalizer.go` in message-processor is needed (pattern: identical to `kick_normalizer.go`).
 
-**No new packages needed** - Native Tailwind v4 feature.
+### Outbound: Overlay Pub/Sub → Discord REST
 
-```css
-/* app/globals.css */
-@theme {
-  /* Colors */
-  --color-bg-primary: #0f172a;
-  --color-bg-secondary: #1a2332;
-  --color-bg-tertiary: #1e293b;
+The relay component subscribes to `overlay:{overlay_id}` Redis Pub/Sub channels (same pattern as api-gateway). For each `UnifiedChatMessage` received:
 
-  --color-text-primary: #f8fafc;
-  --color-text-secondary: #94a3b8;
+1. Check `msg.Platform != "discord"` to prevent relay loops — this field is on `UnifiedChatMessage` directly (verified from message.go)
+2. Look up the configured outbound channel ID for this overlay from PostgreSQL
+3. Call `session.ChannelMessageSend(outboundChannelID, formattedText)` via discordgo
 
-  /* Platform colors */
-  --color-twitch: #9146FF;
-  --color-youtube: #FF0000;
-  --color-kick: #53FC18;
+**Rate limiting:** Discord enforces 5 messages per 5 seconds per channel for bots. Use `golang.org/x/time/rate` (already a dependency via twitch-listener) with rate `1/s` and burst `5` per outbound channel.
 
-  /* Spacing (already in Tailwind defaults, use as-is) */
-}
-```
+### Auth Service Integration
 
-### Pattern 3: Utility Function for Class Names
+The existing auth-service `OAuthProvider` interface (verified from `oauth/platform.go`) expects `GetAuthURL`, `ExchangeCode`, `GetUserInfo`, `RefreshToken`, `GetPlatform`. A `DiscordOAuth` struct implementing this interface is needed in auth-service.
 
-**Already available** - Uses existing packages.
+**Key difference from Twitch/YouTube:** Discord's callback code exchange confirms guild membership; it does not return an ongoing access token for API calls. Store the `guild_id` returned in the callback, not a token pair. No entry in the token-refresh-service is needed for Discord.
 
-```typescript
-// lib/utils.ts
-import { type ClassValue, clsx } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+Add `PlatformDiscord Platform = "discord"` to `oauth/platform.go`.
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
-```
+**Bot token:** Static credential in Kubernetes sealed-secret `DISCORD_BOT_TOKEN`. Not managed by auth-service.
 
-### Pattern 4: Platform Badge Component Example
+---
 
-**Already available** - Uses existing Lucide icons + CVA.
+## Installation
 
-```typescript
-import { cva } from 'class-variance-authority'
-import { TwitchIcon, YoutubeIcon } from 'lucide-react'
-
-const badgeVariants = cva(
-  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium border',
-  {
-    variants: {
-      platform: {
-        twitch: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-        youtube: 'bg-red-500/10 text-red-400 border-red-500/20',
-        kick: 'bg-green-500/10 text-green-400 border-green-500/20',
-        tiktok: 'bg-slate-700/10 text-slate-300 border-slate-600/20'
-      }
-    }
-  }
-)
-```
-
-## Version Compatibility Matrix
-
-| Package | Version | Compatible With | Notes |
-|---------|---------|-----------------|-------|
-| Next.js 16.1.6 | React 19.2.4 | ✓ Full support | Stable release |
-| shadcn/ui 4.0.2 | React 19 | ✓ Fully compatible | Updated March 2026 for React 19 |
-| shadcn/ui 4.0.2 | Tailwind v4 | ✓ Fully compatible | Uses unified radix-ui package |
-| Radix UI 1.2.0 | React 19 | ✓ Fully compatible | Updated for React 19 (no forwardRef) |
-| class-variance-authority 0.7.1 | React 19 | ✓ Compatible | Framework agnostic |
-| eslint-plugin-tailwindcss 3.18+ | Tailwind v4 | ⚠ Beta support | Works but may have edge cases |
-| prettier-plugin-tailwindcss 0.6+ | Tailwind v4 | ✓ Supported | Requires `tailwindStylesheet` config |
-| Lucide React 0.563.0 | React 19 | ✓ Compatible | Regular updates, stable |
-
-**Critical Compatibility Note:** All major packages are React 19 compatible as of March 2026. The only limitation is eslint-plugin-tailwindcss has beta support for Tailwind v4, which means some edge cases may produce false positives.
-
-## Build Process Changes
-
-### Required Changes: NONE
-
-The existing build process (`next build`) already handles:
-- Tailwind CSS v4 compilation with @theme directive
-- TypeScript compilation
-- React Server Components
-- shadcn/ui components
-
-### Optional Enhancements
-
-1. **Add Prettier to CI/CD:**
-```yaml
-# .github/workflows/ci.yml
-- name: Check formatting
-  run: npm run format -- --check
-```
-
-2. **Add ESLint Tailwind rules to CI/CD:**
-```yaml
-- name: Lint Tailwind classes
-  run: npm run lint
-```
-
-3. **Pre-commit hook (if using Husky):**
 ```bash
-npm install -D husky lint-staged
-npx husky init
+# In services/discord-listener/
+go mod init github.com/caesar/all-chat/services/discord-listener
+go get github.com/bwmarrin/discordgo@latest
+
+# Verify resolved version — expected v0.28.1 or higher
+cat go.sum | grep discordgo
+
+# Copy all standard listener dependencies from twitch-listener go.mod:
+# gin, pgx, go-redis, zap, prometheus, otel, uuid, testify, golang.org/x/time
 ```
 
-## Performance Considerations
+---
 
-### Bundle Size Impact
+## Environment Variables (New)
 
-| Addition | Bundle Size Impact | Notes |
-|----------|-------------------|-------|
-| eslint-plugin-tailwindcss | 0 KB (dev only) | ESLint plugin, not included in production |
-| prettier-plugin-tailwindcss | 0 KB (dev only) | Prettier plugin, not included in production |
-| class-variance-authority | ~1.5 KB gzipped | Already installed, minimal runtime |
-| tailwind-merge | ~5 KB gzipped | Already installed, prevents CSS conflicts |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DISCORD_BOT_TOKEN` | Yes | Bot token from Discord Developer Portal — static, no refresh |
+| `DISCORD_CLIENT_ID` | Yes | Application client ID — used to generate "Add to Server" OAuth URL |
+| `DISCORD_CLIENT_SECRET` | Yes | Application client secret — for exchanging OAuth2 callback code |
+| `DISCORD_REDIRECT_URL` | Yes | OAuth2 callback URL, e.g. `https://app.example.com/api/v1/auth/discord/callback` |
 
-**Total additional runtime overhead: 0 KB** (all additions are dev dependencies)
+---
 
-### Build Time Impact
+## Alternatives Considered
 
-| Change | Build Time Impact | Mitigation |
-|--------|-------------------|------------|
-| ESLint with Tailwind plugin | +10-15 seconds | Run only on changed files in dev |
-| Prettier with Tailwind plugin | +5-10 seconds | Fast, minimal impact |
-| Tailwind v4 compilation | -50% vs v3 | Faster than previous version |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Go Discord library | `bwmarrin/discordgo` | Raw gorilla/websocket + net/http | Discord's Gateway protocol is complex; discordgo handles reconnect, heartbeat, rate limits correctly. Building raw is weeks of protocol work with high maintenance risk. |
+| Go Discord library | `bwmarrin/discordgo` | `diamondburned/arikawa` | arikawa is higher quality code but has a smaller community, less documentation, and fewer real-world examples. For a service that closely follows existing patterns, discordgo's larger ecosystem and wider usage reduce integration risk. |
+| Service topology | Single discord-listener (inbound + outbound) | Separate discord-relay service | Relay is a single REST call. A separate service adds Kubernetes deployment overhead, inter-service latency, and operational complexity for trivial logic. |
+| Bot auth | Bot Token (static) | Per-user OAuth access tokens | Discord's bot model is designed around static bot tokens. There is no per-user token needed for reading guild messages with a bot; the bot token IS the auth credential. |
 
-**Net impact:** Build times will be **faster** due to Tailwind v4's 5x performance improvement, despite adding linting/formatting.
-
-## Migration Path
-
-### Phase 1: Install Enforcement Tools (Current)
-```bash
-npm install -D eslint-plugin-tailwindcss prettier-plugin-tailwindcss prettier
-```
-
-### Phase 2: Configure (Next)
-- Add ESLint Tailwind plugin config
-- Add Prettier Tailwind plugin config
-- Test on existing components
-
-### Phase 3: Gradual Adoption (Ongoing)
-- Run `npm run lint:fix` on modified files
-- Fix violations as they appear
-- Add pre-commit hook after team is comfortable
-
-### Phase 4: Enforcement (Final)
-- Enable strict mode in CI/CD
-- Block PRs with linting errors
-- Add to onboarding documentation
+---
 
 ## Sources
 
-**High Confidence (Official Documentation):**
-- [shadcn/ui React 19 Compatibility](https://ui.shadcn.com/docs/react-19) - Official React 19 support documentation
-- [shadcn/ui Tailwind v4 Support](https://ui.shadcn.com/docs/tailwind-v4) - Official Tailwind v4 migration guide
-- [Tailwind CSS v4.0 Release](https://tailwindcss.com/blog/tailwindcss-v4) - Official announcement
-- [Tailwind CSS Theme Variables](https://tailwindcss.com/docs/theme) - Official @theme directive docs
-- [Next.js 16 Release](https://nextjs.org/blog/next-16) - Official Next.js 16 release notes
-- [Radix UI Primitives Releases](https://www.radix-ui.com/primitives/docs/overview/releases) - Official changelog
-- [Class Variance Authority Docs](https://cva.style/docs) - Official CVA documentation
-
-**Medium Confidence (Community/Technical Blogs):**
-- [Design Tokens That Scale in 2026 (Tailwind v4 + CSS Variables)](https://www.maviklabs.com/blog/design-tokens-tailwind-v4-2026) - Tailwind v4 design token patterns
-- [React & Next.js Best Practices in 2026](https://fabwebstudio.com/blog/react-nextjs-best-practices-2026-performance-scale) - Modern Next.js patterns
-- [Tailwind CSS Best Practices 2025-2026: Design Tokens](https://www.frontendtools.tech/blog/tailwind-css-best-practices-design-system-patterns) - Design system patterns
-- [Enterprise Component Architecture with CVA](https://www.thedanielmark.com/blog/enterprise-component-architecture-type-safe-design-systems-with-class-variance-authority) - CVA patterns
-
-**Tools/Packages:**
-- [eslint-plugin-tailwindcss - npm](https://www.npmjs.com/package/eslint-plugin-tailwindcss) - Package documentation
-- [prettier-plugin-tailwindcss - GitHub](https://github.com/tailwindlabs/prettier-plugin-tailwindcss) - Official Prettier plugin
-- [tailwind-merge - npm](https://www.npmjs.com/package/tailwind-merge) - Package documentation
-- [CVA vs. Tailwind Variants Comparison](https://dev.to/webdevlapani/cva-vs-tailwind-variants-choosing-the-right-tool-for-your-design-system-12am) - Alternative comparisons
-
----
-
-## Summary
-
-**What to install:** Only 3 dev dependencies (eslint-plugin-tailwindcss, prettier-plugin-tailwindcss, prettier)
-
-**What's already ready:** Everything else - Next.js 16, React 19, Tailwind v4, shadcn/ui, CVA, tailwind-merge, clsx, Lucide icons
-
-**Performance impact:** Zero runtime overhead, faster builds due to Tailwind v4
-
-**Breaking changes:** None - all additions are backward compatible
-
-**Confidence level:** HIGH - All packages are officially compatible with React 19 and Tailwind v4 as of March 2026
-
----
-
-*Stack research for: All-Chat Frontend Redesign (v1.3)*
-*Researched: 2026-03-09*
+- Codebase: `services/twitch-listener/go.mod`, `services/kick-listener/go.mod`, `services/auth-service/go.mod`, `shared/go.mod` — all dependency versions verified (HIGH confidence)
+- Codebase: `services/message-processor/models/message.go` — `RawChatMessage` schema verified (HIGH confidence)
+- Codebase: `services/twitch-listener/publisher/stream_publisher.go` — Redis Streams publish pattern (`chat:raw`, XADD, MaxLen 1000000) verified (HIGH confidence)
+- Codebase: `services/auth-service/oauth/platform.go`, `oauth/twitch.go` — `OAuthProvider` interface pattern verified (HIGH confidence)
+- `github.com/bwmarrin/discordgo` — v0.28.1 latest as of August 2025 training cutoff; verify before pinning (MEDIUM confidence)
+- Discord API v10 reference (training knowledge) — Gateway v10, intent bitmask values, bot scope model (MEDIUM confidence — Discord API versioning stable since 2022, v10 unchanged)
+- `MESSAGE_CONTENT` privileged intent (HIGH confidence — enforced since April 2022, well-documented, no changes anticipated)
+- Discord bot permission integers (HIGH confidence — standard bitmask, stable)
