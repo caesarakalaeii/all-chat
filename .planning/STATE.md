@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Discord Listener
 status: planning
-stopped_at: Completed 32-setup-ui-01-PLAN.md
-last_updated: "2026-03-16T10:30:54.560Z"
+stopped_at: Completed 32-setup-ui-02-PLAN.md (awaiting Task 2 human-verify checkpoint)
+last_updated: "2026-03-16T10:33:42.796Z"
 last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
   total_phases: 18
   completed_phases: 11
   total_plans: 44
-  completed_plans: 42
+  completed_plans: 43
   percent: 0
 ---
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
 | Phase 31-load-balancing P01 | 117 | 2 tasks | 3 files |
 | Phase 31-load-balancing P02 | 3 | 2 tasks | 5 files |
 | Phase 32-setup-ui P01 | 338 | 3 tasks | 15 files |
+| Phase 32-setup-ui P02 | 5 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,7 @@ Key decisions relevant to v1.5:
 - [Phase 31-load-balancing]: Graceful degradation when SOURCE_MANAGER_URL/SECRET absent: WARN log + direct connect (nil leaderCoord bypasses gate)
 - [Phase 32-setup-ui]: HandleUpdateSourceConfig returns 403 on ownership mismatch (not 404) — distinguishes auth failure from resource absence
 - [Phase 32-setup-ui]: discord platform registered in PLATFORM_COLORS with literal class strings 'text-discord'/'bg-discord' for Tailwind JIT safety
+- [Phase 32-setup-ui]: Controlled Dialog via disconnectTarget state: one Dialog.Root per guild row with open prop avoids mounting multiple portal roots
 
 ### Pending Todos
 
@@ -130,8 +132,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T10:30:54.556Z
-Stopped at: Completed 32-setup-ui-01-PLAN.md
+Last session: 2026-03-16T10:33:42.792Z
+Stopped at: Completed 32-setup-ui-02-PLAN.md (awaiting Task 2 human-verify checkpoint)
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)
