@@ -22,7 +22,7 @@
 
 import Image from 'next/image';
 import { use, useEffect, useState, useRef } from 'react';
-import type { ChatMessage, EventTier, PlatformStatus, DeletionMetadata } from '@/lib/types/message';
+import type { ChatMessage, EventTier, NameGradient, PlatformStatus, DeletionMetadata } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
@@ -236,6 +236,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           let message: ChatMessage = envelope.data;
           message = await resolveTwitchBadgeIcons(message);
           message = sortMessageBadges(message);
+          if (message.user?.name_gradient && typeof message.user.name_gradient === 'string') {
+            message.user.name_gradient = JSON.parse(message.user.name_gradient as unknown as string) as NameGradient;
+          }
 
           setMessages((prev) => {
             const newMessages = [...prev, message];
@@ -248,6 +251,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           let updatedMessage: ChatMessage = envelope.data;
           updatedMessage = await resolveTwitchBadgeIcons(updatedMessage);
           updatedMessage = sortMessageBadges(updatedMessage);
+          if (updatedMessage.user?.name_gradient && typeof updatedMessage.user.name_gradient === 'string') {
+            updatedMessage.user.name_gradient = JSON.parse(updatedMessage.user.name_gradient as unknown as string) as NameGradient;
+          }
 
           setMessages((prev) => {
             // Find existing message by aggregation_id
