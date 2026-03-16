@@ -45,11 +45,16 @@ func (c *Claims) GetActualUserID() string {
 
 // ViewerClaims represents JWT claims for viewer authentication
 type ViewerClaims struct {
+	ViewerID       string `json:"viewer_id"`        // durable viewer UUID (empty for old tokens)
 	SessionID      string `json:"session_id"`
 	Platform       string `json:"platform"`
 	PlatformUserID string `json:"platform_user_id"`
 	Username       string `json:"username"`
+	DisplayName    string `json:"display_name"`     // for extension popup display
+	AvatarURL      string `json:"avatar_url"`       // for extension popup display
 	IsViewer       bool   `json:"is_viewer"`
+	IsPremium      bool   `json:"is_premium"` // true if viewer OR linked streamer account has premium
+	IsAdmin        bool   `json:"is_admin"`   // true if linked streamer account has admin role
 	jwt.RegisteredClaims
 }
 

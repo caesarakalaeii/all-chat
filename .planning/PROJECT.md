@@ -21,7 +21,7 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 
 ## Current State (v1.3 shipped 2026-03-14)
 
-Frontend redesigned with professional streaming dark aesthetic: Tailwind v4 design tokens, @base-ui/react component library, all 6 pages redesigned, draggable split-view preview, ESLint/Prettier/Husky enforcement, and 7-gate CI pipeline with Chromatic visual regression.
+Viewer identity system shipped: OAuth from browser extension, platform linking, global name color/gradient editor, avatar frame/flair cosmetics, All-Chat platform badges, and YouTube InnerTube badge/emote enrichment. All 33 requirements satisfied across 6 phases.
 
 ## Requirements
 

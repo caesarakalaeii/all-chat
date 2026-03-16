@@ -573,7 +573,7 @@ func TestExtractMessageText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractMessageText(tt.message)
+			got, _ := extractMessageText(tt.message)
 			if got != tt.want {
 				t.Errorf("extractMessageText() = %v, want %v", got, tt.want)
 			}

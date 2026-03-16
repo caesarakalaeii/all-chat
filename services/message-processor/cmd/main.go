@@ -168,6 +168,8 @@ func main() {
 	twitchClientSecret := getEnvOrDefault("TWITCH_CLIENT_SECRET", "")
 	avatarEnricher := enricher.NewAvatarEnricher(redisClient, twitchClientID, twitchClientSecret, log)
 	badgeEnricher := enricher.NewBadgeEnricher(redisClient, twitchClientID, twitchClientSecret, log)
+	viewerBadgeEnricher := enricher.NewViewerBadgeEnricher(redisClient, db, log)
+	log.Info("Initialized ViewerBadge enricher")
 
 	overlayRepo := router.NewRepository(db)
 	overlayRouter := router.NewRouter(overlayRepo, log)
@@ -396,6 +398,18 @@ func main() {
 					}
 				}
 
+
+				// Enrich with viewer identity (name_color from All-Chat account, all platforms)
+				startViewer := time.Now()
+				if err := viewerBadgeEnricher.Enrich(ctx, unified); err != nil {
+					log.Warn("Failed to enrich viewer identity for event",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.Error(err),
+					)
+					// Continue even if enrichment fails
+				}
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "viewer_identity_enrichment").Observe(time.Since(startViewer).Seconds())
+
 			} else {
 				// CHAT PATH (existing logic)
 				// Normalize message using platform-specific normalizer
@@ -461,6 +475,17 @@ func main() {
 					}
 					processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "cheermote_enrichment").Observe(time.Since(startCheer).Seconds())
 				}
+
+				// Enrich with viewer identity (name_color from All-Chat account, all platforms)
+				startViewer := time.Now()
+				if err := viewerBadgeEnricher.Enrich(ctx, unified); err != nil {
+					log.Warn("Failed to enrich viewer identity",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.Error(err),
+					)
+					// Continue even if enrichment fails
+				}
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "viewer_identity_enrichment").Observe(time.Since(startViewer).Seconds())
 			}
 
 		publish:

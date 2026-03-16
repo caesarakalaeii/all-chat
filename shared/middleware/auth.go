@@ -35,11 +35,16 @@ func JWTAuth(secret string) gin.HandlerFunc {
 		viewerClaims, err := auth.ValidateViewerJWT(tokenString, secret)
 		if err == nil && viewerClaims.IsViewer {
 			// Viewer token
+			c.Set("viewer_id", viewerClaims.ViewerID)
 			c.Set("session_id", viewerClaims.SessionID)
 			c.Set("username", viewerClaims.Username)
+			c.Set("display_name", viewerClaims.DisplayName)
+			c.Set("avatar_url", viewerClaims.AvatarURL)
 			c.Set("platform", viewerClaims.Platform)
 			c.Set("platform_user_id", viewerClaims.PlatformUserID)
 			c.Set("is_viewer", viewerClaims.IsViewer)
+			c.Set("is_premium", viewerClaims.IsPremium)
+			c.Set("is_admin", viewerClaims.IsAdmin)
 			c.Next()
 			return
 		}
