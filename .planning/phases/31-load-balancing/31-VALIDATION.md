@@ -52,11 +52,11 @@ created: 2026-03-16
 
 ## Wave 0 Requirements
 
-- [ ] `services/discord-listener/gateway/client_test.go` — stubs for LOAD-03 RESUME opcode tests
-- [ ] `services/discord-listener/gateway/types_test.go` — stubs for LOAD-03 payload construction tests
-- [ ] `services/discord-listener/sourcemanager/coordinator_test.go` — stubs for LOAD-01 ownership gating tests
+- [ ] `services/discord-listener/gateway/resume_test.go` — stubs for LOAD-03 RESUME opcode tests (TestResumeWhenSessionExists, TestIdentifyWhenNoSession, TestInvalidSessionFalseClears, TestInvalidSessionTruePreserves, TestReconnectPreservesSession)
 
-*Existing test infrastructure covers framework; Wave 0 adds new test files for new behavior.*
+*metrics/metrics_test.go is created inline by Plan 31-02 Task 1 (tdd=true) — no separate Wave 0 stub needed.*
+
+*Existing test infrastructure covers framework; Wave 0 adds the new gateway test file for new behavior.*
 
 ---
 
