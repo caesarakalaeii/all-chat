@@ -295,15 +295,20 @@ Plans:
 ### Phase 31: All-Chat Platform Badges
 **Goal**: Admin and premium viewers receive All-Chat-specific badges that appear in all overlays, prepended before platform badges
 **Depends on**: Phase 28 (requires viewer_id resolution in message processor)
-**Services affected**: `message-processor`, `api-gateway`, frontend overlay component, admin pages
+**Services affected**: `message-processor`, frontend overlay component, browser extension
 **Requirements**: BADGE-01, BADGE-02, BADGE-03, BADGE-04
 **Success Criteria** (what must be TRUE):
-  1. `badge_definitions` catalog table seeded with two entries: `"allchat"` (logo icon) and `"premium"` (gem/star icon), with 1× and 2× CDN URLs
-  2. `viewer_badges` table assigns badge types to viewer IDs; system auto-assigns `"premium"` badge to viewers with `is_premium=true` and `"allchat"` badge to admins
-  3. `ViewerBadgeEnricher` in message-processor prepends All-Chat badges to `UserInfo.Badges` for resolved viewers
-  4. Badge renders in overlay and extension at 18px height (matching `h-[1em]` pattern) with `title` attribute tooltip
-  5. Admin can manually grant or revoke badges from the admin users page
-**Plans**: TBD (target ~3 plans)
+  1. `badge_definitions` catalog table seeded with two entries: `"allchat"` (logo icon) and `"premium"` (gem/star icon)
+  2. `ViewerBadgeEnricher` in message-processor prepends All-Chat badges to `UserInfo.Badges` for resolved viewers (derived from users.is_admin / users.is_premium — no viewer_badges table)
+  3. AllChatBadge (InfinityLogo wrapper) and PremiumBadge (inline SVG gem) components render in overlay and extension
+  4. Badge renders at h-[1em] responsive height with `title` attribute tooltip; allchat sorts at -2, premium at -1 in ROLE_PRIORITIES
+  5. Admin grant/revoke = existing is_admin / is_premium toggles on admin users page (no new badge UI)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 31-01-PLAN.md — DB migration 038 + enricher extension (viewerIdentityCache, LATERAL JOIN, badge injection, unit tests)
+- [ ] 31-02-PLAN.md — Frontend: AllChatBadge + PremiumBadge components, overlay page.tsx name-check render, badgeOrder.ts + tests
+- [ ] 31-03-PLAN.md — Extension: mirror AllChatBadge + PremiumBadge, extend badgeOrder.ts, update ChatContainer name-check render
 
 ## Progress
 
@@ -323,7 +328,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 (28 can start in
 | 28 Viewer Identity Foundation — Auth & Platform Linking | 6/6 | Complete    | 2026-03-15 | - |
 | 29 Viewer Color & Gradient Editor | 3/3 | Complete    | 2026-03-15 | - |
 | 30 Avatar Frame & Flair System | 4/4 | Complete    | 2026-03-16 | 2026-03-16 |
-| 31 All-Chat Platform Badges | v1.4 | 0/? | Not started | - |
+| 31 All-Chat Platform Badges | v1.4 | 0/3 | Not started | - |
 
 ---
-*Last updated: 2026-03-15 after Phase 29 planning*
+*Last updated: 2026-03-16 after Phase 31 planning*
