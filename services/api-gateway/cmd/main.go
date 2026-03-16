@@ -350,6 +350,7 @@ func main() {
 		publicAPI.GET("/auth/tiktok/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/discord/callback", proxyHandler.ForwardRequest)
 
 		// Viewer OAuth routes (for sending messages)
 		publicAPI.GET("/auth/viewer/twitch/login", proxyHandler.ForwardRequest)
@@ -390,6 +391,12 @@ func main() {
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", proxyHandler.ForwardRequest)
+
+		// Discord guild management
+		protectedAPI.GET("/auth/discord/connect", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/auth/guilds", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/auth/guilds/:guild_id/channels", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/guilds/:guild_id", proxyHandler.ForwardRequest)
 
 		// Viewer protected routes
 		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
