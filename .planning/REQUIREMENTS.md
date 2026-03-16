@@ -36,10 +36,10 @@ Requirements for the Discord Listener milestone. Each maps to roadmap phases.
 
 ### UI — Setup UI
 
-- [ ] **UI-01**: Settings page includes a Discord server connect card showing OAuth2 flow and connected server name/icon
-- [ ] **UI-02**: Overlay editor allows adding a Discord source with guild selector and inbound channel dropdown (from channel listing API)
-- [ ] **UI-03**: Per-source relay configuration panel: toggle relay, pick outbound channel, visual indicator of active filter
-- [ ] **UI-04**: Discord source cards in the overlay editor display connection status and relay active/inactive indicator
+- [x] **UI-01**: Settings page includes a Discord server connect card showing OAuth2 flow and connected server name/icon
+- [x] **UI-02**: Overlay editor allows adding a Discord source with guild selector and inbound channel dropdown (from channel listing API)
+- [x] **UI-03**: Per-source relay configuration panel: toggle relay, pick outbound channel, visual indicator of active filter
+- [x] **UI-04**: Discord source cards in the overlay editor display connection status and relay active/inactive indicator
 
 ## Future Requirements
 
@@ -82,10 +82,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LOAD-01 | Phase 31 | Complete |
 | LOAD-02 | Phase 31 | Complete |
 | LOAD-03 | Phase 31 | Complete |
-| UI-01 | Phase 32 | Pending |
-| UI-02 | Phase 32 | Pending |
-| UI-03 | Phase 32 | Pending |
-| UI-04 | Phase 32 | Pending |
+| UI-01 | Phase 32 | Complete |
+| UI-02 | Phase 32 | Complete |
+| UI-03 | Phase 32 | Complete |
+| UI-04 | Phase 32 | Complete |
 
 **Coverage:**
 - v1.5 requirements: 19 total
