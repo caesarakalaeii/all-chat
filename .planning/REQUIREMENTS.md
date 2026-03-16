@@ -21,9 +21,9 @@
 
 - [x] **PREM-01**: Premium viewer can set a multi-stop gradient (2–4 colors, angle) as their name color
 - [x] **PREM-02**: Gradient name renders in overlay using CSS `background-clip: text` — no JavaScript required
-- [ ] **PREM-03**: Premium viewer can select an avatar frame (decorative PNG ring overlaid on their avatar)
-- [ ] **PREM-04**: Premium viewer can select an avatar flair (small corner icon pinned to bottom-right of avatar)
-- [ ] **PREM-05**: Frame and flair catalog is managed by admins (add/remove items, mark as premium-only)
+- [x] **PREM-03**: Premium viewer can select an avatar frame (decorative PNG ring overlaid on their avatar)
+- [x] **PREM-04**: Premium viewer can select an avatar flair (small corner icon pinned to bottom-right of avatar)
+- [x] **PREM-05**: Frame and flair catalog is managed by admins (add/remove items, mark as premium-only)
 
 ### Platform Badges (All-Chat)
 
@@ -58,8 +58,8 @@
 
 - [x] **WEB-01**: Settings page has a "Viewer Identity" section for all authenticated users (color picker, platform linking)
 - [x] **WEB-02**: Premium users see a "Premium Cosmetics" section with gradient editor (multi-stop, angle control)
-- [ ] **WEB-03**: Premium users can browse and select avatar frame from the frame catalog
-- [ ] **WEB-04**: Premium users can browse and select avatar flair from the flair catalog
+- [x] **WEB-03**: Premium users can browse and select avatar frame from the frame catalog
+- [x] **WEB-04**: Premium users can browse and select avatar flair from the flair catalog
 - [x] **WEB-05**: Live preview of name color, gradient, avatar frame, and flair displayed on the settings page
 
 ---
@@ -108,9 +108,9 @@
 | VID-06 | Phase 28 | Complete |
 | PREM-01 | Phase 29 | Complete |
 | PREM-02 | Phase 32 | Complete |
-| PREM-03 | Phase 32 | Pending |
-| PREM-04 | Phase 32 | Pending |
-| PREM-05 | Phase 32 | Pending |
+| PREM-03 | Phase 32 | Complete |
+| PREM-04 | Phase 32 | Complete |
+| PREM-05 | Phase 32 | Complete |
 | BADGE-01 | Phase 31 | Complete |
 | BADGE-02 | Phase 32 | Complete |
 | BADGE-03 | Phase 31 | Complete |
@@ -130,14 +130,14 @@
 | EXT-04 | Phase 28 | Complete |
 | WEB-01 | Phase 29 | Complete |
 | WEB-02 | Phase 29 | Complete |
-| WEB-03 | Phase 32 | Pending |
-| WEB-04 | Phase 32 | Pending |
+| WEB-03 | Phase 32 | Complete |
+| WEB-04 | Phase 32 | Complete |
 | WEB-05 | Phase 29 | Complete |
 
 **Coverage:**
 - v1.4 requirements: 33 total
 - Mapped to phases: 33
-- Complete: 26 | Pending: 7 (BADGE-02, PREM-02, PREM-03, PREM-04, PREM-05, WEB-03, WEB-04 → Phase 32)
+- Complete: 33 | Pending: 0
 - Unmapped: 0 ✓
 
 ---
