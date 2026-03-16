@@ -41,6 +41,7 @@ jobs:
       token-refresh-service: ${{ steps.changes.outputs.token-refresh-service }}
       share-service: ${{ steps.changes.outputs.share-service }}
       discord-bot: ${{ steps.changes.outputs.discord-bot }}
+      discord-listener: ${{ steps.changes.outputs.discord-listener }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
     steps:
@@ -96,6 +97,9 @@ jobs:
               - 'shared/**'
             discord-bot:
               - 'services/discord-bot/**'
+            discord-listener:
+              - 'services/discord-listener/**'
+              - 'shared/**'
             frontend:
               - 'frontend/**'
             shared:
@@ -158,6 +162,9 @@ jobs:
           - name: discord-bot
             changed: ${{ needs.detect-changes.outputs.discord-bot }}
             path: services/discord-bot
+          - name: discord-listener
+            changed: ${{ needs.detect-changes.outputs.discord-listener }}
+            path: services/discord-listener
           - name: frontend
             changed: ${{ needs.detect-changes.outputs.frontend }}
             path: frontend
@@ -231,6 +238,7 @@ jobs:
           - share-service
           - source-manager
           - token-refresh-service
+          - discord-listener
 
     steps:
       - uses: actions/checkout@v6
