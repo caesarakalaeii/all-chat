@@ -156,15 +156,20 @@ body {
    SECTION 6: USERNAME ENHANCEMENT
    ======================================== */
 
-/* NOTE: :not(.text-transparent) and :not(.username-gradient) exclude spans that are
-   rendering a viewer name gradient — those spans use background-clip:text and need
-   their own background-image intact. Theme authors should follow this pattern. */
-.font-semibold.text-sm:not(.text-transparent):not(.username-gradient),
-.username:not(.text-transparent):not(.username-gradient) {
+/* Typography applies to ALL username spans, including gradient ones. */
+.font-semibold.text-sm,
+.username {
   font-size: 20px !important;
   font-weight: 800 !important;
   letter-spacing: 0.03em !important;
+}
 
+/* NOTE: background and filter are split into a separate rule that excludes
+   gradient username spans (.text-transparent / .username-gradient), because
+   those spans rely on background-clip:text — overriding background or filter
+   breaks the viewer gradient. Theme authors should follow this pattern. */
+.font-semibold.text-sm:not(.text-transparent):not(.username-gradient),
+.username:not(.text-transparent):not(.username-gradient) {
   /* Multi-layer text shadow for legibility with any user color */
   text-shadow:
     -2px -2px 0 #000,
