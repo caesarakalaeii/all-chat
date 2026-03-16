@@ -222,6 +222,7 @@ This codebase is designed to be easy for LLMs to understand and modify:
 - **Client Components** (`'use client'`) - Interactive, use hooks, access browser APIs
 
 In this app:
+
 - All pages are **Client Components** (they use hooks, state, browser APIs)
 - We use `'use client'` directive at the top of each page
 
@@ -231,12 +232,12 @@ In this app:
 // Create store
 const useAuthStore = create<AuthStore>((set) => ({
   user: null,
-  setUser: (user) => set({ user })
-}));
+  setUser: (user) => set({ user }),
+}))
 
 // Use in component
 function MyComponent() {
-  const { user, setUser } = useAuthStore();
+  const { user, setUser } = useAuthStore()
   // ...
 }
 ```
@@ -245,11 +246,12 @@ function MyComponent() {
 
 ```typescript
 // Make authenticated API calls
-const overlay = await overlaysApi.get(overlayId);
-const user = await authApi.getMe();
+const overlay = await overlaysApi.get(overlayId)
+const user = await authApi.getMe()
 ```
 
 The client automatically:
+
 - Adds JWT token from localStorage
 - Handles 401 errors (logout)
 - Parses JSON responses
@@ -259,18 +261,18 @@ The client automatically:
 
 ```typescript
 // Create client
-const wsClient = new WebSocketClient();
+const wsClient = new WebSocketClient()
 
 // Connect
-wsClient.connect(overlayId, token);
+wsClient.connect(overlayId, token)
 
 // Listen for messages
 wsClient.onMessage((message) => {
-  console.log(message);
-});
+  console.log(message)
+})
 
 // Cleanup
-wsClient.disconnect();
+wsClient.disconnect()
 ```
 
 ## Deployment
@@ -352,10 +354,12 @@ npm run dev -- -p 3001
 ## Documentation
 
 ### Frontend Customization
+
 - **[CSS Customization Guide](../docs/CSS_CUSTOMIZATION.md)** - Complete CSS reference for overlay styling
 - **[Theme Gallery](../docs/overlay-themes/README.md)** - Browse and create custom themes
 
 ### Development
+
 - **[Main README](../README.md)** - Project overview and quick start
 - **[Developer Guide](../CLAUDE.md)** - Architecture and development principles
 - **[Getting Started](../GETTING_STARTED.md)** - Navigate the codebase
@@ -363,6 +367,7 @@ npm run dev -- -p 3001
 ## Support
 
 For issues:
+
 1. Check Next.js console output
 2. Check browser console (F12)
 3. Verify backend services are running

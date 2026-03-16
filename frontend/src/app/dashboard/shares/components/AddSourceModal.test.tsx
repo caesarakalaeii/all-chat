@@ -4,20 +4,20 @@
  * Tests for the add-source prompt modal shown after accepting a share.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { AddSourceModal } from './AddSourceModal';
-import { overlaysApi } from '@/lib/api/overlays';
-import type { Overlay } from '@/lib/types/overlay';
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { AddSourceModal } from './AddSourceModal'
+import { overlaysApi } from '@/lib/api/overlays'
+import type { Overlay } from '@/lib/types/overlay'
 
 // Mock APIs
-vi.mock('@/lib/api/overlays');
+vi.mock('@/lib/api/overlays')
 vi.mock('react-hot-toast', () => ({
   default: {
     success: vi.fn(),
     error: vi.fn(),
   },
-}));
+}))
 
 const mockOverlays: Overlay[] = [
   {
@@ -38,16 +38,16 @@ const mockOverlays: Overlay[] = [
     created_at: '2026-03-02T12:00:00Z',
     updated_at: '2026-03-02T12:00:00Z',
   },
-];
+]
 
 describe('AddSourceModal', () => {
-  const mockOnClose = vi.fn();
-  const mockOnAdded = vi.fn();
+  const mockOnClose = vi.fn()
+  const mockOnAdded = vi.fn()
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(overlaysApi.list).mockResolvedValue(mockOverlays);
-  });
+    vi.clearAllMocks()
+    vi.mocked(overlaysApi.list).mockResolvedValue(mockOverlays)
+  })
 
   // Test 1: Modal displays sender name and shared overlay preview
   it('renders sender name in title', async () => {
@@ -58,15 +58,15 @@ describe('AddSourceModal', () => {
         onClose={mockOnClose}
         onAdded={mockOnAdded}
       />
-    );
+    )
 
-    expect(screen.getByText(/Add Streamer 123's overlay to one of yours/i)).toBeInTheDocument();
+    expect(screen.getByText(/Add Streamer 123's overlay to one of yours/i)).toBeInTheDocument()
 
     // Wait for overlays to load
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument();
-    });
-  });
+      expect(screen.getByRole('combobox')).toBeInTheDocument()
+    })
+  })
 
   // Test 2: Overlay dropdown shows all user's overlays
   it('fetches and displays all user overlays in dropdown', async () => {
@@ -77,21 +77,21 @@ describe('AddSourceModal', () => {
         onClose={mockOnClose}
         onAdded={mockOnAdded}
       />
-    );
+    )
 
     await waitFor(() => {
-      expect(overlaysApi.list).toHaveBeenCalled();
-    });
+      expect(overlaysApi.list).toHaveBeenCalled()
+    })
 
     // Check dropdown contains overlays
-    const select = screen.getByRole('combobox');
-    expect(select).toBeInTheDocument();
+    const select = screen.getByRole('combobox')
+    expect(select).toBeInTheDocument()
 
     await waitFor(() => {
-      expect(screen.getByText('My Gaming Overlay')).toBeInTheDocument();
-      expect(screen.getByText('My IRL Overlay')).toBeInTheDocument();
-    });
-  });
+      expect(screen.getByText('My Gaming Overlay')).toBeInTheDocument()
+      expect(screen.getByText('My IRL Overlay')).toBeInTheDocument()
+    })
+  })
 
   // Test 3: Add button adds shared source to selected overlay
   it('calls addSource API when Add button clicked', async () => {
@@ -103,7 +103,7 @@ describe('AddSourceModal', () => {
       is_active: true,
       created_at: '2026-03-09T12:00:00Z',
       updated_at: '2026-03-09T12:00:00Z',
-    });
+    })
 
     render(
       <AddSourceModal
@@ -112,23 +112,23 @@ describe('AddSourceModal', () => {
         onClose={mockOnClose}
         onAdded={mockOnAdded}
       />
-    );
+    )
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument();
-    });
+      expect(screen.getByRole('combobox')).toBeInTheDocument()
+    })
 
     // Click Add button
-    const addButton = screen.getByRole('button', { name: /Add/i });
-    fireEvent.click(addButton);
+    const addButton = screen.getByRole('button', { name: /Add/i })
+    fireEvent.click(addButton)
 
     await waitFor(() => {
       // For Phase 15, we're just logging (Phase 16 will implement API)
       // So we check onAdded and onClose are called
-      expect(mockOnAdded).toHaveBeenCalled();
-      expect(mockOnClose).toHaveBeenCalled();
-    });
-  });
+      expect(mockOnAdded).toHaveBeenCalled()
+      expect(mockOnClose).toHaveBeenCalled()
+    })
+  })
 
   // Test 4: Skip button closes modal without action
   it('closes modal without action when Skip button clicked', async () => {
@@ -139,21 +139,21 @@ describe('AddSourceModal', () => {
         onClose={mockOnClose}
         onAdded={mockOnAdded}
       />
-    );
+    )
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument();
-    });
+      expect(screen.getByRole('combobox')).toBeInTheDocument()
+    })
 
     // Click Skip button
-    const skipButton = screen.getByRole('button', { name: /Skip/i });
-    fireEvent.click(skipButton);
+    const skipButton = screen.getByRole('button', { name: /Skip/i })
+    fireEvent.click(skipButton)
 
     await waitFor(() => {
-      expect(mockOnClose).toHaveBeenCalled();
-      expect(mockOnAdded).not.toHaveBeenCalled();
-    });
-  });
+      expect(mockOnClose).toHaveBeenCalled()
+      expect(mockOnAdded).not.toHaveBeenCalled()
+    })
+  })
 
   // Test 5: Add button calls overlaysApi.addSource with shared_overlay platform
   // RED state (Wave 0): handleAdd uses console.log, NOT overlaysApi.addSource → FAILS
@@ -169,7 +169,7 @@ describe('AddSourceModal', () => {
       is_active: false,
       created_at: '2026-03-10T12:00:00Z',
       updated_at: '2026-03-10T12:00:00Z',
-    });
+    })
 
     render(
       <AddSourceModal
@@ -178,15 +178,15 @@ describe('AddSourceModal', () => {
         onClose={mockOnClose}
         onAdded={mockOnAdded}
       />
-    );
+    )
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox')).toBeInTheDocument();
-    });
+      expect(screen.getByRole('combobox')).toBeInTheDocument()
+    })
 
     // Click Add button
-    const addButton = screen.getByRole('button', { name: /Add/i });
-    fireEvent.click(addButton);
+    const addButton = screen.getByRole('button', { name: /Add/i })
+    fireEvent.click(addButton)
 
     await waitFor(() => {
       // At Wave 0: handleAdd calls console.log, NOT overlaysApi.addSource → assertion FAILS RED
@@ -195,7 +195,7 @@ describe('AddSourceModal', () => {
         platform: 'shared_overlay',
         channel_id: 'sender-overlay-uuid',
         channel_name: "xqc's overlay",
-      });
-    });
-  });
-});
+      })
+    })
+  })
+})

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PlatformBadge } from '@/components/ui/badge'
@@ -7,35 +7,35 @@ import { Dialog } from '@/components/ui/dialog'
 function SettingsPagePreview() {
   return (
     <div className="min-h-screen bg-bg p-8">
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="mx-auto max-w-2xl space-y-6">
         <h1 className="text-2xl font-bold text-text">Settings</h1>
 
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text mb-4">Profile</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">Profile</h2>
           <div className="space-y-3">
             <div>
               <span className="text-sm text-text-sub">Username</span>
-              <p className="text-text font-medium">streamer123</p>
+              <p className="font-medium text-text">streamer123</p>
             </div>
             <div>
               <span className="text-sm text-text-sub">Primary Platform</span>
-              <p className="text-text font-medium">Twitch</p>
+              <p className="font-medium text-text">Twitch</p>
             </div>
           </div>
         </Card>
 
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text mb-4">Connected Platforms</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">Connected Platforms</h2>
           <div className="flex gap-2">
-            {(['twitch', 'youtube', 'kick'] as const).map(p => (
+            {(['twitch', 'youtube', 'kick'] as const).map((p) => (
               <PlatformBadge key={p} platform={p} />
             ))}
           </div>
         </Card>
 
-        <Card className="p-6 border-destructive/20">
-          <h2 className="text-lg font-semibold text-destructive mb-2">Danger Zone</h2>
-          <p className="text-text-sub text-sm mb-4">
+        <Card className="border-destructive/20 p-6">
+          <h2 className="text-destructive mb-2 text-lg font-semibold">Danger Zone</h2>
+          <p className="mb-4 text-sm text-text-sub">
             Deleting your account is permanent and cannot be undone.
           </p>
           <Dialog.Root>
@@ -46,7 +46,7 @@ function SettingsPagePreview() {
                 This permanently deletes your account and all overlays. This action cannot be
                 undone.
               </Dialog.Description>
-              <div className="flex gap-3 justify-end mt-6">
+              <div className="mt-6 flex justify-end gap-3">
                 <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
                 <Button variant="destructive">Yes, delete my account</Button>
               </div>

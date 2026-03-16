@@ -8,21 +8,9 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
-## Current Milestone: v1.4 Viewer Identity & YouTube Enrichment
+## Current State (v1.4 shipped 2026-03-16)
 
-**Goal:** Give viewers global cosmetic control over how their name appears in overlays, unlock premium identity features (gradients, avatar frames/flairs, badges), and enrich YouTube chat with InnerTube-sourced badges and emotes.
-
-**Target features:**
-- Fallback name color picker (all users, global preference)
-- Gradient name color editor (premium + admin)
-- Avatar frame (animated border ring, premium + admin)
-- Avatar flair (corner icon, premium + admin)
-- Admin badge (all-chat logo) and premium badge (gem/star icon)
-- YouTube badges via InnerTube (membership, moderator, verified)
-- YouTube membership emotes rendered inline
-- Global YouTube emotes (source TBD via research)
-- Extension: quick color picker in popup
-- Website: full cosmetics editor (gradient builder, frame/flair picker)
+Viewer identity system shipped: OAuth from browser extension, platform linking, global name color/gradient editor, avatar frame/flair cosmetics, All-Chat platform badges, and YouTube InnerTube badge/emote enrichment. All 33 requirements satisfied across 6 phases.
 
 ## Requirements
 
@@ -72,32 +60,21 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 - ✓ Production rollout infrastructure (Argo Rollouts, canary deployment) — v1.2
 - ✓ Advanced metrics (per-channel message rate, network error classification) — v1.2
 
+**Frontend Redesign (v1.3):**
+- ✓ Design token system (Tailwind v4 @theme, three-tier hierarchy, cascade layers) — v1.3
+- ✓ Static platform color map (no dynamic class construction) — v1.3
+- ✓ Overlay CSS stability contract (events.css public API, EVENTS_CSS_API.md) — v1.3
+- ✓ @base-ui/react + shadcn/ui component library (Button, Card, Input, Badge, Dialog, Toast, Skeleton) with CVA — v1.3
+- ✓ All 6 pages redesigned in streaming dark aesthetic — v1.3
+- ✓ Draggable SplitView component for live overlay preview — v1.3
+- ✓ ESLint v10 flat config + Prettier with Tailwind class ordering (enforced) — v1.3
+- ✓ Husky pre-commit hooks (lint-staged + tsc --noEmit) — v1.3
+- ✓ 7-gate CI pipeline with Chromatic visual regression and 45/45 Storybook tests — v1.3
+- ✓ Marketplace CSS migration guide (cascade layer upgrade path) — v1.3
+
 ### Active
 
-<!-- Current scope: v1.4 Viewer Identity & YouTube Enrichment -->
-
-**Viewer Cosmetics (all users):**
-- [ ] Fallback name color picker saved as global user preference
-- [ ] Color applied in overlay when platform provides no name color
-
-**Premium Cosmetics:**
-- [ ] Gradient name color editor (multi-stop, premium + admin)
-- [ ] Avatar frame (animated border ring, premium + admin)
-- [ ] Avatar flair (small corner icon on avatar, premium + admin)
-
-**Platform Badges:**
-- [ ] Admin badge (all-chat logo) shown in overlay
-- [ ] Premium badge (gem/star icon) shown in overlay
-- [ ] YouTube membership badges via InnerTube
-- [ ] YouTube moderator and verified badges via InnerTube
-
-**YouTube Emotes:**
-- [ ] Membership emotes parsed from InnerTube payload, rendered inline
-- [ ] Global YouTube emotes rendered inline (source TBD via research)
-
-**Extension UX:**
-- [ ] Quick name color picker accessible from extension popup
-- [ ] Full cosmetics editor (gradient, frame, flair) on website settings
+<!-- Current scope: v1.5 (not yet defined — run /gsd:new-milestone) -->
 
 ### Out of Scope
 
@@ -111,11 +88,12 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 
 ## Context
 
-**Current State (v1.2 shipped):**
+**Current State (v1.3 shipped 2026-03-14):**
 - 7 core microservices deployed in Kubernetes (api-gateway, auth-service, emote-service, message-processor, overlay-manager, source-manager, token-refresh-service)
 - 5 listener services: 4 with load balancing (twitch-listener, kick-listener, tiktok-listener, youtube-listener) + 1 quota-free InnerTube listener (youtube-listener-innertube, ready for canary deployment)
-- InnerTube service: 8,684 LOC Go, 21 plans across 5 phases, 69 automated tests
-- Deployment infrastructure: Argo Rollouts manifests, Prometheus metrics, Grafana dashboards, comprehensive documentation
+- Frontend: Next.js 14 App Router, Tailwind v4, @base-ui/react, Storybook 10, ~18,833 LOC TypeScript/TSX
+- CI/CD: 7-gate GitHub Actions pipeline with Chromatic visual regression baseline established
+- ESLint v10 flat config + Prettier enforced via pre-commit hooks and CI
 
 **Load Balancing Implementation (v1.1):**
 - **Coordinator:** Kubernetes Lease-based leader election, bounded-load consistent hashing (1.25x average limit)
@@ -147,6 +125,7 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 - Event suppression architecture deferred (emits N events where 5th is tagged 'batch', not 1 batch event)
 - Argo Rollouts CRD not installed in cluster yet (prerequisite for InnerTube canary deployment)
 - Human verification pending: 24-hour dual-listener test, Grafana dashboard rendering, Kubernetes dry-run validation
+- Twitch design token (`#A37BFF`) lightened for WCAG AA contrast — differs from Twitch brand purple (#9146FF)
 
 ## Constraints
 
@@ -178,6 +157,12 @@ Streamers can aggregate chat from all platforms they stream to, with reliable me
 | **Argo Rollouts for canary deployment** | Automatic promotion/rollback based on Prometheus metrics | ✓ Good — Infrastructure ready, 10%→50%→100% progression with <1% error threshold |
 | **HTML parsing for stream discovery** | InnerTube browse endpoint unstable, HTML canonical link reliable | ✓ Good — Premiere filtering works, 15-minute timeout appropriate |
 | **Source-manager leadership coordination** | Reuse existing leader election, single source of truth for active streams | ✓ Good — Async discovery, Redis caching, graceful lifecycle management |
+| **Tailwind v4 @theme directive for design tokens** | Native CSS custom properties, zero runtime overhead, JIT-safe | ✓ Good — Three-tier hierarchy works cleanly, token naming consistent |
+| **@base-ui/react over Radix UI** | Unstyled primitives with first-class CSS custom properties, better Tailwind v4 alignment | ✓ Good — Clean integration, no className prop conflicts |
+| **Static PLATFORM_COLORS map over dynamic class construction** | Tailwind JIT requires static string analysis; dynamic `bg-${platform}` breaks JIT | ✓ Good — Required approach for Tailwind v4 compatibility |
+| **Cascade layers for events.css** | Eliminates all !important while preserving marketplace theme override priority | ✓ Good — All 14 !important removed, marketplace-themes layer positions correctly |
+| **ESLint v10 flat config (eslint.config.mjs)** | v9 .eslintrc.json silently ignored by ESLint v10; flat config required | ✓ Good — 345 pre-existing violations fixed, both linters exit 0 |
+| **Husky v9 new-style hooks (no husky.sh sourcing)** | Deprecated v8 sourcing logs deprecation warnings in v9, fails in v10 | ✓ Good — Clean hook execution, verified tsc + lint-staged exit 0 |
 
 ---
-*Last updated: 2026-03-14 after v1.4 milestone start*
+*Last updated: 2026-03-16 after v1.4 milestone completion*

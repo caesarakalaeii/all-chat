@@ -12,8 +12,10 @@ function DialogDemo({ size }: { size?: 'sm' | 'default' | 'lg' }) {
       <DialogContent size={size}>
         <DialogTitle>Dialog Title</DialogTitle>
         <DialogDescription>Dialog description and content goes here.</DialogDescription>
-        <div className="mt-4 flex gap-2 justify-end">
-          <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
           <Button onClick={() => setOpen(false)}>Confirm</Button>
         </div>
       </DialogContent>

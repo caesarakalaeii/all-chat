@@ -14,77 +14,78 @@
  * This is a Client Component for animation and dynamic rendering.
  */
 
-'use client';
+'use client'
 
-import Image from 'next/image';
-import { use, useEffect, useState, useRef } from 'react';
-import Script from 'next/script';
-import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay';
+import Image from 'next/image'
+import { use, useEffect, useState, useRef } from 'react'
+import clsx from 'clsx'
+import Script from 'next/script'
+import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay'
 
 declare global {
   interface Window {
-    Twitch: any;
+    Twitch: any
   }
 }
 
 export default function CreditRollPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const [creditData, setCreditData] = useState<CreditRollResponse | null>(null);
-  const [config, setConfig] = useState<CreditRollConfig | null>(null);
-  const [customCss, setCustomCss] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentClipIndex, setCurrentClipIndex] = useState(0);
-  const [twitchReady, setTwitchReady] = useState(false);
-  const playerRef = useRef<any>(null);
-  const playerContainerRef = useRef<HTMLDivElement>(null);
+  const { id } = use(params)
+  const [creditData, setCreditData] = useState<CreditRollResponse | null>(null)
+  const [config, setConfig] = useState<CreditRollConfig | null>(null)
+  const [customCss, setCustomCss] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [currentClipIndex, setCurrentClipIndex] = useState(0)
+  const [twitchReady, setTwitchReady] = useState(false)
+  const playerRef = useRef<any>(null)
+  const playerContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const loadCreditRoll = async () => {
       try {
         // Load config
-        const configResponse = await fetch(`/api/v1/overlays/public/${id}/creditroll`);
+        const configResponse = await fetch(`/api/v1/overlays/public/${id}/creditroll`)
         if (configResponse.ok) {
-          const configData = await configResponse.json();
-          setConfig(configData);
-          setCustomCss(configData.custom_css || '');
+          const configData = await configResponse.json()
+          setConfig(configData)
+          setCustomCss(configData.custom_css || '')
         }
 
         // Load credit roll data
-        const dataResponse = await fetch(`/api/v1/overlays/public/${id}/credit-roll`);
+        const dataResponse = await fetch(`/api/v1/overlays/public/${id}/credit-roll`)
         if (!dataResponse.ok) {
-          const errorData = await dataResponse.json();
-          throw new Error(errorData.error || 'Failed to load credit roll');
+          const errorData = await dataResponse.json()
+          throw new Error(errorData.error || 'Failed to load credit roll')
         }
 
-        const data = await dataResponse.json();
-        setCreditData(data);
+        const data = await dataResponse.json()
+        setCreditData(data)
       } catch (err) {
-        console.error('Failed to load credit roll:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load credit roll');
+        console.error('Failed to load credit roll:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load credit roll')
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    loadCreditRoll();
-  }, [id]);
+    loadCreditRoll()
+  }, [id])
 
   // Initialize Twitch Player when clip changes
   useEffect(() => {
-    if (!twitchReady || !creditData?.clips || creditData.clips.length === 0) return;
-    if (!playerContainerRef.current) return;
+    if (!twitchReady || !creditData?.clips || creditData.clips.length === 0) return
+    if (!playerContainerRef.current) return
 
-    const currentClip = creditData.clips[currentClipIndex];
-    if (!currentClip) return;
+    const currentClip = creditData.clips[currentClipIndex]
+    if (!currentClip) return
 
     // Destroy previous player
     if (playerRef.current) {
-      playerRef.current = null;
+      playerRef.current = null
     }
 
     // Clear container
-    playerContainerRef.current.innerHTML = '';
+    playerContainerRef.current.innerHTML = ''
 
     // Create new player
     const options = {
@@ -94,39 +95,43 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       parent: [window.location.hostname],
       autoplay: true,
       muted: config?.clips_muted ?? true,
-    };
+    }
 
     try {
-      playerRef.current = new window.Twitch.Embed(playerContainerRef.current, options);
+      playerRef.current = new window.Twitch.Embed(playerContainerRef.current, options)
 
       // Listen for player ready event
       playerRef.current.addEventListener(window.Twitch.Embed.VIDEO_READY, () => {
-        const player = playerRef.current.getPlayer();
+        const player = playerRef.current.getPlayer()
 
         // Auto-advance when clip ends
         player.addEventListener(window.Twitch.Player.ENDED, () => {
-          setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length);
-        });
+          setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length)
+        })
 
         // Fallback timer in case ENDED event doesn't fire
-        const duration = (currentClip.duration || 30) * 1000 + 3000;
+        const duration = (currentClip.duration || 30) * 1000 + 3000
         setTimeout(() => {
           if (playerRef.current) {
-            setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length);
+            setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length)
           }
-        }, duration);
-      });
+        }, duration)
+      })
     } catch (err) {
-      console.error('Failed to initialize Twitch player:', err);
+      console.error('Failed to initialize Twitch player:', err)
     }
-  }, [twitchReady, creditData, currentClipIndex, config?.clips_muted]);
+  }, [twitchReady, creditData, currentClipIndex, config?.clips_muted])
 
-  const renderLeaderboard = (title: string, entries: LeaderboardEntry[] | undefined, emoji: string) => {
-    if (!entries || entries.length === 0) return null;
+  const renderLeaderboard = (
+    title: string,
+    entries: LeaderboardEntry[] | undefined,
+    emoji: string
+  ) => {
+    if (!entries || entries.length === 0) return null
 
     return (
       <div className="mb-12">
-        <h2 className="text-4xl font-bold text-white mb-6 flex items-center gap-3">
+        <h2 className="mb-6 flex items-center gap-3 text-4xl font-bold text-white">
           <span className="text-5xl">{emoji}</span>
           {title}
         </h2>
@@ -134,23 +139,27 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           {entries.map((entry, index) => (
             <div
               key={index}
-              className={`flex items-center gap-4 p-4 rounded-lg ${
-                index === 0 ? 'bg-yellow-500/20 border-2 border-yellow-500' :
-                index === 1 ? 'bg-gray-400/20 border-2 border-gray-400' :
-                index === 2 ? 'bg-orange-600/20 border-2 border-orange-600' :
-                'bg-gray-800/50 border border-gray-700'
-              }`}
+              className={clsx(
+                'flex items-center gap-4 rounded-lg p-4',
+                index === 0 && 'border-2 border-yellow-500 bg-yellow-500/20',
+                index === 1 && 'border-2 border-slate-400 bg-slate-400/20',
+                index === 2 && 'border-2 border-orange-600 bg-orange-600/20',
+                index > 2 && 'border border-slate-700 bg-slate-800/50'
+              )}
             >
-              <div className={`text-3xl font-bold w-12 text-center ${
-                index === 0 ? 'text-yellow-400' :
-                index === 1 ? 'text-gray-300' :
-                index === 2 ? 'text-orange-500' :
-                'text-gray-500'
-              }`}>
+              <div
+                className={clsx(
+                  'w-12 text-center text-3xl font-bold',
+                  index === 0 && 'text-yellow-400',
+                  index === 1 && 'text-slate-300',
+                  index === 2 && 'text-orange-500',
+                  index > 2 && 'text-slate-500'
+                )}
+              >
                 #{entry.rank}
               </div>
               {entry.avatar_url && (
-                <div className="relative w-12 h-12 rounded-full overflow-hidden">
+                <div className="relative h-12 w-12 overflow-hidden rounded-full">
                   <Image
                     src={entry.avatar_url}
                     alt={entry.display_name}
@@ -161,7 +170,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
               )}
               <div className="flex-1">
                 <div className="text-xl font-semibold text-white">{entry.display_name}</div>
-                <div className="text-sm text-gray-400 capitalize">{entry.platform}</div>
+                <div className="text-sm text-slate-400 capitalize">{entry.platform}</div>
               </div>
               <div className="text-2xl font-bold text-white">
                 {entry.total_value !== undefined && entry.total_value > 0
@@ -172,47 +181,49 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           ))}
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-gray-900 to-black">
+      <div className="flex min-h-screen items-center justify-center bg-linear-to-b from-slate-900 to-black">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white mx-auto mb-4"></div>
-          <p className="text-white text-xl">Loading Credits...</p>
+          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-b-4 border-white"></div>
+          <p className="text-xl text-white">Loading Credits...</p>
         </div>
       </div>
-    );
+    )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-gray-900 to-black">
+      <div className="flex min-h-screen items-center justify-center bg-linear-to-b from-slate-900 to-black">
         <div className="text-center">
-          <div className="text-6xl mb-4">⚠️</div>
-          <p className="text-white text-xl mb-2">Unable to Load Credit Roll</p>
-          <p className="text-gray-400 text-sm">{error}</p>
-          <p className="text-gray-500 text-xs mt-4">Make sure you have an active streaming session</p>
+          <div className="mb-4 text-6xl">⚠️</div>
+          <p className="mb-2 text-xl text-white">Unable to Load Credit Roll</p>
+          <p className="text-sm text-slate-400">{error}</p>
+          <p className="mt-4 text-xs text-slate-500">
+            Make sure you have an active streaming session
+          </p>
         </div>
       </div>
-    );
+    )
   }
 
   if (!creditData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-b from-gray-900 to-black">
+      <div className="flex min-h-screen items-center justify-center bg-linear-to-b from-slate-900 to-black">
         <div className="text-center">
-          <p className="text-white text-xl">No credit roll data available</p>
+          <p className="text-xl text-white">No credit roll data available</p>
         </div>
       </div>
-    );
+    )
   }
 
-  const theme = config?.theme || 'cinematic';
-  const bgOpacity = config?.background_opacity || 0.8;
+  const theme = config?.theme || 'cinematic'
+  const bgOpacity = config?.background_opacity || 0.8
 
-  const currentClip = creditData?.clips?.[currentClipIndex];
+  const currentClip = creditData?.clips?.[currentClipIndex]
 
   return (
     <>
@@ -224,9 +235,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       />
 
       {/* Custom CSS Injection */}
-      {customCss && customCss.trim() && (
-        <style dangerouslySetInnerHTML={{ __html: customCss }} />
-      )}
+      {customCss && customCss.trim() && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
 
       {/* Background Clip Video */}
       {config?.clips_enabled && currentClip && (
@@ -234,48 +243,49 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           <div
             ref={playerContainerRef}
             id="twitch-clip-player"
-            className="absolute inset-0 w-full h-full"
+            className="absolute inset-0 h-full w-full"
           />
           {/* Overlay gradient for better text readability */}
           <div
             className="absolute inset-0 z-10"
             style={{
               background: `linear-gradient(to bottom, rgba(0, 0, 0, ${bgOpacity * 0.7}), rgba(0, 0, 0, ${bgOpacity * 0.5}))`,
-              pointerEvents: 'none'
+              pointerEvents: 'none',
             }}
           />
         </div>
       )}
 
       <div
-        className="min-h-screen overflow-hidden relative z-10"
+        className="relative z-10 min-h-screen overflow-hidden"
         style={{
-          background: (!config?.clips_enabled || !currentClip) ? (
-            theme === 'cinematic'
-              ? `linear-gradient(to bottom, rgba(17, 24, 39, ${bgOpacity}), rgba(0, 0, 0, ${bgOpacity}))`
-              : theme === 'modern'
-              ? `linear-gradient(135deg, rgba(99, 102, 241, ${bgOpacity * 0.3}), rgba(139, 92, 246, ${bgOpacity * 0.3}))`
-              : `rgba(17, 24, 39, ${bgOpacity})`
-          ) : 'transparent'
+          background:
+            !config?.clips_enabled || !currentClip
+              ? theme === 'cinematic'
+                ? `linear-gradient(to bottom, rgba(17, 24, 39, ${bgOpacity}), rgba(0, 0, 0, ${bgOpacity}))`
+                : theme === 'modern'
+                  ? `linear-gradient(135deg, rgba(99, 102, 241, ${bgOpacity * 0.3}), rgba(139, 92, 246, ${bgOpacity * 0.3}))`
+                  : `rgba(17, 24, 39, ${bgOpacity})`
+              : 'transparent',
         }}
       >
         <div className="container mx-auto px-8 py-12">
           {/* Header */}
-          <div className="text-center mb-16">
-            <h1 className="text-6xl font-bold text-white mb-4 animate-fade-in">
+          <div className="mb-16 text-center">
+            <h1 className="animate-fade-in mb-4 text-6xl font-bold text-white">
               🎬 Stream Credits
             </h1>
-            <p className="text-2xl text-gray-300">
+            <p className="text-2xl text-slate-300">
               Thank you to everyone who supported the stream!
             </p>
-            <div className="mt-4 text-gray-400">
+            <div className="mt-4 text-slate-400">
               <p>Session: {new Date(creditData.session_started_at).toLocaleDateString()}</p>
               <p>Duration: {Math.floor(creditData.session_duration_seconds / 60)} minutes</p>
             </div>
           </div>
 
           {/* Leaderboards */}
-          <div className="max-w-4xl mx-auto">
+          <div className="mx-auto max-w-4xl">
             {renderLeaderboard('Top Subscribers', creditData.leaderboards.subs, '⭐')}
             {renderLeaderboard('Top Gifters', creditData.leaderboards.gifts, '🎁')}
             {renderLeaderboard('Top Cheerers', creditData.leaderboards.bits, '💎')}
@@ -287,29 +297,27 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
           {/* Now Playing Indicator */}
           {config?.clips_enabled && currentClip && (
-            <div className="fixed bottom-8 right-8 z-50">
-              <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4 border border-gray-700 shadow-2xl max-w-sm">
-                <div className="flex items-center gap-3 mb-2">
+            <div className="fixed right-8 bottom-8 z-50">
+              <div className="max-w-sm rounded-lg border border-slate-700 bg-black/80 p-4 shadow-2xl backdrop-blur-sm">
+                <div className="mb-2 flex items-center gap-3">
                   <span className="text-2xl">🎥</span>
-                  <span className="text-white font-semibold">Now Playing</span>
+                  <span className="font-semibold text-white">Now Playing</span>
                 </div>
-                <div className="text-lg text-white font-medium mb-1">{currentClip.title}</div>
-                <div className="flex items-center justify-between text-sm text-gray-400">
+                <div className="mb-1 text-lg font-medium text-white">{currentClip.title}</div>
+                <div className="flex items-center justify-between text-sm text-slate-400">
                   <span>{currentClip.view_count.toLocaleString()} views</span>
-                  <span>Clip {currentClipIndex + 1}/{creditData?.clips?.length || 0}</span>
+                  <span>
+                    Clip {currentClipIndex + 1}/{creditData?.clips?.length || 0}
+                  </span>
                 </div>
               </div>
             </div>
           )}
 
           {/* Footer */}
-          <div className="text-center mt-24 mb-12">
-            <div className="text-4xl font-bold text-white mb-4">
-              Thank you for watching! ❤️
-            </div>
-            <p className="text-xl text-gray-300">
-              See you next stream!
-            </p>
+          <div className="mt-24 mb-12 text-center">
+            <div className="mb-4 text-4xl font-bold text-white">Thank you for watching! ❤️</div>
+            <p className="text-xl text-slate-300">See you next stream!</p>
           </div>
         </div>
       </div>
@@ -329,7 +337,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
         .animate-fade-in {
           animation: fade-in 1s ease-out;
         }
-        `}</style>
-      </>
-    );
+      `}</style>
+    </>
+  )
 }

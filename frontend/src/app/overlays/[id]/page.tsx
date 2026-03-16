@@ -48,8 +48,8 @@ import dynamic from 'next/dynamic'
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
   ssr: false,
   loading: () => (
-    <div className="h-[300px] bg-surface-2 border border-border rounded-lg flex items-center justify-center">
-      <div className="text-text-sub text-sm">Loading editor...</div>
+    <div className="flex h-[300px] items-center justify-center rounded-lg border border-border bg-surface-2">
+      <div className="text-sm text-text-sub">Loading editor...</div>
     </div>
   ),
 })
@@ -57,15 +57,15 @@ const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
 // Dynamically import Theme Marketplace Modal
 const ThemeMarketplaceModal = dynamic(
   () => import('@/components/theme-marketplace/ThemeMarketplaceModal'),
-  { ssr: false },
+  { ssr: false }
 )
 
 // Static platform border mapping — full literal class strings for Tailwind JIT safety
 const PLATFORM_BORDER: Record<string, string> = {
-  twitch:         'border-l-twitch',
-  youtube:        'border-l-youtube',
-  kick:           'border-l-kick',
-  tiktok:         'border-l-tiktok',
+  twitch: 'border-l-twitch',
+  youtube: 'border-l-youtube',
+  kick: 'border-l-kick',
+  tiktok: 'border-l-tiktok',
   shared_overlay: 'border-l-twitch',
 }
 
@@ -225,26 +225,29 @@ function SourceCard({
   return (
     <Card
       className={cn(
-        'flex items-center justify-between p-4 border-l-2',
+        'flex items-center justify-between border-l-2 p-4',
         PLATFORM_BORDER[source.platform] ?? 'border-l-border',
-        isInactiveShared && 'opacity-50',
+        isInactiveShared && 'opacity-50'
       )}
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <PlatformBadge platform={source.platform as 'twitch' | 'youtube' | 'kick' | 'tiktok'} size="sm" />
-        <span className="text-sm font-medium text-text truncate">
+      <div className="flex min-w-0 items-center gap-3">
+        <PlatformBadge
+          platform={source.platform as 'twitch' | 'youtube' | 'kick' | 'tiktok'}
+          size="sm"
+        />
+        <span className="truncate text-sm font-medium text-text">
           {source.channel_name || source.channel_id}
         </span>
         {isInactiveShared && source.share_status && (
           <StatusBadge status={source.share_status} size="sm" />
         )}
       </div>
-      <div className="flex items-center gap-2 shrink-0 ml-3">
+      <div className="ml-3 flex shrink-0 items-center gap-2">
         {isShared && source.is_active && onRevoke && (
           <Button
             variant="outline"
             size="sm"
-            className="text-xs text-destructive border-destructive/40 hover:bg-destructive/10"
+            className="text-destructive border-destructive/40 hover:bg-destructive/10 text-xs"
             onClick={() => onRevoke(source)}
           >
             Revoke
@@ -254,7 +257,7 @@ function SourceCard({
           <Dialog.Trigger
             render={
               <button
-                className="text-text-sub hover:text-destructive transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch rounded"
+                className="hover:text-destructive rounded text-text-sub transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                 aria-label={`Remove ${source.channel_name || source.channel_id}`}
               >
                 <X className="size-4" />
@@ -271,7 +274,10 @@ function SourceCard({
               <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
               <Button
                 variant="destructive"
-                onClick={() => { setConfirmOpen(false); onRemove(source.id) }}
+                onClick={() => {
+                  setConfirmOpen(false)
+                  onRemove(source.id)
+                }}
               >
                 Remove
               </Button>
@@ -286,7 +292,9 @@ function SourceCard({
 function SourceListSkeleton() {
   return (
     <div className="space-y-3">
-      {[0, 1].map(i => <Skeleton key={i} className="h-[60px] w-full rounded-xl" />)}
+      {[0, 1].map((i) => (
+        <Skeleton key={i} className="h-[60px] w-full rounded-xl" />
+      ))}
     </div>
   )
 }
@@ -346,50 +354,63 @@ function AddSourceForm({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-text-sub">Add a platform via OAuth or enter a TikTok username directly.</p>
+      <p className="text-xs text-text-sub">
+        Add a platform via OAuth or enter a TikTok username directly.
+      </p>
 
       {/* OAuth buttons — fetch auth_url then redirect, same pattern as login */}
       <div className="grid grid-cols-1 gap-2">
         <button
           onClick={() => startOAuth(`/api/v1/auth/twitch/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg bg-twitch text-white text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          className="flex items-center gap-2.5 rounded-lg bg-twitch px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
         >
-          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="#FFFFFF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="#FFFFFF"
+              d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"
+            />
           </svg>
           Connect Twitch
         </button>
 
         <button
           onClick={() => startOAuth(`/api/v1/auth/youtube/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-white text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
-          style={{ backgroundColor: '#FF0000', '--tw-ring-color': '#FF0000' } as React.CSSProperties}
+          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          style={
+            { backgroundColor: '#FF0000', '--tw-ring-color': '#FF0000' } as React.CSSProperties
+          }
         >
-          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="#FFFFFF" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="#FFFFFF"
+              d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
+            />
           </svg>
           Connect YouTube
         </button>
 
         <button
           onClick={() => startOAuth(`/api/v1/auth/kick/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-bg text-sm font-semibold hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
           style={{ backgroundColor: 'var(--color-kick)' }}
         >
-          <svg className="w-4 h-4 shrink-0" viewBox="0 0 512 512" aria-hidden="true">
-            <path fill="currentColor" d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z" />
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 512 512" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z"
+            />
           </svg>
           Connect Kick
         </button>
       </div>
 
       {/* TikTok — username only, no OAuth */}
-      <form onSubmit={handleTikTokSubmit} className="pt-1 border-t border-border">
-        <p className="text-xs text-text-sub mb-2">TikTok (enter username)</p>
+      <form onSubmit={handleTikTokSubmit} className="border-t border-border pt-1">
+        <p className="mb-2 text-xs text-text-sub">TikTok (enter username)</p>
         <div className="flex gap-2">
           <Input
             value={tiktokUsername}
-            onChange={e => setTiktokUsername(e.target.value)}
+            onChange={(e) => setTiktokUsername(e.target.value)}
             placeholder="@username"
             className="flex-1"
           />
@@ -401,13 +422,13 @@ function AddSourceForm({
 
       {/* Admin manual entry — any platform, any channel ID */}
       {isAdmin && onAddManual && (
-        <details className="pt-1 border-t border-border">
-          <summary className="text-xs text-text-sub cursor-pointer select-none hover:text-text py-1">
+        <details className="border-t border-border pt-1">
+          <summary className="cursor-pointer py-1 text-xs text-text-sub select-none hover:text-text">
             Admin: manual channel ID
           </summary>
           <form
             className="mt-2 space-y-2"
-            onSubmit={async e => {
+            onSubmit={async (e) => {
               e.preventDefault()
               if (!adminChannelId.trim()) return
               setIsAdminAdding(true)
@@ -422,8 +443,8 @@ function AddSourceForm({
             <div className="flex gap-2">
               <select
                 value={adminPlatform}
-                onChange={e => setAdminPlatform(e.target.value)}
-                className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                onChange={(e) => setAdminPlatform(e.target.value)}
+                className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
                 <option value="twitch">Twitch</option>
                 <option value="youtube">YouTube</option>
@@ -432,12 +453,18 @@ function AddSourceForm({
               </select>
               <Input
                 value={adminChannelId}
-                onChange={e => setAdminChannelId(e.target.value)}
+                onChange={(e) => setAdminChannelId(e.target.value)}
                 placeholder="Channel ID or username"
                 className="flex-1 text-xs"
               />
             </div>
-            <Button type="submit" disabled={isAdminAdding || !adminChannelId.trim()} size="sm" variant="outline" className="w-full">
+            <Button
+              type="submit"
+              disabled={isAdminAdding || !adminChannelId.trim()}
+              size="sm"
+              variant="outline"
+              className="w-full"
+            >
               {isAdminAdding ? 'Adding…' : 'Add manually'}
             </Button>
           </form>
@@ -459,7 +486,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [overlay, setOverlay] = useState<Overlay | null>(null)
   const [sources, setSources] = useState<ChatSource[]>([])
   const [isLoading, setIsLoading] = useState(true)
-const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
+  const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
   const [revokeTarget, setRevokeTarget] = useState<ChatSource | null>(null)
 
   // --- Customization state ---
@@ -473,7 +500,10 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
   const [isPublicForViewers, setIsPublicForViewers] = useState(false)
   const [configLoaded, setConfigLoaded] = useState(false)
   const [isSavingConfig, setIsSavingConfig] = useState(false)
-  const [configAlert, setConfigAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [configAlert, setConfigAlert] = useState<{
+    type: 'success' | 'error'
+    message: string
+  } | null>(null)
 
   // --- Mock messages state ---
   const [mockForm, setMockForm] = useState<MockMessageFormState>(DEFAULT_MOCK_FORM)
@@ -528,15 +558,21 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
 
           if (typeof display.max_messages === 'number') setMaxMessages(display.max_messages)
           if (typeof display.font_size === 'number') setFontSize(display.font_size)
-          if (typeof display.message_duration === 'number') setMessageDuration(display.message_duration)
-          if (typeof display.disable_message_fade === 'boolean') setDisableMessageFade(display.disable_message_fade)
-          if (display.platform_badge_position === 'before' || display.platform_badge_position === 'after') {
+          if (typeof display.message_duration === 'number')
+            setMessageDuration(display.message_duration)
+          if (typeof display.disable_message_fade === 'boolean')
+            setDisableMessageFade(display.disable_message_fade)
+          if (
+            display.platform_badge_position === 'before' ||
+            display.platform_badge_position === 'after'
+          ) {
             setPlatformBadgePosition(display.platform_badge_position)
           }
           if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
             setPlatformBadgeStyle(display.platform_badge_style)
           }
-          if (typeof display.show_platform_badge === 'boolean') setShowPlatformBadge(display.show_platform_badge)
+          if (typeof display.show_platform_badge === 'boolean')
+            setShowPlatformBadge(display.show_platform_badge)
 
           const css = config.custom_css || ''
           setCustomCss(css)
@@ -619,7 +655,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
   async function handleRemoveSource(sourceId: string) {
     try {
       await overlaysApi.removeSource(id, sourceId)
-      setSources(prev => prev.filter(s => s.id !== sourceId))
+      setSources((prev) => prev.filter((s) => s.id !== sourceId))
       toastManager.add({ title: 'Source removed', type: 'success' })
     } catch {
       toastManager.add({
@@ -636,7 +672,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
         platform: 'tiktok',
         channel_id: username,
       })
-      setSources(prev => [...prev, source])
+      setSources((prev) => [...prev, source])
       toastManager.add({ title: 'TikTok source added', type: 'success' })
     } catch {
       toastManager.add({
@@ -653,7 +689,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
         platform: platform as ChatSource['platform'],
         channel_id: channelId,
       })
-      setSources(prev => [...prev, source])
+      setSources((prev) => [...prev, source])
       toastManager.add({ title: 'Source added', type: 'success' })
     } catch {
       toastManager.add({
@@ -728,14 +764,14 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
 
   function handleMockInputChange<K extends keyof MockMessageFormState>(
     field: K,
-    value: MockMessageFormState[K],
+    value: MockMessageFormState[K]
   ) {
-    setMockForm(prev => ({ ...prev, [field]: value }))
+    setMockForm((prev) => ({ ...prev, [field]: value }))
   }
 
   const resolveMockTarget = (requestedPlatform?: ChatMessage['platform']) => {
-    const preferred = sources.find(source =>
-      requestedPlatform ? source.platform === requestedPlatform : true,
+    const preferred = sources.find((source) =>
+      requestedPlatform ? source.platform === requestedPlatform : true
     )
     if (!preferred) {
       return {
@@ -761,15 +797,13 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
         channel_name: target.channel_name,
         text: mockForm.message,
         username:
-          mockForm.username ||
-          mockForm.displayName.toLowerCase().replace(/\s+/g, '') ||
-          'mockuser',
+          mockForm.username || mockForm.displayName.toLowerCase().replace(/\s+/g, '') || 'mockuser',
         display_name: mockForm.displayName || mockForm.username || 'Mock Viewer',
         avatar_url: mockForm.avatarUrl || undefined,
         color: mockForm.color || undefined,
         metadata: { mock: true, source: 'editor-form' },
       })
-      setMockForm(prev => ({ ...prev, message: '' }))
+      setMockForm((prev) => ({ ...prev, message: '' }))
     } catch (error) {
       console.error('[Editor] Failed to send mock message:', error)
       toastManager.add({ title: 'Failed to send mock message', type: 'error' })
@@ -816,7 +850,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
           event: sample.event,
           metadata: { ...(sample.metadata || {}), mock: true, preset: true, order: index },
         })
-        await new Promise(resolve => setTimeout(resolve, 800))
+        await new Promise((resolve) => setTimeout(resolve, 800))
       } catch (error) {
         console.error('[Editor] Failed to send sample event:', error)
         break
@@ -857,7 +891,11 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
       const updated = await overlaysApi.update(id, { is_public_for_viewers: true })
       setIsPublicForViewers(true)
       setOverlay(updated)
-      toastManager.add({ title: 'Extension overlay set', description: 'This overlay will be shown in the browser extension.', type: 'success' })
+      toastManager.add({
+        title: 'Extension overlay set',
+        description: 'This overlay will be shown in the browser extension.',
+        type: 'success',
+      })
     } catch {
       toastManager.add({ title: 'Failed to update overlay', type: 'error' })
     }
@@ -881,7 +919,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
       <div className="min-h-screen bg-bg">
         <AppNav />
         <div className="flex h-[calc(100vh-60px)] items-center justify-center">
-          <div className="space-y-3 w-64">
+          <div className="w-64 space-y-3">
             <Skeleton className="h-6 w-40" />
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-2/3" />
@@ -897,7 +935,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
         <AppNav />
         <div className="flex h-[calc(100vh-60px)] items-center justify-center">
           <div className="text-center">
-            <p className="text-destructive text-lg mb-4">Overlay not found</p>
+            <p className="text-destructive mb-4 text-lg">Overlay not found</p>
             <Button variant="outline" onClick={() => router.push('/dashboard')}>
               Return to Dashboard
             </Button>
@@ -912,24 +950,23 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
       <AppNav />
       <SplitView overlayId={id}>
         {/* Config panel content */}
-        <div className="p-6 max-w-none space-y-6">
-
+        <div className="max-w-none space-y-6 p-6">
           {/* 1. Header */}
           <div className="flex items-start justify-between">
             <div>
               <button
                 onClick={() => router.push('/dashboard')}
-                className="text-text-sub hover:text-text text-sm flex items-center gap-1 mb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch rounded"
+                className="mb-1 flex items-center gap-1 rounded text-sm text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
                 <ChevronLeft className="size-4" />
                 Back
               </button>
               <h1 className="text-xl font-bold text-text">{overlay.name}</h1>
               {overlay.description && (
-                <p className="text-sm text-text-sub mt-0.5">{overlay.description}</p>
+                <p className="mt-0.5 text-sm text-text-sub">{overlay.description}</p>
               )}
             </div>
-            <div className="flex flex-wrap gap-2 shrink-0 ml-4">
+            <div className="ml-4 flex shrink-0 flex-wrap gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -950,7 +987,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
           {/* 2. Copy OBS URL */}
           <Button
             variant="outline"
-            className="w-full flex items-center gap-2 justify-center"
+            className="flex w-full items-center justify-center gap-2"
             onClick={handleCopyObsUrl}
           >
             <Clipboard className="size-4" />
@@ -960,7 +997,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
           {/* 2b. Share overlay */}
           <Button
             variant="outline"
-            className="w-full flex items-center gap-2 justify-center"
+            className="flex w-full items-center justify-center gap-2"
             onClick={handleShareClick}
           >
             <Share2 className="size-4" />
@@ -970,12 +1007,12 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
           {/* 2c. Extension overlay */}
           <Card className="p-4">
             <div className="flex items-start gap-3">
-              <Puzzle className="size-4 text-twitch shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
+              <Puzzle className="mt-0.5 size-4 shrink-0 text-twitch" />
+              <div className="min-w-0 flex-1">
+                <div className="mb-0.5 flex items-center gap-2">
                   <p className="text-sm font-semibold text-text">Browser Extension Overlay</p>
                   {isPublicForViewers && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-twitch/15 text-twitch border border-twitch/30">
+                    <span className="inline-flex items-center rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[10px] font-semibold text-twitch">
                       Active
                     </span>
                   )}
@@ -990,7 +1027,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="shrink-0 text-xs text-text-sub hover:text-destructive"
+                  className="hover:text-destructive shrink-0 text-xs text-text-sub"
                   onClick={handleUnsetExtensionOverlay}
                 >
                   Deactivate
@@ -1010,20 +1047,38 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
 
           {/* Premium required dialog */}
           {showPremiumRequired && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowPremiumRequired(false)}>
-              <div className="bg-surface border border-border rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-                <div className="flex items-start justify-between mb-3">
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+              onClick={() => setShowPremiumRequired(false)}
+            >
+              <div
+                className="mx-4 w-full max-w-sm rounded-xl border border-border bg-surface p-6 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-3 flex items-start justify-between">
                   <h2 className="text-lg font-semibold text-text">Premium Feature</h2>
-                  <button onClick={() => setShowPremiumRequired(false)} className="text-text-sub hover:text-text"><X className="size-4" /></button>
+                  <button
+                    onClick={() => setShowPremiumRequired(false)}
+                    className="text-text-sub hover:text-text"
+                  >
+                    <X className="size-4" />
+                  </button>
                 </div>
-                <p className="text-sm text-text-sub mb-4">
-                  Sharing your overlay is a premium feature. Upgrade your account to share your chat with other streamers.
+                <p className="mb-4 text-sm text-text-sub">
+                  Sharing your overlay is a premium feature. Upgrade your account to share your chat
+                  with other streamers.
                 </p>
-                <p className="text-sm text-text-sub mb-5">
+                <p className="mb-5 text-sm text-text-sub">
                   For more information and to get access, join our Discord community.
                 </p>
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1" onClick={() => setShowPremiumRequired(false)}>Close</Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setShowPremiumRequired(false)}
+                  >
+                    Close
+                  </Button>
                   <a
                     href="https://discord.gg/xCGBSuz39P"
                     target="_blank"
@@ -1039,30 +1094,50 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
 
           {/* Share overlay modal */}
           {showShareModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowShareModal(false)}>
-              <div className="bg-surface border border-border rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-                <div className="flex items-start justify-between mb-3">
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+              onClick={() => setShowShareModal(false)}
+            >
+              <div
+                className="mx-4 w-full max-w-sm rounded-xl border border-border bg-surface p-6 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-3 flex items-start justify-between">
                   <h2 className="text-lg font-semibold text-text">Share Overlay</h2>
-                  <button onClick={() => setShowShareModal(false)} className="text-text-sub hover:text-text"><X className="size-4" /></button>
+                  <button
+                    onClick={() => setShowShareModal(false)}
+                    className="text-text-sub hover:text-text"
+                  >
+                    <X className="size-4" />
+                  </button>
                 </div>
-                <p className="text-sm text-text-sub mb-4">
-                  Enter the Twitch username of the person you want to share <strong>{overlay?.name}</strong> with. They&apos;ll receive a request they can accept or decline.
+                <p className="mb-4 text-sm text-text-sub">
+                  Enter the Twitch username of the person you want to share{' '}
+                  <strong>{overlay?.name}</strong> with. They&apos;ll receive a request they can
+                  accept or decline.
                 </p>
                 <div className="mb-4">
-                  <label className="text-xs text-text-sub mb-1 block">Twitch username</label>
+                  <label className="mb-1 block text-xs text-text-sub">Twitch username</label>
                   <input
                     ref={shareInputRef}
                     type="text"
                     value={shareRecipient}
-                    onChange={e => setShareRecipient(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSendShareRequest()}
+                    onChange={(e) => setShareRecipient(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendShareRequest()}
                     placeholder="e.g. somestreamer"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-surface-2 text-text placeholder:text-text-sub focus:outline-none focus:ring-2 focus:ring-twitch/50"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-sub focus-visible:ring-2 focus-visible:ring-twitch/50 focus-visible:outline-none"
                     disabled={shareLoading}
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1" onClick={() => setShowShareModal(false)} disabled={shareLoading}>Cancel</Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setShowShareModal(false)}
+                    disabled={shareLoading}
+                  >
+                    Cancel
+                  </Button>
                   <Button
                     className="flex-1"
                     onClick={handleSendShareRequest}
@@ -1077,13 +1152,13 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
 
           {/* 3. Sources section */}
           <section aria-label="Chat sources">
-            <h2 className="text-sm font-semibold text-text mb-3">Sources</h2>
+            <h2 className="mb-3 text-sm font-semibold text-text">Sources</h2>
 
             {isLoading ? (
               <SourceListSkeleton />
             ) : (
-              <div className="space-y-3 mb-4">
-                {sources.map(source => (
+              <div className="mb-4 space-y-3">
+                {sources.map((source) => (
                   <SourceCard
                     key={source.id}
                     source={source}
@@ -1092,7 +1167,7 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
                   />
                 ))}
                 {sources.length === 0 && (
-                  <p className="text-text-sub text-sm py-2">
+                  <p className="py-2 text-sm text-text-sub">
                     No sources added yet. Add a platform below.
                   </p>
                 )}
@@ -1101,14 +1176,14 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
 
             {/* Accepted shared overlays — add as source */}
             {acceptedShares.length > 0 && (
-              <div className="mb-4 pt-4 border-t border-border">
-                <h3 className="text-sm font-medium text-text mb-3">Shared Overlays</h3>
+              <div className="mb-4 border-t border-border pt-4">
+                <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
                 <div className="space-y-2">
-                  {acceptedShares.map(share => (
+                  {acceptedShares.map((share) => (
                     <button
                       key={share.share_id}
                       onClick={() => handleAddSharedOverlay(share)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg border border-border bg-surface hover:bg-surface-2 transition-colors text-text"
+                      className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
                     >
                       <span>{share.sender_display_name}&apos;s overlay</span>
                       <span className="text-xs text-twitch">+ Add</span>
@@ -1123,19 +1198,18 @@ const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
               overlayId={id}
               token={token ?? ''}
               onAddTikTok={handleAddTikTokSource}
-onAddManual={handleAddManual}
+              onAddManual={handleAddManual}
               isAdmin={user?.is_admin === true}
             />
           </section>
 
           {/* 4. Customization section */}
           <Card className="p-4">
-            <h2 className="text-sm font-semibold text-text mb-4">Customization</h2>
+            <h2 className="mb-4 text-sm font-semibold text-text">Customization</h2>
             <div className="space-y-5">
-
               {/* Font Size */}
               <div>
-                <label className="block text-xs text-text-sub mb-1">
+                <label className="mb-1 block text-xs text-text-sub">
                   Font Size: <span className="text-twitch">{fontSize}px</span>
                 </label>
                 <input
@@ -1143,14 +1217,14 @@ onAddManual={handleAddManual}
                   min="12"
                   max="32"
                   value={fontSize}
-                  onChange={e => setFontSize(parseInt(e.target.value))}
+                  onChange={(e) => setFontSize(parseInt(e.target.value))}
                   className="w-full accent-twitch"
                 />
               </div>
 
               {/* Max Messages */}
               <div>
-                <label className="block text-xs text-text-sub mb-1">
+                <label className="mb-1 block text-xs text-text-sub">
                   Max Messages: <span className="text-twitch">{maxMessages}</span>
                 </label>
                 <input
@@ -1158,14 +1232,14 @@ onAddManual={handleAddManual}
                   min="10"
                   max="100"
                   value={maxMessages}
-                  onChange={e => setMaxMessages(parseInt(e.target.value))}
+                  onChange={(e) => setMaxMessages(parseInt(e.target.value))}
                   className="w-full accent-twitch"
                 />
               </div>
 
               {/* Message Duration */}
               <div>
-                <label className="block text-xs text-text-sub mb-1">
+                <label className="mb-1 block text-xs text-text-sub">
                   Message Duration: <span className="text-twitch">{messageDuration}s</span>
                 </label>
                 <input
@@ -1173,7 +1247,7 @@ onAddManual={handleAddManual}
                   min="5"
                   max="60"
                   value={messageDuration}
-                  onChange={e => setMessageDuration(parseInt(e.target.value))}
+                  onChange={(e) => setMessageDuration(parseInt(e.target.value))}
                   className="w-full accent-twitch"
                   disabled={disableMessageFade}
                 />
@@ -1185,34 +1259,39 @@ onAddManual={handleAddManual}
                   <input
                     type="checkbox"
                     checked={disableMessageFade}
-                    onChange={e => setDisableMessageFade(e.target.checked)}
+                    onChange={(e) => setDisableMessageFade(e.target.checked)}
                     className="accent-twitch"
                   />
                   Disable Message Fade Out
                 </label>
-                <p className="text-xs text-text-sub mt-1 ml-5">
+                <p className="mt-1 ml-5 text-xs text-text-sub">
                   Messages stay visible until max is reached
                 </p>
               </div>
 
               {/* Platform Badge */}
               <div>
-                <p className="text-xs text-text-sub mb-2">Platform Badge</p>
+                <p className="mb-2 text-xs text-text-sub">Platform Badge</p>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-xs text-text-sub">
                     <input
                       type="checkbox"
                       checked={showPlatformBadge}
-                      onChange={e => setShowPlatformBadge(e.target.checked)}
+                      onChange={(e) => setShowPlatformBadge(e.target.checked)}
                       className="accent-twitch"
                     />
                     Show Platform Badge
                   </label>
-                  <div className={cn('space-y-2', !showPlatformBadge && 'opacity-50 pointer-events-none')}>
+                  <div
+                    className={cn(
+                      'space-y-2',
+                      !showPlatformBadge && 'pointer-events-none opacity-50'
+                    )}
+                  >
                     <div>
-                      <p className="text-xs text-text-sub mb-1">Position</p>
+                      <p className="mb-1 text-xs text-text-sub">Position</p>
                       <div className="flex gap-4">
-                        <label className="flex items-center gap-1.5 text-xs text-text-sub cursor-pointer">
+                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
                           <input
                             type="radio"
                             name="platformBadgePosition"
@@ -1224,7 +1303,7 @@ onAddManual={handleAddManual}
                           />
                           Before
                         </label>
-                        <label className="flex items-center gap-1.5 text-xs text-text-sub cursor-pointer">
+                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
                           <input
                             type="radio"
                             name="platformBadgePosition"
@@ -1239,9 +1318,9 @@ onAddManual={handleAddManual}
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs text-text-sub mb-1">Style</p>
+                      <p className="mb-1 text-xs text-text-sub">Style</p>
                       <div className="flex gap-4">
-                        <label className="flex items-center gap-1.5 text-xs text-text-sub cursor-pointer">
+                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
                           <input
                             type="radio"
                             name="platformBadgeStyle"
@@ -1253,7 +1332,7 @@ onAddManual={handleAddManual}
                           />
                           Text
                         </label>
-                        <label className="flex items-center gap-1.5 text-xs text-text-sub cursor-pointer">
+                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
                           <input
                             type="radio"
                             name="platformBadgeStyle"
@@ -1273,7 +1352,7 @@ onAddManual={handleAddManual}
 
               {/* Emote Providers */}
               <div>
-                <p className="text-xs text-text-sub mb-2">Emote Providers</p>
+                <p className="mb-2 text-xs text-text-sub">Emote Providers</p>
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-2 text-xs text-text-sub">
                     <input type="checkbox" defaultChecked className="accent-twitch" />
@@ -1294,16 +1373,21 @@ onAddManual={handleAddManual}
 
           {/* 5. Mock Messages section */}
           <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-text">Mock Messages</h2>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-text-sub mb-1">Platform</label>
+                <label className="mb-1 block text-xs text-text-sub">Platform</label>
                 <select
                   value={mockForm.platform}
-                  onChange={e => handleMockInputChange('platform', e.target.value as MockMessageFormState['platform'])}
-                  className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                  onChange={(e) =>
+                    handleMockInputChange(
+                      'platform',
+                      e.target.value as MockMessageFormState['platform']
+                    )
+                  }
+                  className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                 >
                   <option value="twitch">Twitch</option>
                   <option value="youtube">YouTube</option>
@@ -1313,51 +1397,51 @@ onAddManual={handleAddManual}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs text-text-sub mb-1">Display Name</label>
+                  <label className="mb-1 block text-xs text-text-sub">Display Name</label>
                   <input
                     type="text"
                     value={mockForm.displayName}
-                    onChange={e => handleMockInputChange('displayName', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                    onChange={(e) => handleMockInputChange('displayName', e.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-text-sub mb-1">Username</label>
+                  <label className="mb-1 block text-xs text-text-sub">Username</label>
                   <input
                     type="text"
                     value={mockForm.username}
-                    onChange={e => handleMockInputChange('username', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                    onChange={(e) => handleMockInputChange('username', e.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                   />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs text-text-sub mb-1">Avatar URL</label>
+                  <label className="mb-1 block text-xs text-text-sub">Avatar URL</label>
                   <input
                     type="text"
                     value={mockForm.avatarUrl}
-                    onChange={e => handleMockInputChange('avatarUrl', e.target.value)}
+                    onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
                     placeholder="https://..."
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-twitch"
+                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-text-sub mb-1">Name Color</label>
+                  <label className="mb-1 block text-xs text-text-sub">Name Color</label>
                   <input
                     type="color"
                     value={mockForm.color}
-                    onChange={e => handleMockInputChange('color', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 h-9"
+                    onChange={(e) => handleMockInputChange('color', e.target.value)}
+                    className="h-9 w-full rounded-lg border border-border bg-surface px-2 py-1.5"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-text-sub mb-1">Message</label>
+                <label className="mb-1 block text-xs text-text-sub">Message</label>
                 <textarea
                   value={mockForm.message}
-                  onChange={e => handleMockInputChange('message', e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text h-16 focus:outline-none focus:ring-2 focus:ring-twitch resize-none"
+                  onChange={(e) => handleMockInputChange('message', e.target.value)}
+                  className="h-16 w-full resize-none rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                   placeholder="Type something fun..."
                 />
               </div>
@@ -1383,7 +1467,7 @@ onAddManual={handleAddManual}
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="flex-1 text-xs border-yellow-600/40 text-yellow-400 hover:bg-yellow-900/20"
+                  className="flex-1 border-yellow-600/40 text-xs text-yellow-400 hover:bg-yellow-900/20"
                   onClick={() => void handleAddSampleEvents()}
                 >
                   ⭐ Sample Events
@@ -1394,14 +1478,14 @@ onAddManual={handleAddManual}
 
           {/* 6. Custom CSS section */}
           <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h2 className="text-sm font-semibold text-text">Custom CSS</h2>
-                <label className="flex items-center gap-2 text-xs text-text-sub cursor-pointer">
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-text-sub">
                   <input
                     type="checkbox"
                     checked={useCustomCss}
-                    onChange={e => setUseCustomCss(e.target.checked)}
+                    onChange={(e) => setUseCustomCss(e.target.checked)}
                     className="accent-twitch"
                   />
                   Enable
@@ -1422,7 +1506,10 @@ onAddManual={handleAddManual}
                   variant="outline"
                   size="sm"
                   className="text-xs"
-                  onClick={() => { setCustomCss(''); setUseCustomCss(false) }}
+                  onClick={() => {
+                    setCustomCss('')
+                    setUseCustomCss(false)
+                  }}
                 >
                   Reset
                 </Button>
@@ -1436,7 +1523,7 @@ onAddManual={handleAddManual}
               placeholder="/* Enter your custom CSS here */"
             />
 
-            <p className="text-xs text-text-sub mt-3">
+            <p className="mt-3 text-xs text-text-sub">
               Need inspiration? Explore{' '}
               <a
                 href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
@@ -1460,12 +1547,16 @@ onAddManual={handleAddManual}
               {isSavingConfig ? 'Saving...' : 'Save Configuration'}
             </Button>
             {configAlert && (
-              <p className={cn('text-sm text-center', configAlert.type === 'success' ? 'text-green-400' : 'text-destructive')}>
+              <p
+                className={cn(
+                  'text-center text-sm',
+                  configAlert.type === 'success' ? 'text-green-400' : 'text-destructive'
+                )}
+              >
                 {configAlert.message}
               </p>
             )}
           </div>
-
         </div>
       </SplitView>
 

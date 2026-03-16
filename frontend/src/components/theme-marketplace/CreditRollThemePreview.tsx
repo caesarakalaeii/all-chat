@@ -5,13 +5,14 @@
  * Displays sample leaderboard entries instead of chat messages.
  */
 
-'use client';
+'use client'
 
-import { useMemo } from 'react';
+import { useMemo } from 'react'
+import clsx from 'clsx'
 
 interface CreditRollThemePreviewProps {
-  css: string;
-  themeId?: string;
+  css: string
+  themeId?: string
 }
 
 const SAMPLE_LEADERBOARD_DATA = [
@@ -20,100 +21,99 @@ const SAMPLE_LEADERBOARD_DATA = [
     display_name: 'TopSupporter',
     platform: 'twitch',
     avatar_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/aaa-profile_image-70x70.png',
-    total_value: 500.00,
+    total_value: 500.0,
   },
   {
     rank: 2,
     display_name: 'GenerousViewer',
     platform: 'youtube',
     avatar_url: 'https://yt3.ggpht.com/a/default-user=s88-c-k-c0x00ffffff-no-rj',
-    total_value: 250.00,
+    total_value: 250.0,
   },
   {
     rank: 3,
     display_name: 'AwesomeFan',
     platform: 'kick',
     avatar_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/bbb-profile_image-70x70.png',
-    total_value: 100.00,
+    total_value: 100.0,
   },
-];
+]
 
-export default function CreditRollThemePreview({ css, themeId = 'preview' }: CreditRollThemePreviewProps) {
+export default function CreditRollThemePreview({
+  css,
+  themeId = 'preview',
+}: CreditRollThemePreviewProps) {
   // Create unique scope ID for this preview
-  const scopeId = `credit-roll-preview-${themeId.replace(/[^a-z0-9]/gi, '-')}`;
+  const scopeId = `credit-roll-preview-${themeId.replace(/[^a-z0-9]/gi, '-')}`
 
   // Scope CSS using Shadow DOM approach - wrap all selectors with unique ID
   const scopedCss = useMemo(() => {
     return css
       .split('\n')
-      .map(line => {
-        const trimmed = line.trim();
+      .map((line) => {
+        const trimmed = line.trim()
 
         // Keep @import and @font-face as-is
         if (trimmed.startsWith('@import') || trimmed.startsWith('@font-face')) {
-          return line;
+          return line
         }
 
         // Handle @keyframes
         if (trimmed.startsWith('@keyframes')) {
-          const name = trimmed.match(/@keyframes\s+([^\s{]+)/)?.[1];
+          const name = trimmed.match(/@keyframes\s+([^\s{]+)/)?.[1]
           if (name) {
-            return line.replace(name, `${scopeId}-${name}`);
+            return line.replace(name, `${scopeId}-${name}`)
           }
-          return line;
+          return line
         }
 
         // Handle animation references
         if (trimmed.includes('animation:') && !trimmed.startsWith('@')) {
           // Replace animation names with scoped versions
           return line.replace(/animation:\s*([^\s]+)/g, (match, animName) => {
-            return `animation: ${scopeId}-${animName}`;
-          });
+            return `animation: ${scopeId}-${animName}`
+          })
         }
 
         // Scope regular CSS rules
         if (trimmed.includes('{') && !trimmed.startsWith('@') && !trimmed.startsWith('/*')) {
-          const selectorEnd = line.indexOf('{');
-          const selector = line.substring(0, selectorEnd).trim();
-          const rest = line.substring(selectorEnd);
+          const selectorEnd = line.indexOf('{')
+          const selector = line.substring(0, selectorEnd).trim()
+          const rest = line.substring(selectorEnd)
 
           if (selector) {
             // Replace body with scoped class
             const scopedSelector = selector
               .replace(/\bbody\b/g, `#${scopeId}`)
               .split(',')
-              .map(s => `#${scopeId} ${s.trim()}`)
-              .join(', ');
+              .map((s) => `#${scopeId} ${s.trim()}`)
+              .join(', ')
 
-            return scopedSelector + rest;
+            return scopedSelector + rest
           }
         }
 
-        return line;
+        return line
       })
-      .join('\n');
-  }, [css, scopeId]);
+      .join('\n')
+  }, [css, scopeId])
 
   return (
-    <div id={scopeId} className="relative w-full h-full overflow-hidden">
+    <div id={scopeId} className="relative h-full w-full overflow-hidden">
       {/* Inject scoped theme CSS */}
       <style dangerouslySetInnerHTML={{ __html: scopedCss }} />
 
       {/* Credit roll preview container */}
-      <div className="min-h-full overflow-y-auto p-4 bg-linear-to-b from-gray-900 to-black">
+      <div className="min-h-full overflow-y-auto bg-linear-to-b from-slate-900 to-black p-4">
         {/* Header */}
-        <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            🎬 Stream Credits
-          </h1>
-          <p className="text-sm text-gray-300">
-            Thank you for your support!
-          </p>
+        <div className="mb-6 text-center">
+          <h1 className="mb-2 text-3xl font-bold text-white">🎬 Stream Credits</h1>
+          <p className="text-sm text-slate-300">Thank you for your support!</p>
         </div>
 
         {/* Sample Leaderboard */}
-        <div className="max-w-md mx-auto">
-          <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+        <div className="mx-auto max-w-md">
+          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold text-white">
             <span className="text-3xl">⭐</span>
             Top Subscribers
           </h2>
@@ -121,53 +121,53 @@ export default function CreditRollThemePreview({ css, themeId = 'preview' }: Cre
             {SAMPLE_LEADERBOARD_DATA.map((entry) => (
               <div
                 key={entry.rank}
-                className={`flex items-center gap-4 p-4 rounded-lg ${
-                  entry.rank === 1 ? 'bg-yellow-500/20 border-2 border-yellow-500' :
-                  entry.rank === 2 ? 'bg-gray-400/20 border-2 border-gray-400' :
-                  entry.rank === 3 ? 'bg-orange-600/20 border-2 border-orange-600' :
-                  'bg-gray-800/50 border border-gray-700'
-                }`}
+                className={clsx(
+                  'flex items-center gap-4 rounded-lg p-4',
+                  entry.rank === 1 && 'border-2 border-yellow-500 bg-yellow-500/20',
+                  entry.rank === 2 && 'border-2 border-slate-400 bg-slate-400/20',
+                  entry.rank === 3 && 'border-2 border-orange-600 bg-orange-600/20',
+                  entry.rank > 3 && 'border border-slate-700 bg-slate-800/50'
+                )}
               >
-                <div className={`text-3xl font-bold w-12 text-center ${
-                  entry.rank === 1 ? 'text-yellow-400' :
-                  entry.rank === 2 ? 'text-gray-300' :
-                  entry.rank === 3 ? 'text-orange-500' :
-                  'text-gray-500'
-                }`}>
+                <div
+                  className={clsx(
+                    'w-12 text-center text-3xl font-bold',
+                    entry.rank === 1 && 'text-yellow-400',
+                    entry.rank === 2 && 'text-slate-300',
+                    entry.rank === 3 && 'text-orange-500',
+                    entry.rank > 3 && 'text-slate-500'
+                  )}
+                >
                   #{entry.rank}
                 </div>
-                <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-700">
+                <div className="relative h-12 w-12 overflow-hidden rounded-full bg-slate-700">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={entry.avatar_url}
                     alt={entry.display_name}
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="48" height="48"%3E%3Crect fill="%23374151" width="48" height="48"/%3E%3C/svg%3E';
+                      ;(e.target as HTMLImageElement).src =
+                        'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="48" height="48"%3E%3Crect fill="%23374151" width="48" height="48"/%3E%3C/svg%3E'
                     }}
                   />
                 </div>
                 <div className="flex-1">
                   <div className="text-xl font-semibold text-white">{entry.display_name}</div>
-                  <div className="text-sm text-gray-400 capitalize">{entry.platform}</div>
+                  <div className="text-sm text-slate-400 capitalize">{entry.platform}</div>
                 </div>
-                <div className="text-2xl font-bold text-white">
-                  ${entry.total_value.toFixed(2)}
-                </div>
+                <div className="text-2xl font-bold text-white">${entry.total_value.toFixed(2)}</div>
               </div>
             ))}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-8">
-          <div className="text-2xl font-bold text-white mb-2">
-            Thank you! ❤️
-          </div>
-          <p className="text-sm text-gray-300">
-            See you next stream!
-          </p>
+        <div className="mt-8 text-center">
+          <div className="mb-2 text-2xl font-bold text-white">Thank you! ❤️</div>
+          <p className="text-sm text-slate-300">See you next stream!</p>
         </div>
       </div>
     </div>
-  );
+  )
 }

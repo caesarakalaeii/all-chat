@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react'
 
 /**
  * Hook to detect when React hydration is complete.
@@ -8,11 +8,12 @@ import { useState, useEffect } from 'react';
  * causing hydration mismatches.
  */
 export function useHydrated(): boolean {
-  const [isHydrated, setIsHydrated] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false)
 
   useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsHydrated(true)
+  }, [])
 
-  return isHydrated;
+  return isHydrated
 }

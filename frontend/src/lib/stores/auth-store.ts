@@ -8,20 +8,20 @@
  *   const { user, token, login, logout } = useAuthStore();
  */
 
-import { create } from 'zustand';
-import type { User } from '../types/auth';
-import { authApi } from '../api/auth';
+import { create } from 'zustand'
+import type { User } from '../types/auth'
+import { authApi } from '../api/auth'
 
 interface AuthStore {
-  user: User | null;
-  token: string | null;
-  loading: boolean;
+  user: User | null
+  token: string | null
+  loading: boolean
 
   // Actions
-  setToken: (token: string) => void;
-  setUser: (user: User) => void;
-  logout: () => void;
-  init: () => Promise<void>;
+  setToken: (token: string) => void
+  setUser: (user: User) => void
+  logout: () => void
+  init: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -31,43 +31,43 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   setToken: (token: string) => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('jwt_token', token);
+      localStorage.setItem('jwt_token', token)
     }
-    set({ token });
+    set({ token })
   },
 
   setUser: (user: User) => {
-    set({ user, loading: false });
+    set({ user, loading: false })
   },
 
   logout: () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('jwt_token');
+      localStorage.removeItem('jwt_token')
     }
-    set({ user: null, token: null, loading: false });
+    set({ user: null, token: null, loading: false })
   },
 
   init: async () => {
     if (typeof window === 'undefined') {
-      set({ loading: false });
-      return;
+      set({ loading: false })
+      return
     }
 
-    const token = localStorage.getItem('jwt_token');
+    const token = localStorage.getItem('jwt_token')
     if (!token) {
-      set({ loading: false });
-      return;
+      set({ loading: false })
+      return
     }
 
-    set({ token });
+    set({ token })
 
     try {
-      const user = await authApi.getMe();
-      set({ user, loading: false });
+      const user = await authApi.getMe()
+      set({ user, loading: false })
     } catch (error) {
       // Token invalid, clear it
-      localStorage.removeItem('jwt_token');
-      set({ user: null, token: null, loading: false });
+      localStorage.removeItem('jwt_token')
+      set({ user: null, token: null, loading: false })
     }
-  }
-}));
+  },
+}))

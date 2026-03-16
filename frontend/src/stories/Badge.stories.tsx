@@ -20,25 +20,30 @@ export const TikTok: Story = { args: { platform: 'tiktok' } }
 export const TwitchSmall: Story = { args: { platform: 'twitch', size: 'sm' }, name: 'Twitch (sm)' }
 export const AllPlatforms: Story = {
   args: { platform: 'twitch' },
-  render: () => React.createElement('div', { className: 'flex gap-2' },
-    React.createElement(PlatformBadge, { platform: 'twitch' as Platform }),
-    React.createElement(PlatformBadge, { platform: 'youtube' as Platform }),
-    React.createElement(PlatformBadge, { platform: 'kick' as Platform }),
-    React.createElement(PlatformBadge, { platform: 'tiktok' as Platform }),
-  )
+  render: () =>
+    React.createElement(
+      'div',
+      { className: 'flex gap-2' },
+      React.createElement(PlatformBadge, { platform: 'twitch' as Platform }),
+      React.createElement(PlatformBadge, { platform: 'youtube' as Platform }),
+      React.createElement(PlatformBadge, { platform: 'kick' as Platform }),
+      React.createElement(PlatformBadge, { platform: 'tiktok' as Platform })
+    ),
 }
 export const AllPlatformsSmall: Story = {
   args: { platform: 'twitch', size: 'sm' },
-  render: () => React.createElement('div', { className: 'flex gap-2' },
-    React.createElement(PlatformBadge, { platform: 'twitch' as Platform, size: 'sm' }),
-    React.createElement(PlatformBadge, { platform: 'youtube' as Platform, size: 'sm' }),
-    React.createElement(PlatformBadge, { platform: 'kick' as Platform, size: 'sm' }),
-    React.createElement(PlatformBadge, { platform: 'tiktok' as Platform, size: 'sm' }),
-  ),
+  render: () =>
+    React.createElement(
+      'div',
+      { className: 'flex gap-2' },
+      React.createElement(PlatformBadge, { platform: 'twitch' as Platform, size: 'sm' }),
+      React.createElement(PlatformBadge, { platform: 'youtube' as Platform, size: 'sm' }),
+      React.createElement(PlatformBadge, { platform: 'kick' as Platform, size: 'sm' }),
+      React.createElement(PlatformBadge, { platform: 'tiktok' as Platform, size: 'sm' })
+    ),
   name: 'All Platforms (sm)',
 }
 export const GenericBadge: Story = {
   args: { platform: 'twitch' },
   render: () => React.createElement(Badge, null, 'Generic Badge'),
-  name: 'Generic Badge',
 }

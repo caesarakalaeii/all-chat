@@ -5,6 +5,7 @@ This document provides comprehensive instructions for testing the All-Chat front
 ## Overview
 
 The All-Chat frontend is built with:
+
 - **Next.js 14+** with App Router
 - **TypeScript** for type safety
 - **Tailwind CSS** for styling
@@ -69,6 +70,7 @@ npm run test:e2e:ui
 ```
 
 This opens an interactive browser where you can:
+
 - See tests run in real-time
 - Step through test execution
 - Inspect element locators
@@ -124,12 +126,12 @@ frontend/
 
 ### Test Coverage
 
-| Test File | Coverage |
-|-----------|----------|
-| `landing.spec.ts` | Landing page, login button, features |
-| `dashboard.spec.ts` | Auth flow, overlay listing, CRUD operations |
-| `overlay-editor.spec.ts` | Overlay editing, source management |
-| `overlay-preview.spec.ts` | WebSocket connection, message display |
+| Test File                 | Coverage                                    |
+| ------------------------- | ------------------------------------------- |
+| `landing.spec.ts`         | Landing page, login button, features        |
+| `dashboard.spec.ts`       | Auth flow, overlay listing, CRUD operations |
+| `overlay-editor.spec.ts`  | Overlay editing, source management          |
+| `overlay-preview.spec.ts` | WebSocket connection, message display       |
 
 ---
 
@@ -138,33 +140,33 @@ frontend/
 ### Basic Test Structure
 
 ```typescript
-import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test'
 
 test.describe('Feature Name', () => {
   test.beforeEach(async ({ page }) => {
     // Setup: navigate to page, set auth, etc.
-    await page.goto('/dashboard');
-  });
+    await page.goto('/dashboard')
+  })
 
   test('should perform action', async ({ page }) => {
     // Arrange
-    const button = page.locator('button', { hasText: 'Click Me' });
+    const button = page.locator('button', { hasText: 'Click Me' })
 
     // Act
-    await button.click();
+    await button.click()
 
     // Assert
-    await expect(page.locator('text=Success')).toBeVisible();
-  });
-});
+    await expect(page.locator('text=Success')).toBeVisible()
+  })
+})
 ```
 
 ### Mocking Authentication
 
 ```typescript
 test.beforeEach(async ({ page, context }) => {
-  await context.addCookies([]);
-  await page.goto('/dashboard');
+  await context.addCookies([])
+  await page.goto('/dashboard')
 
   // Inject mock auth into localStorage
   await page.evaluate(() => {
@@ -178,12 +180,12 @@ test.beforeEach(async ({ page, context }) => {
         token: 'mock-jwt-token',
       },
       version: 0,
-    };
-    localStorage.setItem('auth-store', JSON.stringify(mockAuthState));
-  });
+    }
+    localStorage.setItem('auth-store', JSON.stringify(mockAuthState))
+  })
 
-  await page.reload();
-});
+  await page.reload()
+})
 ```
 
 ### Mocking API Responses
@@ -205,39 +207,39 @@ test('should display overlays', async ({ page }) => {
           updated_at: new Date().toISOString(),
         },
       ]),
-    });
-  });
+    })
+  })
 
-  await page.reload();
+  await page.reload()
 
   // Verify overlay is displayed
-  await expect(page.locator('text=Test Overlay')).toBeVisible();
-});
+  await expect(page.locator('text=Test Overlay')).toBeVisible()
+})
 ```
 
 ### Testing WebSocket Connections
 
 ```typescript
 test('should establish WebSocket connection', async ({ page }) => {
-  let wsConnected = false;
+  let wsConnected = false
 
   page.on('websocket', (ws) => {
-    console.log('WebSocket opened:', ws.url());
-    wsConnected = true;
+    console.log('WebSocket opened:', ws.url())
+    wsConnected = true
 
     // Listen to messages
     ws.on('framereceived', (event) => {
-      console.log('Received:', event.payload);
-    });
-  });
+      console.log('Received:', event.payload)
+    })
+  })
 
-  await page.goto('/overlays/test-id/preview');
+  await page.goto('/overlays/test-id/preview')
 
   // Wait for WebSocket to connect
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(2000)
 
-  expect(wsConnected).toBe(true);
-});
+  expect(wsConnected).toBe(true)
+})
 ```
 
 ---
@@ -252,6 +254,7 @@ npm run test:e2e:debug -- tests/e2e/dashboard.spec.ts
 ```
 
 This will:
+
 - Open a browser window
 - Pause execution at breakpoints
 - Allow step-by-step execution
@@ -264,6 +267,7 @@ npm run test:e2e:ui
 ```
 
 Benefits:
+
 - See test execution visually
 - Time-travel debugging
 - Inspect DOM at any point
@@ -273,6 +277,7 @@ Benefits:
 ### Screenshots and Videos
 
 Tests automatically capture:
+
 - **Screenshots**: On failure only
 - **Videos**: Retained on failure
 - **Traces**: On first retry
@@ -284,10 +289,10 @@ View artifacts in `test-results/` directory.
 ```typescript
 test('should log debug info', async ({ page }) => {
   // Listen to console logs
-  page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
+  page.on('console', (msg) => console.log('PAGE LOG:', msg.text()))
 
-  await page.goto('/dashboard');
-});
+  await page.goto('/dashboard')
+})
 ```
 
 ---
@@ -343,22 +348,25 @@ CI=true
 ### 1. Use Descriptive Test Names
 
 ✅ **Good:**
+
 ```typescript
 test('should display error message when login fails', async ({ page }) => {
   // ...
-});
+})
 ```
 
 ❌ **Bad:**
+
 ```typescript
 test('test 1', async ({ page }) => {
   // ...
-});
+})
 ```
 
 ### 2. Use Locators Wisely
 
 ✅ **Good:** Use semantic locators
+
 ```typescript
 page.locator('button', { hasText: 'Login' })
 page.getByRole('button', { name: 'Login' })
@@ -366,6 +374,7 @@ page.getByLabel('Email')
 ```
 
 ❌ **Bad:** Use brittle selectors
+
 ```typescript
 page.locator('.btn-primary-123')
 page.locator('#submit-button')
@@ -374,18 +383,21 @@ page.locator('#submit-button')
 ### 3. Wait for Conditions
 
 ✅ **Good:**
+
 ```typescript
-await expect(page.locator('text=Success')).toBeVisible();
+await expect(page.locator('text=Success')).toBeVisible()
 ```
 
 ❌ **Bad:**
+
 ```typescript
-await page.waitForTimeout(5000); // Flaky!
+await page.waitForTimeout(5000) // Flaky!
 ```
 
 ### 4. Independent Tests
 
 Each test should:
+
 - Be independent (no shared state)
 - Clean up after itself
 - Not depend on test order
@@ -393,6 +405,7 @@ Each test should:
 ### 5. Mock External Services
 
 Always mock:
+
 - API responses
 - WebSocket connections
 - OAuth redirects
@@ -401,6 +414,7 @@ Always mock:
 ### 6. Test Critical User Flows
 
 Focus on:
+
 - Authentication (login/logout)
 - Main user journeys
 - Payment flows
@@ -431,11 +445,13 @@ use: {
 ### Issue: Flaky tests
 
 **Causes:**
+
 - Race conditions
 - Hard-coded waits
 - Network issues
 
 **Solutions:**
+
 - Use `waitForSelector` instead of `waitForTimeout`
 - Enable retries for flaky tests
 - Mock network requests
@@ -471,6 +487,7 @@ docker-compose up
 ## Support
 
 For issues or questions:
+
 1. Check [GitHub Issues](https://github.com/caesarakalaeii/all-chat/issues)
 2. Review [Playwright Troubleshooting](https://playwright.dev/docs/troubleshooting)
 3. Ask in project discussions

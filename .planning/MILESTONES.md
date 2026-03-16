@@ -1,5 +1,24 @@
 # Milestones
 
+## v1.3 Frontend Redesign (Shipped: 2026-03-14)
+
+**Phases:** 23–26 (4 phases, 20 plans, 46 tasks)
+**Timeline:** 3 days (2026-03-11 → 2026-03-14)
+**Files changed:** 204 files, 14,457 insertions, 7,088 deletions
+**Frontend LOC:** ~18,833 TypeScript/TSX
+
+**Key accomplishments:**
+- Tailwind v4 three-tier design token system (base → semantic → component) with cascade layer architecture (`@layer base, design-system, marketplace-themes, user-overrides`) and static platform color map
+- @base-ui/react + shadcn/ui component library (Button, Card, Input, Badge, Dialog, Toast, Skeleton) with CVA variants, micro-interactions, gradient CTAs, and platform-color coded components
+- All 6 application pages redesigned in streaming dark aesthetic: landing (hero + gradient), dashboard (overlay grid), editor, settings, admin — zero legacy `bg-gray-*` classes
+- Draggable SplitView component for live overlay preview (pointer-capture drag, 25–70% range, keyboard navigation, responsive stacking)
+- ESLint v10 flat config + Prettier with Tailwind class ordering — 345 pre-existing violations fixed; both enforce exit 0 in CI
+- 7-gate GitHub Actions CI pipeline: ESLint, Prettier, tsc, Next.js build, bundle analysis (20KB budget), Storybook vitest (45/45 tests pass), Chromatic visual regression
+
+**Archive:** [v1.3-ROADMAP.md](milestones/v1.3-ROADMAP.md) | [v1.3-REQUIREMENTS.md](milestones/v1.3-REQUIREMENTS.md)
+
+---
+
 ## v1.3 Chat Overlay Sharing (Shipped: 2026-03-11)
 
 **Phases completed:** 6 phases (14-19), 23 plans

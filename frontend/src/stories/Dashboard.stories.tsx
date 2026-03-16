@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { PlatformBadge } from '@/components/ui/badge'
@@ -9,23 +9,23 @@ import { MonitorPlay, Plus } from 'lucide-react'
 function DashboardLoadingStory() {
   return (
     <div className="min-h-screen bg-bg p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex items-center justify-between">
           <Skeleton className="h-8 w-32" />
           <Skeleton className="h-10 w-32 rounded-lg" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-border bg-surface overflow-hidden">
+            <div key={i} className="overflow-hidden rounded-xl border border-border bg-surface">
               <div className="h-[3px] w-full bg-surface-2" />
-              <div className="p-6 space-y-3">
+              <div className="space-y-3 p-6">
                 <Skeleton className="h-4 w-1/2" />
                 <Skeleton className="h-3 w-3/4" />
-                <div className="flex gap-1.5 mt-2">
+                <div className="mt-2 flex gap-1.5">
                   <Skeleton className="h-4 w-12 rounded-full" />
                   <Skeleton className="h-4 w-12 rounded-full" />
                 </div>
-                <Skeleton className="h-3 w-1/3 mt-3" />
+                <Skeleton className="mt-3 h-3 w-1/3" />
               </div>
             </div>
           ))}
@@ -39,21 +39,21 @@ function DashboardLoadingStory() {
 function DashboardEmptyStory() {
   return (
     <div className="min-h-screen bg-bg p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text">Overlays</h1>
           <Button variant="gradient">
-            <Plus className="size-4 mr-2" aria-hidden="true" />
+            <Plus className="mr-2 size-4" aria-hidden="true" />
             New Overlay
           </Button>
         </div>
-        <div className="flex flex-col items-center py-24 text-center gap-4">
+        <div className="flex flex-col items-center gap-4 py-24 text-center">
           <MonitorPlay className="size-16 text-text-dim" strokeWidth={1} aria-hidden="true" />
           <h2 className="text-xl font-semibold text-text">No overlays yet</h2>
-          <p className="text-text-sub text-sm max-w-sm">
+          <p className="max-w-sm text-sm text-text-sub">
             Create your first overlay to start aggregating chat across platforms.
           </p>
-          <div className="flex gap-1.5 mt-2" aria-hidden="true">
+          <div className="mt-2 flex gap-1.5" aria-hidden="true">
             {(['twitch', 'youtube', 'kick', 'tiktok'] as const).map((p) => (
               <PlatformBadge key={p} platform={p} size="sm" />
             ))}
@@ -79,11 +79,7 @@ function DashboardDefaultStory() {
     {
       id: '3',
       name: 'Multistream',
-      sources: [
-        { platform: 'twitch' },
-        { platform: 'kick' },
-        { platform: 'tiktok' },
-      ],
+      sources: [{ platform: 'twitch' }, { platform: 'kick' }, { platform: 'tiktok' }],
     },
   ]
 
@@ -111,20 +107,20 @@ function DashboardDefaultStory() {
 
   return (
     <div className="min-h-screen bg-bg p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text">Overlays</h1>
           <Button variant="gradient">
-            <Plus className="size-4 mr-2" aria-hidden="true" />
+            <Plus className="mr-2 size-4" aria-hidden="true" />
             New Overlay
           </Button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {SAMPLE_OVERLAYS.map((overlay) => (
-            <Card key={overlay.id} interactive className="overflow-hidden cursor-pointer">
+            <Card key={overlay.id} interactive className="cursor-pointer overflow-hidden">
               <div style={{ height: '3px', ...getBorder(overlay.sources) }} />
               <div className="p-6">
-                <h3 className="font-semibold text-text mb-3">{overlay.name}</h3>
+                <h2 className="mb-3 font-semibold text-text">{overlay.name}</h2>
                 <div className="flex flex-wrap gap-1.5">
                   {overlay.sources.map((s, i) => (
                     <PlatformBadge

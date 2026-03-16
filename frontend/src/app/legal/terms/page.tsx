@@ -1,46 +1,54 @@
-import Link from 'next/link';
-import LegalLayout from '@/components/legal/LegalLayout';
+import Link from 'next/link'
+import LegalLayout from '@/components/legal/LegalLayout'
 
 export const metadata = {
   title: 'Terms of Service | All-Chat',
-  description: 'Understand the rules and responsibilities for using All-Chat.'
-};
+  description: 'Understand the rules and responsibilities for using All-Chat.',
+}
 
-const listClasses = 'list-disc pl-6 space-y-1 text-gray-700';
+const listClasses = 'list-disc pl-6 space-y-1 text-slate-700'
 
 export default function TermsOfServicePage() {
   return (
     <LegalLayout title="Terms of Service" lastUpdated="November 15, 2025">
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">1. Acceptance of Terms</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">1. Acceptance of Terms</h2>
         <p>
-          By accessing or using All-Chat you agree to these Terms of Service. If you disagree with any part,
-          you should discontinue use immediately.
+          By accessing or using All-Chat you agree to these Terms of Service. If you disagree with
+          any part, you should discontinue use immediately.
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">2. Description of Service</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">2. Description of Service</h2>
         <p>
-          All-Chat aggregates real-time chat from Twitch, YouTube, Kick, and TikTok into a single overlay so
-          you can display cross-platform conversation on your stream. You can customize overlays, connect
-          sources, and broadcast them via OBS or browser sources.
+          All-Chat aggregates real-time chat from Twitch, YouTube, Kick, and TikTok into a single
+          overlay so you can display cross-platform conversation on your stream. You can customize
+          overlays, connect sources, and broadcast them via OBS or browser sources.
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">3. Accounts & Authentication</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">3. Accounts & Authentication</h2>
         <p>You are responsible for all activity that happens under your account. You agree to:</p>
         <ul className={listClasses}>
           <li>Provide accurate registration details</li>
           <li>Maintain the security of your credentials and OAuth grants</li>
-          <li>Notify us at <a href="mailto:allchat@caes.ar" className="underline">allchat@caes.ar</a> if you suspect compromise</li>
-          <li>Comply with the terms of Twitch, YouTube, TikTok, Kick, and any other connected platform</li>
+          <li>
+            Notify us at{' '}
+            <a href="mailto:allchat@caes.ar" className="underline">
+              allchat@caes.ar
+            </a>{' '}
+            if you suspect compromise
+          </li>
+          <li>
+            Comply with the terms of Twitch, YouTube, TikTok, Kick, and any other connected platform
+          </li>
         </ul>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">4. Acceptable Use</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">4. Acceptable Use</h2>
         <p>You agree not to misuse the Service, including but not limited to:</p>
         <ul className={listClasses}>
           <li>Breaking local, national, or international laws</li>
@@ -53,14 +61,17 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">5. Third-Party Integrations</h2>
-        <p>All-Chat relies on third-party APIs. Their availability, scopes, and rate limits may change.</p>
+        <h2 className="text-2xl font-semibold text-slate-900">5. Third-Party Integrations</h2>
+        <p>
+          All-Chat relies on third-party APIs. Their availability, scopes, and rate limits may
+          change.
+        </p>
         <ul className={listClasses}>
           <li>You must comply with each platform&apos;s terms of service</li>
           <li>We are not accountable for outages or policy shifts by those platforms</li>
           <li>Platform-specific quotas can impact overlay functionality</li>
         </ul>
-        <p className="font-semibold text-gray-800">
+        <p className="font-semibold text-slate-800">
           YouTube Integration: By using All-Chat to connect to YouTube, you agree to be bound by the{' '}
           <a
             href="https://www.youtube.com/t/terms"
@@ -75,7 +86,7 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">6. Privacy</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">6. Privacy</h2>
         <p>
           Your use of All-Chat is also governed by our{' '}
           <Link href="/legal/privacy" className="text-indigo-600 underline">
@@ -86,7 +97,7 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">7. Open Source License</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">7. Open Source License</h2>
         <p>
           All-Chat is released under the{' '}
           <a
@@ -97,9 +108,9 @@ export default function TermsOfServicePage() {
           >
             GNU Affero General Public License v3.0 (AGPL-3.0)
           </a>
-          . That means you may use, study, modify, and distribute the software as long as your derivative
-          works also inherit the AGPL-3.0 terms. If you run a modified version of All-Chat as a hosted
-          service, you must provide the source to your users.
+          . That means you may use, study, modify, and distribute the software as long as your
+          derivative works also inherit the AGPL-3.0 terms. If you run a modified version of
+          All-Chat as a hosted service, you must provide the source to your users.
         </p>
         <p>
           The canonical repository is available on{' '}
@@ -116,7 +127,7 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">8. Availability & Support</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">8. Availability & Support</h2>
         <p>We aim for high uptime but do not guarantee:</p>
         <ul className={listClasses}>
           <li>Uninterrupted access or zero bugs</li>
@@ -124,55 +135,63 @@ export default function TermsOfServicePage() {
           <li>Immediate fixes or feature requests</li>
         </ul>
         <p>
-          Support for the hosted service at <strong>allch.at</strong> is best-effort. Community/self-hosted
-          deployments must rely on their own maintainers or the open source community for assistance.
+          Support for the hosted service at <strong>allch.at</strong> is best-effort.
+          Community/self-hosted deployments must rely on their own maintainers or the open source
+          community for assistance.
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">9. Limitation of Liability</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">9. Limitation of Liability</h2>
         <p>
-          To the fullest extent permitted by law, All-Chat is not liable for indirect, incidental, special, or
-          consequential damages arising from your use of the Service.
+          To the fullest extent permitted by law, All-Chat is not liable for indirect, incidental,
+          special, or consequential damages arising from your use of the Service.
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">10. Indemnification</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">10. Indemnification</h2>
         <p>
-          You agree to indemnify All-Chat against claims, damages, losses, and expenses arising from your use
-          of the Service, violation of these Terms, or infringement of another party&apos;s rights.
+          You agree to indemnify All-Chat against claims, damages, losses, and expenses arising from
+          your use of the Service, violation of these Terms, or infringement of another party&apos;s
+          rights.
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">11. Changes to Terms</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">11. Changes to Terms</h2>
         <p>
-          We may update these Terms over time. Material changes will be announced in the dashboard, and the
-          new version will be posted here with an updated effective date.
+          We may update these Terms over time. Material changes will be announced in the dashboard,
+          and the new version will be posted here with an updated effective date.
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">12. Termination</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">12. Termination</h2>
         <p>
-          We reserve the right to suspend or terminate your access for any breach of these Terms or abusive
-          behavior. You may stop using the Service at any time by deleting your account in the Settings page.
+          We reserve the right to suspend or terminate your access for any breach of these Terms or
+          abusive behavior. You may stop using the Service at any time by deleting your account in
+          the Settings page.
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">13. Governing Law</h2>
-        <p>These Terms are governed by applicable laws without regard to conflict-of-law provisions.</p>
+        <h2 className="text-2xl font-semibold text-slate-900">13. Governing Law</h2>
+        <p>
+          These Terms are governed by applicable laws without regard to conflict-of-law provisions.
+        </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-gray-900">14. Contact</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">14. Contact</h2>
         <p>
-          Questions? Reach us at <a href="mailto:allchat@caes.ar" className="underline">allchat@caes.ar</a>. Hosted
-          community forks should contact their own administrators.
+          Questions? Reach us at{' '}
+          <a href="mailto:allchat@caes.ar" className="underline">
+            allchat@caes.ar
+          </a>
+          . Hosted community forks should contact their own administrators.
         </p>
       </section>
     </LegalLayout>
-  );
+  )
 }

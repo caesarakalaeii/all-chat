@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test'
 
 /**
  * Playwright Configuration for All-Chat Frontend
@@ -79,4 +79,4 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
   },
-});
+})

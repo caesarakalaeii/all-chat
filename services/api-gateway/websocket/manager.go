@@ -447,12 +447,12 @@ func (m *Manager) refreshConnectionTTLs() {
 	refreshed := 0
 	for _, overlayID := range overlayIDs {
 		key := "overlay:connected:" + overlayID
-		err := m.redisClient.Expire(ctx, key, m.connectionTTL).Err()
+		err := m.redisClient.SetEx(ctx, key, "1", m.connectionTTL).Err()
 
 		if err != nil {
 			// Retry once after 100ms for transient failures
 			time.Sleep(100 * time.Millisecond)
-			retryErr := m.redisClient.Expire(ctx, key, m.connectionTTL).Err()
+			retryErr := m.redisClient.SetEx(ctx, key, "1", m.connectionTTL).Err()
 
 			if retryErr != nil {
 				m.logger.Error("Failed to refresh connection TTL after retry",

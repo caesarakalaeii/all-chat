@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test'
 
 /**
  * Landing Page Tests
@@ -12,46 +12,58 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Landing Page', () => {
   test('should load the landing page', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/')
 
     // Check page title and main heading
-    await expect(page.locator('h1')).toHaveText('All-Chat');
+    await expect(page.locator('h1')).toHaveText('All-Chat')
 
     // Check hero description
-    await expect(page.locator('text=Aggregate chat from Twitch, YouTube')).toBeVisible();
-  });
+    await expect(page.locator('text=Aggregate chat from Twitch, YouTube')).toBeVisible()
+  })
 
   test('should display login button', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/')
 
     // Check for "Login with Twitch" button
-    const loginButton = page.locator('button', { hasText: 'Login with Twitch' });
-    await expect(loginButton).toBeVisible();
-    await expect(loginButton).toBeEnabled();
-  });
+    const loginButton = page.locator('button', { hasText: 'Login with Twitch' })
+    await expect(loginButton).toBeVisible()
+    await expect(loginButton).toBeEnabled()
+  })
 
   test('should display platform indicators', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/')
 
     // Check for platform names
-    await expect(page.locator('text=Twitch')).toBeVisible();
-    await expect(page.locator('text=YouTube')).toBeVisible();
-  });
+    await expect(page.locator('text=Twitch')).toBeVisible()
+    await expect(page.locator('text=YouTube')).toBeVisible()
+  })
 
   test('should display feature highlights', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/')
 
     // Check for feature cards
-    await expect(page.locator('text=Multi-Platform')).toBeVisible();
-    await expect(page.locator('text=Real-Time')).toBeVisible();
-    await expect(page.locator('text=Customizable')).toBeVisible();
-  });
+    await expect(page.locator('text=Multi-Platform')).toBeVisible()
+    await expect(page.locator('text=Real-Time')).toBeVisible()
+    await expect(page.locator('text=Customizable')).toBeVisible()
+  })
+
+  test('should link to the browser extension beta release', async ({ page }) => {
+    await page.goto('/')
+
+    const extensionLink = page.getByRole('link', { name: 'Install beta extension' })
+    await expect(extensionLink).toBeVisible()
+    await expect(extensionLink).toHaveAttribute(
+      'href',
+      'https://github.com/caesarakalaeii/all-chat-extension/releases'
+    )
+    await expect(page.locator('text=Currently in beta')).toBeVisible()
+  })
 
   test('should have correct styling and gradient', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/')
 
     // Check main container has gradient background
-    const container = page.locator('.min-h-screen').first();
-    await expect(container).toHaveClass(/bg-gradient-to-br/);
-  });
-});
+    const container = page.locator('.min-h-screen').first()
+    await expect(container).toHaveClass(/bg-gradient-to-br/)
+  })
+})

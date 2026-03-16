@@ -13,35 +13,36 @@
  * Client Component for form interactions and API calls.
  */
 
-'use client';
+'use client'
 
-import { use, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
-import { useAuthStore } from '@/lib/stores/auth-store';
-import { overlaysApi } from '@/lib/api/overlays';
-import type { Overlay, CreditRollConfig } from '@/lib/types/overlay';
+import { use, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import clsx from 'clsx'
+import dynamic from 'next/dynamic'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { overlaysApi } from '@/lib/api/overlays'
+import type { Overlay, CreditRollConfig } from '@/lib/types/overlay'
 
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
   ssr: false,
   loading: () => (
-    <div className="h-[400px] bg-gray-900 border border-gray-700 rounded-lg flex items-center justify-center">
-      <div className="text-gray-400 text-sm">Loading editor...</div>
+    <div className="flex h-[400px] items-center justify-center rounded-lg border border-slate-700 bg-slate-900">
+      <div className="text-sm text-slate-400">Loading editor...</div>
     </div>
-  )
-});
+  ),
+})
 
 const ThemeMarketplaceModal = dynamic(
   () => import('@/components/theme-marketplace/ThemeMarketplaceModal'),
   { ssr: false }
-);
+)
 
 export default function CreditRollConfigPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const router = useRouter();
-  const { token } = useAuthStore();
+  const { id } = use(params)
+  const router = useRouter()
+  const { token } = useAuthStore()
 
-  const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const [overlay, setOverlay] = useState<Overlay | null>(null)
   const [config, setConfig] = useState<Partial<CreditRollConfig>>({
     enabled: false,
     include_subs: true,
@@ -63,120 +64,151 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
     clips_max_count: 5,
     clips_fallback_days: 7,
     clips_muted: true,
-  });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [customCss, setCustomCss] = useState('');
-  const [useCustomCss, setUseCustomCss] = useState(false);
-  const [showThemeMarketplace, setShowThemeMarketplace] = useState(false);
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error'
+    message: string
+  } | null>(null)
+  const [customCss, setCustomCss] = useState('')
+  const [useCustomCss, setUseCustomCss] = useState(false)
+  const [showThemeMarketplace, setShowThemeMarketplace] = useState(false)
 
   useEffect(() => {
     if (!token) {
-      router.push('/');
-      return;
+      router.push('/')
+      return
     }
 
     const loadData = async () => {
       try {
-        const overlayData = await overlaysApi.get(id);
-        setOverlay(overlayData);
+        const overlayData = await overlaysApi.get(id)
+        setOverlay(overlayData)
 
         try {
-          const configData = await overlaysApi.getCreditRollConfig(id);
-          setConfig(configData);
-          const css = configData.custom_css || '';
-          setCustomCss(css);
-          setUseCustomCss(Boolean(css.trim().length));
+          const configData = await overlaysApi.getCreditRollConfig(id)
+          setConfig(configData)
+          const css = configData.custom_css || ''
+          setCustomCss(css)
+          setUseCustomCss(Boolean(css.trim().length))
         } catch (error) {
-          console.warn('Credit roll config not found, using defaults');
+          console.warn('Credit roll config not found, using defaults')
         }
       } catch (error) {
-        console.error('Failed to load overlay:', error);
+        console.error('Failed to load overlay:', error)
         setNotification({
           type: 'error',
-          message: 'Failed to load overlay data'
-        });
+          message: 'Failed to load overlay data',
+        })
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    loadData();
-  }, [id, token, router]);
+    loadData()
+  }, [id, token, router])
 
   const handleSave = async () => {
-    setSaving(true);
+    setSaving(true)
     try {
       await overlaysApi.updateCreditRollConfig(id, {
         ...config,
-        custom_css: useCustomCss ? customCss : ''
-      });
+        custom_css: useCustomCss ? customCss : '',
+      })
       setNotification({
         type: 'success',
-        message: 'Credit roll settings saved successfully!'
-      });
-      setTimeout(() => setNotification(null), 5000);
+        message: 'Credit roll settings saved successfully!',
+      })
+      setTimeout(() => setNotification(null), 5000)
     } catch (error) {
-      console.error('Failed to save config:', error);
+      console.error('Failed to save config:', error)
       setNotification({
         type: 'error',
-        message: 'Failed to save settings. Please try again.'
-      });
-      setTimeout(() => setNotification(null), 5000);
+        message: 'Failed to save settings. Please try again.',
+      })
+      setTimeout(() => setNotification(null), 5000)
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-twitch"></div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-900">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-twitch"></div>
       </div>
-    );
+    )
   }
 
   if (!overlay) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+      <div className="flex min-h-screen items-center justify-center bg-slate-900">
         <div className="text-center">
-          <p className="text-red-500 text-lg">Overlay not found</p>
-          <a href="/dashboard" className="text-twitch hover:underline mt-4 inline-block">
+          <p className="text-lg text-red-500">Overlay not found</p>
+          <a href="/dashboard" className="mt-4 inline-block text-twitch hover:underline">
             Return to Dashboard
           </a>
         </div>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-slate-900">
       {/* Notification */}
       {notification && (
-        <div className="fixed top-4 right-4 z-50 animate-slide-in">
-          <div className={`rounded-lg p-4 shadow-lg border ${
-            notification.type === 'success'
-              ? 'bg-green-500/20 border-green-500/30 text-green-400'
-              : 'bg-red-500/20 border-red-500/30 text-red-400'
-          }`}>
+        <div className="animate-slide-in fixed top-4 right-4 z-50">
+          <div
+            className={clsx(
+              'rounded-lg border p-4 shadow-lg',
+              notification.type === 'success'
+                ? 'border-green-500/30 bg-green-500/20 text-green-400'
+                : 'border-red-500/30 bg-red-500/20 text-red-400'
+            )}
+          >
             <div className="flex items-center gap-3">
               {notification.type === 'success' ? (
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <svg
+                  className="h-5 w-5 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
               ) : (
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="h-5 w-5 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               )}
               <p className="font-medium">{notification.message}</p>
               <button
                 onClick={() => setNotification(null)}
-                className="ml-2 text-gray-400 hover:text-white"
+                className="ml-2 text-slate-400 hover:text-white"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
@@ -185,43 +217,51 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
       )}
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto max-w-4xl px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <a
             href={`/overlays/${id}`}
-            className="text-gray-400 hover:text-white transition-colors inline-flex items-center gap-2 mb-4"
+            className="mb-4 inline-flex items-center gap-2 text-slate-400 transition-colors hover:text-white"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
             </svg>
             Back to Overlay
           </a>
           <h1 className="text-3xl font-bold text-white">Credit Roll Settings</h1>
-          <p className="text-gray-400 mt-2">
-            Configure end-of-stream credits to showcase viewers who supported your stream with subs, donations, raids, and more.
+          <p className="mt-2 text-slate-400">
+            Configure end-of-stream credits to showcase viewers who supported your stream with subs,
+            donations, raids, and more.
           </p>
         </div>
 
         {/* Main Toggle */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
+        <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-semibold text-white">Enable Credit Roll</h2>
-              <p className="text-sm text-gray-400 mt-1">
+              <p className="mt-1 text-sm text-slate-400">
                 Show end-of-stream credits with leaderboards and highlights
               </p>
             </div>
             <button
               onClick={() => setConfig({ ...config, enabled: !config.enabled })}
-              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-                config.enabled ? 'bg-green-600' : 'bg-gray-600'
-              }`}
+              className={clsx(
+                'relative inline-flex h-8 w-14 items-center rounded-full transition-colors',
+                config.enabled ? 'bg-green-600' : 'bg-slate-600'
+              )}
             >
               <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                className={clsx(
+                  'inline-block h-6 w-6 transform rounded-full bg-white transition-transform',
                   config.enabled ? 'translate-x-7' : 'translate-x-1'
-                }`}
+                )}
               />
             </button>
           </div>
@@ -230,9 +270,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
         {config.enabled && (
           <>
             {/* Event Types */}
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Event Types to Include</h3>
-              <p className="text-sm text-gray-400 mb-4">
+            <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
+              <h3 className="mb-4 text-lg font-semibold text-white">Event Types to Include</h3>
+              <p className="mb-4 text-sm text-slate-400">
                 Select which types of events should appear in the credit roll leaderboards
               </p>
               <div className="grid grid-cols-2 gap-4">
@@ -246,26 +286,29 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   { key: 'include_memberships', label: 'Memberships', icon: '👑' },
                   { key: 'include_follows', label: 'Follows', icon: '❤️' },
                 ].map(({ key, label, icon }) => (
-                  <label key={key} className="flex items-center gap-3 p-3 bg-gray-750 rounded-lg border border-gray-600 cursor-pointer hover:border-gray-500 transition-colors">
+                  <label
+                    key={key}
+                    className="bg-slate-750 flex cursor-pointer items-center gap-3 rounded-lg border border-slate-600 p-3 transition-colors hover:border-slate-500"
+                  >
                     <input
                       type="checkbox"
                       checked={config[key as keyof typeof config] as boolean}
                       onChange={(e) => setConfig({ ...config, [key]: e.target.checked })}
-                      className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-twitch focus:ring-twitch focus:ring-offset-gray-800"
+                      className="h-5 w-5 rounded border-slate-600 bg-slate-700 text-twitch focus-visible:ring-twitch focus-visible:ring-offset-slate-800"
                     />
                     <span className="text-2xl">{icon}</span>
-                    <span className="text-white font-medium">{label}</span>
+                    <span className="font-medium text-white">{label}</span>
                   </label>
                 ))}
               </div>
             </div>
 
             {/* Leaderboard Settings */}
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Leaderboard Settings</h3>
+            <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
+              <h3 className="mb-4 text-lg font-semibold text-white">Leaderboard Settings</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
+                  <label className="mb-2 block text-sm font-medium text-white">
                     Top N Users per Category
                   </label>
                   <input
@@ -273,19 +316,26 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     min="1"
                     max="50"
                     value={config.leaderboard_top_n || 10}
-                    onChange={(e) => setConfig({ ...config, leaderboard_top_n: parseInt(e.target.value) })}
-                    className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
+                    onChange={(e) =>
+                      setConfig({ ...config, leaderboard_top_n: parseInt(e.target.value) })
+                    }
+                    className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white focus-visible:border-twitch focus-visible:outline-none"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Show top 1-50 users in each leaderboard category</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Show top 1-50 users in each leaderboard category
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Sort By
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-white">Sort By</label>
                   <select
                     value={config.leaderboard_sort_by || 'value'}
-                    onChange={(e) => setConfig({ ...config, leaderboard_sort_by: e.target.value as 'value' | 'count' })}
-                    className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        leaderboard_sort_by: e.target.value as 'value' | 'count',
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white focus-visible:border-twitch focus-visible:outline-none"
                   >
                     <option value="value">Total Value (monetary amount)</option>
                     <option value="count">Count (number of events)</option>
@@ -295,17 +345,20 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
             </div>
 
             {/* Display Settings */}
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Display Settings</h3>
+            <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
+              <h3 className="mb-4 text-lg font-semibold text-white">Display Settings</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Theme
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-white">Theme</label>
                   <select
                     value={config.theme || 'cinematic'}
-                    onChange={(e) => setConfig({ ...config, theme: e.target.value as 'classic' | 'cinematic' | 'modern' })}
-                    className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        theme: e.target.value as 'classic' | 'cinematic' | 'modern',
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white focus-visible:border-twitch focus-visible:outline-none"
                   >
                     <option value="classic">Classic</option>
                     <option value="cinematic">Cinematic</option>
@@ -313,7 +366,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
+                  <label className="mb-2 block text-sm font-medium text-white">
                     Scroll Speed (1-100)
                   </label>
                   <input
@@ -321,13 +374,17 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     min="1"
                     max="100"
                     value={config.scroll_speed || 50}
-                    onChange={(e) => setConfig({ ...config, scroll_speed: parseInt(e.target.value) })}
+                    onChange={(e) =>
+                      setConfig({ ...config, scroll_speed: parseInt(e.target.value) })
+                    }
                     className="w-full"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Current: {config.scroll_speed || 50}</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Current: {config.scroll_speed || 50}
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
+                  <label className="mb-2 block text-sm font-medium text-white">
                     Display Duration (seconds)
                   </label>
                   <input
@@ -335,13 +392,17 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     min="10"
                     max="300"
                     value={config.display_duration_seconds || 60}
-                    onChange={(e) => setConfig({ ...config, display_duration_seconds: parseInt(e.target.value) })}
-                    className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
+                    onChange={(e) =>
+                      setConfig({ ...config, display_duration_seconds: parseInt(e.target.value) })
+                    }
+                    className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white focus-visible:border-twitch focus-visible:outline-none"
                   />
-                  <p className="text-xs text-gray-400 mt-1">How long to show the credit roll (10-300 seconds)</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    How long to show the credit roll (10-300 seconds)
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
+                  <label className="mb-2 block text-sm font-medium text-white">
                     Background Opacity (0-1)
                   </label>
                   <input
@@ -350,31 +411,37 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     max="1"
                     step="0.1"
                     value={config.background_opacity || 0.8}
-                    onChange={(e) => setConfig({ ...config, background_opacity: parseFloat(e.target.value) })}
+                    onChange={(e) =>
+                      setConfig({ ...config, background_opacity: parseFloat(e.target.value) })
+                    }
                     className="w-full"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Current: {config.background_opacity || 0.8}</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Current: {config.background_opacity || 0.8}
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* Clips Settings */}
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
-              <div className="flex items-center justify-between mb-4">
+            <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
+              <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-white">Twitch Clips</h3>
-                  <p className="text-sm text-gray-400 mt-1">Show clips during credit roll</p>
+                  <p className="mt-1 text-sm text-slate-400">Show clips during credit roll</p>
                 </div>
                 <button
                   onClick={() => setConfig({ ...config, clips_enabled: !config.clips_enabled })}
-                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-                    config.clips_enabled ? 'bg-green-600' : 'bg-gray-600'
-                  }`}
+                  className={clsx(
+                    'relative inline-flex h-8 w-14 items-center rounded-full transition-colors',
+                    config.clips_enabled ? 'bg-green-600' : 'bg-slate-600'
+                  )}
                 >
                   <span
-                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                    className={clsx(
+                      'inline-block h-6 w-6 transform rounded-full bg-white transition-transform',
                       config.clips_enabled ? 'translate-x-7' : 'translate-x-1'
-                    }`}
+                    )}
                   />
                 </button>
               </div>
@@ -382,7 +449,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
               {config.clips_enabled && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-white mb-2">
+                    <label className="mb-2 block text-sm font-medium text-white">
                       Maximum Clips
                     </label>
                     <input
@@ -390,12 +457,14 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       min="1"
                       max="20"
                       value={config.clips_max_count || 5}
-                      onChange={(e) => setConfig({ ...config, clips_max_count: parseInt(e.target.value) })}
-                      className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
+                      onChange={(e) =>
+                        setConfig({ ...config, clips_max_count: parseInt(e.target.value) })
+                      }
+                      className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white focus-visible:border-twitch focus-visible:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-white mb-2">
+                    <label className="mb-2 block text-sm font-medium text-white">
                       Fallback Days
                     </label>
                     <input
@@ -403,22 +472,28 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       min="1"
                       max="30"
                       value={config.clips_fallback_days || 7}
-                      onChange={(e) => setConfig({ ...config, clips_fallback_days: parseInt(e.target.value) })}
-                      className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-twitch"
+                      onChange={(e) =>
+                        setConfig({ ...config, clips_fallback_days: parseInt(e.target.value) })
+                      }
+                      className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white focus-visible:border-twitch focus-visible:outline-none"
                     />
-                    <p className="text-xs text-gray-400 mt-1">If no clips from this stream, show clips from last N days</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      If no clips from this stream, show clips from last N days
+                    </p>
                   </div>
                   <div>
-                    <label className="flex items-center gap-3 p-3 bg-gray-750 rounded-lg border border-gray-600 cursor-pointer hover:border-gray-500 transition-colors">
+                    <label className="bg-slate-750 flex cursor-pointer items-center gap-3 rounded-lg border border-slate-600 p-3 transition-colors hover:border-slate-500">
                       <input
                         type="checkbox"
                         checked={config.clips_muted ?? true}
                         onChange={(e) => setConfig({ ...config, clips_muted: e.target.checked })}
-                        className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-twitch focus:ring-twitch focus:ring-offset-gray-800"
+                        className="h-5 w-5 rounded border-slate-600 bg-slate-700 text-twitch focus-visible:ring-twitch focus-visible:ring-offset-slate-800"
                       />
                       <div className="flex-1">
-                        <span className="text-white font-medium">Mute Clips Audio</span>
-                        <p className="text-xs text-gray-400 mt-1">Required for browser autoplay. Unmuting may require viewer interaction.</p>
+                        <span className="font-medium text-white">Mute Clips Audio</span>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Required for browser autoplay. Unmuting may require viewer interaction.
+                        </p>
                       </div>
                     </label>
                   </div>
@@ -429,16 +504,16 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
         )}
 
         {/* CSS Customization Section */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
+          <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-semibold text-white">Custom CSS Editor</h3>
-              <label className="flex items-center gap-2 text-sm text-gray-300">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input
                   type="checkbox"
                   checked={useCustomCss}
                   onChange={(e) => setUseCustomCss(e.target.checked)}
-                  className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-twitch focus:ring-twitch focus:ring-offset-gray-800"
+                  className="h-5 w-5 rounded border-slate-600 bg-slate-700 text-twitch focus-visible:ring-twitch focus-visible:ring-offset-slate-800"
                 />
                 Enable Custom CSS
               </label>
@@ -447,20 +522,25 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
               <button
                 type="button"
                 onClick={() => setShowThemeMarketplace(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                  />
                 </svg>
                 Browse Themes
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  setCustomCss('');
-                  setUseCustomCss(false);
+                  setCustomCss('')
+                  setUseCustomCss(false)
                 }}
-                className="px-4 py-2 text-sm border border-gray-600 rounded-lg text-gray-200 hover:bg-gray-600 transition-colors"
+                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-600"
               >
                 Reset
               </button>
@@ -474,7 +554,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
             placeholder="/* Enter your custom CSS for credit roll */"
           />
 
-          <p className="text-sm text-gray-400 mt-4">
+          <p className="mt-4 text-sm text-slate-400">
             Customize your credit roll appearance with CSS. Browse themes or write your own styles.
             See{' '}
             <a
@@ -494,13 +574,13 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 bg-twitch hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 rounded-lg bg-twitch px-6 py-3 font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
           <button
             onClick={() => router.push(`/overlays/${id}`)}
-            className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors"
+            className="rounded-lg bg-slate-700 px-6 py-3 font-semibold text-white transition-colors hover:bg-slate-600"
           >
             Cancel
           </button>
@@ -512,12 +592,12 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
         isOpen={showThemeMarketplace}
         onClose={() => setShowThemeMarketplace(false)}
         onApplyTheme={(css) => {
-          setCustomCss(css);
-          setUseCustomCss(true);
-          setShowThemeMarketplace(false);
+          setCustomCss(css)
+          setUseCustomCss(true)
+          setShowThemeMarketplace(false)
         }}
         themeType="creditroll"
       />
     </div>
-  );
+  )
 }
