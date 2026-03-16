@@ -426,6 +426,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           return '🎁';
         case 'token_expiration_warning':
           return '⚠️';
+        case 'source_permission_error':
+          return '🔒';
         default:
           return '✨';
       }
@@ -469,6 +471,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         case 'token_expiration_warning':
           const platform = (event.metadata?.platform as string) || 'Platform';
           return `${platform.charAt(0).toUpperCase() + platform.slice(1)} Authentication Error`;
+        case 'source_permission_error':
+          return 'Bot Missing Channel Permission';
         default:
           return 'Event!';
       }
@@ -505,6 +509,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             </div>
             <div className="text-xs text-orange-300">
               {'→ Please reconnect your account in Settings → Connections'}
+            </div>
+          </div>
+        )}
+        {event.type === 'source_permission_error' && (
+          <div className="text-sm event-warning-message text-red-200 ml-14 mt-2 space-y-1">
+            <div className="font-semibold">
+              {`Channel ${String(event.metadata?.channel_id || '')} is not accessible`}
+            </div>
+            <div className="text-xs text-red-300">
+              {'→ Grant the bot "View Channel" permission in your Discord server settings'}
             </div>
           </div>
         )}

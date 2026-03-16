@@ -21,6 +21,7 @@ export type EventType =
   | 'gift' | 'follow' | 'like_aggregate' | 'share'
   // System
   | 'token_expiration_warning'
+  | 'source_permission_error'
   // Deletion events
   | 'message_deletion';
 
@@ -57,7 +58,7 @@ export interface EventInfo {
 export interface ChatMessage {
   id: string;
   overlay_id: string;
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'system';
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'system';
   channel_id: string;
   channel_name: string;
   user: UserInfo;
