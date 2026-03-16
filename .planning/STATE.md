@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Discord Listener
 status: planning
-stopped_at: Completed 31-load-balancing-01-PLAN.md
-last_updated: "2026-03-16T09:24:16.607Z"
+stopped_at: Completed 31-load-balancing-02-PLAN.md
+last_updated: "2026-03-16T09:30:09.627Z"
 last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
 progress:
   total_phases: 18
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 41
-  completed_plans: 40
+  completed_plans: 41
   percent: 0
 ---
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
 | Phase 30-outbound-relay P02 | 5 | 1 tasks | 3 files |
 | Phase 31-load-balancing P03 | 2min | 2 tasks | 4 files |
 | Phase 31-load-balancing P01 | 117 | 2 tasks | 3 files |
+| Phase 31-load-balancing P02 | 3 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,8 @@ Key decisions relevant to v1.5:
 - [Phase 31-load-balancing]: [Phase 31-03]: scaleUp type=Pods value=1 periodSeconds=30 — prevents Redis shard ownership lock race during scale-up
 - [Phase 31-load-balancing]: [Phase 31-03]: discord-listener-secrets separate Secret for DISCORD_BOT_TOKEN — independent rotation from allchat-secrets
 - [Phase 31-load-balancing]: [Phase 31]: Gateway RESUME protocol — RESUME/IDENTIFY branch in Connect() after OpHello; d=false clears Redis session keys, d=true preserves them
+- [Phase 31-load-balancing]: lostCallback in EnsureLeadership does NOT call gwClient.Close() — re-entrant race with Connect(); next loop iteration re-checks leadership instead
+- [Phase 31-load-balancing]: Graceful degradation when SOURCE_MANAGER_URL/SECRET absent: WARN log + direct connect (nil leaderCoord bypasses gate)
 
 ### Pending Todos
 
@@ -124,8 +127,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T09:24:16.604Z
-Stopped at: Completed 31-load-balancing-01-PLAN.md
+Last session: 2026-03-16T09:30:09.624Z
+Stopped at: Completed 31-load-balancing-02-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 27` to plan Phase 27 (Auth and Bot Token Foundation)
