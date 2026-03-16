@@ -129,7 +129,7 @@ func mapEventTypeToColumn(platform, eventType string) string {
 
 	case "system":
 		switch eventType {
-		case "token_expiration_warning":
+		case "token_expiration_warning", "source_permission_error":
 			return "enable_token_warnings"
 		default:
 			return ""

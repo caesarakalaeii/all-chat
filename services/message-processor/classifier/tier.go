@@ -205,6 +205,10 @@ func classifySystemEvent(eventType string, value *models.EventValue) (tier strin
 		// Token warnings are critical - high priority, long duration
 		return "high", 60
 
+	case "source_permission_error":
+		// Permission errors are critical - high priority, long duration
+		return "high", 60
+
 	default:
 		return "medium", 15
 	}

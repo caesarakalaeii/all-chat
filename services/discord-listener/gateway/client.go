@@ -29,6 +29,8 @@ type ChannelRegistry interface {
 	// GetOverlayForChannel returns the overlayID for the given channelID.
 	// Returns ("", false, nil) when the key is absent (not configured).
 	GetOverlayForChannel(ctx context.Context, channelID string) (overlayID string, found bool, err error)
+	// ListConfiguredChannels returns all configured channel_id → overlay_id mappings.
+	ListConfiguredChannels(ctx context.Context) (map[string]string, error)
 	// Subscribe registers a channel to receive channelID strings on invalidation events.
 	Subscribe(ctx context.Context, ch chan<- string) error
 }
@@ -91,6 +93,9 @@ type GatewayClient struct {
 	seq              int
 	done             chan struct{}
 	firstMessageSeen bool
+	// OnReady is called in a goroutine after each successful READY event.
+	// Use it to trigger post-connect checks (e.g. channel permission verification).
+	OnReady func()
 }
 
 // NewGatewayClient creates a new GatewayClient.
@@ -216,6 +221,9 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 				}
 				c.log.Info("Gateway READY — session established",
 					zap.String("session_id", ready.SessionID))
+				if c.OnReady != nil {
+					go c.OnReady()
+				}
 			}
 
 			if payload.T != nil && *payload.T == "MESSAGE_CREATE" {

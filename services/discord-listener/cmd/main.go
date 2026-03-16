@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -62,6 +64,34 @@ func (r *redisChannelRegistry) GetOverlayForChannel(ctx context.Context, channel
 func (r *redisChannelRegistry) Subscribe(_ context.Context, _ chan<- string) error {
 	// Not used in the pure-Redis-GET approach — each lookup is a direct GET.
 	return nil
+}
+
+func (r *redisChannelRegistry) ListConfiguredChannels(ctx context.Context) (map[string]string, error) {
+	result := make(map[string]string)
+	var cursor uint64
+	for {
+		keys, next, err := r.client.Scan(ctx, cursor, "discord:channels:*", 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("registry scan failed: %w", err)
+		}
+		for _, key := range keys {
+			val, err := r.client.Get(ctx, key).Result()
+			if err != nil {
+				continue
+			}
+			var v channelRegistryValue
+			if err := json.Unmarshal([]byte(val), &v); err != nil {
+				continue
+			}
+			channelID := strings.TrimPrefix(key, "discord:channels:")
+			result[channelID] = v.OverlayID
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return result, nil
 }
 
 // redisGuildCache implements gateway.GuildCache backed by Redis.
@@ -178,6 +208,19 @@ func main() {
 
 	gwClient := gateway.NewGatewayClient(botToken, gatewayURL, store, log, registry, pubAdapter, guildCache)
 
+	// After each READY event, check that configured Discord channels are actually
+	// accessible to the bot. Channels missing VIEW_CHANNEL trigger a system error
+	// event so the overlay surfaces the problem to the user.
+	gwClient.OnReady = func() {
+		// Wait for GUILD_CREATE events to settle before checking.
+		select {
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+			return
+		}
+		checkChannelPermissions(ctx, botToken, registry, streamPub, log)
+	}
+
 	// Start Gateway connection in background with automatic reconnect.
 	// When SOURCE_MANAGER_SECRET is set, EnsureLeadership gates the connection:
 	// only the pod that holds shard:0 ownership will call Connect().
@@ -266,6 +309,84 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// checkChannelPermissions verifies that the bot has access to every configured
+// Discord channel. For each channel that returns 403/Missing Access from the
+// Discord REST API a "source_permission_error" system event is published to
+// chat:raw so the message-processor can forward it to the overlay.
+func checkChannelPermissions(
+	ctx context.Context,
+	botToken string,
+	reg gateway.ChannelRegistry,
+	pub *publisher.StreamPublisher,
+	log *zap.Logger,
+) {
+	channels, err := reg.ListConfiguredChannels(ctx)
+	if err != nil {
+		log.Warn("Permission check: failed to list configured channels", zap.Error(err))
+		return
+	}
+	if len(channels) == 0 {
+		return
+	}
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	for channelID, overlayID := range channels {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			"https://discord.com/api/v10/channels/"+channelID, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Authorization", "Bot "+botToken)
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			log.Warn("Permission check: HTTP error", zap.String("channel_id", channelID), zap.Error(err))
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			log.Debug("Permission check: channel accessible", zap.String("channel_id", channelID))
+			continue
+		}
+
+		// 403 = Missing Access (code 50001) or Missing Permissions (code 50013)
+		// 404 = Unknown Channel (channel deleted or bot not in that guild)
+		log.Error("Permission check: bot cannot access configured Discord channel",
+			zap.String("channel_id", channelID),
+			zap.String("overlay_id", overlayID),
+			zap.Int("http_status", resp.StatusCode),
+			zap.String("response", string(body)),
+		)
+
+		// Publish a system error event so the overlay surface the problem.
+		errMsg := &publisher.RawMessage{
+			MessageID: fmt.Sprintf("perm-err-%s", channelID),
+			Platform:  "system",
+			OverlayID: overlayID,
+			ChannelID: "system",
+			EventType: "source_permission_error",
+			EventData: map[string]interface{}{
+				"platform":    "discord",
+				"channel_id":  channelID,
+				"http_status": resp.StatusCode,
+				"description": fmt.Sprintf(
+					"Discord bot cannot access channel %s — grant it View Channel permission in your Discord server settings.",
+					channelID,
+				),
+			},
+			Timestamp: time.Now(),
+		}
+		if pubErr := pub.Publish(ctx, errMsg); pubErr != nil {
+			log.Warn("Permission check: failed to publish error event",
+				zap.String("channel_id", channelID),
+				zap.Error(pubErr),
+			)
+		}
+	}
 }
 
 func buildDatabaseDSN() string {

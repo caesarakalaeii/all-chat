@@ -32,6 +32,8 @@ func (n *SystemNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 	switch raw.EventType {
 	case "token_expiration_warning":
 		eventInfo, err = n.normalizeTokenWarning(raw)
+	case "source_permission_error":
+		eventInfo, err = n.normalizeSourcePermissionError(raw)
 	default:
 		return nil, fmt.Errorf("unsupported system event type: %s", raw.EventType)
 	}
@@ -65,6 +67,33 @@ func (n *SystemNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 	}
 
 	return unified, nil
+}
+
+// normalizeSourcePermissionError normalizes a source permission error event.
+// Published by the discord-listener when the bot cannot access a configured channel.
+func (n *SystemNormalizer) normalizeSourcePermissionError(raw *models.RawChatMessage) (*models.EventInfo, error) {
+	platform, _ := raw.EventData["platform"].(string)
+	channelID, _ := raw.EventData["channel_id"].(string)
+	description, _ := raw.EventData["description"].(string)
+
+	metadata := make(map[string]interface{})
+	for k, v := range raw.EventData {
+		metadata[k] = v
+	}
+	if description == "" {
+		description = fmt.Sprintf("Bot cannot access %s channel %s — check View Channel permissions.", platform, channelID)
+	}
+	metadata["description"] = description
+
+	tier, duration := classifier.ClassifyEvent("system", "source_permission_error", nil)
+
+	return &models.EventInfo{
+		Type:     "source_permission_error",
+		Tier:     tier,
+		Duration: duration,
+		IsUpdate: false,
+		Metadata: metadata,
+	}, nil
 }
 
 // normalizeTokenWarning normalizes a token expiration warning event
