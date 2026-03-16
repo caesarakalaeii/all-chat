@@ -132,6 +132,11 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 	c.conn = conn
 	c.mu.Unlock()
 
+	// connCtx is cancelled when this Connect() call exits, stopping the heartbeat goroutine
+	// started below. Without this, old goroutines keep writing to c.conn after reconnect.
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+
 	defer conn.Close()
 
 	for {
@@ -175,8 +180,9 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 			if err := json.Unmarshal(payload.D, &hello); err != nil {
 				return fmt.Errorf("failed to parse HELLO: %w", err)
 			}
-			// Start heartbeat goroutine with jitter on first beat (Discord requirement)
-			go c.heartbeatLoop(ctx, hello.HeartbeatInterval)
+			// Start heartbeat goroutine with jitter on first beat (Discord requirement).
+			// Pass connCtx so it stops when this Connect() call exits.
+			go c.heartbeatLoop(connCtx, hello.HeartbeatInterval)
 
 			// Attempt RESUME if a prior session exists in Redis; otherwise IDENTIFY.
 			sessionID, _ := c.store.Get(ctx, RedisKeySessionID)
