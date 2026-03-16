@@ -131,13 +131,15 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		       COALESCE(cf.image_url, '') AS avatar_frame_url,
 		       COALESCE(cfl.image_url, '') AS avatar_flair_url,
 		       COALESCE(u.is_admin, false) AS is_admin,
-		       COALESCE(u.is_premium, false) AS is_premium
+		       COALESCE(v.is_premium, false) AS is_premium
 		FROM viewer_platform_identities vpi
 		LEFT JOIN viewer_cosmetics vc ON vc.viewer_id = vpi.viewer_id
 		LEFT JOIN cosmetic_frames cf ON cf.id = vc.avatar_frame_id
 		LEFT JOIN cosmetic_flairs cfl ON cfl.id = vc.avatar_flair_id
 		LEFT JOIN LATERAL (SELECT user_id FROM viewer_sessions WHERE viewer_id = vpi.viewer_id LIMIT 1) vs ON true
 		LEFT JOIN users u ON u.id = vs.user_id
+		-- Phase 32: viewers.is_premium is the viewer cosmetic flag (migration 036); users.is_premium is streamer-only
+		LEFT JOIN viewers v ON v.id = vpi.viewer_id
 		WHERE vpi.platform = $1 AND vpi.platform_user_id = $2
 	`, msg.Platform, msg.User.ID)
 
