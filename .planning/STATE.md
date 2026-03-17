@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Completed 37-03-PLAN.md
-last_updated: "2026-03-17T22:53:49.981Z"
+stopped_at: Completed 37-02-PLAN.md
+last_updated: "2026-03-17T22:55:34.825Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
-  completed_phases: 22
+  completed_phases: 23
   total_plans: 78
-  completed_plans: 77
+  completed_plans: 78
   percent: 0
 ---
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 36-migrate-kick-listener P02 | 3m | 2 tasks | 2 files |
 | Phase 37-migrate-youtube-innertube-and-discord-listener P01 | 2m | 2 tasks | 5 files |
 | Phase 37 P03 | 3min | 2 tasks | 2 files |
+| Phase 37-migrate-youtube-innertube-and-discord-listener P02 | 5m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,8 @@ Key decisions relevant to v1.6:
 - [Phase 37-migrate-youtube-innertube-and-discord-listener]: SMClient() accessor mirrors LeadershipCoordinator() nil-safety pattern — doc comment warns callers to nil-check
 - [Phase 37]: discord-listener is leadership-only: ll.Start() and ll.Stop() NOT called — ListenerBase used as container only for NewLeadershipListenerFromEnv; custom shutdown sequence unchanged
 - [Phase 37]: Gateway goroutine outer nil guard removed — EnsureLeadership called unconditionally via nil-safe passthrough; only metrics.SetShardOwnership calls remain guarded
+- [Phase 37-migrate-youtube-innertube-and-discord-listener]: nil passed for logger in NewListenerBase smoke test — matches kick-listener pattern (not zap.NewNop())
+- [Phase 37-migrate-youtube-innertube-and-discord-listener]: ListenerBase used as container only in youtube-innertube production main.go — Start/Stop not called for leadership-only service
 
 ### Pending Todos
 
@@ -114,8 +117,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T22:53:49.977Z
-Stopped at: Completed 37-03-PLAN.md
+Last session: 2026-03-17T22:55:34.823Z
+Stopped at: Completed 37-02-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
