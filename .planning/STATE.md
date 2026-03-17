@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Phase 37 context gathered
-last_updated: "2026-03-17T22:33:25.206Z"
+stopped_at: Completed 37-01-PLAN.md
+last_updated: "2026-03-17T22:49:05.668Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
   completed_phases: 22
-  total_plans: 75
-  completed_plans: 75
+  total_plans: 78
+  completed_plans: 76
   percent: 0
 ---
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 35-migrate-twitch-listener P02 | 5m | 3 tasks | 2 files |
 | Phase 36-migrate-kick-listener P01 | 5m | 2 tasks | 3 files |
 | Phase 36-migrate-kick-listener P02 | 3m | 2 tasks | 2 files |
+| Phase 37-migrate-youtube-innertube-and-discord-listener P01 | 2m | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,8 @@ Key decisions relevant to v1.6:
 - [Phase 36-migrate-kick-listener]: goleak placed in direct require block (not indirect) — forward dep for plan 02 smoke test before any .go file imports it
 - [Phase 36-migrate-kick-listener]: Compile-time assertion var _ listener.ChannelManager = (*Manager)(nil) added to kick-listener channels/manager.go — build fails immediately if Manager drifts from 7-method SDK interface
 - [Phase 36-migrate-kick-listener]: nil passed to NewListenerBase for logger in smoke test — matches established twitch-listener smoke test pattern from Phase 35
+- [Phase 37-migrate-youtube-innertube-and-discord-listener]: go mod edit -require + go mod download used to pin goleak as direct dep before any .go imports it — avoids go mod tidy stripping unused dep
+- [Phase 37-migrate-youtube-innertube-and-discord-listener]: SMClient() accessor mirrors LeadershipCoordinator() nil-safety pattern — doc comment warns callers to nil-check
 
 ### Pending Todos
 
@@ -108,8 +111,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T22:33:25.203Z
-Stopped at: Phase 37 context gathered
-Resume file: .planning/phases/37-migrate-youtube-innertube-and-discord-listener/37-CONTEXT.md
+Last session: 2026-03-17T22:49:05.664Z
+Stopped at: Completed 37-01-PLAN.md
+Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
