@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Completed 37-01-PLAN.md
-last_updated: "2026-03-17T22:49:05.668Z"
+stopped_at: Completed 37-03-PLAN.md
+last_updated: "2026-03-17T22:53:49.981Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
   completed_phases: 22
   total_plans: 78
-  completed_plans: 76
+  completed_plans: 77
   percent: 0
 ---
 
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 36-migrate-kick-listener P01 | 5m | 2 tasks | 3 files |
 | Phase 36-migrate-kick-listener P02 | 3m | 2 tasks | 2 files |
 | Phase 37-migrate-youtube-innertube-and-discord-listener P01 | 2m | 2 tasks | 5 files |
+| Phase 37 P03 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Key decisions relevant to v1.6:
 - [Phase 36-migrate-kick-listener]: nil passed to NewListenerBase for logger in smoke test — matches established twitch-listener smoke test pattern from Phase 35
 - [Phase 37-migrate-youtube-innertube-and-discord-listener]: go mod edit -require + go mod download used to pin goleak as direct dep before any .go imports it — avoids go mod tidy stripping unused dep
 - [Phase 37-migrate-youtube-innertube-and-discord-listener]: SMClient() accessor mirrors LeadershipCoordinator() nil-safety pattern — doc comment warns callers to nil-check
+- [Phase 37]: discord-listener is leadership-only: ll.Start() and ll.Stop() NOT called — ListenerBase used as container only for NewLeadershipListenerFromEnv; custom shutdown sequence unchanged
+- [Phase 37]: Gateway goroutine outer nil guard removed — EnsureLeadership called unconditionally via nil-safe passthrough; only metrics.SetShardOwnership calls remain guarded
 
 ### Pending Todos
 
@@ -111,8 +114,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T22:49:05.664Z
-Stopped at: Completed 37-01-PLAN.md
+Last session: 2026-03-17T22:53:49.977Z
+Stopped at: Completed 37-03-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
