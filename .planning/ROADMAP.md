@@ -173,7 +173,7 @@
 
 **Milestone Goal:** Extract load balancing, leader election, and channel management into a shared SDK that all listeners import, eliminating 80–150 lines of duplicated startup wiring from every listener and making future listeners trivial to build.
 
-- [ ] **Phase 33: Pre-Migration Cleanup** - Normalize source ID suffix handling and canonicalize HandleMigrationEvent signature across Twitch and Kick before SDK extraction begins
+- [x] **Phase 33: Pre-Migration Cleanup** - Normalize source ID suffix handling and canonicalize HandleMigrationEvent signature across Twitch and Kick before SDK extraction begins (completed 2026-03-17)
 - [ ] **Phase 34: SDK Package Definition** - Create shared/listener package with ListenerBase, LeadershipListener, ChannelManager interface, ShutdownCoordinator, and make build-all CI target
 - [ ] **Phase 35: Migrate twitch-listener** - First production SDK validation; twitch-listener cmd/main.go reduced to IRC connection and message publishing only
 - [ ] **Phase 36: Migrate kick-listener** - Exercise both ListenerBase and LeadershipListener archetypes; both SDK models confirmed in production
@@ -260,7 +260,7 @@ Plans:
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27-32 | v1.5 | 16/16 | Complete | 2026-03-16 |
-| 33. Pre-Migration Cleanup | 1/2 | In Progress|  | - |
+| 33. Pre-Migration Cleanup | 2/2 | Complete   | 2026-03-17 | - |
 | 34. SDK Package Definition | v1.6 | 0/TBD | Not started | - |
 | 35. Migrate twitch-listener | v1.6 | 0/TBD | Not started | - |
 | 36. Migrate kick-listener | v1.6 | 0/TBD | Not started | - |
