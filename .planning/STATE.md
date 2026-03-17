@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Phase 35 context gathered
-last_updated: "2026-03-17T20:56:56.330Z"
+stopped_at: Completed 35-01-PLAN.md
+last_updated: "2026-03-17T21:16:22.076Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
   completed_phases: 20
-  total_plans: 71
-  completed_plans: 71
+  total_plans: 73
+  completed_plans: 72
   percent: 0
 ---
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 34 P01 | 4m | 3 tasks | 8 files |
 | Phase 34 P02 | 15m | 3 tasks | 8 files |
 | Phase 34 P03 | 10 | 3 tasks | 3 files |
+| Phase 35-migrate-twitch-listener P01 | 3m | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Key decisions relevant to v1.6:
 - [Phase 34]: coordinatorClient is a private interface in base.go — enables mock injection without public API surface
 - [Phase 34]: LeadershipListener uses sourcemanager.NewSigningTokenSource (15min TTL) — matches kick-listener production pattern
 - [Phase 34]: mockChannelManager defined in test file — satisfies ChannelManager interface without adding public SDK surface
+- [Phase 35-migrate-twitch-listener]: goleak placed in direct require block (not indirect) — forward dep for plan 02 smoke test before any .go file imports it
+- [Phase 35-migrate-twitch-listener]: Compile-time assertion var _ listener.ChannelManager = (*Manager)(nil) added to channels/manager.go — build fails immediately if Manager drifts from 7-method SDK interface
 
 ### Pending Todos
 
@@ -97,8 +100,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T20:56:56.327Z
-Stopped at: Phase 35 context gathered
-Resume file: .planning/phases/35-migrate-twitch-listener/35-CONTEXT.md
+Last session: 2026-03-17T21:16:22.073Z
+Stopped at: Completed 35-01-PLAN.md
+Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
