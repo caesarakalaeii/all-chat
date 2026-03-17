@@ -266,7 +266,7 @@ Plans:
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27-32 | v1.5 | 16/16 | Complete | 2026-03-16 |
 | 33. Pre-Migration Cleanup | v1.6 | 2/2 | Complete | 2026-03-17 |
-| 34. SDK Package Definition | 1/3 | In Progress|  | - |
+| 34. SDK Package Definition | 2/3 | In Progress|  | - |
 | 35. Migrate twitch-listener | v1.6 | 0/TBD | Not started | - |
 | 36. Migrate kick-listener | v1.6 | 0/TBD | Not started | - |
 | 37. Migrate youtube-innertube and discord-listener | v1.6 | 0/TBD | Not started | - |
