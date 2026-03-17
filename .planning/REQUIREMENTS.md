@@ -41,29 +41,71 @@ Requirements for the Discord Listener milestone. Each maps to roadmap phases.
 - [x] **UI-03**: Per-source relay configuration panel: toggle relay, pick outbound channel, visual indicator of active filter
 - [x] **UI-04**: Discord source cards in the overlay editor display connection status and relay active/inactive indicator
 
+---
+
+## v1.6 Requirements — Listener SDK
+
+Requirements for the Listener SDK milestone. Each maps to roadmap phases.
+
+### PREP — Pre-Migration Cleanup
+
+- [ ] **PREP-01**: Source ID suffix handling is normalized across all Go listeners — Twitch and Kick agree on whether the `:platform` suffix is present or stripped before SDK extraction begins
+- [ ] **PREP-02**: `HandleMigrationEvent` signature is canonicalized to `func(event *coordination.MigrationEvent) error` in both Twitch and Kick channel managers and deployed before SDK extraction begins
+
+### SDK — Shared Listener Package
+
+- [ ] **SDK-01**: `ListenerBase` struct in `shared/listener/base.go` manages the full shared lifecycle: startup jitter, CoordinatorClient construction, initial assignment query, heartbeat goroutine, assignment refresh goroutine, migration subscriber goroutine, and graceful stop
+- [ ] **SDK-02**: `LeadershipListener` struct in `shared/listener/leadership.go` (embeds `ListenerBase`) constructs `LeadershipCoordinator` + `SourceManagerClient` from environment, with nil-safe passthrough when `SOURCE_MANAGER_SECRET` is absent
+- [ ] **SDK-03**: `ChannelManager` interface in `shared/listener/channel_manager.go` defines the `Start`, `Stop`, `HandleMigrationEvent`, `UpdateAssignedSourceIDs`, `GetFilteredAssignmentCount` contract that both Twitch and Kick channel managers satisfy
+- [ ] **SDK-04**: `ShutdownCoordinator` in `shared/listener/shutdown.go` implements ordered shutdown: channel manager stop + base stop (parallel) → platform disconnect → HTTP server drain with 10s timeout
+- [ ] **SDK-05**: `ListenerConfig` exposes configurable intervals — heartbeat interval, assignment refresh interval, startup jitter max — so each listener can override defaults and tests can disable jitter via `LISTENER_STARTUP_JITTER_MAX=0`
+- [ ] **SDK-06**: `ListenerConfig` includes `DisableCoordinatorFiltering bool` to preserve the operational rollback mechanism currently in twitch-listener
+- [ ] **SDK-07**: `shared/listener` package exposes `Env(key, defaultValue string) string` helper used by all migrated listeners (eliminates copy-paste env-with-default boilerplate)
+- [ ] **SDK-08**: `NewCoordinatorClient` in `shared/coordination/client.go` accepts an explicit `serviceName string` parameter replacing hostname-prefix auto-detection
+
+### MIGRATE — Listener Migrations
+
+- [ ] **MIGRATE-01**: twitch-listener `cmd/main.go` migrated to use `ListenerBase` — startup wiring reduced to service-specific IRC connection and message publishing only
+- [ ] **MIGRATE-02**: kick-listener `cmd/main.go` migrated to use `ListenerBase` + `LeadershipListener` — both assignment and leadership archetypes exercised via SDK
+- [ ] **MIGRATE-03**: youtube-listener `cmd/main.go` migrated to use `LeadershipListener` — quota tracker behavior unchanged; all existing tests pass
+- [ ] **MIGRATE-04**: youtube-listener-innertube `cmd/main.go` migrated to use `LeadershipListener` — no CoordinatorClient; SDK leadership wiring is the sole integration point
+- [ ] **MIGRATE-05**: discord-listener `cmd/main.go` migrated to use `LeadershipListener` — shard ownership coordination via existing Redis lock pattern unchanged
+- [ ] **MIGRATE-06**: twitch-eventsub-listener `cmd/main.go` migrated to use `ListenerBase` — stateless webhook receiver gains standardized heartbeat and health wiring
+
+### VERIFY — Build and Interface Verification
+
+- [ ] **VERIFY-01**: `make build-all` Makefile target builds all listener modules in one command, run in CI on every PR to catch `replace`-directive version drift
+- [ ] **VERIFY-02**: Each migrated listener has a compile-time interface assertion (`var _ listener.ChannelManager = (*channels.Manager)(nil)`) in its `channels/manager.go` file
+
 ## Future Requirements
 
-### Extended Discord Features
+### Extended SDK
 
-- **INBD-05**: Support for Discord threads as sources (thread messages ingested separately)
-- **INBD-06**: Discord emoji/reaction events surfaced in overlay
-- **RELY-05**: Rich embed formatting for relayed messages (avatar, platform color)
-- **AUTH-05**: Multi-guild support per user account (connect multiple Discord servers)
+- **SDK-09**: Generic `ChannelManager[K comparable]` — defer until string-key convention proves insufficient
+- **SDK-10**: `HealthChecker` interface in SDK for health route registration — defer until migration validates API shape
+- **SDK-11**: `go.work` at repo root — `make build-all` is sufficient for v1.6; workspace adds `go mod tidy` risk
+
+### TikTok Go Rewrite
+
+- **TIKTOK-01**: Rewrite tiktok-listener in Go (currently Node.js) — prerequisite for SDK migration; defer to v1.7+
+- **TIKTOK-02**: Migrate Go tiktok-listener to SDK — follows TIKTOK-01
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Discord slash commands | Out of scope — not a chat aggregation concern |
+| tiktok-listener SDK migration | Node.js service — cannot use Go SDK |
+| go.work at repo root | replace directives + make build-all sufficient for v1.6 scope |
+| Generic ChannelManager[K] | String-keyed convention sufficient; generics add complexity before interface is proven |
+| Discord slash commands | Not a chat aggregation concern |
 | Voice channel transcription | High complexity, separate domain |
 | Discord DMs / private channels | Privacy concerns, not a streaming use case |
-| Per-user Discord identity mapping | Over-engineering — platform username sufficient |
-| Discord embeds for relay | Avoid embed rate limits; plain text is sufficient and simpler |
-| Reaction/emoji event relay | Not chat messages; different event type |
 
 ## Traceability
 
 Which phases cover which requirements. Updated during roadmap creation.
+
+### v1.5 Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -87,11 +129,34 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-03 | Phase 32 | Complete |
 | UI-04 | Phase 32 | Complete |
 
+### v1.6 Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| PREP-01 | TBD | Pending |
+| PREP-02 | TBD | Pending |
+| SDK-01 | TBD | Pending |
+| SDK-02 | TBD | Pending |
+| SDK-03 | TBD | Pending |
+| SDK-04 | TBD | Pending |
+| SDK-05 | TBD | Pending |
+| SDK-06 | TBD | Pending |
+| SDK-07 | TBD | Pending |
+| SDK-08 | TBD | Pending |
+| MIGRATE-01 | TBD | Pending |
+| MIGRATE-02 | TBD | Pending |
+| MIGRATE-03 | TBD | Pending |
+| MIGRATE-04 | TBD | Pending |
+| MIGRATE-05 | TBD | Pending |
+| MIGRATE-06 | TBD | Pending |
+| VERIFY-01 | TBD | Pending |
+| VERIFY-02 | TBD | Pending |
+
 **Coverage:**
-- v1.5 requirements: 19 total
-- Mapped to phases: 19
-- Unmapped: 0 ✓
+- v1.6 requirements: 18 total
+- Mapped to phases: 0 (pending roadmap creation)
+- Unmapped: 18 ⚠️
 
 ---
-*Requirements defined: 2026-03-15*
-*Last updated: 2026-03-15 after roadmap creation — traceability complete*
+*Requirements defined: 2026-03-15 (v1.5), 2026-03-17 (v1.6)*
+*Last updated: 2026-03-17 after v1.6 requirement definition*
