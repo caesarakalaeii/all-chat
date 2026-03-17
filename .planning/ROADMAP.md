@@ -206,7 +206,12 @@ Plans:
   3. Unit tests with a mock coordinator verify that `ListenerBase` goroutines (heartbeat, assignment refresh, migration subscriber) start on `Start()` and stop on `Stop()` with no goroutine leak (`goleak.VerifyNone` passes)
   4. `make build-all` runs in CI and exits 0, building all listener modules in a single command
   5. `ListenerConfig` exposes heartbeat interval, assignment refresh interval, and startup jitter max — setting `LISTENER_STARTUP_JITTER_MAX=0` results in zero jitter delay in tests
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 34-01-PLAN.md — Contract foundation: ChannelManager interface, NewCoordinatorClient signature update, kick-listener Start(ctx) fix
+- [ ] 34-02-PLAN.md — SDK core: ListenerBase, LeadershipListener, ShutdownCoordinator, ListenerConfig, Env(), testutil mock, make build-all
+- [ ] 34-03-PLAN.md — Unit tests: goroutine lifecycle (goleak), jitter, LeadershipListener nil-safe, Env() helper
 
 ### Phase 35: Migrate twitch-listener
 **Goal**: twitch-listener uses the shared SDK in production and validates the ListenerBase lifecycle against live Twitch IRC traffic
@@ -260,12 +265,12 @@ Plans:
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27-32 | v1.5 | 16/16 | Complete | 2026-03-16 |
-| 33. Pre-Migration Cleanup | 2/2 | Complete    | 2026-03-17 | - |
-| 34. SDK Package Definition | v1.6 | 0/TBD | Not started | - |
+| 33. Pre-Migration Cleanup | v1.6 | 2/2 | Complete | 2026-03-17 |
+| 34. SDK Package Definition | v1.6 | 0/3 | Not started | - |
 | 35. Migrate twitch-listener | v1.6 | 0/TBD | Not started | - |
 | 36. Migrate kick-listener | v1.6 | 0/TBD | Not started | - |
 | 37. Migrate youtube-innertube and discord-listener | v1.6 | 0/TBD | Not started | - |
 | 38. Migrate youtube-listener and twitch-eventsub-listener | v1.6 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-17 after Phase 33 planning*
+*Last updated: 2026-03-17 after Phase 34 planning*
