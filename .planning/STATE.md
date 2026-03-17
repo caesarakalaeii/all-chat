@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: ""
-last_updated: "2026-03-17T00:00:00.000Z"
-last_activity: 2026-03-17 — Roadmap created for v1.6 Listener SDK (6 phases, 18 requirements)
+stopped_at: Completed 33-01-PLAN.md — source ID intake normalization in kick-listener and twitch-listener
+last_updated: "2026-03-17T16:47:34.909Z"
+last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
-  total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 24
+  completed_phases: 18
+  total_plans: 68
+  completed_plans: 67
   percent: 0
 ---
 
@@ -51,6 +51,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | v1.3 Frontend Redesign | 23-26 | 20 | Complete |
 | v1.5 Discord Listener | 27-32 | 16 | Complete |
 | v1.6 Listener SDK | 33-38 | TBD | Not started |
+| Phase 33 P01 | 107 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,7 @@ Key decisions relevant to v1.6:
 - Migration order: twitch → kick → (innertube + discord in parallel) → (youtube + twitch-eventsub) — simplest first, one listener at a time
 - tiktok-listener explicitly excluded — Node.js service cannot use the Go SDK
 - `make build-all` CI target (not go.work) chosen for monorepo-wide compile verification — avoids go mod tidy side-effect risks
+- [Phase 33]: Strip platform suffix at intake in cmd/main.go (not inside Manager) to keep channels.Manager interface simple; bare-UUID maps passed to NewManager and UpdateAssignedSourceIDs in both kick-listener and twitch-listener
 
 ### Pending Todos
 
@@ -84,8 +86,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17
-Stopped at: Roadmap created — phases 33-38 defined, all 18 v1.6 requirements mapped
+Last session: 2026-03-17T16:47:34.907Z
+Stopped at: Completed 33-01-PLAN.md — source ID intake normalization in kick-listener and twitch-listener
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)

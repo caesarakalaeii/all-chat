@@ -49,7 +49,7 @@ Requirements for the Listener SDK milestone. Each maps to roadmap phases.
 
 ### PREP — Pre-Migration Cleanup
 
-- [ ] **PREP-01**: Source ID suffix handling is normalized across all Go listeners — Twitch and Kick agree on whether the `:platform` suffix is present or stripped before SDK extraction begins
+- [x] **PREP-01**: Source ID suffix handling is normalized across all Go listeners — Twitch and Kick agree on whether the `:platform` suffix is present or stripped before SDK extraction begins
 - [ ] **PREP-02**: `HandleMigrationEvent` signature is canonicalized to `func(event *coordination.MigrationEvent) error` in both Twitch and Kick channel managers and deployed before SDK extraction begins
 
 ### SDK — Shared Listener Package
@@ -133,7 +133,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PREP-01 | Phase 33 | Pending |
+| PREP-01 | Phase 33 | Complete |
 | PREP-02 | Phase 33 | Pending |
 | SDK-01 | Phase 34 | Pending |
 | SDK-02 | Phase 34 | Pending |
