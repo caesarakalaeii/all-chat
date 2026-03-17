@@ -1,142 +1,147 @@
 # Domain Pitfalls
 
-**Domain:** Discord Gateway listener + relay integration into Go microservices platform (v1.5)
-**Researched:** 2026-03-15
+**Domain:** Extracting a shared Listener SDK from working Go microservices (v1.6)
+**Researched:** 2026-03-17
 **Confidence:** HIGH
+
+---
+
+## Context: What Makes This Migration Risky
+
+Six listeners exist and work correctly in production: twitch-listener, kick-listener, youtube-listener, youtube-listener-innertube, tiktok-listener (Node.js — separate runtime), and discord-listener. The v1.6 goal is to extract `ListenerBase` and `ChannelManager` from the Go listeners into `/shared/listener` so future listeners are trivial to build.
+
+The trap is not "will the SDK be correct" — it is "will migrating working listeners to the SDK break them while everything else runs." Each listener is independently deployed, independently tested, and carries live production traffic. A bug introduced during migration is a production incident, not a failing unit test.
+
+The system already uses a multi-module monorepo with `replace` directives (no `go.work` file). The `shared` module is the single shared dependency. The new `listener` SDK will live inside it or alongside it. Both options have distinct pitfalls documented below.
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, data loss, or bot bans.
+Mistakes that cause production incidents, data loss, or rewrites.
 
 ---
 
-### Pitfall 1: Missing MESSAGE_CONTENT Privileged Intent Causes Silent Empty Messages
+### Pitfall 1: Big-Bang Migration Breaks All Listeners Simultaneously
 
-**What goes wrong:** The bot receives `MESSAGE_CREATE` events with an empty `content` field. Events arrive, Prometheus counters increment, Redis Streams fill with messages — but every message has blank text. Discord does not error. It silently omits the field.
+**What goes wrong:** All six listeners are migrated to the SDK in a single pull request or a single phase. The SDK has a subtle bug — wrong startup order, incorrect context propagation, a nil pointer on the optional `leaderCoord`. Six listeners break simultaneously. Redis Streams fill because no consumer is reading them. The message-processor falls behind. Overlays go dark.
 
-**Why it happens:** Since April 2022, `MESSAGE_CONTENT` is a privileged gateway intent. Bots in fewer than 100 servers receive it automatically during development. Verified bots in 100+ servers must declare the intent in the `IDENTIFY` payload's `intents` bitmask AND enable it in the Discord Developer Portal under Bot > Privileged Gateway Intents. Missing either half means silent content omission.
+**Why it happens:** It feels efficient to migrate everything at once once the SDK is "done." But the SDK has never run in production. It has no track record. The complexity surface is the product of (SDK bugs) × (migration bugs) × (6 listeners).
 
-**Consequences:** The listener appears functional. Messages are published to Redis Streams with `text: ""`. They flow through message-processor normalization (which passes empty text through), into overlay pub/sub, and render as blank messages on overlays. Silent data corruption that is easy to miss in integration testing if tests use bot-posted messages from a small test server (where the intent is auto-granted).
+**Consequences:** Full listener fleet outage. No incremental rollback point. The only recovery is reverting the SDK entirely, which means reverting all six migrations in parallel.
 
 **Prevention:**
-- Declare intents bitmask `33281` in the Gateway `IDENTIFY` payload: `(1 << 0) | (1 << 9) | (1 << 15)` = `GUILDS | GUILD_MESSAGES | MESSAGE_CONTENT`.
-- Enable MESSAGE_CONTENT in the Discord Developer Portal before running any integration tests.
-- Add a startup assertion: on first `READY` event, log the resolved intents value. Assert the `MESSAGE_CONTENT` bit is set. Fail fast if not.
-- Write a contract test: post a message via REST API in a test guild > 100 servers (or a bot that has been through verification flow), verify `content` is non-empty in the received event.
-- Add a Prometheus counter `discord_message_content_empty_total`. Any non-zero value after confirmed message delivery indicates missing intent.
+- Migrate one listener first. Ship it to production. Let it run for 24 hours.
+- Use the listener with the simplest startup sequence as the first migration target: twitch-listener has no leadership coordinator (confirmed: `var leaderCoord *sourcemanager.LeadershipCoordinator = nil`), making it the safest first subject.
+- Only migrate the second listener after the first is verified stable in production.
+- Keep the old `cmd/main.go` logic reachable via a feature flag or a parallel branch for at least one deployment cycle. "I can revert one listener in 5 minutes" is a different risk level than "I need to roll back the SDK."
 
-**Detection:** `discord_message_content_empty_total > 0` after verified message delivery. Log a `WARN` with `intent_value` on every `READY` event.
+**Detection:** Per-listener `messages_published_total` metric must not drop after migration. Alert on any drop > 10% for 5 minutes after a deploy. A silent zero is the worst failure mode.
 
-**Phase:** Must be validated in Phase 1 (Gateway connection), before any integration tests are written. The startup assertion should exist before the first demo.
+**Phase:** This is the governing constraint for the entire migration roadmap. Single-listener-at-a-time is non-negotiable.
 
 ---
 
-### Pitfall 2: Relay Echo Loop — Discord Messages Re-relayed Back to Discord
+### Pitfall 2: ListenerBase Startup Sequence Hardcodes Order That Not All Listeners Share
 
-**What goes wrong:** A Discord message arrives in channel A. It flows through: discord-listener → Redis Streams → message-processor (normalizes, sets `platform="discord"`) → Redis Pub/Sub (`overlay:{overlay_id}`) → relay consumer. The relay reads the pub/sub message, sees a new message to forward, and posts it back to Discord (channel A or the configured outbound channel). That post triggers a new `MESSAGE_CREATE` event from the bot itself. The listener ingests it. The cycle repeats. Infinite loop.
+**What goes wrong:** The SDK's `ListenerBase.Start()` wires this sequence (from the existing twitch-listener main.go): jitter → query assignments → start migration subscriber → start heartbeat → start assignment refresh loop. Kick-listener's main.go adds `leaderCoord` initialization and a reconnection goroutine between "start channel manager" and "start migration subscriber." Discord-listener uses a Gateway connection lock. YouTube-innertube uses stream discovery before any assignment query.
 
-**Why it happens:** The relay subscribes to `overlay:{overlay_id}` pub/sub, which carries all normalized messages — including Discord-sourced ones. Without an explicit platform-origin guard, the relay cannot distinguish "came from Discord" from "came from Twitch." This is a new architectural pattern with no precedent in the existing codebase (all other listeners are receive-only).
+If `ListenerBase` hardcodes a single startup sequence, listeners that need a different order must either subvert the SDK (calling internal fields directly) or duplicate the sequence outside the SDK. Both are leaky abstractions.
 
-**Consequences:** Unthrottled message storm. Discord rate-limits the bot (429s), then throttles all REST calls, then potentially bans the application token. All overlay messages for affected overlays stop. Recovery requires bot token rotation, application reconfiguration in the Discord Developer Portal, and a Kubernetes rollout. Downtime measured in hours.
+**Why it happens:** Looking at two listeners (twitch, kick), their main.go files look 80% identical. The temptation is to extract that 80% and call it the canonical sequence. The 20% divergence is where the production bugs live.
+
+**Consequences:** The SDK becomes a straightjacket. Listeners that don't fit the sequence grow workaround code in `cmd/main.go` that is harder to read than the original duplication. Future listeners are written with SDK + workarounds instead of clean SDK usage.
 
 **Prevention:**
-- The `RawChatMessage` struct already carries a `Platform` field. Ensure `platform = "discord"` is set on every message published from the discord-listener.
-- In the relay consumer goroutine, filter unconditionally: only forward messages where `platform != "discord"`. This is the loop-safe filter described in the PROJECT.md milestone requirements.
-- Secondary guard: compare the relay's configured outbound `channel_id` against the inbound message's source channel ID. If identical, drop regardless of platform (handles edge cases where platform field is malformed).
-- Write an integration test that injects a Discord-platform message directly into the overlay pub/sub channel and asserts the relay does NOT call the Discord REST endpoint. This test must exist before the relay is ever connected to a live bot.
-- The filter must be present before the relay is merged into any branch connected to a live Discord application.
+- Before writing a single line of SDK code, diff all six Go listener `cmd/main.go` files step by step. Document every divergence point.
+- Design `ListenerBase` as a struct-of-hooks, not a call sequence. The caller provides hooks that the base invokes at the right points. Example: `OnAfterConnect func(ctx context.Context) error`, `OnChannelAdd func(channelID string) error`. The base provides the sequence skeleton; the hooks provide the variations.
+- The `LeadershipListener` variant is the right architectural split already identified in PROJECT.md: base has no leader logic, `LeadershipListener` embeds base and adds leader hooks. Do not attempt a single struct that optionally does leadership via a nil-checked pointer.
+- If a listener requires a step that does not fit any hook, that is a signal the abstraction is wrong — not a reason to expose internals.
 
-**Detection:** `relay_discord_suppressed_total` counter that increments on every suppressed Discord-sourced message. Alert if this counter is zero after 24 hours with active Discord sources — may indicate the filter is broken and passing everything through.
+**Detection:** Code review gate: no listener's `cmd/main.go` may reach into `ListenerBase` exported fields after `Start()` is called. If a listener needs to do that, the SDK is missing a hook.
 
-**Phase:** Architecture decision in Phase 1. Filter implementation in Phase 2 (relay). Integration test in Phase 3. The filter logic must exist before the relay connects to any live bot.
+**Phase:** Design-time concern. Must be resolved before SDK code is written, not after the first migration fails.
 
 ---
 
-### Pitfall 3: Gateway Heartbeat Miss Causes Zombie Connection and Message Loss
+### Pitfall 3: ChannelManager Extraction Breaks Kick-Specific Chatroom ID Logic
 
-**What goes wrong:** The Discord Gateway requires a `Heartbeat` (opcode 1) every `heartbeat_interval` milliseconds (provided in the `HELLO` payload, typically ~41.25 seconds). If the bot sends a heartbeat but does not receive an ACK (opcode 11) before the next heartbeat is due, Discord considers the connection a zombie and closes it with close code 1008. The session may not be resumable depending on how long the zombie persisted.
+**What goes wrong:** The Twitch ChannelManager key is the channel name (a string, e.g., `"shroud"`). The Kick ChannelManager has two keys: `channel_slug` (string) and `chatroom_id` (integer) — because Kick's Pusher events use chatroom ID, not slug. The `firstMessageChan` map is `map[string]chan struct{}` in twitch and `map[int]chan struct{}` in kick (confirmed from source).
 
-**Why it happens:** Common Go implementation mistakes:
-- Using `time.Sleep` instead of `time.NewTicker`, causing drift under load.
-- Not tracking whether the previous heartbeat was ACK'd before sending the next one.
-- Sharing the WebSocket write path between the heartbeat goroutine and the event-dispatch goroutine without a mutex, causing concurrent-write panics that crash the connection goroutine silently.
-- Not storing `session_id` and `resume_gateway_url` from `READY`, so a reconnect requires full re-IDENTIFY (counts against the identify rate limit).
+If the shared `ChannelManager` uses `string` as the only key type, kick-listener must maintain a parallel `chatroomIndex` outside the shared manager to do integer lookups. The migration "succeeds" at compile time but the manager is actually two managers: one shared, one private.
 
-**Consequences:** Connection drops without warning. Pod may not detect the drop for up to one heartbeat interval (~41 seconds). All messages from monitored Discord channels during that window are lost. If session cannot be resumed, a full re-IDENTIFY is required, which costs 5+ seconds and counts against the global identify rate limit (1 per 5 seconds per token).
+**Why it happens:** Go generics are available but the existing codebase does not use them. The natural reflex is to use `string` as the universal key (it works for Twitch) and add a lookup table in kick-listener to bridge integer → string. This is the abstraction leak.
+
+**Consequences:** `SignalFirstMessage` in kick-listener takes an int. The shared manager's `SignalFirstMessage` takes a string. The caller must do a string conversion that is fragile — a chatroom ID 12345 is not the same key space as a channel slug "shroud". If a channel has both a slug and a chatroom ID in the manager's keys, they are different entries. Assignment filtering breaks.
 
 **Prevention:**
-- Implement heartbeat as a dedicated goroutine with `time.NewTicker(heartbeat_interval)`.
-- Track a boolean `heartbeatACKed`. Before sending each heartbeat: check `heartbeatACKed`. If false, the connection is a zombie — close with code 1000 and initiate session resume.
-- Use a single write channel (`chan []byte`) for all WebSocket writes. Both the heartbeat goroutine and event dispatcher send to this channel. A dedicated writer goroutine drains it and calls `conn.WriteMessage`. This eliminates all concurrent-write races.
-- On receiving `READY`: store `session_id` and `resume_gateway_url` in Redis, keyed by pod ID. On reconnect, always attempt `RESUME` (opcode 6) before `IDENTIFY` (opcode 2). Successful RESUME does not count against the identify rate limit.
+- Use a generic `ChannelManager[K comparable]` with `K = string` for Twitch/YouTube/Discord and `K = int` for Kick. This is the correct Go generics use case.
+- Alternatively, define the manager as string-keyed and require Kick to always use `strconv.Itoa(chatroomID)` as the key. Document this convention explicitly. This is simpler but slightly more brittle.
+- Do not accept the approach of "shared manager for common fields, kick adds its own map." That is duplication in disguise.
 
-**Detection:** `discord_heartbeat_ack_missed_total` counter. Alert on any value > 0 in a 5-minute window.
+**Detection:** Unit test the shared `ChannelManager` with both `int` and `string` key types before any listener migration. If the test requires awkward conversions, the interface is wrong.
 
-**Phase:** Core implementation concern for Phase 1. Session resume storage in Redis must be implemented alongside the initial connection — not deferred to "later."
+**Phase:** Phase 1 of SDK development. The key type question must be answered before any listener migration begins.
 
 ---
 
-### Pitfall 4: Gateway Identify Rate Limit During HPA Scale-Up or Rolling Deploy
+### Pitfall 4: Circular Dependency Between `/shared/listener` and Other Shared Packages
 
-**What goes wrong:** On startup, multiple discord-listener pods each open a Gateway connection and send `IDENTIFY`. Discord enforces a global identify rate: 1 per 5 seconds per bot token. If 3 pods start simultaneously (HPA scale-up event or Kubernetes rolling deploy), all 3 send `IDENTIFY` within milliseconds of each other. Discord closes 2 connections with opcode 9 (Invalid Session, not resumable). Those pods retry immediately and hit the rate limit again. Cascading reconnect storm.
+**What goes wrong:** The new `shared/listener` package depends on `shared/coordination`, `shared/sourcemanager`, `shared/metrics`, and `shared/tracing`. One of these packages — likely `shared/coordination` or `shared/metrics` — later needs a type from `shared/listener` (for example, a `ListenerType` enum used in metrics labels). Go does not allow circular imports. The build breaks. Resolving this mid-migration requires either introducing a third package or restructuring both packages.
 
-**Why it happens:** The existing load balancing system applies startup jitter (0-30 seconds random delay) across Twitch/YouTube/Kick/TikTok listeners specifically to prevent the thundering herd pattern (see `PROJECT.md` Key Decisions). This jitter must be applied to the discord-listener. Additionally, the Discord identify rate limit is stricter and more consequential than IRC reconnects — a failed identify cannot simply be retried immediately.
+**Why it happens:** `shared` is currently one Go module (`github.com/caesar/all-chat/shared`). All subpackages within it can import each other freely at first. But `shared/metrics` already defines `NewListenerMetrics("twitch", ...)` — it is listener-aware. If `shared/listener` needs to call `shared/metrics.NewListenerMetrics`, and `shared/metrics` later needs `shared/listener.ListenerType`, you have a cycle.
 
-**Consequences:** Pods stuck in perpetual identify-fail-wait cycles. No Discord messages ingested during the identify storm. If triggered by a rolling deploy, the entire Discord listener fleet may be offline for the duration of the deploy (potentially minutes).
+**Consequences:** Compile error blocking all builds. Resolution requires a non-trivial refactor during an active migration.
 
 **Prevention:**
-- Apply the same startup jitter (0-30s random delay) already present in other listeners.
-- Add Discord-specific stagger: derive `pod_index * 6 seconds` additional delay from the pod hostname (parse the StatefulSet ordinal or use a Redis-based pod registration sequence). Six seconds safely exceeds the 5-second identify rate limit.
-- On receiving opcode 9 (Invalid Session), wait 1-5 seconds (random) before re-identifying. Never retry opcode 9 immediately.
-- Attempt RESUME before IDENTIFY on every reconnect. Successful RESUME bypasses the identify rate limit entirely.
-- Only pods that have been assigned at least one Discord source by the coordinator should open a Gateway connection. Pods with no assigned Discord sources must not connect.
+- Define a strict import hierarchy at the start: `shared/listener` may import `shared/{coordination,sourcemanager,metrics,tracing,logger}` but none of those packages may import `shared/listener`. Write this as a comment in `shared/listener/doc.go` on day one.
+- Any type that both `shared/listener` and `shared/metrics` need (e.g., platform name constants) must live in a third package with no upstream dependencies: `shared/types` or `shared/listenertype`. Neither `shared/listener` nor `shared/metrics` owns it.
+- Run `go build ./...` from the `shared` module root after every new file addition during SDK development. Catch cycles immediately rather than at integration.
 
-**Detection:** `discord_invalid_session_total` counter. Alert on any value > 0 — this should never happen in a healthy deployment.
+**Detection:** `go build ./...` in CI for the shared module. Any import cycle is a build failure.
 
-**Phase:** Phase 1 (startup behavior). The jitter and RESUME logic must be present before any load testing or production deployment.
+**Phase:** Structural concern for Phase 1 of SDK development. Diagram the import graph before writing the first SDK file.
 
 ---
 
-### Pitfall 5: REST Rate Limit Mismanagement During Relay Bursts
+### Pitfall 5: `replace` Directive Version Skew During Migration
 
-**What goes wrong:** The relay posts messages to Discord via REST (`POST /channels/{channel_id}/messages`). Discord enforces two rate limit layers: per-route buckets (typically 5 requests per second per channel for message posting) and a global bucket (50 requests per second across all routes for the bot token). During a high-traffic overlay event such as a Twitch raid, dozens of messages per second flow through. The relay attempts to forward all of them, exhausts the per-channel bucket, and receives 429 responses. A naive retry-immediately loop amplifies toward the global bucket. If the global limit is hit, ALL Discord REST calls are blocked, including calls needed for source management.
+**What goes wrong:** Each listener module uses `replace github.com/caesar/all-chat/shared => ../../shared`. This means all listeners always use the local `shared` code. The problem arises when the new `shared/listener` package is added to `shared/go.mod` but some listeners have stale `go.sum` entries or their `go.mod` does not yet reference the new package. A listener that was not yet migrated compiles against the new shared module with new exported types. If the new types introduce backward-incompatible changes to existing shared packages (e.g., `shared/coordination.CoordinatorClient` gains a required parameter), unmigrated listeners break at compile time even though they have not touched the SDK.
 
-**Why it happens:** No existing service in the codebase makes outbound REST calls under load. The existing `shared/ratelimit/` module handles inbound API Gateway rate limiting only. There is no outbound REST client rate limiter in the shared package. This is a genuinely new pattern.
+**Why it happens:** The `replace` directive makes all listeners always reflect the latest `shared` state. This is convenient for development but means any breaking change to `shared` immediately breaks all consumers.
 
-**Consequences:** 429 errors cascade. Relay queue backs up. If the queue is unbounded, memory grows until the pod OOMs. If the global rate limit is hit, Gateway reconnect calls are also blocked, potentially causing the bot to disconnect.
+**Consequences:** Attempting to migrate listener A while listeners B-F are unmigrated fails if the SDK changes any existing shared interface. The migration must be done atomically (violating Pitfall 1) or the shared interfaces must be strictly backward-compatible during the migration window.
 
 **Prevention:**
-- Parse `X-RateLimit-Remaining`, `X-RateLimit-Reset-After`, and `X-RateLimit-Bucket` response headers on every Discord REST call. Build a per-bucket leaky bucket that respects these headers rather than relying on a fixed rate.
-- Implement a configurable relay rate cap: max 2 messages per second per outbound channel as the default (well below the 5/second Discord limit, leaving headroom for other REST calls).
-- On 429 response: extract `Retry-After` header. Sleep exactly that duration before retrying. Do not retry sooner.
-- Use a bounded buffered Go channel as the relay queue per outbound channel (suggested capacity: 50 messages). If the queue is full, drop the oldest message (not the newest — prefer recency for live chat relay). Log drops to `discord_relay_dropped_total`.
-- Maintain a separate global rate limit bucket. Count all Discord REST calls against it regardless of per-route bucket.
+- Strict rule: during the v1.6 migration window, **no existing shared package API may be changed**. The SDK adds new packages and new types only. Existing `shared/coordination`, `shared/sourcemanager`, `shared/metrics` public interfaces are frozen.
+- New SDK code lives in `shared/listener` — a completely new package. Existing packages are not modified.
+- If a change to an existing shared package is truly required, it must be done in a separate commit before migration begins, must be backward-compatible (add new function alongside old), and all listeners must still compile against it without changes.
+- After each listener migration, run `go build ./...` for all listener modules in CI to verify no unintended breakage.
 
-**Detection:** `discord_relay_429_total` labeled by `{bucket_id, channel_id}`. `discord_relay_dropped_total` for queue overflow. Alert on sustained 429 rate above 1 per minute.
+**Detection:** CI must build every listener module, not just the one being migrated. A "migrated listener CI" that only checks the migrated service is insufficient.
 
-**Phase:** Phase 2 (relay implementation). Must be designed from the start. Adding rate limiting as a fix after hitting limits in production requires a relay rewrite.
+**Phase:** Applies to every phase of migration. The "freeze existing shared APIs" rule is in effect from the start of SDK development until all migrations are complete.
 
 ---
 
-### Pitfall 6: Shard Mismatch Causes Silent Event Blackout for Affected Guilds
+### Pitfall 6: SDK Changes After Partial Migration Require Coordinated Deploys
 
-**What goes wrong:** The Discord Gateway sharding model routes each guild to exactly one shard using `guild_id % shard_count`. If a pod connects with `shard_id=0, num_shards=2` but an assigned guild belongs to shard 1, that pod receives zero events for that guild — with no error, no log message, no indication from Discord that anything is wrong. The channel configured as a source simply never produces messages.
+**What goes wrong:** Listener A is migrated and deployed. Listener B is being migrated. A bug is found in `ListenerBase.Start()` — the heartbeat goroutine leaks when `ctx` is cancelled before the goroutine reads from it. The fix changes `ListenerBase`'s exported interface (adds a `context.Context` parameter to `Start()`). Listener A must be redeployed to pick up the fix. Listener B's in-progress migration must be rebased. All four unmigrated listeners are not affected because they do not use the SDK — but when they are migrated later, they will immediately get the fixed interface.
 
-**Why it happens:** At current scale (small bot, few guilds), all guilds fit on a single shard (`shard_id=0, num_shards=1`). This works in development and early production. When the bot grows past approximately 2,500 guilds, Discord requires multiple shards. If someone adds shards by setting `num_shards=N` per pod (matching replica count) without coordinating shard ID assignment, each pod may connect to the wrong shard for its assigned guilds.
+This is manageable. What is not manageable: a fix that changes the behavior (not the interface) of `ListenerBase.Start()` — for example, changes the startup jitter timing. Listener A picks up the fix on next deploy. Listeners B-F run the old behavior until migrated. The fleet now has mixed startup behavior, which can cause thundering herd from the subset running old code if the fix was changing jitter semantics.
 
-**Consequences:** Users report "Discord chat not showing up in overlay" for affected guilds. No errors in logs. Extremely difficult to diagnose without understanding the shard routing formula.
+**Why it happens:** Partial migration means the fleet is in a mixed state. SDK behavior changes affect deployed listeners immediately (via next deploy) but unmigrated listeners are immune.
+
+**Consequences:** Operational complexity during the migration window. Difficult to reason about fleet behavior when some listeners use the SDK and some do not.
 
 **Prevention:**
-- For v1.5 (current scale, < 2,500 guilds): hardcode `shard_id=0, num_shards=1` in all pods. Document this limit explicitly in the service README and an ADR.
-- Query `GET /gateway/bot` on startup to obtain Discord's recommended shard count. Log the value. If recommended count differs from configured count, log a WARN.
-- Design the future shard assignment protocol before hitting scale: the source-manager coordinator assigns guild+channel sources to pods; the Discord shard for each guild is `guild_id % total_shards`. Source assignment and shard assignment are separate concerns — do not conflate them.
-- On `READY`, log `unavailable_guilds` count. If non-zero after 60 seconds, a guild has not connected — may indicate a shard routing problem.
+- Minimize the SDK's stable surface area. The SDK should have zero behavior changes after it is first deployed by listener A. If a bug requires a behavioral change, evaluate whether to roll back listener A's migration temporarily rather than operating a mixed fleet with different timing behavior.
+- Document explicitly: "once ListenerBase.Start() is deployed, its timing semantics (jitter duration, heartbeat interval, assignment refresh interval) are frozen for the duration of the migration." These values should be injected via a `ListenerConfig` struct, not hardcoded, so per-listener overrides are possible without changing the SDK.
+- Keep the migration window short. The longer the fleet is in mixed state, the higher the operational risk.
 
-**Detection:** Log `unavailable_guilds` count from `READY` payload. Alert if count remains > 0 after 60 seconds. Alert if `GET /gateway/bot` returns `shards > 1` and configured `num_shards == 1`.
+**Detection:** Grafana dashboard showing deployment timestamps per listener. Alert if any listener has been using old (non-SDK) code for more than 2 weeks after SDK first deployment.
 
-**Phase:** Phase 1 (document single-shard assumption and scale threshold). Phase 3 (integration with load balancer — do not conflate shard assignment with channel assignment).
+**Phase:** Operational constraint for the migration phases. Addressed in rollout strategy, not SDK design.
 
 ---
 
@@ -144,88 +149,92 @@ Mistakes that cause rewrites, data loss, or bot bans.
 
 ---
 
-### Pitfall 7: Discord Bot OAuth Flow Confused with User OAuth Flow
+### Pitfall 7: Embed vs. Interface — Choosing the Wrong Go Pattern for ListenerBase
 
-**What goes wrong:** The existing auth-service handles Twitch and YouTube with the standard user OAuth2 flow: authorization code grant, user grants scopes, per-user access token stored encrypted in PostgreSQL, token-refresh-service refreshes it periodically. Discord bot authorization is different: the bot token (from the Discord Developer Portal) is a static application credential that does not expire and does not need refreshing. The user-facing "Add to Server" flow (`scope=bot`) results in the bot being added to a guild — it does not issue a user access token at all.
+**What goes wrong:** `ListenerBase` is implemented as a struct that listeners embed: `type TwitchListener struct { listener.ListenerBase; ... }`. The embedded base has a `Start(ctx context.Context) error` method. The twitch-listener's `Start` needs to do extra steps after `ListenerBase.Start()`. It does: `func (t *TwitchListener) Start(ctx context.Context) error { t.ListenerBase.Start(ctx); t.doTwitchStuff() }`. This works.
+
+Now consider: a test creates a `TwitchListener` and calls `listener.StartAll(ctx, []listener.Startable{tl, kl})` where `Startable` is an interface with `Start(ctx) error`. The embedded `ListenerBase.Start` is promoted — unless `TwitchListener` defines its own `Start`, in which case the embedded method is shadowed. If `TwitchListener.Start` calls `t.ListenerBase.Start(ctx)` and `ListenerBase.Start` launches goroutines that hold a reference to `ListenerBase` internals, and `TwitchListener` is garbage collected while those goroutines run — the embed creates subtle lifetime dependencies.
+
+More practically: if `ListenerBase` defines a `Stop()` method via embed and the listener also defines `Stop()`, Go's method promotion rules mean the listener's `Stop()` shadows the base's `Stop()`. If the test calls `Stop()` on the `listener.Startable` interface, which `Stop()` runs? The listener's, which may forget to call `t.ListenerBase.Stop()`. Silent goroutine leak.
 
 **Prevention:**
-- Store the Discord bot token as an application environment variable (`DISCORD_BOT_TOKEN`), not in the OAuth tokens table. It is not a per-user credential.
-- Do NOT route the Discord bot token through token-refresh-service. The service will attempt unnecessary refresh calls and likely fail or corrupt the stored value.
-- The "Add to Server" OAuth2 flow (user-facing setup UI) uses `scope=bot+applications.commands` with the `authorization_code` grant. The result is guild membership for the bot, not a token to store. Record guild membership in a new PostgreSQL table: `(user_id, guild_id, authorized_at, inbound_channel_id, outbound_channel_id)`.
-- Model this as the existing systems model bot vs. user: Twitch uses a bot OAuth token for IRC (static credential) separate from the user's Twitch OAuth token. Follow the same separation.
+- Prefer composition over embedding for `ListenerBase`. The listener holds a `base *listener.Base` field (unexported) and explicitly calls `base.Start(ctx)` and `base.Stop()` in its own lifecycle methods. No method promotion ambiguity.
+- The public interface for "anything that can be started/stopped" is an interface, not a base struct: `type Listener interface { Start(ctx context.Context) error; Stop() }`. Implementations satisfy it explicitly.
+- If embedding is used, document exactly which methods are promoted and which are shadowed, with a compile-time check: `var _ listener.Listener = (*TwitchListener)(nil)`.
 
-**Phase:** Phase 1 (auth design and database migration). Wrong direction here is expensive to undo.
+**Detection:** `go vet ./...` catches some method shadowing issues but not all. Static analysis (e.g., `staticcheck`) catches promoted method shadowing in more cases.
+
+**Phase:** SDK design phase. Decide embed vs. composition before writing any listener implementation.
 
 ---
 
-### Pitfall 8: Source-Manager Assignment Key Must Include Guild ID
+### Pitfall 8: Tests That Depend on `cmd/main.go` Logic Cannot Test the SDK
 
-**What goes wrong:** The existing load balancer hashes on `source_id` (an opaque string) to assign sources to pods. Two Discord channels from different guilds may have similar or identical numeric channel IDs if the system only stores the channel ID without the guild ID. Hash collisions cause incorrect pod assignments. More critically, the `MESSAGE_CREATE` event payload includes `guild_id` — if the source record does not store it, the listener cannot verify that an incoming event matches an active source.
+**What goes wrong:** The existing channel manager tests (e.g., `twitch-listener/channels/manager_test.go`) mock `JoinParterInterface` and test the manager in isolation. They do not test the startup sequence in `cmd/main.go` — the jitter, assignment query, migration subscriber launch, heartbeat goroutine, assignment refresh loop. After migration to the SDK, this startup sequence lives in `ListenerBase.Start()`. If `ListenerBase` has a bug in how it wires these goroutines, the existing tests will not catch it. The tests still pass. The bug only manifests in a deployed pod.
+
+**Why it happens:** The startup sequence in `cmd/main.go` was previously untestable imperative code. It was acceptable when it was ~150 lines of straightforward Go. When it becomes `ListenerBase.Start()`, it is shared code that must be tested.
+
+**Consequences:** SDK bugs in goroutine wiring, context propagation, or shutdown ordering are invisible to the test suite. They surface in production as subtle issues: goroutine leaks detected by `go/pprof`, double-heartbeat under load, assignment refresh running after shutdown.
 
 **Prevention:**
-- Define the Discord source key as `discord:{guild_id}:{channel_id}` for consistent hashing. This matches the existing platform-prefixed pattern used by other listeners.
-- Validate that `guild_id` is present on every `MESSAGE_CREATE` event before publishing to Redis Streams. Direct messages (DMs) do not have `guild_id` — the listener must drop DM events immediately, as they are not a supported source type.
-- The source-manager coordinator, heartbeat, and migration logic all operate on opaque source IDs. No changes to coordinator internals are needed — only to how the discord-listener registers its sources.
+- Write unit tests for `ListenerBase.Start()` before any listener migration. Mock all external dependencies: coordinator client (returns assignments), migration subscriber (no-op), heartbeat publisher (counter). Verify: goroutines start, goroutines stop when `ctx` is cancelled, no goroutine leaks (use `goleak` in tests).
+- Write a test that calls `ListenerBase.Start()` and then cancels the context before the startup jitter completes. Verify the method returns promptly and no goroutines are left running.
+- The SDK tests must achieve higher coverage than the original `cmd/main.go` code, because the SDK serves more consumers.
+- After migrating a listener, run the listener's existing channel manager tests with the SDK-backed implementation. If any test needs to be modified to accommodate the SDK, that is a signal the SDK changed behavior.
 
-**Phase:** Phase 1 (data model and source registration). Must be correct before any load balancing work.
+**Detection:** `goleak.VerifyNone(t)` in every SDK test. If goroutine count after test teardown is non-zero, the test fails.
+
+**Phase:** Phase 1 of SDK development. SDK tests must exist before the first listener migration begins.
 
 ---
 
-### Pitfall 9: Multiple Pods Opening Gateway Connections on the Same Shard
+### Pitfall 9: Assignment Refresh Strips Platform Suffix in Twitch but Not in Kick
 
-**What goes wrong:** All discord-listener pods share the same `DISCORD_BOT_TOKEN`. At single-shard scale, if two pods both open a Gateway connection, the second `IDENTIFY` from the same bot token causes Discord to invalidate the first connection (opcode 7 Reconnect or opcode 9 Invalid Session). The first pod reconnects. Discord invalidates it again. Neither pod maintains a stable connection.
+**What goes wrong:** In twitch-listener's assignment refresh loop, source IDs are stripped of their platform suffix: `"abc123:twitch"` → `"abc123"` (see `cmd/main.go` lines 264-269). Kick-listener's assignment refresh does not strip the suffix (lines 260-262). After migration to the SDK's shared assignment refresh logic, this divergence must be preserved — or one listener gets incorrect source ID filtering.
 
-**Why it happens:** The source-manager assigns channels to specific pods, but does not inherently prevent multiple pods from each opening their own Gateway connection. Other listeners (Twitch IRC, Kick Pusher) handle this by each pod independently managing its assigned channels. This model works for those protocols. For Discord's Gateway, a shard connection covers ALL guilds on that shard — only one connection per shard per token is allowed.
+**Why it happens:** This is an undocumented behavioral difference between two otherwise-identical code blocks. It exists because Twitch source IDs include a platform suffix in the coordinator response but the twitch-listener's internal channel matching does not expect the suffix. It was added as a quick fix and not documented.
+
+**Consequences:** If the SDK's assignment refresh strips the suffix universally, kick-listener breaks (it doesn't expect the strip). If it doesn't strip, twitch-listener breaks. If the SDK accepts a `StripPlatformSuffix bool` config field, future SDK users will not know whether to set it.
 
 **Prevention:**
-- Gate Gateway connection on source assignment: a pod must have at least one Discord source assigned by the coordinator before it opens a Gateway connection. Pods with no assigned Discord sources must not connect to the Gateway.
-- For single-shard deployments: at most one pod should hold the active Gateway connection. The coordinator (source-manager leader) assigns all Discord sources to the same pod when possible at single-shard scale.
-- Alternatively, use a Redis-based Gateway connection lock: a pod acquires a Redis key `discord:gateway:shard:0:holder` (TTL: 2x heartbeat interval) before connecting. Only the lock holder connects. Other pods wait and poll for channel assignments to be delivered via a different mechanism (Redis Pub/Sub commands from the connection-holding pod).
-- Store `session_id` and `resume_gateway_url` in Redis immediately after `READY`. The lock holder writes these; if it dies, the next pod to acquire the lock can attempt RESUME with the stored values.
+- Before extracting the assignment refresh loop, document the exact source ID format each listener receives from the coordinator and the format each listener's `UpdateAssignedSourceIDs` expects.
+- The correct fix is upstream: normalize the coordinator's response to not include the platform suffix in the first place, or always include it and always strip it. Pick one and make it consistent across all listeners before extracting to the SDK.
+- Do not add a `StripPlatformSuffix bool` field to `ListenerConfig`. That is encoding an undocumented inconsistency into the SDK's public interface.
 
-**Phase:** Phase 1 (architecture decision — connection ownership model). This is the most important architectural question for the discord-listener before any code is written.
+**Detection:** Integration test: call `coordClient.QueryAssignments()` in both the old twitch-listener and the SDK-backed twitch-listener. Assert the resulting `assignedSourceIDs` map is identical.
+
+**Phase:** Pre-migration cleanup task. Must be resolved before SDK extraction begins.
 
 ---
 
-### Pitfall 10: Relay Not Reusing HTTP Client — Port Exhaustion Under Load
+### Pitfall 10: `DBConnInterface` Defined Redundantly in Each Listener — Conflict on Extraction
 
-**What goes wrong:** Each relay call to Discord REST creates a new `http.Client` instance or new TCP connection. Under relay load (100+ messages per minute), this exhausts ephemeral TCP ports, accumulates TIME_WAIT connections, and adds 3-10ms of TCP handshake latency to every relay call.
+**What goes wrong:** Both `twitch-listener/channels` and `kick-listener/channels` define a local `DBConnInterface` with method `GetPool() interface{}`. Both use a local `dbConnWrapper` struct in `cmd/main.go`. If the shared `ChannelManager` defines its own `DBConnInterface`, there are now three definitions of the same interface. The listener-local ones are not removed. Code that passes a `*dbConnWrapper` to the local `channels.NewManager` compiles, but if it is passed to the shared `channels.NewManager`, there may be a type mismatch at the interface boundary (Go structural typing means it still compiles, but the `interface{}` return from `GetPool()` hides the concrete type, making it impossible to use without a type assertion).
+
+**Why it happens:** The interface was defined locally in each package because Go interfaces are lightweight. When extracting to shared code, the natural move is to define it in the SDK. But the old local definitions remain, and `cmd/main.go` still uses `dbConnWrapper` from the service package — which satisfies the local interface but may not satisfy the shared interface if signatures diverge.
+
+**Consequences:** Compile errors after migration, or worse, silent behavior where both interfaces exist and different parts of the code use different definitions.
 
 **Prevention:**
-- Create a single `http.Client` with an explicit transport at discord-listener service startup. Inject it into the relay component.
-- Configure `MaxIdleConnsPerHost: 10` and `IdleConnTimeout: 90 * time.Second` on the transport.
-- This follows the existing pattern in emote-service HTTP clients. The relay client is not special.
+- Define `DBConnInterface` once: in the shared `ChannelManager` package. Remove the local definitions as part of migration. Do not leave them as aliases.
+- The `GetPool() interface{}` return type is already a code smell — it forces callers to do type assertions. During extraction, change this to `GetPool() *pgxpool.Pool` for a stronger contract. If this is a breaking change for any consumer, address it explicitly.
 
-**Phase:** Phase 2 (relay implementation). Easy to get right from the start, expensive to diagnose in production.
+**Phase:** During ChannelManager extraction (Phase 2 of SDK). Not a blocker for ListenerBase extraction.
 
 ---
 
-### Pitfall 11: Relay Logic Inside Message-Processor Breaks the Processing Pipeline Contract
+### Pitfall 11: Shared `ChannelManager` with Two Different `HandleMigrationEvent` Signatures
 
-**What goes wrong:** If the relay is implemented as logic inside the message-processor (triggered on the processing path, not the pub/sub consumer path), a relay failure (Discord 429, timeout, network error) causes the message-processor to fail to ACK the Redis Streams message. The message gets reprocessed. Every reprocess triggers another relay attempt. The relay failure propagates backward into the core message pipeline.
+**What goes wrong:** In both twitch-listener and kick-listener, `channelMgr.HandleMigrationEvent` is passed to `coordination.NewMigrationSubscriber`. The method signature is defined locally in each manager. If the signature differs between listeners (e.g., Kick's manager passes additional context about chatroom IDs), the shared `MigrationSubscriber` cannot accept a generic `HandleMigrationEvent` function.
 
-**Why it happens:** The relay reads from the same pub/sub as the API Gateway. It may seem natural to add relay logic inside the message-processor's publish step. This conflates the processing pipeline (inbound) with the relay (outbound).
-
-**Prevention:**
-- Implement relay as an independent goroutine (or group of goroutines) that subscribes to `overlay:{overlay_id}` pub/sub as a separate consumer, parallel to the API Gateway's subscription. The relay is a peer of the API Gateway, not a component of the message-processor.
-- Relay failures must never affect the message-processor's XACK cadence. Relay errors are logged and counted but do not propagate upstream.
-- Keep the message-processor contract unchanged: normalize → enrich → route → publish to pub/sub → XACK. The relay is downstream of this contract.
-
-**Phase:** Phase 1 (architecture decision). The PROJECT.md already lists "single service for inbound+outbound vs separate relay service" as an open question. The correct answer is: single discord-listener service containing both a Gateway inbound goroutine and a relay outbound goroutine, both operating independently. The relay goroutine subscribes to pub/sub independently; it does not depend on or modify the message-processor.
-
----
-
-### Pitfall 12: Graceful Shutdown Does Not Preserve Session for Resume
-
-**What goes wrong:** When a pod receives SIGTERM and begins the 25-second graceful shutdown, the Gateway WebSocket connection is dropped without a clean close. Discord's session resume window is typically a few minutes. If the pod restarts slowly (image pull, migration, slow startup) and the resume window expires, a full re-IDENTIFY is required. Worse: if the close code is 1000 (Normal Closure), Discord intentionally invalidates the session — there is nothing to resume.
+Examining the codebase: the migration subscriber in `shared/coordination/migration_subscriber.go` calls a callback. If that callback's signature is `func(event MigrationEvent) error`, and kick-listener's current manager defines it as `func(event coordination.MigrationEvent)` (no error return), the migration to shared code requires a signature change — which breaks the existing manager test for kick.
 
 **Prevention:**
-- On SIGTERM: send WebSocket close frame with code 4000 (Unknown Error — Discord allows session resume after this code) rather than 1000.
-- Store `session_id` and `resume_gateway_url` in Redis immediately after every `READY` event (keyed by pod ID). On startup, always attempt RESUME first using the stored values before falling back to IDENTIFY.
-- The 25-second graceful shutdown window is sufficient: close Gateway with 4000 (instant), drain in-flight Redis Streams publishes (~1-2 seconds), shutdown HTTP server.
-- Note: close code 1000 explicitly invalidates the session. Use 4000 for planned restarts, 1001 (Going Away) for pod eviction.
+- Before extracting the migration callback, determine the canonical signature: does it return an error or not? Make it return an error. This is strictly better and enables the subscriber to log callback errors.
+- Update both listeners' `HandleMigrationEvent` to match the canonical signature before SDK extraction.
+- The update to `HandleMigrationEvent` is a preparation task that should be done and deployed independently, before any SDK extraction. It is low-risk (error return is ignored or logged).
 
-**Phase:** Phase 1 (connection lifecycle). Session storage in Redis must be present before the service reaches production.
+**Phase:** Pre-migration cleanup. Done before SDK extraction starts.
 
 ---
 
@@ -233,41 +242,60 @@ Mistakes that cause rewrites, data loss, or bot bans.
 
 ---
 
-### Pitfall 13: Discord Snowflake IDs Must Be Stored as Strings
+### Pitfall 12: TikTok Listener Is Node.js — Cannot Use the Go SDK
 
-**What goes wrong:** Discord entity IDs (guild, channel, message, user) are 64-bit Snowflakes, JSON-encoded as strings. If any part of the pipeline stores them as integers, Go handles int64 correctly, but the frontend (JavaScript/TypeScript) has a 53-bit safe integer limit. Values above 2^53 are truncated silently. Discord message IDs regularly exceed this threshold.
+**What goes wrong:** tiktok-listener is a Node.js/TypeScript service (confirmed by `tsconfig.json` and `node_modules` in the services directory). PROJECT.md lists it as one of the six listeners to migrate to the SDK. It cannot import Go packages.
+
+If the roadmap defines "migrate all 6 listeners" as a success criterion and tiktok-listener is included in that count, the milestone can never be fully completed as specified.
 
 **Prevention:**
-- Store all Discord IDs as strings throughout the pipeline. Never convert Snowflakes to integer types.
-- The system's internal `MessageID` is a UUID generated by the listener. The Discord Snowflake message ID belongs in `Tags["discord_message_id"]` or a dedicated metadata field — not as the primary `MessageID`.
-- The `guild_id` and `channel_id` fields in the source record must be string columns in PostgreSQL (`text`, not `bigint`).
+- Redefine "migrate all 6 listeners" to explicitly exclude tiktok-listener, or plan a parallel effort to rewrite it in Go first.
+- The SDK extraction provides value to the 5 Go listeners regardless of tiktok-listener. Document this explicitly so tiktok-listener's status does not block the milestone.
 
-**Phase:** Phase 1 (data model). Cannot be corrected after database migrations are written.
+**Phase:** Milestone scoping clarification before roadmap is written.
 
 ---
 
-### Pitfall 14: Bot Receives Events for All Channels in a Guild, Not Just Subscribed Ones
+### Pitfall 13: `go.work` Absent — Missing Module Graph Visibility During Development
 
-**What goes wrong:** When the bot is in a guild, it receives `MESSAGE_CREATE` events for every channel it has read permissions for — not just the channels configured as sources. Without explicit channel filtering, messages from non-subscribed channels flow into Redis Streams and appear in overlays.
+**What goes wrong:** The monorepo uses `replace` directives and has no `go.work` file. During SDK development, if you `cd /shared && go test ./listener/...`, the test sees the local `shared/listener` code. But if you `cd /services/twitch-listener && go test ./...`, the test also sees local shared code (via replace directive). However, running `go build ./...` at the repo root fails because there is no root module.
+
+The practical consequence: there is no single command to verify all modules compile against the new SDK. You must run `go build ./...` in each service directory separately. This is error-prone during migration.
 
 **Prevention:**
-- In the discord-listener event handler, look up active sources for the incoming event's `guild_id`. Check whether `event.channel_id` matches a registered source's `channel_id`. Drop the event if there is no matching source.
-- This is identical to the pattern in twitch-listener: the IRC client joins only registered channels. The discord-listener must implement the equivalent channel filter at the event handler level.
-- Cache the active sources map in memory (refresh on source assignment changes from coordinator). Do not query PostgreSQL on every `MESSAGE_CREATE` event.
+- Create a `go.work` file at the repo root that includes all modules. This is not a breaking change and does not affect deployed behavior (go.work is a local development tool). The `replace` directives remain functional.
+- With a `go.work` file, `go build ./...` from the repo root verifies all modules compile against the current SDK state in a single command.
+- Alternatively, add a Makefile target `build-all` that runs `go build ./...` in each service directory. This requires no structural change.
 
-**Phase:** Phase 1 (channel filtering). Must be present from the first working implementation.
+**Detection:** CI explicitly tests all service modules, not just the module being changed.
+
+**Phase:** Development tooling setup, ideally before any SDK code is written.
 
 ---
 
-### Pitfall 15: Bot REST Endpoint vs. Webhook — Using Webhooks for Relay
+### Pitfall 14: `ListenerMetrics` Prometheus Labels Registered Twice
 
-**What goes wrong:** Discord supports posting messages via incoming webhooks (a separate URL, no bot token required). Using webhooks for relay is tempting because they do not require the `SEND_MESSAGES` permission explicitly — just the webhook URL. However, webhooks cannot post "as" the bot user (they post as a webhook identity), require per-channel webhook creation (an additional setup step and permission), and lack consistent rate limit header semantics across older webhook endpoints.
+**What goes wrong:** After migration, both the old listener startup code path (if partially removed) and `ListenerBase.Start()` call `metrics.NewListenerMetrics("twitch", "twitch-listener")`. Prometheus panics on duplicate metric registration if the same label values are registered twice in the same process. The panic crashes the pod on startup.
+
+**Why it happens:** Partial migrations where some initialization code is moved to the SDK but the original code is not fully removed. Also triggered if the listener unit tests register metrics during test setup and the SDK also registers them.
 
 **Prevention:**
-- Use bot REST (`POST /channels/{channel_id}/messages` with `Authorization: Bot {token}`) for relay. The bot token is already available. Requires `SEND_MESSAGES` permission in the target channel, which is part of standard bot authorization.
-- Do not implement webhooks for relay in v1.5. The additional setup complexity (webhook URL storage, per-channel creation, permission management) exceeds any benefit at current scale.
+- Prometheus metric registration should use `MustRegister` only once per process. If the SDK registers metrics, the listener must not register them separately. Use `promauto` (registers on declaration) or register in an explicit `init()` guarded by a `sync.Once`.
+- Test isolation: use `prometheus.NewRegistry()` in tests rather than the default global registry. Pass it via the `ListenerConfig`. This prevents test-to-test pollution and avoids the double-registration panic in test binaries.
 
-**Phase:** Phase 2 (relay implementation).
+**Phase:** During migration of each listener. Verify by running the new `cmd/main.go` in a test binary with `go test -run TestMain` before full deployment.
+
+---
+
+### Pitfall 15: Feature Flag `ENABLE_COORDINATOR_FILTERING` Is Twitch-Specific and Not in the SDK
+
+**What goes wrong:** twitch-listener has `ENABLE_COORDINATOR_FILTERING` env var (lines 155-159 of `cmd/main.go`) that disables coordinator filtering entirely as an instant rollback. kick-listener does not have this flag. If the SDK manages the assignment filtering logic, this flag either becomes SDK-level (configurable by all listeners) or disappears. If it disappears, the operational rollback mechanism for twitch-listener disappears with it.
+
+**Prevention:**
+- Preserve the flag in the SDK's `ListenerConfig` as `DisableCoordinatorFiltering bool`. Document it as an emergency rollback mechanism, not a configuration option.
+- Ensure the flag is evaluated in `ListenerBase` at the point where `assignedSourceIDs` is applied to filtering — not buried in the channel manager.
+
+**Phase:** Minor concern during SDK design. Must be noted in the SDK config struct's documentation.
 
 ---
 
@@ -275,19 +303,20 @@ Mistakes that cause rewrites, data loss, or bot bans.
 
 | Phase Topic | Likely Pitfall | Mitigation |
 |-------------|---------------|------------|
-| Phase 1: Gateway connection | Missing MESSAGE_CONTENT intent — silent empty messages | Validate intent bitmask on startup; add `discord_message_content_empty_total` counter; contract test against real bot |
-| Phase 1: Gateway connection | Heartbeat goroutine without ACK tracking — zombie connection | Implement `heartbeatACKed` bool; zombie detection before each heartbeat send; single write channel |
-| Phase 1: Connection ownership | Multiple pods connecting on same shard — session invalidation cascade | Gate Gateway connection on source assignment; Redis lock per shard; only connection-holder pod connects |
-| Phase 1: Auth design | Bot token treated as user OAuth token — routed through token-refresh-service | Separate storage path (env var); new guild membership table; no token-refresh-service involvement |
-| Phase 1: Data model | Missing guild_id in source key — incorrect hash assignments | Use `discord:{guild_id}:{channel_id}` as source ID; store all IDs as strings |
-| Phase 1: Session lifecycle | Close code 1000 on SIGTERM invalidates session | Use close code 4000; store session_id + resume_gateway_url in Redis on every READY |
-| Phase 2: Relay | Echo loop — Discord messages re-relayed back to Discord | Filter `platform == "discord"` unconditionally before relay; integration test required before connecting to live bot |
-| Phase 2: Relay | REST 429 during relay burst — cascade to global limit | Per-bucket rate limiter parsing X-RateLimit headers; bounded drop-oldest queue; 2 msg/sec default cap |
-| Phase 2: Relay | New HTTP client per call — port exhaustion | Single `http.Client` at startup; configure transport with `MaxIdleConnsPerHost: 10` |
-| Phase 2: Relay | Relay logic in message-processor — pipeline contamination | Relay as independent pub/sub consumer; relay errors never propagate to XACK path |
-| Phase 3: Load balancing | Shard ID conflated with pod index — event blackout for affected guilds | Document single-shard assumption; shard assignment separate from source assignment |
-| Phase 3: Load balancing | Identify rate limit during HPA scale-up — reconnect storm | Pod-index stagger (pod_ordinal * 6s) on top of existing 0-30s jitter; RESUME before IDENTIFY |
-| Phase 4: Production | Channel filter missing — non-subscribed channels flow into overlays | Filter on channel_id against active sources; cache source map in memory |
+| SDK design | Startup sequence as fixed order instead of hooks | Document all 6 listener divergences first; design struct-of-hooks before writing code |
+| SDK design | Circular import between `shared/listener` and `shared/metrics` | Define import hierarchy on day one; platform constants in separate `shared/types` package |
+| Pre-migration cleanup | Platform suffix stripping inconsistency (twitch strips, kick does not) | Normalize source ID format in coordinator response; single behavior for all listeners |
+| Pre-migration cleanup | `HandleMigrationEvent` signature mismatch | Canonicalize to `func(event) error`; deploy to both listeners before SDK extraction |
+| ChannelManager extraction | Generic key type (string vs. int) for Kick chatroom IDs | Use `ChannelManager[K comparable]` with generics, or string-keyed with explicit conversion documented |
+| ChannelManager extraction | `DBConnInterface` defined in 3 places post-extraction | Define once in SDK; remove listener-local definitions as part of migration commit |
+| ListenerBase extraction | Embed vs. composition method shadowing | Prefer composition; compile-time interface check `var _ Listener = (*TwitchListener)(nil)` |
+| First listener migration | No SDK tests exist before migration | `goleak`-verified SDK tests required before touching any listener |
+| First listener migration | Prometheus duplicate metric registration | Use `prometheus.NewRegistry()` in tests; SDK owns metric registration, listener does not |
+| Each listener migration | Big-bang migration across all listeners | One listener at a time; 24-hour production soak before next migration |
+| Mixed-fleet period | SDK behavioral change affects deployed listeners, unmigrated listeners immune | Freeze SDK timing semantics after first deployment; inject all tunable values via `ListenerConfig` |
+| Mixed-fleet period | No single build command for all modules | Add `go.work` or `make build-all`; CI must build all modules on every PR |
+| Milestone scoping | TikTok listener is Node.js and cannot use Go SDK | Exclude from migration scope explicitly; document why |
+| Post-migration | `ENABLE_COORDINATOR_FILTERING` rollback mechanism disappears | Preserve as `DisableCoordinatorFiltering` in `ListenerConfig` |
 
 ---
 
@@ -295,28 +324,24 @@ Mistakes that cause rewrites, data loss, or bot bans.
 
 **Confidence assessment:**
 
-- Discord Gateway protocol (intents, heartbeat, opcodes, sharding, rate limits): HIGH — derived from official Discord developer documentation. Knowledge cutoff August 2025 covers all referenced features: privileged intents mandatory since April 2022, sharding model stable since 2020, rate limit bucket model stable since 2019.
-- Integration pitfalls with existing Redis Streams / source-manager / load balancing: HIGH — derived from direct inspection of `services/source-manager/coordination/coordinator.go`, `assigner.go`, `services/twitch-listener/irc/connection.go`, `.planning/codebase/ARCHITECTURE.md`, `.planning/codebase/CONCERNS.md`, `.planning/PROJECT.md`.
-- Relay echo loop risk: HIGH — logical derivation from system architecture; the pub/sub consumer model is identical to the API Gateway subscription model. No external source needed.
-- REST rate limit bucket model: HIGH — Discord's X-RateLimit header semantics have been stable and are extensively documented.
-
-**Official reference URLs:**
-- Discord Gateway: https://discord.com/developers/docs/topics/gateway
-- Discord Intents: https://discord.com/developers/docs/topics/gateway#gateway-intents
-- Discord Rate Limits: https://discord.com/developers/docs/topics/rate-limits
-- Discord Sharding: https://discord.com/developers/docs/topics/gateway#sharding
-- Discord OAuth2: https://discord.com/developers/docs/topics/oauth2
+- Migration pitfalls: HIGH — derived from direct inspection of `services/twitch-listener/cmd/main.go`, `services/kick-listener/cmd/main.go`, `services/twitch-listener/channels/manager.go`, `services/kick-listener/channels/manager.go`. All specific line references in pitfalls above verified against current source.
+- Go-specific pitfalls (embed/interface, circular deps, replace directives): HIGH — these are properties of the Go module system and language spec. Not time-sensitive.
+- Operational pitfalls (coordinated deploys, mixed fleet): HIGH — logical derivation from the multi-module monorepo structure and replace directive model confirmed in `services/twitch-listener/go.mod` line 87-89.
+- TikTok listener runtime: HIGH — confirmed by presence of `tsconfig.json` and `node_modules/` in `services/tiktok-listener/`.
+- go.work absence: HIGH — confirmed no `go.work` file exists at repo root via glob search.
 
 **Codebase references:**
-- `/home/moersener/Hobby/worktree/all-chat/services/source-manager/coordination/coordinator.go`
-- `/home/moersener/Hobby/worktree/all-chat/services/source-manager/coordination/assigner.go`
-- `/home/moersener/Hobby/worktree/all-chat/services/twitch-listener/irc/connection.go`
-- `/home/moersener/Hobby/worktree/all-chat/.planning/PROJECT.md`
-- `/home/moersener/Hobby/worktree/all-chat/.planning/codebase/ARCHITECTURE.md`
-- `/home/moersener/Hobby/worktree/all-chat/.planning/codebase/CONCERNS.md`
+- `/home/moersener/Hobby/all-chat/services/twitch-listener/cmd/main.go` — startup sequence, jitter, platform suffix stripping, ENABLE_COORDINATOR_FILTERING flag
+- `/home/moersener/Hobby/all-chat/services/kick-listener/cmd/main.go` — startup sequence divergence, leaderCoord initialization, reconnect goroutine
+- `/home/moersener/Hobby/all-chat/services/twitch-listener/channels/manager.go` — firstMessageChan type (`map[string]chan struct{}`), DBConnInterface
+- `/home/moersener/Hobby/all-chat/services/kick-listener/channels/manager.go` — firstMessageChan type (`map[int]chan struct{}`), DBConnInterface, dual-key structure
+- `/home/moersener/Hobby/all-chat/services/twitch-listener/go.mod` — replace directive for shared
+- `/home/moersener/Hobby/all-chat/services/discord-listener/go.mod` — discord-listener does not import coordination or sourcemanager packages (confirmed: no coordinator references)
+- `/home/moersener/Hobby/all-chat/shared/go.mod` — shared module dependency list
+- `/home/moersener/Hobby/all-chat/.planning/PROJECT.md` — v1.6 milestone requirements, constraints, known technical debt
 
 ---
 
-*Pitfalls research for: All-Chat v1.5 Discord Listener + Relay*
-*Researched: 2026-03-15*
+*Pitfalls research for: All-Chat v1.6 Listener SDK*
+*Researched: 2026-03-17*
 *Confidence: HIGH*
