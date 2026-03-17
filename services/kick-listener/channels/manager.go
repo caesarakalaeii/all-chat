@@ -139,8 +139,9 @@ type OverlayTarget struct {
 	ChannelSlug string
 }
 
-// Start begins the channel management loop
-func (m *Manager) Start() error {
+// Start begins the channel management loop. ctx is accepted for ChannelManager interface compliance;
+// internal goroutines use m.ctx created by NewManager.
+func (m *Manager) Start(_ context.Context) error {
 	m.logger.Info("Starting Kick channel manager")
 
 	// Initial sync
@@ -919,6 +920,24 @@ func (m *Manager) GetFilteredAssignmentCount() int {
 	m.subsMu.RLock()
 	defer m.subsMu.RUnlock()
 	return m.filteredAssignmentCount
+}
+
+// GetActiveChannels returns the slugs of all currently subscribed channels.
+func (m *Manager) GetActiveChannels() []string {
+	m.subsMu.RLock()
+	defer m.subsMu.RUnlock()
+	channels := make([]string, 0, len(m.subscriptions))
+	for slug := range m.subscriptions {
+		channels = append(channels, slug)
+	}
+	return channels
+}
+
+// GetActiveChannelCount returns the number of currently subscribed channels.
+func (m *Manager) GetActiveChannelCount() int {
+	m.subsMu.RLock()
+	defer m.subsMu.RUnlock()
+	return len(m.subscriptions)
 }
 
 // UpdateAssignedSourceIDs updates the assigned source IDs from coordinator
