@@ -75,7 +75,7 @@ Requirements for the Listener SDK milestone. Each maps to roadmap phases.
 ### VERIFY — Build and Interface Verification
 
 - [x] **VERIFY-01**: `make build-all` Makefile target builds all listener modules in one command, run in CI on every PR to catch `replace`-directive version drift
-- [ ] **VERIFY-02**: Each migrated listener has a compile-time interface assertion (`var _ listener.ChannelManager = (*channels.Manager)(nil)`) in its `channels/manager.go` file
+- [x] **VERIFY-02**: Each migrated listener has a compile-time interface assertion (`var _ listener.ChannelManager = (*channels.Manager)(nil)`) in its `channels/manager.go` file
 
 ## Future Requirements
 
@@ -150,7 +150,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIGRATE-05 | Phase 37 | Pending |
 | MIGRATE-06 | Phase 38 | Pending |
 | VERIFY-01 | Phase 34 | Complete |
-| VERIFY-02 | Phase 35 | Pending |
+| VERIFY-02 | Phase 35 | Complete |
 
 **Coverage:**
 - v1.6 requirements: 18 total
