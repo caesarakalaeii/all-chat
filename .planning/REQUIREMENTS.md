@@ -133,30 +133,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PREP-01 | TBD | Pending |
-| PREP-02 | TBD | Pending |
-| SDK-01 | TBD | Pending |
-| SDK-02 | TBD | Pending |
-| SDK-03 | TBD | Pending |
-| SDK-04 | TBD | Pending |
-| SDK-05 | TBD | Pending |
-| SDK-06 | TBD | Pending |
-| SDK-07 | TBD | Pending |
-| SDK-08 | TBD | Pending |
-| MIGRATE-01 | TBD | Pending |
-| MIGRATE-02 | TBD | Pending |
-| MIGRATE-03 | TBD | Pending |
-| MIGRATE-04 | TBD | Pending |
-| MIGRATE-05 | TBD | Pending |
-| MIGRATE-06 | TBD | Pending |
-| VERIFY-01 | TBD | Pending |
-| VERIFY-02 | TBD | Pending |
+| PREP-01 | Phase 33 | Pending |
+| PREP-02 | Phase 33 | Pending |
+| SDK-01 | Phase 34 | Pending |
+| SDK-02 | Phase 34 | Pending |
+| SDK-03 | Phase 34 | Pending |
+| SDK-04 | Phase 34 | Pending |
+| SDK-05 | Phase 34 | Pending |
+| SDK-06 | Phase 34 | Pending |
+| SDK-07 | Phase 34 | Pending |
+| SDK-08 | Phase 34 | Pending |
+| MIGRATE-01 | Phase 35 | Pending |
+| MIGRATE-02 | Phase 36 | Pending |
+| MIGRATE-03 | Phase 38 | Pending |
+| MIGRATE-04 | Phase 37 | Pending |
+| MIGRATE-05 | Phase 37 | Pending |
+| MIGRATE-06 | Phase 38 | Pending |
+| VERIFY-01 | Phase 34 | Pending |
+| VERIFY-02 | Phase 35 | Pending |
 
 **Coverage:**
 - v1.6 requirements: 18 total
-- Mapped to phases: 0 (pending roadmap creation)
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18/18 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-15 (v1.5), 2026-03-17 (v1.6)*
-*Last updated: 2026-03-17 after v1.6 requirement definition*
+*Last updated: 2026-03-17 after v1.6 roadmap creation*

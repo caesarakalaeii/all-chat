@@ -6,7 +6,8 @@
 - ✅ **v1.1 Listener Load Balancing** — Phases 4-10 (shipped 2026-02-21)
 - ✅ **v1.2 InnerTube YouTube Listener** — Phases 11-22 (shipped 2026-03-06)
 - ✅ **v1.3 Frontend Redesign** — Phases 23-26 (shipped 2026-03-14)
-- 🚧 **v1.5 Discord Listener** — Phases 27-32 (in progress)
+- ✅ **v1.5 Discord Listener** — Phases 27-32 (shipped 2026-03-16)
+- 🚧 **v1.6 Listener SDK** — Phases 33-38 (in progress)
 
 ## Phases
 
@@ -131,120 +132,136 @@
 
 </details>
 
-### 🚧 v1.5 Discord Listener (In Progress)
+<details>
+<summary>✅ v1.5 Discord Listener (Phases 27-32) — SHIPPED 2026-03-16</summary>
 
 **Milestone Goal:** Add Discord as a bidirectional chat source — read from Discord channels into overlays, and relay overlay messages back to Discord with loop-safe filtering, full OAuth2 bot authorization UX, and production-grade load balancing.
 
-## Phase Details
-
 ### Phase 27: Auth and Bot Token Foundation
 **Goal**: Users can authorize the Discord bot into their server and the service has a stable Gateway connection with correct session management
-**Depends on**: Nothing (first phase of v1.5)
-**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04
-**Success Criteria** (what must be TRUE):
-  1. User can click "Add to Server" and complete the OAuth2 flow, resulting in the bot appearing in their Discord server
-  2. After connecting, user sees the list of text channels available in their server (API response from auth-service)
-  3. User receives a clear, human-readable error when bot is missing required permissions (VIEW_CHANNEL, READ_MESSAGE_HISTORY, SEND_MESSAGES)
-  4. User can disconnect the bot, which removes it from their account and deletes all associated Discord sources
-  5. discord-listener establishes a Gateway WebSocket connection with correct intents bitmask and a startup assertion confirms MESSAGE_CONTENT is non-empty on first READY event
-**Plans**: 4 plans
-
-Plans:
-- [ ] 27-01-PLAN.md — DB migration (discord_guilds) + overlay-manager platform registration
-- [ ] 27-02-PLAN.md — discord-listener service scaffold + Gateway WebSocket connection
-- [ ] 27-03-PLAN.md — Discord OAuth provider + DiscordRepository in auth-service
-- [ ] 27-04-PLAN.md — Discord HTTP handlers + route wiring in auth-service
+**Plans**: 4/4 complete
+**Status**: Complete (2026-03-15)
 
 ### Phase 28: Inbound Listener Core
 **Goal**: Discord channel messages appear in overlays as a real-time, first-class chat source
-**Depends on**: Phase 27
-**Requirements**: INBD-01, INBD-02
-**Success Criteria** (what must be TRUE):
-  1. A message sent in a configured Discord channel appears in the overlay within one second
-  2. Discord messages display with platform label "discord" and author username, consistent with Twitch and YouTube messages in the overlay
-  3. Bot messages (author.bot == true) are silently filtered and never appear in overlays
-  4. Only messages from the configured inbound channel appear — messages from other channels in the same server are ignored
-**Plans**: 2 plans
-
-Plans:
-- [ ] 28-01-PLAN.md — MESSAGE_CREATE dispatch + ChannelRegistry + publisher package + overlay-manager Redis wiring (INBD-01)
-- [ ] 28-02-PLAN.md — DiscordNormalizer in message-processor + registration (INBD-02)
+**Plans**: 2/2 complete
+**Status**: Complete (2026-03-15)
 
 ### Phase 29: Inbound Enrichment
 **Goal**: Discord messages carry deletion events and resolved mention text through the existing platform pipelines
-**Depends on**: Phase 28
-**Requirements**: INBD-03, INBD-04
-**Success Criteria** (what must be TRUE):
-  1. When a Discord message is deleted, a deletion event propagates through the pipeline and the message disappears from active overlays (consistent with Twitch/YouTube deletion behavior)
-  2. A message containing @username or #channel mentions renders with resolved names (e.g., "@alice" not "@123456789012345678") in the overlay
-**Plans**: 2 plans
-
-Plans:
-- [ ] 29-01-PLAN.md — MESSAGE_DELETE/MESSAGE_DELETE_BULK dispatch + HandleMessageDelete + channel filter (INBD-03)
-- [ ] 29-02-PLAN.md — GuildCache interface + GUILD_CREATE/CHANNEL_*/ROLE_* handlers + mention resolution in HandleMessageCreate (INBD-04)
+**Plans**: 2/2 complete
+**Status**: Complete (2026-03-16)
 
 ### Phase 30: Outbound Relay
 **Goal**: Non-Discord overlay messages are posted to a user-configured Discord channel with no echo loops
-**Depends on**: Phase 28
-**Requirements**: RELY-01, RELY-02, RELY-03, RELY-04
-**Success Criteria** (what must be TRUE):
-  1. A Twitch message that appears in an overlay is relayed to the configured Discord channel within two seconds, formatted as "[emoji] username: text"
-  2. A message that originated from Discord is never posted back to Discord — verified by a test asserting no REST call is made for platform="discord" pub/sub messages
-  3. When relay_enabled is set to false for a source, no messages are relayed for that source even if other sources in the same overlay have relay active
-  4. The relay target channel can be configured independently from the inbound channel (same or different channel ID accepted on save)
-**Plans**: 2 plans
-
-Plans:
-- [ ] 30-01-PLAN.md — relay package TDD: Manager, Repository, DiscordPoster interface + httpPoster, loop-safety filter, format function (RELY-01 to RELY-04)
-- [ ] 30-02-PLAN.md — pgx/v5 dependency + relay.Manager wiring in cmd/main.go
+**Plans**: 2/2 complete
+**Status**: Complete (2026-03-16)
 
 ### Phase 31: Load Balancing
 **Goal**: discord-listener runs safely across multiple pods with deterministic shard ownership and auto-scales under load
-**Depends on**: Phase 30
-**Requirements**: LOAD-01, LOAD-02, LOAD-03
-**Success Criteria** (what must be TRUE):
-  1. When two discord-listener pods are running, exactly one pod holds the Gateway connection for each shard — the second pod does not connect until the first fails or releases ownership
-  2. After a pod restart, the Gateway session resumes (RESUME opcode) using the persisted session_id and resume_gateway_url from Redis, avoiding a full re-IDENTIFY
-  3. HPA scales discord-listener pods up when events/sec or active guild count exceeds configured thresholds, and the new pod acquires shard ownership within 60 seconds of the prior pod terminating
-**Plans**: 3 plans
-
-Plans:
-- [ ] 31-01-PLAN.md — Gateway RESUME protocol TDD: OpResume types, BuildResumePayload, IDENTIFY/RESUME branch in Connect(), InvalidSession clear logic (LOAD-03)
-- [ ] 31-02-PLAN.md — metrics package + go.mod shared deps + cmd/main.go ownership gating via LeadershipCoordinator + /metrics endpoint (LOAD-01, LOAD-02)
-- [ ] 31-03-PLAN.md — Kubernetes manifests: Deployment+Service, HPA, ServiceMonitor + kustomization.yaml update (LOAD-02)
+**Plans**: 3/3 complete
+**Status**: Complete (2026-03-16)
 
 ### Phase 32: Setup UI
 **Goal**: Users can configure Discord sources end-to-end from the frontend without leaving the app
-**Depends on**: Phase 31
-**Requirements**: UI-01, UI-02, UI-03, UI-04
-**Success Criteria** (what must be TRUE):
-  1. Settings page shows a Discord server connect card — clicking it initiates the OAuth2 redirect; after completion the card updates to show the connected server name and icon
-  2. Overlay editor allows adding a Discord source by selecting a guild and choosing an inbound channel from a dropdown populated from the channel listing API
-  3. Each Discord source card in the overlay editor shows connection status and a visual indicator of whether relay is active or inactive
-  4. Per-source relay configuration panel lets the user toggle relay on/off and pick an outbound channel; the visual filter indicator updates immediately on toggle
-**Plans**: 3 plans
+**Plans**: 3/3 complete
+**Status**: Complete (2026-03-16)
 
-Plans:
-- [ ] 32-01-PLAN.md — Backend PATCH endpoint + type system + discord.ts API module + design tokens + test scaffolds
-- [ ] 32-02-PLAN.md — Settings page Discord server connect card (OAuth, guild list, disconnect)
-- [ ] 32-03-PLAN.md — Overlay editor: Discord SourceCard + relay panel + AddSourceForm 2-step dialog
+</details>
+
+### 🚧 v1.6 Listener SDK (In Progress)
+
+**Milestone Goal:** Extract load balancing, leader election, and channel management into a shared SDK that all listeners import, eliminating 80–150 lines of duplicated startup wiring from every listener and making future listeners trivial to build.
+
+- [ ] **Phase 33: Pre-Migration Cleanup** - Normalize source ID suffix handling and canonicalize HandleMigrationEvent signature across Twitch and Kick before SDK extraction begins
+- [ ] **Phase 34: SDK Package Definition** - Create shared/listener package with ListenerBase, LeadershipListener, ChannelManager interface, ShutdownCoordinator, and make build-all CI target
+- [ ] **Phase 35: Migrate twitch-listener** - First production SDK validation; twitch-listener cmd/main.go reduced to IRC connection and message publishing only
+- [ ] **Phase 36: Migrate kick-listener** - Exercise both ListenerBase and LeadershipListener archetypes; both SDK models confirmed in production
+- [ ] **Phase 37: Migrate youtube-innertube and discord-listener** - Leadership-only migrations; close leadership archetype with two independent validations
+- [ ] **Phase 38: Migrate youtube-listener and twitch-eventsub-listener** - Close migration window; all Go listeners running on shared SDK
+
+## Phase Details
+
+### Phase 33: Pre-Migration Cleanup
+**Goal**: All behavioral inconsistencies between existing listeners are resolved and deployed before any SDK code is written
+**Depends on**: Phase 32 (v1.5 complete)
+**Requirements**: PREP-01, PREP-02
+**Success Criteria** (what must be TRUE):
+  1. All Go listeners agree on source ID format — source IDs passed to CoordinatorClient either always include or always omit the `:platform` suffix, with no per-listener branching
+  2. `HandleMigrationEvent` has the canonical signature `func(event *coordination.MigrationEvent) error` in both twitch-listener and kick-listener channel managers, and both compile and pass existing tests
+  3. The `shared/coordination` migration subscriber correctly handles the error return from `HandleMigrationEvent` (logs or ignores) without panicking
+**Plans**: TBD
+
+### Phase 34: SDK Package Definition
+**Goal**: The shared/listener package exists, is fully tested, and the build-all CI target verifies all listener modules compile together
+**Depends on**: Phase 33
+**Requirements**: SDK-01, SDK-02, SDK-03, SDK-04, SDK-05, SDK-06, SDK-07, SDK-08, VERIFY-01
+**Success Criteria** (what must be TRUE):
+  1. `shared/listener` package compiles with `go build ./...` inside the shared module — four new files present: base.go, leadership.go, channel_manager.go, shutdown.go
+  2. `NewCoordinatorClient` in `shared/coordination/client.go` accepts an explicit `serviceName string` parameter — no existing listener has a compilation error after the signature change
+  3. Unit tests with a mock coordinator verify that `ListenerBase` goroutines (heartbeat, assignment refresh, migration subscriber) start on `Start()` and stop on `Stop()` with no goroutine leak (`goleak.VerifyNone` passes)
+  4. `make build-all` runs in CI and exits 0, building all listener modules in a single command
+  5. `ListenerConfig` exposes heartbeat interval, assignment refresh interval, and startup jitter max — setting `LISTENER_STARTUP_JITTER_MAX=0` results in zero jitter delay in tests
+**Plans**: TBD
+
+### Phase 35: Migrate twitch-listener
+**Goal**: twitch-listener uses the shared SDK in production and validates the ListenerBase lifecycle against live Twitch IRC traffic
+**Depends on**: Phase 34
+**Requirements**: MIGRATE-01, VERIFY-02
+**Success Criteria** (what must be TRUE):
+  1. twitch-listener `cmd/main.go` contains only IRC connection setup and message publishing — all coordinator wiring, heartbeat, assignment refresh, and migration subscriber goroutines are gone from the file
+  2. `var _ listener.ChannelManager = (*channels.Manager)(nil)` compile-time assertion is present in twitch-listener `channels/manager.go` and the build succeeds
+  3. `messages_published_total` metric for twitch-listener shows no drop greater than 10% sustained for 5 minutes after the SDK-backed deployment replaces the prior deployment
+  4. All existing twitch-listener unit tests pass without modification
+**Plans**: TBD
+
+### Phase 36: Migrate kick-listener
+**Goal**: kick-listener uses both ListenerBase and LeadershipListener from the SDK, confirming both archetypes work correctly in production
+**Depends on**: Phase 35
+**Requirements**: MIGRATE-02
+**Success Criteria** (what must be TRUE):
+  1. kick-listener `cmd/main.go` uses `ListenerBase` for assignment coordination and `LeadershipListener` for per-stream ownership — manual construction of both CoordinatorClient and LeadershipCoordinator is removed from the file
+  2. kick-listener compiles with string-keyed channel manager (`strconv.Itoa(chatroomID)` convention documented in code) and all existing Kick channel manager tests pass
+  3. Both SDK archetypes (assignment-based and leadership-based) have been exercised against live Kick traffic with `messages_published_total` showing no regression
+**Plans**: TBD
+
+### Phase 37: Migrate youtube-innertube and discord-listener
+**Goal**: Both leadership-only listeners use LeadershipListener from the SDK, validating the archetype without assignment coordinator complexity
+**Depends on**: Phase 36
+**Requirements**: MIGRATE-04, MIGRATE-05
+**Success Criteria** (what must be TRUE):
+  1. youtube-listener-innertube `cmd/main.go` uses `LeadershipListener` — manual `sourcemanager.NewLeadershipCoordinator` wiring is removed; SDK nil-safe passthrough is active when `SOURCE_MANAGER_SECRET` is absent
+  2. discord-listener `cmd/main.go` uses `LeadershipListener` — shard ownership coordination via Redis lock pattern is unchanged in behavior; Gateway RESUME protocol is unaffected
+  3. Both services deploy without regression: InnerTube message rate is stable and Discord relay continues to function with loop-safety filter intact
+**Plans**: TBD
+
+### Phase 38: Migrate youtube-listener and twitch-eventsub-listener
+**Goal**: Migration window is closed — all Go listeners run on the shared SDK and the mixed-fleet monitoring period ends
+**Depends on**: Phase 37
+**Requirements**: MIGRATE-03, MIGRATE-06
+**Success Criteria** (what must be TRUE):
+  1. youtube-listener `cmd/main.go` uses `LeadershipListener` — quota tracker behavior is unchanged; all existing quota-related tests pass against the SDK-backed assignment implementation
+  2. twitch-eventsub-listener `cmd/main.go` uses `ListenerBase` — stateless webhook receiver gains standardized heartbeat and health wiring; no existing EventSub webhook test requires modification
+  3. All 5 Go listener services (twitch, kick, youtube, youtube-innertube, discord) plus twitch-eventsub-listener are running SDK-backed code in production simultaneously with no active mixed-fleet monitoring alerts
+**Plans**: TBD
 
 ## Progress
 
-**Execution Order:** 27 → 28 → 29 → 30 → 31 → 32
+**Execution Order:** 33 → 34 → 35 → 36 → 37 → 38
 
-| Phases | Milestone | Plans Complete | Status | Completed |
-|--------|-----------|----------------|--------|-----------|
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
 | 1-3 | v1.0 | 11/11 | Complete | 2026-02-18 |
 | 4-10 | v1.1 | 21/21 | Complete | 2026-02-21 |
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
-| 27. Auth and Bot Token Foundation | 4/4 | Complete    | 2026-03-15 | - |
-| 28. Inbound Listener Core | 2/2 | Complete    | 2026-03-15 | - |
-| 29. Inbound Enrichment | 2/2 | Complete    | 2026-03-16 | - |
-| 30. Outbound Relay | 2/2 | Complete    | 2026-03-16 | - |
-| 31. Load Balancing | 3/3 | Complete    | 2026-03-16 | - |
-| 32. Setup UI | 3/3 | Complete    | 2026-03-16 | - |
+| 27-32 | v1.5 | 16/16 | Complete | 2026-03-16 |
+| 33. Pre-Migration Cleanup | v1.6 | 0/TBD | Not started | - |
+| 34. SDK Package Definition | v1.6 | 0/TBD | Not started | - |
+| 35. Migrate twitch-listener | v1.6 | 0/TBD | Not started | - |
+| 36. Migrate kick-listener | v1.6 | 0/TBD | Not started | - |
+| 37. Migrate youtube-innertube and discord-listener | v1.6 | 0/TBD | Not started | - |
+| 38. Migrate youtube-listener and twitch-eventsub-listener | v1.6 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-16 after Phase 31 planning — 3 plans created*
+*Last updated: 2026-03-17 after v1.6 roadmap creation*
