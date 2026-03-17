@@ -8,16 +8,15 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
-## Current Milestone: v1.5 Discord Listener
+## Current Milestone: v1.6 Listener SDK
 
-**Goal:** Add Discord as a bidirectional chat source — read from Discord channels into overlays, and relay overlay messages back to Discord with loop-safe filtering.
+**Goal:** Extract load balancing, leader election, and channel management into a shared SDK that all listeners import, eliminating duplication and making future listeners trivial to build.
 
 **Target features:**
-- Discord-to-overlay ingestion: managed OAuth2 bot, channel-level source model
-- Overlay-to-Discord relay: configurable per-source outbound channel, Discord messages filtered to prevent loops
-- OAuth2 "Add to Server" bot authorization (consistent with Twitch/YouTube auth UX)
-- Comprehensive setup UI (server connect, channel picker, relay config, overlay editor integration)
-- Full load balancing with hash-based sharding + HPA (consistent with other listeners)
+- ListenerBase framework: single embed that wires startup jitter, assignment query, migration subscriber, heartbeat, and optional leadership
+- Shared ChannelManager: channel add/remove/filter/assignment pattern extracted from twitch-listener and kick-listener
+- Full migration of all existing listeners (twitch, youtube, youtube-innertube, kick, tiktok, discord) to the shared SDK
+- SDK ergonomics: new listeners implement one interface and get load balancing for free
 
 ## Current State (v1.3 shipped 2026-03-14)
 
@@ -85,16 +84,13 @@ Viewer identity system shipped: OAuth from browser extension, platform linking, 
 
 ### Active
 
-<!-- Current scope: v1.5 Discord Listener -->
+<!-- Current scope: v1.6 Listener SDK -->
 
-- [ ] Discord bot reads from a configured channel and pushes messages to overlays as a first-class source
-- [ ] Overlay messages (Discord excluded) are relayed to a user-configured Discord outbound channel
-- [ ] Loop-safe filtering: Discord-sourced messages are never echoed back to Discord
-- [ ] OAuth2 "Add to Server" flow to authorize the bot in a user's Discord server
-- [ ] Setup UI: server connection, inbound channel picker, outbound channel picker, relay toggle
-- [ ] Discord source integrated in overlay editor alongside Twitch/YouTube/Kick/TikTok
-- [ ] discord-listener service with full load balancing (hash-based sharding + HPA)
-- [ ] Architecture decision: single service for inbound+outbound vs separate relay service
+- [ ] ListenerBase struct in /shared/listener that wires the full startup sequence (jitter, assignment query, migration subscriber, heartbeat, assignment refresh loop)
+- [ ] LeadershipListener variant of ListenerBase for stream-per-pod ownership model (YouTube, Kick, InnerTube, Discord)
+- [ ] Shared ChannelManager extracted from twitch-listener and kick-listener with add/remove/filter/assignment operations
+- [ ] All 6 listeners (twitch, youtube, youtube-innertube, kick, tiktok, discord) migrated to use shared SDK
+- [ ] Each migrated listener's cmd/main.go reduced to service-specific logic only (platform connection + message publishing)
 
 ### Out of Scope
 
@@ -185,4 +181,4 @@ Viewer identity system shipped: OAuth from browser extension, platform linking, 
 | **Husky v9 new-style hooks (no husky.sh sourcing)** | Deprecated v8 sourcing logs deprecation warnings in v9, fails in v10 | ✓ Good — Clean hook execution, verified tsc + lint-staged exit 0 |
 
 ---
-*Last updated: 2026-03-15 after v1.5 milestone started*
+*Last updated: 2026-03-17 after v1.6 milestone started*
