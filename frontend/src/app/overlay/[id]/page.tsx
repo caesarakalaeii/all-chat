@@ -49,6 +49,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text');
   const [showPlatformBadge, setShowPlatformBadge] = useState(true);
+  const [invertMessageOrder, setInvertMessageOrder] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -88,6 +89,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         if (typeof display.show_platform_badge === 'boolean') {
           setShowPlatformBadge(display.show_platform_badge);
         }
+        setInvertMessageOrder(display.invert_message_order === true);
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
 
@@ -608,7 +610,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       <PlatformStatusIndicators activePlatforms={activePlatforms} platformStatuses={platformStatuses} />
 
       <div className="space-y-3">
-        {messages.map((message, index) => {
+        {invertMessageOrder && <div ref={messagesEndRef} className="scroll-anchor" />}
+        {(invertMessageOrder ? [...messages].reverse() : messages).map((message, index) => {
           const isSharedChat = message.metadata?.is_shared_chat === true;
           const isEvent = message.event != null;
           const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : '';
@@ -785,7 +788,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
         )})}
-        <div ref={messagesEndRef} className="scroll-anchor" />
+        {!invertMessageOrder && <div ref={messagesEndRef} className="scroll-anchor" />}
       </div>
     </div>
   );
