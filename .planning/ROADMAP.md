@@ -190,7 +190,11 @@
   1. All Go listeners agree on source ID format — source IDs passed to CoordinatorClient either always include or always omit the `:platform` suffix, with no per-listener branching
   2. `HandleMigrationEvent` has the canonical signature `func(event *coordination.MigrationEvent) error` in both twitch-listener and kick-listener channel managers, and both compile and pass existing tests
   3. The `shared/coordination` migration subscriber correctly handles the error return from `HandleMigrationEvent` (logs or ignores) without panicking
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 33-01-PLAN.md — Source ID suffix normalization (strip-at-intake in kick-listener and twitch-listener startup path)
+- [ ] 33-02-PLAN.md — HandleMigrationEvent error signature canonicalization across both channel managers and MigrationSubscriber
 
 ### Phase 34: SDK Package Definition
 **Goal**: The shared/listener package exists, is fully tested, and the build-all CI target verifies all listener modules compile together
@@ -256,7 +260,7 @@
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27-32 | v1.5 | 16/16 | Complete | 2026-03-16 |
-| 33. Pre-Migration Cleanup | v1.6 | 0/TBD | Not started | - |
+| 33. Pre-Migration Cleanup | v1.6 | 0/2 | Not started | - |
 | 34. SDK Package Definition | v1.6 | 0/TBD | Not started | - |
 | 35. Migrate twitch-listener | v1.6 | 0/TBD | Not started | - |
 | 36. Migrate kick-listener | v1.6 | 0/TBD | Not started | - |
@@ -264,4 +268,4 @@
 | 38. Migrate youtube-listener and twitch-eventsub-listener | v1.6 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-17 after v1.6 roadmap creation*
+*Last updated: 2026-03-17 after Phase 33 planning*
