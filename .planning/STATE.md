@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5
-milestone_name: Discord Listener
+milestone: v1.6
+milestone_name: Listener SDK
 status: planning
-stopped_at: Completed 32-03-PLAN.md — all 3 tasks done, human approved
-last_updated: "2026-03-16T11:57:00.177Z"
-last_activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
+stopped_at: ""
+last_updated: "2026-03-17T00:00:00.000Z"
+last_activity: 2026-03-17 — Milestone v1.6 started
 progress:
-  total_phases: 18
-  completed_phases: 12
-  total_plans: 44
-  completed_plans: 44
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -18,19 +18,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-15)
+See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** v1.5 Discord Listener — Phase 27 (Auth and Bot Token Foundation)
+**Current focus:** v1.6 Listener SDK — defining requirements
 
 ## Current Position
 
-Phase: 27 of 32 (Auth and Bot Token Foundation)
-Plan: — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-03-15 — v1.5 roadmap created, 6 phases (27-32), 19 requirements mapped
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-17 — Milestone v1.6 started
 
-Progress: [░░░░░░░░░░] 0% (v1.5 — 0 plans complete)
+Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 
 ## Performance Metrics
 
