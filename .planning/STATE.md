@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Completed 33-01-PLAN.md — source ID intake normalization in kick-listener and twitch-listener
-last_updated: "2026-03-17T16:47:34.909Z"
+stopped_at: Completed 33-pre-migration-cleanup plan 02 (33-02-PLAN.md)
+last_updated: "2026-03-17T16:48:32.415Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
-  completed_phases: 18
+  completed_phases: 19
   total_plans: 68
-  completed_plans: 67
+  completed_plans: 68
   percent: 0
 ---
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | v1.5 Discord Listener | 27-32 | 16 | Complete |
 | v1.6 Listener SDK | 33-38 | TBD | Not started |
 | Phase 33 P01 | 107 | 2 tasks | 3 files |
+| Phase 33-pre-migration-cleanup P02 | 4 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Key decisions relevant to v1.6:
 - tiktok-listener explicitly excluded — Node.js service cannot use the Go SDK
 - `make build-all` CI target (not go.work) chosen for monorepo-wide compile verification — avoids go mod tidy side-effect risks
 - [Phase 33]: Strip platform suffix at intake in cmd/main.go (not inside Manager) to keep channels.Manager interface simple; bare-UUID maps passed to NewManager and UpdateAssignedSourceIDs in both kick-listener and twitch-listener
+- [Phase 33-pre-migration-cleanup]: HandleMigrationEvent returns nil unconditionally in both managers — error return is a forward-compatible slot for future SDK-defined fatal conditions
+- [Phase 33-pre-migration-cleanup]: consumeMessages retains panic recovery defer alongside new error-logging — two separate safety nets for panic vs application error
 
 ### Pending Todos
 
@@ -86,8 +89,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T16:47:34.907Z
-Stopped at: Completed 33-01-PLAN.md — source ID intake normalization in kick-listener and twitch-listener
+Last session: 2026-03-17T16:48:32.413Z
+Stopped at: Completed 33-pre-migration-cleanup plan 02 (33-02-PLAN.md)
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
