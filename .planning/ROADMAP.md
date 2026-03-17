@@ -265,7 +265,12 @@ Plans:
   1. youtube-listener `cmd/main.go` uses `LeadershipListener` — quota tracker behavior is unchanged; all existing quota-related tests pass against the SDK-backed assignment implementation
   2. twitch-eventsub-listener `cmd/main.go` uses `ListenerBase` — stateless webhook receiver gains standardized heartbeat and health wiring; no existing EventSub webhook test requires modification
   3. All 5 Go listener services (twitch, kick, youtube, youtube-innertube, discord) plus twitch-eventsub-listener are running SDK-backed code in production simultaneously with no active mixed-fleet monitoring alerts
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 38-01-PLAN.md — youtube-listener cmd/main.go LeadershipListener migration + goleak smoke test
+- [ ] 38-02-PLAN.md — twitch-eventsub ChannelManager interface gap fixes (Start re-sign, 3 new methods, compile assertion)
+- [ ] 38-03-PLAN.md — twitch-eventsub cmd/main.go ListenerBase wiring + goleak smoke test
 
 ## Progress
 
@@ -283,7 +288,7 @@ Plans:
 | 35. Migrate twitch-listener | 2/2 | Complete    | 2026-03-17 | - |
 | 36. Migrate kick-listener | 2/2 | Complete    | 2026-03-17 | - |
 | 37. Migrate youtube-innertube and discord-listener | 3/3 | Complete    | 2026-03-17 | - |
-| 38. Migrate youtube-listener and twitch-eventsub-listener | v1.6 | 0/TBD | Not started | - |
+| 38. Migrate youtube-listener and twitch-eventsub-listener | v1.6 | 0/3 | Not started | - |
 
 ---
-*Last updated: 2026-03-17 after Phase 35 planning*
+*Last updated: 2026-03-18 after Phase 38 planning*
