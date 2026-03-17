@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Completed 35-01-PLAN.md
-last_updated: "2026-03-17T21:16:22.076Z"
+stopped_at: Completed 35-02-PLAN.md
+last_updated: "2026-03-17T21:23:22.207Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
-  completed_phases: 20
+  completed_phases: 21
   total_plans: 73
-  completed_plans: 72
+  completed_plans: 73
   percent: 0
 ---
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 34 P02 | 15m | 3 tasks | 8 files |
 | Phase 34 P03 | 10 | 3 tasks | 3 files |
 | Phase 35-migrate-twitch-listener P01 | 3m | 2 tasks | 3 files |
+| Phase 35-migrate-twitch-listener P02 | 5m | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Key decisions relevant to v1.6:
 - [Phase 34]: mockChannelManager defined in test file — satisfies ChannelManager interface without adding public SDK surface
 - [Phase 35-migrate-twitch-listener]: goleak placed in direct require block (not indirect) — forward dep for plan 02 smoke test before any .go file imports it
 - [Phase 35-migrate-twitch-listener]: Compile-time assertion var _ listener.ChannelManager = (*Manager)(nil) added to channels/manager.go — build fails immediately if Manager drifts from 7-method SDK interface
+- [Phase 35-migrate-twitch-listener]: listener.Env used as drop-in for getEnvOrDefault — local helper deleted entirely
+- [Phase 35-migrate-twitch-listener]: nil passed to channels.NewManager for assignedSourceIDs — SDK owns via UpdateAssignedSourceIDs inside base.Start
 
 ### Pending Todos
 
@@ -100,8 +103,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T21:16:22.073Z
-Stopped at: Completed 35-01-PLAN.md
+Last session: 2026-03-17T21:23:22.203Z
+Stopped at: Completed 35-02-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
