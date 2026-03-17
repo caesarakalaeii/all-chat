@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Completed 34-01-PLAN.md
-last_updated: "2026-03-17T20:29:46.733Z"
+stopped_at: Completed 34-02-PLAN.md
+last_updated: "2026-03-17T20:35:17.265Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
   completed_phases: 19
   total_plans: 71
-  completed_plans: 69
+  completed_plans: 70
   percent: 0
 ---
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 33 P01 | 107 | 2 tasks | 3 files |
 | Phase 33-pre-migration-cleanup P02 | 4 | 2 tasks | 5 files |
 | Phase 34 P01 | 4m | 3 tasks | 8 files |
+| Phase 34 P02 | 15m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,8 @@ Key decisions relevant to v1.6:
 - [Phase 33-pre-migration-cleanup]: consumeMessages retains panic recovery defer alongside new error-logging — two separate safety nets for panic vs application error
 - [Phase 34]: serviceName passed explicitly by each listener caller — no hostname auto-detection in NewCoordinatorClient
 - [Phase 34]: ChannelManager interface defined in shared/listener with 7 methods; compile-time assertions deferred to Phase 35
+- [Phase 34]: coordinatorClient is a private interface in base.go — enables mock injection without public API surface
+- [Phase 34]: LeadershipListener uses sourcemanager.NewSigningTokenSource (15min TTL) — matches kick-listener production pattern
 
 ### Pending Todos
 
@@ -92,8 +95,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T20:29:46.731Z
-Stopped at: Completed 34-01-PLAN.md
+Last session: 2026-03-17T20:35:17.263Z
+Stopped at: Completed 34-02-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)

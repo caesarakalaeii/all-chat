@@ -54,13 +54,13 @@ Requirements for the Listener SDK milestone. Each maps to roadmap phases.
 
 ### SDK — Shared Listener Package
 
-- [ ] **SDK-01**: `ListenerBase` struct in `shared/listener/base.go` manages the full shared lifecycle: startup jitter, CoordinatorClient construction, initial assignment query, heartbeat goroutine, assignment refresh goroutine, migration subscriber goroutine, and graceful stop
-- [ ] **SDK-02**: `LeadershipListener` struct in `shared/listener/leadership.go` (embeds `ListenerBase`) constructs `LeadershipCoordinator` + `SourceManagerClient` from environment, with nil-safe passthrough when `SOURCE_MANAGER_SECRET` is absent
+- [x] **SDK-01**: `ListenerBase` struct in `shared/listener/base.go` manages the full shared lifecycle: startup jitter, CoordinatorClient construction, initial assignment query, heartbeat goroutine, assignment refresh goroutine, migration subscriber goroutine, and graceful stop
+- [x] **SDK-02**: `LeadershipListener` struct in `shared/listener/leadership.go` (embeds `ListenerBase`) constructs `LeadershipCoordinator` + `SourceManagerClient` from environment, with nil-safe passthrough when `SOURCE_MANAGER_SECRET` is absent
 - [x] **SDK-03**: `ChannelManager` interface in `shared/listener/channel_manager.go` defines the `Start`, `Stop`, `HandleMigrationEvent`, `UpdateAssignedSourceIDs`, `GetFilteredAssignmentCount` contract that both Twitch and Kick channel managers satisfy
-- [ ] **SDK-04**: `ShutdownCoordinator` in `shared/listener/shutdown.go` implements ordered shutdown: channel manager stop + base stop (parallel) → platform disconnect → HTTP server drain with 10s timeout
-- [ ] **SDK-05**: `ListenerConfig` exposes configurable intervals — heartbeat interval, assignment refresh interval, startup jitter max — so each listener can override defaults and tests can disable jitter via `LISTENER_STARTUP_JITTER_MAX=0`
-- [ ] **SDK-06**: `ListenerConfig` includes `DisableCoordinatorFiltering bool` to preserve the operational rollback mechanism currently in twitch-listener
-- [ ] **SDK-07**: `shared/listener` package exposes `Env(key, defaultValue string) string` helper used by all migrated listeners (eliminates copy-paste env-with-default boilerplate)
+- [x] **SDK-04**: `ShutdownCoordinator` in `shared/listener/shutdown.go` implements ordered shutdown: channel manager stop + base stop (parallel) → platform disconnect → HTTP server drain with 10s timeout
+- [x] **SDK-05**: `ListenerConfig` exposes configurable intervals — heartbeat interval, assignment refresh interval, startup jitter max — so each listener can override defaults and tests can disable jitter via `LISTENER_STARTUP_JITTER_MAX=0`
+- [x] **SDK-06**: `ListenerConfig` includes `DisableCoordinatorFiltering bool` to preserve the operational rollback mechanism currently in twitch-listener
+- [x] **SDK-07**: `shared/listener` package exposes `Env(key, defaultValue string) string` helper used by all migrated listeners (eliminates copy-paste env-with-default boilerplate)
 - [x] **SDK-08**: `NewCoordinatorClient` in `shared/coordination/client.go` accepts an explicit `serviceName string` parameter replacing hostname-prefix auto-detection
 
 ### MIGRATE — Listener Migrations
@@ -74,7 +74,7 @@ Requirements for the Listener SDK milestone. Each maps to roadmap phases.
 
 ### VERIFY — Build and Interface Verification
 
-- [ ] **VERIFY-01**: `make build-all` Makefile target builds all listener modules in one command, run in CI on every PR to catch `replace`-directive version drift
+- [x] **VERIFY-01**: `make build-all` Makefile target builds all listener modules in one command, run in CI on every PR to catch `replace`-directive version drift
 - [ ] **VERIFY-02**: Each migrated listener has a compile-time interface assertion (`var _ listener.ChannelManager = (*channels.Manager)(nil)`) in its `channels/manager.go` file
 
 ## Future Requirements
@@ -135,13 +135,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | PREP-01 | Phase 33 | Complete |
 | PREP-02 | Phase 33 | Complete |
-| SDK-01 | Phase 34 | Pending |
-| SDK-02 | Phase 34 | Pending |
+| SDK-01 | Phase 34 | Complete |
+| SDK-02 | Phase 34 | Complete |
 | SDK-03 | Phase 34 | Complete |
-| SDK-04 | Phase 34 | Pending |
-| SDK-05 | Phase 34 | Pending |
-| SDK-06 | Phase 34 | Pending |
-| SDK-07 | Phase 34 | Pending |
+| SDK-04 | Phase 34 | Complete |
+| SDK-05 | Phase 34 | Complete |
+| SDK-06 | Phase 34 | Complete |
+| SDK-07 | Phase 34 | Complete |
 | SDK-08 | Phase 34 | Complete |
 | MIGRATE-01 | Phase 35 | Pending |
 | MIGRATE-02 | Phase 36 | Pending |
@@ -149,7 +149,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIGRATE-04 | Phase 37 | Pending |
 | MIGRATE-05 | Phase 37 | Pending |
 | MIGRATE-06 | Phase 38 | Pending |
-| VERIFY-01 | Phase 34 | Pending |
+| VERIFY-01 | Phase 34 | Complete |
 | VERIFY-02 | Phase 35 | Pending |
 
 **Coverage:**
