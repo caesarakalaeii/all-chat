@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -31,7 +32,7 @@ func TestMigrationSubscriber_ErrorHandling(t *testing.T) {
 	var receivedIDs []string
 
 	// Handler that always returns an error so we can verify the loop continues
-	handler := func(event *MigrationEvent) error {
+	handler := func(event *coordination.MigrationEvent) error {
 		mu.Lock()
 		defer mu.Unlock()
 		callCount++
@@ -61,14 +62,14 @@ func TestMigrationSubscriber_ErrorHandling(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	sub := NewMigrationSubscriber(redisClient, handler, logger)
+	sub := coordination.NewMigrationSubscriber(redisClient, handler, logger)
 	if err := sub.Subscribe(ctx); err != nil {
 		t.Skipf("Redis unavailable: %v", err)
 	}
 
 	// Publish two events to the migration:events channel
-	event1, _ := json.Marshal(&MigrationEvent{MigrationID: "mig-001", ChannelID: "ch-1", Platform: "twitch"})
-	event2, _ := json.Marshal(&MigrationEvent{MigrationID: "mig-002", ChannelID: "ch-2", Platform: "twitch"})
+	event1, _ := json.Marshal(&coordination.MigrationEvent{MigrationID: "mig-001", ChannelID: "ch-1", Platform: "twitch"})
+	event2, _ := json.Marshal(&coordination.MigrationEvent{MigrationID: "mig-002", ChannelID: "ch-2", Platform: "twitch"})
 
 	pub := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	defer pub.Close()

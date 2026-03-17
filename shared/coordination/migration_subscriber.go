@@ -13,11 +13,11 @@ import (
 type MigrationSubscriber struct {
 	redisClient *redis.Client
 	logger      *zap.Logger
-	handler     func(*MigrationEvent)
+	handler     func(*MigrationEvent) error
 }
 
 // NewMigrationSubscriber creates a new migration event subscriber
-func NewMigrationSubscriber(redisClient *redis.Client, handler func(*MigrationEvent), logger *zap.Logger) *MigrationSubscriber {
+func NewMigrationSubscriber(redisClient *redis.Client, handler func(*MigrationEvent) error, logger *zap.Logger) *MigrationSubscriber {
 	return &MigrationSubscriber{
 		redisClient: redisClient,
 		handler:     handler,
@@ -105,7 +105,13 @@ func (s *MigrationSubscriber) consumeMessages(ctx context.Context, pubsub *redis
 					}
 				}()
 
-				s.handler(&event)
+				if err := s.handler(&event); err != nil {
+					s.logger.Error("Migration event handler returned error",
+						zap.String("migration_id", event.MigrationID),
+						zap.Error(err),
+					)
+					// Do not return — continue processing subsequent events
+				}
 			}()
 		}
 	}
