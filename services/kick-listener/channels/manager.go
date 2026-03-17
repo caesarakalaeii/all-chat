@@ -15,6 +15,7 @@ import (
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
 	"github.com/caesar/all-chat/shared/coordination"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -24,6 +25,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
+
+// Compile-time assertion: Manager must satisfy the SDK ChannelManager interface.
+var _ listener.ChannelManager = (*Manager)(nil)
 
 const (
 	// Kick API endpoint for channel info
