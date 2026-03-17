@@ -222,7 +222,11 @@ Plans:
   2. `var _ listener.ChannelManager = (*channels.Manager)(nil)` compile-time assertion is present in twitch-listener `channels/manager.go` and the build succeeds
   3. `messages_published_total` metric for twitch-listener shows no drop greater than 10% sustained for 5 minutes after the SDK-backed deployment replaces the prior deployment
   4. All existing twitch-listener unit tests pass without modification
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 35-01-PLAN.md — Compile-time ChannelManager assertion + goleak dependency
+- [ ] 35-02-PLAN.md — cmd/main.go SDK migration + goroutine leak smoke test
 
 ### Phase 36: Migrate kick-listener
 **Goal**: kick-listener uses both ListenerBase and LeadershipListener from the SDK, confirming both archetypes work correctly in production
@@ -267,10 +271,10 @@ Plans:
 | 27-32 | v1.5 | 16/16 | Complete | 2026-03-16 |
 | 33. Pre-Migration Cleanup | v1.6 | 2/2 | Complete | 2026-03-17 |
 | 34. SDK Package Definition | 3/3 | Complete    | 2026-03-17 | - |
-| 35. Migrate twitch-listener | v1.6 | 0/TBD | Not started | - |
+| 35. Migrate twitch-listener | v1.6 | 0/2 | Not started | - |
 | 36. Migrate kick-listener | v1.6 | 0/TBD | Not started | - |
 | 37. Migrate youtube-innertube and discord-listener | v1.6 | 0/TBD | Not started | - |
 | 38. Migrate youtube-listener and twitch-eventsub-listener | v1.6 | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-03-17 after Phase 34 planning*
+*Last updated: 2026-03-17 after Phase 35 planning*
