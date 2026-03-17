@@ -160,7 +160,7 @@ func main() {
 		log.Fatal("SERVICE_JWT_SECRET is required for coordinator authentication")
 	}
 
-	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, log)
+	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, "twitch-eventsub-listener", log)
 	log.Info("Initialized coordinator client", zap.String("coordinator_url", coordinatorURL))
 
 	// Start JWT refresh to prevent token expiration (refreshes every 12 hours)

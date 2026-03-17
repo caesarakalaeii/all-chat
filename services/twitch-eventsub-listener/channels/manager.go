@@ -319,7 +319,7 @@ func (m *Manager) decryptToken(encryptedToken string) (string, error) {
 //   - Only the leader creates/deletes subscriptions
 //   - Webhook events are received on all pods (stateless HTTP endpoint)
 //   - Migration is about subscription ownership, not active connections
-func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
+func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) error {
 	// EventSub migrations don't require immediate action because:
 	// 1. Webhooks are stateless - all pods can receive events
 	// 2. Only leader creates/deletes subscriptions
@@ -351,4 +351,5 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 			zap.String("channel_id", event.ChannelID),
 		)
 	}
+	return nil
 }
