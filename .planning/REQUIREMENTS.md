@@ -56,12 +56,12 @@ Requirements for the Listener SDK milestone. Each maps to roadmap phases.
 
 - [ ] **SDK-01**: `ListenerBase` struct in `shared/listener/base.go` manages the full shared lifecycle: startup jitter, CoordinatorClient construction, initial assignment query, heartbeat goroutine, assignment refresh goroutine, migration subscriber goroutine, and graceful stop
 - [ ] **SDK-02**: `LeadershipListener` struct in `shared/listener/leadership.go` (embeds `ListenerBase`) constructs `LeadershipCoordinator` + `SourceManagerClient` from environment, with nil-safe passthrough when `SOURCE_MANAGER_SECRET` is absent
-- [ ] **SDK-03**: `ChannelManager` interface in `shared/listener/channel_manager.go` defines the `Start`, `Stop`, `HandleMigrationEvent`, `UpdateAssignedSourceIDs`, `GetFilteredAssignmentCount` contract that both Twitch and Kick channel managers satisfy
+- [x] **SDK-03**: `ChannelManager` interface in `shared/listener/channel_manager.go` defines the `Start`, `Stop`, `HandleMigrationEvent`, `UpdateAssignedSourceIDs`, `GetFilteredAssignmentCount` contract that both Twitch and Kick channel managers satisfy
 - [ ] **SDK-04**: `ShutdownCoordinator` in `shared/listener/shutdown.go` implements ordered shutdown: channel manager stop + base stop (parallel) → platform disconnect → HTTP server drain with 10s timeout
 - [ ] **SDK-05**: `ListenerConfig` exposes configurable intervals — heartbeat interval, assignment refresh interval, startup jitter max — so each listener can override defaults and tests can disable jitter via `LISTENER_STARTUP_JITTER_MAX=0`
 - [ ] **SDK-06**: `ListenerConfig` includes `DisableCoordinatorFiltering bool` to preserve the operational rollback mechanism currently in twitch-listener
 - [ ] **SDK-07**: `shared/listener` package exposes `Env(key, defaultValue string) string` helper used by all migrated listeners (eliminates copy-paste env-with-default boilerplate)
-- [ ] **SDK-08**: `NewCoordinatorClient` in `shared/coordination/client.go` accepts an explicit `serviceName string` parameter replacing hostname-prefix auto-detection
+- [x] **SDK-08**: `NewCoordinatorClient` in `shared/coordination/client.go` accepts an explicit `serviceName string` parameter replacing hostname-prefix auto-detection
 
 ### MIGRATE — Listener Migrations
 
@@ -137,12 +137,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PREP-02 | Phase 33 | Complete |
 | SDK-01 | Phase 34 | Pending |
 | SDK-02 | Phase 34 | Pending |
-| SDK-03 | Phase 34 | Pending |
+| SDK-03 | Phase 34 | Complete |
 | SDK-04 | Phase 34 | Pending |
 | SDK-05 | Phase 34 | Pending |
 | SDK-06 | Phase 34 | Pending |
 | SDK-07 | Phase 34 | Pending |
-| SDK-08 | Phase 34 | Pending |
+| SDK-08 | Phase 34 | Complete |
 | MIGRATE-01 | Phase 35 | Pending |
 | MIGRATE-02 | Phase 36 | Pending |
 | MIGRATE-03 | Phase 38 | Pending |
