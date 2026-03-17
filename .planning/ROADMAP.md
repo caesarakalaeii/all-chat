@@ -282,7 +282,7 @@ Plans:
 | 34. SDK Package Definition | 3/3 | Complete    | 2026-03-17 | - |
 | 35. Migrate twitch-listener | 2/2 | Complete    | 2026-03-17 | - |
 | 36. Migrate kick-listener | 2/2 | Complete    | 2026-03-17 | - |
-| 37. Migrate youtube-innertube and discord-listener | 3/3 | Complete   | 2026-03-17 | - |
+| 37. Migrate youtube-innertube and discord-listener | 3/3 | Complete    | 2026-03-17 | - |
 | 38. Migrate youtube-listener and twitch-eventsub-listener | v1.6 | 0/TBD | Not started | - |
 
 ---
