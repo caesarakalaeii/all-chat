@@ -51,3 +51,9 @@ func NewLeadershipListenerFromEnv(base *ListenerBase, platform string, logger *z
 func (l *LeadershipListener) LeadershipCoordinator() *sourcemanager.LeadershipCoordinator {
 	return l.coordinator
 }
+
+// SMClient returns the source manager client.
+// May be nil when SOURCE_MANAGER_SECRET was absent — callers must nil-check before use.
+func (l *LeadershipListener) SMClient() *sourcemanager.Client {
+	return l.smClient
+}
