@@ -236,7 +236,11 @@ Plans:
   1. kick-listener `cmd/main.go` uses `ListenerBase` for assignment coordination and `LeadershipListener` for per-stream ownership — manual construction of both CoordinatorClient and LeadershipCoordinator is removed from the file
   2. kick-listener compiles with string-keyed channel manager (`strconv.Itoa(chatroomID)` convention documented in code) and all existing Kick channel manager tests pass
   3. Both SDK archetypes (assignment-based and leadership-based) have been exercised against live Kick traffic with `messages_published_total` showing no regression
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 36-01-PLAN.md — Compile-time ChannelManager assertion + goleak direct dep (Wave 0 prerequisites)
+- [ ] 36-02-PLAN.md — cmd/main.go SDK migration (NewLeadershipListenerFromEnv) + goroutine leak smoke test
 
 ### Phase 37: Migrate youtube-innertube and discord-listener
 **Goal**: Both leadership-only listeners use LeadershipListener from the SDK, validating the archetype without assignment coordinator complexity
