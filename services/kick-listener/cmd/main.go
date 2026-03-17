@@ -132,7 +132,12 @@ func main() {
 	// Extract assigned source IDs into map for filtering
 	assignedSourceIDs := make(map[string]bool)
 	for _, a := range assignments {
-		assignedSourceIDs[a.SourceID] = true
+		sourceID := a.SourceID
+		// Strip platform suffix if present (e.g., "abc123:kick" → "abc123")
+		if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
+			sourceID = sourceID[:colonIdx]
+		}
+		assignedSourceIDs[sourceID] = true
 	}
 
 	// Configure Pusher connection
@@ -259,7 +264,12 @@ func main() {
 				// Update assignedSourceIDs map
 				newAssignedIDs := make(map[string]bool)
 				for _, a := range newAssignments {
-					newAssignedIDs[a.SourceID] = true
+					sourceID := a.SourceID
+					// Strip platform suffix if present (e.g., "abc123:kick" → "abc123")
+					if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
+						sourceID = sourceID[:colonIdx]
+					}
+					newAssignedIDs[sourceID] = true
 				}
 
 				channelMgr.UpdateAssignedSourceIDs(newAssignedIDs)
