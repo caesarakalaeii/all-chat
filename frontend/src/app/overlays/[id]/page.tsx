@@ -880,6 +880,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [maxMessages, setMaxMessages] = useState(50)
   const [messageDuration, setMessageDuration] = useState(15)
   const [disableMessageFade, setDisableMessageFade] = useState(false)
+  const [invertMessageOrder, setInvertMessageOrder] = useState(false)
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
@@ -951,6 +952,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             setMessageDuration(display.message_duration)
           if (typeof display.disable_message_fade === 'boolean')
             setDisableMessageFade(display.disable_message_fade)
+          setInvertMessageOrder(display.invert_message_order === true)
           if (
             display.platform_badge_position === 'before' ||
             display.platform_badge_position === 'after'
@@ -1265,6 +1267,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           message_duration: messageDuration,
           max_messages: maxMessages,
           disable_message_fade: disableMessageFade,
+          invert_message_order: invertMessageOrder,
           platform_badge_position: platformBadgePosition,
           platform_badge_style: platformBadgeStyle,
           show_platform_badge: showPlatformBadge,
@@ -1673,6 +1676,22 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 </label>
                 <p className="mt-1 ml-5 text-xs text-text-sub">
                   Messages stay visible until max is reached
+                </p>
+              </div>
+
+              {/* Invert message order */}
+              <div>
+                <label className="flex items-center gap-2 text-xs text-text-sub">
+                  <input
+                    type="checkbox"
+                    checked={invertMessageOrder}
+                    onChange={(e) => setInvertMessageOrder(e.target.checked)}
+                    className="accent-twitch"
+                  />
+                  Invert Message Order
+                </label>
+                <p className="mt-1 ml-5 text-xs text-text-sub">
+                  Show newest messages at the top instead of the bottom
                 </p>
               </div>
 
