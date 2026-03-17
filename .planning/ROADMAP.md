@@ -260,7 +260,7 @@ Plans:
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27-32 | v1.5 | 16/16 | Complete | 2026-03-16 |
-| 33. Pre-Migration Cleanup | 2/2 | Complete   | 2026-03-17 | - |
+| 33. Pre-Migration Cleanup | 2/2 | Complete    | 2026-03-17 | - |
 | 34. SDK Package Definition | v1.6 | 0/TBD | Not started | - |
 | 35. Migrate twitch-listener | v1.6 | 0/TBD | Not started | - |
 | 36. Migrate kick-listener | v1.6 | 0/TBD | Not started | - |
