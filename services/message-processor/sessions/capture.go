@@ -69,6 +69,11 @@ func (ec *EventCapture) CaptureIfActive(ctx context.Context, msg *models.Unified
 
 	// Get session_id
 	sessionID, err := ec.redis.HGet(ctx, sessionKey, "session_id").Result()
+	if err == redis.Nil {
+		// Partial/corrupted session hash: state field exists but session_id missing.
+		// Treat as no active session rather than propagating a noisy error.
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to get session_id: %w", err)
 	}
