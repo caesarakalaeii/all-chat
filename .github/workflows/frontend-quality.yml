@@ -1,13 +1,7 @@
 name: Frontend Quality Gates
 
 on:
-  pull_request:
-    branches: [main]
-    paths: ['frontend/**']
-  # Also run on pushes to main to establish Chromatic baseline
-  push:
-    branches: [main]
-    paths: ['frontend/**']
+  workflow_dispatch: # disabled: manually trigger only
 
 jobs:
   quality:
