@@ -1,699 +1,476 @@
-# Architecture Patterns: Discord Listener + Relay
+# Architecture Patterns: Listener SDK
 
-**Domain:** Bidirectional Discord integration for All-Chat microservices platform
-**Researched:** 2026-03-15
-**Confidence:** HIGH (inbound listener, sharding model, loop prevention) / MEDIUM (relay rate-limit specifics)
-
----
-
-## Recommendation: One Service, Two Goroutine Groups
-
-**Use a single `discord-listener` service** that handles both inbound (Gateway WebSocket → Redis Streams) and outbound relay (Redis Pub/Sub → Discord REST). Do not create a separate relay service.
-
-**Rationale:**
-- Both directions share the same Discord bot token and REST client. Splitting means two services managing the same credential lifecycle.
-- Both directions need the same guild/channel membership knowledge. Sharing in-process eliminates a cross-service lookup on every relay message.
-- Loop prevention is simplest with shared state: the in-process source registry can tag relay-exclusion channel IDs without a round-trip.
-- Precedent in codebase: Kick listener handles multiple concerns (subscribe, message, deletion) in one service. No existing service is split purely on direction.
-- The relay workload is modest (one REST POST per non-Discord message per configured relay target), not an independent scaling axis.
-
-**When to reconsider splitting:** If the platform grows to thousands of guilds, relay throughput independently saturates Discord REST rate limits, or separate on-call ownership is needed. At v1.5 scale, that is not the case.
+**Domain:** Shared Go SDK for listener microservices in All-Chat platform
+**Researched:** 2026-03-17
+**Confidence:** HIGH — based entirely on direct code inspection of the live codebase
 
 ---
 
 ## Recommended Architecture
 
+The Listener SDK lives in `/shared/listener/` as a new package within the existing `github.com/caesar/all-chat/shared` Go module. No new Go module is introduced. No `go.work` file is needed. All listener `go.mod` files already use `replace github.com/caesar/all-chat/shared => ../../shared` to point at the monorepo `shared/` directory. Adding a new package inside `shared/` is automatically available to all listeners that already declare this replace directive.
+
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     discord-listener (new service)                       │
-│                                                                          │
-│  ┌──────────────────────┐    ┌────────────────────────────────────────┐  │
-│  │  Inbound Goroutine   │    │  Relay Goroutine Group                 │  │
-│  │  Group               │    │                                        │  │
-│  │                      │    │  • Subscribes to overlay:{id} Pub/Sub  │  │
-│  │  • Discord Gateway   │    │  • Filters: skip platform=="discord"   │  │
-│  │    WebSocket (shard) │    │    AND source_channel_id in           │  │
-│  │  • Receives MESSAGE_ │    │    configured_inbound_channels         │  │
-│  │    CREATE events     │    │  • POSTs to Discord REST API           │  │
-│  │  • Ignores bot's own │    │    POST /channels/{id}/messages        │  │
-│  │    messages (author  │    │  • Respects per-channel rate limits    │  │
-│  │    .bot == true)     │    │  • Queues with token bucket per        │  │
-│  │  • Publishes to      │    │    channel_id (5 msg/s)                │  │
-│  │    Redis Streams     │    │                                        │  │
-│  │    chat:raw          │    └────────────────────────────────────────┘  │
-│  └──────────────────────┘                                                │
-│                                                                          │
-│  ┌──────────────────────────────────────────────────────────────────┐    │
-│  │  Channel Registry (in-memory + Redis)                            │    │
-│  │  • guild_id → shard_id mapping                                   │    │
-│  │  • source registry: channel_id → []overlay_id                   │    │
-│  │  • relay registry: overlay_id → outbound_channel_id             │    │
-│  │  • inbound_channel_ids set (for loop-prevention lookup)         │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-│  ┌──────────────────────────────────────────────────────────────────┐    │
-│  │  Shard Manager                                                   │    │
-│  │  • Owns N Gateway WebSocket connections (one per shard)         │    │
-│  │  • Shard ID = guild_id % num_shards                             │    │
-│  │  • Only one pod per shard (source-manager leader election)      │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────┘
-        │ Inbound                              │ Relay
-        ▼                                      │
-Redis Streams (chat:raw)            Redis Pub/Sub (overlay:{id})
-        │                                      ▲
-        ▼                                      │
-Message Processor                   Message Processor
-(adds platform="discord")           (publishes after normalization)
+shared/
+├── coordination/            # EXISTING: CoordinatorClient, MigrationSubscriber
+├── sourcemanager/           # EXISTING: LeadershipCoordinator, Client, LeadershipClient
+├── metrics/                 # EXISTING: ShardMetrics, ListenerMetrics
+├── listener/                # NEW: Listener SDK
+│   ├── base.go              # NEW: ListenerBase struct + Config
+│   ├── leadership.go        # NEW: LeadershipListener variant
+│   ├── channel_manager.go   # NEW: ChannelManager interface + BaseChannelManager
+│   └── shutdown.go          # NEW: ShutdownCoordinator (Gin + platform connections)
+├── auth/                    # EXISTING
+├── database/                # EXISTING
+└── ...
 ```
+
+The two listener archetypes require different SDK types:
+
+| Archetype | Examples | SDK Type |
+|-----------|----------|----------|
+| Sharded/assigned listeners | Twitch, Kick, (future Discord) | `ListenerBase` |
+| Leadership-per-stream listeners | YouTube InnerTube, Kick (leadership aspect), Discord shard | `LeadershipListener` (embeds `ListenerBase`) |
+
+---
+
+## Package Structure
+
+### `shared/listener/base.go` — ListenerBase
+
+`ListenerBase` replaces the ~120 lines of identical startup wiring found in `twitch-listener/cmd/main.go` and `kick-listener/cmd/main.go`. It encapsulates:
+
+1. Startup jitter (`rand.Intn(30)` seconds — prevents thundering herd)
+2. Assignment query (blocks indefinitely with backoff via `CoordinatorClient.QueryAssignments`)
+3. JWT refresh background task (`CoordinatorClient.StartJWTRefresh`)
+4. Heartbeat loop (10-second interval, `CoordinatorClient.PublishHeartbeat`)
+5. Assignment refresh loop (60-second interval, re-queries coordinator)
+6. Migration subscriber (wires `coordination.NewMigrationSubscriber` to the platform's `HandleMigrationEvent`)
+
+```go
+// Package path: github.com/caesar/all-chat/shared/listener
+
+type Config struct {
+    ServiceName     string
+    CoordinatorURL  string
+    ServiceSecret   string
+    PodID           string
+    JitterMaxSec    int           // default: 30
+    HeartbeatInterval time.Duration // default: 10s
+    AssignmentRefreshInterval time.Duration // default: 60s
+    EnableFiltering bool
+    Logger          *zap.Logger
+    RedisClient     *redis.Client
+}
+
+type ListenerBase struct {
+    Config
+    coordClient *coordination.CoordinatorClient
+    // unexported fields for goroutine lifecycle
+}
+
+// Start performs jitter + assignment query. Returns initial assigned source IDs.
+// Caller MUST call Stop() on shutdown.
+func (b *ListenerBase) Start(ctx context.Context) (map[string]bool, error)
+
+// Run starts background loops: heartbeat, assignment refresh, migration subscriber.
+// migrationHandler is the platform-specific HandleMigrationEvent method.
+func (b *ListenerBase) Run(ctx context.Context, migrationHandler func(*coordination.MigrationEvent))
+
+// Stop signals all background loops to exit gracefully.
+func (b *ListenerBase) Stop()
+
+// GetFilteredAssignedSourceIDs returns the current assignment map (updated by refresh loop).
+func (b *ListenerBase) GetFilteredAssignedSourceIDs() map[string]bool
+```
+
+### `shared/listener/leadership.go` — LeadershipListener
+
+`LeadershipListener` embeds `ListenerBase` and adds:
+
+- Wiring for `sourcemanager.LeadershipCoordinator` (claim/renew/release per stream)
+- Source-manager client creation (reuses `sourcemanager.NewSigningTokenSource` + `sourcemanager.NewClient`)
+- Nil-safe operation: coordinator is optional (logs warning if `SOURCE_MANAGER_SECRET` is empty)
+
+```go
+type LeadershipConfig struct {
+    Config                           // embeds ListenerBase config
+    Platform            string       // "youtube", "kick", "discord"
+    SourceManagerURL    string
+    SourceManagerSecret string
+    RenewalInterval     time.Duration // default: 5s
+}
+
+type LeadershipListener struct {
+    ListenerBase
+    LeaderCoord *sourcemanager.LeadershipCoordinator
+    SMClient    *sourcemanager.Client
+}
+
+// New creates the coordinator + client (or nil if secret is empty) and returns a LeadershipListener.
+func NewLeadershipListener(cfg LeadershipConfig) (*LeadershipListener, error)
+```
+
+Usage: youtube-listener-innertube and kick-listener embed `LeadershipListener` instead of wiring their own `sourcemanager.NewLeadershipCoordinator` calls (currently duplicated in both services).
+
+### `shared/listener/channel_manager.go` — ChannelManager
+
+`ChannelManager` is an **interface** that both Twitch and Kick channel managers already satisfy (they have matching method sets). Extracting the interface to `/shared/listener/` enables `ListenerBase.Run` to accept any channel manager without importing platform-specific packages.
+
+```go
+// ChannelManager is the interface all platform channel managers must implement.
+type ChannelManager interface {
+    // Start begins periodic sync and DB LISTEN. Called after platform connection is established.
+    Start(ctx context.Context) error
+
+    // Stop gracefully stops sync loops and releases resources.
+    Stop()
+
+    // HandleMigrationEvent processes a channel migration event from the coordinator.
+    HandleMigrationEvent(event *coordination.MigrationEvent)
+
+    // UpdateAssignedSourceIDs replaces the current assignment filter map.
+    UpdateAssignedSourceIDs(ids map[string]bool)
+
+    // GetFilteredAssignmentCount returns the number of assigned sources with active channels.
+    GetFilteredAssignmentCount() int
+}
+```
+
+The existing `twitch-listener/channels.Manager` and `kick-listener/channels.Manager` already implement all these methods. Migration requires only adding the `ChannelManager` interface import — no structural changes to either manager.
+
+**Where ChannelManager lives relative to existing packages:**
+
+- `shared/coordination/` remains unchanged — it owns `CoordinatorClient`, `MigrationSubscriber`, `MigrationEvent`
+- `shared/sourcemanager/` remains unchanged — it owns `LeadershipCoordinator`, `Client`, `LeadershipClient`
+- `shared/listener/channel_manager.go` introduces the `ChannelManager` **interface** that ties them together at the SDK layer. The concrete implementations stay in each listener's `channels/` package.
+
+This preserves the existing package boundaries while enabling `ListenerBase.Run` to accept a `ChannelManager` and wire migration events without importing platform-specific code.
+
+### `shared/listener/shutdown.go` — ShutdownCoordinator
+
+Both Twitch and Kick implement identical shutdown sequences (channel manager stop → platform disconnect → HTTP server graceful shutdown). `ShutdownCoordinator` extracts this into a reusable helper.
+
+```go
+// PlatformConnector is the minimal interface for platform connections that need cleanup.
+type PlatformConnector interface {
+    Disconnect() error
+}
+
+type ShutdownConfig struct {
+    Logger       *zap.Logger
+    HTTPServer   *http.Server
+    HTTPTimeout  time.Duration // default: 10s
+}
+
+type ShutdownCoordinator struct {
+    cfg ShutdownConfig
+}
+
+// Wait blocks until SIGINT or SIGTERM, then calls Stop on the ChannelManager,
+// Disconnect on the platform connector, and Shutdown on the HTTP server.
+func (s *ShutdownCoordinator) Wait(
+    ctx context.Context,
+    base *ListenerBase,
+    channelMgr ChannelManager,
+    conn PlatformConnector, // nil if no platform disconnect needed
+)
+```
+
+---
+
+## Go Module and Workspace Strategy
+
+**Decision: No `go.work` file. Use existing `replace` directives.**
+
+Rationale from code inspection:
+
+1. Every listener `go.mod` already has: `replace github.com/caesar/all-chat/shared => ../../shared`
+2. Adding `shared/listener/*.go` to the existing `shared` module is automatically visible — no `go.mod` or `go.work` changes needed
+3. A `go.work` file would enable cross-module tooling (e.g., `go build ./...` from root), but the existing per-service build model (each service's `Dockerfile` runs `go build ./cmd/...`) does not require it
+4. Go workspace (`go work`) is useful when multiple modules need simultaneous development. Since the SDK lives in `shared/` (already an existing module), and listeners already depend on it via `replace`, there is no cross-module cycle to solve.
+
+**What must be added to `shared/go.mod`:**
+
+The new `shared/listener/` package imports `github.com/google/uuid` (already in `shared/go.mod` as indirect via `sourcemanager`) and `github.com/redis/go-redis/v9` (already direct). No new dependencies are required.
+
+**If a `go.work` is later desired** (e.g., for monorepo-wide `go vet` in CI), the minimal workspace file would be:
+
+```
+// go.work — root of monorepo
+go 1.25.6
+
+use (
+    ./shared
+    ./services/twitch-listener
+    ./services/kick-listener
+    ./services/youtube-listener
+    ./services/youtube-listener-innertube
+    ./services/discord-listener
+    ./services/message-processor
+    // ... all Go services
+)
+```
+
+This is a future improvement, not a prerequisite for the SDK milestone.
 
 ---
 
 ## Component Boundaries
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| **discord-listener** (NEW) | Gateway WebSocket shards, inbound publish, relay subscribe + POST | Redis Streams (write), Redis Pub/Sub (subscribe), Discord Gateway WS, Discord REST API, source-manager (leadership), PostgreSQL (channel registry), auth-service (bot token storage) |
-| **source-manager** (EXTEND) | Leader election for shard ownership | discord-listener replicas |
-| **auth-service** (EXTEND) | Store Discord bot token (OAuth2 "Add to Server" flow) | PostgreSQL (oauth_tokens), discord-listener |
-| **overlay-manager** (EXTEND) | CRUD for discord sources and relay config | PostgreSQL, discord-listener (via NOTIFY) |
-| **message-processor** (EXTEND) | Add `discord` normalizer, parse MESSAGE_CREATE payload | Redis Streams (read), Redis Pub/Sub (write) |
+| Component | Responsibility | NEW or MODIFIED |
+|-----------|---------------|-----------------|
+| `shared/listener/base.go` | Startup sequence: jitter, assignment query, JWT refresh, heartbeat loop, assignment refresh loop | NEW |
+| `shared/listener/leadership.go` | LeadershipListener: embeds ListenerBase, adds leader election wiring | NEW |
+| `shared/listener/channel_manager.go` | ChannelManager interface definition | NEW |
+| `shared/listener/shutdown.go` | Graceful shutdown: channel manager stop + platform disconnect + HTTP server shutdown | NEW |
+| `shared/coordination/` | CoordinatorClient, MigrationSubscriber, MigrationEvent, Assignment | UNCHANGED |
+| `shared/sourcemanager/` | LeadershipCoordinator, Client, LeadershipClient | UNCHANGED |
+| `shared/metrics/` | ShardMetrics, ListenerMetrics | UNCHANGED |
+| `twitch-listener/channels/manager.go` | Concrete ChannelManager implementation, Twitch-specific IRC join/part logic | MODIFY: add interface compliance, remove duplicated SDK wiring from cmd/main.go |
+| `kick-listener/channels/manager.go` | Concrete ChannelManager implementation, Kick-specific Pusher subscribe/unsubscribe | MODIFY: same as above |
+| `twitch-listener/cmd/main.go` | Platform setup: IRC connect, Gin routes, health handlers | MODIFY: replace ~120 lines of coordination wiring with ListenerBase + ShutdownCoordinator |
+| `kick-listener/cmd/main.go` | Platform setup: Pusher connect, Gin routes, health handlers | MODIFY: same as above |
+| `youtube-listener-innertube/cmd/main.go` | Platform setup: InnerTube client, stream manager, Gin routes | MODIFY: replace LeadershipCoordinator wiring with LeadershipListener |
+| `discord-listener/cmd/main.go` | Platform setup: Gateway shard, relay worker, Gin routes | MODIFY: use LeadershipListener for shard ownership (already exists as a service) |
 
 ---
 
-## Data Flow: Inbound (Discord → Overlay)
+## Graceful Shutdown Coordination
+
+The existing shutdown pattern (from both Twitch and Kick main.go) is:
 
 ```
-1. User adds Discord channel as source to overlay
-   overlay-manager inserts:
-   platform="discord", channel_id="{discord_channel_id}",
-   config={"guild_id":"...", "inbound_channel_id":"..."}
-
-2. source-manager detects new discord source
-   → NOTIFY discord_source_changes
-
-3. discord-listener receives NOTIFY
-   → Channel manager adds channel to in-memory registry
-   → Shard manager ensures shard for guild_id is active
-   → Subscribes to MESSAGE_CREATE events on that channel
-
-4. Discord user posts message
-   → Gateway sends MESSAGE_CREATE on shard for guild_id % num_shards
-   → discord-listener receives event
-   → Tags message with source_channel_id
-
-5. discord-listener publishes to Redis Streams chat:raw:
-   {
-     "message_id":   "<discord_message_snowflake>",
-     "platform":     "discord",
-     "overlay_id":   "<overlay_uuid>",
-     "channel_id":   "<discord_channel_id>",
-     "channel_name": "<#channel-name>",
-     "user_id":      "<discord_user_snowflake>",
-     "username":     "<username#discriminator>",
-     "text":         "<message content>",
-     "timestamp":    "<ISO8601>",
-     "tags": {
-       "guild_id":          "<discord_guild_id>",
-       "guild_name":        "<server name>",
-       "inbound_channel_id": "<discord_channel_id>",
-       "is_bot":            "false"
-     },
-     "raw_message":  <full MESSAGE_CREATE JSON>
-   }
-
-6. message-processor normalizes → publishes to overlay:{overlay_id}
-
-7. API Gateway WebSocket → overlay client receives message
+SIGINT/SIGTERM received
+  → channelMgr.Stop()          (drains sync loops, stops DB LISTEN, waits WaitGroup)
+  → ircConn.Disconnect() / wsClient.Disconnect()   (closes platform connection)
+  → srv.Shutdown(ctx with 10s timeout)             (HTTP server drains in-flight requests)
 ```
+
+`ShutdownCoordinator.Wait` encapsulates this sequence. The critical ordering constraint is:
+
+1. **Channel manager MUST stop before platform disconnect.** The channel manager's `Stop()` closes `stopChan` and calls `wg.Wait()`, ensuring all sync goroutines have exited before the IRC/WebSocket connection is torn down. If the platform connection is closed first, running goroutines that attempt to `Join`/`Subscribe` channels will panic or log errors.
+
+2. **HTTP server shutdown is always last.** Health probes must remain responsive during the channel manager drain phase (Kubernetes readiness probe may be polled during pod termination). The HTTP server is shut down only after all platform state has been cleaned up.
+
+3. **ListenerBase.Stop() runs concurrently with ChannelManager.Stop().** The background loops (heartbeat, assignment refresh) do not interact with the channel manager and can be stopped in parallel. `ShutdownCoordinator.Wait` stops both concurrently, then waits for both, before closing the platform connection.
+
+For `LeadershipListener`-based services (YouTube InnerTube, Discord), the `LeadershipCoordinator.Stop()` must be called **before** the HTTP server shutdown but **after** platform connections are released. The `LeadershipCoordinator.Stop()` fires `ReleaseLeadership` calls for all active leases via goroutines — these are best-effort (non-blocking), so they do not extend the shutdown deadline.
 
 ---
 
-## Data Flow: Outbound Relay (Overlay → Discord)
+## Data Flow: How SDK Wires Into Platform Message Path
+
+The SDK does not touch the message publishing path. It only manages the lifecycle (startup, assignment, migration, shutdown). Platform-specific code remains responsible for:
 
 ```
-1. User configures relay: overlay X → discord channel Y
-   overlay-manager inserts config:
-   config={"relay_channel_id": "<discord_channel_id>", "relay_enabled": true}
-
-2. discord-listener subscribes to overlay:{overlay_id} on Redis Pub/Sub
-
-3. Message arrives on overlay:{overlay_id}
-   discord-listener receives UnifiedMessage
-
-4. Loop prevention check (in-process, O(1)):
-   IF message.platform == "discord"
-      AND message.tags["inbound_channel_id"] IN inbound_channel_ids
-   THEN DROP (this message originated from Discord, would echo back)
-
-5. Format relay message:
-   "[platform-emoji] username: text"
-   e.g. "📺 xQcOW: Pepega OMEGALUL"
-
-6. Enqueue in per-channel token bucket (5 msg/s per Discord channel)
-
-7. POST /channels/{relay_channel_id}/messages
-   Authorization: Bot {bot_token}
-   {"content": "<formatted message>"}
-
-8. On 429 Too Many Requests: parse Retry-After header, requeue after delay
+Platform connection (IRC/WebSocket/HTTP polling)
+  → Platform-specific message handler
+  → publisher.Publish(ctx, rawMsg)   [platform-specific publisher package]
+  → Redis Streams chat:raw
 ```
 
----
-
-## Discord Gateway Sharding Model
-
-**Confidence: MEDIUM** (based on training data; verify against https://discord.com/developers/docs/topics/gateway#sharding before implementation)
-
-### How Discord sharding works
-
-Discord requires sharding when a bot is in 2,500+ guilds (servers). Each shard is a separate Gateway WebSocket connection. A guild's events are always delivered to the shard with ID:
+The ChannelManager interface methods (`Start`, `Stop`, `HandleMigrationEvent`, `UpdateAssignedSourceIDs`) are all lifecycle and assignment operations. The SDK never calls `Publish` directly.
 
 ```
-shard_id = guild_id % num_shards
+ListenerBase.Start()
+  ├─ Jitter
+  ├─ QueryAssignments → returns map[string]bool (assignedSourceIDs)
+  └─ Returns to caller
+
+Caller (cmd/main.go):
+  ├─ Initializes platform connection (IRC/WebSocket)
+  ├─ Initializes ChannelManager with assignedSourceIDs
+  ├─ Calls channelMgr.Start(ctx)
+
+ListenerBase.Run(ctx, channelMgr.HandleMigrationEvent)
+  ├─ goroutine: JWT refresh (12h interval)
+  ├─ goroutine: heartbeat (10s interval)
+  └─ goroutine: assignment refresh (60s interval)
+        └─ on tick: QueryAssignments → channelMgr.UpdateAssignedSourceIDs(newIDs)
+
+ShutdownCoordinator.Wait(ctx, base, channelMgr, conn)
+  ├─ waits SIGINT/SIGTERM
+  ├─ parallel: base.Stop() + channelMgr.Stop()
+  ├─ conn.Disconnect()
+  └─ srv.Shutdown(10s timeout)
 ```
-
-The bot sends an `IDENTIFY` payload with `[shard_id, num_shards]` when opening each Gateway connection.
-
-### Sharding vs. existing hash-based load balancing
-
-The existing system uses CRC32 consistent hashing to distribute channels across listener pods. Discord's sharding is fundamentally different: Discord determines which shard receives which guild's events. The service cannot freely redistribute guilds across shards — the shard assignment is imposed by Discord protocol.
-
-**Key implication:** For discord-listener, load balancing across pods means assigning shard ownership, not individual channel ownership. One pod owns one or more shards. All guilds on that shard are handled by that pod.
-
-### At v1.5 scale (small bot, few guilds)
-
-With fewer than 2,500 guilds (likely at launch: single-digit to hundreds), sharding is not required. A single Gateway connection (shard 0 of 1) handles all guilds. The service should:
-
-1. Start with `num_shards=1` (no sharding)
-2. The existing source-manager leader election ensures only one pod holds the single Gateway connection
-3. When the bot grows, increase `num_shards` and assign shard ranges to pods
-
-### Leader election approach for shards
-
-Reuse source-manager's leadership API with a shard-scoped key:
-
-```
-Redis key: leader:discord:shard:{shard_id}
-Value:     "discord-listener-pod-abc123"
-TTL:       60s (renewed every 30s)
-```
-
-One discord-listener pod claims leadership for shard 0 (or shards 0-N if multi-shard). Other pods in standby. This reuses the exact same pattern as youtube-listener-innertube.
-
-### Coordinator-based shard assignment (future, multi-shard)
-
-When `num_shards > 1`, extend the coordinator to distribute shard ranges:
-
-```
-Pod 1: shards [0, 1, 2]    → handles guilds where guild_id % 6 ∈ {0,1,2}
-Pod 2: shards [3, 4, 5]    → handles guilds where guild_id % 6 ∈ {3,4,5}
-```
-
-The bounded-load consistent hashing used for Twitch/Kick/TikTok is not applicable here. Use simple range partitioning for shard assignment.
-
----
-
-## Loop Prevention
-
-**This is the most critical correctness requirement.**
-
-### Where loop prevention lives
-
-Loop prevention is enforced in the **discord-listener relay goroutine** before any HTTP call is made. It is NOT implemented in message-processor (which doesn't know about relay targets).
-
-### Detection algorithm
-
-A message is a potential echo if ALL of the following are true:
-1. `message.platform == "discord"` (came from Discord originally)
-2. `message.tags["inbound_channel_id"]` is in the set of Discord channels configured as inbound sources for the same overlay
-
-```go
-// In-process check, O(1) hash lookup
-func (r *RelayWorker) isEcho(msg *models.UnifiedMessage, relayConfig RelayConfig) bool {
-    if msg.Platform != "discord" {
-        return false
-    }
-    inboundChannelID, ok := msg.Tags["inbound_channel_id"]
-    if !ok {
-        return false
-    }
-    // Check if the message's source channel is an inbound channel for this overlay
-    return r.channelRegistry.IsInboundChannel(relayConfig.OverlayID, inboundChannelID)
-}
-```
-
-### Why not filter in message-processor
-
-Message-processor does not know which overlays have relay configured, nor which Discord channels are inbound vs outbound. Adding relay awareness to message-processor would couple two concerns that should stay separate. The discord-listener already subscribes to the Pub/Sub channel and can filter before calling Discord REST.
-
-### Scenario table
-
-| Message origin | Relay target | Action |
-|----------------|-------------|--------|
-| Twitch | Discord channel Y | Relay: post to Discord |
-| YouTube | Discord channel Y | Relay: post to Discord |
-| Discord channel X (same overlay, inbound source) | Discord channel Y | DROP (echo) |
-| Discord channel X (different overlay, no inbound source match) | Discord channel Y | Relay: post to Discord |
-| Discord channel Y (the relay target itself) | Discord channel Y | DROP (bot's own message filtered by `author.bot == true` at inbound) |
-
-### Bot self-message filtering
-
-The discord-listener inbound goroutine must always drop `MESSAGE_CREATE` events where `author.bot == true` AND `author.id == bot_application_id`. This prevents the relay's outbound messages from being re-ingested as chat messages.
-
----
-
-## Integration with Existing Services
-
-### source-manager
-
-Discord channels are registered as sources with:
-- `platform = "discord"`
-- `channel_id = "{discord_channel_snowflake}"`
-- `config = {"guild_id": "...", "inbound_channel_id": "...", "relay_channel_id": "...", "relay_enabled": true}`
-
-Source-manager's existing `/sources?platform=discord` query works without modification. Leadership API is reused with `stream_id = "discord:shard:{shard_id}"`.
-
-Source-manager needs one change: add `"discord"` to the list of known platforms so it includes Discord sources in the active source registry sync.
-
-### auth-service
-
-Discord uses OAuth2 with the "Add to Server" flow (not user-token OAuth). The bot token is a long-lived application token, not a per-user OAuth token. Storage options:
-
-**Option A (Recommended):** Store the bot token in Kubernetes Secret, inject as environment variable `DISCORD_BOT_TOKEN`. The auth-service handles the OAuth2 "Add to Server" web flow (guild authorization for the streamer), but the bot token is global — not per-user.
-
-**Option B:** Store in `oauth_tokens` table with `platform="discord"` and a synthetic `user_id`. More complex, no benefit at v1.5.
-
-**Guild authorization (streamer flow):** When a streamer connects their Discord server, they complete a web OAuth2 flow (not bot token exchange) that grants the bot permission to join their guild. This results in the bot being added to the guild. The auth-service handles the callback and stores the `guild_id` in the user's profile or overlay config — NOT a per-user token.
-
-The auth-service needs a new OAuth endpoint:
-```
-GET /api/v1/auth/discord/authorize   → redirects to Discord OAuth2 "Add to Server" URL
-GET /api/v1/auth/discord/callback    → receives code, exchanges for guild_id confirmation, stores guild membership
-```
-
-### overlay-manager
-
-Add `discord` as a supported platform. The `overlay_chat_sources` table already supports arbitrary `platform` values and `config` JSONB. No schema changes to the table itself.
-
-New validation on source create/update: if `platform="discord"`, verify `guild_id` in config matches a guild the bot has joined (can query Discord REST `GET /guilds/{guild_id}` or rely on startup registry).
-
-### message-processor
-
-Add a Discord normalizer (`normalizer/discord_normalizer.go`). Input is the `raw_message` field from the `chat:raw` stream entry. The normalizer extracts:
-- `user.id` ← `author.id`
-- `user.username` ← `author.username` (+ optional `#discriminator` for legacy accounts)
-- `user.display_name` ← `member.nick` if present, else `author.global_name`, else `author.username`
-- `user.avatar_url` ← constructed from `author.avatar` hash
-- `message.text` ← `content` (with mention resolution if desired)
-- `badges` ← roles mapped to badge names (optional for v1.5)
-
-Discord does not use emote codes in the 7TV/BTTV/FFZ sense. The emote enrichment stage can be skipped (pass-through) for `platform="discord"`.
-
----
-
-## New Components
-
-### New: discord-listener service
-
-```
-services/discord-listener/
-├── cmd/main.go                    # Entry: DB, Redis, Gateway, Relay, HTTP
-├── gateway/
-│   ├── client.go                  # Discord Gateway WebSocket client
-│   ├── shard.go                   # Shard lifecycle (connect, identify, heartbeat, resume)
-│   ├── types.go                   # Gateway event structs (MESSAGE_CREATE, READY, etc.)
-│   └── handler.go                 # Routes gateway events to message handler
-├── channels/
-│   ├── manager.go                 # Syncs active Discord sources from DB
-│   ├── registry.go                # In-memory channel→overlay mapping + inbound set
-│   └── repository.go              # DB queries for discord sources
-├── relay/
-│   ├── worker.go                  # Subscribes to Pub/Sub, filters, queues relay messages
-│   ├── poster.go                  # Discord REST POST /channels/{id}/messages
-│   └── ratelimit.go               # Token bucket per channel_id, 429 backoff
-├── publisher/
-│   └── redis.go                   # Publishes RawChatMessage to chat:raw
-├── handlers/
-│   └── health.go                  # /health/live, /health/ready, /status
-├── metrics/
-│   └── metrics.go                 # Prometheus counters/histograms
-├── go.mod
-└── Dockerfile
-```
-
-### Modified: source-manager
-
-- Add `"discord"` to `SUPPORTED_PLATFORMS` list
-- Add shard leadership key namespace: `leader:discord:shard:{shard_id}`
-- No API surface changes
-
-### Modified: auth-service
-
-- Add `GET /api/v1/auth/discord/authorize` (redirects to Discord OAuth2 guild authorization URL)
-- Add `GET /api/v1/auth/discord/callback` (stores guild_id, confirms bot membership)
-- Add `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN` env vars
-
-### Modified: message-processor
-
-- Add `normalizer/discord_normalizer.go`
-- Add case `"discord"` in router switch
-- Skip emote enrichment stage for `platform="discord"` (Discord embeds are not third-party emotes)
-
-### Modified: overlay-manager
-
-- Add `"discord"` to supported platforms enum/validation
-- Add validation: if `platform="discord"`, verify `guild_id` in config is known to bot
 
 ---
 
 ## Patterns to Follow
 
-### Pattern 1: Gateway Client Mirrors Kick Pusher Client
+### Pattern 1: Interface-First for ChannelManager
 
-The Kick listener's `websocket/client.go` is the closest structural analog: it manages a persistent WebSocket, handles reconnects, parses typed events, and calls registered handlers. Discord Gateway is more complex (heartbeat interval from HELLO, sequence numbers for RESUME, zlib decompression optionally), but the same read/write pump goroutine pattern applies.
+Define `ChannelManager` as an interface in `shared/listener/` with only the methods the SDK needs. Do not define a concrete `BaseChannelManager` struct in the shared package — the Twitch and Kick managers have platform-specific constructor arguments (IRC client, WebSocket client, Pusher publisher) that cannot be generalized without reflection or `interface{}`.
 
-**Key differences from Kick:**
+Both existing managers already have matching method signatures. The migration is additive: add `_ listener.ChannelManager = (*channels.Manager)(nil)` compile-time assertion to each platform's `channels/manager.go`.
 
-| Aspect | Kick (Pusher) | Discord Gateway |
-|--------|---------------|-----------------|
-| Reconnect | Reconnect and re-subscribe | Reconnect → RESUME if sequence < threshold; else IDENTIFY |
-| Heartbeat | Pusher application-level ping/pong | Send `{"op":1,"d":sequence}` every `heartbeat_interval` ms |
-| Multiple guilds | Multiple Pusher channels per connection | All guilds on the shard on one connection |
-| Auth | App key in URL | `IDENTIFY` payload with bot token |
+### Pattern 2: Config Structs Over Long Parameter Lists
 
-### Pattern 2: Relay Worker as Pub/Sub Consumer
+The existing `channels.NewManager` in Kick has 9 parameters. Future ChannelManager constructors in new listeners should use a config struct. The SDK should not dictate the constructor signature — only the interface.
 
-```go
-// relay/worker.go
-func (w *RelayWorker) Start(ctx context.Context) {
-    // Subscribe to all configured overlay channels
-    for _, overlayID := range w.registry.GetRelayOverlayIDs() {
-        w.client.Subscribe("overlay:" + overlayID)
-    }
+### Pattern 3: Nil-Safe LeadershipCoordinator
 
-    ch := w.client.Channel()
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case msg := <-ch:
-            w.handleMessage(msg)
-        }
-    }
-}
+The `sourcemanager.LeadershipCoordinator` already implements nil-safe methods (`EnsureLeadership` and `Release` both check `c == nil`). `LeadershipListener` should preserve this: if `SOURCE_MANAGER_SECRET` is empty, `LeaderCoord` is nil, and leadership operations are no-ops. This allows local development without a source-manager.
 
-func (w *RelayWorker) handleMessage(msg *redis.Message) {
-    var unified models.UnifiedMessage
-    json.Unmarshal([]byte(msg.Payload), &unified)
+### Pattern 4: CoordinatorClient.NewCoordinatorClient Retains Service Name Detection
 
-    config, ok := w.registry.GetRelayConfig(unified.OverlayID)
-    if !ok || !config.RelayEnabled {
-        return
-    }
+The existing `NewCoordinatorClient` in `shared/coordination/client.go` auto-detects the service name from `HOSTNAME` (pod name prefix). When listeners migrate to `ListenerBase`, the `Config.ServiceName` field should override this auto-detection by being passed explicitly. The `NewCoordinatorClient` constructor will need an optional `serviceName` parameter, or `ListenerBase.Start` builds the client with the explicit name.
 
-    if w.isEcho(&unified, config) {
-        return // loop prevention
-    }
-
-    w.queue.Enqueue(config.RelayChannelID, &unified)
-}
-```
-
-### Pattern 3: Token Bucket Rate Limiting for Relay
-
-Discord REST allows ~5 messages/second per channel (confirmed in documentation; MEDIUM confidence — verify exact limits). Use a per-channel token bucket:
-
-```go
-// relay/ratelimit.go
-type ChannelRateLimiter struct {
-    buckets map[string]*rate.Limiter  // channel_id → limiter
-    mu      sync.Mutex
-}
-
-func (l *ChannelRateLimiter) Wait(ctx context.Context, channelID string) error {
-    l.mu.Lock()
-    limiter, ok := l.buckets[channelID]
-    if !ok {
-        limiter = rate.NewLimiter(rate.Limit(5), 5) // 5/s, burst 5
-        l.buckets[channelID] = limiter
-    }
-    l.mu.Unlock()
-    return limiter.Wait(ctx)
-}
-```
-
-Also handle Discord 429 responses:
-```go
-if resp.StatusCode == 429 {
-    var rateLimit DiscordRateLimit
-    json.NewDecoder(resp.Body).Decode(&rateLimit)
-    time.Sleep(time.Duration(rateLimit.RetryAfter * float64(time.Second)))
-    // retry
-}
-```
-
-### Pattern 4: Source Registry with NOTIFY-Driven Updates
-
-Mirror the Twitch/Kick channel manager pattern: query DB on startup for all active Discord sources, then receive `NOTIFY discord_source_changes` from overlay-manager to add/remove channels without full resync.
-
-```go
-// channels/manager.go — same structure as kick-listener/channels/manager.go
-// channels/repository.go — query WHERE platform='discord' AND is_active=true
-```
+**Preferred approach:** Add a `serviceName string` parameter to `NewCoordinatorClient` and remove the hostname auto-detection logic (which only covers `twitch-listener`, `twitch-eventsub-listener`, `kick-listener`, `tiktok-listener`). The SDK passes `Config.ServiceName` directly.
 
 ---
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Separate Relay Service
+### Anti-Pattern 1: Shared `BaseChannelManager` Struct
 
-**What:** Create `discord-relay` as a separate Kubernetes Deployment
-**Why bad:**
-- Both inbound listener and relay need the same Discord bot token and channel registry
-- Loop prevention requires shared knowledge of which channels are inbound sources
-- Two services to deploy, monitor, and maintain for one logical feature
-- No independent scaling benefit at current scale (relay is rate-limit-bound, not CPU-bound)
+**What goes wrong:** Trying to provide a concrete `BaseChannelManager` in the shared package requires generics or `interface{}` for the platform connection dependency (IRC client, WebSocket client). This makes the SDK harder to use and test than the existing service-specific managers.
 
-**Instead:** Single `discord-listener` service with two goroutine groups
+**Instead:** Interface only. Each platform keeps its concrete manager in `services/<listener>/channels/`.
 
-### Anti-Pattern 2: Message-Processor-Level Loop Prevention
+### Anti-Pattern 2: Moving Channel DB Repository to Shared
 
-**What:** Adding a "drop if platform==discord AND is relay echo" filter in message-processor
+**What goes wrong:** The Twitch `channels.Repository` and Kick `channels.Repository` query platform-specific tables/columns (`platform = 'twitch'`, Kick chatroom IDs). Sharing a generic repository adds conditional logic that obscures platform intent and makes the shared package aware of platform specifics.
 
-**Why bad:**
-- Message-processor does not know which overlays have relay configured
-- Requires message-processor to query relay config on every Discord message (hot path)
-- Couples the relay feature into the general message processing pipeline
-- Loop prevention should be at the relay boundary, not the normalization boundary
+**Instead:** Each service keeps its own `channels/repository.go`. The `ChannelManager` interface abstracts the channel sync behavior, not the database access pattern.
 
-**Instead:** discord-listener relay worker filters before calling Discord REST
+### Anti-Pattern 3: Adding `go.work` Without Understanding Build Impact
 
-### Anti-Pattern 3: Subscribing Relay to chat:raw Stream Instead of Pub/Sub
+**What goes wrong:** `go.work` causes `go mod tidy` in any workspace member to modify other modules' checksums. CI pipelines that run per-service `go mod tidy` break. Docker builds using `COPY go.mod go.sum ./` patterns require the workspace file to be present in the build context.
 
-**What:** Relay worker consumes from `chat:raw` Redis Stream to pick up messages to relay
+**Instead:** Use the existing `replace` directives. Introduce `go.work` only if CI needs monorepo-wide `go vet` or `go build ./...`.
 
-**Why bad:**
-- `chat:raw` contains unnormalized, unenriched messages — the relay would need its own normalization
-- Adds a consumer group to `chat:raw`, increasing stream fan-out
-- Messages in `chat:raw` are not yet filtered by `MESSAGE_AGE_CUTOFF_SECONDS`
-- The relay should send the same human-readable text that appears in the overlay, which is the normalized form
+### Anti-Pattern 4: Inlining SDK Logic into `cmd/main.go` of New Listeners
 
-**Instead:** Subscribe to `overlay:{overlay_id}` Pub/Sub (post-normalization)
+**What goes wrong:** Adding new listeners (e.g., a future Twitch EventSub listener) by copy-pasting the startup sequence from existing `main.go` files perpetuates the duplication the SDK is meant to eliminate.
 
-### Anti-Pattern 4: Hash-Based Sharding Applied to Discord Channels
-
-**What:** Using CRC32 consistent hashing to distribute individual Discord channels across pods
-
-**Why bad:**
-- Discord Gateway sharding is guild-based (not channel-based) and imposed by Discord protocol
-- A guild's events all arrive on `shard_id = guild_id % num_shards` — you cannot route individual channels from the same guild to different Gateway connections
-- Applying all-chat's channel-level consistent hashing would require opening one Gateway connection per channel, violating Discord's connection model (one connection per shard, which covers all guilds on that shard)
-
-**Instead:** Assign shard ownership to pods. One pod owns one shard (or a range of shards).
-
-### Anti-Pattern 5: Re-using the Existing Node.js discord-bot Service
-
-**What:** Extending `services/discord-bot` (the YouTube quota monitoring Node.js bot) to also handle chat listening/relay
-
-**Why bad:**
-- That service is Node.js, not Go — inconsistent with all other services
-- It is a monitoring-only bot with no message ingestion or Redis Streams publishing
-- Mixing quota monitoring and chat routing concerns increases blast radius
-- The all-chat platform constraint: "No new infrastructure dependencies" — adding Node.js as a pattern for core services violates the Go-only backend decision
-
-**Instead:** New `services/discord-listener` in Go, following Standard Go Layout
+**Instead:** All new Go listener services after v1.6 MUST embed `ListenerBase` or `LeadershipListener` in their `cmd/main.go`.
 
 ---
 
-## Scalability Considerations
+## Build Order: SDK First, Then Per-Listener Migration
 
-| Concern | At 100 guilds | At 10K guilds | At 1M guilds |
-|---------|---------------|---------------|--------------|
-| **Gateway connections** | 1 shard, 1 pod | 4 shards (Discord recommends 2,500/shard), 4 pods | 400 shards, 400 pods |
-| **Relay throughput** | Single REST client, token bucket sufficient | Relay worker pool per overlay, per-channel queue | Dedicated relay service, Redis queue with multiple workers |
-| **Channel registry** | In-memory map, trivial | In-memory + Redis backup | Redis Cluster, region-local replica |
-| **Loop prevention** | In-process set lookup | In-process set (thousands of entries, still trivial) | Bloom filter or Redis SET |
-| **Pub/Sub subscriptions** | One subscription per relay overlay | Standard Redis Pub/Sub handles thousands | Redis Cluster with Pub/Sub sharding |
+The SDK is developed in phases. Each phase is independently deployable. Existing listeners continue to use their current startup wiring until migrated.
 
-**At v1.5 scale:** In-process everything is correct. Redis-backed state as fallback for pod restarts.
+### Phase 1 — Define SDK Package (no listener changes)
 
----
+**Files created:**
+- `shared/listener/channel_manager.go` — `ChannelManager` interface + `PlatformConnector` interface
+- `shared/listener/base.go` — `ListenerBase` struct + `Config`
+- `shared/listener/leadership.go` — `LeadershipListener` struct + `LeadershipConfig`
+- `shared/listener/shutdown.go` — `ShutdownCoordinator`
 
-## Database Schema
+**Files modified:**
+- `shared/coordination/client.go` — add explicit `serviceName` parameter to `NewCoordinatorClient`, remove hostname auto-detection
 
-No new tables are required. Discord sources fit the existing `overlay_chat_sources` schema:
+**Dependencies:** None. The `shared` module compiles independently.
 
-```sql
--- Discord inbound source (read messages from this channel)
-INSERT INTO overlay_chat_sources (
-    overlay_id,
-    platform,           -- 'discord'
-    channel_id,         -- Discord channel snowflake (the inbound text channel)
-    channel_name,       -- '#channel-name'
-    config,             -- JSONB
-    is_active
-) VALUES (
-    '<overlay_uuid>',
-    'discord',
-    '1234567890123456789',  -- channel snowflake
-    '#general',
-    '{
-        "guild_id":          "9876543210987654321",
-        "guild_name":        "xQc Server",
-        "inbound_channel_id": "1234567890123456789",
-        "relay_enabled":     true,
-        "relay_channel_id":  "9999999999999999999"
-    }',
-    true
-);
-```
+**Validation:** `cd shared && go build ./...` passes. Unit tests for `ListenerBase.Start` (mock coordinator) pass.
 
-**Config JSONB fields:**
+### Phase 2 — Migrate twitch-listener
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| `guild_id` | string (snowflake) | Discord server ID — determines shard assignment |
-| `guild_name` | string | Display name (denormalized for UX) |
-| `inbound_channel_id` | string (snowflake) | Channel to read chat from |
-| `relay_enabled` | bool | Whether to relay overlay messages back to Discord |
-| `relay_channel_id` | string (snowflake) | Channel to post relay messages to (can equal `inbound_channel_id`) |
+**Files modified:**
+- `services/twitch-listener/cmd/main.go` — replace coordination wiring with `ListenerBase.Start()`, `ListenerBase.Run()`, `ShutdownCoordinator.Wait()`
+- `services/twitch-listener/channels/manager.go` — add `_ listener.ChannelManager = (*Manager)(nil)` compile-time assertion
 
----
+**Files unchanged:** `channels/repository.go`, `irc/`, `handlers/`, `publisher/`
 
-## Build Order and Dependencies
+**Validation:** `cd services/twitch-listener && go build ./...` passes. Integration smoke test: listener starts, queries coordinator, joins channels.
 
-### Phase 1: Discord bot token + auth flow (no chat yet)
-**Goal:** Bot can join servers, token stored, auth-service extended
-- `auth-service`: Discord OAuth2 endpoints (authorize, callback, guild membership storage)
-- Kubernetes Secret: `DISCORD_BOT_TOKEN`
-- Database: no schema changes needed
+### Phase 3 — Migrate kick-listener
 
-**Dependencies:** None — standalone auth work
+**Files modified:**
+- `services/kick-listener/cmd/main.go` — same pattern as twitch migration, plus `LeadershipListener` for leader coordination
+- `services/kick-listener/channels/manager.go` — add compile-time assertion
 
-**Validation:** Bot appears in Discord server after "Add to Server" OAuth flow
+**Files unchanged:** `channels/repository.go`, `websocket/`, `handlers/`, `publisher/`, `metrics/`
 
-### Phase 2: Inbound listener (Discord → overlay)
-**Goal:** Discord messages appear in overlays
-- `discord-listener/gateway`: WebSocket client, shard manager, inbound goroutine group
-- `discord-listener/channels`: Channel registry, source sync from DB
-- `discord-listener/publisher`: Publish to `chat:raw`
-- `message-processor`: Add Discord normalizer
-- `source-manager`: Add `"discord"` platform
-- `overlay-manager`: Add `"discord"` platform validation
+**Dependency on Phase 2:** None — kick and twitch migrations are independent. Can run in parallel.
 
-**Dependencies:** Phase 1 (bot token available)
+**Validation:** `cd services/kick-listener && go build ./...` passes.
 
-**Validation:** Discord message appears in overlay WebSocket stream
+### Phase 4 — Migrate youtube-listener-innertube
 
-### Phase 3: Outbound relay (overlay → Discord)
-**Goal:** Non-Discord overlay messages are relayed to configured Discord channel
-- `discord-listener/relay`: Pub/Sub consumer, loop prevention, token bucket, REST poster
-- End-to-end test: Twitch message → overlay → Discord relay channel
+**Files modified:**
+- `services/youtube-listener-innertube/cmd/main.go` — replace manual `sourcemanager.NewLeadershipCoordinator` wiring with `LeadershipListener`
 
-**Dependencies:** Phase 2 (inbound working, channel registry established)
+**Files unchanged:** `streams/`, `innertube/`, `deletion/`, `handlers/`, `publisher/`
 
-**Validation:** Twitch message appears in Discord channel; Discord message does NOT echo back
+**Validation:** `cd services/youtube-listener-innertube && go build ./...` passes.
 
-### Phase 4: Load balancing + HPA (production hardening)
-**Goal:** Multiple discord-listener pods, shard ownership via leader election
-- `discord-listener`: Startup jitter, coordinator integration, shard assignment
-- Kubernetes: HPA config, Prometheus metrics, Grafana dashboard
-- `source-manager`: Shard leadership keys
+### Phase 5 — Migrate remaining listeners
 
-**Dependencies:** Phase 2-3 (service functional as single pod)
+**discord-listener:** Uses `LeadershipListener` for shard ownership (already implemented as a service, wires its own `sourcemanager.NewLeadershipCoordinator`). Migration replaces that manual wiring.
 
-**Validation:** Scale to 3 replicas, one pod owns shard 0, others standby; failover within 60s
+**youtube-listener (quota-based):** Uses `ListenerBase` (no leadership required — coordinator assigns streams). Has its own assignment + heartbeat loop in `cmd/main.go`.
 
-### Phase 5: Setup UI
-**Goal:** Streamer can configure Discord sources and relay in overlay editor
-- Frontend: Discord server connect card, channel picker, relay toggle
-- Integrates with Phase 1 auth flow and Phase 2-3 source management
-
-**Dependencies:** Phase 1-3 (backend APIs working)
+**Note:** `tiktok-listener` is Node.js — out of scope for the Go SDK.
 
 ---
 
-## Service Interface Contracts
+## Service Interface Contracts (Unchanged by SDK Migration)
 
-### discord-listener HTTP API
-
-```
-GET  /health/live         → 200 always
-GET  /health/ready        → 200 if Gateway connected + Redis reachable
-GET  /status              → JSON: shard status, channel count, relay count
-GET  /metrics             → Prometheus metrics
-```
-
-### Key Prometheus Metrics
+The SDK migration is internal to each listener's `cmd/main.go`. The following external interfaces are unaffected:
 
 ```
-discord_gateway_messages_total{event_type}       # MESSAGE_CREATE, etc.
-discord_gateway_shard_connected{shard_id}        # 0 or 1
-discord_relay_messages_total{result}             # sent, dropped_echo, dropped_bot, error
-discord_relay_queue_depth{channel_id}            # per-channel relay queue
-discord_relay_rate_limit_waits_total{channel_id} # 429 backoffs
-discord_inbound_messages_published_total         # published to chat:raw
+GET  /health/live     → 200 always
+GET  /health/ready    → 200 if platform connected + coordinator reachable
+GET  /status          → JSON: channel count, assignment count, platform connection state
+GET  /metrics         → Prometheus metrics
 ```
+
+Redis Streams key (`chat:raw`), message schema (`RawChatMessage`), and coordinator HTTP API (`/assignments`, `/heartbeat`) are not modified.
 
 ---
 
-## Environment Variables
+## New Files vs. Modified Files Summary
 
-```bash
-# Discord credentials
-DISCORD_BOT_TOKEN=Bot.xxxxx          # Long-lived bot token
-DISCORD_APPLICATION_ID=12345...      # Bot's application/user ID (for self-filtering)
-DISCORD_NUM_SHARDS=1                 # Increase when guild count approaches 2500
+### New Files (all in `shared/listener/`)
 
-# Source Manager
-SOURCE_MANAGER_URL=http://source-manager:8088
-SOURCE_MANAGER_SECRET=dev-service-secret
+| File | Contains |
+|------|---------|
+| `shared/listener/base.go` | `Config`, `ListenerBase`, `Start()`, `Run()`, `Stop()`, `GetFilteredAssignedSourceIDs()` |
+| `shared/listener/leadership.go` | `LeadershipConfig`, `LeadershipListener`, `NewLeadershipListener()` |
+| `shared/listener/channel_manager.go` | `ChannelManager` interface, `PlatformConnector` interface |
+| `shared/listener/shutdown.go` | `ShutdownConfig`, `ShutdownCoordinator`, `Wait()` |
 
-# Standard (shared with all services)
-DATABASE_HOST=localhost
-DATABASE_PORT=5432
-DATABASE_USER=allchat
-DATABASE_PASSWORD=allchat_dev_password
-DATABASE_NAME=allchat
-REDIS_HOST=localhost
-REDIS_PORT=6379
-PORT=8092
-LOG_LEVEL=info
-OTEL_ENABLED=false
-APP_VERSION=dev
-ENVIRONMENT=development
-```
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `shared/coordination/client.go` | Add explicit `serviceName` parameter, remove hostname prefix auto-detection logic |
+| `services/twitch-listener/cmd/main.go` | Replace ~120 lines of coordination wiring with SDK calls |
+| `services/twitch-listener/channels/manager.go` | Add compile-time interface assertion |
+| `services/kick-listener/cmd/main.go` | Replace coordination + leadership wiring with SDK calls |
+| `services/kick-listener/channels/manager.go` | Add compile-time interface assertion |
+| `services/youtube-listener-innertube/cmd/main.go` | Replace manual leadership wiring with `LeadershipListener` |
+| `services/discord-listener/cmd/main.go` | Replace manual leadership wiring with `LeadershipListener` |
+| `services/youtube-listener/cmd/main.go` | Replace assignment loop wiring with `ListenerBase` |
+
+### Unchanged Files
+
+All `channels/repository.go`, `handlers/`, `publisher/`, and platform connection packages (IRC, WebSocket, InnerTube) remain untouched. No database schema changes. No Kubernetes manifests changes. No Redis key changes.
 
 ---
 
 ## Sources
 
-Research informed by:
-- All-Chat existing service READMEs: `services/*/README.md`
-- All-Chat existing service code: `services/kick-listener/cmd/main.go`, `services/kick-listener/websocket/client.go`
-- All-Chat architecture docs: `CLAUDE.md`, `.planning/PROJECT.md`
-- All-Chat prior research: `.planning/research/ARCHITECTURE.md` (sharing pattern)
-- Discord Gateway API documentation (training data, MEDIUM confidence for specific limits — verify at https://discord.com/developers/docs/topics/gateway before implementation)
-- Discord REST API rate limits (training data: ~5 msg/s per channel, MEDIUM confidence — verify at https://discord.com/developers/docs/topics/rate-limits)
-- Discord Gateway sharding requirement: 2,500 guilds per shard limit (training data, MEDIUM confidence — verify at https://discord.com/developers/docs/topics/gateway#sharding)
+Research based on direct inspection of:
+- `/home/moersener/Hobby/all-chat/services/twitch-listener/cmd/main.go` — full startup sequence
+- `/home/moersener/Hobby/all-chat/services/twitch-listener/channels/manager.go` — ChannelManager method set
+- `/home/moersener/Hobby/all-chat/services/kick-listener/cmd/main.go` — startup sequence, leadership wiring
+- `/home/moersener/Hobby/all-chat/services/kick-listener/channels/manager.go` — ChannelManager method set
+- `/home/moersener/Hobby/all-chat/services/youtube-listener-innertube/cmd/main.go` — leadership coordinator pattern
+- `/home/moersener/Hobby/all-chat/services/discord-listener/cmd/main.go` — leadership pattern, no coordinator-based assignment
+- `/home/moersener/Hobby/all-chat/shared/coordination/client.go` — CoordinatorClient API, hostname auto-detection
+- `/home/moersener/Hobby/all-chat/shared/coordination/migration_subscriber.go` — MigrationSubscriber API
+- `/home/moersener/Hobby/all-chat/shared/sourcemanager/coordinator.go` — LeadershipCoordinator API
+- `/home/moersener/Hobby/all-chat/shared/sourcemanager/client.go` — Client API, LeadershipClient interface
+- `/home/moersener/Hobby/all-chat/shared/metrics/shard_metrics.go` — ShardMetrics (unchanged)
+- `/home/moersener/Hobby/all-chat/services/twitch-listener/go.mod` — replace directive pattern
+- `/home/moersener/Hobby/all-chat/services/kick-listener/go.mod` — replace directive pattern
+- `/home/moersener/Hobby/all-chat/services/discord-listener/go.mod` — replace directive pattern
+- `/home/moersener/Hobby/all-chat/shared/go.mod` — existing shared module dependencies
+- `/home/moersener/Hobby/all-chat/.planning/PROJECT.md` — milestone requirements and constraints
