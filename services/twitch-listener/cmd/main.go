@@ -148,7 +148,12 @@ func main() {
 	// Extract assigned source IDs into map for filtering
 	assignedSourceIDs := make(map[string]bool)
 	for _, a := range assignments {
-		assignedSourceIDs[a.SourceID] = true
+		sourceID := a.SourceID
+		// Strip platform suffix if present (e.g., "abc123:twitch" → "abc123")
+		if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
+			sourceID = sourceID[:colonIdx]
+		}
+		assignedSourceIDs[sourceID] = true
 	}
 
 	// Feature flag for coordinator filtering (allows instant rollback)
