@@ -161,6 +161,18 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 func (sm *SessionManager) StartGracePeriod(ctx context.Context, overlayID string) error {
 	key := SessionKeyPrefix + overlayID
 
+	// Only transition to ENDING if a real session (with session_id) exists.
+	// Writing state=ENDING on a non-existent key creates a partial hash that
+	// has no session_id, corrupting credit-roll capture for the next connection.
+	sessionID, err := sm.redis.HGet(ctx, key, "session_id").Result()
+	if err == redis.Nil || sessionID == "" {
+		// No active session to end
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to check session existence: %w", err)
+	}
+
 	// Update state to ENDING and refresh TTL
 	pipe := sm.redis.Pipeline()
 	pipe.HSet(ctx, key, "state", "ENDING")
