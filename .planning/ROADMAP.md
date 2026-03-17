@@ -176,7 +176,7 @@
 - [x] **Phase 33: Pre-Migration Cleanup** - Normalize source ID suffix handling and canonicalize HandleMigrationEvent signature across Twitch and Kick before SDK extraction begins (completed 2026-03-17)
 - [x] **Phase 34: SDK Package Definition** - Create shared/listener package with ListenerBase, LeadershipListener, ChannelManager interface, ShutdownCoordinator, and make build-all CI target (completed 2026-03-17)
 - [x] **Phase 35: Migrate twitch-listener** - First production SDK validation; twitch-listener cmd/main.go reduced to IRC connection and message publishing only (completed 2026-03-17)
-- [ ] **Phase 36: Migrate kick-listener** - Exercise both ListenerBase and LeadershipListener archetypes; both SDK models confirmed in production
+- [x] **Phase 36: Migrate kick-listener** - Exercise both ListenerBase and LeadershipListener archetypes; both SDK models confirmed in production (completed 2026-03-17)
 - [ ] **Phase 37: Migrate youtube-innertube and discord-listener** - Leadership-only migrations; close leadership archetype with two independent validations
 - [ ] **Phase 38: Migrate youtube-listener and twitch-eventsub-listener** - Close migration window; all Go listeners running on shared SDK
 
@@ -276,7 +276,7 @@ Plans:
 | 33. Pre-Migration Cleanup | v1.6 | 2/2 | Complete | 2026-03-17 |
 | 34. SDK Package Definition | 3/3 | Complete    | 2026-03-17 | - |
 | 35. Migrate twitch-listener | 2/2 | Complete    | 2026-03-17 | - |
-| 36. Migrate kick-listener | 1/2 | In Progress|  | - |
+| 36. Migrate kick-listener | 2/2 | Complete   | 2026-03-17 | - |
 | 37. Migrate youtube-innertube and discord-listener | v1.6 | 0/TBD | Not started | - |
 | 38. Migrate youtube-listener and twitch-eventsub-listener | v1.6 | 0/TBD | Not started | - |
 

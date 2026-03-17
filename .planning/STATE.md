@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Completed 36-01-PLAN.md
-last_updated: "2026-03-17T22:03:59.283Z"
+stopped_at: Completed 36-02-PLAN.md
+last_updated: "2026-03-17T22:09:41.727Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
-  completed_phases: 21
+  completed_phases: 22
   total_plans: 75
-  completed_plans: 74
+  completed_plans: 75
   percent: 0
 ---
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 35-migrate-twitch-listener P01 | 3m | 2 tasks | 3 files |
 | Phase 35-migrate-twitch-listener P02 | 5m | 3 tasks | 2 files |
 | Phase 36-migrate-kick-listener P01 | 5m | 2 tasks | 3 files |
+| Phase 36-migrate-kick-listener P02 | 3m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,7 @@ Key decisions relevant to v1.6:
 - [Phase 35-migrate-twitch-listener]: nil passed to channels.NewManager for assignedSourceIDs — SDK owns via UpdateAssignedSourceIDs inside base.Start
 - [Phase 36-migrate-kick-listener]: goleak placed in direct require block (not indirect) — forward dep for plan 02 smoke test before any .go file imports it
 - [Phase 36-migrate-kick-listener]: Compile-time assertion var _ listener.ChannelManager = (*Manager)(nil) added to kick-listener channels/manager.go — build fails immediately if Manager drifts from 7-method SDK interface
+- [Phase 36-migrate-kick-listener]: nil passed to NewListenerBase for logger in smoke test — matches established twitch-listener smoke test pattern from Phase 35
 
 ### Pending Todos
 
@@ -106,8 +108,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T22:03:59.280Z
-Stopped at: Completed 36-01-PLAN.md
+Last session: 2026-03-17T22:09:41.725Z
+Stopped at: Completed 36-02-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
