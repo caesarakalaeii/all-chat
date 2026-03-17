@@ -250,7 +250,12 @@ Plans:
   1. youtube-listener-innertube `cmd/main.go` uses `LeadershipListener` — manual `sourcemanager.NewLeadershipCoordinator` wiring is removed; SDK nil-safe passthrough is active when `SOURCE_MANAGER_SECRET` is absent
   2. discord-listener `cmd/main.go` uses `LeadershipListener` — shard ownership coordination via Redis lock pattern is unchanged in behavior; Gateway RESUME protocol is unaffected
   3. Both services deploy without regression: InnerTube message rate is stable and Discord relay continues to function with loop-safety filter intact
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 37-01-PLAN.md — SDK SMClient() accessor + goleak direct dep in both services
+- [ ] 37-02-PLAN.md — youtube-listener-innertube cmd/main.go SDK migration + goroutine leak smoke test
+- [ ] 37-03-PLAN.md — discord-listener cmd/main.go SDK migration + goroutine leak smoke test
 
 ### Phase 38: Migrate youtube-listener and twitch-eventsub-listener
 **Goal**: Migration window is closed — all Go listeners run on the shared SDK and the mixed-fleet monitoring period ends
