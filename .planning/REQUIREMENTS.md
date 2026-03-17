@@ -68,8 +68,8 @@ Requirements for the Listener SDK milestone. Each maps to roadmap phases.
 - [x] **MIGRATE-01**: twitch-listener `cmd/main.go` migrated to use `ListenerBase` — startup wiring reduced to service-specific IRC connection and message publishing only
 - [x] **MIGRATE-02**: kick-listener `cmd/main.go` migrated to use `ListenerBase` + `LeadershipListener` — both assignment and leadership archetypes exercised via SDK
 - [ ] **MIGRATE-03**: youtube-listener `cmd/main.go` migrated to use `LeadershipListener` — quota tracker behavior unchanged; all existing tests pass
-- [ ] **MIGRATE-04**: youtube-listener-innertube `cmd/main.go` migrated to use `LeadershipListener` — no CoordinatorClient; SDK leadership wiring is the sole integration point
-- [ ] **MIGRATE-05**: discord-listener `cmd/main.go` migrated to use `LeadershipListener` — shard ownership coordination via existing Redis lock pattern unchanged
+- [x] **MIGRATE-04**: youtube-listener-innertube `cmd/main.go` migrated to use `LeadershipListener` — no CoordinatorClient; SDK leadership wiring is the sole integration point
+- [x] **MIGRATE-05**: discord-listener `cmd/main.go` migrated to use `LeadershipListener` — shard ownership coordination via existing Redis lock pattern unchanged
 - [ ] **MIGRATE-06**: twitch-eventsub-listener `cmd/main.go` migrated to use `ListenerBase` — stateless webhook receiver gains standardized heartbeat and health wiring
 
 ### VERIFY — Build and Interface Verification
@@ -146,8 +146,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIGRATE-01 | Phase 35 | Complete |
 | MIGRATE-02 | Phase 36 | Complete |
 | MIGRATE-03 | Phase 38 | Pending |
-| MIGRATE-04 | Phase 37 | Pending |
-| MIGRATE-05 | Phase 37 | Pending |
+| MIGRATE-04 | Phase 37 | Complete |
+| MIGRATE-05 | Phase 37 | Complete |
 | MIGRATE-06 | Phase 38 | Pending |
 | VERIFY-01 | Phase 34 | Complete |
 | VERIFY-02 | Phase 35 | Complete |
