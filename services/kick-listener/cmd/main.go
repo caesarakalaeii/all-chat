@@ -106,7 +106,7 @@ func main() {
 		podName = "kick-listener-local" // Fallback for local development
 	}
 
-	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, log)
+	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, "kick-listener", log)
 
 	// Start JWT refresh to prevent token expiration (refreshes every 12 hours)
 	coordClient.StartJWTRefresh(ctx)
@@ -206,7 +206,7 @@ func main() {
 	time.Sleep(2 * time.Second)
 
 	// Start channel manager (will sync and subscribe to channels)
-	if err := channelMgr.Start(); err != nil {
+	if err := channelMgr.Start(ctx); err != nil {
 		log.Fatal("Failed to start channel manager", zap.Error(err))
 	}
 
