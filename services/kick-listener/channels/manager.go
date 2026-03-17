@@ -672,7 +672,7 @@ func (m *Manager) GetOverlayTargetsForChatroom(chatroomID int) ([]OverlayTarget,
 }
 
 // HandleMigrationEvent handles migration events from Redis Pub/Sub (KICK-03, KICK-04)
-func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
+func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) error {
 	// Extract trace context from event (from Redis Streams message)
 	carrier := propagation.MapCarrier{
 		"traceparent": event.TraceParent,
@@ -695,7 +695,7 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 	defer m.migrationMu.Unlock()
 
 	if event.Platform != "kick" {
-		return // Not for this listener
+		return nil // Not for this listener
 	}
 
 	// Check if this pod is involved
@@ -711,6 +711,7 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 		// Old pod: unsubscribe after confirmation (KICK-04)
 		m.handleMigrationAsOldPod(ctx, event)
 	}
+	return nil
 }
 
 // handleMigrationAsNewPod handles migration when this pod is the new assignment target
