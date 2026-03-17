@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/shared/coordination"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,9 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
+
+// Compile-time assertion: Manager must satisfy the SDK ChannelManager interface.
+var _ listener.ChannelManager = (*Manager)(nil)
 
 const (
 	// Twitch rate limits for authenticated connections
