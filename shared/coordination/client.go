@@ -24,6 +24,7 @@ type CoordinatorClient struct {
 	logger        *zap.Logger
 	jwtMutex      sync.RWMutex // Protects serviceJWT during refresh
 	stopRefresh   chan struct{} // Signal to stop JWT refresh goroutine
+	stopOnce      sync.Once    // Ensures stopRefresh is closed only once
 }
 
 // Assignment represents a channel assignment from the coordinator
@@ -281,9 +282,9 @@ func (c *CoordinatorClient) StartJWTRefresh(ctx context.Context) {
 	}()
 }
 
-// StopJWTRefresh stops the JWT refresh background task
+// StopJWTRefresh stops the JWT refresh background task. Safe to call multiple times.
 func (c *CoordinatorClient) StopJWTRefresh() {
-	close(c.stopRefresh)
+	c.stopOnce.Do(func() { close(c.stopRefresh) })
 }
 
 // refreshJWT generates a new JWT token and updates the client
