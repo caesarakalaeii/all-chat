@@ -234,7 +234,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         }
 
         // Handle chat messages and events
-        if (envelope.type === 'chat_message' && envelope.data && !envelope.data.event) {
+        if (envelope.type === 'chat_message' && envelope.data) {
           let message: ChatMessage = envelope.data;
           message = await resolveTwitchBadgeIcons(message);
           message = sortMessageBadges(message);
