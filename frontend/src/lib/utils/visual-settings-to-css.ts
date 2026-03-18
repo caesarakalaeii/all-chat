@@ -4,7 +4,7 @@ import type { VisualSettings } from '@/lib/types/visual-settings'
  * Authoritative mapping from VisualSettings field names to CSS custom property names.
  * Order determines declaration order in the generated CSS string.
  */
-const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
+export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   // Typography
   ['fontFamily',            '--chat-font-family'],
   ['fontWeight',            '--chat-font-weight'],
