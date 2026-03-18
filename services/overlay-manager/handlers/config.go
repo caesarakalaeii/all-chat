@@ -87,6 +87,7 @@ func (h *ConfigHandler) HandleUpdateConfig(c *gin.Context) {
 		EnableBTTV      *bool          `json:"enable_bttv"`
 		EnableFFZ       *bool          `json:"enable_ffz"`
 		CustomCSS       *string        `json:"custom_css"`
+		VisualSettings  map[string]any `json:"visual_settings"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -111,6 +112,9 @@ func (h *ConfigHandler) HandleUpdateConfig(c *gin.Context) {
 	}
 	if req.CustomCSS != nil {
 		config.CustomCSS = *req.CustomCSS
+	}
+	if req.VisualSettings != nil {
+		config.VisualSettings = req.VisualSettings
 	}
 
 	if err := h.repo.Update(c.Request.Context(), config); err != nil {
