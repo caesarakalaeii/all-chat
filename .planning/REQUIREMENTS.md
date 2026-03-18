@@ -17,8 +17,8 @@ Requirements for the Visual Overlay Customizer milestone. Each maps to roadmap p
 - [ ] **APPR-06**: User can adjust component sizing: avatar size, badge size, emote scale
 - [ ] **APPR-07**: User can override per-platform accent colors (Twitch, YouTube, Kick, TikTok, Discord)
 - [x] **APPR-08**: User can configure backdrop blur (glassmorphism) intensity
-- [ ] **APPR-09**: User can customize special event styling: show/hide, size modifier for Super Chat, subscriptions, raids
-- [ ] **APPR-10**: All visual control changes update the live overlay preview in real-time without requiring save
+- [x] **APPR-09**: User can customize special event styling: show/hide, size modifier for Super Chat, subscriptions, raids
+- [x] **APPR-10**: All visual control changes update the live overlay preview in real-time without requiring save
 
 ### VISM — Visual Customizer Mechanism
 
