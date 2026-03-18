@@ -10,6 +10,9 @@ import { Logger } from '../types/logger.js';
 import { Assignment, AssignmentResponse, HeartbeatRequest } from './models.js';
 import { generateServiceJWT } from '../auth/jwt.js';
 
+const JWT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const JWT_REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // Refresh when < 5 minutes remaining
+
 /**
  * CoordinatorClient is an HTTP client for coordinator integration.
  * Matches Go shared/coordination/client.go CoordinatorClient behavior.
@@ -18,6 +21,7 @@ export class CoordinatorClient {
   private baseURL: string;
   private serviceSecret: string;
   private serviceJWT: string;
+  private jwtExpiresAt: number; // unix timestamp in ms
   private serviceName: string;
   private httpClient: AxiosInstance;
   private logger: Logger;
@@ -47,8 +51,9 @@ export class CoordinatorClient {
       this.serviceName = 'tiktok-listener';
     }
 
-    // Generate service JWT (24 hour expiry, matching Go implementation)
-    this.serviceJWT = generateServiceJWT(this.serviceName, this.serviceSecret, 24 * 60 * 60 * 1000);
+    // Generate initial service JWT (24 hour expiry, matching Go implementation)
+    this.serviceJWT = generateServiceJWT(this.serviceName, this.serviceSecret, JWT_TTL_MS);
+    this.jwtExpiresAt = Date.now() + JWT_TTL_MS;
 
     this.logger.info('Generated service JWT for coordinator authentication', {
       service_name: this.serviceName,
@@ -58,9 +63,19 @@ export class CoordinatorClient {
     this.httpClient = axios.create({
       baseURL: this.baseURL,
       timeout: 10000, // 10 seconds
-      headers: {
-        Authorization: `Bearer ${this.serviceJWT}`,
-      },
+    });
+
+    // Refresh JWT before expiry on every request (matches Go StartJWTRefresh behavior)
+    this.httpClient.interceptors.request.use((config) => {
+      if (Date.now() >= this.jwtExpiresAt - JWT_REFRESH_THRESHOLD_MS) {
+        this.serviceJWT = generateServiceJWT(this.serviceName, this.serviceSecret, JWT_TTL_MS);
+        this.jwtExpiresAt = Date.now() + JWT_TTL_MS;
+        this.logger.info('Refreshed service JWT for coordinator authentication', {
+          service_name: this.serviceName,
+        });
+      }
+      config.headers['Authorization'] = `Bearer ${this.serviceJWT}`;
+      return config;
     });
   }
 
