@@ -914,6 +914,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- Iframe ref for live preview communication ---
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
+  // --- Latest-value ref for visualSettings (avoids stale closure in handleIframeReady) ---
+  const visualSettingsRef = useRef<Partial<VisualSettings>>({})
+  visualSettingsRef.current = visualSettings
+
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
 
@@ -967,7 +971,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
   const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
     iframeRef.current = iframe
-    sendCssToIframe(visualSettings)
+    sendCssToIframe(visualSettingsRef.current)
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document
     if (doc) {
       const style = getComputedStyle(doc.documentElement)
@@ -988,7 +992,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       }
       setIframeVisibilityDefaults(defaults)
     }
-  }, [sendCssToIframe, visualSettings])
+  }, [sendCssToIframe])
 
   // Load overlay, sources, accepted shares and config
   useEffect(() => {
