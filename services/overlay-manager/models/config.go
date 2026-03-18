@@ -12,6 +12,7 @@ type OverlayConfig struct {
 	EnableBTTV      bool           `json:"enable_bttv"`
 	EnableFFZ       bool           `json:"enable_ffz"`
 	CustomCSS       string         `json:"custom_css"`
+	VisualSettings  map[string]any `json:"visual_settings"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 }
@@ -23,5 +24,8 @@ func (c *OverlayConfig) EnsureMaps() {
 	}
 	if c.FilterSettings == nil {
 		c.FilterSettings = map[string]any{}
+	}
+	if c.VisualSettings == nil {
+		c.VisualSettings = map[string]any{}
 	}
 }
