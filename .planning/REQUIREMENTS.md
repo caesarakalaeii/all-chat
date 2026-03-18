@@ -40,7 +40,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VISM-01 | Phase 33 | Not started |
+| VISM-01 | Phase 33 | Complete |
 | VISM-03 | Phase 33 | Not started |
 | APPR-01 | Phase 34 | Not started |
 | APPR-02 | Phase 34 | Not started |
