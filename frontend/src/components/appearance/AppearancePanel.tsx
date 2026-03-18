@@ -9,6 +9,7 @@ import { BackgroundGroup } from './BackgroundGroup'
 import { VisibilityGroup } from './VisibilityGroup'
 import { SizingGroup } from './SizingGroup'
 import { PlatformColorsGroup } from './PlatformColorsGroup'
+import { EventsGroup } from './EventsGroup'
 
 export interface AppearancePanelProps {
   visualSettings: Partial<VisualSettings>
@@ -40,6 +41,9 @@ export function AppearancePanel({ visualSettings, onChange, visibilityDefaults =
       </CollapsibleSection>
       <CollapsibleSection id="platform-colors" title="Platform Colors">
         <PlatformColorsGroup visualSettings={visualSettings} onChange={onChange} />
+      </CollapsibleSection>
+      <CollapsibleSection id="events" title="Events">
+        <EventsGroup visualSettings={visualSettings} onChange={onChange} />
       </CollapsibleSection>
     </div>
   )
