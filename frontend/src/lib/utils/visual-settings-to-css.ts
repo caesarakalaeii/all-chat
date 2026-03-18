@@ -16,6 +16,8 @@ const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['usernameColor',         '--chat-username-color'],
   ['timestampColor',        '--chat-timestamp-color'],
   // Username typography
+  ['usernameFontFamily',    '--chat-username-font-family'],
+  ['timestampFontFamily',   '--chat-timestamp-font-family'],
   ['usernameFontWeight',    '--chat-username-font-weight'],
   ['usernameFontSize',      '--chat-username-font-size'],
   ['timestampFontSize',     '--chat-timestamp-font-size'],
