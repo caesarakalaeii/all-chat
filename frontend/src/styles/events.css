@@ -304,3 +304,24 @@
   .event-message[data-platform='system'] {
   }
 }
+
+@layer visual-customizer {
+  .event-message[class*='super_chat'],
+  .event-message[class*='super_sticker'] {
+    transform: scale(var(--chat-super-chat-size-modifier, 1.05));
+  }
+  .event-message[class*='subscription'],
+  .event-message[class*='gift_subscription'] {
+    transform: scale(var(--chat-subscription-size-modifier, 1.05));
+  }
+  .event-message[class*='raid'] {
+    transform: scale(var(--chat-raid-size-modifier, 1.05));
+  }
+  .event-message[class*='bits'] {
+    transform: scale(var(--chat-bits-size-modifier, 1.05));
+  }
+  .event-message[class*='member'],
+  .event-message[class*='gift'] {
+    transform: scale(var(--chat-membership-gift-size-modifier, 1.05));
+  }
+}
