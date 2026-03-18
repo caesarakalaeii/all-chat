@@ -74,4 +74,5 @@ export interface VisualSettings {
   subscriptionSizeModifier?: string    // --chat-subscription-size-modifier
   raidSizeModifier?: string            // --chat-raid-size-modifier
   bitsSizeModifier?: string            // --chat-bits-size-modifier
+  membershipGiftSizeModifier?: string  // --chat-membership-gift-size-modifier
 }
