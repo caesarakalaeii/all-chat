@@ -27,6 +27,7 @@ export interface OverlayConfig {
   enable_bttv: boolean
   enable_ffz: boolean
   custom_css?: string
+  visual_settings?: Record<string, unknown>
   created_at: string
   updated_at: string
 }
