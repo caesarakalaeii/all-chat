@@ -201,7 +201,7 @@ func main() {
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
-	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher)
+	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher, ChannelSyncInterval)
 
 	// Set assigned source IDs for filtering
 	channelManager.SetAssignedSourceIDs(assignedSourceIDs, podName)
@@ -394,7 +394,9 @@ func main() {
 			if acquired {
 				log.Info("Acquired leadership", zap.String("instance_id", instanceID))
 				// Start channel manager (creates/deletes EventSub subscriptions)
-				channelManager.Start(ctx, ChannelSyncInterval)
+				if err := channelManager.Start(ctx); err != nil {
+					log.Error("Channel manager start failed", zap.Error(err))
+				}
 			}
 		}
 
@@ -423,7 +425,9 @@ func main() {
 					log.Info("Acquired leadership", zap.String("instance_id", instanceID))
 
 					// Start channel manager (creates/deletes EventSub subscriptions)
-					channelManager.Start(ctx, ChannelSyncInterval)
+					if err := channelManager.Start(ctx); err != nil {
+						log.Error("Channel manager start failed", zap.Error(err))
+					}
 
 				} else if wasLeader && !acquired {
 					// Lost leadership - stop managing subscriptions
