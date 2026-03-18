@@ -75,6 +75,7 @@ describe('visualSettingsToCss', () => {
       subscriptionSizeModifier: '1',
       raidSizeModifier: '1',
       bitsSizeModifier: '1',
+      membershipGiftSizeModifier: '1.2',
     }
 
     const result = visualSettingsToCss(full)
@@ -85,8 +86,9 @@ describe('visualSettingsToCss', () => {
     expect(result).toContain('--platform-discord-accent: #5865f2;')
     expect(result).toContain('--chat-show-super-chat: block;')
     expect(result).toContain('--chat-bits-size-modifier: 1;')
-    // All 49 properties present (47 original + 2 new font family fields)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(49)
+    expect(result).toContain('--chat-membership-gift-size-modifier: 1.2;')
+    // All 50 properties present (49 original + membershipGiftSizeModifier)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(50)
   })
 
   it('wraps output in correct cascade layer syntax', () => {

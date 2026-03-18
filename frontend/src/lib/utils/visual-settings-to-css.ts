@@ -63,6 +63,7 @@ const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['subscriptionSizeModifier',   '--chat-subscription-size-modifier'],
   ['raidSizeModifier',           '--chat-raid-size-modifier'],
   ['bitsSizeModifier',           '--chat-bits-size-modifier'],
+  ['membershipGiftSizeModifier', '--chat-membership-gift-size-modifier'],
 ]
 
 /**
