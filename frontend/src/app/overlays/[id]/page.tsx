@@ -47,6 +47,7 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge'
 import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal'
 import { cn } from '@/lib/utils'
+import { AppearancePanel } from '@/components/appearance/AppearancePanel'
 import dynamic from 'next/dynamic'
 
 // Dynamically import Monaco Editor to avoid SSR issues
@@ -1937,7 +1938,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             </div>
           </Card>
 
-          {/* 6. Custom CSS section */}
+          {/* 6. Appearance controls */}
+          <Card className="p-4">
+            <h2 className="mb-3 text-sm font-semibold text-text">Appearance</h2>
+            <AppearancePanel visualSettings={visualSettings} onChange={handleVisualSettingsChange} />
+          </Card>
+
+          {/* 7. Custom CSS section */}
           <Card className="p-4">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
