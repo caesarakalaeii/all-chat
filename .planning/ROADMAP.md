@@ -7,7 +7,7 @@
 - ✅ **v1.2 InnerTube YouTube Listener** — Phases 11-22 (shipped 2026-03-06)
 - ✅ **v1.3 Frontend Redesign** — Phases 23-26 (shipped 2026-03-14)
 - ✅ **v1.5 Discord Listener** — Phases 27-32 (shipped 2026-03-16)
-- 🚧 **v1.6 Listener SDK** — Phases 33-38 (in progress)
+- ✅ **v1.6 Listener SDK** — Phases 33-38 (shipped 2026-03-18)
 
 ## Phases
 
@@ -169,112 +169,29 @@
 
 </details>
 
-### 🚧 v1.6 Listener SDK (In Progress)
+<details>
+<summary>✅ v1.6 Listener SDK (Phases 33-38) — SHIPPED 2026-03-18</summary>
 
 **Milestone Goal:** Extract load balancing, leader election, and channel management into a shared SDK that all listeners import, eliminating 80–150 lines of duplicated startup wiring from every listener and making future listeners trivial to build.
 
-- [x] **Phase 33: Pre-Migration Cleanup** - Normalize source ID suffix handling and canonicalize HandleMigrationEvent signature across Twitch and Kick before SDK extraction begins (completed 2026-03-17)
-- [x] **Phase 34: SDK Package Definition** - Create shared/listener package with ListenerBase, LeadershipListener, ChannelManager interface, ShutdownCoordinator, and make build-all CI target (completed 2026-03-17)
-- [x] **Phase 35: Migrate twitch-listener** - First production SDK validation; twitch-listener cmd/main.go reduced to IRC connection and message publishing only (completed 2026-03-17)
-- [x] **Phase 36: Migrate kick-listener** - Exercise both ListenerBase and LeadershipListener archetypes; both SDK models confirmed in production (completed 2026-03-17)
-- [x] **Phase 37: Migrate youtube-innertube and discord-listener** - Leadership-only migrations; close leadership archetype with two independent validations (completed 2026-03-17)
-- [x] **Phase 38: Migrate youtube-listener and twitch-eventsub-listener** - Close migration window; all Go listeners running on shared SDK (completed 2026-03-18)
+- [x] **Phase 33: Pre-Migration Cleanup** — Source ID suffix normalization + HandleMigrationEvent error signature canonicalized (2/2 plans, completed 2026-03-17)
+- [x] **Phase 34: SDK Package Definition** — shared/listener package: ListenerBase, LeadershipListener, ChannelManager, ShutdownCoordinator, make build-all CI target (3/3 plans, completed 2026-03-17)
+- [x] **Phase 35: Migrate twitch-listener** — First production SDK validation; ListenerBase archetype confirmed (2/2 plans, completed 2026-03-17)
+- [x] **Phase 36: Migrate kick-listener** — Both ListenerBase + LeadershipListener archetypes exercised (2/2 plans, completed 2026-03-17)
+- [x] **Phase 37: Migrate youtube-innertube and discord-listener** — Leadership-only archetype validated with two independent services (3/3 plans, completed 2026-03-17)
+- [x] **Phase 38: Migrate youtube-listener and twitch-eventsub-listener** — Migration window closed; all Go listeners on shared SDK (3/3 plans, completed 2026-03-18)
 
-## Phase Details
+**Delivered:**
+- Shared `shared/listener` SDK (797 LOC) with two archetypes: `ListenerBase` (Twitch, youtube, twitch-eventsub) and `LeadershipListener` (kick, youtube-innertube, discord)
+- All 6 Go listeners migrated — `cmd/main.go` reduced to service-specific connection + publishing only
+- Compile-time `ChannelManager` assertions and goroutine leak smoke tests in every migrated listener
+- `make build-all` CI target catching cross-module version drift
 
-### Phase 33: Pre-Migration Cleanup
-**Goal**: All behavioral inconsistencies between existing listeners are resolved and deployed before any SDK code is written
-**Depends on**: Phase 32 (v1.5 complete)
-**Requirements**: PREP-01, PREP-02
-**Success Criteria** (what must be TRUE):
-  1. All Go listeners agree on source ID format — source IDs passed to CoordinatorClient either always include or always omit the `:platform` suffix, with no per-listener branching
-  2. `HandleMigrationEvent` has the canonical signature `func(event *coordination.MigrationEvent) error` in both twitch-listener and kick-listener channel managers, and both compile and pass existing tests
-  3. The `shared/coordination` migration subscriber correctly handles the error return from `HandleMigrationEvent` (logs or ignores) without panicking
-**Plans**: 2 plans
+**Archive**: [v1.6-ROADMAP.md](milestones/v1.6-ROADMAP.md) | [v1.6-REQUIREMENTS.md](milestones/v1.6-REQUIREMENTS.md)
 
-Plans:
-- [ ] 33-01-PLAN.md — Source ID suffix normalization (strip-at-intake in kick-listener and twitch-listener startup path)
-- [ ] 33-02-PLAN.md — HandleMigrationEvent error signature canonicalization across both channel managers and MigrationSubscriber
-
-### Phase 34: SDK Package Definition
-**Goal**: The shared/listener package exists, is fully tested, and the build-all CI target verifies all listener modules compile together
-**Depends on**: Phase 33
-**Requirements**: SDK-01, SDK-02, SDK-03, SDK-04, SDK-05, SDK-06, SDK-07, SDK-08, VERIFY-01
-**Success Criteria** (what must be TRUE):
-  1. `shared/listener` package compiles with `go build ./...` inside the shared module — four new files present: base.go, leadership.go, channel_manager.go, shutdown.go
-  2. `NewCoordinatorClient` in `shared/coordination/client.go` accepts an explicit `serviceName string` parameter — no existing listener has a compilation error after the signature change
-  3. Unit tests with a mock coordinator verify that `ListenerBase` goroutines (heartbeat, assignment refresh, migration subscriber) start on `Start()` and stop on `Stop()` with no goroutine leak (`goleak.VerifyNone` passes)
-  4. `make build-all` runs in CI and exits 0, building all listener modules in a single command
-  5. `ListenerConfig` exposes heartbeat interval, assignment refresh interval, and startup jitter max — setting `LISTENER_STARTUP_JITTER_MAX=0` results in zero jitter delay in tests
-**Plans**: 3 plans
-
-Plans:
-- [ ] 34-01-PLAN.md — Contract foundation: ChannelManager interface, NewCoordinatorClient signature update, kick-listener Start(ctx) fix
-- [ ] 34-02-PLAN.md — SDK core: ListenerBase, LeadershipListener, ShutdownCoordinator, ListenerConfig, Env(), testutil mock, make build-all
-- [ ] 34-03-PLAN.md — Unit tests: goroutine lifecycle (goleak), jitter, LeadershipListener nil-safe, Env() helper
-
-### Phase 35: Migrate twitch-listener
-**Goal**: twitch-listener uses the shared SDK in production and validates the ListenerBase lifecycle against live Twitch IRC traffic
-**Depends on**: Phase 34
-**Requirements**: MIGRATE-01, VERIFY-02
-**Success Criteria** (what must be TRUE):
-  1. twitch-listener `cmd/main.go` contains only IRC connection setup and message publishing — all coordinator wiring, heartbeat, assignment refresh, and migration subscriber goroutines are gone from the file
-  2. `var _ listener.ChannelManager = (*channels.Manager)(nil)` compile-time assertion is present in twitch-listener `channels/manager.go` and the build succeeds
-  3. `messages_published_total` metric for twitch-listener shows no drop greater than 10% sustained for 5 minutes after the SDK-backed deployment replaces the prior deployment
-  4. All existing twitch-listener unit tests pass without modification
-**Plans**: 2 plans
-
-Plans:
-- [ ] 35-01-PLAN.md — Compile-time ChannelManager assertion + goleak dependency
-- [ ] 35-02-PLAN.md — cmd/main.go SDK migration + goroutine leak smoke test
-
-### Phase 36: Migrate kick-listener
-**Goal**: kick-listener uses both ListenerBase and LeadershipListener from the SDK, confirming both archetypes work correctly in production
-**Depends on**: Phase 35
-**Requirements**: MIGRATE-02
-**Success Criteria** (what must be TRUE):
-  1. kick-listener `cmd/main.go` uses `ListenerBase` for assignment coordination and `LeadershipListener` for per-stream ownership — manual construction of both CoordinatorClient and LeadershipCoordinator is removed from the file
-  2. kick-listener compiles with string-keyed channel manager (`strconv.Itoa(chatroomID)` convention documented in code) and all existing Kick channel manager tests pass
-  3. Both SDK archetypes (assignment-based and leadership-based) have been exercised against live Kick traffic with `messages_published_total` showing no regression
-**Plans**: 2 plans
-
-Plans:
-- [ ] 36-01-PLAN.md — Compile-time ChannelManager assertion + goleak direct dep (Wave 0 prerequisites)
-- [ ] 36-02-PLAN.md — cmd/main.go SDK migration (NewLeadershipListenerFromEnv) + goroutine leak smoke test
-
-### Phase 37: Migrate youtube-innertube and discord-listener
-**Goal**: Both leadership-only listeners use LeadershipListener from the SDK, validating the archetype without assignment coordinator complexity
-**Depends on**: Phase 36
-**Requirements**: MIGRATE-04, MIGRATE-05
-**Success Criteria** (what must be TRUE):
-  1. youtube-listener-innertube `cmd/main.go` uses `LeadershipListener` — manual `sourcemanager.NewLeadershipCoordinator` wiring is removed; SDK nil-safe passthrough is active when `SOURCE_MANAGER_SECRET` is absent
-  2. discord-listener `cmd/main.go` uses `LeadershipListener` — shard ownership coordination via Redis lock pattern is unchanged in behavior; Gateway RESUME protocol is unaffected
-  3. Both services deploy without regression: InnerTube message rate is stable and Discord relay continues to function with loop-safety filter intact
-**Plans**: 3 plans
-
-Plans:
-- [ ] 37-01-PLAN.md — SDK SMClient() accessor + goleak direct dep in both services
-- [ ] 37-02-PLAN.md — youtube-listener-innertube cmd/main.go SDK migration + goroutine leak smoke test
-- [ ] 37-03-PLAN.md — discord-listener cmd/main.go SDK migration + goroutine leak smoke test
-
-### Phase 38: Migrate youtube-listener and twitch-eventsub-listener
-**Goal**: Migration window is closed — all Go listeners run on the shared SDK and the mixed-fleet monitoring period ends
-**Depends on**: Phase 37
-**Requirements**: MIGRATE-03, MIGRATE-06
-**Success Criteria** (what must be TRUE):
-  1. youtube-listener `cmd/main.go` uses `LeadershipListener` — quota tracker behavior is unchanged; all existing quota-related tests pass against the SDK-backed assignment implementation
-  2. twitch-eventsub-listener `cmd/main.go` uses `ListenerBase` — stateless webhook receiver gains standardized heartbeat and health wiring; no existing EventSub webhook test requires modification
-  3. All 5 Go listener services (twitch, kick, youtube, youtube-innertube, discord) plus twitch-eventsub-listener are running SDK-backed code in production simultaneously with no active mixed-fleet monitoring alerts
-**Plans**: 3 plans
-
-Plans:
-- [ ] 38-01-PLAN.md — youtube-listener cmd/main.go LeadershipListener migration + goleak smoke test
-- [ ] 38-02-PLAN.md — twitch-eventsub ChannelManager interface gap fixes (Start re-sign, 3 new methods, compile assertion)
-- [ ] 38-03-PLAN.md — twitch-eventsub cmd/main.go ListenerBase wiring + goleak smoke test
+</details>
 
 ## Progress
-
-**Execution Order:** 33 → 34 → 35 → 36 → 37 → 38
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -283,12 +200,7 @@ Plans:
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27-32 | v1.5 | 16/16 | Complete | 2026-03-16 |
-| 33. Pre-Migration Cleanup | v1.6 | 2/2 | Complete | 2026-03-17 |
-| 34. SDK Package Definition | 3/3 | Complete    | 2026-03-17 | - |
-| 35. Migrate twitch-listener | 2/2 | Complete    | 2026-03-17 | - |
-| 36. Migrate kick-listener | 2/2 | Complete    | 2026-03-17 | - |
-| 37. Migrate youtube-innertube and discord-listener | 3/3 | Complete    | 2026-03-17 | - |
-| 38. Migrate youtube-listener and twitch-eventsub-listener | 3/3 | Complete    | 2026-03-18 | - |
+| 33-38 | v1.6 | 15/15 | Complete | 2026-03-18 |
 
 ---
-*Last updated: 2026-03-18 after Phase 38 planning*
+*Last updated: 2026-03-18 after v1.6 milestone*
