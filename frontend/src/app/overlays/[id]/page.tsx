@@ -21,7 +21,7 @@
 
 'use client'
 
-import { use, useEffect, useRef, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, X, Clipboard, Share2, Puzzle } from 'lucide-react'
@@ -33,6 +33,8 @@ import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
 import type { Overlay, ChatSource, DiscordSourceConfig } from '@/lib/types/overlay'
 import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
+import type { VisualSettings } from '@/lib/types/visual-settings'
+import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { toastManager } from '@/lib/toast'
 import { AppNav } from '@/components/AppNav'
 import { SplitView } from '@/components/SplitView'
@@ -900,6 +902,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [useCustomCss, setUseCustomCss] = useState(false)
   const [showThemeMarketplace, setShowThemeMarketplace] = useState(false)
 
+  // --- Visual appearance settings state ---
+  const [visualSettings, setVisualSettings] = useState<Partial<VisualSettings>>({})
+
+  // --- Iframe ref for live preview communication ---
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
 
@@ -912,6 +920,30 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [shareRecipient, setShareRecipient] = useState('')
   const [shareLoading, setShareLoading] = useState(false)
   const shareInputRef = useRef<HTMLInputElement>(null)
+
+  // --- sendCssToIframe: post CSS generated from visualSettings to the iframe ---
+  const sendCssToIframe = useCallback((settings: Partial<VisualSettings>) => {
+    const css = visualSettingsToCss(settings)
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'VISUAL_CSS_UPDATE', css },
+      '*'
+    )
+  }, [])
+
+  // --- handleVisualSettingsChange: merge patch, update state, send CSS ---
+  const handleVisualSettingsChange = useCallback((patch: Partial<VisualSettings>) => {
+    setVisualSettings((prev) => {
+      const next = { ...prev, ...patch }
+      sendCssToIframe(next)
+      return next
+    })
+  }, [sendCssToIframe])
+
+  // --- handleIframeReady: store iframe ref and send initial CSS ---
+  const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
+    iframeRef.current = iframe
+    sendCssToIframe(visualSettings)
+  }, [sendCssToIframe, visualSettings])
 
   // Load overlay, sources, accepted shares and config
   useEffect(() => {
@@ -968,6 +1000,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           const css = config.custom_css || ''
           setCustomCss(css)
           setUseCustomCss(Boolean(css.trim().length))
+
+          if (config.visual_settings) setVisualSettings(config.visual_settings)
         } catch (err) {
           console.warn('[OverlayEditor] Failed to load config', err)
         } finally {
@@ -1273,6 +1307,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           show_platform_badge: showPlatformBadge,
         },
         custom_css: useCustomCss ? customCss : '',
+        visual_settings: visualSettings,
       })
       setConfigAlert({ type: 'success', message: 'Configuration saved!' })
     } catch (error) {
@@ -1346,7 +1381,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <SplitView overlayId={id}>
+      <SplitView overlayId={id} onIframeReady={handleIframeReady}>
         {/* Config panel content */}
         <div className="max-w-none space-y-6 p-6">
           {/* 1. Header */}
