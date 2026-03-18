@@ -288,7 +288,7 @@ Plans:
 | 35. Migrate twitch-listener | 2/2 | Complete    | 2026-03-17 | - |
 | 36. Migrate kick-listener | 2/2 | Complete    | 2026-03-17 | - |
 | 37. Migrate youtube-innertube and discord-listener | 3/3 | Complete    | 2026-03-17 | - |
-| 38. Migrate youtube-listener and twitch-eventsub-listener | 1/3 | In Progress|  | - |
+| 38. Migrate youtube-listener and twitch-eventsub-listener | 2/3 | In Progress|  | - |
 
 ---
 *Last updated: 2026-03-18 after Phase 38 planning*

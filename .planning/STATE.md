@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-01-PLAN.md
-last_updated: "2026-03-18T08:52:29.688Z"
+stopped_at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-02-PLAN.md
+last_updated: "2026-03-18T09:01:13.375Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
   completed_phases: 23
   total_plans: 81
-  completed_plans: 79
+  completed_plans: 80
   percent: 0
 ---
 
@@ -64,6 +64,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 37 P03 | 3min | 2 tasks | 2 files |
 | Phase 37-migrate-youtube-innertube-and-discord-listener P02 | 5m | 2 tasks | 2 files |
 | Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener P01 | 10min | 2 tasks | 3 files |
+| Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener P02 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,8 @@ Key decisions relevant to v1.6:
 - [Phase 37-migrate-youtube-innertube-and-discord-listener]: nil passed for logger in NewListenerBase smoke test — matches kick-listener pattern (not zap.NewNop())
 - [Phase 37-migrate-youtube-innertube-and-discord-listener]: ListenerBase used as container only in youtube-innertube production main.go — Start/Stop not called for leadership-only service
 - [Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener]: [Phase 38-01]: listener.Env used as drop-in for getEnvOrDefault — local helper deleted entirely; base.Start not called for leadership-only youtube-listener; parseIntEnv preserved for 4 quota tier config call sites
+- [Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener]: [Phase 38-02]: syncInterval stored as Manager field, passed to NewManager as 5th arg; ChannelSyncInterval constant stays in cmd/main.go as documentation
+- [Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener]: [Phase 38-02]: Old map-returning GetActiveChannels renamed to GetActiveChannelMap; new GetActiveChannels() []string satisfies SDK interface without breaking callers
 
 ### Pending Todos
 
@@ -119,8 +122,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T08:52:29.683Z
-Stopped at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-01-PLAN.md
+Last session: 2026-03-18T09:01:13.371Z
+Stopped at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-02-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
