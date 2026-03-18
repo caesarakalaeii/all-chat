@@ -1,16 +1,35 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import React from 'react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 
-// Stub tests for CollapsibleSection
-// Stubs exist to establish test names; full interaction tests run once component is implemented.
+afterEach(() => { cleanup() })
+
+// Mock localStorage before any imports that might reference it
+const localStorageMock = (() => {
+  let store: Record<string, string> = {}
+  return {
+    getItem: vi.fn((key: string) => store[key] ?? null),
+    setItem: vi.fn((key: string, value: string) => { store[key] = value }),
+    removeItem: vi.fn((key: string) => { delete store[key] }),
+    clear: vi.fn(() => { store = {} }),
+  }
+})()
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+})
+
+import { CollapsibleSection } from '../CollapsibleSection'
+
 describe('CollapsibleSection', () => {
-  const mockOnOpenChange = vi.fn()
-  void mockOnOpenChange
+  beforeEach(() => {
+    localStorageMock.clear()
+    vi.clearAllMocks()
+  })
 
-  it('renders with title and children', async () => {
-    const { render, screen } = await import('@testing-library/react')
-    const { CollapsibleSection } = await import('../CollapsibleSection')
-
+  it('renders with title and children', () => {
     render(
       <CollapsibleSection id="typography" title="Typography">
         <span>child content</span>
@@ -22,9 +41,23 @@ describe('CollapsibleSection', () => {
 
   it.todo('clicking trigger toggles open state')
 
-  it('open state is written to localStorage key appearance-panel-sections-v1', async () => {
-    // Verify the localStorage key constant matches the plan specification
-    const STORAGE_KEY = 'appearance-panel-sections-v1'
-    expect(STORAGE_KEY).toBe('appearance-panel-sections-v1')
+  it('open state is written to localStorage key appearance-panel-sections-v1 when trigger is clicked', () => {
+    render(
+      <CollapsibleSection id="typography" title="Typography">
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    const trigger = screen.getByRole('button')
+    fireEvent.click(trigger)
+    // Verify localStorage.setItem was called with the correct key
+    expect(localStorageMock.setItem).toHaveBeenCalledWith(
+      'appearance-panel-sections-v1',
+      expect.any(String)
+    )
+    // Verify the value stored is valid JSON with the section id
+    const calls = localStorageMock.setItem.mock.calls
+    const lastCall = calls[calls.length - 1] as [string, string]
+    const stored = JSON.parse(lastCall[1]) as Record<string, boolean>
+    expect('typography' in stored).toBe(true)
   })
 })
