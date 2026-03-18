@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Visual Overlay Customizer
 status: planning
-stopped_at: Phase 34 context gathered
-last_updated: "2026-03-18T10:12:15.658Z"
+stopped_at: Completed 34-appearance-controls-core 34-02-PLAN.md
+last_updated: "2026-03-18T10:34:22.559Z"
 last_activity: 2026-03-18 — v1.6 roadmap created, 5 phases (33-37), 18 requirements mapped
 progress:
   total_phases: 23
   completed_phases: 19
-  total_plans: 69
-  completed_plans: 69
+  total_plans: 72
+  completed_plans: 70
   percent: 0
 ---
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 
 *Updated: 2026-03-18 after milestone start*
 | Phase 33 P02 | 8 | 3 tasks | 3 files |
+| Phase 34-appearance-controls-core P02 | 15 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,8 @@ Key decisions relevant to v1.6:
 - **No new stack additions**: Frontend only (TypeScript/React); backend adds one DB column + one model field
 - [Phase 33]: VisualSettings visibility fields use union literal types ('inline'|'none', 'block'|'none') for direct CSS value mapping without runtime transformation
 - [Phase 33]: visualSettingsToCss returns empty string for empty/undefined-only input (not empty CSS block) to allow callers to skip injection
+- [Phase 34-appearance-controls-core]: Google Font names duplicated in embed page (not imported from FontFamilyCombobox) — embed and component are in different routing contexts
+- [Phase 34-appearance-controls-core]: style#visual-customizer-style managed imperatively via DOM to avoid re-render overhead on CSS updates
 
 ### Pending Todos
 
@@ -80,8 +83,8 @@ None identified at milestone start.
 
 ## Session Continuity
 
-Last session: 2026-03-18T10:12:15.654Z
-Stopped at: Phase 34 context gathered
-Resume file: .planning/phases/34-appearance-controls-core/34-CONTEXT.md
+Last session: 2026-03-18T10:34:22.555Z
+Stopped at: Completed 34-appearance-controls-core 34-02-PLAN.md
+Resume file: None
 
 **Next action:** Phase 33 complete — proceed to Phase 34 (Appearance Controls — Core)
