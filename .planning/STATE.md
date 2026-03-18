@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Phase 38 context gathered
-last_updated: "2026-03-17T23:29:24.581Z"
+stopped_at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-01-PLAN.md
+last_updated: "2026-03-18T08:52:29.688Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
   completed_phases: 23
-  total_plans: 78
-  completed_plans: 78
+  total_plans: 81
+  completed_plans: 79
   percent: 0
 ---
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 37-migrate-youtube-innertube-and-discord-listener P01 | 2m | 2 tasks | 5 files |
 | Phase 37 P03 | 3min | 2 tasks | 2 files |
 | Phase 37-migrate-youtube-innertube-and-discord-listener P02 | 5m | 2 tasks | 2 files |
+| Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener P01 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,7 @@ Key decisions relevant to v1.6:
 - [Phase 37]: Gateway goroutine outer nil guard removed — EnsureLeadership called unconditionally via nil-safe passthrough; only metrics.SetShardOwnership calls remain guarded
 - [Phase 37-migrate-youtube-innertube-and-discord-listener]: nil passed for logger in NewListenerBase smoke test — matches kick-listener pattern (not zap.NewNop())
 - [Phase 37-migrate-youtube-innertube-and-discord-listener]: ListenerBase used as container only in youtube-innertube production main.go — Start/Stop not called for leadership-only service
+- [Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener]: [Phase 38-01]: listener.Env used as drop-in for getEnvOrDefault — local helper deleted entirely; base.Start not called for leadership-only youtube-listener; parseIntEnv preserved for 4 quota tier config call sites
 
 ### Pending Todos
 
@@ -117,8 +119,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T23:29:24.578Z
-Stopped at: Phase 38 context gathered
-Resume file: .planning/phases/38-migrate-youtube-listener-and-twitch-eventsub-listener/38-CONTEXT.md
+Last session: 2026-03-18T08:52:29.683Z
+Stopped at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-01-PLAN.md
+Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
