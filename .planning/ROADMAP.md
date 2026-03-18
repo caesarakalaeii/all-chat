@@ -311,12 +311,12 @@ Plans:
 4. All three groups wired to live preview, following the same pattern as Phase 34 groups
 5. All three groups appear inside `AppearancePanel` with collapsible wrappers
 
-**Plans:** ~3 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] 35-01-PLAN.md — `VisibilityGroup` (component show/hide toggles)
-- [ ] 35-02-PLAN.md — `SizingGroup` (avatar, badge, emote size sliders)
-- [ ] 35-03-PLAN.md — `PlatformColorsGroup` (per-platform accent color pickers)
+- [ ] 35-01-PLAN.md — ToggleSwitch primitive + VisibilityGroup (6 show/hide toggles) + iframe defaults wiring
+- [ ] 35-02-PLAN.md — SizingGroup (avatar 16-64px, badge 12-32px, emote scale 0.5-3.0×)
+- [ ] 35-03-PLAN.md — PlatformColorsGroup (5 accent colors + reset) + AppearancePanel wiring
 
 ### Phase 36: Events Styling + Theme Import
 
@@ -334,7 +334,7 @@ Plans:
 5. Unit tests for `theme-css-parser.ts`: full theme CSS → all matched properties extracted, unknown properties ignored
 6. All visual control changes update live preview without save (APPR-10 fully verified end-to-end)
 
-**Plans:** ~3 plans
+**Plans:** 3 plans
 
 Plans:
 - [ ] 36-01-PLAN.md — `EventsGroup` (Super Chat / subscription / raid show/hide + size modifier)
@@ -358,7 +358,7 @@ Plans:
 6. Existing functionality (sources, behavior settings, CSS editor) works unchanged — only relocated
 7. Visual settings save correctly when "Save" is clicked; reload restores all control values
 
-**Plans:** ~3 plans
+**Plans:** 3 plans
 
 Plans:
 - [ ] 37-01-PLAN.md — `CollapsibleSection` integration into editor page + section order scaffolding
