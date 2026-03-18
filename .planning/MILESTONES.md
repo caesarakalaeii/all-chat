@@ -1,5 +1,24 @@
 # Milestones
 
+## v1.6 Listener SDK (Shipped: 2026-03-18)
+
+**Phases:** 33–38 (6 phases, 15 plans)
+**Timeline:** 2 days (2026-03-17 → 2026-03-18)
+**Files changed:** 88 files, +10,302 net LOC (10,974 insertions, 672 deletions)
+**Shared SDK:** 797 LOC Go (`shared/listener/`)
+
+**Key accomplishments:**
+- `shared/listener` SDK (797 LOC) with `ListenerBase`, `LeadershipListener`, `ShutdownCoordinator`, and `ChannelManager` interface — two archetypes covering all Go listener load-balancing patterns
+- Pre-migration cleanup: source ID suffix normalization and `HandleMigrationEvent` error signature canonicalized across all listeners before SDK extraction
+- All 6 Go listeners migrated: twitch-listener (ListenerBase), kick-listener (ListenerBase + LeadershipListener), youtube-listener, youtube-listener-innertube, discord-listener, twitch-eventsub-listener
+- `make build-all` CI target added — catches `replace`-directive version drift across all listener modules in one command
+- Compile-time `ChannelManager` assertions in every migrated listener — build fails immediately if Manager drifts from SDK interface
+- Goroutine leak smoke tests (`goleak.VerifyNone`) added to all 6 listeners — lifecycle correctness verified at the SDK boundary
+
+**Archive:** [v1.6-ROADMAP.md](milestones/v1.6-ROADMAP.md) | [v1.6-REQUIREMENTS.md](milestones/v1.6-REQUIREMENTS.md)
+
+---
+
 ## v1.3 Frontend Redesign (Shipped: 2026-03-14)
 
 **Phases:** 23–26 (4 phases, 20 plans, 46 tasks)
