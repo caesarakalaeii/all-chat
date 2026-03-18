@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Visual Overlay Customizer
 status: planning
-stopped_at: Completed 36-02-PLAN.md
-last_updated: "2026-03-18T14:24:22.195Z"
+stopped_at: "Completed 36-03-PLAN.md (checkpoint:human-verify pending)"
+last_updated: "2026-03-18T22:36:28.167Z"
 last_activity: 2026-03-18 — v1.6 roadmap created, 5 phases (33-37), 18 requirements mapped
 progress:
   total_phases: 23
-  completed_phases: 21
+  completed_phases: 22
   total_plans: 78
-  completed_plans: 77
+  completed_plans: 78
   percent: 0
 ---
 
@@ -82,6 +82,8 @@ Key decisions relevant to v1.6:
 - [Phase 36]: EventsGroup visual-customizer CSS fallback 1.05 matches marketplace-themes baseline to prevent visual regression
 - [Phase 36-events-styling-theme-import]: PROPERTY_MAP exported from visual-settings-to-css.ts so theme-css-parser.ts can import it directly
 - [Phase 36-events-styling-theme-import]: CSS_VAR_REGEX defined inside parseCssToVisualSettings function body (fresh regex per call, avoids stale lastIndex)
+- [Phase 36-events-styling-theme-import]: Dialog.Close rendered with Button component via render prop to match project UI conventions
+- [Phase 36-events-styling-theme-import]: applyThemeImmediately also calls setShowThemeMarketplace(false) to close modal on successful apply
 
 ### Pending Todos
 
@@ -93,8 +95,8 @@ None identified at milestone start.
 
 ## Session Continuity
 
-Last session: 2026-03-18T14:24:22.192Z
-Stopped at: Completed 36-02-PLAN.md
+Last session: 2026-03-18T22:36:08.074Z
+Stopped at: Completed 36-03-PLAN.md (checkpoint:human-verify pending)
 Resume file: None
 
 **Next action:** Phase 33 complete — proceed to Phase 34 (Appearance Controls — Core)

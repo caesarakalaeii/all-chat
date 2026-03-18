@@ -334,7 +334,7 @@ Plans:
 5. Unit tests for `theme-css-parser.ts`: full theme CSS → all matched properties extracted, unknown properties ignored
 6. All visual control changes update live preview without save (APPR-10 fully verified end-to-end)
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 36-01-PLAN.md — `EventsGroup` (Super Chat / subscription / raid show/hide + size modifier)
@@ -379,7 +379,7 @@ Plans:
 | 33 | CSS Architecture Foundation | Complete    | 2026-03-18 | — |
 | 34 | 3/3 | Complete    | 2026-03-18 | — |
 | 35 | Appearance Controls — Extended | 0/3 | Not started | — |
-| 36 | 2/3 | In Progress|  | — |
+| 36 | 3/3 | Complete   | 2026-03-18 | — |
 | 37 | Editor UX Rework | 0/3 | Not started | — |
 
 ---
