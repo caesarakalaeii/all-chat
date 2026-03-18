@@ -905,6 +905,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- Visual appearance settings state ---
   const [visualSettings, setVisualSettings] = useState<Partial<VisualSettings>>({})
+  const [iframeVisibilityDefaults, setIframeVisibilityDefaults] = useState<Partial<VisualSettings>>({})
 
   // --- Iframe ref for live preview communication ---
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -940,10 +941,30 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     })
   }, [sendCssToIframe])
 
-  // --- handleIframeReady: store iframe ref and send initial CSS ---
+  // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
   const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
     iframeRef.current = iframe
     sendCssToIframe(visualSettings)
+    const doc = iframe.contentDocument ?? iframe.contentWindow?.document
+    if (doc) {
+      const style = getComputedStyle(doc.documentElement)
+      const visFields: Array<[keyof VisualSettings, string]> = [
+        ['showAvatars', '--chat-show-avatars'],
+        ['showBadges', '--chat-show-badges'],
+        ['showTimestamps', '--chat-show-timestamps'],
+        ['showPlatformBadge', '--chat-show-platform-badge'],
+        ['showEmotes', '--chat-show-emotes'],
+        ['showUsername', '--chat-show-username'],
+      ]
+      const defaults: Partial<VisualSettings> = {}
+      for (const [field, cssVar] of visFields) {
+        const v = style.getPropertyValue(cssVar).trim()
+        if (v) {
+          ;(defaults as Record<string, string>)[field] = v
+        }
+      }
+      setIframeVisibilityDefaults(defaults)
+    }
   }, [sendCssToIframe, visualSettings])
 
   // Load overlay, sources, accepted shares and config
@@ -1941,7 +1962,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* 6. Appearance controls */}
           <Card className="p-4">
             <h2 className="mb-3 text-sm font-semibold text-text">Appearance</h2>
-            <AppearancePanel visualSettings={visualSettings} onChange={handleVisualSettingsChange} />
+            <AppearancePanel visualSettings={visualSettings} onChange={handleVisualSettingsChange} visibilityDefaults={iframeVisibilityDefaults} />
           </Card>
 
           {/* 7. Custom CSS section */}
