@@ -8,7 +8,7 @@
  */
 
 /* Cascade layer order — required for standalone overlay page context */
-@layer base, design-system, marketplace-themes, user-overrides;
+@layer base, design-system, marketplace-themes, visual-customizer, user-overrides;
 
 /* @keyframes stay at document scope (not inside layers) */
 

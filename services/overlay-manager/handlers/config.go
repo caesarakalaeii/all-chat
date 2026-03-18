@@ -164,6 +164,7 @@ func (h *ConfigHandler) HandleGetPublicConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"display_settings": config.DisplaySettings,
 		"custom_css":       config.CustomCSS,
+		"visual_settings":  config.VisualSettings,
 		"sources":          sourceStatus,
 	})
 }
