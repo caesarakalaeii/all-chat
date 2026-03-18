@@ -289,12 +289,12 @@ Plans:
 5. `AppearancePanel` hosts all three groups with a collapsible sub-group wrapper for each
 6. `CollapsibleSection` reusable wrapper component exists and is used by all groups
 
-**Plans:** ~3 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] 34-01-PLAN.md — `CollapsibleSection` + `AppearancePanel` scaffold + `TypographyGroup`
-- [ ] 34-02-PLAN.md — `ColorsGroup` + live preview wiring (style injection into preview frame)
-- [ ] 34-03-PLAN.md — `BackgroundGroup` (overlay bg + bubble bg + border + padding + blur)
+- [ ] 34-01-PLAN.md — VisualSettings type extension + test scaffolds + CollapsibleSection + TypographyGroup
+- [ ] 34-02-PLAN.md — Live preview wiring (SplitView + embed page + editor state + react-colorful install)
+- [ ] 34-03-PLAN.md — ColorPickerControl + ColorsGroup + BackgroundGroup + AppearancePanel mount
 
 ### Phase 35: Appearance Controls — Extended
 
