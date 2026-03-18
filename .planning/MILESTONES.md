@@ -1,5 +1,25 @@
 # Milestones
 
+## v1.5 Discord Listener (Shipped: 2026-03-16)
+
+**Phases:** 27–32 (6 phases, 15 plans)
+**Timeline:** 2 days (2026-03-15 → 2026-03-16)
+
+**Key accomplishments:**
+- Discord Gateway client with OAuth2 "Add to Server" bot authorization, permission validation, and guild disconnect
+- Inbound ingestion: Discord channel messages normalized to unified RawChatMessage schema, delivered to overlays as first-class source
+- @user/#channel mention resolution via guild cache (Redis-backed)
+- Deletion event propagation through existing deletion pipeline (MESSAGE_DELETE + MESSAGE_DELETE_BULK)
+- Outbound relay to Discord REST API with loop-safe filter (platform == "discord" always suppressed), single-retry on 5xx
+- Per-source relay toggle and configurable outbound channel (can equal inbound channel)
+- Gateway shard ownership via source-manager leader election; session state persisted in Redis for pod-restart resume
+- HPA scaling on Prometheus metrics; discord-listener Deployment + Service + HPA Kubernetes manifests
+- Full setup UI: Settings Discord server card, overlay editor guild/channel picker, relay config panel, source card status indicators
+
+**Archive:** [v1.5-REQUIREMENTS.md](milestones/v1.5-REQUIREMENTS.md)
+
+---
+
 ## v1.3 Frontend Redesign (Shipped: 2026-03-14)
 
 **Phases:** 23–26 (4 phases, 20 plans, 46 tasks)
