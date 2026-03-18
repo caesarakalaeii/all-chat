@@ -1,4 +1,5 @@
 import type { ChatMessage } from './message'
+import type { VisualSettings } from './visual-settings'
 
 /**
  * Overlay and Chat Source Types
@@ -27,7 +28,7 @@ export interface OverlayConfig {
   enable_bttv: boolean
   enable_ffz: boolean
   custom_css?: string
-  visual_settings?: Record<string, unknown>
+  visual_settings?: Partial<VisualSettings>
   created_at: string
   updated_at: string
 }

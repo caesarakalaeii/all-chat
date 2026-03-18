@@ -21,6 +21,8 @@ export interface VisualSettings {
   timestampColor?: string     // --chat-timestamp-color
 
   // Username typography
+  usernameFontFamily?: string // --chat-username-font-family
+  timestampFontFamily?: string // --chat-timestamp-font-family
   usernameFontWeight?: string // --chat-username-font-weight
   usernameFontSize?: string   // --chat-username-font-size
   timestampFontSize?: string  // --chat-timestamp-font-size

@@ -34,6 +34,8 @@ describe('visualSettingsToCss', () => {
       messageColor: '#ffffff',
       usernameColor: '#aaaaaa',
       timestampColor: '#666666',
+      usernameFontFamily: 'Inter',
+      timestampFontFamily: 'Georgia',
       usernameFontWeight: '600',
       usernameFontSize: '14px',
       timestampFontSize: '11px',
@@ -83,8 +85,8 @@ describe('visualSettingsToCss', () => {
     expect(result).toContain('--platform-discord-accent: #5865f2;')
     expect(result).toContain('--chat-show-super-chat: block;')
     expect(result).toContain('--chat-bits-size-modifier: 1;')
-    // All 47 properties present
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(47)
+    // All 49 properties present (47 original + 2 new font family fields)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(49)
   })
 
   it('wraps output in correct cascade layer syntax', () => {
@@ -92,5 +94,15 @@ describe('visualSettingsToCss', () => {
     expect(result.trim()).toMatch(/^@layer visual-customizer \{/)
     expect(result).toContain('  :root {')
     expect(result.trim()).toMatch(/\}$/)
+  })
+
+  it('emits --chat-username-font-family for usernameFontFamily', () => {
+    const result = visualSettingsToCss({ usernameFontFamily: 'Inter' })
+    expect(result).toContain('--chat-username-font-family: Inter;')
+  })
+
+  it('emits --chat-timestamp-font-family for timestampFontFamily', () => {
+    const result = visualSettingsToCss({ timestampFontFamily: 'Georgia' })
+    expect(result).toContain('--chat-timestamp-font-family: Georgia;')
   })
 })
