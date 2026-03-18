@@ -35,7 +35,8 @@ func NewOverlayConfigRepository(connString string) (*OverlayConfigRepository, er
 func (r *OverlayConfigRepository) GetByOverlayID(ctx context.Context, overlayID string) (*models.OverlayConfig, error) {
 	query := `
 		SELECT id, overlay_id, display_settings, filter_settings,
-		       enable_7tv, enable_bttv, enable_ffz, custom_css, created_at, updated_at
+		       enable_7tv, enable_bttv, enable_ffz, custom_css, visual_settings,
+		       created_at, updated_at
 		FROM overlay_configs
 		WHERE overlay_id = $1
 	`
@@ -56,6 +57,10 @@ func (r *OverlayConfigRepository) Update(ctx context.Context, config *models.Ove
 	if err != nil {
 		return fmt.Errorf("failed to marshal filter settings: %w", err)
 	}
+	visualSettings, err := json.Marshal(config.VisualSettings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal visual settings: %w", err)
+	}
 
 	query := `
 		UPDATE overlay_configs
@@ -65,10 +70,12 @@ func (r *OverlayConfigRepository) Update(ctx context.Context, config *models.Ove
 		    enable_bttv = $4,
 		    enable_ffz = $5,
 		    custom_css = $6,
+		    visual_settings = $7,
 		    updated_at = NOW()
-		WHERE overlay_id = $7
+		WHERE overlay_id = $8
 		RETURNING id, overlay_id, display_settings, filter_settings,
-		          enable_7tv, enable_bttv, enable_ffz, custom_css, created_at, updated_at
+		          enable_7tv, enable_bttv, enable_ffz, custom_css, visual_settings,
+		          created_at, updated_at
 	`
 
 	row := r.pool.QueryRow(ctx, query,
@@ -78,6 +85,7 @@ func (r *OverlayConfigRepository) Update(ctx context.Context, config *models.Ove
 		config.EnableBTTV,
 		config.EnableFFZ,
 		config.CustomCSS,
+		visualSettings,
 		config.OverlayID,
 	)
 
@@ -92,7 +100,7 @@ func (r *OverlayConfigRepository) Update(ctx context.Context, config *models.Ove
 
 func scanOverlayConfig(row pgx.Row) (*models.OverlayConfig, error) {
 	config := &models.OverlayConfig{}
-	var displaySettingsJSON, filterSettingsJSON []byte
+	var displaySettingsJSON, filterSettingsJSON, visualSettingsJSON []byte
 
 	err := row.Scan(
 		&config.ID,
@@ -103,6 +111,7 @@ func scanOverlayConfig(row pgx.Row) (*models.OverlayConfig, error) {
 		&config.EnableBTTV,
 		&config.EnableFFZ,
 		&config.CustomCSS,
+		&visualSettingsJSON,
 		&config.CreatedAt,
 		&config.UpdatedAt,
 	)
@@ -118,6 +127,9 @@ func scanOverlayConfig(row pgx.Row) (*models.OverlayConfig, error) {
 	}
 	if err := json.Unmarshal(filterSettingsJSON, &config.FilterSettings); err != nil {
 		config.FilterSettings = map[string]any{}
+	}
+	if err := json.Unmarshal(visualSettingsJSON, &config.VisualSettings); err != nil {
+		config.VisualSettings = map[string]any{}
 	}
 
 	config.EnsureMaps()
