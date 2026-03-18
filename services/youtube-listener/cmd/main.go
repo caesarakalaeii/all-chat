@@ -21,9 +21,9 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/streams"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
-	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,24 +43,24 @@ func main() {
 	}
 
 	// Initialize logger
-	logLevel := getEnvOrDefault("LOG_LEVEL", "info")
+	logLevel := listener.Env("LOG_LEVEL", "info")
 	log := logger.NewLogger("youtube-listener", logLevel)
 	defer log.Sync()
 
 	log.Info("Starting YouTube Listener",
-		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
+		zap.String("version", listener.Env("APP_VERSION", "dev")),
 		zap.String("grpc_log_level", os.Getenv("GRPC_GO_LOG_VERBOSITY_LEVEL")),
 		zap.String("grpc_trace", os.Getenv("GRPC_TRACE")),
 	)
 
 	// Initialize tracing
-	tracingEnabled := getEnvOrDefault("OTEL_ENABLED", "false") == "true"
+	tracingEnabled := listener.Env("OTEL_ENABLED", "false") == "true"
 	if tracingEnabled {
 		tracingCfg := tracing.Config{
 			ServiceName:    "youtube-listener",
-			ServiceVersion: getEnvOrDefault("APP_VERSION", "dev"),
-			Environment:    getEnvOrDefault("ENVIRONMENT", "development"),
-			OTLPEndpoint:   getEnvOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+			ServiceVersion: listener.Env("APP_VERSION", "dev"),
+			Environment:    listener.Env("ENVIRONMENT", "development"),
+			OTLPEndpoint:   listener.Env("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
 			Enabled:        true,
 		}
 		shutdownTracer, err := tracing.InitTracer(tracingCfg, log)
@@ -77,7 +77,7 @@ func main() {
 	// Validate required environment variables
 	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
-	frontendURL := strings.TrimSuffix(getEnvOrDefault("FRONTEND_URL", "http://localhost:3000"), "/")
+	frontendURL := strings.TrimSuffix(listener.Env("FRONTEND_URL", "http://localhost:3000"), "/")
 	youtubeRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/youtube/callback")
 
 	if youtubeClientID == "" || youtubeClientSecret == "" {
@@ -97,11 +97,11 @@ func main() {
 	}
 
 	// Connect to PostgreSQL
-	dbHost := getEnvOrDefault("DATABASE_HOST", "localhost")
-	dbPort := getEnvOrDefault("DATABASE_PORT", "5432")
-	dbUser := getEnvOrDefault("DATABASE_USER", "allchat")
-	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "allchat_dev_password")
-	dbName := getEnvOrDefault("DATABASE_NAME", "allchat")
+	dbHost := listener.Env("DATABASE_HOST", "localhost")
+	dbPort := listener.Env("DATABASE_PORT", "5432")
+	dbUser := listener.Env("DATABASE_USER", "allchat")
+	dbPassword := listener.Env("DATABASE_PASSWORD", "allchat_dev_password")
+	dbName := listener.Env("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		dbUser, dbPassword, dbHost, dbPort, dbName)
@@ -115,8 +115,8 @@ func main() {
 	log.Info("Connected to PostgreSQL")
 
 	// Connect to Redis
-	redisHost := getEnvOrDefault("REDIS_HOST", "localhost")
-	redisPort := getEnvOrDefault("REDIS_PORT", "6379")
+	redisHost := listener.Env("REDIS_HOST", "localhost")
+	redisPort := listener.Env("REDIS_PORT", "6379")
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
 	})
@@ -143,7 +143,7 @@ func main() {
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 
 	// Initialize quota tracker (legacy - kept for backward compatibility)
-	quotaLimitStr := getEnvOrDefault("QUOTA_LIMIT_DAILY", "1009000")
+	quotaLimitStr := listener.Env("QUOTA_LIMIT_DAILY", "1009000")
 	quotaLimit, err := strconv.Atoi(quotaLimitStr)
 	if err != nil {
 		log.Warn("Invalid QUOTA_LIMIT_DAILY, using default 1009000", zap.Error(err))
@@ -205,18 +205,12 @@ func main() {
 	// Create message handler that publishes to Redis Streams and tracks quota
 	messageHandler := NewMessageHandler(streamPublisher, quotaTracker, msgIDRegistry, log)
 
-	sourceManagerURL := getEnvOrDefault("SOURCE_MANAGER_URL", "http://source-manager:8088")
-	sourceManagerSecret := getEnvOrDefault("SOURCE_MANAGER_SECRET", "dev-service-secret")
-	var leaderCoord *sourcemanager.LeadershipCoordinator
-	if sourceManagerSecret == "" {
-		log.Warn("SOURCE_MANAGER_SECRET not set; YouTube Listener will not coordinate leadership")
-	} else {
-		tokenSource := sourcemanager.NewSigningTokenSource("youtube-listener", sourceManagerSecret, 15*time.Minute)
-		smClient, err := sourcemanager.NewClient(sourceManagerURL, tokenSource)
-		if err != nil {
-			log.Fatal("Failed to initialize Source Manager client", zap.Error(err))
-		}
-		leaderCoord = sourcemanager.NewLeadershipCoordinator("youtube", smClient, 5*time.Second, log)
+	podName := listener.Env("HOSTNAME", "youtube-listener-unknown")
+	cfg := listener.DefaultConfig()
+	base := listener.NewListenerBase(cfg, nil, redisClient, podName, log)
+	ll, err := listener.NewLeadershipListenerFromEnv(base, "youtube", log)
+	if err != nil {
+		log.Fatal("Failed to initialize LeadershipListener", zap.Error(err))
 	}
 
 	// Initialize YouTube-specific metrics
@@ -228,7 +222,7 @@ func main() {
 	// Initialize stream manager
 	streamRepo := streams.NewRepository(db, log)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, leaderCoord, quotaTracker, perChannelQuotaTracker, redisClient, ytMetrics, statusPublisher, log)
+	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, ll.LeadershipCoordinator(), quotaTracker, perChannelQuotaTracker, redisClient, ytMetrics, statusPublisher, log)
 
 	// Start stream manager
 	if err := streamManager.Start(ctx); err != nil {
@@ -299,7 +293,7 @@ func main() {
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Get port
-	port := getEnvOrDefault("PORT", "8086")
+	port := listener.Env("PORT", "8086")
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -343,14 +337,6 @@ func main() {
 	}
 
 	log.Info("Service exited")
-}
-
-// getEnvOrDefault gets an environment variable or returns a default value
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }
 
 // parseIntEnv parses an integer environment variable or returns default
