@@ -282,9 +282,16 @@ class TikTokListenerService {
 
         this.coordinatorClient = new CoordinatorClient(COORDINATOR_URL, SERVICE_JWT_SECRET, logger);
 
-        // Staggered startup jitter to prevent thundering herd during HPA scale-up (Phase 7)
-        const jitterMs = Math.floor(Math.random() * 30000); // 0-30 seconds
-        logger.info('Applying startup jitter to prevent thundering herd', { jitterMs });
+        // Start heartbeat publisher FIRST so source-manager includes this pod in its
+        // next assignment cycle before we query for assignments.
+        this.startHeartbeatPublisher();
+        logger.info('Heartbeat publisher started', { interval_ms: HEARTBEAT_INTERVAL_MS });
+
+        // Wait for at least one source-manager assignment cycle (~30s) plus jitter to
+        // prevent thundering herd. This ensures the pod is in the heartbeat registry
+        // when it queries, so the source-manager has already assigned sources to it.
+        const jitterMs = 35000 + Math.floor(Math.random() * 15000); // 35-50 seconds
+        logger.info('Waiting for source-manager assignment cycle before querying', { jitterMs });
         await new Promise(resolve => setTimeout(resolve, jitterMs));
 
         // Query assignments from coordinator (blocks indefinitely with backoff)
@@ -308,10 +315,6 @@ class TikTokListenerService {
         );
         await this.migrationSubscriber.subscribe();
         logger.info('Migration subscriber started');
-
-        // Start heartbeat publisher goroutine (10s interval)
-        this.startHeartbeatPublisher();
-        logger.info('Heartbeat publisher started', { interval_ms: HEARTBEAT_INTERVAL_MS });
       } else {
         logger.warn('Coordinator integration disabled (SERVICE_JWT_SECRET not set)');
       }
