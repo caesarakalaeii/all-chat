@@ -8,20 +8,21 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
-## Current Milestone: v1.5 Discord Listener
+## Current Milestone: v1.6 Visual Overlay Customizer
 
-**Goal:** Add Discord as a bidirectional chat source — read from Discord channels into overlays, and relay overlay messages back to Discord with loop-safe filtering.
+**Goal:** Enable non-technical users to visually customize their overlay appearance — ~50 CSS properties organized into categories — with live preview, theme pre-population, and a cascade layer architecture that keeps raw CSS override power intact.
 
 **Target features:**
-- Discord-to-overlay ingestion: managed OAuth2 bot, channel-level source model
-- Overlay-to-Discord relay: configurable per-source outbound channel, Discord messages filtered to prevent loops
-- OAuth2 "Add to Server" bot authorization (consistent with Twitch/YouTube auth UX)
-- Comprehensive setup UI (server connect, channel picker, relay config, overlay editor integration)
-- Full load balancing with hash-based sharding + HPA (consistent with other listeners)
+- Full visual design system editor: typography, colors, backgrounds, component visibility, sizing, platform colors, special events
+- Theme marketplace pre-populates visual controls from loaded theme's CSS custom properties
+- New `visual-customizer` CSS cascade layer above `marketplace-themes`, below `user-css-overrides`
+- Editor panel UX rework: collapsible sections, marketplace-first layout, CSS editor in "Expert" section
+- `visual_settings` JSONB persisted in overlay config via new DB migration
+- Live preview updates without save on every control change
 
-## Current State (v1.3 shipped 2026-03-14)
+## Current State (v1.5 shipped 2026-03-16)
 
-Viewer identity system shipped: OAuth from browser extension, platform linking, global name color/gradient editor, avatar frame/flair cosmetics, All-Chat platform badges, and YouTube InnerTube badge/emote enrichment. All 33 requirements satisfied across 6 phases.
+Discord Listener shipped: bidirectional Discord ↔ overlay integration with OAuth2 bot authorization, inbound message ingestion, outbound relay with loop-safe filtering, full load balancing, and comprehensive setup UI. All 19 requirements satisfied across 6 phases (27–32).
 
 ## Requirements
 
@@ -71,6 +72,17 @@ Viewer identity system shipped: OAuth from browser extension, platform linking, 
 - ✓ Production rollout infrastructure (Argo Rollouts, canary deployment) — v1.2
 - ✓ Advanced metrics (per-channel message rate, network error classification) — v1.2
 
+**Discord Listener (v1.5):**
+- ✓ Discord bot OAuth2 "Add to Server" flow + permission validation — v1.5
+- ✓ Discord channel messages as first-class overlay source (inbound ingestion) — v1.5
+- ✓ Discord @user/#channel mention resolution in message text — v1.5
+- ✓ Deletion event propagation through existing deletion pipeline — v1.5
+- ✓ Outbound relay to Discord channel with loop-safe filtering — v1.5
+- ✓ Per-source relay toggle and outbound channel configuration — v1.5
+- ✓ Gateway shard ownership via source-manager leader election — v1.5
+- ✓ HPA scaling on Prometheus metrics + session resume via Redis — v1.5
+- ✓ Full setup UI: Settings Discord card, overlay editor channel picker, relay config panel — v1.5
+
 **Frontend Redesign (v1.3):**
 - ✓ Design token system (Tailwind v4 @theme, three-tier hierarchy, cascade layers) — v1.3
 - ✓ Static platform color map (no dynamic class construction) — v1.3
@@ -85,16 +97,19 @@ Viewer identity system shipped: OAuth from browser extension, platform linking, 
 
 ### Active
 
-<!-- Current scope: v1.5 Discord Listener -->
+<!-- Current scope: v1.6 Visual Overlay Customizer -->
 
-- [ ] Discord bot reads from a configured channel and pushes messages to overlays as a first-class source
-- [ ] Overlay messages (Discord excluded) are relayed to a user-configured Discord outbound channel
-- [ ] Loop-safe filtering: Discord-sourced messages are never echoed back to Discord
-- [ ] OAuth2 "Add to Server" flow to authorize the bot in a user's Discord server
-- [ ] Setup UI: server connection, inbound channel picker, outbound channel picker, relay toggle
-- [ ] Discord source integrated in overlay editor alongside Twitch/YouTube/Kick/TikTok
-- [ ] discord-listener service with full load balancing (hash-based sharding + HPA)
-- [ ] Architecture decision: single service for inbound+outbound vs separate relay service
+- [ ] User can customize typography: font family, weight, line height, letter spacing
+- [ ] User can customize text colors: message body, username, timestamp
+- [ ] User can customize overlay background: color + opacity, bubble background + opacity, border, padding, blur
+- [ ] User can toggle component visibility individually: avatars, badges, timestamps, platform badge, emotes, username
+- [ ] User can adjust component sizing: avatar, badge, emote scale
+- [ ] User can override per-platform accent colors (Twitch, YouTube, Kick, TikTok, Discord)
+- [ ] User can configure special event styling: show/hide, size modifier for Super Chat, subscriptions, raids
+- [ ] All visual control changes update live overlay preview in real-time
+- [ ] Loading a marketplace theme pre-populates visual controls with theme's CSS variable values
+- [ ] Visual customizations persist in `visual_settings` JSONB in overlay config
+- [ ] Editor panel reworked: collapsible sections, marketplace-first, CSS editor in "Expert" section
 
 ### Out of Scope
 
@@ -185,4 +200,4 @@ Viewer identity system shipped: OAuth from browser extension, platform linking, 
 | **Husky v9 new-style hooks (no husky.sh sourcing)** | Deprecated v8 sourcing logs deprecation warnings in v9, fails in v10 | ✓ Good — Clean hook execution, verified tsc + lint-staged exit 0 |
 
 ---
-*Last updated: 2026-03-15 after v1.5 milestone started*
+*Last updated: 2026-03-18 after v1.6 milestone started*

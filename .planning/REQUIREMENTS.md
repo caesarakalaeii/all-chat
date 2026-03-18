@@ -1,11 +1,74 @@
 # Requirements: All-Chat
 
-**Defined:** 2026-03-15
+**Defined:** 2026-03-18
 **Core Value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
-## v1.5 Requirements — Discord Listener
+## v1.6 Requirements — Visual Overlay Customizer
 
-Requirements for the Discord Listener milestone. Each maps to roadmap phases.
+Requirements for the Visual Overlay Customizer milestone. Each maps to roadmap phases.
+
+### APPR — Appearance Controls
+
+- [ ] **APPR-01**: User can customize typography: font family (picker), weight, line height, letter spacing
+- [ ] **APPR-02**: User can customize text colors: message body, username, timestamp
+- [ ] **APPR-03**: User can customize overlay background: color + opacity slider
+- [ ] **APPR-04**: User can customize message bubble: background color + opacity, border radius, border width/color, inner padding, gap between messages
+- [ ] **APPR-05**: User can toggle component visibility individually: avatars, badges, timestamps, platform badge, emotes, username
+- [ ] **APPR-06**: User can adjust component sizing: avatar size, badge size, emote scale
+- [ ] **APPR-07**: User can override per-platform accent colors (Twitch, YouTube, Kick, TikTok, Discord)
+- [ ] **APPR-08**: User can configure backdrop blur (glassmorphism) intensity
+- [ ] **APPR-09**: User can customize special event styling: show/hide, size modifier for Super Chat, subscriptions, raids
+- [ ] **APPR-10**: All visual control changes update the live overlay preview in real-time without requiring save
+
+### VISM — Visual Customizer Mechanism
+
+- [ ] **VISM-01**: Visual customizations are stored as structured JSON in overlay config and persist across sessions
+- [ ] **VISM-02**: Loading a marketplace theme pre-populates visual controls with that theme's CSS variable values
+- [ ] **VISM-03**: Visual customizations generate CSS overrides at a layer above the marketplace theme and below raw user CSS
+- [ ] **VISM-04**: Resetting visual customizations restores theme defaults (or system defaults if no theme loaded)
+
+### EDUX — Editor UX Rework
+
+- [ ] **EDUX-01**: Theme Marketplace is the first visible element in the editor panel
+- [ ] **EDUX-02**: Editor panel uses collapsible sections: Theme, Appearance (with sub-groups), Sources, Behavior, Expert
+- [ ] **EDUX-03**: CSS editor is hidden by default inside the collapsible "Expert" section
+- [ ] **EDUX-04**: Visual customizer sub-groups: Typography, Colors, Background & Bubbles, Visibility, Sizing, Platform Colors, Events
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| VISM-01 | Phase 33 | Not started |
+| VISM-03 | Phase 33 | Not started |
+| APPR-01 | Phase 34 | Not started |
+| APPR-02 | Phase 34 | Not started |
+| APPR-03 | Phase 34 | Not started |
+| APPR-04 | Phase 34 | Not started |
+| APPR-08 | Phase 34 | Not started |
+| APPR-05 | Phase 35 | Not started |
+| APPR-06 | Phase 35 | Not started |
+| APPR-07 | Phase 35 | Not started |
+| APPR-09 | Phase 36 | Not started |
+| APPR-10 | Phase 36 | Not started |
+| VISM-02 | Phase 36 | Not started |
+| VISM-04 | Phase 36 | Not started |
+| EDUX-01 | Phase 37 | Not started |
+| EDUX-02 | Phase 37 | Not started |
+| EDUX-03 | Phase 37 | Not started |
+| EDUX-04 | Phase 37 | Not started |
+
+**Coverage:**
+- v1.6 requirements: 18 total
+- Mapped to phases: 18
+- Unmapped: 0 ✓
+
+---
+
+## v1.5 Requirements — Discord Listener (Complete)
+
+**Archive:** [v1.5-REQUIREMENTS.md](milestones/v1.5-REQUIREMENTS.md)
 
 ### AUTH — Bot Setup
 
@@ -41,57 +104,6 @@ Requirements for the Discord Listener milestone. Each maps to roadmap phases.
 - [x] **UI-03**: Per-source relay configuration panel: toggle relay, pick outbound channel, visual indicator of active filter
 - [x] **UI-04**: Discord source cards in the overlay editor display connection status and relay active/inactive indicator
 
-## Future Requirements
-
-### Extended Discord Features
-
-- **INBD-05**: Support for Discord threads as sources (thread messages ingested separately)
-- **INBD-06**: Discord emoji/reaction events surfaced in overlay
-- **RELY-05**: Rich embed formatting for relayed messages (avatar, platform color)
-- **AUTH-05**: Multi-guild support per user account (connect multiple Discord servers)
-
-## Out of Scope
-
-| Feature | Reason |
-|---------|--------|
-| Discord slash commands | Out of scope — not a chat aggregation concern |
-| Voice channel transcription | High complexity, separate domain |
-| Discord DMs / private channels | Privacy concerns, not a streaming use case |
-| Per-user Discord identity mapping | Over-engineering — platform username sufficient |
-| Discord embeds for relay | Avoid embed rate limits; plain text is sufficient and simpler |
-| Reaction/emoji event relay | Not chat messages; different event type |
-
-## Traceability
-
-Which phases cover which requirements. Updated during roadmap creation.
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| AUTH-01 | Phase 27 | Complete |
-| AUTH-02 | Phase 27 | Complete |
-| AUTH-03 | Phase 27 | Complete |
-| AUTH-04 | Phase 27 | Complete |
-| INBD-01 | Phase 28 | Complete |
-| INBD-02 | Phase 28 | Complete |
-| INBD-03 | Phase 29 | Complete |
-| INBD-04 | Phase 29 | Complete |
-| RELY-01 | Phase 30 | Complete |
-| RELY-02 | Phase 30 | Complete |
-| RELY-03 | Phase 30 | Complete |
-| RELY-04 | Phase 30 | Complete |
-| LOAD-01 | Phase 31 | Complete |
-| LOAD-02 | Phase 31 | Complete |
-| LOAD-03 | Phase 31 | Complete |
-| UI-01 | Phase 32 | Complete |
-| UI-02 | Phase 32 | Complete |
-| UI-03 | Phase 32 | Complete |
-| UI-04 | Phase 32 | Complete |
-
-**Coverage:**
-- v1.5 requirements: 19 total
-- Mapped to phases: 19
-- Unmapped: 0 ✓
-
 ---
-*Requirements defined: 2026-03-15*
-*Last updated: 2026-03-15 after roadmap creation — traceability complete*
+*Requirements defined: 2026-03-18*
+*Last updated: 2026-03-18 after v1.6 milestone start — traceability complete*
