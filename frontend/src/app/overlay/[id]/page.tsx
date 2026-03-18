@@ -28,6 +28,8 @@ import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
 import { sortMessageBadges } from '@/lib/badgeOrder';
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
 import { buildGradientCSS } from '@/lib/utils/gradient';
+import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css';
+import type { VisualSettings } from '@/lib/types/visual-settings';
 import { UserAvatar } from '@/components/UserAvatar';
 import { AllChatBadge } from '@/components/AllChatBadge';
 import { PremiumBadge } from '@/components/PremiumBadge';
@@ -41,6 +43,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [messageDuration, setMessageDuration] = useState(15);
   const [disableMessageFade, setDisableMessageFade] = useState(false);
   const [customCss, setCustomCss] = useState('');
+  const [visualSettingsCss, setVisualSettingsCss] = useState('');
   const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set());
   const [configuredChannels, setConfiguredChannels] = useState<Map<string, Set<string>>>(new Map()); // platform → Set<channel_id>
   const [platformStatuses, setPlatformStatuses] = useState<Map<string, PlatformStatus>>(new Map());
@@ -92,6 +95,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         setInvertMessageOrder(display.invert_message_order === true);
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
+
+        if (data.visual_settings && typeof data.visual_settings === 'object') {
+          setVisualSettingsCss(visualSettingsToCss(data.visual_settings as Partial<VisualSettings>));
+        }
 
         // Load configured channel IDs from sources
         // Note: activePlatforms is only set by live platform_status messages (status === 'connected')
@@ -602,6 +609,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           -ms-overflow-style: none !important;
         }
       ` }} />
+      {visualSettingsCss.length > 0 && (
+        <style dangerouslySetInnerHTML={{ __html: visualSettingsCss }} />
+      )}
       {customCss.trim().length > 0 && (
         <style dangerouslySetInnerHTML={{ __html: customCss }} />
       )}
