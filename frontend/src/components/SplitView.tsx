@@ -8,9 +8,11 @@ const MAX_LEFT = 70
 export function SplitView({
   overlayId,
   children,
+  onIframeReady,
 }: {
   overlayId: string
   children: React.ReactNode
+  onIframeReady?: (iframe: HTMLIFrameElement) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [leftPct, setLeftPct] = useState(40)
@@ -65,6 +67,7 @@ export function SplitView({
       {/* Preview panel */}
       <div className="min-h-[300px] flex-1 overflow-hidden bg-bg md:min-h-0">
         <iframe
+          ref={(el) => { if (el) onIframeReady?.(el) }}
           src={`/overlays/${overlayId}/preview/embed`}
           className="h-full w-full border-0"
           title="Overlay live preview"
