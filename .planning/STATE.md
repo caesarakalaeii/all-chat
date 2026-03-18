@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Visual Overlay Customizer
 status: planning
-stopped_at: Phase 36 context gathered
-last_updated: "2026-03-18T14:00:46.052Z"
+stopped_at: Completed 36-01-PLAN.md
+last_updated: "2026-03-18T14:21:00.591Z"
 last_activity: 2026-03-18 — v1.6 roadmap created, 5 phases (33-37), 18 requirements mapped
 progress:
   total_phases: 23
   completed_phases: 21
-  total_plans: 75
-  completed_plans: 75
+  total_plans: 78
+  completed_plans: 76
   percent: 0
 ---
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 34-appearance-controls-core P02 | 15 | 3 tasks | 4 files |
 | Phase 34 P01 | 9m | 2 tasks | 12 files |
 | Phase 34 P03 | 15 | 2 tasks | 7 files |
+| Phase 36-events-styling-theme-import P01 | 3 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,7 @@ Key decisions relevant to v1.6:
 - [Phase 34]: CollapsibleSection uses localStorage key appearance-panel-sections-v1 for section open/close persistence
 - [Phase 34]: FontFamilyCombobox requires Combobox.Portal wrapper for Positioner context (base-ui v1.2.0 requirement)
 - [Phase 34]: Opacity stored as decimal string ('0.0'–'1.0'); opacity slider uses 0-100 int range and converts on change
+- [Phase 36]: EventsGroup visual-customizer CSS fallback 1.05 matches marketplace-themes baseline to prevent visual regression
 
 ### Pending Todos
 
@@ -88,8 +90,8 @@ None identified at milestone start.
 
 ## Session Continuity
 
-Last session: 2026-03-18T14:00:46.049Z
-Stopped at: Phase 36 context gathered
-Resume file: .planning/phases/36-events-styling-theme-import/36-CONTEXT.md
+Last session: 2026-03-18T14:21:00.589Z
+Stopped at: Completed 36-01-PLAN.md
+Resume file: None
 
 **Next action:** Phase 33 complete — proceed to Phase 34 (Appearance Controls — Core)
