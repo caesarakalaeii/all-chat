@@ -35,6 +35,7 @@ import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import { parseCssToVisualSettings } from '@/lib/utils/theme-css-parser'
 import { toastManager } from '@/lib/toast'
 import { AppNav } from '@/components/AppNav'
 import { SplitView } from '@/components/SplitView'
@@ -906,6 +907,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- Visual appearance settings state ---
   const [visualSettings, setVisualSettings] = useState<Partial<VisualSettings>>({})
   const [iframeVisibilityDefaults, setIframeVisibilityDefaults] = useState<Partial<VisualSettings>>({})
+  const [parsedThemeSettings, setParsedThemeSettings] = useState<Partial<VisualSettings>>({})
+  const [showThemeConfirm, setShowThemeConfirm] = useState(false)
+  const [pendingTheme, setPendingTheme] = useState<{ css: string; parsed: Partial<VisualSettings> } | null>(null)
 
   // --- Iframe ref for live preview communication ---
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -940,6 +944,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       return next
     })
   }, [sendCssToIframe])
+
+  // --- applyThemeImmediately: atomically apply CSS + parsed settings ---
+  const applyThemeImmediately = useCallback(
+    (css: string, parsed: Partial<VisualSettings>) => {
+      setCustomCss(css)
+      setUseCustomCss(true)
+      setVisualSettings(parsed)
+      setParsedThemeSettings(parsed)
+      sendCssToIframe(parsed)
+      setShowThemeMarketplace(false)
+    },
+    [sendCssToIframe]
+  )
 
   // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
   const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
@@ -2067,11 +2084,48 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         isOpen={showThemeMarketplace}
         onClose={() => setShowThemeMarketplace(false)}
         onApplyTheme={(css) => {
-          setCustomCss(css)
-          setUseCustomCss(true)
-          setShowThemeMarketplace(false)
+          const parsed = parseCssToVisualSettings(css)
+          const hasExisting = Object.keys(visualSettings).length > 0
+          if (hasExisting) {
+            setPendingTheme({ css, parsed })
+            setShowThemeConfirm(true)
+          } else {
+            applyThemeImmediately(css, parsed)
+          }
         }}
       />
+
+      {/* Theme apply confirm dialog */}
+      <Dialog.Root open={showThemeConfirm} onOpenChange={setShowThemeConfirm}>
+        <Dialog.Content size="sm" showCloseButton={false}>
+          <Dialog.Title>Apply theme?</Dialog.Title>
+          <Dialog.Description>
+            Loading this theme will reset your visual customizations. Continue?
+          </Dialog.Description>
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close
+              render={
+                <Button type="button" variant="outline" size="sm">
+                  Cancel
+                </Button>
+              }
+            />
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                if (pendingTheme) {
+                  applyThemeImmediately(pendingTheme.css, pendingTheme.parsed)
+                  setPendingTheme(null)
+                }
+                setShowThemeConfirm(false)
+              }}
+            >
+              Continue
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
     </div>
   )
 }
