@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Visual Overlay Customizer
 status: planning
-stopped_at: Completed 34-01-PLAN.md (Appearance Controls — VisualSettings types + CollapsibleSection + TypographyGroup)
-last_updated: "2026-03-18T10:39:56.613Z"
+stopped_at: Completed 34-03-PLAN.md (ColorPickerControl + ColorsGroup + BackgroundGroup + AppearancePanel)
+last_updated: "2026-03-18T10:51:12.722Z"
 last_activity: 2026-03-18 — v1.6 roadmap created, 5 phases (33-37), 18 requirements mapped
 progress:
   total_phases: 23
-  completed_phases: 19
+  completed_phases: 20
   total_plans: 72
-  completed_plans: 71
+  completed_plans: 72
   percent: 0
 ---
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 33 P02 | 8 | 3 tasks | 3 files |
 | Phase 34-appearance-controls-core P02 | 15 | 3 tasks | 4 files |
 | Phase 34 P01 | 9m | 2 tasks | 12 files |
+| Phase 34 P03 | 15 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,7 @@ Key decisions relevant to v1.6:
 - [Phase 34-appearance-controls-core]: style#visual-customizer-style managed imperatively via DOM to avoid re-render overhead on CSS updates
 - [Phase 34]: CollapsibleSection uses localStorage key appearance-panel-sections-v1 for section open/close persistence
 - [Phase 34]: FontFamilyCombobox requires Combobox.Portal wrapper for Positioner context (base-ui v1.2.0 requirement)
+- [Phase 34]: Opacity stored as decimal string ('0.0'–'1.0'); opacity slider uses 0-100 int range and converts on change
 
 ### Pending Todos
 
@@ -86,8 +88,8 @@ None identified at milestone start.
 
 ## Session Continuity
 
-Last session: 2026-03-18T10:39:56.610Z
-Stopped at: Completed 34-01-PLAN.md (Appearance Controls — VisualSettings types + CollapsibleSection + TypographyGroup)
+Last session: 2026-03-18T10:51:12.718Z
+Stopped at: Completed 34-03-PLAN.md (ColorPickerControl + ColorsGroup + BackgroundGroup + AppearancePanel)
 Resume file: None
 
 **Next action:** Phase 33 complete — proceed to Phase 34 (Appearance Controls — Core)
