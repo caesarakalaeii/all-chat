@@ -958,6 +958,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     [sendCssToIframe]
   )
 
+  // --- handleResetToTheme: restore visualSettings to parsedThemeSettings (or {}) ---
+  const handleResetToTheme = useCallback(() => {
+    setVisualSettings(parsedThemeSettings)
+    sendCssToIframe(parsedThemeSettings)
+  }, [parsedThemeSettings, sendCssToIframe])
+
   // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
   const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
     iframeRef.current = iframe
@@ -1997,7 +2003,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   Enable
                 </label>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -2007,6 +2013,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 >
                   Browse Themes
                 </Button>
+                <button
+                  type="button"
+                  className="text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                  onClick={handleResetToTheme}
+                >
+                  Reset to theme defaults
+                </button>
                 <Button
                   type="button"
                   variant="outline"
