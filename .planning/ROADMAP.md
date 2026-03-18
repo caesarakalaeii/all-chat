@@ -266,7 +266,7 @@ Plans:
 5. `overlay_configs` Go model updated with `VisualSettings` field; API round-trips `visual_settings` JSON unchanged
 6. Unit tests for `visual-settings-to-css.ts`: empty input → empty string, partial input → only set properties, full input → all properties present
 
-**Plans:** 3/3 plans executed — Phase Complete
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 33-01-PLAN.md — DB migration: `visual_settings JSONB DEFAULT '{}'` column + Go model + API passthrough
@@ -376,7 +376,7 @@ Plans:
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27-32 | v1.5 | 15/15 | Complete | 2026-03-16 |
-| 33 | CSS Architecture Foundation | 2/3 | In Progress | — |
+| 33 | CSS Architecture Foundation | Complete    | 2026-03-18 | — |
 | 34 | Appearance Controls — Core | 0/3 | Not started | — |
 | 35 | Appearance Controls — Extended | 0/3 | Not started | — |
 | 36 | Events Styling + Theme Import | 0/3 | Not started | — |
