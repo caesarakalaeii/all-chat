@@ -9,7 +9,7 @@ Requirements for the Visual Overlay Customizer milestone. Each maps to roadmap p
 
 ### APPR — Appearance Controls
 
-- [ ] **APPR-01**: User can customize typography: font family (picker), weight, line height, letter spacing
+- [x] **APPR-01**: User can customize typography: font family (picker), weight, line height, letter spacing
 - [x] **APPR-02**: User can customize text colors: message body, username, timestamp
 - [x] **APPR-03**: User can customize overlay background: color + opacity slider
 - [x] **APPR-04**: User can customize message bubble: background color + opacity, border radius, border width/color, inner padding, gap between messages
