@@ -289,7 +289,7 @@ Plans:
 5. `AppearancePanel` hosts all three groups with a collapsible sub-group wrapper for each
 6. `CollapsibleSection` reusable wrapper component exists and is used by all groups
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 34-01-PLAN.md — VisualSettings type extension + test scaffolds + CollapsibleSection + TypographyGroup
@@ -377,7 +377,7 @@ Plans:
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27-32 | v1.5 | 15/15 | Complete | 2026-03-16 |
 | 33 | CSS Architecture Foundation | Complete    | 2026-03-18 | — |
-| 34 | Appearance Controls — Core | 0/3 | Not started | — |
+| 34 | 1/3 | In Progress|  | — |
 | 35 | Appearance Controls — Extended | 0/3 | Not started | — |
 | 36 | Events Styling + Theme Import | 0/3 | Not started | — |
 | 37 | Editor UX Rework | 0/3 | Not started | — |

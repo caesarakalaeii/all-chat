@@ -10,13 +10,13 @@ Requirements for the Visual Overlay Customizer milestone. Each maps to roadmap p
 ### APPR — Appearance Controls
 
 - [ ] **APPR-01**: User can customize typography: font family (picker), weight, line height, letter spacing
-- [ ] **APPR-02**: User can customize text colors: message body, username, timestamp
-- [ ] **APPR-03**: User can customize overlay background: color + opacity slider
-- [ ] **APPR-04**: User can customize message bubble: background color + opacity, border radius, border width/color, inner padding, gap between messages
+- [x] **APPR-02**: User can customize text colors: message body, username, timestamp
+- [x] **APPR-03**: User can customize overlay background: color + opacity slider
+- [x] **APPR-04**: User can customize message bubble: background color + opacity, border radius, border width/color, inner padding, gap between messages
 - [ ] **APPR-05**: User can toggle component visibility individually: avatars, badges, timestamps, platform badge, emotes, username
 - [ ] **APPR-06**: User can adjust component sizing: avatar size, badge size, emote scale
 - [ ] **APPR-07**: User can override per-platform accent colors (Twitch, YouTube, Kick, TikTok, Discord)
-- [ ] **APPR-08**: User can configure backdrop blur (glassmorphism) intensity
+- [x] **APPR-08**: User can configure backdrop blur (glassmorphism) intensity
 - [ ] **APPR-09**: User can customize special event styling: show/hide, size modifier for Super Chat, subscriptions, raids
 - [ ] **APPR-10**: All visual control changes update the live overlay preview in real-time without requiring save
 
