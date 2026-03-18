@@ -376,7 +376,7 @@ Plans:
 | 11-22 | v1.2 | 21/21 | Complete | 2026-03-06 |
 | 23-26 | v1.3 | 20/20 | Complete | 2026-03-14 |
 | 27-32 | v1.5 | 15/15 | Complete | 2026-03-16 |
-| 33 | 1/3 | In Progress|  | — |
+| 33 | CSS Architecture Foundation | 2/3 | In Progress | — |
 | 34 | Appearance Controls — Core | 0/3 | Not started | — |
 | 35 | Appearance Controls — Extended | 0/3 | Not started | — |
 | 36 | Events Styling + Theme Import | 0/3 | Not started | — |
