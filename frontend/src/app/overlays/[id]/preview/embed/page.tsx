@@ -129,6 +129,33 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
   }
 }
 
+// ---- Google Font loader ---------------------------------------------------
+
+const GOOGLE_FONT_NAMES = new Set([
+  'Bebas Neue',
+  'Oswald',
+  'Rajdhani',
+  'Barlow Condensed',
+  'Exo 2',
+  'Nunito',
+  'Poppins',
+  'Roboto',
+  'Open Sans',
+  'Montserrat',
+])
+
+function ensureGoogleFontLoaded(fontFamily: string): void {
+  if (!GOOGLE_FONT_NAMES.has(fontFamily)) return
+  const slug = fontFamily.replace(/\s+/g, '-').toLowerCase()
+  if (document.getElementById('gfont-' + slug)) return
+  const link = document.createElement('link')
+  link.id = 'gfont-' + slug
+  link.rel = 'stylesheet'
+  const encodedName = encodeURIComponent(fontFamily)
+  link.href = `https://fonts.googleapis.com/css2?family=${encodedName}:wght@400;600;700&display=swap`
+  document.head.appendChild(link)
+}
+
 // ---- Page -----------------------------------------------------------------
 
 export default function OverlayEmbedPage({ params }: { params: Promise<{ id: string }> }) {
@@ -157,6 +184,35 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       '#overlay-preview-root .overlay-preview-body'
     )
   }, [customCss, useCustomCss])
+
+  // postMessage listener for live visual CSS updates from the editor
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'VISUAL_CSS_UPDATE') return
+      const css = event.data.css as string
+
+      // Upsert the visual customizer style tag
+      let styleEl = document.getElementById('visual-customizer-style') as HTMLStyleElement | null
+      if (!styleEl) {
+        styleEl = document.createElement('style')
+        styleEl.id = 'visual-customizer-style'
+        document.head.appendChild(styleEl)
+      }
+      styleEl.textContent = css
+
+      // Load any Google Fonts referenced in the CSS
+      const fontFamilyMatches = css.matchAll(/--chat-[^:]*font-family\s*:\s*([^;}"]+)/g)
+      for (const match of fontFamilyMatches) {
+        const fontFamily = match[1].trim().replace(/['"]/g, '')
+        ensureGoogleFontLoaded(fontFamily)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
+  }, [])
 
   // Load overlay config
   useEffect(() => {
