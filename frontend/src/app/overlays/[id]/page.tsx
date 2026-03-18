@@ -1697,9 +1697,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             />
           </section>
 
-          {/* 4. Customization section */}
+          {/* 4. Appearance section (customization + visual settings) */}
           <Card className="p-4">
-            <h2 className="mb-4 text-sm font-semibold text-text">Customization</h2>
+            <h2 className="mb-4 text-sm font-semibold text-text">Appearance</h2>
             <div className="space-y-5">
               {/* Font Size */}
               <div>
@@ -1879,6 +1879,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 </div>
               </div>
             </div>
+            <div className="mt-5">
+              <AppearancePanel visualSettings={visualSettings} onChange={handleVisualSettingsChange} visibilityDefaults={iframeVisibilityDefaults} />
+            </div>
           </Card>
 
           {/* 5. Mock Messages section */}
@@ -1986,13 +1989,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             </div>
           </Card>
 
-          {/* 6. Appearance controls */}
-          <Card className="p-4">
-            <h2 className="mb-3 text-sm font-semibold text-text">Appearance</h2>
-            <AppearancePanel visualSettings={visualSettings} onChange={handleVisualSettingsChange} visibilityDefaults={iframeVisibilityDefaults} />
-          </Card>
-
-          {/* 7. Custom CSS section */}
+          {/* 5b. Custom CSS section */}
           <Card className="p-4">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
