@@ -178,7 +178,7 @@
 - [x] **Phase 35: Migrate twitch-listener** - First production SDK validation; twitch-listener cmd/main.go reduced to IRC connection and message publishing only (completed 2026-03-17)
 - [x] **Phase 36: Migrate kick-listener** - Exercise both ListenerBase and LeadershipListener archetypes; both SDK models confirmed in production (completed 2026-03-17)
 - [x] **Phase 37: Migrate youtube-innertube and discord-listener** - Leadership-only migrations; close leadership archetype with two independent validations (completed 2026-03-17)
-- [ ] **Phase 38: Migrate youtube-listener and twitch-eventsub-listener** - Close migration window; all Go listeners running on shared SDK
+- [x] **Phase 38: Migrate youtube-listener and twitch-eventsub-listener** - Close migration window; all Go listeners running on shared SDK (completed 2026-03-18)
 
 ## Phase Details
 
@@ -288,7 +288,7 @@ Plans:
 | 35. Migrate twitch-listener | 2/2 | Complete    | 2026-03-17 | - |
 | 36. Migrate kick-listener | 2/2 | Complete    | 2026-03-17 | - |
 | 37. Migrate youtube-innertube and discord-listener | 3/3 | Complete    | 2026-03-17 | - |
-| 38. Migrate youtube-listener and twitch-eventsub-listener | 2/3 | In Progress|  | - |
+| 38. Migrate youtube-listener and twitch-eventsub-listener | 3/3 | Complete   | 2026-03-18 | - |
 
 ---
 *Last updated: 2026-03-18 after Phase 38 planning*

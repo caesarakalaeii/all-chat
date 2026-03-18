@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Listener SDK
 status: planning
-stopped_at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-02-PLAN.md
-last_updated: "2026-03-18T09:01:13.375Z"
+stopped_at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-03-PLAN.md
+last_updated: "2026-03-18T09:08:51.727Z"
 last_activity: 2026-03-17 — Roadmap created, phases 33-38 defined
 progress:
   total_phases: 24
-  completed_phases: 23
+  completed_phases: 24
   total_plans: 81
-  completed_plans: 80
+  completed_plans: 81
   percent: 0
 ---
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 37-migrate-youtube-innertube-and-discord-listener P02 | 5m | 2 tasks | 2 files |
 | Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener P01 | 10min | 2 tasks | 3 files |
 | Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener P02 | 8min | 2 tasks | 2 files |
+| Phase 38 P03 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,8 @@ Key decisions relevant to v1.6:
 - [Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener]: [Phase 38-01]: listener.Env used as drop-in for getEnvOrDefault — local helper deleted entirely; base.Start not called for leadership-only youtube-listener; parseIntEnv preserved for 4 quota tier config call sites
 - [Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener]: [Phase 38-02]: syncInterval stored as Manager field, passed to NewManager as 5th arg; ChannelSyncInterval constant stays in cmd/main.go as documentation
 - [Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener]: [Phase 38-02]: Old map-returning GetActiveChannels renamed to GetActiveChannelMap; new GetActiveChannels() []string satisfies SDK interface without breaking callers
+- [Phase 38]: coordClient still built manually with coordination.NewCoordinatorClient — NewListenerBaseFromEnv does not exist in SDK; all other migrated services use the same direct pattern
+- [Phase 38]: [Phase 38-03]: base.Start called before leader election goroutine — ensures UpdateAssignedSourceIDs is available when channelManager.Start fires on leadership acquisition
 
 ### Pending Todos
 
@@ -122,8 +125,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T09:01:13.371Z
-Stopped at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-02-PLAN.md
+Last session: 2026-03-18T09:08:51.721Z
+Stopped at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-03-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
