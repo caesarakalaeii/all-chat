@@ -308,20 +308,25 @@
 @layer visual-customizer {
   .event-message[class*='super_chat'],
   .event-message[class*='super_sticker'] {
+    display: var(--chat-show-super-chat, block);
     transform: scale(var(--chat-super-chat-size-modifier, 1.05));
   }
   .event-message[class*='subscription'],
   .event-message[class*='gift_subscription'] {
+    display: var(--chat-show-subscriptions, block);
     transform: scale(var(--chat-subscription-size-modifier, 1.05));
   }
   .event-message[class*='raid'] {
+    display: var(--chat-show-raids, block);
     transform: scale(var(--chat-raid-size-modifier, 1.05));
   }
   .event-message[class*='bits'] {
+    display: var(--chat-show-bits, block);
     transform: scale(var(--chat-bits-size-modifier, 1.05));
   }
   .event-message[class*='member'],
   .event-message[class*='gift'] {
+    display: var(--chat-show-membership-gift, block);
     transform: scale(var(--chat-membership-gift-size-modifier, 1.05));
   }
 }
