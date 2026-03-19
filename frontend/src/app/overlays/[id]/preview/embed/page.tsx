@@ -190,17 +190,22 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   // postMessage listener for live visual CSS updates from the editor
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type !== 'VISUAL_CSS_UPDATE') return
-      const css = event.data.css as string
-
-      // Update React state — renders via the <style> tag in JSX
-      setVisualSettingsCss(css)
-
-      // Load any Google Fonts referenced in the CSS
-      const fontFamilyMatches = css.matchAll(/--chat-[^:]*font-family\s*:\s*([^;}"]+)/g)
-      for (const match of fontFamilyMatches) {
-        const fontFamily = match[1].trim().replace(/['"]/g, '')
-        ensureGoogleFontLoaded(fontFamily)
+      // Live visual settings (CSS variables)
+      if (event.data?.type === 'VISUAL_CSS_UPDATE') {
+        const css = event.data.css as string
+        setVisualSettingsCss(css)
+        const fontFamilyMatches = css.matchAll(/--chat-[^:]*font-family\s*:\s*([^;}"]+)/g)
+        for (const match of fontFamilyMatches) {
+          ensureGoogleFontLoaded(match[1].trim().replace(/['"]/g, ''))
+        }
+        return
+      }
+      // Full theme CSS replacement (sent when user applies a new theme)
+      if (event.data?.type === 'CUSTOM_CSS_UPDATE') {
+        const css = event.data.css as string
+        setCustomCss(css)
+        setUseCustomCss(Boolean(css.trim().length))
+        return
       }
     }
 
