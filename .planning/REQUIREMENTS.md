@@ -29,8 +29,8 @@ Requirements for the Visual Overlay Customizer milestone. Each maps to roadmap p
 
 ### EDUX — Editor UX Rework
 
-- [ ] **EDUX-01**: Theme Marketplace is the first visible element in the editor panel
-- [ ] **EDUX-02**: Editor panel uses collapsible sections: Theme, Appearance (with sub-groups), Sources, Behavior, Expert
+- [x] **EDUX-01**: Theme Marketplace is the first visible element in the editor panel
+- [x] **EDUX-02**: Editor panel uses collapsible sections: Theme, Appearance (with sub-groups), Sources, Behavior, Expert
 - [ ] **EDUX-03**: CSS editor is hidden by default inside the collapsible "Expert" section
 - [ ] **EDUX-04**: Visual customizer sub-groups: Typography, Colors, Background & Bubbles, Visibility, Sizing, Platform Colors, Events
 
