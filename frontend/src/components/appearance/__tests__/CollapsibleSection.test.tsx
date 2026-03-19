@@ -130,19 +130,13 @@ describe('CollapsibleSection', () => {
   it('stored value overrides defaultOpen (stored false wins over defaultOpen=true)', () => {
     // Pre-store false for this section
     localStorageMock.setItem('appearance-panel-sections-v1', JSON.stringify({ themes: false }))
-    localStorageMock.getItem.mockImplementation((key: string) => {
-      if (key === 'appearance-panel-sections-v1') {
-        return JSON.stringify({ themes: false })
-      }
-      return null
-    })
     vi.clearAllMocks()
     // Re-mock getItem to return the pre-stored value
-    localStorageMock.getItem.mockImplementation((key: string) => {
+    localStorageMock.getItem.mockImplementation((key: string): string => {
       if (key === 'appearance-panel-sections-v1') {
         return JSON.stringify({ themes: false })
       }
-      return null
+      return ''
     })
 
     render(

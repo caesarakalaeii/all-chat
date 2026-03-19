@@ -104,15 +104,13 @@ describe('ThemeContent', () => {
   it('calls onApply with CSS string when a theme card apply button is clicked', () => {
     const testTheme = {
       id: 'theme-1',
+      filename: 'dark-theme.css',
       name: 'Dark Theme',
       css: '.chat { color: white; }',
       description: 'A dark theme',
       tags: [],
       author: 'test',
       version: '1.0',
-      preview: '',
-      createdAt: '',
-      updatedAt: '',
     }
     mockUseThemeMarketplace.mockReturnValue({
       ...defaultHookReturn,
