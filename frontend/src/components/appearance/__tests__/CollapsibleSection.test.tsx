@@ -60,4 +60,102 @@ describe('CollapsibleSection', () => {
     const stored = JSON.parse(lastCall[1]) as Record<string, boolean>
     expect('typography' in stored).toBe(true)
   })
+
+  // New tests for storageKey prop
+  it('when storageKey is provided, localStorage.setItem is called with that key', () => {
+    render(
+      <CollapsibleSection id="themes" title="Themes" storageKey="editor-panel-sections-v1">
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    const trigger = screen.getByRole('button')
+    fireEvent.click(trigger)
+    expect(localStorageMock.setItem).toHaveBeenCalledWith(
+      'editor-panel-sections-v1',
+      expect.any(String)
+    )
+    // Must NOT use the default key
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith(
+      'appearance-panel-sections-v1',
+      expect.any(String)
+    )
+  })
+
+  it('when no storageKey is passed, uses appearance-panel-sections-v1 (backward compat)', () => {
+    render(
+      <CollapsibleSection id="colors" title="Colors">
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    const trigger = screen.getByRole('button')
+    fireEvent.click(trigger)
+    expect(localStorageMock.setItem).toHaveBeenCalledWith(
+      'appearance-panel-sections-v1',
+      expect.any(String)
+    )
+  })
+
+  it('when defaultOpen=true and no stored value, section starts open', () => {
+    render(
+      <CollapsibleSection id="themes" title="Themes" defaultOpen={true}>
+        <span>themes content</span>
+      </CollapsibleSection>
+    )
+    // The trigger should have aria-expanded="true" or the panel should be open
+    // We can verify by checking that clicking again closes (setItem called with false)
+    const trigger = screen.getByRole('button')
+    fireEvent.click(trigger)
+    // Section was open, click closes it — stored value should be false
+    const calls = localStorageMock.setItem.mock.calls
+    const lastCall = calls[calls.length - 1] as [string, string]
+    const stored = JSON.parse(lastCall[1]) as Record<string, boolean>
+    expect(stored['themes']).toBe(false)
+  })
+
+  it('when defaultOpen is not passed and no stored value, section starts closed', () => {
+    render(
+      <CollapsibleSection id="sources" title="Sources">
+        <span>sources content</span>
+      </CollapsibleSection>
+    )
+    const trigger = screen.getByRole('button')
+    fireEvent.click(trigger)
+    // Section was closed, click opens it — stored value should be true
+    const calls = localStorageMock.setItem.mock.calls
+    const lastCall = calls[calls.length - 1] as [string, string]
+    const stored = JSON.parse(lastCall[1]) as Record<string, boolean>
+    expect(stored['sources']).toBe(true)
+  })
+
+  it('stored value overrides defaultOpen (stored false wins over defaultOpen=true)', () => {
+    // Pre-store false for this section
+    localStorageMock.setItem('appearance-panel-sections-v1', JSON.stringify({ themes: false }))
+    localStorageMock.getItem.mockImplementation((key: string) => {
+      if (key === 'appearance-panel-sections-v1') {
+        return JSON.stringify({ themes: false })
+      }
+      return null
+    })
+    vi.clearAllMocks()
+    // Re-mock getItem to return the pre-stored value
+    localStorageMock.getItem.mockImplementation((key: string) => {
+      if (key === 'appearance-panel-sections-v1') {
+        return JSON.stringify({ themes: false })
+      }
+      return null
+    })
+
+    render(
+      <CollapsibleSection id="themes" title="Themes" defaultOpen={true}>
+        <span>themes content</span>
+      </CollapsibleSection>
+    )
+    const trigger = screen.getByRole('button')
+    fireEvent.click(trigger)
+    // If stored false overrode defaultOpen=true, section was closed, click opens → stored true
+    const calls = localStorageMock.setItem.mock.calls
+    const lastCall = calls[calls.length - 1] as [string, string]
+    const stored = JSON.parse(lastCall[1]) as Record<string, boolean>
+    expect(stored['themes']).toBe(true)
+  })
 })

@@ -6,9 +6,9 @@ import { ChevronDown } from 'lucide-react'
 
 const STORAGE_KEY = 'appearance-panel-sections-v1'
 
-function readStoredSections(): Record<string, boolean> {
+function readStoredSections(key: string): Record<string, boolean> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return {}
     return JSON.parse(raw) as Record<string, boolean>
   } catch {
@@ -20,20 +20,28 @@ export interface CollapsibleSectionProps {
   id: string
   title: string
   children: React.ReactNode
+  storageKey?: string
+  defaultOpen?: boolean
 }
 
-export function CollapsibleSection({ id, title, children }: CollapsibleSectionProps): React.ReactElement {
+export function CollapsibleSection({
+  id,
+  title,
+  children,
+  storageKey = STORAGE_KEY,
+  defaultOpen = false,
+}: CollapsibleSectionProps): React.ReactElement {
   const [open, setOpen] = useState<boolean>(() => {
-    const stored = readStoredSections()
-    return stored[id] ?? false
+    const stored = readStoredSections(storageKey)
+    return stored[id] ?? defaultOpen
   })
 
   function handleOpenChange(nextOpen: boolean): void {
     setOpen(nextOpen)
     try {
-      const stored = readStoredSections()
+      const stored = readStoredSections(storageKey)
       const next: Record<string, boolean> = { ...stored, [id]: nextOpen }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      localStorage.setItem(storageKey, JSON.stringify(next))
     } catch {
       // localStorage unavailable (e.g. SSR or private mode) — silently ignore
     }
