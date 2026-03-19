@@ -951,6 +951,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     })
   }, [sendCssToIframe])
 
+  // --- sendCustomCssToIframe: post the full theme CSS to the embed preview ---
+  const sendCustomCssToIframe = useCallback((css: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'CUSTOM_CSS_UPDATE', css },
+      '*'
+    )
+  }, [])
+
   // --- applyThemeImmediately: atomically apply CSS + parsed settings ---
   const applyThemeImmediately = useCallback(
     (css: string, parsed: Partial<VisualSettings>) => {
@@ -959,8 +967,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setVisualSettings(parsed)
       setParsedThemeSettings(parsed)
       sendCssToIframe(parsed)
+      sendCustomCssToIframe(css)
     },
-    [sendCssToIframe]
+    [sendCssToIframe, sendCustomCssToIframe]
   )
 
   // --- handleResetToTheme: restore visualSettings to parsedThemeSettings (or {}) ---
