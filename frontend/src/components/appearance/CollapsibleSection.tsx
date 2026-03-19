@@ -58,7 +58,7 @@ export function CollapsibleSection({
       </Collapsible.Trigger>
       <Collapsible.Panel
         keepMounted
-        className="overflow-hidden max-h-0 data-[open]:max-h-[2000px] transition-all duration-200"
+        className="overflow-hidden max-h-0 data-[open]:max-h-[2000px] data-[open]:overflow-visible transition-all duration-200"
       >
         <div className="pb-3">{children}</div>
       </Collapsible.Panel>
