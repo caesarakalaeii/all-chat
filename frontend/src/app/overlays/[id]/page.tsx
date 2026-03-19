@@ -1077,11 +1077,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           setCustomCss(css)
           setUseCustomCss(Boolean(css.trim().length))
 
-          // If visual_settings is empty but a theme CSS exists, parse it to populate form defaults
+          // Parse theme CSS — always set parsedThemeSettings so "Reset to theme defaults" works
+          // after save+reload (when visual_settings is non-empty, theme defaults are still needed)
           const savedVisual = config.visual_settings as Partial<VisualSettings> | null
           const hasNoSavedVisual = !savedVisual || Object.keys(savedVisual).length === 0
-          const parsedFromCss = hasNoSavedVisual && css.trim() ? parseCssToVisualSettings(css) : {}
-          if (hasNoSavedVisual && css.trim()) {
+          const parsedFromCss = css.trim() ? parseCssToVisualSettings(css) : {}
+          if (css.trim()) {
             setParsedThemeSettings(parsedFromCss)
           }
 
