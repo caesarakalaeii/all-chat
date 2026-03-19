@@ -39,6 +39,9 @@ export function SizingGroup({ visualSettings, onChange }: SizingGroupProps): Rea
         unit="×"
         onChange={(v) => onChange({ emoteScale: `${v}` })}
       />
+      <p className="text-xs text-text-dim">
+        Emote scale applies to third-party emotes (7TV, BTTV, FFZ). Standard emoji are not affected.
+      </p>
     </div>
   )
 }

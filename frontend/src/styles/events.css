@@ -344,11 +344,21 @@
     min-height: var(--chat-avatar-size, 2.5rem) !important;
   }
 
-  /* ── Badges ────────────────────────────────────────────────────────── */
+  /* ── User badges (subscriber/mod/bits icons) ───────────────────────── */
   .overlay-preview-body .flex.gap-1 {
     display: var(--chat-show-badges, flex) !important;
   }
   .overlay-preview-body .flex.gap-1 img {
+    width: var(--chat-badge-size, 1rem) !important;
+    height: var(--chat-badge-size, 1rem) !important;
+  }
+
+  /* ── Platform badge (TWITCH/YOUTUBE pill or icon) ──────────────────── */
+  .overlay-preview-body .platform-badge-text {
+    font-size: var(--chat-badge-size, 0.75rem) !important;
+  }
+  .overlay-preview-body .platform-badge-icon svg,
+  .overlay-preview-body .platform-badge-icon img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
   }
