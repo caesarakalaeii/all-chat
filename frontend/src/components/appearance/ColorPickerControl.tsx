@@ -22,6 +22,8 @@ export function ColorPickerControl({
 }: ColorPickerControlProps): React.ReactElement {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 })
 
   useEffect(() => {
     if (!open) return
@@ -32,6 +34,12 @@ export function ColorPickerControl({
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  useEffect(() => {
+    if (!open || !buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+    setPopoverPos({ top: rect.bottom + 4, left: rect.left })
   }, [open])
 
   const opacityValue =
@@ -46,6 +54,7 @@ export function ColorPickerControl({
       <div className="relative">
         {/* Color swatch button */}
         <button
+          ref={buttonRef}
           type="button"
           data-testid="color-swatch"
           className="h-7 w-10 rounded border border-border"
@@ -56,7 +65,10 @@ export function ColorPickerControl({
 
         {/* Popover with color picker */}
         {open && (
-          <div className="absolute top-full left-0 z-50 mt-1 rounded border border-border bg-surface p-2 shadow-lg">
+          <div
+            className="fixed z-[200] rounded border border-border bg-surface p-2 shadow-lg"
+            style={{ top: popoverPos.top, left: popoverPos.left }}
+          >
             <HexColorPicker color={value} onChange={onChange} />
           </div>
         )}
