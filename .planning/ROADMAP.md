@@ -361,9 +361,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 37-01-PLAN.md — `CollapsibleSection` integration into editor page + section order scaffolding
-- [ ] 37-02-PLAN.md — Wire AppearancePanel into Appearance section; move CSS editor to Expert section
-- [ ] 37-03-PLAN.md — Save/load round-trip verification + end-to-end UAT checkpoint
+- [ ] 37-01-PLAN.md — Extend CollapsibleSection (storageKey/defaultOpen props) + ThemeContent inline component
+- [ ] 37-02-PLAN.md — Restructure editor panel into 5 CollapsibleSections + sticky footer (Theme, Appearance, Sources, Behavior, Expert)
+- [ ] 37-03-PLAN.md — Migrate fontSize to visualSettings + end-to-end UAT checkpoint
 
 ## Progress
 
@@ -383,4 +383,4 @@ Plans:
 | 37 | Editor UX Rework | 0/3 | Not started | — |
 
 ---
-*Last updated: 2026-03-18 after v1.6 milestone start — phases 33-37 added*
+*Last updated: 2026-03-19 after Phase 37 planning*
