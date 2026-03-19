@@ -1,3 +1,4 @@
+/* Visual Settings: uses CSS custom properties for live customization */
 /**
  * Theme Name: Minimal Icon Badge Theme
  * Description: Clean minimal theme showcasing icon-based platform badges
@@ -19,10 +20,10 @@
    ============================================ */
 
 .space-y-3 > div {
-  background: rgba(0, 0, 0, 0.85) !important;
-  border-left: 3px solid #9146FF !important;
-  border-radius: 8px !important;
-  padding: 12px 16px !important;
+  background: var(--chat-bubble-bg-color, rgba(0, 0, 0, 0.85)) !important;
+  border-left: var(--chat-bubble-border-width, 3px) solid #9146FF !important;
+  border-radius: var(--chat-bubble-border-radius, 8px) !important;
+  padding: var(--chat-bubble-padding, 12px 16px) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
 
@@ -51,8 +52,9 @@
    ============================================ */
 
 .font-semibold.text-sm {
-  font-size: 15px !important;
-  font-weight: 700 !important;
+  font-size: var(--chat-username-font-size, 15px) !important;
+  font-weight: var(--chat-username-font-weight, 700) !important;
+  display: var(--chat-show-username, inline) !important;
   text-shadow: 0 0 8px rgba(0, 0, 0, 0.5) !important;
 }
 
@@ -60,9 +62,13 @@
    USER BADGES
    ============================================ */
 
+.flex.gap-1 {
+  display: var(--chat-show-badges, inline-flex) !important;
+}
+
 .flex.gap-1 img {
-  width: 18px !important;
-  height: 18px !important;
+  width: var(--chat-avatar-size, 18px) !important;
+  height: var(--chat-avatar-size, 18px) !important;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5)) !important;
 }
 
@@ -71,9 +77,9 @@
    ============================================ */
 
 .text-white.break-words {
-  color: #f0f0f0 !important;
-  font-size: 16px !important;
-  line-height: 1.5 !important;
+  color: var(--chat-message-color, #f0f0f0) !important;
+  font-size: var(--chat-font-size, 16px) !important;
+  line-height: var(--chat-line-height, 1.5) !important;
   margin-top: 4px !important;
 }
 
@@ -91,8 +97,9 @@
    ============================================ */
 
 .text-xs.text-gray-500 {
-  color: #888 !important;
-  font-size: 11px !important;
+  color: var(--chat-timestamp-color, #888) !important;
+  font-size: var(--chat-timestamp-font-size, 11px) !important;
+  display: var(--chat-show-timestamps, block) !important;
 }
 
 /* ============================================

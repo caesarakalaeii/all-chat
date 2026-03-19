@@ -1,3 +1,4 @@
+/* Visual Settings: uses CSS custom properties for live customization */
 /**
  * Theme Name: Minimal Clean Theme (Fixed Platform & Badges)
  * Description: Inline layout with platform icon and badges before username
@@ -47,20 +48,20 @@
 /* Reset body background and ensure clean rendering */
 body {
   background: transparent !important;
-  font-family: 'Roboto', Arial, sans-serif !important;
+  font-family: var(--chat-font-family, 'Roboto', Arial, sans-serif) !important;
   -webkit-font-smoothing: antialiased !important;
   -moz-osx-font-smoothing: grayscale !important;
 }
 
 /* Main container - transparent and minimal */
 .min-h-screen {
-  background: transparent !important;
-  padding: 16px !important;
+  background: var(--chat-overlay-bg-color, transparent) !important;
+  padding: var(--chat-overlay-padding, 16px) !important;
 }
 
 /* Message list container - reduced spacing for minimal look */
 .space-y-3 {
-  gap: 8px !important;
+  gap: var(--chat-message-gap, 8px) !important;
 }
 
 /* ============================================================
@@ -108,7 +109,7 @@ body {
 
 /* Badge container - inline flex to keep badges horizontal */
 .flex.gap-1 {
-  display: inline-flex !important;
+  display: var(--chat-show-badges, inline-flex) !important;
   gap: 4px !important;
   margin-right: 4px !important;
   vertical-align: middle !important;
@@ -117,8 +118,8 @@ body {
 
 /* Individual badges - proper sizing */
 .flex.gap-1 img {
-  width: 18px !important;
-  height: 18px !important;
+  width: var(--chat-avatar-size, 18px) !important;
+  height: var(--chat-avatar-size, 18px) !important;
   display: inline-block !important;
   vertical-align: middle !important;
   image-rendering: -webkit-optimize-contrast !important;
@@ -131,7 +132,7 @@ body {
 
 /* Hide avatar container completely */
 .flex-shrink-0 {
-  display: none !important;
+  display: var(--chat-show-avatars, none) !important;
 }
 
 /* ============================================================
@@ -157,11 +158,11 @@ body {
 
 /* Username with thick black outline for maximum readability */
 .font-semibold.text-sm {
-  font-family: 'Roboto', Arial, sans-serif !important;
-  font-size: 18px !important;
-  font-weight: 700 !important;
-  line-height: 1.4 !important;
-  display: inline !important;
+  font-family: var(--chat-username-font-family, 'Roboto', Arial, sans-serif) !important;
+  font-size: var(--chat-username-font-size, 18px) !important;
+  font-weight: var(--chat-username-font-weight, 700) !important;
+  line-height: var(--chat-line-height, 1.4) !important;
+  display: var(--chat-show-username, inline) !important;
   margin-bottom: 0 !important;
   margin-right: 0 !important;
   /* Multiple text-shadow layers create thick black outline */
@@ -195,11 +196,11 @@ body {
 
 /* Message text with white color and black outline */
 .text-white.break-words {
-  font-family: 'Roboto', Arial, sans-serif !important;
-  font-size: 16px !important;
-  font-weight: 400 !important;
-  line-height: 1.5 !important;
-  color: #ffffff !important;
+  font-family: var(--chat-font-family, 'Roboto', Arial, sans-serif) !important;
+  font-size: var(--chat-font-size, 16px) !important;
+  font-weight: var(--chat-font-weight, 400) !important;
+  line-height: var(--chat-line-height, 1.5) !important;
+  color: var(--chat-message-color, #ffffff) !important;
   display: inline !important;
   word-break: break-word !important;
   overflow-wrap: break-word !important;
@@ -239,11 +240,11 @@ body {
 
 /* Hide timestamps for ultra-minimal look */
 .text-xs.text-gray-500.mt-1 {
-  display: none !important;
+  display: var(--chat-show-timestamps, none) !important;
 }
 
 .text-xs.text-gray-500 {
-  display: none !important;
+  display: var(--chat-show-timestamps, none) !important;
 }
 
 /* ============================================================
