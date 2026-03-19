@@ -306,6 +306,30 @@
 }
 
 @layer visual-customizer {
+  /* ---- Chat element visibility (CSS-layer !important beats unlayered !important) ---- */
+
+  /* Avatar container */
+  .overlay-preview-body .flex-shrink-0 {
+    display: var(--chat-show-avatars, block) !important;
+  }
+
+  /* User badges row */
+  .overlay-preview-body .flex.gap-1 {
+    display: var(--chat-show-badges, flex) !important;
+  }
+
+  /* Username */
+  .overlay-preview-body .font-semibold {
+    display: var(--chat-show-username, inline) !important;
+  }
+
+  /* Timestamp */
+  .overlay-preview-body .text-xs.text-gray-500 {
+    display: var(--chat-show-timestamps, block) !important;
+  }
+}
+
+@layer visual-customizer {
   .event-message[class*='super_chat'],
   .event-message[class*='super_sticker'] {
     display: var(--chat-show-super-chat, block);
