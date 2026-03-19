@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Visual Overlay Customizer
 status: planning
-stopped_at: Completed 37-editor-ux-rework-01 (CollapsibleSection extensions + ThemeContent)
-last_updated: "2026-03-19T09:29:31.968Z"
+stopped_at: Completed 37-editor-ux-rework-02 (5-section CollapsibleSection restructure + sticky footer)
+last_updated: "2026-03-19T09:36:01.314Z"
 last_activity: 2026-03-18 — v1.6 roadmap created, 5 phases (33-37), 18 requirements mapped
 progress:
   total_phases: 24
   completed_phases: 22
   total_plans: 81
-  completed_plans: 79
+  completed_plans: 80
   percent: 0
 ---
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 36-events-styling-theme-import P01 | 3 | 2 tasks | 7 files |
 | Phase 36-events-styling-theme-import P02 | 82 | 2 tasks | 3 files |
 | Phase 37-editor-ux-rework P01 | 8 | 3 tasks | 4 files |
+| Phase 37-editor-ux-rework P02 | 15 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,9 @@ Key decisions relevant to v1.6:
 - [Phase 36-events-styling-theme-import]: events.css requires display: var(--chat-show-*) rules for EventsGroup show/hide toggles to have visual effect in the preview iframe
 - [Phase 37-editor-ux-rework]: storageKey prop defaults to 'appearance-panel-sections-v1' so existing AppearancePanel callers require zero changes
 - [Phase 37-editor-ux-rework]: ThemeContent uses single-column grid for compact sidebar display; onApply passed directly to ThemeCard without intermediate handleApply (no modal to close)
+- [Phase 37-editor-ux-rework]: ThemeContent rendered inline in Theme CollapsibleSection — ThemeMarketplaceModal fully removed from overlay editor
+- [Phase 37-editor-ux-rework]: Editor sections use storageKey=editor-panel-sections-v1, separate from appearance-panel-sections-v1
+- [Phase 37-editor-ux-rework]: Sticky footer uses position:sticky bottom-0 inside split-view-config overflow-y-auto scroll container
 
 ### Pending Todos
 
@@ -99,8 +103,8 @@ None identified at milestone start.
 
 ## Session Continuity
 
-Last session: 2026-03-19T09:29:31.966Z
-Stopped at: Completed 37-editor-ux-rework-01 (CollapsibleSection extensions + ThemeContent)
+Last session: 2026-03-19T09:36:01.311Z
+Stopped at: Completed 37-editor-ux-rework-02 (5-section CollapsibleSection restructure + sticky footer)
 Resume file: None
 
 **Next action:** Phase 33 complete — proceed to Phase 34 (Appearance Controls — Core)
