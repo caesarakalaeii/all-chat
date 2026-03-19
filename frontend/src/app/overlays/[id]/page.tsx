@@ -982,6 +982,16 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // --- EMBED_READY: re-send CSS when embed page signals its listener is registered ---
+  useEffect(() => {
+    const handleEmbedReady = (event: MessageEvent) => {
+      if (event.data?.type !== 'EMBED_READY') return
+      sendCssToIframe(visualSettingsRef.current)
+    }
+    window.addEventListener('message', handleEmbedReady)
+    return () => window.removeEventListener('message', handleEmbedReady)
+  }, [sendCssToIframe])
+
   // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
   const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
     iframeRef.current = iframe

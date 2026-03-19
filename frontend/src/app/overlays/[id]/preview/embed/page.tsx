@@ -23,6 +23,7 @@ import type { ChatMessage } from '@/lib/types/message'
 import { renderMessageContent } from '@/lib/renderMessage'
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
+import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import '@/styles/events.css'
 
 // ---- Utilities (identical to preview/page.tsx) ----------------------------
@@ -167,6 +168,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [fontSize, setFontSize] = useState(16)
   const [customCss, setCustomCss] = useState('')
   const [useCustomCss, setUseCustomCss] = useState(false)
+  const [visualSettingsCss, setVisualSettingsCss] = useState('')
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
@@ -191,14 +193,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       if (event.data?.type !== 'VISUAL_CSS_UPDATE') return
       const css = event.data.css as string
 
-      // Upsert the visual customizer style tag
-      let styleEl = document.getElementById('visual-customizer-style') as HTMLStyleElement | null
-      if (!styleEl) {
-        styleEl = document.createElement('style')
-        styleEl.id = 'visual-customizer-style'
-        document.head.appendChild(styleEl)
-      }
-      styleEl.textContent = css
+      // Update React state — renders via the <style> tag in JSX
+      setVisualSettingsCss(css)
 
       // Load any Google Fonts referenced in the CSS
       const fontFamilyMatches = css.matchAll(/--chat-[^:]*font-family\s*:\s*([^;}"]+)/g)
@@ -209,6 +205,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     }
 
     window.addEventListener('message', handleMessage)
+    // Signal the editor that we're ready to receive visual CSS updates
+    window.parent.postMessage({ type: 'EMBED_READY' }, '*')
     return () => {
       window.removeEventListener('message', handleMessage)
     }
@@ -241,6 +239,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         const css = config.custom_css || ''
         setCustomCss(css)
         setUseCustomCss(Boolean(css.trim().length))
+
+        // Apply saved visual settings (CSS variables) directly — no postMessage needed
+        const vcCss = visualSettingsToCss(config.visual_settings ?? {})
+        setVisualSettingsCss(vcCss)
       } catch (error) {
         console.warn('[Embed] Failed to load overlay config', error)
       }
@@ -412,6 +414,12 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           key={scopedPreviewCss}
           id="overlay-preview-custom-css"
           dangerouslySetInnerHTML={{ __html: scopedPreviewCss }}
+        />
+      )}
+      {visualSettingsCss && (
+        <style
+          id="overlay-preview-visual-settings"
+          dangerouslySetInnerHTML={{ __html: visualSettingsCss }}
         />
       )}
 
