@@ -120,7 +120,7 @@ export function TypographyGroup({ visualSettings, onChange }: TypographyGroupPro
         <input
           type="number"
           value={visualSettings.usernameFontSize?.replace('px', '') ?? ''}
-          onChange={(e) => onChange({ usernameFontSize: e.target.value })}
+          onChange={(e) => onChange({ usernameFontSize: `${e.target.value}px` })}
           className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus:outline-none focus:ring-1 focus:ring-border"
         />
         <span className="text-sm text-text-dim">px</span>
@@ -132,7 +132,7 @@ export function TypographyGroup({ visualSettings, onChange }: TypographyGroupPro
         <input
           type="number"
           value={visualSettings.timestampFontSize?.replace('px', '') ?? ''}
-          onChange={(e) => onChange({ timestampFontSize: e.target.value })}
+          onChange={(e) => onChange({ timestampFontSize: `${e.target.value}px` })}
           className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus:outline-none focus:ring-1 focus:ring-border"
         />
         <span className="text-sm text-text-dim">px</span>

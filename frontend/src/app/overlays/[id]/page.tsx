@@ -1060,14 +1060,25 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           setCustomCss(css)
           setUseCustomCss(Boolean(css.trim().length))
 
-          setVisualSettings((prev) => ({
-            ...prev,
-            ...(config.visual_settings ?? {}),
+          // If visual_settings is empty but a theme CSS exists, parse it to populate form defaults
+          const savedVisual = config.visual_settings as Partial<VisualSettings> | null
+          const hasNoSavedVisual = !savedVisual || Object.keys(savedVisual).length === 0
+          const parsedFromCss = hasNoSavedVisual && css.trim() ? parseCssToVisualSettings(css) : {}
+          if (hasNoSavedVisual && css.trim()) {
+            setParsedThemeSettings(parsedFromCss)
+          }
+
+          const merged: Partial<VisualSettings> = {
+            ...parsedFromCss,
+            ...(savedVisual ?? {}),
             // migrate legacy font_size to visualSettings.fontSize if not already present
             fontSize:
-              (config.visual_settings as Partial<VisualSettings> | null)?.fontSize ??
+              savedVisual?.fontSize ??
+              parsedFromCss.fontSize ??
               (typeof display.font_size === 'number' ? `${display.font_size}px` : undefined),
-          }))
+          }
+          setVisualSettings(merged)
+          sendCssToIframe(merged)
         } catch (err) {
           console.warn('[OverlayEditor] Failed to load config', err)
         } finally {
