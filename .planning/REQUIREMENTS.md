@@ -54,10 +54,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | APPR-10 | Phase 36 | Not started |
 | VISM-02 | Phase 36 | Not started |
 | VISM-04 | Phase 36 | Not started |
-| EDUX-01 | Phase 37 | Not started |
-| EDUX-02 | Phase 37 | Not started |
-| EDUX-03 | Phase 37 | Not started |
-| EDUX-04 | Phase 37 | Not started |
+| EDUX-01 | Phase 37 | Complete |
+| EDUX-02 | Phase 37 | Complete |
+| EDUX-03 | Phase 37 | Complete |
+| EDUX-04 | Phase 37 | Complete |
 
 **Coverage:**
 - v1.6 requirements: 18 total
