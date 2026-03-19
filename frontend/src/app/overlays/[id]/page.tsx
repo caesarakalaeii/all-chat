@@ -967,6 +967,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     sendCssToIframe(parsedThemeSettings)
   }, [parsedThemeSettings, sendCssToIframe])
 
+  // --- handleThemeApply: apply a theme CSS string from ThemeContent ---
+  // Prompts for confirmation if visual settings are already customized.
+  function handleThemeApply(css: string): void {
+    const parsed = parseCssToVisualSettings(css)
+    const hasExisting = Object.keys(visualSettings).length > 0
+    if (hasExisting) {
+      setPendingTheme({ css, parsed })
+      setShowThemeConfirm(true)
+    } else {
+      applyThemeImmediately(css, parsed)
+    }
+  }
+
   // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
   const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
     iframeRef.current = iframe
@@ -1631,441 +1644,474 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          {/* 3. Sources section */}
-          <section aria-label="Chat sources">
-            <h2 className="mb-3 text-sm font-semibold text-text">Sources</h2>
-
-            {isLoading ? (
-              <SourceListSkeleton />
-            ) : (
-              <div className="mb-4 space-y-3">
-                {sources.map((source) => (
-                  <div key={source.id}>
-                    <SourceCard
-                      source={source}
-                      onRemove={handleRemoveSource}
-                      onRevoke={setRevokeTarget}
-                      onConfigureRelay={(s) =>
-                        setRelayExpandedSourceId((prev) => (prev === s.id ? null : s.id))
-                      }
-                    />
-                    {source.id === relayExpandedSourceId && source.platform === 'discord' && (
-                      <RelayPanel
-                        source={source}
-                        overlayId={id}
-                        onSaved={handleRelayConfigSaved}
-                      />
-                    )}
-                  </div>
-                ))}
-                {sources.length === 0 && (
-                  <p className="py-2 text-sm text-text-sub">
-                    No sources added yet. Add a platform below.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Accepted shared overlays — add as source */}
-            {acceptedShares.length > 0 && (
-              <div className="mb-4 border-t border-border pt-4">
-                <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
-                <div className="space-y-2">
-                  {acceptedShares.map((share) => (
-                    <button
-                      key={share.share_id}
-                      onClick={() => handleAddSharedOverlay(share)}
-                      className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
-                    >
-                      <span>{share.sender_display_name}&apos;s overlay</span>
-                      <span className="text-xs text-twitch">+ Add</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Add source */}
-            <AddSourceForm
-              overlayId={id}
-              token={token ?? ''}
-              onAddTikTok={handleAddTikTokSource}
-              onAddManual={handleAddManual}
-              onSourceAdded={() => overlaysApi.getSources(id).then(setSources).catch(console.error)}
-              isAdmin={user?.is_admin === true}
-            />
-          </section>
-
-          {/* 4. Appearance section (customization + visual settings) */}
-          <Card className="p-4">
-            <h2 className="mb-4 text-sm font-semibold text-text">Appearance</h2>
-            <div className="space-y-5">
-              {/* Font Size */}
-              <div>
-                <label className="mb-1 block text-xs text-text-sub">
-                  Font Size: <span className="text-twitch">{fontSize}px</span>
-                </label>
-                <input
-                  type="range"
-                  min="12"
-                  max="32"
-                  value={fontSize}
-                  onChange={(e) => setFontSize(parseInt(e.target.value))}
-                  className="w-full accent-twitch"
-                />
-              </div>
-
-              {/* Max Messages */}
-              <div>
-                <label className="mb-1 block text-xs text-text-sub">
-                  Max Messages: <span className="text-twitch">{maxMessages}</span>
-                </label>
-                <input
-                  type="range"
-                  min="10"
-                  max="100"
-                  value={maxMessages}
-                  onChange={(e) => setMaxMessages(parseInt(e.target.value))}
-                  className="w-full accent-twitch"
-                />
-              </div>
-
-              {/* Message Duration */}
-              <div>
-                <label className="mb-1 block text-xs text-text-sub">
-                  Message Duration: <span className="text-twitch">{messageDuration}s</span>
-                </label>
-                <input
-                  type="range"
-                  min="5"
-                  max="60"
-                  value={messageDuration}
-                  onChange={(e) => setMessageDuration(parseInt(e.target.value))}
-                  className="w-full accent-twitch"
-                  disabled={disableMessageFade}
-                />
-              </div>
-
-              {/* Disable fade */}
-              <div>
-                <label className="flex items-center gap-2 text-xs text-text-sub">
-                  <input
-                    type="checkbox"
-                    checked={disableMessageFade}
-                    onChange={(e) => setDisableMessageFade(e.target.checked)}
-                    className="accent-twitch"
-                  />
-                  Disable Message Fade Out
-                </label>
-                <p className="mt-1 ml-5 text-xs text-text-sub">
-                  Messages stay visible until max is reached
-                </p>
-              </div>
-
-              {/* Invert message order */}
-              <div>
-                <label className="flex items-center gap-2 text-xs text-text-sub">
-                  <input
-                    type="checkbox"
-                    checked={invertMessageOrder}
-                    onChange={(e) => setInvertMessageOrder(e.target.checked)}
-                    className="accent-twitch"
-                  />
-                  Invert Message Order
-                </label>
-                <p className="mt-1 ml-5 text-xs text-text-sub">
-                  Show newest messages at the top instead of the bottom
-                </p>
-              </div>
-
-              {/* Platform Badge */}
-              <div>
-                <p className="mb-2 text-xs text-text-sub">Platform Badge</p>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-xs text-text-sub">
-                    <input
-                      type="checkbox"
-                      checked={showPlatformBadge}
-                      onChange={(e) => setShowPlatformBadge(e.target.checked)}
-                      className="accent-twitch"
-                    />
-                    Show Platform Badge
-                  </label>
-                  <div
-                    className={cn(
-                      'space-y-2',
-                      !showPlatformBadge && 'pointer-events-none opacity-50'
-                    )}
-                  >
-                    <div>
-                      <p className="mb-1 text-xs text-text-sub">Position</p>
-                      <div className="flex gap-4">
-                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
-                          <input
-                            type="radio"
-                            name="platformBadgePosition"
-                            value="before"
-                            checked={platformBadgePosition === 'before'}
-                            onChange={() => setPlatformBadgePosition('before')}
-                            className="accent-twitch"
-                            disabled={!showPlatformBadge}
-                          />
-                          Before
-                        </label>
-                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
-                          <input
-                            type="radio"
-                            name="platformBadgePosition"
-                            value="after"
-                            checked={platformBadgePosition === 'after'}
-                            onChange={() => setPlatformBadgePosition('after')}
-                            className="accent-twitch"
-                            disabled={!showPlatformBadge}
-                          />
-                          After
-                        </label>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="mb-1 text-xs text-text-sub">Style</p>
-                      <div className="flex gap-4">
-                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
-                          <input
-                            type="radio"
-                            name="platformBadgeStyle"
-                            value="text"
-                            checked={platformBadgeStyle === 'text'}
-                            onChange={() => setPlatformBadgeStyle('text')}
-                            className="accent-twitch"
-                            disabled={!showPlatformBadge}
-                          />
-                          Text
-                        </label>
-                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
-                          <input
-                            type="radio"
-                            name="platformBadgeStyle"
-                            value="icon"
-                            checked={platformBadgeStyle === 'icon'}
-                            onChange={() => setPlatformBadgeStyle('icon')}
-                            className="accent-twitch"
-                            disabled={!showPlatformBadge}
-                          />
-                          Icon
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Emote Providers */}
-              <div>
-                <p className="mb-2 text-xs text-text-sub">Emote Providers</p>
-                <div className="space-y-1.5">
-                  <label className="flex items-center gap-2 text-xs text-text-sub">
-                    <input type="checkbox" defaultChecked className="accent-twitch" />
-                    7TV
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-text-sub">
-                    <input type="checkbox" defaultChecked className="accent-twitch" />
-                    BetterTTV
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-text-sub">
-                    <input type="checkbox" defaultChecked className="accent-twitch" />
-                    FrankerFaceZ
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div className="mt-5">
-              <AppearancePanel visualSettings={visualSettings} onChange={handleVisualSettingsChange} visibilityDefaults={iframeVisibilityDefaults} />
-            </div>
-          </Card>
-
-          {/* 5. Mock Messages section */}
-          <Card className="p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-text">Mock Messages</h2>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-xs text-text-sub">Platform</label>
-                <select
-                  value={mockForm.platform}
-                  onChange={(e) =>
-                    handleMockInputChange(
-                      'platform',
-                      e.target.value as MockMessageFormState['platform']
-                    )
-                  }
-                  className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                >
-                  <option value="twitch">Twitch</option>
-                  <option value="youtube">YouTube</option>
-                  <option value="kick">Kick</option>
-                  <option value="tiktok">TikTok</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-1 block text-xs text-text-sub">Display Name</label>
-                  <input
-                    type="text"
-                    value={mockForm.displayName}
-                    onChange={(e) => handleMockInputChange('displayName', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-text-sub">Username</label>
-                  <input
-                    type="text"
-                    value={mockForm.username}
-                    onChange={(e) => handleMockInputChange('username', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-1 block text-xs text-text-sub">Avatar URL</label>
-                  <input
-                    type="text"
-                    value={mockForm.avatarUrl}
-                    onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
-                    placeholder="https://..."
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-text-sub">Name Color</label>
-                  <input
-                    type="color"
-                    value={mockForm.color}
-                    onChange={(e) => handleMockInputChange('color', e.target.value)}
-                    className="h-9 w-full rounded-lg border border-border bg-surface px-2 py-1.5"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-text-sub">Message</label>
-                <textarea
-                  value={mockForm.message}
-                  onChange={(e) => handleMockInputChange('message', e.target.value)}
-                  className="h-16 w-full resize-none rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                  placeholder="Type something fun..."
-                />
-              </div>
-              <Button
-                type="button"
-                onClick={() => void handleAddMockMessage()}
-                disabled={!mockForm.message.trim()}
-                className="w-full"
+          {/* 5-section collapsible editor panel */}
+          {/* sticky footer uses position:sticky bottom-0 — works because split-view-config has overflow-y-auto */}
+          <div className="relative">
+            <div className="divide-y divide-border">
+              {/* Theme section — first and open by default */}
+              <CollapsibleSection
+                id="theme"
+                title="Theme"
+                storageKey="editor-panel-sections-v1"
+                defaultOpen={true}
               >
-                Inject Message
-              </Button>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => void handleAddSampleTranscript()}
-                >
-                  💬 Sample Chat
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 border-yellow-600/40 text-xs text-yellow-400 hover:bg-yellow-900/20"
-                  onClick={() => void handleAddSampleEvents()}
-                >
-                  ⭐ Sample Events
-                </Button>
-              </div>
-            </div>
-          </Card>
-
-          {/* 5b. Custom CSS section */}
-          <Card className="p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h2 className="text-sm font-semibold text-text">Custom CSS</h2>
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-text-sub">
-                  <input
-                    type="checkbox"
-                    checked={useCustomCss}
-                    onChange={(e) => setUseCustomCss(e.target.checked)}
-                    className="accent-twitch"
-                  />
-                  Enable
-                </label>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
+                <ThemeContent onApply={handleThemeApply} />
                 <button
                   type="button"
-                  className="text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                  className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
                   onClick={handleResetToTheme}
                 >
                   Reset to theme defaults
                 </button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  onClick={() => {
-                    setCustomCss('')
-                    setUseCustomCss(false)
-                  }}
-                >
-                  Reset
-                </Button>
-              </div>
+              </CollapsibleSection>
+
+              {/* Appearance section */}
+              <CollapsibleSection
+                id="appearance"
+                title="Appearance"
+                storageKey="editor-panel-sections-v1"
+                defaultOpen={false}
+              >
+                <AppearancePanel
+                  visualSettings={visualSettings}
+                  onChange={handleVisualSettingsChange}
+                  visibilityDefaults={iframeVisibilityDefaults}
+                />
+              </CollapsibleSection>
+
+              {/* Sources section — open by default */}
+              <CollapsibleSection
+                id="sources"
+                title="Sources"
+                storageKey="editor-panel-sections-v1"
+                defaultOpen={true}
+              >
+                {isLoading ? (
+                  <SourceListSkeleton />
+                ) : (
+                  <div className="mb-4 space-y-3">
+                    {sources.map((source) => (
+                      <div key={source.id}>
+                        <SourceCard
+                          source={source}
+                          onRemove={handleRemoveSource}
+                          onRevoke={setRevokeTarget}
+                          onConfigureRelay={(s) =>
+                            setRelayExpandedSourceId((prev) => (prev === s.id ? null : s.id))
+                          }
+                        />
+                        {source.id === relayExpandedSourceId && source.platform === 'discord' && (
+                          <RelayPanel
+                            source={source}
+                            overlayId={id}
+                            onSaved={handleRelayConfigSaved}
+                          />
+                        )}
+                      </div>
+                    ))}
+                    {sources.length === 0 && (
+                      <p className="py-2 text-sm text-text-sub">
+                        No sources added yet. Add a platform below.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Accepted shared overlays — add as source */}
+                {acceptedShares.length > 0 && (
+                  <div className="mb-4 border-t border-border pt-4">
+                    <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
+                    <div className="space-y-2">
+                      {acceptedShares.map((share) => (
+                        <button
+                          key={share.share_id}
+                          onClick={() => handleAddSharedOverlay(share)}
+                          className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
+                        >
+                          <span>{share.sender_display_name}&apos;s overlay</span>
+                          <span className="text-xs text-twitch">+ Add</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <AddSourceForm
+                  overlayId={id}
+                  token={token ?? ''}
+                  onAddTikTok={handleAddTikTokSource}
+                  onAddManual={handleAddManual}
+                  onSourceAdded={() => overlaysApi.getSources(id).then(setSources).catch(console.error)}
+                  isAdmin={user?.is_admin === true}
+                />
+              </CollapsibleSection>
+
+              {/* Behavior section */}
+              <CollapsibleSection
+                id="behavior"
+                title="Behavior"
+                storageKey="editor-panel-sections-v1"
+                defaultOpen={false}
+              >
+                <div className="space-y-5">
+                  {/* Font Size — will be migrated to TypographyGroup in Plan 03 */}
+                  <div>
+                    <label className="mb-1 block text-xs text-text-sub">
+                      Font Size: <span className="text-twitch">{fontSize}px</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="12"
+                      max="32"
+                      value={fontSize}
+                      onChange={(e) => setFontSize(parseInt(e.target.value))}
+                      className="w-full accent-twitch"
+                    />
+                  </div>
+
+                  {/* Max Messages */}
+                  <div>
+                    <label className="mb-1 block text-xs text-text-sub">
+                      Max Messages: <span className="text-twitch">{maxMessages}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="10"
+                      max="100"
+                      value={maxMessages}
+                      onChange={(e) => setMaxMessages(parseInt(e.target.value))}
+                      className="w-full accent-twitch"
+                    />
+                  </div>
+
+                  {/* Message Duration */}
+                  <div>
+                    <label className="mb-1 block text-xs text-text-sub">
+                      Message Duration: <span className="text-twitch">{messageDuration}s</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="5"
+                      max="60"
+                      value={messageDuration}
+                      onChange={(e) => setMessageDuration(parseInt(e.target.value))}
+                      className="w-full accent-twitch"
+                      disabled={disableMessageFade}
+                    />
+                  </div>
+
+                  {/* Disable fade */}
+                  <div>
+                    <label className="flex items-center gap-2 text-xs text-text-sub">
+                      <input
+                        type="checkbox"
+                        checked={disableMessageFade}
+                        onChange={(e) => setDisableMessageFade(e.target.checked)}
+                        className="accent-twitch"
+                      />
+                      Disable Message Fade Out
+                    </label>
+                    <p className="mt-1 ml-5 text-xs text-text-sub">
+                      Messages stay visible until max is reached
+                    </p>
+                  </div>
+
+                  {/* Invert message order */}
+                  <div>
+                    <label className="flex items-center gap-2 text-xs text-text-sub">
+                      <input
+                        type="checkbox"
+                        checked={invertMessageOrder}
+                        onChange={(e) => setInvertMessageOrder(e.target.checked)}
+                        className="accent-twitch"
+                      />
+                      Invert Message Order
+                    </label>
+                    <p className="mt-1 ml-5 text-xs text-text-sub">
+                      Show newest messages at the top instead of the bottom
+                    </p>
+                  </div>
+
+                  {/* Platform Badge */}
+                  <div>
+                    <p className="mb-2 text-xs text-text-sub">Platform Badge</p>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-xs text-text-sub">
+                        <input
+                          type="checkbox"
+                          checked={showPlatformBadge}
+                          onChange={(e) => setShowPlatformBadge(e.target.checked)}
+                          className="accent-twitch"
+                        />
+                        Show Platform Badge
+                      </label>
+                      <div
+                        className={cn(
+                          'space-y-2',
+                          !showPlatformBadge && 'pointer-events-none opacity-50'
+                        )}
+                      >
+                        <div>
+                          <p className="mb-1 text-xs text-text-sub">Position</p>
+                          <div className="flex gap-4">
+                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
+                              <input
+                                type="radio"
+                                name="platformBadgePosition"
+                                value="before"
+                                checked={platformBadgePosition === 'before'}
+                                onChange={() => setPlatformBadgePosition('before')}
+                                className="accent-twitch"
+                                disabled={!showPlatformBadge}
+                              />
+                              Before
+                            </label>
+                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
+                              <input
+                                type="radio"
+                                name="platformBadgePosition"
+                                value="after"
+                                checked={platformBadgePosition === 'after'}
+                                onChange={() => setPlatformBadgePosition('after')}
+                                className="accent-twitch"
+                                disabled={!showPlatformBadge}
+                              />
+                              After
+                            </label>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="mb-1 text-xs text-text-sub">Style</p>
+                          <div className="flex gap-4">
+                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
+                              <input
+                                type="radio"
+                                name="platformBadgeStyle"
+                                value="text"
+                                checked={platformBadgeStyle === 'text'}
+                                onChange={() => setPlatformBadgeStyle('text')}
+                                className="accent-twitch"
+                                disabled={!showPlatformBadge}
+                              />
+                              Text
+                            </label>
+                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
+                              <input
+                                type="radio"
+                                name="platformBadgeStyle"
+                                value="icon"
+                                checked={platformBadgeStyle === 'icon'}
+                                onChange={() => setPlatformBadgeStyle('icon')}
+                                className="accent-twitch"
+                                disabled={!showPlatformBadge}
+                              />
+                              Icon
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Emote Providers */}
+                  <div>
+                    <p className="mb-2 text-xs text-text-sub">Emote Providers</p>
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-2 text-xs text-text-sub">
+                        <input type="checkbox" defaultChecked className="accent-twitch" />
+                        7TV
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-text-sub">
+                        <input type="checkbox" defaultChecked className="accent-twitch" />
+                        BetterTTV
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-text-sub">
+                        <input type="checkbox" defaultChecked className="accent-twitch" />
+                        FrankerFaceZ
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </CollapsibleSection>
+
+              {/* Expert section — collapsed by default */}
+              <CollapsibleSection
+                id="expert"
+                title="Expert"
+                storageKey="editor-panel-sections-v1"
+                defaultOpen={false}
+              >
+                {/* Custom CSS */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-text">Custom CSS</span>
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-text-sub">
+                      <input
+                        type="checkbox"
+                        checked={useCustomCss}
+                        onChange={(e) => setUseCustomCss(e.target.checked)}
+                        className="accent-twitch"
+                      />
+                      Enable
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="ml-auto text-xs"
+                      onClick={() => {
+                        setCustomCss('')
+                        setUseCustomCss(false)
+                      }}
+                    >
+                      Reset
+                    </Button>
+                  </div>
+
+                  <MonacoCSSEditor
+                    value={customCss}
+                    onChange={setCustomCss}
+                    height="300px"
+                    placeholder="/* Enter your custom CSS here */"
+                  />
+
+                  <p className="text-xs text-text-sub">
+                    Need inspiration? Explore{' '}
+                    <a
+                      href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-twitch hover:underline"
+                    >
+                      theme docs
+                    </a>
+                    .
+                  </p>
+                </div>
+
+                {/* Mock Messages */}
+                <div className="mt-6 space-y-3">
+                  <p className="text-xs font-medium text-text">Mock Messages</p>
+                  <div>
+                    <label className="mb-1 block text-xs text-text-sub">Platform</label>
+                    <select
+                      value={mockForm.platform}
+                      onChange={(e) =>
+                        handleMockInputChange(
+                          'platform',
+                          e.target.value as MockMessageFormState['platform']
+                        )
+                      }
+                      className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                    >
+                      <option value="twitch">Twitch</option>
+                      <option value="youtube">YouTube</option>
+                      <option value="kick">Kick</option>
+                      <option value="tiktok">TikTok</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-text-sub">Display Name</label>
+                      <input
+                        type="text"
+                        value={mockForm.displayName}
+                        onChange={(e) => handleMockInputChange('displayName', e.target.value)}
+                        className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-text-sub">Username</label>
+                      <input
+                        type="text"
+                        value={mockForm.username}
+                        onChange={(e) => handleMockInputChange('username', e.target.value)}
+                        className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-text-sub">Avatar URL</label>
+                      <input
+                        type="text"
+                        value={mockForm.avatarUrl}
+                        onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
+                        placeholder="https://..."
+                        className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-text-sub">Name Color</label>
+                      <input
+                        type="color"
+                        value={mockForm.color}
+                        onChange={(e) => handleMockInputChange('color', e.target.value)}
+                        className="h-9 w-full rounded-lg border border-border bg-surface px-2 py-1.5"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-text-sub">Message</label>
+                    <textarea
+                      value={mockForm.message}
+                      onChange={(e) => handleMockInputChange('message', e.target.value)}
+                      className="h-16 w-full resize-none rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                      placeholder="Type something fun..."
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => void handleAddMockMessage()}
+                    disabled={!mockForm.message.trim()}
+                    className="w-full"
+                  >
+                    Inject Message
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 text-xs"
+                      onClick={() => void handleAddSampleTranscript()}
+                    >
+                      💬 Sample Chat
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 border-yellow-600/40 text-xs text-yellow-400 hover:bg-yellow-900/20"
+                      onClick={() => void handleAddSampleEvents()}
+                    >
+                      ⭐ Sample Events
+                    </Button>
+                  </div>
+                </div>
+              </CollapsibleSection>
             </div>
 
-            <MonacoCSSEditor
-              value={customCss}
-              onChange={setCustomCss}
-              height="300px"
-              placeholder="/* Enter your custom CSS here */"
-            />
-
-            <p className="mt-3 text-xs text-text-sub">
-              Need inspiration? Explore{' '}
-              <a
-                href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
-                target="_blank"
-                rel="noreferrer"
-                className="text-twitch hover:underline"
+            {/* Sticky Save footer — position:sticky works inside overflow-y-auto split-view-config container */}
+            <div className="sticky bottom-0 z-10 -mx-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
+              <Button
+                onClick={() => void handleSaveConfiguration()}
+                disabled={!configLoaded || isSavingConfig}
+                className="w-full"
               >
-                theme docs
-              </a>
-              .
-            </p>
-          </Card>
-
-          {/* Save Configuration */}
-          <div className="space-y-2 pb-6">
-            <Button
-              onClick={() => void handleSaveConfiguration()}
-              disabled={!configLoaded || isSavingConfig}
-              className="w-full"
-            >
-              {isSavingConfig ? 'Saving...' : 'Save Configuration'}
-            </Button>
-            {configAlert && (
-              <p
-                className={cn(
-                  'text-center text-sm',
-                  configAlert.type === 'success' ? 'text-green-400' : 'text-destructive'
-                )}
-              >
-                {configAlert.message}
-              </p>
-            )}
+                {isSavingConfig ? 'Saving...' : 'Save Configuration'}
+              </Button>
+              {configAlert && (
+                <p
+                  className={cn(
+                    'mt-2 text-center text-sm',
+                    configAlert.type === 'success' ? 'text-green-400' : 'text-destructive'
+                  )}
+                >
+                  {configAlert.message}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </SplitView>
