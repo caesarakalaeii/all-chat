@@ -81,8 +81,8 @@ export function FontFamilyCombobox({
         </Combobox.Trigger>
       </div>
       <Combobox.Portal>
-      <Combobox.Positioner>
-        <Combobox.Popup className="z-[200] max-h-60 overflow-y-auto rounded border border-border bg-surface py-1 shadow-lg">
+      <Combobox.Positioner className="z-[200]">
+        <Combobox.Popup className="max-h-60 overflow-y-auto rounded border border-border bg-surface py-1 shadow-lg">
           {!hasResults && (
             <Combobox.Empty className="px-3 py-2 text-sm text-text-dim">
               No fonts found
