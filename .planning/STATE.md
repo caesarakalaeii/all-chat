@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Visual Overlay Customizer
 status: planning
-stopped_at: Phase 37 context gathered
-last_updated: "2026-03-19T09:06:45.765Z"
+stopped_at: Completed 37-editor-ux-rework-01 (CollapsibleSection extensions + ThemeContent)
+last_updated: "2026-03-19T09:29:31.968Z"
 last_activity: 2026-03-18 — v1.6 roadmap created, 5 phases (33-37), 18 requirements mapped
 progress:
   total_phases: 24
   completed_phases: 22
-  total_plans: 78
-  completed_plans: 78
+  total_plans: 81
+  completed_plans: 79
   percent: 0
 ---
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0% (v1.6 — 0 plans complete)
 | Phase 34 P03 | 15 | 2 tasks | 7 files |
 | Phase 36-events-styling-theme-import P01 | 3 | 2 tasks | 7 files |
 | Phase 36-events-styling-theme-import P02 | 82 | 2 tasks | 3 files |
+| Phase 37-editor-ux-rework P01 | 8 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Key decisions relevant to v1.6:
 - [Phase 36-events-styling-theme-import]: Dialog.Close rendered with Button component via render prop to match project UI conventions
 - [Phase 36-events-styling-theme-import]: applyThemeImmediately also calls setShowThemeMarketplace(false) to close modal on successful apply
 - [Phase 36-events-styling-theme-import]: events.css requires display: var(--chat-show-*) rules for EventsGroup show/hide toggles to have visual effect in the preview iframe
+- [Phase 37-editor-ux-rework]: storageKey prop defaults to 'appearance-panel-sections-v1' so existing AppearancePanel callers require zero changes
+- [Phase 37-editor-ux-rework]: ThemeContent uses single-column grid for compact sidebar display; onApply passed directly to ThemeCard without intermediate handleApply (no modal to close)
 
 ### Pending Todos
 
@@ -96,8 +99,8 @@ None identified at milestone start.
 
 ## Session Continuity
 
-Last session: 2026-03-19T09:06:45.761Z
-Stopped at: Phase 37 context gathered
-Resume file: .planning/phases/37-editor-ux-rework/37-CONTEXT.md
+Last session: 2026-03-19T09:29:31.966Z
+Stopped at: Completed 37-editor-ux-rework-01 (CollapsibleSection extensions + ThemeContent)
+Resume file: None
 
 **Next action:** Phase 33 complete — proceed to Phase 34 (Appearance Controls — Core)
