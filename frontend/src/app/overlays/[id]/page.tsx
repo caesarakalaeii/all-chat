@@ -888,6 +888,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
+  const [enable7tv, setEnable7tv] = useState(true)
+  const [enableBttv, setEnableBttv] = useState(true)
+  const [enableFfz, setEnableFfz] = useState(true)
   const [isPublicForViewers, setIsPublicForViewers] = useState(false)
   const [configLoaded, setConfigLoaded] = useState(false)
   const [isSavingConfig, setIsSavingConfig] = useState(false)
@@ -1055,6 +1058,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           }
           if (typeof display.show_platform_badge === 'boolean')
             setShowPlatformBadge(display.show_platform_badge)
+
+          if (typeof config.enable_7tv === 'boolean') setEnable7tv(config.enable_7tv)
+          if (typeof config.enable_bttv === 'boolean') setEnableBttv(config.enable_bttv)
+          if (typeof config.enable_ffz === 'boolean') setEnableFfz(config.enable_ffz)
 
           const css = config.custom_css || ''
           setCustomCss(css)
@@ -1374,7 +1381,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     try {
       await overlaysApi.updateConfig(id, {
         display_settings: {
-          font_size: parseInt(visualSettings.fontSize ?? '16'),
+          font_size: parseInt(visualSettings.fontSize ?? '16') || 16,
           message_duration: messageDuration,
           max_messages: maxMessages,
           disable_message_fade: disableMessageFade,
@@ -1383,6 +1390,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           platform_badge_style: platformBadgeStyle,
           show_platform_badge: showPlatformBadge,
         },
+        enable_7tv: enable7tv,
+        enable_bttv: enableBttv,
+        enable_ffz: enableFfz,
         custom_css: useCustomCss ? customCss : '',
         visual_settings: visualSettings,
       })
@@ -1919,15 +1929,30 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     <p className="mb-2 text-xs text-text-sub">Emote Providers</p>
                     <div className="space-y-1.5">
                       <label className="flex items-center gap-2 text-xs text-text-sub">
-                        <input type="checkbox" defaultChecked className="accent-twitch" />
+                        <input
+                          type="checkbox"
+                          checked={enable7tv}
+                          onChange={(e) => setEnable7tv(e.target.checked)}
+                          className="accent-twitch"
+                        />
                         7TV
                       </label>
                       <label className="flex items-center gap-2 text-xs text-text-sub">
-                        <input type="checkbox" defaultChecked className="accent-twitch" />
+                        <input
+                          type="checkbox"
+                          checked={enableBttv}
+                          onChange={(e) => setEnableBttv(e.target.checked)}
+                          className="accent-twitch"
+                        />
                         BetterTTV
                       </label>
                       <label className="flex items-center gap-2 text-xs text-text-sub">
-                        <input type="checkbox" defaultChecked className="accent-twitch" />
+                        <input
+                          type="checkbox"
+                          checked={enableFfz}
+                          onChange={(e) => setEnableFfz(e.target.checked)}
+                          className="accent-twitch"
+                        />
                         FrankerFaceZ
                       </label>
                     </div>
