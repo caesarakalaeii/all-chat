@@ -379,7 +379,7 @@ Plans:
 | 33 | CSS Architecture Foundation | Complete    | 2026-03-18 | — |
 | 34 | 3/3 | Complete    | 2026-03-18 | — |
 | 35 | Appearance Controls — Extended | 0/3 | Not started | — |
-| 36 | 3/3 | Complete   | 2026-03-18 | — |
+| 36 | 3/3 | Complete    | 2026-03-19 | — |
 | 37 | Editor UX Rework | 0/3 | Not started | — |
 
 ---

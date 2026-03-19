@@ -25,7 +25,7 @@ Requirements for the Visual Overlay Customizer milestone. Each maps to roadmap p
 - [x] **VISM-01**: Visual customizations are stored as structured JSON in overlay config and persist across sessions
 - [x] **VISM-02**: Loading a marketplace theme pre-populates visual controls with that theme's CSS variable values
 - [x] **VISM-03**: Visual customizations generate CSS overrides at a layer above the marketplace theme and below raw user CSS
-- [ ] **VISM-04**: Resetting visual customizations restores theme defaults (or system defaults if no theme loaded)
+- [x] **VISM-04**: Resetting visual customizations restores theme defaults (or system defaults if no theme loaded)
 
 ### EDUX — Editor UX Rework
 
