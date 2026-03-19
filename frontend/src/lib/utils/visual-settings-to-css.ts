@@ -78,9 +78,13 @@ export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
 
   for (const [field, cssVar] of PROPERTY_MAP) {
     const value = settings[field]
-    if (value !== undefined) {
-      declarations.push(`    ${cssVar}: ${value};`)
-    }
+    if (value === undefined) continue
+    // Skip values with unbalanced parentheses — partial extractions of complex CSS
+    // functions (e.g. linear-gradient) corrupt subsequent :root declarations
+    const opens = (value.match(/\(/g) ?? []).length
+    const closes = (value.match(/\)/g) ?? []).length
+    if (opens !== closes) continue
+    declarations.push(`    ${cssVar}: ${value};`)
   }
 
   if (declarations.length === 0) {
