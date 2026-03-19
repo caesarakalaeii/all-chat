@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,6 +18,7 @@ import (
 	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
@@ -52,22 +52,22 @@ type leaderState struct {
 
 func main() {
 	// Initialize logger
-	logLevel := getEnv("LOG_LEVEL", "info")
+	logLevel := listener.Env("LOG_LEVEL", "info")
 	log := logger.NewLogger("twitch-eventsub-listener", logLevel)
 	defer log.Sync()
 
 	log.Info("Starting Twitch EventSub Listener Service",
-		zap.String("version", getEnv("APP_VERSION", "dev")),
+		zap.String("version", listener.Env("APP_VERSION", "dev")),
 	)
 
 	// Initialize tracing
-	tracingEnabled := getEnv("OTEL_ENABLED", "false") == "true"
+	tracingEnabled := listener.Env("OTEL_ENABLED", "false") == "true"
 	if tracingEnabled {
 		tracingCfg := tracing.Config{
 			ServiceName:    "twitch-eventsub-listener",
-			ServiceVersion: getEnv("APP_VERSION", "dev"),
-			Environment:    getEnv("ENVIRONMENT", "development"),
-			OTLPEndpoint:   getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+			ServiceVersion: listener.Env("APP_VERSION", "dev"),
+			Environment:    listener.Env("ENVIRONMENT", "development"),
+			OTLPEndpoint:   listener.Env("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
 			Enabled:        true,
 		}
 		shutdownTracer, err := tracing.InitTracer(tracingCfg, log)
@@ -99,11 +99,11 @@ func main() {
 	}
 
 	// Connect to PostgreSQL
-	dbHost := getEnv("DATABASE_HOST", "localhost")
-	dbPort := getEnv("DATABASE_PORT", "5432")
-	dbUser := getEnv("DATABASE_USER", "allchat")
-	dbPassword := getEnv("DATABASE_PASSWORD", "allchat_dev_password")
-	dbName := getEnv("DATABASE_NAME", "allchat")
+	dbHost := listener.Env("DATABASE_HOST", "localhost")
+	dbPort := listener.Env("DATABASE_PORT", "5432")
+	dbUser := listener.Env("DATABASE_USER", "allchat")
+	dbPassword := listener.Env("DATABASE_PASSWORD", "allchat_dev_password")
+	dbName := listener.Env("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		dbUser, dbPassword, dbHost, dbPort, dbName)
@@ -117,8 +117,8 @@ func main() {
 	log.Info("Connected to PostgreSQL")
 
 	// Connect to Redis
-	redisHost := getEnv("REDIS_HOST", "localhost")
-	redisPort := getEnv("REDIS_PORT", "6379")
+	redisHost := listener.Env("REDIS_HOST", "localhost")
+	redisPort := listener.Env("REDIS_PORT", "6379")
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
 	})
@@ -146,65 +146,39 @@ func main() {
 		log.Fatal("Failed to initialize token cipher", zap.Error(err))
 	}
 
-	// Get Kubernetes pod name from HOSTNAME environment variable
-	podName := os.Getenv("HOSTNAME")
-	if podName == "" {
-		podName = "twitch-eventsub-listener-unknown"
-		log.Warn("HOSTNAME not set, using default pod name", zap.String("pod_name", podName))
-	}
+	// Initialize SDK — ListenerBase owns heartbeat, assignment refresh, migration subscriber, JWT refresh
+	podName := listener.Env("HOSTNAME", "twitch-eventsub-listener-unknown")
+	cfg := listener.DefaultConfig()
 
-	// Initialize coordinator client
-	coordinatorURL := getEnv("COORDINATOR_URL", "http://source-manager:8088")
 	serviceJWT := os.Getenv("SERVICE_JWT_SECRET")
 	if serviceJWT == "" {
 		log.Fatal("SERVICE_JWT_SECRET is required for coordinator authentication")
 	}
 
-	coordClient := coordination.NewCoordinatorClient(coordinatorURL, serviceJWT, log)
-	log.Info("Initialized coordinator client", zap.String("coordinator_url", coordinatorURL))
-
-	// Start JWT refresh to prevent token expiration (refreshes every 12 hours)
-	coordClient.StartJWTRefresh(ctx)
-	defer coordClient.StopJWTRefresh()
-
-	// Staggered startup jitter to prevent thundering herd during HPA scale-up
-	jitter := time.Duration(rand.Intn(30)) * time.Second
-	log.Info("Applying startup jitter to prevent thundering herd",
-		zap.Duration("jitter", jitter),
+	coordClient := coordination.NewCoordinatorClient(
+		listener.Env("COORDINATOR_URL", "http://source-manager:8088"),
+		serviceJWT,
+		"twitch-eventsub-listener",
+		log,
 	)
-	time.Sleep(jitter)
-
-	// Query assignments from coordinator (EVENTSUB-01)
-	// Block indefinitely until coordinator responds
-	assignments, err := coordClient.QueryAssignments(ctx, podName)
-	if err != nil {
-		log.Fatal("Failed to query coordinator assignments", zap.Error(err))
-	}
-
-	log.Info("Received assignments from coordinator",
-		zap.Int("count", len(assignments)),
-		zap.String("pod_id", podName),
+	log.Info("Initialized coordinator client",
+		zap.String("coordinator_url", listener.Env("COORDINATOR_URL", "http://source-manager:8088")),
 	)
 
-	// Extract assigned source IDs into map for filtering
-	// Extract real source ID from composite keys (format: "{uuid}:{platform}")
-	assignedSourceIDs := make(map[string]bool)
-	for _, a := range assignments {
-		sourceID := a.SourceID
-		// Strip platform suffix if present (e.g., "abc123:twitch-eventsub" → "abc123")
-		if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
-			sourceID = sourceID[:colonIdx]
-		}
-		assignedSourceIDs[sourceID] = true
-	}
+	base := listener.NewListenerBase(cfg, coordClient, redisClient, podName, log)
 
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
-	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher)
+	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher, ChannelSyncInterval)
 
-	// Set assigned source IDs for filtering
-	channelManager.SetAssignedSourceIDs(assignedSourceIDs, podName)
+	// Start ListenerBase — handles startup jitter, initial assignment query, channelManager.Start,
+	// JWT refresh, and launches heartbeat/assignment-refresh/migration-subscriber goroutines
+	// MUST be called before the leader election goroutine starts
+	if err := base.Start(ctx, channelManager); err != nil {
+		log.Fatal("Failed to start ListenerBase", zap.Error(err))
+	}
+	defer base.Stop()
 
 	// Create webhook handler
 	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, log)
@@ -394,7 +368,9 @@ func main() {
 			if acquired {
 				log.Info("Acquired leadership", zap.String("instance_id", instanceID))
 				// Start channel manager (creates/deletes EventSub subscriptions)
-				channelManager.Start(ctx, ChannelSyncInterval)
+				if err := channelManager.Start(ctx); err != nil {
+					log.Error("Channel manager start failed", zap.Error(err))
+				}
 			}
 		}
 
@@ -423,7 +399,9 @@ func main() {
 					log.Info("Acquired leadership", zap.String("instance_id", instanceID))
 
 					// Start channel manager (creates/deletes EventSub subscriptions)
-					channelManager.Start(ctx, ChannelSyncInterval)
+					if err := channelManager.Start(ctx); err != nil {
+						log.Error("Channel manager start failed", zap.Error(err))
+					}
 
 				} else if wasLeader && !acquired {
 					// Lost leadership - stop managing subscriptions
@@ -437,80 +415,8 @@ func main() {
 		}
 	}()
 
-	// Start migration subscriber (EVENTSUB-04, EVENTSUB-05)
-	migrationSub := coordination.NewMigrationSubscriber(
-		redisClient,
-		channelManager.HandleMigrationEvent,
-		log,
-	)
-
-	go func() {
-		if err := migrationSub.Subscribe(ctx); err != nil {
-			log.Error("Migration subscriber error", zap.Error(err))
-		}
-	}()
-
-	log.Info("Started migration event subscriber")
-
-	// Start heartbeat publisher (EVENTSUB-06)
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-leaderCtx.Done():
-				return
-			case <-ticker.C:
-				if err := coordClient.PublishHeartbeat(ctx, podName); err != nil {
-					log.Warn("Failed to publish heartbeat", zap.Error(err))
-				}
-			}
-		}
-	}()
-
-	log.Info("Started heartbeat publisher", zap.Duration("interval", 10*time.Second))
-
-	// Start assignment refresh (re-query every 60 seconds to pick up dynamic changes)
-	go func() {
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-leaderCtx.Done():
-				return
-			case <-ticker.C:
-				newAssignments, err := coordClient.QueryAssignments(ctx, podName)
-				if err != nil {
-					log.Warn("Failed to refresh assignments", zap.Error(err))
-					continue
-				}
-
-				// Update assignedSourceIDs map
-				// Extract real source ID from composite keys (format: "{uuid}:{platform}")
-				newAssignedIDs := make(map[string]bool)
-				for _, a := range newAssignments {
-					sourceID := a.SourceID
-					// Strip platform suffix if present (e.g., "abc123:twitch-eventsub" → "abc123")
-					if colonIdx := strings.LastIndexByte(sourceID, ':'); colonIdx != -1 {
-						sourceID = sourceID[:colonIdx]
-					}
-					newAssignedIDs[sourceID] = true
-				}
-
-				channelManager.UpdateAssignedSourceIDs(newAssignedIDs)
-
-				log.Info("Refreshed assignments from coordinator",
-					zap.Int("count", len(newAssignments)),
-					zap.String("pod_id", podName),
-				)
-			}
-		}
-	}()
-
-	log.Info("Started assignment refresh", zap.Duration("interval", 60*time.Second))
-
 	// Start HTTP server for health checks and webhook endpoint
-	startHTTPServer(log, getEnv("PORT", "8090"), state, webhookHandler, db, redisClient, tracingEnabled)
+	startHTTPServer(log, listener.Env("PORT", "8090"), state, webhookHandler, db, redisClient, tracingEnabled)
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
@@ -630,12 +536,4 @@ func startHTTPServer(log *zap.Logger, port string, state *leaderState, webhookHa
 	}()
 
 	log.Info("HTTP server started", zap.String("port", port))
-}
-
-// getEnv gets an environment variable with a default value
-func getEnv(key, defaultValue string) string {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		return value
-	}
-	return defaultValue
 }
