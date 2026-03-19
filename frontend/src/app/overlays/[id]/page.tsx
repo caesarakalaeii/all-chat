@@ -881,7 +881,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [revokeTarget, setRevokeTarget] = useState<ChatSource | null>(null)
 
   // --- Customization state ---
-  const [fontSize, setFontSize] = useState(16)
   const [maxMessages, setMaxMessages] = useState(50)
   const [messageDuration, setMessageDuration] = useState(15)
   const [disableMessageFade, setDisableMessageFade] = useState(false)
@@ -1040,7 +1039,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           const display = config.display_settings || {}
 
           if (typeof display.max_messages === 'number') setMaxMessages(display.max_messages)
-          if (typeof display.font_size === 'number') setFontSize(display.font_size)
           if (typeof display.message_duration === 'number')
             setMessageDuration(display.message_duration)
           if (typeof display.disable_message_fade === 'boolean')
@@ -1062,7 +1060,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           setCustomCss(css)
           setUseCustomCss(Boolean(css.trim().length))
 
-          if (config.visual_settings) setVisualSettings(config.visual_settings)
+          setVisualSettings((prev) => ({
+            ...prev,
+            ...(config.visual_settings ?? {}),
+            // migrate legacy font_size to visualSettings.fontSize if not already present
+            fontSize:
+              (config.visual_settings as Partial<VisualSettings> | null)?.fontSize ??
+              (typeof display.font_size === 'number' ? `${display.font_size}px` : undefined),
+          }))
         } catch (err) {
           console.warn('[OverlayEditor] Failed to load config', err)
         } finally {
@@ -1358,7 +1363,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     try {
       await overlaysApi.updateConfig(id, {
         display_settings: {
-          font_size: fontSize,
+          font_size: parseInt(visualSettings.fontSize ?? '16'),
           message_duration: messageDuration,
           max_messages: maxMessages,
           disable_message_fade: disableMessageFade,
@@ -1754,21 +1759,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 defaultOpen={false}
               >
                 <div className="space-y-5">
-                  {/* Font Size — will be migrated to TypographyGroup in Plan 03 */}
-                  <div>
-                    <label className="mb-1 block text-xs text-text-sub">
-                      Font Size: <span className="text-twitch">{fontSize}px</span>
-                    </label>
-                    <input
-                      type="range"
-                      min="12"
-                      max="32"
-                      value={fontSize}
-                      onChange={(e) => setFontSize(parseInt(e.target.value))}
-                      className="w-full accent-twitch"
-                    />
-                  </div>
-
                   {/* Max Messages */}
                   <div>
                     <label className="mb-1 block text-xs text-text-sub">
