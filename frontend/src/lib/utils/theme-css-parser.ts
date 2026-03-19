@@ -41,10 +41,18 @@ export function parseCssToVisualSettings(css: string): Partial<VisualSettings> {
 
   // Pattern 2: var(--chat-*, fallback) usage — extract fallback as the default value.
   // Only fills fields not already set by Pattern 1.
+  // Skips fallbacks with unbalanced parentheses (e.g. partial linear-gradient extractions)
+  // because unbalanced parens in a CSS custom property value corrupt subsequent declarations.
   const VAR_FALLBACK_REGEX = /var\((--(chat|platform)-[\w-]+)\s*,\s*([^)]+?)\s*\)/g
   while ((match = VAR_FALLBACK_REGEX.exec(css)) !== null) {
     const cssVar = match[1]
     const fallback = match[3].trim()
+    // Skip values with unbalanced parentheses — they are partial extractions of
+    // complex CSS functions like linear-gradient() or rgba() and would corrupt
+    // the CSS layer block when written to :root {}
+    const openParens = (fallback.match(/\(/g) ?? []).length
+    const closeParens = (fallback.match(/\)/g) ?? []).length
+    if (openParens !== closeParens) continue
     const field = REVERSE_MAP.get(cssVar)
     if (field !== undefined && !(field in result)) {
       ;(result as Record<string, string>)[field] = fallback
