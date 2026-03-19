@@ -8,6 +8,7 @@ import (
 
 	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/encryption"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -45,19 +46,24 @@ type Manager struct {
 	podName           string
 	assignmentMu      sync.RWMutex
 
-	stopChan chan struct{}
-	wg       sync.WaitGroup
+	stopChan     chan struct{}
+	wg           sync.WaitGroup
+	syncInterval time.Duration
 }
 
+// compile-time assertion: Manager must satisfy listener.ChannelManager
+var _ listener.ChannelManager = (*Manager)(nil)
+
 // NewManager creates a new channel manager
-func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, cipher *encryption.AESEncryptor) *Manager {
+func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, cipher *encryption.AESEncryptor, syncInterval time.Duration) *Manager {
 	return &Manager{
-		db:       db,
-		cipher:   cipher,
-		logger:   logger,
-		resolver: resolver,
-		channels: make(map[string]*Channel),
-		stopChan: make(chan struct{}),
+		db:           db,
+		cipher:       cipher,
+		logger:       logger,
+		resolver:     resolver,
+		channels:     make(map[string]*Channel),
+		stopChan:     make(chan struct{}),
+		syncInterval: syncInterval,
 	}
 }
 
@@ -94,9 +100,9 @@ func (m *Manager) UpdateAssignedSourceIDs(assignedSourceIDs map[string]bool) {
 }
 
 // Start begins periodic channel syncing
-func (m *Manager) Start(ctx context.Context, interval time.Duration) {
+func (m *Manager) Start(ctx context.Context) error {
 	m.logger.Info("Starting channel manager",
-		zap.Duration("sync_interval", interval),
+		zap.Duration("sync_interval", m.syncInterval),
 	)
 
 	// Initial sync
@@ -109,7 +115,7 @@ func (m *Manager) Start(ctx context.Context, interval time.Duration) {
 	go func() {
 		defer m.wg.Done()
 
-		ticker := time.NewTicker(interval)
+		ticker := time.NewTicker(m.syncInterval)
 		defer ticker.Stop()
 
 		for {
@@ -125,6 +131,7 @@ func (m *Manager) Start(ctx context.Context, interval time.Duration) {
 			}
 		}
 	}()
+	return nil
 }
 
 // Stop stops the channel manager
@@ -293,8 +300,9 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	return nil
 }
 
-// GetActiveChannels returns the list of active channels
-func (m *Manager) GetActiveChannels() map[string]*Channel {
+// GetActiveChannelMap returns the active channels as a map (broadcaster_id -> Channel).
+// Prefer GetActiveChannels for SDK-compatible access.
+func (m *Manager) GetActiveChannelMap() map[string]*Channel {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -304,6 +312,31 @@ func (m *Manager) GetActiveChannels() map[string]*Channel {
 		channels[k] = v
 	}
 	return channels
+}
+
+// GetActiveChannels returns broadcaster IDs of all active channels (satisfies listener.ChannelManager).
+func (m *Manager) GetActiveChannels() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	ids := make([]string, 0, len(m.channels))
+	for id := range m.channels {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// GetActiveChannelCount returns the number of active channels (satisfies listener.ChannelManager).
+func (m *Manager) GetActiveChannelCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.channels)
+}
+
+// GetFilteredAssignmentCount returns the number of assigned source IDs (satisfies listener.ChannelManager).
+func (m *Manager) GetFilteredAssignmentCount() int {
+	m.assignmentMu.RLock()
+	defer m.assignmentMu.RUnlock()
+	return len(m.assignedSourceIDs)
 }
 
 // decryptToken decrypts an encrypted access token
@@ -319,7 +352,7 @@ func (m *Manager) decryptToken(encryptedToken string) (string, error) {
 //   - Only the leader creates/deletes subscriptions
 //   - Webhook events are received on all pods (stateless HTTP endpoint)
 //   - Migration is about subscription ownership, not active connections
-func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
+func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) error {
 	// EventSub migrations don't require immediate action because:
 	// 1. Webhooks are stateless - all pods can receive events
 	// 2. Only leader creates/deletes subscriptions
@@ -351,4 +384,5 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 			zap.String("channel_id", event.ChannelID),
 		)
 	}
+	return nil
 }

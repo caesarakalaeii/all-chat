@@ -1,4 +1,4 @@
-.PHONY: help build test clean docker-up docker-down migrate deps frontend-dev
+.PHONY: help build build-all test clean docker-up docker-down migrate deps frontend-dev
 
 # Default target
 help:
@@ -41,6 +41,9 @@ help:
 	@echo "  make build-processor     - Build message-processor"
 	@echo "  make build-source-manager - Build source-manager"
 	@echo "  make build-token-refresh - Build token-refresh-service"
+	@echo ""
+	@echo "CI Targets:"
+	@echo "  make build-all     - Build all Go listener modules (CI target)"
 
 # Download dependencies
 deps:
@@ -57,6 +60,19 @@ deps:
 	cd services/message-processor && go mod download
 	cd services/source-manager && go mod download
 	cd services/token-refresh-service && go mod download
+
+# Build all Go listener modules — verifies replace-directive version consistency across all modules
+# Note: tiktok-listener is Node.js and is intentionally excluded
+build-all:
+	@echo "Building all Go listener modules..."
+	cd /home/moersener/Hobby/all-chat/shared && go build ./...
+	cd /home/moersener/Hobby/all-chat/services/twitch-listener && go build ./...
+	cd /home/moersener/Hobby/all-chat/services/kick-listener && go build ./...
+	cd /home/moersener/Hobby/all-chat/services/twitch-eventsub-listener && go build ./...
+	cd /home/moersener/Hobby/all-chat/services/youtube-listener && go build ./...
+	cd /home/moersener/Hobby/all-chat/services/youtube-listener-innertube && go build ./...
+	cd /home/moersener/Hobby/all-chat/services/discord-listener && go build ./...
+	@echo "All listener modules built successfully"
 
 # Build all services
 build:

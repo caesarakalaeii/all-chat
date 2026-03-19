@@ -8,21 +8,9 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
-## Current Milestone: v1.6 Visual Overlay Customizer
+## Current State (v1.6 shipped 2026-03-18)
 
-**Goal:** Enable non-technical users to visually customize their overlay appearance — ~50 CSS properties organized into categories — with live preview, theme pre-population, and a cascade layer architecture that keeps raw CSS override power intact.
-
-**Target features:**
-- Full visual design system editor: typography, colors, backgrounds, component visibility, sizing, platform colors, special events
-- Theme marketplace pre-populates visual controls from loaded theme's CSS custom properties
-- New `visual-customizer` CSS cascade layer above `marketplace-themes`, below `user-css-overrides`
-- Editor panel UX rework: collapsible sections, marketplace-first layout, CSS editor in "Expert" section
-- `visual_settings` JSONB persisted in overlay config via new DB migration
-- Live preview updates without save on every control change
-
-## Current State (v1.5 shipped 2026-03-16)
-
-Discord Listener shipped: bidirectional Discord ↔ overlay integration with OAuth2 bot authorization, inbound message ingestion, outbound relay with loop-safe filtering, full load balancing, and comprehensive setup UI. All 19 requirements satisfied across 6 phases (27–32).
+Listener SDK shipped: all 6 Go listeners migrated to shared `shared/listener` SDK in 2 days. 18 requirements satisfied across 6 phases. `cmd/main.go` files reduced to service-specific logic only; two archetypes (`ListenerBase`, `LeadershipListener`) cover all load-balancing patterns.
 
 ## Requirements
 
@@ -72,17 +60,6 @@ Discord Listener shipped: bidirectional Discord ↔ overlay integration with OAu
 - ✓ Production rollout infrastructure (Argo Rollouts, canary deployment) — v1.2
 - ✓ Advanced metrics (per-channel message rate, network error classification) — v1.2
 
-**Discord Listener (v1.5):**
-- ✓ Discord bot OAuth2 "Add to Server" flow + permission validation — v1.5
-- ✓ Discord channel messages as first-class overlay source (inbound ingestion) — v1.5
-- ✓ Discord @user/#channel mention resolution in message text — v1.5
-- ✓ Deletion event propagation through existing deletion pipeline — v1.5
-- ✓ Outbound relay to Discord channel with loop-safe filtering — v1.5
-- ✓ Per-source relay toggle and outbound channel configuration — v1.5
-- ✓ Gateway shard ownership via source-manager leader election — v1.5
-- ✓ HPA scaling on Prometheus metrics + session resume via Redis — v1.5
-- ✓ Full setup UI: Settings Discord card, overlay editor channel picker, relay config panel — v1.5
-
 **Frontend Redesign (v1.3):**
 - ✓ Design token system (Tailwind v4 @theme, three-tier hierarchy, cascade layers) — v1.3
 - ✓ Static platform color map (no dynamic class construction) — v1.3
@@ -95,21 +72,24 @@ Discord Listener shipped: bidirectional Discord ↔ overlay integration with OAu
 - ✓ 7-gate CI pipeline with Chromatic visual regression and 45/45 Storybook tests — v1.3
 - ✓ Marketplace CSS migration guide (cascade layer upgrade path) — v1.3
 
+**Discord Listener (v1.5):**
+- ✓ Discord bot OAuth2 server authorization (VIEW_CHANNEL, READ_MESSAGE_HISTORY, SEND_MESSAGES) — v1.5
+- ✓ Discord inbound chat as first-class overlay source (normalized to RawChatMessage) — v1.5
+- ✓ Discord message deletion propagation and mention resolution — v1.5
+- ✓ Outbound relay (overlay → Discord) with loop-safe filtering per source — v1.5
+- ✓ discord-listener shard ownership via source-manager leader election + HPA — v1.5
+- ✓ Discord setup UI: server connect card, channel selector, relay configuration panel — v1.5
+
+**Listener SDK (v1.6):**
+- ✓ `ListenerBase` struct in `shared/listener` wiring full startup sequence (jitter, assignment query, migration subscriber, heartbeat, assignment refresh loop) — v1.6
+- ✓ `LeadershipListener` variant for stream-per-pod ownership model (YouTube, Kick, InnerTube, Discord) — v1.6
+- ✓ `ChannelManager` interface extracted with `Start`, `Stop`, `HandleMigrationEvent`, `UpdateAssignedSourceIDs`, `GetFilteredAssignmentCount` — v1.6
+- ✓ All 6 Go listeners migrated to shared SDK (twitch, kick, youtube, youtube-innertube, discord, twitch-eventsub) — v1.6
+- ✓ `make build-all` CI target + compile-time assertions + goroutine leak smoke tests in every listener — v1.6
+
 ### Active
 
-<!-- Current scope: v1.6 Visual Overlay Customizer -->
-
-- [ ] User can customize typography: font family, weight, line height, letter spacing
-- [ ] User can customize text colors: message body, username, timestamp
-- [ ] User can customize overlay background: color + opacity, bubble background + opacity, border, padding, blur
-- [ ] User can toggle component visibility individually: avatars, badges, timestamps, platform badge, emotes, username
-- [ ] User can adjust component sizing: avatar, badge, emote scale
-- [ ] User can override per-platform accent colors (Twitch, YouTube, Kick, TikTok, Discord)
-- [ ] User can configure special event styling: show/hide, size modifier for Super Chat, subscriptions, raids
-- [ ] All visual control changes update live overlay preview in real-time
-- [ ] Loading a marketplace theme pre-populates visual controls with theme's CSS variable values
-- [ ] Visual customizations persist in `visual_settings` JSONB in overlay config
-- [ ] Editor panel reworked: collapsible sections, marketplace-first, CSS editor in "Expert" section
+<!-- Next milestone not yet defined — run /gsd:new-milestone to start -->
 
 ### Out of Scope
 
@@ -123,12 +103,12 @@ Discord Listener shipped: bidirectional Discord ↔ overlay integration with OAu
 
 ## Context
 
-**Current State (v1.3 shipped 2026-03-14):**
+**Current State (v1.6 shipped 2026-03-18):**
 - 7 core microservices deployed in Kubernetes (api-gateway, auth-service, emote-service, message-processor, overlay-manager, source-manager, token-refresh-service)
-- 5 listener services: 4 with load balancing (twitch-listener, kick-listener, tiktok-listener, youtube-listener) + 1 quota-free InnerTube listener (youtube-listener-innertube, ready for canary deployment)
+- 7 listener services: twitch-listener, kick-listener, youtube-listener, youtube-listener-innertube (quota-free), tiktok-listener (Node.js), discord-listener, twitch-eventsub-listener — all Go listeners on shared SDK
+- Shared listener SDK (`shared/listener/`, 797 LOC): `ListenerBase` + `LeadershipListener` archetypes; `make build-all` CI target; goroutine leak tests in all 6 Go listeners
 - Frontend: Next.js 14 App Router, Tailwind v4, @base-ui/react, Storybook 10, ~18,833 LOC TypeScript/TSX
-- CI/CD: 7-gate GitHub Actions pipeline with Chromatic visual regression baseline established
-- ESLint v10 flat config + Prettier enforced via pre-commit hooks and CI
+- CI/CD: 7-gate GitHub Actions pipeline with Chromatic visual regression + `make build-all` cross-module lint
 
 **Load Balancing Implementation (v1.1):**
 - **Coordinator:** Kubernetes Lease-based leader election, bounded-load consistent hashing (1.25x average limit)
@@ -198,6 +178,12 @@ Discord Listener shipped: bidirectional Discord ↔ overlay integration with OAu
 | **Cascade layers for events.css** | Eliminates all !important while preserving marketplace theme override priority | ✓ Good — All 14 !important removed, marketplace-themes layer positions correctly |
 | **ESLint v10 flat config (eslint.config.mjs)** | v9 .eslintrc.json silently ignored by ESLint v10; flat config required | ✓ Good — 345 pre-existing violations fixed, both linters exit 0 |
 | **Husky v9 new-style hooks (no husky.sh sourcing)** | Deprecated v8 sourcing logs deprecation warnings in v9, fails in v10 | ✓ Good — Clean hook execution, verified tsc + lint-staged exit 0 |
+| **SDK in shared/listener (not a new module)** | Four new files in existing shared module; no go.work or new Go modules required | ✓ Good — v1.6: ListenerBase + LeadershipListener cover all listener patterns |
+| **Two SDK archetypes: ListenerBase + LeadershipListener** | Assignment-based (Twitch, youtube, twitch-eventsub) vs leadership-based (kick, innertube, discord) — clean split | ✓ Good — Both archetypes ship and run in production |
+| **Strip source ID suffix at intake (not inside Manager)** | Keeps channels.Manager interface simple; bare-UUID maps passed to NewManager and UpdateAssignedSourceIDs | ✓ Good — Pre-migration cleanup in Phase 33 before SDK extraction |
+| **make build-all over go.work** | Catches replace-directive version drift without go mod tidy side-effect risk | ✓ Good — CI target exits 0 across all listener modules |
+| **Explicit serviceName in NewCoordinatorClient** | Removes hostname auto-detection; each listener caller controls its service identity | ✓ Good — Predictable coordinator registration, easier debugging |
+| **discord-listener: LeadershipListener as container only** | Start/Stop not called on ListenerBase; custom shutdown sequence unchanged; Gateway RESUME unaffected | ✓ Good — No regression in Discord shard ownership or relay |
 
 ---
-*Last updated: 2026-03-18 after v1.6 milestone started*
+*Last updated: 2026-03-18 after v1.6 milestone*

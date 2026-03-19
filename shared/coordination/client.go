@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +24,7 @@ type CoordinatorClient struct {
 	logger        *zap.Logger
 	jwtMutex      sync.RWMutex // Protects serviceJWT during refresh
 	stopRefresh   chan struct{} // Signal to stop JWT refresh goroutine
+	stopOnce      sync.Once    // Ensures stopRefresh is closed only once
 }
 
 // Assignment represents a channel assignment from the coordinator
@@ -42,20 +42,8 @@ type HeartbeatRequest struct {
 }
 
 // NewCoordinatorClient creates a new coordinator client
-func NewCoordinatorClient(baseURL, serviceSecret string, logger *zap.Logger) *CoordinatorClient {
-	// Determine service name from hostname (pod name)
-	hostname := os.Getenv("HOSTNAME")
-	serviceName := "listener" // default
-	if strings.HasPrefix(hostname, "twitch-listener") {
-		serviceName = "twitch-listener"
-	} else if strings.HasPrefix(hostname, "twitch-eventsub-listener") {
-		serviceName = "twitch-eventsub-listener"
-	} else if strings.HasPrefix(hostname, "kick-listener") {
-		serviceName = "kick-listener"
-	} else if strings.HasPrefix(hostname, "tiktok-listener") {
-		serviceName = "tiktok-listener"
-	}
-
+// serviceName is provided explicitly by the caller — no hostname parsing needed
+func NewCoordinatorClient(baseURL, serviceSecret, serviceName string, logger *zap.Logger) *CoordinatorClient {
 	// Generate initial JWT (24 hour expiry)
 	jwt, err := auth.GenerateServiceJWT(serviceName, serviceSecret, 24*time.Hour)
 	if err != nil {
@@ -294,9 +282,9 @@ func (c *CoordinatorClient) StartJWTRefresh(ctx context.Context) {
 	}()
 }
 
-// StopJWTRefresh stops the JWT refresh background task
+// StopJWTRefresh stops the JWT refresh background task. Safe to call multiple times.
 func (c *CoordinatorClient) StopJWTRefresh() {
-	close(c.stopRefresh)
+	c.stopOnce.Do(func() { close(c.stopRefresh) })
 }
 
 // refreshJWT generates a new JWT token and updates the client

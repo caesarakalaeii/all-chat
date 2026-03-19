@@ -15,6 +15,7 @@ import (
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
 	"github.com/caesar/all-chat/shared/coordination"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -24,6 +25,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
+
+// Compile-time assertion: Manager must satisfy the SDK ChannelManager interface.
+var _ listener.ChannelManager = (*Manager)(nil)
 
 const (
 	// Kick API endpoint for channel info
@@ -139,8 +143,9 @@ type OverlayTarget struct {
 	ChannelSlug string
 }
 
-// Start begins the channel management loop
-func (m *Manager) Start() error {
+// Start begins the channel management loop. ctx is accepted for ChannelManager interface compliance;
+// internal goroutines use m.ctx created by NewManager.
+func (m *Manager) Start(_ context.Context) error {
 	m.logger.Info("Starting Kick channel manager")
 
 	// Initial sync
@@ -672,7 +677,7 @@ func (m *Manager) GetOverlayTargetsForChatroom(chatroomID int) ([]OverlayTarget,
 }
 
 // HandleMigrationEvent handles migration events from Redis Pub/Sub (KICK-03, KICK-04)
-func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
+func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) error {
 	// Extract trace context from event (from Redis Streams message)
 	carrier := propagation.MapCarrier{
 		"traceparent": event.TraceParent,
@@ -695,7 +700,7 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 	defer m.migrationMu.Unlock()
 
 	if event.Platform != "kick" {
-		return // Not for this listener
+		return nil // Not for this listener
 	}
 
 	// Check if this pod is involved
@@ -711,6 +716,7 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 		// Old pod: unsubscribe after confirmation (KICK-04)
 		m.handleMigrationAsOldPod(ctx, event)
 	}
+	return nil
 }
 
 // handleMigrationAsNewPod handles migration when this pod is the new assignment target
@@ -918,6 +924,24 @@ func (m *Manager) GetFilteredAssignmentCount() int {
 	m.subsMu.RLock()
 	defer m.subsMu.RUnlock()
 	return m.filteredAssignmentCount
+}
+
+// GetActiveChannels returns the slugs of all currently subscribed channels.
+func (m *Manager) GetActiveChannels() []string {
+	m.subsMu.RLock()
+	defer m.subsMu.RUnlock()
+	channels := make([]string, 0, len(m.subscriptions))
+	for slug := range m.subscriptions {
+		channels = append(channels, slug)
+	}
+	return channels
+}
+
+// GetActiveChannelCount returns the number of currently subscribed channels.
+func (m *Manager) GetActiveChannelCount() int {
+	m.subsMu.RLock()
+	defer m.subsMu.RUnlock()
+	return len(m.subscriptions)
 }
 
 // UpdateAssignedSourceIDs updates the assigned source IDs from coordinator

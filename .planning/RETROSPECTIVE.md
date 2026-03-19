@@ -90,6 +90,49 @@
 
 ---
 
+## Milestone: v1.6 — Listener SDK
+
+**Shipped:** 2026-03-18
+**Phases:** 6 (33-38) | **Plans:** 15 | **Commits:** 18 feat + 55 docs/test | **Timeline:** 2 days
+
+### What Was Built
+- `shared/listener` SDK (797 LOC): `ListenerBase` with 3-goroutine lifecycle (heartbeat, assignment refresh, migration subscriber), `LeadershipListener` embedding `ListenerBase` with nil-safe `SourceManagerClient`, `ShutdownCoordinator` with parallel stop + 10s HTTP drain, `ChannelManager` interface (7 methods)
+- Pre-migration cleanup (Phase 33): source ID suffix normalization stripped at intake in both kick-listener and twitch-listener; `HandleMigrationEvent` canonical error signature deployed before SDK extraction
+- Migration of all 6 Go listeners: twitch-listener (ListenerBase), kick-listener (ListenerBase + LeadershipListener), youtube-listener (LeadershipListener), youtube-listener-innertube (LeadershipListener), discord-listener (LeadershipListener container), twitch-eventsub-listener (ListenerBase)
+- `make build-all` CI target — single command builds all listener modules, catches `replace`-directive version drift
+- Compile-time `ChannelManager` assertions and goroutine leak smoke tests (`goleak.VerifyNone`) in every migrated listener
+
+### What Worked
+- **Phase 33 prerequisite cleanup first** — Behavioral inconsistencies (source ID suffix, `HandleMigrationEvent` signature) were resolved and deployed before SDK code was written. Zero mid-migration surprises.
+- **Two-archetype SDK design** — Splitting into `ListenerBase` (assignment-based) and `LeadershipListener` (per-stream ownership) mapped cleanly onto all 6 listeners with no edge cases. Each `cmd/main.go` migration was mechanical once the archetype was chosen.
+- **goleak-as-direct-dep pattern** — Adding `goleak` as a direct dependency before any `.go` import (Phase 35, extended to all subsequent phases) prevented `go mod tidy` stripping the dep. Established pattern eliminated friction in every subsequent migration.
+- **compile-time assertion first, then migration** — Each listener had `var _ listener.ChannelManager = (*channels.Manager)(nil)` added before `cmd/main.go` migration. Build failures surfaced interface gaps immediately, before wiring complexity.
+- **Incremental migration (simplest first)** — twitch → kick → (innertube + discord) → (youtube + twitch-eventsub) ordered by complexity. Each migration validated the SDK under live traffic before the next began.
+
+### What Was Inefficient
+- **twitch-eventsub Phase 38-02 ChannelManager gap** — `channels.Manager` needed `Start` re-signature and 3 new methods (`HandleMigrationEvent`, `UpdateAssignedSourceIDs`, `GetFilteredAssignmentCount`) before SDK wiring could proceed. A dedicated plan for interface gap analysis before each migration would have been cleaner.
+- **discord-listener edge case: ListenerBase as container only** — Discord uses a custom shutdown sequence and can't call `base.Start`/`base.Stop`. The SDK pattern works but required a non-obvious workaround (ll used for construction only). Should document this pattern explicitly for future listeners.
+- **STATE.md progress stale at 0%** — The GSD tool set `percent: 0` on the v1.6 state despite all 15 plans completing. Percent tracking not updated by plan execution in this milestone.
+
+### Patterns Established
+- **Pre-migration cleanup phase** — Fix behavioral inconsistencies (API contracts, naming conventions) in a dedicated phase before any SDK extraction begins. Prevents mid-migration surprises.
+- **goleak-as-direct-dep before any .go import** — Use `go mod edit -require + go mod download` to pin `goleak` as a direct dep before the first smoke test `.go` file imports it; avoids `go mod tidy` stripping it as unused.
+- **Compile-time assertion before migration** — Add `var _ Interface = (*Impl)(nil)` in the first plan of each migration phase; build failures surface all interface gaps before wiring complexity begins.
+- **Leadership-only container pattern** — For services with custom shutdown sequences, `LeadershipListener` can be used as a construction container (env-based wiring) without calling `Start`/`Stop`.
+
+### Key Lessons
+1. **Interface gap analysis belongs in Phase 0** — Before migrating a service to a new interface, explicitly audit all required methods. `twitch-eventsub` needed 3 new methods that weren't caught until Plan 38-02.
+2. **`make build-all` catches cross-module drift that single-module tests miss** — Replace directives can diverge silently; the CI target makes this visible immediately.
+3. **Two archetypes is the right level of abstraction** — Not one (too restrictive for leadership-only services) and not five (too complex). The boundary between `ListenerBase` and `LeadershipListener` is stable.
+4. **Strip platform suffix at intake, not inside Manager** — The `channels.Manager` interface stays simple; the caller in `cmd/main.go` normalizes IDs before passing them in. Easier to test, easier to read.
+
+### Cost Observations
+- Model mix: ~100% sonnet (balanced profile)
+- Sessions: ~3 sessions across 2 days
+- Notable: Fine granularity + wave parallelization kept plans small (2-3 tasks each); 2-day delivery for 6 phases across 6 services
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -101,6 +144,8 @@
 | v1.2 | 5 | 21 | 13 | InnerTube + production rollout |
 | v1.3 (Sharing) | 6 | 23 | 3 | Cross-service feature with new microservice |
 | v1.3 (Frontend) | 4 | 20 | 3 | Full frontend redesign + design system |
+| v1.5 (Discord) | 6 | 16 | 2 | New platform listener + bidirectional relay |
+| v1.6 (SDK) | 6 | 15 | 2 | SDK extraction + full listener migration |
 
 ### Cumulative Quality
 
@@ -111,6 +156,8 @@
 | v1.2 | 69 automated tests | Contract validation before prod |
 | v1.3 (Sharing) | Nyquist RED stubs + modal TDD | Test scaffolding before implementation |
 | v1.3 (Frontend) | 45 Storybook vitest tests | a11y 'error' mode as CI gate |
+| v1.5 (Discord) | Bot auth + relay integration | End-to-end Discord flow testing |
+| v1.6 (SDK) | goleak smoke tests in all 6 listeners | Goroutine lifecycle correctness at SDK boundary |
 
 ### Top Lessons (Verified Across Milestones)
 

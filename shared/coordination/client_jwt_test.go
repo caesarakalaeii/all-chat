@@ -15,7 +15,7 @@ func TestJWTRefresh(t *testing.T) {
 	secret := "test-secret-for-jwt-refresh"
 	baseURL := "http://test-coordinator:8088"
 
-	client := NewCoordinatorClient(baseURL, secret, logger)
+	client := NewCoordinatorClient(baseURL, secret, "test-service", logger)
 
 	// Get initial JWT
 	client.jwtMutex.RLock()
@@ -77,7 +77,7 @@ func TestJWTRefreshConcurrency(t *testing.T) {
 	secret := "test-secret-concurrency"
 	baseURL := "http://test-coordinator:8088"
 
-	client := NewCoordinatorClient(baseURL, secret, logger)
+	client := NewCoordinatorClient(baseURL, secret, "test-service", logger)
 
 	// Start multiple goroutines reading the JWT while refreshing
 	done := make(chan struct{})
@@ -136,7 +136,7 @@ func TestStartStopJWTRefresh(t *testing.T) {
 	secret := "test-secret-lifecycle"
 	baseURL := "http://test-coordinator:8088"
 
-	client := NewCoordinatorClient(baseURL, secret, logger)
+	client := NewCoordinatorClient(baseURL, secret, "test-service", logger)
 	ctx := context.Background()
 
 	// Start refresh
