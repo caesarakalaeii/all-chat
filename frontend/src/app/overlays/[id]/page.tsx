@@ -49,6 +49,7 @@ import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge'
 import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal'
 import { cn } from '@/lib/utils'
 import { AppearancePanel } from '@/components/appearance/AppearancePanel'
+import { CollapsibleSection } from '@/components/appearance/CollapsibleSection'
 import dynamic from 'next/dynamic'
 
 // Dynamically import Monaco Editor to avoid SSR issues
@@ -61,9 +62,9 @@ const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
   ),
 })
 
-// Dynamically import Theme Marketplace Modal
-const ThemeMarketplaceModal = dynamic(
-  () => import('@/components/theme-marketplace/ThemeMarketplaceModal'),
+// Dynamically import ThemeContent for inline Theme section (SSR unsafe — uses hooks)
+const ThemeContent = dynamic(
+  () => import('@/components/theme-marketplace/ThemeContent').then((m) => ({ default: m.ThemeContent })),
   { ssr: false }
 )
 
@@ -902,7 +903,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- Custom CSS state ---
   const [customCss, setCustomCss] = useState('')
   const [useCustomCss, setUseCustomCss] = useState(false)
-  const [showThemeMarketplace, setShowThemeMarketplace] = useState(false)
 
   // --- Visual appearance settings state ---
   const [visualSettings, setVisualSettings] = useState<Partial<VisualSettings>>({})
@@ -957,7 +957,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setVisualSettings(parsed)
       setParsedThemeSettings(parsed)
       sendCssToIframe(parsed)
-      setShowThemeMarketplace(false)
     },
     [sendCssToIframe]
   )
@@ -2005,15 +2004,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 </label>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  onClick={() => setShowThemeMarketplace(true)}
-                >
-                  Browse Themes
-                </Button>
                 <button
                   type="button"
                   className="text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
@@ -2092,22 +2082,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           }}
         />
       )}
-
-      {/* Theme Marketplace Modal */}
-      <ThemeMarketplaceModal
-        isOpen={showThemeMarketplace}
-        onClose={() => setShowThemeMarketplace(false)}
-        onApplyTheme={(css) => {
-          const parsed = parseCssToVisualSettings(css)
-          const hasExisting = Object.keys(visualSettings).length > 0
-          if (hasExisting) {
-            setPendingTheme({ css, parsed })
-            setShowThemeConfirm(true)
-          } else {
-            applyThemeImmediately(css, parsed)
-          }
-        }}
-      />
 
       {/* Theme apply confirm dialog */}
       <Dialog.Root open={showThemeConfirm} onOpenChange={setShowThemeConfirm}>
