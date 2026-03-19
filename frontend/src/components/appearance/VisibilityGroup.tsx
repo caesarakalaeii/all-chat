@@ -27,7 +27,6 @@ const ROWS: Array<{ field: keyof VisualSettings; label: string }> = [
   { field: 'showAvatars', label: 'Show avatars' },
   { field: 'showBadges', label: 'Show badges' },
   { field: 'showTimestamps', label: 'Show timestamps' },
-  { field: 'showPlatformBadge', label: 'Show platform badge' },
   { field: 'showEmotes', label: 'Show emotes' },
   { field: 'showUsername', label: 'Show username' },
 ]
