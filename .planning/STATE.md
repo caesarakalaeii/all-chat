@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Visual Overlay Customizer
 status: planning
-stopped_at: "Completed 36-03-PLAN.md (checkpoint:human-verify pending)"
-last_updated: "2026-03-18T22:36:28.167Z"
+stopped_at: Completed 36-03-PLAN.md — phase 36 complete
+last_updated: "2026-03-18T23:22:44.513Z"
 last_activity: 2026-03-18 — v1.6 roadmap created, 5 phases (33-37), 18 requirements mapped
 progress:
   total_phases: 23
@@ -84,6 +84,7 @@ Key decisions relevant to v1.6:
 - [Phase 36-events-styling-theme-import]: CSS_VAR_REGEX defined inside parseCssToVisualSettings function body (fresh regex per call, avoids stale lastIndex)
 - [Phase 36-events-styling-theme-import]: Dialog.Close rendered with Button component via render prop to match project UI conventions
 - [Phase 36-events-styling-theme-import]: applyThemeImmediately also calls setShowThemeMarketplace(false) to close modal on successful apply
+- [Phase 36-events-styling-theme-import]: events.css requires display: var(--chat-show-*) rules for EventsGroup show/hide toggles to have visual effect in the preview iframe
 
 ### Pending Todos
 
@@ -95,8 +96,8 @@ None identified at milestone start.
 
 ## Session Continuity
 
-Last session: 2026-03-18T22:36:08.074Z
-Stopped at: Completed 36-03-PLAN.md (checkpoint:human-verify pending)
+Last session: 2026-03-18T23:22:39.662Z
+Stopped at: Completed 36-03-PLAN.md — phase 36 complete
 Resume file: None
 
 **Next action:** Phase 33 complete — proceed to Phase 34 (Appearance Controls — Core)

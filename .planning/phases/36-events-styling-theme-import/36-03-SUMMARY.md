@@ -48,21 +48,21 @@ requirements-completed:
   - APPR-10
 
 # Metrics
-duration: 5min
-completed: 2026-03-18
+duration: 15min
+completed: 2026-03-19
 ---
 
 # Phase 36 Plan 03: Theme Import Pre-population and Reset Button Summary
 
-**Overlay editor now pre-populates all visual controls when a marketplace theme is applied, shows a confirm dialog before overwriting existing customizations, and exposes a "Reset to theme defaults" button**
+**Overlay editor now pre-populates all visual controls when a marketplace theme is applied, shows a confirm dialog before overwriting existing customizations, and exposes a "Reset to theme defaults" button — VISM-02, VISM-04, and APPR-10 verified end-to-end**
 
 ## Performance
 
-- **Duration:** 5 min
+- **Duration:** ~15 min (including human verification)
 - **Started:** 2026-03-18T22:21:00Z
-- **Completed:** 2026-03-18T22:21:11Z
-- **Tasks:** 2/3 automated (Task 3 is checkpoint:human-verify)
-- **Files modified:** 1
+- **Completed:** 2026-03-19T00:00:00Z
+- **Tasks:** 3/3 complete (Tasks 1-2 automated, Task 3 human-verified)
+- **Files modified:** 2
 
 ## Accomplishments
 - Added `parsedThemeSettings`, `showThemeConfirm`, and `pendingTheme` state to overlay editor
@@ -70,6 +70,7 @@ completed: 2026-03-18
 - Extended `onApplyTheme` callback to call `parseCssToVisualSettings(css)` and show confirm dialog when visual settings already exist
 - Added `handleResetToTheme` which restores visualSettings to parsedThemeSettings (clears to {} when no theme loaded)
 - Added "Reset to theme defaults" text button adjacent to "Browse Themes" button in the Custom CSS card
+- Human verified: VISM-02 confirm dialog, VISM-04 Reset to defaults, and APPR-10 EventsGroup live preview all pass
 
 ## Task Commits
 
@@ -77,12 +78,13 @@ Each task was committed atomically:
 
 1. **Task 1: Add parsedThemeSettings state + extended onApplyTheme handler + confirm dialog** - `d131b31` (feat)
 2. **Task 2: Add "Reset to theme defaults" button** - `9dd4c4c` (feat)
-3. **Task 3: Human verification checkpoint** - awaiting
+3. **Task 3: Human verification checkpoint** - approved (see deviation: `db221e1`)
 
-*Note: Additional fix commits d131b31 → 9dd4c4c → 30b594a → f3ae3f8 → 65b025a were applied for stability and UX refinements*
+*Note: Additional stabilization commits — `30b594a` (prevent infinite loop in handleIframeReady), `f3ae3f8` (stabilize iframe ref callback), `65b025a` (merge Customization + Appearance sections) — were applied during prior work.*
 
 ## Files Created/Modified
 - `frontend/src/app/overlays/[id]/page.tsx` - parsedThemeSettings state, confirm dialog, Reset button, extended onApplyTheme
+- `frontend/src/app/overlay/events.css` - added `display: var(--chat-show-*)` rules for event show/hide toggles (deviation fix, `db221e1`)
 
 ## Decisions Made
 - Dialog.Close rendered using Button component via render prop to match project UI conventions rather than plain text
@@ -91,19 +93,32 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None — plan executed exactly as written. Prior commits (f3ae3f8, 30b594a) addressed iframe stability issues (separate from this plan's scope).
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] Missing display rules in events.css for event show/hide toggles**
+- **Found during:** Task 3 (human verification of APPR-10)
+- **Issue:** EventsGroup sends `--chat-show-super-chat: none` to the iframe via sendCssToIframe, but events.css had no `display: var(--chat-show-super-chat)` rule on the event elements. Toggling Super Chat OFF had no visual effect in the preview.
+- **Fix:** Added `display: var(--chat-show-*)` rules to events.css for all event types (Super Chat, Membership, etc.)
+- **Files modified:** `frontend/src/app/overlay/events.css`
+- **Verification:** Human verified: toggling Super Chat OFF hides it in preview; toggling ON restores it. Raids size slider at 2x visually scales the event card.
+- **Committed in:** `db221e1` (fix(36-01): add display rules to events.css for show/hide toggles)
+
+---
+
+**Total deviations:** 1 auto-fixed (Rule 1 - bug)
+**Impact on plan:** Essential for APPR-10 correctness — without this fix the EventsGroup toggles had no visual effect. No scope creep.
 
 ## Issues Encountered
-None — TypeScript compiled cleanly and all 134 unit tests passed.
+None beyond the deviation documented above.
 
 ## User Setup Required
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Theme pre-population (VISM-02) and Reset to defaults (VISM-04) are implemented and TypeScript-clean
-- Human verification (Task 3 checkpoint) is pending — user must verify in running app
-- APPR-10 end-to-end confirmation depends on human checkpoint result
+- All phase 36 requirements delivered: VISM-02, VISM-04, APPR-10 verified end-to-end
+- Phase 36 (events-styling-theme-import) is complete — all 3 plans have SUMMARY.md
+- Ready to proceed to Phase 37 or next milestone work
 
 ---
 *Phase: 36-events-styling-theme-import*
-*Completed: 2026-03-18*
+*Completed: 2026-03-19*
