@@ -1,3 +1,4 @@
+/* Visual Settings: uses CSS custom properties for live customization */
 /**
  * Theme Name: Terminal Hacker Theme
  * Description: Classic green terminal aesthetic with monospace fonts and typing effects
@@ -28,17 +29,17 @@
 
 body {
   background: transparent !important;
-  font-family: 'Source Code Pro', 'Courier New', monospace !important;
+  font-family: var(--chat-font-family, 'Source Code Pro', 'Courier New', monospace) !important;
   -webkit-font-smoothing: antialiased !important;
 }
 
 .min-h-screen {
-  background: transparent !important;
-  padding: 12px !important;
+  background: var(--chat-overlay-bg-color, transparent) !important;
+  padding: var(--chat-overlay-padding, 12px) !important;
 }
 
 .space-y-3 {
-  gap: 8px !important;
+  gap: var(--chat-message-gap, 8px) !important;
 }
 
 /* ============================================================
@@ -46,16 +47,16 @@ body {
    ============================================================ */
 
 .space-y-3 > div {
-  background: rgba(0, 0, 0, 0.95) !important;
+  background: var(--chat-bubble-bg-color, rgba(0, 0, 0, 0.95)) !important;
   border: 1px solid #00ff00 !important;
   border-left: 3px solid #00ff00 !important;
-  border-radius: 0 !important;
-  padding: 12px !important;
+  border-radius: var(--chat-bubble-border-radius, 0) !important;
+  padding: var(--chat-bubble-padding, 12px) !important;
   box-shadow:
     0 0 20px rgba(0, 255, 0, 0.2),
     inset 0 0 100px rgba(0, 255, 0, 0.02) !important;
   position: relative !important;
-  font-family: 'Source Code Pro', monospace !important;
+  font-family: var(--chat-font-family, 'Source Code Pro', monospace) !important;
 }
 
 /* CRT scanline effect */
@@ -117,14 +118,15 @@ body {
    ============================================================ */
 
 .font-semibold.text-sm {
-  font-family: 'Source Code Pro', monospace !important;
-  font-size: 15px !important;
-  font-weight: 700 !important;
-  color: #00ff00 !important;
+  font-family: var(--chat-username-font-family, 'Source Code Pro', monospace) !important;
+  font-size: var(--chat-username-font-size, 15px) !important;
+  font-weight: var(--chat-username-font-weight, 700) !important;
+  color: var(--chat-username-color, #00ff00) !important;
   text-shadow: 0 0 8px rgba(0, 255, 0, 0.8) !important;
   position: relative !important;
   z-index: 2 !important;
   letter-spacing: 0.02em !important;
+  display: var(--chat-show-username, inline) !important;
 }
 
 /* Terminal user@host format - Disabled in preview to prevent CSS leakage */
@@ -151,6 +153,7 @@ body {
   gap: 4px !important;
   position: relative !important;
   z-index: 2 !important;
+  display: var(--chat-show-badges, inline) !important;
 }
 
 .flex.gap-1 img {
@@ -172,7 +175,13 @@ body {
    AVATAR - TERMINAL AVATAR
    ============================================================ */
 
+.flex-shrink-0 {
+  display: var(--chat-show-avatars, inline) !important;
+}
+
 .flex-shrink-0 img {
+  width: var(--chat-avatar-size, auto) !important;
+  height: var(--chat-avatar-size, auto) !important;
   filter:
     grayscale(100%)
     brightness(1.5)
@@ -188,15 +197,15 @@ body {
    ============================================================ */
 
 .text-white.break-words {
-  font-family: 'Source Code Pro', monospace !important;
-  font-size: 14px !important;
-  font-weight: 400 !important;
-  color: #00ff00 !important;
-  line-height: 1.8 !important;
+  font-family: var(--chat-font-family, 'Source Code Pro', monospace) !important;
+  font-size: var(--chat-font-size, 14px) !important;
+  font-weight: var(--chat-font-weight, 400) !important;
+  color: var(--chat-message-color, #00ff00) !important;
+  line-height: var(--chat-line-height, 1.8) !important;
   text-shadow: 0 0 5px rgba(0, 255, 0, 0.6) !important;
   position: relative !important;
   z-index: 2 !important;
-  letter-spacing: 0.02em !important;
+  letter-spacing: var(--chat-letter-spacing, 0.02em) !important;
   padding-left: 16px !important;
 }
 
@@ -215,11 +224,12 @@ body {
    ============================================================ */
 
 .text-xs.text-gray-500 {
-  font-family: 'Source Code Pro', monospace !important;
-  font-size: 11px !important;
-  color: rgba(0, 255, 0, 0.6) !important;
+  font-family: var(--chat-timestamp-font-family, 'Source Code Pro', monospace) !important;
+  font-size: var(--chat-timestamp-font-size, 11px) !important;
+  color: var(--chat-timestamp-color, rgba(0, 255, 0, 0.6)) !important;
   text-shadow: 0 0 5px rgba(0, 255, 0, 0.4) !important;
   letter-spacing: 0.05em !important;
+  display: var(--chat-show-timestamps, inline) !important;
 }
 
 /* Commented to prevent CSS leakage in marketplace */

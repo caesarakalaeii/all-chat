@@ -1,3 +1,4 @@
+/* Visual Settings: uses CSS custom properties for live customization */
 /**
  * Theme Name: Vaporwave Aesthetic Theme
  * Description: Retro 80s/90s vaporwave with pink and cyan gradients and grid patterns
@@ -29,17 +30,17 @@
 
 body {
   background: transparent !important;
-  font-family: 'Orbitron', sans-serif !important;
+  font-family: var(--chat-font-family, 'Orbitron', sans-serif) !important;
   -webkit-font-smoothing: antialiased !important;
 }
 
 .min-h-screen {
-  background: transparent !important;
-  padding: 20px !important;
+  background: var(--chat-overlay-bg-color, transparent) !important;
+  padding: var(--chat-overlay-padding, 20px) !important;
 }
 
 .space-y-3 {
-  gap: 20px !important;
+  gap: var(--chat-message-gap, 20px) !important;
 }
 
 /* ============================================================
@@ -48,12 +49,13 @@ body {
 
 .space-y-3 > div {
   background:
-    linear-gradient(135deg, rgba(255, 0, 128, 0.3) 0%, rgba(0, 255, 255, 0.3) 100%),
-    linear-gradient(0deg, rgba(128, 0, 255, 0.2) 0%, rgba(255, 0, 255, 0.2) 100%) !important;
+    var(--chat-bubble-bg-color,
+      linear-gradient(135deg, rgba(255, 0, 128, 0.3) 0%, rgba(0, 255, 255, 0.3) 100%),
+      linear-gradient(0deg, rgba(128, 0, 255, 0.2) 0%, rgba(255, 0, 255, 0.2) 100%)) !important;
   border: 2px solid transparent !important;
   border-image: linear-gradient(135deg, #ff0080, #00ffff, #ff00ff) 1 !important;
-  border-radius: 12px !important;
-  padding: 1.5rem !important;
+  border-radius: var(--chat-bubble-border-radius, 12px) !important;
+  padding: var(--chat-bubble-padding, 1.5rem) !important;
   box-shadow:
     0 8px 32px rgba(255, 0, 128, 0.4),
     0 0 50px rgba(0, 255, 255, 0.2),
@@ -124,9 +126,9 @@ body {
    ============================================================ */
 
 .font-semibold.text-sm {
-  font-family: 'Orbitron', sans-serif !important;
-  font-size: 18px !important;
-  font-weight: 900 !important;
+  font-family: var(--chat-username-font-family, 'Orbitron', sans-serif) !important;
+  font-size: var(--chat-username-font-size, 18px) !important;
+  font-weight: var(--chat-username-font-weight, 900) !important;
   background: linear-gradient(180deg, #ff0080, #00ffff, #ff00ff) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
@@ -136,6 +138,7 @@ body {
   letter-spacing: 0.05em !important;
   position: relative !important;
   z-index: 2 !important;
+  display: var(--chat-show-username, inline) !important;
 }
 
 /* Secondary glow layer - Commented to prevent CSS leakage in marketplace */
@@ -158,6 +161,7 @@ body {
   gap: 6px !important;
   position: relative !important;
   z-index: 2 !important;
+  display: var(--chat-show-badges, inline) !important;
 }
 
 .flex.gap-1 img {
@@ -175,7 +179,13 @@ body {
    AVATAR - VAPORWAVE BORDER
    ============================================================ */
 
+.flex-shrink-0 {
+  display: var(--chat-show-avatars, inline) !important;
+}
+
 .flex-shrink-0 img {
+  width: var(--chat-avatar-size, auto) !important;
+  height: var(--chat-avatar-size, auto) !important;
   border: 3px solid transparent !important;
   border-image: linear-gradient(135deg, #ff0080, #00ffff, #ff00ff) 1 !important;
   border-radius: 8px !important;
@@ -190,11 +200,11 @@ body {
    ============================================================ */
 
 .text-white.break-words {
-  font-family: 'Orbitron', sans-serif !important;
-  font-size: 16px !important;
-  font-weight: 400 !important;
-  color: #ffffff !important;
-  line-height: 1.7 !important;
+  font-family: var(--chat-font-family, 'Orbitron', sans-serif) !important;
+  font-size: var(--chat-font-size, 16px) !important;
+  font-weight: var(--chat-font-weight, 400) !important;
+  color: var(--chat-message-color, #ffffff) !important;
+  line-height: var(--chat-line-height, 1.7) !important;
   text-shadow:
     0 0 10px rgba(255, 0, 128, 0.5),
     0 0 20px rgba(0, 255, 255, 0.3) !important;
@@ -216,15 +226,16 @@ body {
    ============================================================ */
 
 .text-xs.text-gray-500 {
-  font-family: 'Orbitron', sans-serif !important;
-  font-size: 11px !important;
+  font-family: var(--chat-timestamp-font-family, 'Orbitron', sans-serif) !important;
+  font-size: var(--chat-timestamp-font-size, 11px) !important;
   background: linear-gradient(90deg, #ff0080, #00ffff) !important;
   -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
+  -webkit-text-fill-color: var(--chat-timestamp-color, transparent) !important;
   background-clip: text !important;
   font-weight: 700 !important;
   text-shadow: 0 0 10px rgba(255, 0, 128, 0.5) !important;
-  letter-spacing: 0.1em !important;
+  letter-spacing: var(--chat-letter-spacing, 0.1em) !important;
+  display: var(--chat-show-timestamps, inline) !important;
 }
 
 /* ============================================================

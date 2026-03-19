@@ -1,3 +1,4 @@
+/* Visual Settings: uses CSS custom properties for live customization */
 /**
  * Theme Name: Cyberpunk 2077 Theme
  * Description: High-tech dystopian cyberpunk aesthetic with glitch effects and neon yellow accents
@@ -28,17 +29,17 @@
 
 body {
   background: transparent !important;
-  font-family: 'Rajdhani', sans-serif !important;
+  font-family: var(--chat-font-family, 'Rajdhani', sans-serif) !important;
   -webkit-font-smoothing: antialiased !important;
 }
 
 .min-h-screen {
-  background: transparent !important;
-  padding: 16px !important;
+  background: var(--chat-overlay-bg-color, transparent) !important;
+  padding: var(--chat-overlay-padding, 16px) !important;
 }
 
 .space-y-3 {
-  gap: 16px !important;
+  gap: var(--chat-message-gap, 16px) !important;
 }
 
 /* ============================================================
@@ -46,11 +47,11 @@ body {
    ============================================================ */
 
 .space-y-3 > div {
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.95) 0%, rgba(20, 20, 0, 0.9) 100%) !important;
-  border: 2px solid #ffed4e !important;
+  background: var(--chat-bubble-bg-color, linear-gradient(135deg, rgba(0, 0, 0, 0.95) 0%, rgba(20, 20, 0, 0.9) 100%)) !important;
+  border: var(--chat-bubble-border-width, 2px) solid #ffed4e !important;
   border-left: 6px solid #ffed4e !important;
-  border-radius: 0 !important;
-  padding: 1rem !important;
+  border-radius: var(--chat-bubble-border-radius, 0) !important;
+  padding: var(--chat-bubble-padding, 1rem) !important;
   box-shadow:
     0 0 20px rgba(255, 237, 78, 0.3),
     inset 0 1px 0 rgba(255, 237, 78, 0.2),
@@ -114,11 +115,11 @@ body {
    ============================================================ */
 
 .font-semibold.text-sm {
-  font-family: 'Rajdhani', sans-serif !important;
-  font-size: 18px !important;
-  font-weight: 700 !important;
+  font-family: var(--chat-username-font-family, 'Rajdhani', sans-serif) !important;
+  font-size: var(--chat-username-font-size, 18px) !important;
+  font-weight: var(--chat-username-font-weight, 700) !important;
   text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
+  letter-spacing: var(--chat-letter-spacing, 0.05em) !important;
   text-shadow:
     2px 0 0 rgba(255, 0, 255, 0.4),
     -2px 0 0 rgba(0, 255, 255, 0.4),
@@ -164,11 +165,11 @@ body {
    ============================================================ */
 
 .text-white.break-words {
-  font-family: 'Rajdhani', sans-serif !important;
-  font-size: 17px !important;
-  font-weight: 500 !important;
-  color: #e0e0e0 !important;
-  line-height: 1.6 !important;
+  font-family: var(--chat-font-family, 'Rajdhani', sans-serif) !important;
+  font-size: var(--chat-font-size, 17px) !important;
+  font-weight: var(--chat-font-weight, 500) !important;
+  color: var(--chat-message-color, #e0e0e0) !important;
+  line-height: var(--chat-line-height, 1.6) !important;
   text-shadow: 0 0 5px rgba(255, 237, 78, 0.3) !important;
   position: relative !important;
   z-index: 2 !important;
@@ -184,9 +185,9 @@ body {
    ============================================================ */
 
 .text-xs.text-gray-500 {
-  font-family: 'Share Tech Mono', monospace !important;
-  font-size: 10px !important;
-  color: #ffed4e !important;
+  font-family: var(--chat-timestamp-font-family, 'Share Tech Mono', monospace) !important;
+  font-size: var(--chat-timestamp-font-size, 10px) !important;
+  color: var(--chat-timestamp-color, #ffed4e) !important;
   text-shadow: 0 0 5px rgba(255, 237, 78, 0.4) !important;
   letter-spacing: 0.1em !important;
 }

@@ -1,3 +1,4 @@
+/* Visual Settings: uses CSS custom properties for live customization */
 /**
  * Theme Name: Pastel Kawaii Theme
  * Description: Soft pastel colors with cute rounded elements and gentle animations
@@ -28,17 +29,17 @@
 
 body {
   background: transparent !important;
-  font-family: 'Nunito', sans-serif !important;
+  font-family: var(--chat-font-family, 'Nunito', sans-serif) !important;
   -webkit-font-smoothing: antialiased !important;
 }
 
 .min-h-screen {
-  background: transparent !important;
-  padding: 20px !important;
+  background: var(--chat-overlay-bg-color, transparent) !important;
+  padding: var(--chat-overlay-padding, 20px) !important;
 }
 
 .space-y-3 {
-  gap: 16px !important;
+  gap: var(--chat-message-gap, 16px) !important;
 }
 
 /* ============================================================
@@ -46,10 +47,10 @@ body {
    ============================================================ */
 
 .space-y-3 > div {
-  background: linear-gradient(135deg, rgba(255, 218, 234, 0.95) 0%, rgba(230, 230, 250, 0.95) 100%) !important;
+  background: var(--chat-bubble-bg-color, linear-gradient(135deg, rgba(255, 218, 234, 0.95) 0%, rgba(230, 230, 250, 0.95) 100%)) !important;
   border: 3px solid rgba(255, 182, 193, 0.6) !important;
-  border-radius: 24px !important;
-  padding: 1.25rem !important;
+  border-radius: var(--chat-bubble-border-radius, 24px) !important;
+  padding: var(--chat-bubble-padding, 1.25rem) !important;
   box-shadow:
     0 8px 32px rgba(255, 182, 193, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
@@ -99,13 +100,14 @@ body {
    ============================================================ */
 
 .font-semibold.text-sm {
-  font-family: 'Nunito', sans-serif !important;
-  font-size: 17px !important;
-  font-weight: 700 !important;
+  font-family: var(--chat-username-font-family, 'Nunito', sans-serif) !important;
+  font-size: var(--chat-username-font-size, 17px) !important;
+  font-weight: var(--chat-username-font-weight, 700) !important;
   text-shadow:
     0 2px 4px rgba(255, 182, 193, 0.3),
     0 0 20px rgba(255, 255, 255, 0.8) !important;
   filter: brightness(1.1) saturate(1.2) !important;
+  display: var(--chat-show-username, inline) !important;
 }
 
 /* ============================================================
@@ -114,6 +116,7 @@ body {
 
 .flex.gap-1 {
   gap: 6px !important;
+  display: var(--chat-show-badges, inline) !important;
 }
 
 .flex.gap-1 img {
@@ -130,7 +133,13 @@ body {
    AVATAR - CUTE STYLE
    ============================================================ */
 
+.flex-shrink-0 {
+  display: var(--chat-show-avatars, inline) !important;
+}
+
 .flex-shrink-0 img {
+  width: var(--chat-avatar-size, auto) !important;
+  height: var(--chat-avatar-size, auto) !important;
   border: 3px solid rgba(255, 182, 193, 0.6) !important;
   border-radius: 50% !important;
   box-shadow:
@@ -145,11 +154,11 @@ body {
    ============================================================ */
 
 .text-white.break-words {
-  font-family: 'Nunito', sans-serif !important;
-  font-size: 16px !important;
-  font-weight: 600 !important;
-  color: #6b5b8c !important;
-  line-height: 1.6 !important;
+  font-family: var(--chat-font-family, 'Nunito', sans-serif) !important;
+  font-size: var(--chat-font-size, 16px) !important;
+  font-weight: var(--chat-font-weight, 600) !important;
+  color: var(--chat-message-color, #6b5b8c) !important;
+  line-height: var(--chat-line-height, 1.6) !important;
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8) !important;
 }
 
@@ -164,11 +173,12 @@ body {
    ============================================================ */
 
 .text-xs.text-gray-500 {
-  font-family: 'Nunito', sans-serif !important;
-  font-size: 11px !important;
-  color: rgba(255, 105, 180, 0.7) !important;
+  font-family: var(--chat-timestamp-font-family, 'Nunito', sans-serif) !important;
+  font-size: var(--chat-timestamp-font-size, 11px) !important;
+  color: var(--chat-timestamp-color, rgba(255, 105, 180, 0.7)) !important;
   font-weight: 600 !important;
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6) !important;
+  display: var(--chat-show-timestamps, inline) !important;
 }
 
 /* ============================================================
