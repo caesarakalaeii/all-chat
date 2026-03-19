@@ -49,7 +49,7 @@ export default function ThemeCard({
   themeType = 'overlay',
 }: ThemeCardProps) {
   return (
-    <div className="theme-card flex flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900 transition-all duration-200 hover:-translate-y-1 hover:border-purple-500/50 hover:shadow-lg">
+    <div className="theme-card flex flex-col overflow-hidden rounded-lg border border-border bg-surface transition-all duration-200 hover:-translate-y-1 hover:border-twitch/50 hover:shadow-lg">
       {/* Preview */}
       {themeType === 'creditroll' ? (
         <CreditRollThemePreview css={theme.css} themeId={theme.id} />
@@ -61,10 +61,10 @@ export default function ThemeCard({
       <div className="flex flex-1 flex-col p-4">
         {/* Name and Favorite */}
         <div className="mb-2 flex items-start justify-between gap-2">
-          <h3 className="flex-1 text-lg leading-tight font-semibold text-white">{theme.name}</h3>
+          <h3 className="flex-1 text-base leading-tight font-semibold text-text">{theme.name}</h3>
           <button
             onClick={() => onToggleFavorite(theme.id)}
-            className="flex-shrink-0 text-2xl transition-transform hover:scale-110"
+            className="flex-shrink-0 text-xl transition-transform hover:scale-110"
             aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
             title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
@@ -73,12 +73,12 @@ export default function ThemeCard({
         </div>
 
         {/* Description */}
-        <p className="mb-3 line-clamp-2 text-sm text-slate-400">{theme.description}</p>
+        <p className="mb-3 line-clamp-2 text-xs text-text-sub">{theme.description}</p>
 
         {/* Tags */}
-        <div className="mb-4 flex flex-wrap gap-2">
+        <div className="mb-4 flex flex-wrap gap-1.5">
           {theme.tags.map((tag) => (
-            <span key={tag} className={clsx('rounded border px-2 py-1 text-xs', getTagColor(tag))}>
+            <span key={tag} className={clsx('rounded border px-1.5 py-0.5 text-xs', getTagColor(tag))}>
               {tag}
             </span>
           ))}
@@ -87,9 +87,9 @@ export default function ThemeCard({
         {/* Apply Button */}
         <button
           onClick={() => onApply(theme.css)}
-          className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-purple-700"
+          className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-twitch px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-twitch/90"
         >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
           Apply Theme
