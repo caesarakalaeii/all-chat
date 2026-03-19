@@ -380,7 +380,7 @@ Plans:
 | 34 | 3/3 | Complete    | 2026-03-18 | — |
 | 35 | Appearance Controls — Extended | 0/3 | Not started | — |
 | 36 | 3/3 | Complete    | 2026-03-19 | — |
-| 37 | 3/3 | Complete   | 2026-03-19 | — |
+| 37 | 3/3 | Complete    | 2026-03-19 | — |
 
 ---
 *Last updated: 2026-03-19 after Phase 37 planning*
