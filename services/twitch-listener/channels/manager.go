@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/shared/coordination"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,9 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
+
+// Compile-time assertion: Manager must satisfy the SDK ChannelManager interface.
+var _ listener.ChannelManager = (*Manager)(nil)
 
 const (
 	// Twitch rate limits for authenticated connections
@@ -597,7 +601,7 @@ func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels 
 }
 
 // HandleMigrationEvent handles migration events from Redis Pub/Sub (TWITCH-04, TWITCH-05)
-func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
+func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) error {
 	// Extract trace context from event (from Redis Streams message)
 	carrier := propagation.MapCarrier{
 		"traceparent": event.TraceParent,
@@ -620,7 +624,7 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 	defer m.migrationMu.Unlock()
 
 	if event.Platform != "twitch" {
-		return // Not for this listener
+		return nil // Not for this listener
 	}
 
 	// Check if this pod is involved
@@ -633,6 +637,7 @@ func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) {
 		// Old pod: disconnect after confirmation (TWITCH-05)
 		m.handleMigrationAsOldPod(ctx, event)
 	}
+	return nil
 }
 
 // handleMigrationAsNewPod handles migration as the new pod (TWITCH-04)

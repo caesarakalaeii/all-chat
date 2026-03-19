@@ -17,7 +17,7 @@ import (
 	"github.com/caesar/all-chat/services/discord-listener/metrics"
 	"github.com/caesar/all-chat/services/discord-listener/publisher"
 	"github.com/caesar/all-chat/services/discord-listener/relay"
-	"github.com/caesar/all-chat/shared/sourcemanager"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -165,8 +165,8 @@ func main() {
 		log.Fatal("DISCORD_BOT_TOKEN must be set")
 	}
 
-	redisHost := getEnv("REDIS_HOST", "localhost")
-	redisPort := getEnv("REDIS_PORT", "6379")
+	redisHost := listener.Env("REDIS_HOST", "localhost")
+	redisPort := listener.Env("REDIS_PORT", "6379")
 	rdb := redis.NewClient(&redis.Options{
 		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
 	})
@@ -184,22 +184,14 @@ func main() {
 	relayPoster := relay.NewHTTPPoster(botToken, &http.Client{Timeout: 10 * time.Second}, log)
 	relayMgr := relay.NewManager(relayRepo, relayPoster, rdb, dbPool, log)
 
-	sourceManagerURL := getEnv("SOURCE_MANAGER_URL", "")
-	sourceManagerSecret := getEnv("SOURCE_MANAGER_SECRET", "")
-	var leaderCoord *sourcemanager.LeadershipCoordinator
-	if sourceManagerURL != "" && sourceManagerSecret != "" {
-		tokenSource := sourcemanager.NewSigningTokenSource("discord-listener", sourceManagerSecret, 15*time.Minute)
-		smClient, err := sourcemanager.NewClient(sourceManagerURL, tokenSource)
-		if err != nil {
-			log.Fatal("Failed to initialize Source Manager client", zap.Error(err))
-		}
-		leaderCoord = sourcemanager.NewLeadershipCoordinator("discord", smClient, 5*time.Second, log)
-		log.Info("Source Manager leadership coordinator initialized")
-	} else {
-		log.Warn("SOURCE_MANAGER_URL or SOURCE_MANAGER_SECRET not set — running without shard ownership gating")
+	// Leadership coordination via SDK
+	base := listener.NewListenerBase(listener.ListenerConfig{}, nil, nil, "", log)
+	ll, err := listener.NewLeadershipListenerFromEnv(base, "discord", log)
+	if err != nil {
+		log.Fatal("Failed to initialize leadership listener", zap.Error(err))
 	}
 
-	gatewayURL := getEnv("DISCORD_GATEWAY_URL", "wss://gateway.discord.gg/?v=10&encoding=json")
+	gatewayURL := listener.Env("DISCORD_GATEWAY_URL", "wss://gateway.discord.gg/?v=10&encoding=json")
 	store := &redisSessionStore{client: rdb}
 	registry := &redisChannelRegistry{client: rdb}
 	guildCache := &redisGuildCache{client: rdb}
@@ -232,27 +224,29 @@ func main() {
 			default:
 			}
 
-			if leaderCoord != nil {
-				acquired, err := leaderCoord.EnsureLeadership(ctx, "shard:0", func() {
-					log.Warn("Lost gateway shard ownership — disconnecting")
+			acquired, err := ll.LeadershipCoordinator().EnsureLeadership(ctx, "shard:0", func() {
+				log.Warn("Lost gateway shard ownership — disconnecting")
+				if ll.LeadershipCoordinator() != nil {
 					metrics.SetShardOwnership(0)
-				})
-				if err != nil || !acquired {
-					log.Info("Waiting for shard ownership...")
-					select {
-					case <-time.After(5 * time.Second):
-					case <-ctx.Done():
-						return
-					}
-					continue
 				}
+			})
+			if err != nil || !acquired {
+				log.Info("Waiting for shard ownership...")
+				select {
+				case <-time.After(5 * time.Second):
+				case <-ctx.Done():
+					return
+				}
+				continue
+			}
+			if ll.LeadershipCoordinator() != nil {
 				metrics.SetShardOwnership(1)
 			}
 
 			log.Info("Starting Gateway connection")
 			if err := gwClient.Connect(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("Gateway disconnected, reconnecting in 5s", zap.Error(err))
-				if leaderCoord != nil {
+				if ll.LeadershipCoordinator() != nil {
 					metrics.SetShardOwnership(0)
 				}
 				select {
@@ -279,7 +273,7 @@ func main() {
 	router.GET("/health/ready", healthHandler.CheckReady)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	port := getEnv("PORT", "8086")
+	port := listener.Env("PORT", "8086")
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      router,
@@ -302,13 +296,6 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
-}
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
 
 // checkChannelPermissions verifies that the bot has access to every configured
@@ -390,10 +377,10 @@ func checkChannelPermissions(
 }
 
 func buildDatabaseDSN() string {
-	host := getEnv("DATABASE_HOST", "localhost")
-	port := getEnv("DATABASE_PORT", "5432")
-	name := getEnv("DATABASE_NAME", "allchat")
-	user := getEnv("DATABASE_USER", "allchat")
-	password := getEnv("DATABASE_PASSWORD", "allchat_dev_password")
+	host := listener.Env("DATABASE_HOST", "localhost")
+	port := listener.Env("DATABASE_PORT", "5432")
+	name := listener.Env("DATABASE_NAME", "allchat")
+	user := listener.Env("DATABASE_USER", "allchat")
+	password := listener.Env("DATABASE_PASSWORD", "allchat_dev_password")
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s", user, password, host, port, name)
 }

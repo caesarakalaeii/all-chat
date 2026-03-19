@@ -16,7 +16,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/publisher"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/streams"
-	"github.com/caesar/all-chat/shared/sourcemanager"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -51,17 +51,17 @@ func (a *metricsAdapter) RecordOverflow(channelID string) {
 
 func main() {
 	// 1. Environment variables
-	logLevel := getEnv("LOG_LEVEL", "info")
-	redisHost := getEnv("REDIS_HOST", "localhost")
-	redisPort := getEnv("REDIS_PORT", "6379")
-	httpPort := getEnv("HTTP_PORT", "8080")
+	logLevel := listener.Env("LOG_LEVEL", "info")
+	redisHost := listener.Env("REDIS_HOST", "localhost")
+	redisPort := listener.Env("REDIS_PORT", "6379")
+	httpPort := listener.Env("HTTP_PORT", "8080")
 
 	// 2. Logger initialization
 	logger := newLogger("youtube-listener-innertube", logLevel)
 	defer logger.Sync()
 
 	logger.Info("Starting YouTube Listener InnerTube",
-		zap.String("version", getEnv("APP_VERSION", "dev")),
+		zap.String("version", listener.Env("APP_VERSION", "dev")),
 		zap.String("log_level", logLevel),
 	)
 
@@ -72,7 +72,7 @@ func main() {
 	logger.Info("Initialized Prometheus metrics")
 
 	// 3.5. Initialize batch deletion detector
-	batchThresholdStr := getEnv("BATCH_DELETION_THRESHOLD", "5")
+	batchThresholdStr := listener.Env("BATCH_DELETION_THRESHOLD", "5")
 	batchThreshold, err := strconv.Atoi(batchThresholdStr)
 	if err != nil {
 		logger.Warn("Invalid BATCH_DELETION_THRESHOLD, using default",
@@ -138,27 +138,17 @@ func main() {
 		zap.Duration("delay", 500*time.Millisecond),
 		zap.Int("max_size", 1000))
 
-	// Leadership coordinator for stream ownership
-	sourceManagerURL := getEnv("SOURCE_MANAGER_URL", "http://source-manager:8088")
-	sourceManagerSecret := getEnv("SOURCE_MANAGER_SECRET", "dev-service-secret")
-	var leaderCoord *sourcemanager.LeadershipCoordinator
-	var smClient *sourcemanager.Client
-	if sourceManagerSecret == "" {
-		logger.Warn("SOURCE_MANAGER_SECRET not set; InnerTube listener will not coordinate leadership")
-	} else {
-		tokenSource := sourcemanager.NewSigningTokenSource("youtube", sourceManagerSecret, 15*time.Minute)
-		var err error
-		smClient, err = sourcemanager.NewClient(sourceManagerURL, tokenSource)
-		if err != nil {
-			logger.Fatal("Failed to initialize Source Manager client", zap.Error(err))
-		}
-		leaderCoord = sourcemanager.NewLeadershipCoordinator("youtube", smClient, 5*time.Second, logger)
+	// Leadership coordination via SDK
+	base := listener.NewListenerBase(listener.ListenerConfig{}, nil, nil, "", logger)
+	ll, err := listener.NewLeadershipListenerFromEnv(base, "youtube", logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize leadership listener", zap.Error(err))
 	}
 
 	// 6. Initialize and start stream manager
 	streamManager := streams.NewManager(
-		leaderCoord,
-		smClient,
+		ll.LeadershipCoordinator(),
+		ll.SMClient(),
 		repository,
 		discovery,
 		streamPublisher,
@@ -240,14 +230,6 @@ func main() {
 	logger.Info("Service stopped gracefully")
 }
 
-// getEnv gets an environment variable or returns a default value
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
 // newLogger creates a new Zap logger with the given service name and log level
 func newLogger(serviceName, level string) *zap.Logger {
 	config := zap.NewProductionConfig()
@@ -259,7 +241,7 @@ func newLogger(serviceName, level string) *zap.Logger {
 	logger, err := config.Build(
 		zap.Fields(
 			zap.String("service", serviceName),
-			zap.String("version", getEnv("APP_VERSION", "dev")),
+			zap.String("version", listener.Env("APP_VERSION", "dev")),
 		),
 	)
 	if err != nil {

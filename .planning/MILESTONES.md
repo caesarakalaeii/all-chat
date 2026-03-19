@@ -1,22 +1,21 @@
 # Milestones
 
-## v1.5 Discord Listener (Shipped: 2026-03-16)
+## v1.6 Listener SDK (Shipped: 2026-03-18)
 
-**Phases:** 27–32 (6 phases, 15 plans)
-**Timeline:** 2 days (2026-03-15 → 2026-03-16)
+**Phases:** 33–38 (6 phases, 15 plans)
+**Timeline:** 2 days (2026-03-17 → 2026-03-18)
+**Files changed:** 88 files, +10,302 net LOC (10,974 insertions, 672 deletions)
+**Shared SDK:** 797 LOC Go (`shared/listener/`)
 
 **Key accomplishments:**
-- Discord Gateway client with OAuth2 "Add to Server" bot authorization, permission validation, and guild disconnect
-- Inbound ingestion: Discord channel messages normalized to unified RawChatMessage schema, delivered to overlays as first-class source
-- @user/#channel mention resolution via guild cache (Redis-backed)
-- Deletion event propagation through existing deletion pipeline (MESSAGE_DELETE + MESSAGE_DELETE_BULK)
-- Outbound relay to Discord REST API with loop-safe filter (platform == "discord" always suppressed), single-retry on 5xx
-- Per-source relay toggle and configurable outbound channel (can equal inbound channel)
-- Gateway shard ownership via source-manager leader election; session state persisted in Redis for pod-restart resume
-- HPA scaling on Prometheus metrics; discord-listener Deployment + Service + HPA Kubernetes manifests
-- Full setup UI: Settings Discord server card, overlay editor guild/channel picker, relay config panel, source card status indicators
+- `shared/listener` SDK (797 LOC) with `ListenerBase`, `LeadershipListener`, `ShutdownCoordinator`, and `ChannelManager` interface — two archetypes covering all Go listener load-balancing patterns
+- Pre-migration cleanup: source ID suffix normalization and `HandleMigrationEvent` error signature canonicalized across all listeners before SDK extraction
+- All 6 Go listeners migrated: twitch-listener (ListenerBase), kick-listener (ListenerBase + LeadershipListener), youtube-listener, youtube-listener-innertube, discord-listener, twitch-eventsub-listener
+- `make build-all` CI target added — catches `replace`-directive version drift across all listener modules in one command
+- Compile-time `ChannelManager` assertions in every migrated listener — build fails immediately if Manager drifts from SDK interface
+- Goroutine leak smoke tests (`goleak.VerifyNone`) added to all 6 listeners — lifecycle correctness verified at the SDK boundary
 
-**Archive:** [v1.5-REQUIREMENTS.md](milestones/v1.5-REQUIREMENTS.md)
+**Archive:** [v1.6-ROADMAP.md](milestones/v1.6-ROADMAP.md) | [v1.6-REQUIREMENTS.md](milestones/v1.6-REQUIREMENTS.md)
 
 ---
 
