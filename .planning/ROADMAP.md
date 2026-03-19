@@ -358,7 +358,7 @@ Plans:
 6. Existing functionality (sources, behavior settings, CSS editor) works unchanged — only relocated
 7. Visual settings save correctly when "Save" is clicked; reload restores all control values
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 37-01-PLAN.md — Extend CollapsibleSection (storageKey/defaultOpen props) + ThemeContent inline component
@@ -380,7 +380,7 @@ Plans:
 | 34 | 3/3 | Complete    | 2026-03-18 | — |
 | 35 | Appearance Controls — Extended | 0/3 | Not started | — |
 | 36 | 3/3 | Complete    | 2026-03-19 | — |
-| 37 | 2/3 | In Progress|  | — |
+| 37 | 3/3 | Complete   | 2026-03-19 | — |
 
 ---
 *Last updated: 2026-03-19 after Phase 37 planning*

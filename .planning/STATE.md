@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Visual Overlay Customizer
 status: planning
-stopped_at: Completed 37-editor-ux-rework-02 (5-section CollapsibleSection restructure + sticky footer)
-last_updated: "2026-03-19T09:36:01.314Z"
+stopped_at: Completed 37-editor-ux-rework-03 task 1; awaiting human UAT checkpoint
+last_updated: "2026-03-19T09:38:54.560Z"
 last_activity: 2026-03-18 — v1.6 roadmap created, 5 phases (33-37), 18 requirements mapped
 progress:
   total_phases: 24
-  completed_phases: 22
+  completed_phases: 23
   total_plans: 81
-  completed_plans: 80
+  completed_plans: 81
   percent: 0
 ---
 
@@ -92,6 +92,8 @@ Key decisions relevant to v1.6:
 - [Phase 37-editor-ux-rework]: ThemeContent rendered inline in Theme CollapsibleSection — ThemeMarketplaceModal fully removed from overlay editor
 - [Phase 37-editor-ux-rework]: Editor sections use storageKey=editor-panel-sections-v1, separate from appearance-panel-sections-v1
 - [Phase 37-editor-ux-rework]: Sticky footer uses position:sticky bottom-0 inside split-view-config overflow-y-auto scroll container
+- [Phase 37-editor-ux-rework]: visualSettings.fontSize is single source of truth for font size; display_settings.font_size derived via parseInt on save
+- [Phase 37-editor-ux-rework]: Legacy overlay migration: visualSettings.fontSize seeded from display_settings.font_size when visual_settings.fontSize absent
 
 ### Pending Todos
 
@@ -103,8 +105,8 @@ None identified at milestone start.
 
 ## Session Continuity
 
-Last session: 2026-03-19T09:36:01.311Z
-Stopped at: Completed 37-editor-ux-rework-02 (5-section CollapsibleSection restructure + sticky footer)
+Last session: 2026-03-19T09:38:50.876Z
+Stopped at: Completed 37-editor-ux-rework-03 task 1; awaiting human UAT checkpoint
 Resume file: None
 
 **Next action:** Phase 33 complete — proceed to Phase 34 (Appearance Controls — Core)
