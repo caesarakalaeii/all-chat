@@ -1681,7 +1681,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 storageKey="editor-panel-sections-v1"
                 defaultOpen={true}
               >
-                <ThemeContent onApply={handleThemeApply} />
+                <ThemeContent onApply={handleThemeApply} isAdmin={user?.is_admin === true} />
                 <button
                   type="button"
                   className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"

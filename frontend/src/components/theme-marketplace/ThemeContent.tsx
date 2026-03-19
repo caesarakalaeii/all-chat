@@ -5,12 +5,14 @@ import ThemeCard from './ThemeCard'
 import ThemeFilters from './ThemeFilters'
 import { useThemeMarketplace } from '@/hooks/useThemeMarketplace'
 import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
+import { clearCache } from '@/lib/theme-marketplace/cache'
 
 interface ThemeContentProps {
   onApply: (css: string) => void
+  isAdmin?: boolean
 }
 
-export function ThemeContent({ onApply }: ThemeContentProps): React.ReactElement {
+export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): React.ReactElement {
   const {
     themes,
     loading,
@@ -26,6 +28,7 @@ export function ThemeContent({ onApply }: ThemeContentProps): React.ReactElement
     hasActiveFilters,
     totalCount,
     filteredCount,
+    refreshThemes,
   } = useThemeMarketplace()
 
   return (
@@ -70,9 +73,23 @@ export function ThemeContent({ onApply }: ThemeContentProps): React.ReactElement
       {/* Theme Grid */}
       {!loading && themes.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs text-text-sub">
-            Showing {filteredCount} of {totalCount} themes
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-text-sub">
+              Showing {filteredCount} of {totalCount} themes
+            </p>
+            {isAdmin && (
+              <button
+                onClick={() => { clearCache(); refreshThemes() }}
+                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-text-dim transition-colors hover:bg-subtle hover:text-text"
+                title="Force refresh themes from GitHub (Admin)"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Sync
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {themes.map((theme) => (
               <ThemeCard
