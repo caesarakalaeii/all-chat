@@ -1862,7 +1862,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         <input
                           type="checkbox"
                           checked={showPlatformBadge}
-                          onChange={(e) => setShowPlatformBadge(e.target.checked)}
+                          onChange={(e) => {
+                            setShowPlatformBadge(e.target.checked)
+                            handleVisualSettingsChange({ showPlatformBadge: e.target.checked ? 'inline' : 'none' })
+                          }}
                           className="accent-twitch"
                         />
                         Show Platform Badge
