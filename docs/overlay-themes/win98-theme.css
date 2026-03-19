@@ -1,3 +1,5 @@
+/* Visual Settings: uses CSS custom properties for live customization */
+
 /**
  * Theme Name: Windows 98 Retro Theme
  * Description: Nostalgic Windows 98 styling with 3D borders and inset containers
@@ -35,7 +37,7 @@
 /* Remove default background and reset container */
 body {
   background: transparent !important;
-  font-family: "MS Sans Serif", "Microsoft Sans Serif", sans-serif !important;
+  font-family: var(--chat-font-family, "MS Sans Serif", "Microsoft Sans Serif", sans-serif) !important;
   image-rendering: pixelated;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: grayscale;
@@ -44,22 +46,22 @@ body {
 /* Main container - looks like a Win98 window */
 .min-h-screen {
   background: transparent !important;
-  padding: 0 !important;
+  padding: var(--chat-overlay-padding, 0) !important;
 }
 
 /* Message container - Win98 window style */
 .space-y-3 > div {
-  background: #c0c0c0 !important;
+  background: var(--chat-bubble-bg-color, #c0c0c0) !important;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff !important;
   box-shadow:
     inset 1px 1px 0 0 #dfdfdf,
     inset -1px -1px 0 0 #404040,
     1px 1px 0 0 #000000 !important;
-  border-radius: 0 !important;
+  border-radius: var(--chat-bubble-border-radius, 0) !important;
   backdrop-filter: none !important;
-  padding: 8px !important;
-  margin-bottom: 8px !important;
+  padding: var(--chat-bubble-padding, 8px) !important;
+  margin-bottom: var(--chat-message-gap, 8px) !important;
   animation: win98-slide-in 0.2s ease-out !important;
 }
 
@@ -93,8 +95,8 @@ body {
     inset -1px -1px 0 0 #dfdfdf,
     inset 1px 1px 0 0 #000000 !important;
   border-radius: 0 !important;
-  width: 32px !important;
-  height: 32px !important;
+  width: var(--chat-avatar-size, 32px) !important;
+  height: var(--chat-avatar-size, 32px) !important;
   background: #c0c0c0 !important;
   image-rendering: pixelated;
 }
@@ -107,6 +109,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.flex-shrink-0 {
+  display: var(--chat-show-avatars, inline) !important;
 }
 
 /* ============================================
@@ -142,6 +148,10 @@ body {
   image-rendering: pixelated !important;
 }
 
+.platform-badge {
+  display: var(--chat-show-badges, inline) !important;
+}
+
 /* Platform-specific colors for badge background */
 .text-purple-400 {
   background: #800080 !important; /* Twitch purple */
@@ -165,10 +175,13 @@ body {
 
 /* Username styling */
 .font-semibold.text-sm {
-  font-size: 11px !important;
-  font-weight: bold !important;
+  font-size: var(--chat-username-font-size, 11px) !important;
+  font-family: var(--chat-username-font-family, inherit) !important;
+  font-weight: var(--chat-username-font-weight, bold) !important;
+  color: var(--chat-username-color, inherit) !important;
   text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5) !important;
   filter: none !important;
+  display: var(--chat-show-username, inline) !important;
 }
 
 /* ============================================
@@ -178,6 +191,7 @@ body {
 /* Badge container */
 .flex.gap-1 {
   gap: 2px !important;
+  display: var(--chat-show-badges, inline) !important;
 }
 
 /* Individual badges - Win98 icon style */
@@ -198,14 +212,15 @@ body {
 
 /* Message text container */
 .text-white.break-words {
-  color: #000000 !important;
-  font-size: 11px !important;
-  line-height: 1.4 !important;
-  font-family: "MS Sans Serif", "Microsoft Sans Serif", sans-serif !important;
-  background: #ffffff !important;
+  color: var(--chat-message-color, #000000) !important;
+  font-size: var(--chat-font-size, 11px) !important;
+  line-height: var(--chat-line-height, 1.4) !important;
+  font-family: var(--chat-font-family, "MS Sans Serif", "Microsoft Sans Serif", sans-serif) !important;
+  font-weight: var(--chat-font-weight, normal) !important;
+  background: var(--chat-bubble-bg-color, #ffffff) !important;
   border: 1px solid;
   border-color: #808080 #ffffff #ffffff #808080 !important;
-  padding: 4px 6px !important;
+  padding: var(--chat-bubble-padding, 4px 6px) !important;
   margin-top: 4px !important;
   box-shadow: inset -1px -1px 0 0 #dfdfdf !important;
   word-wrap: break-word !important;
@@ -217,15 +232,15 @@ body {
 
 /* Timestamp styling - Win98 status bar look */
 .text-xs.text-gray-500 {
-  color: #000000 !important;
-  font-size: 9px !important;
+  color: var(--chat-timestamp-color, #000000) !important;
+  font-size: var(--chat-timestamp-font-size, 9px) !important;
+  font-family: var(--chat-timestamp-font-family, "MS Sans Serif", "Microsoft Sans Serif", sans-serif) !important;
   background: #c0c0c0 !important;
   border: 1px solid;
   border-color: #808080 #ffffff #ffffff #808080 !important;
   padding: 1px 4px !important;
   margin-top: 4px !important;
-  display: inline-block !important;
-  font-family: "MS Sans Serif", "Microsoft Sans Serif", sans-serif !important;
+  display: var(--chat-show-timestamps, inline-block) !important;
 }
 
 /* ============================================

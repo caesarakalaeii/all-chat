@@ -1,3 +1,4 @@
+/* Visual Settings: uses CSS custom properties for live customization */
 /**
  * Theme Name: Neon Glass Theme
  * Description: Vibrant neon pink glass morphism design with glowing text effects
@@ -43,20 +44,20 @@
 /* Reset body background and set modern font */
 body {
   background: transparent !important;
-  font-family: 'Space Grotesk', sans-serif !important;
+  font-family: var(--chat-font-family, 'Space Grotesk', sans-serif) !important;
   -webkit-font-smoothing: antialiased !important;
   -moz-osx-font-smoothing: grayscale !important;
 }
 
 /* Main container - transparent and clean */
 .min-h-screen {
-  background: transparent !important;
-  padding: 16px !important;
+  background: var(--chat-overlay-bg-color, transparent) !important;
+  padding: var(--chat-overlay-padding, 16px) !important;
 }
 
 /* Message list container - standard spacing */
 .space-y-3 {
-  gap: 12px !important;
+  gap: var(--chat-message-gap, 12px) !important;
 }
 
 /* ============================================================
@@ -65,10 +66,10 @@ body {
 
 /* Glassmorphism effect with neon accents */
 .space-y-3 > div {
-  background: rgba(74, 29, 150, 0.45) !important;
+  background: var(--chat-bubble-bg-color, rgba(74, 29, 150, 0.45)) !important;
   border: 1px solid rgba(236, 72, 153, 0.5) !important;
-  border-radius: 16px !important;
-  padding: 1.25rem !important;
+  border-radius: var(--chat-bubble-border-radius, 16px) !important;
+  padding: var(--chat-bubble-padding, 1.25rem) !important;
   backdrop-filter: blur(18px) saturate(180%) !important;
   box-shadow: 0 25px 45px rgba(0, 0, 0, 0.35) !important;
   transition: all 0.3s ease !important;
@@ -105,10 +106,10 @@ body {
 
 /* Username with neon glow effect */
 .font-semibold.text-sm {
-  font-family: 'Space Grotesk', sans-serif !important;
-  font-size: 16px !important;
-  font-weight: 600 !important;
-  line-height: 1.4 !important;
+  font-family: var(--chat-username-font-family, 'Space Grotesk', sans-serif) !important;
+  font-size: var(--chat-username-font-size, 16px) !important;
+  font-weight: var(--chat-username-font-weight, 600) !important;
+  line-height: var(--chat-line-height, 1.4) !important;
   /* Colors are preserved from backend (dynamic per user) */
   text-shadow: 0 0 15px rgba(236, 72, 153, 0.6) !important;
   filter: brightness(1.2) !important;
@@ -121,7 +122,7 @@ body {
 /* Badge container - clean spacing */
 .flex.gap-1 {
   gap: 6px !important;
-  display: inline-flex !important;
+  display: var(--chat-show-badges, inline-flex) !important;
   align-items: center !important;
   vertical-align: middle !important;
 }
@@ -154,16 +155,16 @@ body {
 
 /* Message text with subtle neon glow */
 .text-white.break-words {
-  font-family: 'Space Grotesk', sans-serif !important;
-  font-size: 18px !important;
-  font-weight: 400 !important;
-  line-height: 1.6 !important;
-  color: #fff1f2 !important;
+  font-family: var(--chat-font-family, 'Space Grotesk', sans-serif) !important;
+  font-size: var(--chat-font-size, 18px) !important;
+  font-weight: var(--chat-font-weight, 400) !important;
+  line-height: var(--chat-line-height, 1.6) !important;
+  color: var(--chat-message-color, #fff1f2) !important;
   text-shadow: 0 0 12px rgba(236, 72, 153, 0.65) !important;
   margin: 0 !important;
   padding: 0 !important;
   background: transparent !important;
-  letter-spacing: 0.01em !important;
+  letter-spacing: var(--chat-letter-spacing, 0.01em) !important;
 }
 
 /* Emotes within messages - glowing */
@@ -183,12 +184,12 @@ body {
 
 /* Timestamps with neon accent */
 .text-xs.text-gray-500 {
-  font-family: 'Space Grotesk', sans-serif !important;
-  font-size: 11px !important;
-  color: rgba(244, 114, 182, 0.7) !important;
+  font-family: var(--chat-timestamp-font-family, 'Space Grotesk', sans-serif) !important;
+  font-size: var(--chat-timestamp-font-size, 11px) !important;
+  color: var(--chat-timestamp-color, rgba(244, 114, 182, 0.7)) !important;
   margin-top: 4px !important;
   text-shadow: 0 0 8px rgba(236, 72, 153, 0.4) !important;
-  font-weight: 500 !important;
+  font-weight: var(--chat-font-weight, 500) !important;
 }
 
 /* ============================================================

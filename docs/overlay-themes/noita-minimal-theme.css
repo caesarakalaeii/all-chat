@@ -1,3 +1,5 @@
+/* Visual Settings: uses CSS custom properties for live customization */
+
 /**
  * Theme Name: Noita Minimal
  * Description: Dark fantasy pixel-art theme inspired by Noita's mystical underground atmosphere. Features authentic Noita Blackletter font, glowing magical text, earthy colors, and pixel-art message fonts.
@@ -79,9 +81,9 @@
 /* Transparent background for OBS */
 body {
   background: transparent !important;
-  font-family: 'Press Start 2P', 'VT323', 'Courier New', monospace;
-  color: #c9b896;
-  letter-spacing: 1px;
+  font-family: var(--chat-font-family, 'Press Start 2P', 'VT323', 'Courier New', monospace);
+  color: var(--chat-message-color, #c9b896);
+  letter-spacing: var(--chat-letter-spacing, 1px);
 }
 
 /* Message container - minimal transparent */
@@ -89,8 +91,8 @@ body {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
+  padding: var(--chat-bubble-padding, 0) !important;
+  margin: var(--chat-message-gap, 0) !important;
   border-radius: 0 !important;
   display: block !important;
   animation: noita-fade-in 0.4s ease-out;
@@ -106,7 +108,7 @@ body {
 
 /* Hide avatar - minimal theme convention */
 .flex-shrink-0 {
-  display: none !important;
+  display: var(--chat-show-avatars, none) !important;
 }
 
 /* ============================================
@@ -157,7 +159,7 @@ body {
 
 /* Badge container - inline flex to keep badges horizontal */
 .flex.gap-1 {
-  display: inline-flex !important;
+  display: var(--chat-show-badges, inline-flex) !important;
   gap: 4px !important;
   margin-right: 4px !important;
   vertical-align: middle !important;
@@ -184,12 +186,12 @@ body {
 
 /* Username - Noita Blackletter font with magical glow */
 .font-semibold.text-sm {
-  font-family: 'Noita Blackletter', 'Cinzel', 'Georgia', serif !important;
-  font-size: 20px !important;
-  font-weight: 400 !important;
-  letter-spacing: 0.5px !important;
-  line-height: 1.4 !important;
-  display: inline !important;
+  font-family: var(--chat-username-font-family, 'Noita Blackletter', 'Cinzel', 'Georgia', serif) !important;
+  font-size: var(--chat-username-font-size, 20px) !important;
+  font-weight: var(--chat-username-font-weight, 400) !important;
+  letter-spacing: var(--chat-letter-spacing, 0.5px) !important;
+  line-height: var(--chat-line-height, 1.4) !important;
+  display: var(--chat-show-username, inline) !important;
   margin-bottom: 0 !important;
   margin-right: 0 !important;
 
@@ -239,11 +241,11 @@ body {
 
 /* Message text - pixel font with dark outline */
 .text-white.break-words {
-  font-family: 'Press Start 2P', 'VT323', 'Courier New', monospace !important;
-  font-size: 14px !important;
-  font-weight: 400 !important;
-  line-height: 1.6 !important;
-  color: #c9b896 !important;
+  font-family: var(--chat-font-family, 'Press Start 2P', 'VT323', 'Courier New', monospace) !important;
+  font-size: var(--chat-font-size, 14px) !important;
+  font-weight: var(--chat-font-weight, 400) !important;
+  line-height: var(--chat-line-height, 1.6) !important;
+  color: var(--chat-message-color, #c9b896) !important;
   display: inline !important;
   word-break: break-word !important;
   overflow-wrap: break-word !important;
@@ -289,11 +291,14 @@ body {
 
 /* Hide timestamps for ultra-minimal look */
 .text-xs.text-gray-500.mt-1 {
-  display: none !important;
+  display: var(--chat-show-timestamps, none) !important;
 }
 
 .text-xs.text-gray-500 {
-  display: none !important;
+  display: var(--chat-show-timestamps, none) !important;
+  color: var(--chat-timestamp-color, inherit) !important;
+  font-size: var(--chat-timestamp-font-size, inherit) !important;
+  font-family: var(--chat-timestamp-font-family, inherit) !important;
 }
 
 /* ============================================

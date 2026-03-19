@@ -1,3 +1,4 @@
+/* Visual Settings: uses CSS custom properties for live customization */
 /**
  * Theme Name: Minecraft Blocky Theme
  * Description: Pixelated Minecraft-inspired design with blocky elements and text shadows
@@ -29,19 +30,19 @@
 
 body {
   background: transparent !important;
-  font-family: 'Press Start 2P', cursive !important;
+  font-family: var(--chat-font-family, 'Press Start 2P', cursive) !important;
   -webkit-font-smoothing: none !important;
   image-rendering: pixelated !important;
   image-rendering: crisp-edges !important;
 }
 
 .min-h-screen {
-  background: transparent !important;
-  padding: 16px !important;
+  background: var(--chat-overlay-bg-color, transparent) !important;
+  padding: var(--chat-overlay-padding, 16px) !important;
 }
 
 .space-y-3 {
-  gap: 12px !important;
+  gap: var(--chat-message-gap, 12px) !important;
 }
 
 /* ============================================================
@@ -50,11 +51,12 @@ body {
 
 .space-y-3 > div {
   background:
-    linear-gradient(135deg, rgba(139, 90, 43, 0.95) 0%, rgba(101, 67, 33, 0.95) 100%),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0px, transparent 2px, transparent 4px, rgba(0, 0, 0, 0.1) 6px) !important;
-  border: 4px solid #000000 !important;
-  border-radius: 0 !important;
-  padding: 12px !important;
+    var(--chat-bubble-bg-color,
+      linear-gradient(135deg, rgba(139, 90, 43, 0.95) 0%, rgba(101, 67, 33, 0.95) 100%),
+      repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0px, transparent 2px, transparent 4px, rgba(0, 0, 0, 0.1) 6px)) !important;
+  border: var(--chat-bubble-border-width, 4px) solid #000000 !important;
+  border-radius: var(--chat-bubble-border-radius, 0) !important;
+  padding: var(--chat-bubble-padding, 12px) !important;
   box-shadow:
     4px 4px 0 rgba(0, 0, 0, 0.8),
     inset -2px -2px 0 rgba(0, 0, 0, 0.5),
@@ -105,15 +107,16 @@ body {
    ============================================================ */
 
 .font-semibold.text-sm {
-  font-family: 'Press Start 2P', cursive !important;
-  font-size: 12px !important;
-  font-weight: 400 !important;
-  line-height: 1.6 !important;
+  font-family: var(--chat-username-font-family, 'Press Start 2P', cursive) !important;
+  font-size: var(--chat-username-font-size, 12px) !important;
+  font-weight: var(--chat-username-font-weight, 400) !important;
+  line-height: var(--chat-line-height, 1.6) !important;
   /* Minecraft-style text shadow */
   text-shadow:
     2px 2px 0 rgba(0, 0, 0, 0.8) !important;
   image-rendering: pixelated !important;
   filter: brightness(1.1) !important;
+  display: var(--chat-show-username, inline) !important;
 }
 
 /* ============================================================
@@ -122,6 +125,7 @@ body {
 
 .flex.gap-1 {
   gap: 4px !important;
+  display: var(--chat-show-badges, inline) !important;
 }
 
 .flex.gap-1 img {
@@ -140,7 +144,13 @@ body {
    AVATAR - MINECRAFT HEAD
    ============================================================ */
 
+.flex-shrink-0 {
+  display: var(--chat-show-avatars, inline) !important;
+}
+
 .flex-shrink-0 img {
+  width: var(--chat-avatar-size, auto) !important;
+  height: var(--chat-avatar-size, auto) !important;
   border: 3px solid #000000 !important;
   border-radius: 0 !important;
   box-shadow:
@@ -156,11 +166,11 @@ body {
    ============================================================ */
 
 .text-white.break-words {
-  font-family: 'Press Start 2P', cursive !important;
-  font-size: 10px !important;
-  font-weight: 400 !important;
-  color: #ffffff !important;
-  line-height: 2 !important;
+  font-family: var(--chat-font-family, 'Press Start 2P', cursive) !important;
+  font-size: var(--chat-font-size, 10px) !important;
+  font-weight: var(--chat-font-weight, 400) !important;
+  color: var(--chat-message-color, #ffffff) !important;
+  line-height: var(--chat-line-height, 2) !important;
   text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.8) !important;
   image-rendering: pixelated !important;
   word-break: break-word !important;
@@ -179,12 +189,13 @@ body {
    ============================================================ */
 
 .text-xs.text-gray-500 {
-  font-family: 'Press Start 2P', cursive !important;
-  font-size: 8px !important;
-  color: #aaaaaa !important;
+  font-family: var(--chat-timestamp-font-family, 'Press Start 2P', cursive) !important;
+  font-size: var(--chat-timestamp-font-size, 8px) !important;
+  color: var(--chat-timestamp-color, #aaaaaa) !important;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8) !important;
   margin-top: 6px !important;
   image-rendering: pixelated !important;
+  display: var(--chat-show-timestamps, inline) !important;
 }
 
 /* ============================================================
