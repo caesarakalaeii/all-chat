@@ -306,26 +306,81 @@
 }
 
 @layer visual-customizer {
-  /* ---- Chat element visibility (CSS-layer !important beats unlayered !important) ---- */
+  /*
+   * Authoritative property map: CSS variables → embed-page elements.
+   * @layer !important beats unlayered !important (CSS cascade layers spec),
+   * so these rules win over Tailwind utilities AND theme !important overrides.
+   */
 
-  /* Avatar container */
+  /* ── Overlay container ─────────────────────────────────────────────── */
+  .overlay-preview-body {
+    padding: var(--chat-overlay-padding, 1rem) !important;
+    gap: var(--chat-message-gap, 0.75rem) !important;
+  }
+  /* space-y-* uses margin-top on siblings — override message gap */
+  .overlay-preview-body > * + * {
+    margin-top: var(--chat-message-gap, 0.75rem) !important;
+  }
+
+  /* ── Message bubble ────────────────────────────────────────────────── */
+  .overlay-preview-body > div {
+    border-radius: var(--chat-bubble-border-radius, 0.5rem) !important;
+    border-width: var(--chat-bubble-border-width, 0px) !important;
+    border-color: var(--chat-bubble-border-color, transparent) !important;
+    border-style: solid !important;
+    padding: var(--chat-bubble-padding, 0.75rem) !important;
+    backdrop-filter: blur(var(--chat-backdrop-blur, 0px)) !important;
+  }
+
+  /* ── Avatar ────────────────────────────────────────────────────────── */
   .overlay-preview-body .flex-shrink-0 {
     display: var(--chat-show-avatars, block) !important;
   }
+  .overlay-preview-body .flex-shrink-0 img,
+  .overlay-preview-body .flex-shrink-0 > div {
+    width: var(--chat-avatar-size, 2.5rem) !important;
+    height: var(--chat-avatar-size, 2.5rem) !important;
+    min-width: var(--chat-avatar-size, 2.5rem) !important;
+    min-height: var(--chat-avatar-size, 2.5rem) !important;
+  }
 
-  /* User badges row */
+  /* ── Badges ────────────────────────────────────────────────────────── */
   .overlay-preview-body .flex.gap-1 {
     display: var(--chat-show-badges, flex) !important;
   }
+  .overlay-preview-body .flex.gap-1 img {
+    width: var(--chat-badge-size, 1rem) !important;
+    height: var(--chat-badge-size, 1rem) !important;
+  }
 
-  /* Username */
+  /* ── Username ──────────────────────────────────────────────────────── */
   .overlay-preview-body .font-semibold {
     display: var(--chat-show-username, inline) !important;
   }
 
-  /* Timestamp */
+  /* ── Message text ──────────────────────────────────────────────────── */
+  .overlay-preview-body .break-words {
+    font-size: var(--chat-font-size, 1rem) !important;
+    font-family: var(--chat-font-family, inherit) !important;
+    font-weight: var(--chat-font-weight, inherit) !important;
+    line-height: var(--chat-line-height, 1.5) !important;
+    letter-spacing: var(--chat-letter-spacing, normal) !important;
+    color: var(--chat-message-color, inherit) !important;
+  }
+
+  /* ── Timestamp ─────────────────────────────────────────────────────── */
   .overlay-preview-body .text-xs.text-gray-500 {
     display: var(--chat-show-timestamps, block) !important;
+    font-size: var(--chat-timestamp-font-size, 0.75rem) !important;
+    font-family: var(--chat-timestamp-font-family, inherit) !important;
+    color: var(--chat-timestamp-color, inherit) !important;
+  }
+
+  /* ── Emotes (inline images inside message text) ────────────────────── */
+  .overlay-preview-body .break-words img {
+    display: var(--chat-show-emotes, inline) !important;
+    transform: scale(var(--chat-emote-scale, 1)) !important;
+    vertical-align: middle !important;
   }
 }
 
