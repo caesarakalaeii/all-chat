@@ -72,7 +72,10 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 			FROM users u
 			INNER JOIN overlays o ON o.user_id = u.id
 			INNER JOIN overlay_chat_sources ocs ON ocs.overlay_id = o.id
-			WHERE (LOWER(ocs.channel_id) = LOWER($1) OR LOWER(ocs.channel_handle) = LOWER($1))
+			WHERE (
+				LOWER(ocs.channel_id) = LOWER($1)
+				OR LOWER(LTRIM(ocs.channel_handle, '@')) = LOWER(LTRIM($1, '@'))
+			)
 			LIMIT 1
 		`
 
