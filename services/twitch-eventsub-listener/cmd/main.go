@@ -149,6 +149,7 @@ func main() {
 	// Initialize SDK — ListenerBase owns heartbeat, assignment refresh, migration subscriber, JWT refresh
 	podName := listener.Env("HOSTNAME", "twitch-eventsub-listener-unknown")
 	cfg := listener.DefaultConfig()
+	cfg.Platform = "twitch-eventsub"
 
 	serviceJWT := os.Getenv("SERVICE_JWT_SECRET")
 	if serviceJWT == "" {

@@ -100,6 +100,7 @@ func main() {
 	// SDK setup
 	podName := listener.Env("HOSTNAME", "kick-listener-0")
 	cfg := listener.DefaultConfig()
+	cfg.Platform = "kick"
 	// kick-listener always uses coordinator filtering (no rollback knob needed)
 	// DisableCoordinatorFiltering = false is the default
 

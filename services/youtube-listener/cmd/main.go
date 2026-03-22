@@ -207,6 +207,7 @@ func main() {
 
 	podName := listener.Env("HOSTNAME", "youtube-listener-unknown")
 	cfg := listener.DefaultConfig()
+	cfg.Platform = "youtube"
 	base := listener.NewListenerBase(cfg, nil, redisClient, podName, log)
 	ll, err := listener.NewLeadershipListenerFromEnv(base, "youtube", log)
 	if err != nil {

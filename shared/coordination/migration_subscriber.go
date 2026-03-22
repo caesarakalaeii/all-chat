@@ -14,6 +14,7 @@ type MigrationSubscriber struct {
 	redisClient *redis.Client
 	logger      *zap.Logger
 	handler     func(*MigrationEvent) error
+	platform    string // when non-empty, only events with matching platform are processed
 }
 
 // NewMigrationSubscriber creates a new migration event subscriber
@@ -23,6 +24,13 @@ func NewMigrationSubscriber(redisClient *redis.Client, handler func(*MigrationEv
 		handler:     handler,
 		logger:      logger,
 	}
+}
+
+// WithPlatform restricts this subscriber to only process events for the given platform.
+// Events with a different (non-empty) platform field are silently dropped at DEBUG level.
+func (s *MigrationSubscriber) WithPlatform(platform string) *MigrationSubscriber {
+	s.platform = platform
+	return s
 }
 
 // Subscribe subscribes to the migration:events Redis Pub/Sub channel
@@ -81,6 +89,16 @@ func (s *MigrationSubscriber) consumeMessages(ctx context.Context, pubsub *redis
 				s.logger.Warn("Failed to unmarshal migration event, skipping",
 					zap.String("payload", msg.Payload),
 					zap.Error(err),
+				)
+				continue
+			}
+
+			// Drop events for other platforms when platform filter is set.
+			if s.platform != "" && event.Platform != s.platform {
+				s.logger.Debug("Ignoring migration event for other platform",
+					zap.String("event_platform", event.Platform),
+					zap.String("listener_platform", s.platform),
+					zap.String("migration_id", event.MigrationID),
 				)
 				continue
 			}

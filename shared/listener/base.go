@@ -211,6 +211,9 @@ func (b *ListenerBase) startMigrationSubscriberLoop(ctx context.Context, mgr Cha
 		}
 
 		subscriber := coordination.NewMigrationSubscriber(b.redisClient, mgr.HandleMigrationEvent, b.logger)
+		if b.config.Platform != "" {
+			subscriber = subscriber.WithPlatform(b.config.Platform)
+		}
 		if err := subscriber.Subscribe(ctx); err != nil {
 			b.logger.Error("Migration subscriber failed, retrying",
 				zap.Duration("backoff", backoff),
