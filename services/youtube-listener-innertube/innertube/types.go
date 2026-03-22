@@ -1,10 +1,34 @@
 package innertube
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
+
+// FlexInt is an integer that unmarshals from either a JSON number or a JSON string.
+// YouTube occasionally sends numeric fields (e.g. durationSec) as quoted strings.
+type FlexInt int
+
+func (f *FlexInt) UnmarshalJSON(data []byte) error {
+	var n int
+	if err := json.Unmarshal(data, &n); err == nil {
+		*f = FlexInt(n)
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	*f = FlexInt(n)
+	return nil
+}
 
 // LiveChatResponse represents the InnerTube API response structure
 // Minimal implementation for PoC - only fields needed for message parsing
@@ -44,7 +68,7 @@ type ReplayChatItemAction struct {
 // AddLiveChatTickerItem represents ticker items (super chats, memberships)
 type AddLiveChatTickerItem struct {
 	Item        ChatItem `json:"item"`
-	DurationSec int      `json:"durationSec,omitempty"` // Ticker display duration
+	DurationSec FlexInt  `json:"durationSec,omitempty"` // Ticker display duration (YouTube sends as string or number)
 }
 
 // ChatItem can contain different message types

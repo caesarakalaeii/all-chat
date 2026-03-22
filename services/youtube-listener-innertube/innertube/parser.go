@@ -388,7 +388,7 @@ func parseTickerEvent(ticker *AddLiveChatTickerItem, channelID string) (*RawChat
 	msg.EventData["pinned"] = true
 
 	if ticker.DurationSec > 0 {
-		msg.EventData["ticker_duration_sec"] = ticker.DurationSec
+		msg.EventData["ticker_duration_sec"] = int(ticker.DurationSec)
 	}
 
 	return msg, nil
