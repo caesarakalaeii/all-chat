@@ -60,6 +60,10 @@ type Poller struct {
 	zeroActionCount      int
 	zeroActionThreshold  int
 
+	// Empty-continuation detection: attempt refresh before declaring offline
+	emptyContCount     int
+	emptyContThreshold int
+
 	// Graceful shutdown
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -96,6 +100,12 @@ type PollerOptions struct {
 	// ZeroActionThreshold is the number of consecutive zero-action polls before
 	// attempting a continuation refresh (default: 150, ~5 minutes at 2s interval).
 	ZeroActionThreshold int
+
+	// EmptyContThreshold is the number of consecutive empty-continuation responses
+	// before declaring the stream offline. On each attempt the poller first tries to
+	// obtain a fresh continuation via Refresher; only once Refresher also fails (or
+	// is not configured) do we count towards the threshold. Defaults to 3.
+	EmptyContThreshold int
 }
 
 // NewPoller creates a new polling loop manager
@@ -139,6 +149,12 @@ func NewPoller(
 		zeroActionThreshold = 150
 	}
 
+	// Default empty-continuation threshold: 3 attempts (~6s at 2s interval)
+	emptyContThreshold := opts.EmptyContThreshold
+	if emptyContThreshold == 0 {
+		emptyContThreshold = 3
+	}
+
 	return &Poller{
 		client:              client,
 		continuation:        initialContinuation,
@@ -154,6 +170,7 @@ func NewPoller(
 		metrics:             opts.Metrics,
 		refresher:           opts.Refresher,
 		zeroActionThreshold: zeroActionThreshold,
+		emptyContThreshold:  emptyContThreshold,
 		doneChan:            make(chan struct{}),
 	}
 }
@@ -268,11 +285,56 @@ func (p *Poller) poll() {
 		return
 	}
 
-	// Offline detection: Check for empty continuation array (stream ended)
+	// Offline detection: Check for empty continuation array (stream ended).
+	// Before declaring the stream offline we attempt to fetch a fresh continuation
+	// token – YouTube occasionally sends an empty continuation array transiently
+	// even while the stream is live. Only after emptyContThreshold consecutive
+	// failed recovery attempts do we treat the stream as genuinely offline.
 	if DetectOffline(resp) {
-		p.logger.Info("Stream went offline (empty continuation)",
-			zap.String("channel_id", p.channelID),
-			zap.String("video_id", p.videoID))
+		if p.refresher != nil && p.videoID != "" {
+			p.emptyContCount++
+			p.logger.Info("Empty continuation received, attempting token refresh",
+				zap.String("channel_id", p.channelID),
+				zap.String("video_id", p.videoID),
+				zap.Int("attempt", p.emptyContCount),
+				zap.Int("threshold", p.emptyContThreshold),
+			)
+			if fresh, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID); err == nil {
+				// Stream is still live – resume with the fresh token.
+				p.continuation = fresh
+				p.emptyContCount = 0
+				p.logger.Info("Stream still live, resuming with fresh continuation",
+					zap.String("channel_id", p.channelID),
+					zap.String("video_id", p.videoID),
+				)
+				p.sleep(p.interval)
+				return
+			} else {
+				p.logger.Warn("Continuation refresh failed after empty response",
+					zap.String("channel_id", p.channelID),
+					zap.String("video_id", p.videoID),
+					zap.Int("attempt", p.emptyContCount),
+					zap.Error(err),
+				)
+			}
+
+			if p.emptyContCount < p.emptyContThreshold {
+				// Not yet at threshold – keep retrying on the next poll cycle.
+				p.sleep(p.interval)
+				return
+			}
+
+			p.logger.Info("Stream confirmed offline after repeated empty continuations",
+				zap.String("channel_id", p.channelID),
+				zap.String("video_id", p.videoID),
+				zap.Int("empty_cont_count", p.emptyContCount),
+			)
+		} else {
+			p.logger.Info("Stream went offline (empty continuation)",
+				zap.String("channel_id", p.channelID),
+				zap.String("video_id", p.videoID),
+			)
+		}
 
 		p.state.SetState(StateOffline)
 		p.state.SetError(nil)
@@ -289,6 +351,9 @@ func (p *Poller) poll() {
 		}
 		return
 	}
+
+	// Got a valid continuation – reset the empty-continuation counter.
+	p.emptyContCount = 0
 
 	// Extract continuation token for next poll
 	nextContinuation := p.client.ExtractContinuation(resp)
