@@ -438,7 +438,13 @@ func (p *Poller) poll() {
 		p.messageCallback(messages)
 	}
 
-	p.sleep(sleepDuration)
+	// Only sleep when the poll returned no messages. When messages arrived,
+	// re-poll immediately so the next batch is fetched without an artificial delay.
+	// This reduces average viewer latency from ~(interval/2) to near zero on
+	// active streams, while still backing off on quiet/idle channels.
+	if len(messages) == 0 {
+		p.sleep(sleepDuration)
+	}
 }
 
 // sleep blocks for d or until context is cancelled.
