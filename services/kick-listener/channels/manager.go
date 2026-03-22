@@ -278,10 +278,36 @@ func (m *Manager) listenAndWait(poolInterface interface{}) error {
 			zap.String("payload", notification.Payload),
 		)
 
+		// Only sync when the notification concerns a Kick source.
+		// The chat_source_changes channel fires for all platforms; skip others to
+		// avoid unnecessary work.
+		if !isKickNotification(notification.Payload) {
+			m.logger.Debug("Ignoring source change notification for other platform",
+				zap.String("payload", notification.Payload),
+			)
+			continue
+		}
+
 		if err := m.syncChannels(); err != nil {
 			m.logger.Error("Failed to sync after notification", zap.Error(err))
 		}
 	}
+}
+
+// sourceChangePayload is used to parse the platform field from PostgreSQL NOTIFY payloads.
+type sourceChangePayload struct {
+	Platform string `json:"platform"`
+}
+
+// isKickNotification returns true when the notification payload either cannot be
+// parsed (fail-open: sync anyway) or explicitly belongs to the "kick" platform.
+func isKickNotification(payload string) bool {
+	var p sourceChangePayload
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		// Unparseable payload — sync to be safe.
+		return true
+	}
+	return p.Platform == "" || p.Platform == "kick"
 }
 
 // sleepWithContext waits for the provided duration or exits if context is canceled
@@ -321,7 +347,6 @@ func (m *Manager) syncChannels() error {
 	)
 
 	channels = assignedChannels
-	filteredCount := len(assignedChannels) // Capture filtered count before lock
 
 	plans := m.buildChannelPlans(channels)
 	m.ensureChatroomIDs(plans)
@@ -332,11 +357,22 @@ func (m *Manager) syncChannels() error {
 		desiredChannels[slug] = plan.channel
 	}
 
+	// Count only channels that have a valid chatroom ID — these are the ones the
+	// subscription loop will actually subscribe to. Channels whose chatroom ID
+	// lookup failed (API error or unknown slug) are skipped in the loop below and
+	// must not inflate the expected subscription count used by the readiness probe.
+	validChannelCount := 0
+	for _, tc := range desiredChannels {
+		if tc.ChatroomID != 0 {
+			validChannelCount++
+		}
+	}
+
 	m.subsMu.Lock()
 	defer m.subsMu.Unlock()
 
 	// Store filtered count for readiness probe
-	m.filteredAssignmentCount = filteredCount
+	m.filteredAssignmentCount = validChannelCount
 
 	// Unsubscribe from channels no longer active
 	for slug, ch := range m.subscriptions {
