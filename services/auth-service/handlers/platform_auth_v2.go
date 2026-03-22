@@ -97,7 +97,7 @@ func (h *PlatformAuthHandlerV2) HandleLogin(platform oauth.Platform) gin.Handler
 
 		// Store state data in Redis with platform prefix
 		stateKey := fmt.Sprintf("oauth_state:%s:%s", platform, csrfToken)
-		err = h.redis.Set(c.Request.Context(), stateKey, stateStr, 10*time.Minute).Err()
+		err = h.redis.Set(c.Request.Context(), stateKey, stateStr, 30*time.Minute).Err()
 		if err != nil {
 			h.logger.Error("Failed to store state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -268,7 +268,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 
 		// Store state data in Redis with platform prefix
 		stateKey := fmt.Sprintf("oauth_state:%s:%s", platform, csrfToken)
-		err = h.redis.Set(c.Request.Context(), stateKey, stateStr, 10*time.Minute).Err()
+		err = h.redis.Set(c.Request.Context(), stateKey, stateStr, 30*time.Minute).Err()
 		if err != nil {
 			h.logger.Error("Failed to store state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -359,6 +359,18 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 		stateKey := fmt.Sprintf("oauth_state:%s:%s", platform, oauthState.CSRFToken)
 		storedState, err := h.redis.Get(c.Request.Context(), stateKey).Result()
 		if err != nil {
+			// Check for idempotency tombstone — handles double-callbacks from iOS Safari
+			// or Google issuing multiple auth codes for the same consent session.
+			// The tombstone stores the original redirect URL for 60 seconds after state consumption.
+			usedKey := fmt.Sprintf("oauth_state:%s:used:%s", platform, oauthState.CSRFToken)
+			if usedRedirectURL, tombErr := h.redis.Get(c.Request.Context(), usedKey).Result(); tombErr == nil {
+				h.logger.Info("Idempotent OAuth callback replay — replaying original redirect",
+					zap.String("platform", string(platform)),
+					zap.String("csrf_token", oauthState.CSRFToken),
+				)
+				c.Redirect(http.StatusFound, usedRedirectURL)
+				return
+			}
 			h.logger.Warn("Invalid or expired state",
 				zap.String("platform", string(platform)),
 				zap.String("csrf_token", oauthState.CSRFToken),
@@ -416,7 +428,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				zap.String("platform", string(platform)),
 				zap.String("platform_id", platformUser.GetID()),
 			)
-			c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+			h.redirectWithTombstone(c, platform, oauthState.CSRFToken, fmt.Sprintf("%s/auth/banned", h.frontendURL))
 			return
 		}
 
@@ -524,7 +536,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 					h.frontendURL,
 					oauthState.OverlayID,
 				)
-				c.Redirect(http.StatusFound, redirectURL)
+				h.redirectWithTombstone(c, platform, oauthState.CSRFToken, redirectURL)
 				return
 			}
 
@@ -545,7 +557,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				zap.String("overlay_id", oauthState.OverlayID),
 			)
 
-			c.Redirect(http.StatusFound, redirectURL)
+			h.redirectWithTombstone(c, platform, oauthState.CSRFToken, redirectURL)
 		} else {
 			// Regular login - redirect to auth callback with token
 			redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer",
@@ -561,7 +573,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				zap.String("username", user.Username),
 			)
 
-			c.Redirect(http.StatusFound, redirectURL)
+			h.redirectWithTombstone(c, platform, oauthState.CSRFToken, redirectURL)
 		}
 
 		if platform == oauth.PlatformYouTube && youtubeChannel != nil {
@@ -803,4 +815,20 @@ func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 	}
 
 	return nil
+}
+
+// redirectWithTombstone performs an OAuth redirect and stores an idempotency tombstone in Redis.
+// The tombstone keeps the redirect URL for 60 seconds so that duplicate callbacks (e.g. from iOS
+// Safari prefetch or Google issuing multiple auth codes for the same consent session) are replayed
+// with the original redirect instead of returning "Invalid or expired state".
+func (h *PlatformAuthHandlerV2) redirectWithTombstone(c *gin.Context, platform oauth.Platform, csrfToken, redirectURL string) {
+	usedKey := fmt.Sprintf("oauth_state:%s:used:%s", platform, csrfToken)
+	if err := h.redis.Set(c.Request.Context(), usedKey, redirectURL, 60*time.Second).Err(); err != nil {
+		h.logger.Warn("Failed to store OAuth callback tombstone",
+			zap.String("platform", string(platform)),
+			zap.String("csrf_token", csrfToken),
+			zap.Error(err),
+		)
+	}
+	c.Redirect(http.StatusFound, redirectURL)
 }
