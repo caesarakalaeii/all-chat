@@ -46,6 +46,16 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		StripPrefix: true, // Strip /api/v1/overlays, forward remaining path
 	}
 
+	// YouTube resolver (overlay-manager)
+	registry.Services["youtube-resolver"] = &ServiceConfig{
+		Name:          "youtube-resolver",
+		BaseURL:       overlayURL,
+		HealthPath:    "/health/live",
+		PathPrefix:    "/api/v1/youtube",
+		StripPrefix:   true,
+		RewritePrefix: "/youtube",
+	}
+
 	// Emote Service
 	emoteURL := getEnvOrDefault("EMOTE_SERVICE_URL", "http://localhost:8083")
 	registry.Services["emote-service"] = &ServiceConfig{
