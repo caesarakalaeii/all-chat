@@ -85,16 +85,59 @@ func (r *Resolver) ResolveToChannelID(ctx context.Context, input string) (string
 }
 
 // resolveHandleToChannelID resolves a YouTube @handle to a channel ID via the
-// InnerTube Browse API. No YouTube Data API v3 quota consumed.
+// InnerTube navigation/resolve_url endpoint. No YouTube Data API v3 quota consumed.
 func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) (string, error) {
-	browseID := "@" + handle
-	data, err := r.innertubeBrowse(ctx, browseID)
-	if err != nil {
-		return "", fmt.Errorf("innertube browse for handle @%s: %w", handle, err)
+	channelURL := "https://www.youtube.com/@" + handle
+
+	resolveURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/navigation/resolve_url?key=%s", innertubeAPIKey)
+	payload := map[string]interface{}{
+		"context": map[string]interface{}{
+			"client": map[string]interface{}{
+				"clientName":    "WEB",
+				"clientVersion": innertubeClientVersion,
+			},
+		},
+		"url": channelURL,
 	}
 
-	channelID := extractChannelIDFromBrowse(data)
-	if channelID == "" {
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal resolve_url payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, resolveURL, bytes.NewReader(jsonPayload))
+	if err != nil {
+		return "", fmt.Errorf("create resolve_url request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("execute resolve_url request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("resolve_url returned status %d for @%s", resp.StatusCode, handle)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read resolve_url response: %w", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("parse resolve_url response: %w", err)
+	}
+
+	// Response path: endpoint.browseEndpoint.browseId
+	endpoint, _ := result["endpoint"].(map[string]interface{})
+	browseEndpoint, _ := endpoint["browseEndpoint"].(map[string]interface{})
+	channelID, _ := browseEndpoint["browseId"].(string)
+
+	if channelID == "" || !channelIDPattern.MatchString(channelID) {
 		return "", fmt.Errorf("no channel found for handle: @%s", handle)
 	}
 	return channelID, nil
