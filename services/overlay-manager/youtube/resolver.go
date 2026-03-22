@@ -1,18 +1,18 @@
 package youtube
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/caesar/all-chat/services/overlay-manager/clients"
 	"go.uber.org/zap"
-	"google.golang.org/api/option"
-	"google.golang.org/api/youtube/v3"
 )
 
 var (
@@ -24,27 +24,29 @@ var (
 	// YouTube URL patterns
 	videoURLPattern   = regexp.MustCompile(`(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})`)
 	channelURLPattern = regexp.MustCompile(`youtube\.com/channel/([a-zA-Z0-9_-]+)`)
-	handlePattern     = regexp.MustCompile(`youtube\.com/@([a-zA-Z0-9_-]+)`)
+	handlePattern     = regexp.MustCompile(`youtube\.com/@([a-zA-Z0-9_.-]+)`)
 	channelIDPattern  = regexp.MustCompile(`^UC[a-zA-Z0-9_-]{22}$`)
 )
 
-// Resolver resolves YouTube URLs/handles to channel IDs
+const (
+	innertubeAPIKey        = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+	innertubeClientVersion = "2.20260312.01.00"
+)
+
+// Resolver resolves YouTube URLs/handles to channel IDs using the InnerTube API.
+// No YouTube Data API v3 quota is consumed.
 type Resolver struct {
-	apiKey      string
-	httpClient  *http.Client
-	quotaClient *clients.YouTubeQuotaClient
-	logger      *zap.Logger
+	httpClient *http.Client
+	logger     *zap.Logger
 }
 
-// NewResolver creates a new YouTube resolver
-func NewResolver(apiKey string, quotaClient *clients.YouTubeQuotaClient, logger *zap.Logger) *Resolver {
+// NewResolver creates a new YouTube resolver.
+// The apiKey and quotaClient parameters are accepted but ignored — resolution
+// is performed via InnerTube which has no quota cost.
+func NewResolver(_ string, _ interface{}, logger *zap.Logger) *Resolver {
 	return &Resolver{
-		apiKey: apiKey,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-		quotaClient: quotaClient,
-		logger:      logger,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+		logger:     logger,
 	}
 }
 
@@ -57,12 +59,12 @@ func (r *Resolver) ResolveToChannelID(ctx context.Context, input string) (string
 		return input, nil
 	}
 
-	// Extract from channel URL
+	// Extract from channel URL: youtube.com/channel/UC...
 	if matches := channelURLPattern.FindStringSubmatch(input); len(matches) > 1 {
 		return matches[1], nil
 	}
 
-	// Extract from handle (@LofiGirl or youtube.com/@LofiGirl)
+	// Extract handle from full URL (youtube.com/@Handle) or bare @Handle
 	var handle string
 	if matches := handlePattern.FindStringSubmatch(input); len(matches) > 1 {
 		handle = matches[1]
@@ -74,206 +76,209 @@ func (r *Resolver) ResolveToChannelID(ctx context.Context, input string) (string
 		return r.resolveHandleToChannelID(ctx, handle)
 	}
 
-	// Extract from video URL and get channel
+	// Extract from video URL and look up channel via oEmbed
 	if matches := videoURLPattern.FindStringSubmatch(input); len(matches) > 1 {
-		videoID := matches[1]
-		return r.resolveVideoToChannelID(ctx, videoID)
+		return r.resolveVideoToChannelID(ctx, matches[1])
 	}
 
 	return "", fmt.Errorf("unable to parse YouTube input: %s", input)
 }
 
-// resolveHandleToChannelID resolves a YouTube handle to channel ID using Search API
-// Costs 100 quota units (Search.List)
+// resolveHandleToChannelID resolves a YouTube @handle to a channel ID via the
+// InnerTube Browse API. No YouTube Data API v3 quota consumed.
 func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) (string, error) {
-	const quotaCost = 100  // Search.List API cost
-
-	var reservationID string
-	var response *youtube.SearchListResponse
-
-	// 1. RESERVE QUOTA BEFORE API CALL (new reserve-confirm pattern)
-	if r.quotaClient != nil {
-		var err error
-		reservationID, err = r.quotaClient.ReserveQuota(ctx, quotaCost, "search.list", false)
-		if err != nil {
-			r.logger.Warn("Failed to reserve quota for handle resolution",
-				zap.String("handle", handle),
-				zap.Int("units", quotaCost),
-				zap.Error(err),
-			)
-			return "", ErrQuotaExhausted
-		}
-
-		// Ensure we confirm or rollback on return
-		defer func() {
-			// Determine if we should charge (rollback on 4xx client errors only)
-			shouldCharge := response != nil || !isClientError(err)
-
-			if confirmErr := r.quotaClient.ConfirmQuota(ctx, reservationID, quotaCost, shouldCharge); confirmErr != nil {
-				r.logger.Warn("Failed to confirm/rollback quota reservation",
-					zap.String("reservation_id", reservationID),
-					zap.Bool("should_charge", shouldCharge),
-					zap.Error(confirmErr),
-				)
-			}
-		}()
-	}
-
-	// 2. MAKE YOUTUBE API CALL
-	// FIX: Don't pass httpClient with API key - it interferes with authentication
-	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey))
+	browseID := "@" + handle
+	data, err := r.innertubeBrowse(ctx, browseID)
 	if err != nil {
-		return "", fmt.Errorf("failed to create YouTube service: %w", err)
+		return "", fmt.Errorf("innertube browse for handle @%s: %w", handle, err)
 	}
 
-	// Search for channel by name/handle
-	call := service.Search.List([]string{"snippet"}).
-		Q(handle).
-		Type("channel").
-		MaxResults(1)
-
-	response, err = call.Do()
-
-	// 3. PROCESS RESPONSE
-	if err != nil {
-		return "", fmt.Errorf("failed to search for channel: %w", err)
-	}
-
-	if len(response.Items) == 0 {
+	channelID := extractChannelIDFromBrowse(data)
+	if channelID == "" {
 		return "", fmt.Errorf("no channel found for handle: @%s", handle)
 	}
-
-	channelID := response.Items[0].Snippet.ChannelId
-	if channelID == "" {
-		return "", fmt.Errorf("no channel ID in search result")
-	}
-
 	return channelID, nil
 }
 
-// isClientError checks if an error is a 4xx client error (quota shouldn't be charged)
-func isClientError(err error) bool {
-	if err == nil {
-		return false
+// resolveVideoToChannelID resolves a video ID to its channel ID via YouTube oEmbed.
+// oEmbed returns the author_url which contains the channel URL.
+func (r *Resolver) resolveVideoToChannelID(ctx context.Context, videoID string) (string, error) {
+	oembedURL := fmt.Sprintf("https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=%s&format=json", videoID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, oembedURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create oembed request: %w", err)
 	}
-	// Check for 4xx status codes in error message
-	// This is a simplified check - could be more robust
-	errStr := err.Error()
-	return strings.Contains(errStr, "400") || strings.Contains(errStr, "404") || strings.Contains(errStr, "403")
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch oembed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("oembed returned status %d for video %s", resp.StatusCode, videoID)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read oembed response: %w", err)
+	}
+
+	var oembed struct {
+		AuthorURL string `json:"author_url"`
+	}
+	if err := json.Unmarshal(body, &oembed); err != nil {
+		return "", fmt.Errorf("parse oembed response: %w", err)
+	}
+
+	// author_url is like https://www.youtube.com/channel/UC... or https://www.youtube.com/@handle
+	if matches := channelURLPattern.FindStringSubmatch(oembed.AuthorURL); len(matches) > 1 {
+		return matches[1], nil
+	}
+	if matches := handlePattern.FindStringSubmatch(oembed.AuthorURL); len(matches) > 1 {
+		return r.resolveHandleToChannelID(ctx, matches[1])
+	}
+
+	return "", fmt.Errorf("could not extract channel ID from oembed author_url: %s", oembed.AuthorURL)
 }
 
-// resolveVideoToChannelID resolves a video ID to its channel ID
-// Costs 1 quota unit (Videos.List)
-func (r *Resolver) resolveVideoToChannelID(ctx context.Context, videoID string) (string, error) {
-	const quotaCost = 1  // Videos.List API cost
+// GetChannelInfo returns display info for a channel ID via the InnerTube Browse API.
+func (r *Resolver) GetChannelInfo(ctx context.Context, channelID string) (*ChannelInfo, error) {
+	data, err := r.innertubeBrowse(ctx, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("innertube browse for channel %s: %w", channelID, err)
+	}
 
-	// DEBUG: Log API key status
-	r.logger.Info("Resolving video to channel ID",
-		zap.String("video_id", videoID),
-		zap.Bool("has_api_key", r.apiKey != ""),
-		zap.Int("api_key_length", len(r.apiKey)),
+	header := extractHeader(data)
+	if header == nil {
+		return nil, fmt.Errorf("no channel header in browse response for %s", channelID)
+	}
+
+	info := &ChannelInfo{ChannelID: channelID}
+
+	if title, ok := header["title"].(string); ok {
+		info.Title = title
+	}
+	if handle, ok := extractChannelHandle(header); ok {
+		info.CustomURL = "@" + handle
+	}
+	if thumb := extractThumbnail(header); thumb != "" {
+		info.Thumbnail = thumb
+	}
+
+	return info, nil
+}
+
+// innertubeBrowse calls the InnerTube Browse API for the given browseId.
+func (r *Resolver) innertubeBrowse(ctx context.Context, browseID string) (map[string]interface{}, error) {
+	url := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", innertubeAPIKey)
+
+	payload := map[string]interface{}{
+		"context": map[string]interface{}{
+			"client": map[string]interface{}{
+				"clientName":    "WEB",
+				"clientVersion": innertubeClientVersion,
+			},
+		},
+		"browseId": browseID,
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("innertube browse returned status %d for %s", resp.StatusCode, browseID)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	r.logger.Debug("innertube browse response",
+		zap.String("browse_id", browseID),
+		zap.Int("body_bytes", len(body)),
 	)
 
-	// 1. CHECK QUOTA BEFORE API CALL
-	if r.quotaClient != nil {
-		allowed, err := r.quotaClient.CheckQuota(ctx, quotaCost)
-		if err != nil {
-			r.logger.Warn("Failed to check quota (allowing request)", zap.Error(err))
-		} else if !allowed {
-			return "", ErrQuotaExhausted
-		}
-	}
-
-	// 2. MAKE YOUTUBE API CALL
-	// FIX: Don't pass httpClient with API key - it interferes with authentication
-	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey))
-	if err != nil {
-		return "", fmt.Errorf("failed to create YouTube service: %w", err)
-	}
-
-	// Get video details
-	call := service.Videos.List([]string{"snippet"}).Id(videoID)
-	response, err := call.Do()
-
-	// 3. RECORD USAGE AFTER API CALL
-	if r.quotaClient != nil {
-		if recordErr := r.quotaClient.RecordUsage(ctx, quotaCost); recordErr != nil {
-			r.logger.Warn("Failed to record quota usage",
-				zap.Int("units", quotaCost),
-				zap.Error(recordErr),
-			)
-		}
-	}
-
-	// 4. PROCESS RESPONSE
-	if err != nil {
-		return "", fmt.Errorf("failed to get video details: %w", err)
-	}
-
-	if len(response.Items) == 0 {
-		return "", fmt.Errorf("video not found: %s", videoID)
-	}
-
-	channelID := response.Items[0].Snippet.ChannelId
-	if channelID == "" {
-		return "", fmt.Errorf("no channel ID in video details")
-	}
-
-	return channelID, nil
+	return data, nil
 }
 
-// GetChannelInfo gets channel information for display
-// Costs 1 quota unit (Channels.List)
-func (r *Resolver) GetChannelInfo(ctx context.Context, channelID string) (*ChannelInfo, error) {
-	const quotaCost = 1  // Channels.List API cost
+// extractChannelIDFromBrowse extracts the channel ID from an InnerTube browse response.
+// The channel ID lives in header.c4TabbedHeaderRenderer.channelId.
+func extractChannelIDFromBrowse(data map[string]interface{}) string {
+	header := extractHeader(data)
+	if header == nil {
+		return ""
+	}
+	if id, ok := header["channelId"].(string); ok && id != "" {
+		return id
+	}
+	return ""
+}
 
-	// 1. CHECK QUOTA BEFORE API CALL
-	if r.quotaClient != nil {
-		allowed, err := r.quotaClient.CheckQuota(ctx, quotaCost)
-		if err != nil {
-			r.logger.Warn("Failed to check quota (allowing request)", zap.Error(err))
-		} else if !allowed {
-			return nil, ErrQuotaExhausted
+// extractHeader returns the c4TabbedHeaderRenderer map from a browse response.
+func extractHeader(data map[string]interface{}) map[string]interface{} {
+	h, _ := data["header"].(map[string]interface{})
+	if h == nil {
+		return nil
+	}
+	renderer, _ := h["c4TabbedHeaderRenderer"].(map[string]interface{})
+	return renderer
+}
+
+// extractChannelHandle tries to pull the handle from the header renderer.
+func extractChannelHandle(header map[string]interface{}) (string, bool) {
+	// channelHandleText.runs[0].text  →  "@handle"
+	if cht, ok := header["channelHandleText"].(map[string]interface{}); ok {
+		if runs, ok := cht["runs"].([]interface{}); ok && len(runs) > 0 {
+			if run, ok := runs[0].(map[string]interface{}); ok {
+				if text, ok := run["text"].(string); ok {
+					return strings.TrimPrefix(text, "@"), true
+				}
+			}
 		}
 	}
+	return "", false
+}
 
-	// 2. MAKE YOUTUBE API CALL
-	// FIX: Don't pass httpClient with API key - it interferes with authentication
-	service, err := youtube.NewService(ctx, option.WithAPIKey(r.apiKey))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create YouTube service: %w", err)
+// extractThumbnail returns the best available thumbnail URL from the header renderer.
+func extractThumbnail(header map[string]interface{}) string {
+	avatar, _ := header["avatar"].(map[string]interface{})
+	if avatar == nil {
+		return ""
 	}
-
-	call := service.Channels.List([]string{"snippet", "statistics"}).Id(channelID)
-	response, err := call.Do()
-
-	// 3. RECORD USAGE AFTER API CALL
-	if r.quotaClient != nil {
-		if recordErr := r.quotaClient.RecordUsage(ctx, quotaCost); recordErr != nil {
-			r.logger.Warn("Failed to record quota usage",
-				zap.Int("units", quotaCost),
-				zap.Error(recordErr),
-			)
+	thumbs, _ := avatar["thumbnails"].([]interface{})
+	if len(thumbs) == 0 {
+		return ""
+	}
+	// Prefer the last (highest resolution) thumbnail
+	last := thumbs[len(thumbs)-1]
+	if t, ok := last.(map[string]interface{}); ok {
+		if u, ok := t["url"].(string); ok {
+			return u
 		}
 	}
-
-	// 4. PROCESS RESPONSE
-	if err != nil {
-		return nil, fmt.Errorf("failed to get channel info: %w", err)
-	}
-
-	if len(response.Items) == 0 {
-		return nil, fmt.Errorf("channel not found: %s", channelID)
-	}
-
-	channel := response.Items[0]
-	return &ChannelInfo{
-		ChannelID:   channelID,
-		Title:       channel.Snippet.Title,
-		Description:  channel.Snippet.Description,
-		CustomURL:   channel.Snippet.CustomUrl,
-		Thumbnail:   channel.Snippet.Thumbnails.Default.Url,
-	}, nil
+	return ""
 }
 
 // ChannelInfo contains YouTube channel information
