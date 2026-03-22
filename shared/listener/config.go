@@ -31,6 +31,11 @@ type ListenerConfig struct {
 	// sourceName is the goroutine name ("heartbeat", "assignment-refresh", "migration-subscriber").
 	// If nil, goroutines retry indefinitely with exponential backoff (backward-compatible behavior).
 	OnFatalError func(source string, err error)
+
+	// Platform is the platform identifier for this listener (e.g. "kick", "twitch", "youtube").
+	// When set, the migration subscriber will silently drop events for other platforms,
+	// eliminating cross-platform log noise and unnecessary handler invocations.
+	Platform string
 }
 
 // DefaultConfig returns a ListenerConfig with production-ready defaults.

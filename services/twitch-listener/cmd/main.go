@@ -130,6 +130,7 @@ func main() {
 	// Feature flag for coordinator filtering (allows instant rollback)
 	enableFiltering := listener.Env("ENABLE_COORDINATOR_FILTERING", "false") == "true"
 	cfg := listener.DefaultConfig()
+	cfg.Platform = "twitch"
 	cfg.DisableCoordinatorFiltering = !enableFiltering
 
 	// Initialize ListenerBase — owns heartbeat, assignment refresh, migration subscriber, JWT refresh
