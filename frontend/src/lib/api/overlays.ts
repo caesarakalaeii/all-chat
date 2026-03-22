@@ -116,6 +116,19 @@ export const overlaysApi = {
   },
 
   /**
+   * Resolve a YouTube handle, URL, or channel ID to a canonical channel ID
+   */
+  async resolveYouTubeChannel(input: string): Promise<{
+    channel_id: string
+    title?: string
+    custom_url?: string
+    thumbnail?: string
+    input_type: string
+  }> {
+    return apiClient.post('/api/v1/youtube/resolve', { input })
+  },
+
+  /**
    * Get credit roll data (public endpoint)
    */
   async getCreditRoll(id: string): Promise<CreditRollResponse> {
