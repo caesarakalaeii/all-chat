@@ -386,12 +386,28 @@ func searchLiveChatRenderer(data interface{}) string {
 }
 
 // extractContinuationFromLiveChatRenderer extracts the continuation token
-// from a liveChatRenderer object's continuations array.
+// from a liveChatRenderer object, preferring the "Live chat" (all messages)
+// token over "Top chat" (filtered subset).
+//
+// YouTube exposes two chat views via subMenuItems in the viewSelector:
+//   - "Top chat"  – filtered; hides ~80-90% of messages on busy streams
+//   - "Live chat" – unfiltered; all messages visible
+//
+// We look for the "Live chat" token in the subMenuItems first. If it isn't
+// present (older streams, members-only, etc.) we fall back to the legacy
+// continuations array.
 func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 	m, ok := renderer.(map[string]interface{})
 	if !ok {
 		return ""
 	}
+
+	// Prefer "Live chat" token from the view selector subMenuItems.
+	if token := extractLiveChatSubMenuToken(m); token != "" {
+		return token
+	}
+
+	// Fallback: legacy continuations array (may be Top Chat on busy streams).
 	continuations, ok := m["continuations"].([]interface{})
 	if !ok {
 		return ""
@@ -401,7 +417,6 @@ func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 		if !ok {
 			continue
 		}
-		// reloadContinuationData is the standard for initial live chat fetch
 		if reload, ok := contMap["reloadContinuationData"].(map[string]interface{}); ok {
 			if token, ok := reload["continuation"].(string); ok && token != "" {
 				return token
@@ -416,6 +431,35 @@ func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 			if token, ok := inv["continuation"].(string); ok && token != "" {
 				return token
 			}
+		}
+	}
+	return ""
+}
+
+// extractLiveChatSubMenuToken walks
+// liveChatRenderer.header.liveChatHeaderRenderer.viewSelector
+//   .sortFilterSubMenuRenderer.subMenuItems
+// and returns the continuation token for the "Live chat" item (all messages).
+// Returns "" if the structure is absent or no "Live chat" item is found.
+func extractLiveChatSubMenuToken(renderer map[string]interface{}) string {
+	header, _ := renderer["header"].(map[string]interface{})
+	lch, _ := header["liveChatHeaderRenderer"].(map[string]interface{})
+	vs, _ := lch["viewSelector"].(map[string]interface{})
+	sfr, _ := vs["sortFilterSubMenuRenderer"].(map[string]interface{})
+	items, _ := sfr["subMenuItems"].([]interface{})
+
+	for _, raw := range items {
+		item, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if item["title"] != "Live chat" {
+			continue
+		}
+		cont, _ := item["continuation"].(map[string]interface{})
+		reload, _ := cont["reloadContinuationData"].(map[string]interface{})
+		if token, ok := reload["continuation"].(string); ok && token != "" {
+			return token
 		}
 	}
 	return ""
