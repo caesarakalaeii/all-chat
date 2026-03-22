@@ -54,7 +54,7 @@ func (m *MockClient) GetPollInterval(resp *innertube.LiveChatResponse) time.Dura
 	if m.callCount-1 < len(m.pollIntervals) {
 		return m.pollIntervals[m.callCount-1]
 	}
-	return 2 * time.Second
+	return 0 // let the poller use its own interval
 }
 
 func TestNewPoller(t *testing.T) {
