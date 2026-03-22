@@ -593,6 +593,13 @@ function AddSourceForm({
   }
   const [adminChannelId, setAdminChannelId] = useState('')
   const [isAdminAdding, setIsAdminAdding] = useState(false)
+  const [youtubeResolved, setYoutubeResolved] = useState<{
+    channel_id: string
+    title?: string
+    custom_url?: string
+    thumbnail?: string
+  } | null>(null)
+  const [youtubeResolveError, setYoutubeResolveError] = useState<string | null>(null)
 
   const handleTikTokSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -823,9 +830,23 @@ function AddSourceForm({
               e.preventDefault()
               if (!adminChannelId.trim()) return
               setIsAdminAdding(true)
+              setYoutubeResolveError(null)
               try {
-                await onAddManual(adminPlatform, adminChannelId.trim())
-                setAdminChannelId('')
+                if (adminPlatform === 'youtube') {
+                  const resolved = await overlaysApi.resolveYouTubeChannel(adminChannelId.trim())
+                  setYoutubeResolved(resolved)
+                  await onAddManual(adminPlatform, resolved.channel_id)
+                  setAdminChannelId('')
+                  setYoutubeResolved(null)
+                } else {
+                  await onAddManual(adminPlatform, adminChannelId.trim())
+                  setAdminChannelId('')
+                }
+              } catch (err) {
+                if (adminPlatform === 'youtube') {
+                  setYoutubeResolveError(err instanceof Error ? err.message : 'Failed to resolve YouTube channel')
+                  setYoutubeResolved(null)
+                }
               } finally {
                 setIsAdminAdding(false)
               }
@@ -834,7 +855,11 @@ function AddSourceForm({
             <div className="flex gap-2">
               <select
                 value={adminPlatform}
-                onChange={(e) => setAdminPlatform(e.target.value)}
+                onChange={(e) => {
+                  setAdminPlatform(e.target.value)
+                  setYoutubeResolved(null)
+                  setYoutubeResolveError(null)
+                }}
                 className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
                 <option value="twitch">Twitch</option>
@@ -844,11 +869,31 @@ function AddSourceForm({
               </select>
               <Input
                 value={adminChannelId}
-                onChange={(e) => setAdminChannelId(e.target.value)}
-                placeholder="Channel ID or username"
+                onChange={(e) => {
+                  setAdminChannelId(e.target.value)
+                  setYoutubeResolved(null)
+                  setYoutubeResolveError(null)
+                }}
+                placeholder={adminPlatform === 'youtube' ? '@handle, channel URL, or UC…' : 'Channel ID or username'}
                 className="flex-1 text-xs"
               />
             </div>
+            {adminPlatform === 'youtube' && youtubeResolved && (
+              <div className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-xs text-text-sub">
+                {youtubeResolved.thumbnail && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={youtubeResolved.thumbnail} alt="" className="h-6 w-6 rounded-full object-cover" />
+                )}
+                <span className="font-medium text-text">{youtubeResolved.title ?? youtubeResolved.channel_id}</span>
+                {youtubeResolved.custom_url && (
+                  <span className="text-text-sub">{youtubeResolved.custom_url}</span>
+                )}
+                <span className="ml-auto font-mono text-[10px] text-text-sub">{youtubeResolved.channel_id}</span>
+              </div>
+            )}
+            {adminPlatform === 'youtube' && youtubeResolveError && (
+              <p className="text-xs text-red-500">{youtubeResolveError}</p>
+            )}
             <Button
               type="submit"
               disabled={isAdminAdding || !adminChannelId.trim()}
@@ -856,7 +901,11 @@ function AddSourceForm({
               variant="outline"
               className="w-full"
             >
-              {isAdminAdding ? 'Adding…' : 'Add manually'}
+              {isAdminAdding
+                ? adminPlatform === 'youtube'
+                  ? 'Resolving…'
+                  : 'Adding…'
+                : 'Add manually'}
             </Button>
           </form>
         </details>
