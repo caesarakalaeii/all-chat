@@ -53,13 +53,17 @@ func TestNewServiceRegistry(t *testing.T) {
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, sr *ServiceRegistry) {
-				assert.Len(t, sr.Services, 6) // 3 base services + 3 admin routes
+				assert.Len(t, sr.Services, 10) // 4 base + 3 admin + 3 share-service routes
 				assert.NotNil(t, sr.Services["auth-service"])
 				assert.NotNil(t, sr.Services["overlay-manager"])
+				assert.NotNil(t, sr.Services["youtube-resolver"])
 				assert.NotNil(t, sr.Services["emote-service"])
 				assert.NotNil(t, sr.Services["admin-users"])
 				assert.NotNil(t, sr.Services["admin-overlays"])
 				assert.NotNil(t, sr.Services["admin-sources"])
+				assert.NotNil(t, sr.Services["share-service-shares"])
+				assert.NotNil(t, sr.Services["share-service-users"])
+				assert.NotNil(t, sr.Services["share-service-admin-premium"])
 			},
 		},
 	}

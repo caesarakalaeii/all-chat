@@ -58,7 +58,7 @@ func TestTryAcquireLeadership_Success(t *testing.T) {
 	logger := zap.NewNop()
 	manager := NewManager(client, logger)
 
-	acquired, err := manager.TryAcquireLeadership(context.Background(), "youtube", "stream123")
+	acquired, err := manager.TryAcquireLeadership(context.Background(), "youtube", "stream123", "")
 
 	assert.NoError(t, err)
 	assert.True(t, acquired)
@@ -80,12 +80,12 @@ func TestTryAcquireLeadership_AlreadyHeld(t *testing.T) {
 	manager2 := NewManager(client, logger)
 
 	// Manager 1 acquires leadership
-	acquired1, err := manager1.TryAcquireLeadership(context.Background(), "youtube", "stream123")
+	acquired1, err := manager1.TryAcquireLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.True(t, acquired1)
 
 	// Manager 2 tries to acquire (should fail)
-	acquired2, err := manager2.TryAcquireLeadership(context.Background(), "youtube", "stream123")
+	acquired2, err := manager2.TryAcquireLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.False(t, acquired2)
 }
@@ -99,12 +99,12 @@ func TestRenewLeadership_Success(t *testing.T) {
 	manager := NewManager(client, logger)
 
 	// Acquire leadership first
-	acquired, err := manager.TryAcquireLeadership(context.Background(), "youtube", "stream123")
+	acquired, err := manager.TryAcquireLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.True(t, acquired)
 
 	// Renew leadership
-	renewed, err := manager.RenewLeadership(context.Background(), "youtube", "stream123")
+	renewed, err := manager.RenewLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.True(t, renewed)
 }
@@ -118,7 +118,7 @@ func TestRenewLeadership_LostLeadership(t *testing.T) {
 	manager := NewManager(client, logger)
 
 	// Try to renew without acquiring first
-	renewed, err := manager.RenewLeadership(context.Background(), "youtube", "stream123")
+	renewed, err := manager.RenewLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.False(t, renewed)
 }
@@ -133,7 +133,7 @@ func TestRenewLeadership_StolenByAnother(t *testing.T) {
 	manager2 := NewManager(client, logger)
 
 	// Manager 1 acquires leadership
-	acquired, err := manager1.TryAcquireLeadership(context.Background(), "youtube", "stream123")
+	acquired, err := manager1.TryAcquireLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.True(t, acquired)
 
@@ -141,12 +141,12 @@ func TestRenewLeadership_StolenByAnother(t *testing.T) {
 	mr.FastForward(15 * time.Second)
 
 	// Manager 2 acquires leadership
-	acquired2, err := manager2.TryAcquireLeadership(context.Background(), "youtube", "stream123")
+	acquired2, err := manager2.TryAcquireLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.True(t, acquired2)
 
 	// Manager 1 tries to renew (should fail)
-	renewed, err := manager1.RenewLeadership(context.Background(), "youtube", "stream123")
+	renewed, err := manager1.RenewLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.False(t, renewed)
 }
@@ -160,12 +160,12 @@ func TestReleaseLeadership_Success(t *testing.T) {
 	manager := NewManager(client, logger)
 
 	// Acquire leadership first
-	acquired, err := manager.TryAcquireLeadership(context.Background(), "youtube", "stream123")
+	acquired, err := manager.TryAcquireLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.True(t, acquired)
 
 	// Release leadership
-	err = manager.ReleaseLeadership(context.Background(), "youtube", "stream123")
+	err = manager.ReleaseLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 
 	// Verify key is gone
@@ -185,12 +185,12 @@ func TestReleaseLeadership_NotLeader(t *testing.T) {
 	manager2 := NewManager(client, logger)
 
 	// Manager 1 acquires leadership
-	acquired, err := manager1.TryAcquireLeadership(context.Background(), "youtube", "stream123")
+	acquired, err := manager1.TryAcquireLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.True(t, acquired)
 
 	// Manager 2 tries to release (should not delete)
-	err = manager2.ReleaseLeadership(context.Background(), "youtube", "stream123")
+	err = manager2.ReleaseLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 
 	// Verify key still exists
@@ -209,7 +209,7 @@ func TestGetLeadership(t *testing.T) {
 	manager := NewManager(client, logger)
 
 	// Acquire leadership first
-	acquired, err := manager.TryAcquireLeadership(context.Background(), "youtube", "stream123")
+	acquired, err := manager.TryAcquireLeadership(context.Background(), "youtube", "stream123", "")
 	assert.NoError(t, err)
 	assert.True(t, acquired)
 
