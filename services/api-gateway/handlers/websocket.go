@@ -20,15 +20,16 @@ import (
 
 // WebSocketHandler handles WebSocket connections for overlays
 type WebSocketHandler struct {
-	wsManager       *wsconn.Manager
-	subscriber      *subscription.Subscriber
-	repo            *subscription.Repository
-	jwtSecret       string
-	replayBuffer    replay.DeletionReplayBuffer
-	logger          *zap.Logger
-	upgrader        websocket.Upgrader
-	allowAllOrigins bool
-	allowedOrigins  map[string]struct{}
+	wsManager        *wsconn.Manager
+	subscriber       *subscription.Subscriber
+	repo             *subscription.Repository
+	statusSubscriber *subscription.StatusSubscriber
+	jwtSecret        string
+	replayBuffer     replay.DeletionReplayBuffer
+	logger           *zap.Logger
+	upgrader         websocket.Upgrader
+	allowAllOrigins  bool
+	allowedOrigins   map[string]struct{}
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
@@ -36,20 +37,22 @@ func NewWebSocketHandler(
 	wsManager *wsconn.Manager,
 	subscriber *subscription.Subscriber,
 	repo *subscription.Repository,
+	statusSubscriber *subscription.StatusSubscriber,
 	jwtSecret string,
 	replayBuffer replay.DeletionReplayBuffer,
 	logger *zap.Logger,
 ) *WebSocketHandler {
 	allowedOrigins, allowAll := loadAllowedOrigins()
 	h := &WebSocketHandler{
-		wsManager:       wsManager,
-		subscriber:      subscriber,
-		repo:            repo,
-		jwtSecret:       jwtSecret,
-		replayBuffer:    replayBuffer,
-		logger:          logger,
-		allowedOrigins:  allowedOrigins,
-		allowAllOrigins: allowAll,
+		wsManager:        wsManager,
+		subscriber:       subscriber,
+		repo:             repo,
+		statusSubscriber: statusSubscriber,
+		jwtSecret:        jwtSecret,
+		replayBuffer:     replayBuffer,
+		logger:           logger,
+		allowedOrigins:   allowedOrigins,
+		allowAllOrigins:  allowAll,
 	}
 
 	h.upgrader = websocket.Upgrader{
@@ -182,6 +185,27 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	connectedMsg := models.NewConnected(overlayID)
 	connectedJSON, _ := connectedMsg.ToJSON()
 	wsConn.Send(connectedJSON)
+
+	// Send status snapshot for all configured sources so indicators are populated immediately.
+	// Without this, indicators remain blank until the next status-change event fires.
+	if h.statusSubscriber != nil {
+		sources, err := h.repo.GetOverlaySources(context.Background(), overlayID)
+		if err != nil {
+			h.logger.Warn("Failed to get overlay sources for status snapshot",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		} else {
+			for _, src := range sources {
+				if statusData, ok := h.statusSubscriber.GetPlatformStatus(src.Platform, src.ChannelID); ok {
+					wsMsg := models.NewPlatformStatus(*statusData)
+					if msgJSON, err := wsMsg.ToJSON(); err == nil {
+						wsConn.Send(msgJSON)
+					}
+				}
+			}
+		}
+	}
 
 	h.logger.Info("WebSocket connection established",
 		zap.String("overlay_id", overlayID),
