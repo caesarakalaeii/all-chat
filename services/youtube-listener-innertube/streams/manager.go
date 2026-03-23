@@ -361,10 +361,11 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 		// Notify overlay: channel is reconnecting (no live stream found yet)
 		nextRetry := time.Now().Add(backoffDuration)
 		m.statusPublisher.Publish(ctx, status.Message{
-			Platform:    "youtube",
-			ChannelID:   state.ChannelID,
-			Status:      "reconnecting",
-			NextRetryAt: &nextRetry,
+			Platform:     "youtube",
+			ChannelID:    state.ChannelID,
+			Status:       "reconnecting",
+			NextRetryAt:  &nextRetry,
+			ErrorMessage: "Searching for stream",
 		})
 
 		// Wait with backoff, reset signal, or context cancellation
