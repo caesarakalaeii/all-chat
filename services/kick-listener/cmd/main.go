@@ -16,6 +16,7 @@ import (
 	"github.com/caesar/all-chat/services/kick-listener/handlers"
 	"github.com/caesar/all-chat/services/kick-listener/metrics"
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
+	"github.com/caesar/all-chat/services/kick-listener/status"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
 	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
@@ -138,6 +139,10 @@ func main() {
 	channelRepo := channels.NewRepository(db, log)
 	dbWrapper := &dbConnWrapper{pool: db}
 
+	// Initialize status publisher for platform status indicators
+	statusPublisher := status.NewPublisher(redisClient, log)
+	log.Info("Initialized platform status publisher")
+
 	// Create channel manager first (without WebSocket client yet)
 	var channelMgr *channels.Manager
 
@@ -161,6 +166,9 @@ func main() {
 	// Now initialize channel manager with the WebSocket client
 	// Pass nil for assignedSourceIDs — SDK populates via UpdateAssignedSourceIDs inside l.Start
 	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, l.LeadershipCoordinator(), nil, redisClient, podName, log)
+
+	// Inject status publisher into channel manager
+	channelMgr.SetStatusPublisher(statusPublisher)
 
 	// Connect to Kick Pusher WebSocket
 	if err := wsClient.Connect(); err != nil {

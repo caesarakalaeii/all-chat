@@ -7,6 +7,7 @@ import (
 
 	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
+	"github.com/caesar/all-chat/services/twitch-listener/status"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gempir/go-twitch-irc/v4"
 	"go.uber.org/zap"
@@ -26,6 +27,8 @@ type ConnectionManager struct {
 	stopChan         chan struct{}
 	wg               sync.WaitGroup
 	firstMessageChan map[string]chan struct{} // Per-channel first message signal for migration
+	activeChannelsFn func() []string          // Returns currently active channels for reconnect status publish
+	statusPublisher  *status.Publisher        // Publishes platform status on IRC reconnect
 }
 
 // Config holds the configuration for IRC connection
@@ -146,11 +149,22 @@ func (cm *ConnectionManager) SetFirstMessageChan(firstMessageChan map[string]cha
 	cm.firstMessageChan = firstMessageChan
 }
 
+// SetActiveChannelsFn sets a callback that returns the list of currently active channels.
+// This is used on IRC reconnect to re-publish connected status for all channels.
+func (cm *ConnectionManager) SetActiveChannelsFn(fn func() []string, pub *status.Publisher) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.activeChannelsFn = fn
+	cm.statusPublisher = pub
+}
+
 // handleConnect is called when connection is established
 func (cm *ConnectionManager) handleConnect() {
 	cm.mu.Lock()
 	cm.connected = true
 	cm.connectedAt = time.Now()
+	activeChannelsFn := cm.activeChannelsFn
+	statusPublisher := cm.statusPublisher
 	cm.mu.Unlock()
 
 	// Record successful connection
@@ -158,6 +172,25 @@ func (cm *ConnectionManager) handleConnect() {
 	cm.metrics.RecordConnection("twitch", "twitch-listener", "irc", true)
 
 	cm.logger.Info("Connected to Twitch IRC")
+
+	// On IRC reconnect, re-publish connected status for all currently active channels.
+	// This covers the case where the IRC client reconnects after a network interruption.
+	if activeChannelsFn != nil && statusPublisher != nil {
+		channels := activeChannelsFn()
+		if len(channels) > 0 {
+			ctx := context.Background()
+			for _, ch := range channels {
+				statusPublisher.Publish(ctx, status.Message{
+					Platform:  "twitch",
+					ChannelID: ch,
+					Status:    "connected",
+				})
+			}
+			cm.logger.Info("Re-published connected status for active channels after IRC connect",
+				zap.Int("channel_count", len(channels)),
+			)
+		}
+	}
 }
 
 // handlePrivateMessage processes incoming PRIVMSG from Twitch
