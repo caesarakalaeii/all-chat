@@ -249,7 +249,7 @@ func main() {
 	healthHandler := handlers.NewHealthHandler(registry)
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
 	statsHandler := handlers.NewStatsHandler(redisClient)
-	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, jwtSecret, replayBuffer, log)
+	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, statusSubscriber, jwtSecret, replayBuffer, log)
 
 	// Create viewer WebSocket handler (same origin policy as owner handler)
 	viewerWsHandler := handlers.NewViewerWebSocketHandler(

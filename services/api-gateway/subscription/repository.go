@@ -105,6 +105,38 @@ func (r *Repository) ActivateSourcesForOverlay(ctx context.Context, overlayID st
 	return int(result.RowsAffected()), nil
 }
 
+// OverlaySource represents a single chat source for an overlay
+type OverlaySource struct {
+	Platform  string
+	ChannelID string
+}
+
+// GetOverlaySources returns all platform+channel_id pairs configured for an overlay
+func (r *Repository) GetOverlaySources(ctx context.Context, overlayID string) ([]OverlaySource, error) {
+	query := `
+		SELECT platform, channel_id
+		FROM overlay_chat_sources
+		WHERE overlay_id = $1
+	`
+
+	rows, err := r.db.Query(ctx, query, overlayID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get overlay sources: %w", err)
+	}
+	defer rows.Close()
+
+	sources := make([]OverlaySource, 0)
+	for rows.Next() {
+		var src OverlaySource
+		if err := rows.Scan(&src.Platform, &src.ChannelID); err != nil {
+			return nil, fmt.Errorf("failed to scan overlay source: %w", err)
+		}
+		sources = append(sources, src)
+	}
+
+	return sources, nil
+}
+
 // DeactivateSourcesForOverlay deactivates all sources for an overlay
 // This is called when the last WebSocket connection for an overlay disconnects
 func (r *Repository) DeactivateSourcesForOverlay(ctx context.Context, overlayID string) (int, error) {
