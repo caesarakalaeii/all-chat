@@ -13,6 +13,7 @@ import (
 
 	"github.com/caesar/all-chat/services/kick-listener/metrics"
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
+	"github.com/caesar/all-chat/services/kick-listener/status"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
 	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/listener"
@@ -59,21 +60,22 @@ type WebSocketClient interface {
 
 // Manager manages Kick channel subscriptions
 type Manager struct {
-	repo        *Repository
-	wsClient    WebSocketClient
-	publisher   *publisher.StreamPublisher
-	logger      *zap.Logger
-	httpClient  *http.Client
-	dbConn      DBConnInterface
-	leader      *sourcemanager.LeadershipCoordinator
-	redisClient *redis.Client // Redis client for migration confirmations
-	podID       string        // Pod ID for migration confirmations
+	repo            *Repository
+	wsClient        WebSocketClient
+	publisher       *publisher.StreamPublisher
+	logger          *zap.Logger
+	httpClient      *http.Client
+	dbConn          DBConnInterface
+	leader          *sourcemanager.LeadershipCoordinator
+	redisClient     *redis.Client     // Redis client for migration confirmations
+	podID           string            // Pod ID for migration confirmations
+	statusPublisher *status.Publisher // Publishes platform status to Redis Pub/Sub
 
 	// Coordinator integration
-	assignedSourceIDs       map[string]bool           // From coordinator
-	filteredAssignmentCount int                       // Number of assigned sources that have database channels
-	migrationMu             sync.RWMutex              // Protects migration state
-	firstMessageChan        map[int]chan struct{}     // Per-chatroom first message signal (key: chatroom ID)
+	assignedSourceIDs       map[string]bool      // From coordinator
+	filteredAssignmentCount int                  // Number of assigned sources that have database channels
+	migrationMu             sync.RWMutex         // Protects migration state
+	firstMessageChan        map[int]chan struct{} // Per-chatroom first message signal (key: chatroom ID)
 
 	// Track active subscriptions
 	subscriptions map[string]*trackedChannel // key: channel_slug
@@ -117,6 +119,13 @@ func NewManager(
 		ctx:               ctx,
 		cancel:            cancel,
 	}
+}
+
+// SetStatusPublisher injects the status publisher after construction
+func (m *Manager) SetStatusPublisher(pub *status.Publisher) {
+	m.subsMu.Lock()
+	defer m.subsMu.Unlock()
+	m.statusPublisher = pub
 }
 
 type trackedChannel struct {
@@ -392,6 +401,15 @@ func (m *Manager) syncChannels() error {
 			m.logger.Debug("Unsubscribed from channel (sources remain active in DB)",
 				zap.String("channel", slug),
 			)
+
+			// Publish offline status to overlay status indicators
+			if m.statusPublisher != nil {
+				m.statusPublisher.Publish(m.ctx, status.Message{
+					Platform:  "kick",
+					ChannelID: slug,
+					Status:    "offline",
+				})
+			}
 		}
 	}
 
@@ -490,6 +508,15 @@ func (m *Manager) syncChannels() error {
 				zap.String("channel", slug),
 				zap.Error(err),
 			)
+		}
+
+		// Publish connected status to overlay status indicators
+		if m.statusPublisher != nil {
+			m.statusPublisher.Publish(m.ctx, status.Message{
+				Platform:  "kick",
+				ChannelID: slug,
+				Status:    "connected",
+			})
 		}
 	}
 

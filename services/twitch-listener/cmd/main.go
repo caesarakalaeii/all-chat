@@ -14,6 +14,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-listener/handlers"
 	"github.com/caesar/all-chat/services/twitch-listener/irc"
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
+	"github.com/caesar/all-chat/services/twitch-listener/status"
 	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/listener"
@@ -157,13 +158,23 @@ func main() {
 	var leaderCoord *sourcemanager.LeadershipCoordinator = nil
 	log.Info("Twitch Listener running without leadership coordination (IRC is stateless)")
 
+	// Initialize status publisher for platform status indicators
+	statusPublisher := status.NewPublisher(redisClient, log)
+	log.Info("Initialized platform status publisher")
+
 	// Initialize channel manager — pass nil for assignedSourceIDs; SDK calls UpdateAssignedSourceIDs inside base.Start
 	channelRepo := channels.NewRepository(db)
 	dbConnWrapper := &dbConnWrapper{pool: db}
 	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, leaderCoord, nil, redisClient, podName, log, listenerMetrics)
 
+	// Inject status publisher into channel manager
+	channelMgr.SetStatusPublisher(statusPublisher)
+
 	// Wire firstMessageChan from manager to IRC connection for migration coordination
 	ircConn.SetFirstMessageChan(channelMgr.GetFirstMessageChan())
+
+	// Wire status publisher and active channels callback to IRC connection for reconnect
+	ircConn.SetActiveChannelsFn(channelMgr.GetActiveChannels, statusPublisher)
 
 	// Connect to Twitch IRC
 	if err := ircConn.Connect(ctx); err != nil {

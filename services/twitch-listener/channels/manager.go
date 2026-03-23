@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/twitch-listener/status"
 	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/metrics"
@@ -63,6 +64,7 @@ type Manager struct {
 	firstMessageChan map[string]chan struct{}     // Per-channel first message signal
 	redisClient      *redis.Client                // Redis client for migration confirmations
 	podID            string                       // Pod ID for migration confirmations
+	statusPublisher  *status.Publisher            // Publishes platform status to Redis Pub/Sub
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -89,6 +91,13 @@ func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn
 		syncTicker:        time.NewTicker(SyncInterval),
 		stopChan:          make(chan struct{}),
 	}
+}
+
+// SetStatusPublisher injects the status publisher after construction
+func (m *Manager) SetStatusPublisher(pub *status.Publisher) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.statusPublisher = pub
 }
 
 // GetFirstMessageChan returns the first message channel map for migration coordination
@@ -475,6 +484,15 @@ func (m *Manager) joinChannel(ctx context.Context, channel string) {
 		)
 	}
 
+	// Publish connected status to overlay status indicators
+	if m.statusPublisher != nil {
+		m.statusPublisher.Publish(ctx, status.Message{
+			Platform:  "twitch",
+			ChannelID: channel,
+			Status:    "connected",
+		})
+	}
+
 	m.logger.Info("Joined channel",
 		zap.String("channel", channel),
 	)
@@ -492,6 +510,15 @@ func (m *Manager) partChannelLocked(ctx context.Context, channel string, release
 	// Don't deactivate database sources when parting
 	// Sources should remain active in DB even if temporarily not connected
 	// This allows multiple overlays to share the same channel
+
+	// Publish offline status to overlay status indicators
+	if m.statusPublisher != nil {
+		m.statusPublisher.Publish(ctx, status.Message{
+			Platform:  "twitch",
+			ChannelID: channel,
+			Status:    "offline",
+		})
+	}
 
 	m.logger.Info("Parted channel (sources remain active in DB)",
 		zap.String("channel", channel),
