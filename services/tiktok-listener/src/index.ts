@@ -978,6 +978,9 @@ class TikTokListenerService {
         // Start heartbeat monitoring
         this.heartbeatMonitor.start(username, connection);
 
+        // Publish connected status for overlay status indicators
+        this.publishPlatformStatus(username, 'connected');
+
         // Update database: stream is live and source is active
         this.updateStreamHistory(username, true);
         this.setSourceActive(username, true);
@@ -999,6 +1002,13 @@ class TikTokListenerService {
         // Stream ended - reset to quick re-check
         this.backoffManager.recordDisconnection(username);
         this.livePoller.addTarget(username, overlayId);
+
+        // Publish reconnecting status so overlay indicators show the retry state
+        const backoffState = this.backoffManager.getState(username);
+        const nextRetryAt = backoffState
+          ? new Date(Date.now() + backoffState.currentBackoffMs)
+          : new Date(Date.now() + TIKTOK_BASE_OFFLINE_BACKOFF_MS);
+        this.publishPlatformStatus(username, 'reconnecting', nextRetryAt);
 
         // Update database: stream went offline (but keep source active for other overlays)
         this.updateStreamHistory(username, false);
@@ -1052,6 +1062,9 @@ class TikTokListenerService {
       this.livePoller.removeTarget(username);
       this.backoffManager.removeState(username);
       this.statusChecker.clearCache(username);
+
+      // Publish offline status so overlay indicators reflect the disconnected state
+      this.publishPlatformStatus(username, 'offline');
     } catch (error) {
       logger.error('Failed to disconnect from TikTok stream', { username, error });
     }
@@ -1096,6 +1109,35 @@ class TikTokListenerService {
       logger.debug('Updated overlay-specific source active status', { overlay_id: overlayId, username, is_active: isActive });
     } catch (error) {
       logger.error('Failed to update overlay-specific source active status', { overlay_id: overlayId, username, error });
+    }
+  }
+
+  /**
+   * Publish platform connection status to Redis Pub/Sub for overlay status indicators.
+   * The API Gateway subscribes to platform:status and forwards to connected WebSocket clients.
+   */
+  private async publishPlatformStatus(
+    username: string,
+    statusValue: 'connected' | 'reconnecting' | 'offline',
+    nextRetryAt?: Date,
+    errorMessage?: string
+  ): Promise<void> {
+    try {
+      const msg: Record<string, string> = {
+        platform: 'tiktok',
+        channel_id: username,
+        status: statusValue,
+      };
+      if (nextRetryAt) {
+        msg.next_retry_at = nextRetryAt.toISOString();
+      }
+      if (errorMessage) {
+        msg.error_message = errorMessage;
+      }
+      await this.redis.publish('platform:status', JSON.stringify(msg));
+      logger.debug('Published platform status', { username, status: statusValue });
+    } catch (error) {
+      logger.warn('Failed to publish platform status', { username, status: statusValue, error: String(error) });
     }
   }
 
