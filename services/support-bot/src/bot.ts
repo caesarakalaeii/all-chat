@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import type { Octokit } from '@octokit/rest';
 import { queryCodebase } from './claude/agent.js';
+import type { ClaudeTokenManager } from './claude/token-manager.js';
 import { createIssue, createOctokitClient } from './github/issues.js';
 import type { BotConfig } from './types.js';
 
@@ -25,8 +26,9 @@ async function handleQuestion(
   config: BotConfig,
   octokit: Octokit,
   history: string[],
+  tokenManager?: ClaudeTokenManager,
 ): Promise<string> {
-  const result = await queryCodebase(question, repoPaths, history);
+  const result = await queryCodebase(question, repoPaths, history, tokenManager);
   let answer = result.answer;
 
   if (result.issueProposal !== null) {
@@ -59,7 +61,7 @@ async function sendResponse(
   }
 }
 
-export async function startBot(config: BotConfig): Promise<Client> {
+export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenManager): Promise<Client> {
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -108,7 +110,7 @@ export async function startBot(config: BotConfig): Promise<Client> {
         }
       }
 
-      const answer = await handleQuestion(question, repoPaths, config, octokit, history);
+      const answer = await handleQuestion(question, repoPaths, config, octokit, history, tokenManager);
 
       clearInterval(typingInterval);
 
@@ -140,7 +142,7 @@ export async function startBot(config: BotConfig): Promise<Client> {
     let answer: string;
     try {
       console.log('[interaction] Spawning claude subprocess...');
-      answer = await handleQuestion(question, repoPaths, config, octokit, []);
+      answer = await handleQuestion(question, repoPaths, config, octokit, [], tokenManager);
       console.log('[interaction] Claude responded successfully');
     } catch (err) {
       console.error('[interaction] Error handling interaction:', err);
