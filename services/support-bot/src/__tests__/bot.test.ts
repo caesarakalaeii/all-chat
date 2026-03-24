@@ -11,7 +11,7 @@ vi.mock('discord.js', () => {
   const mockThread = {
     id: 'thread1',
     isThread: () => true,
-    ownerId: 'bot-user-id',
+    ownerId: '123456789',
     messages: {
       fetch: vi.fn().mockResolvedValue(mockMessages),
     },
@@ -33,7 +33,7 @@ vi.mock('discord.js', () => {
 
   const mockMessage = {
     id: 'msg-main',
-    content: '@bot how does twitch work?',
+    content: '<@123456789> how does twitch work?',
     author: { bot: false, username: 'Alice', id: 'user-alice' },
     channel: mockChannel,
     mentions: {
@@ -54,7 +54,7 @@ vi.mock('discord.js', () => {
     fetchReply: vi.fn().mockResolvedValue({ id: 'reply1', startThread: vi.fn().mockResolvedValue({}) }),
   };
 
-  const mockClientUser = { id: 'bot-user-id', tag: 'SupportBot#0000' };
+  const mockClientUser = { id: '123456789', tag: 'SupportBot#0000' };
 
   const mockClientInstance = {
     user: mockClientUser,
@@ -195,7 +195,7 @@ describe('MessageCreate handler', () => {
     startThread: ReturnType<typeof vi.fn>;
   }> = {}) {
     const defaults = {
-      content: '<@bot-user-id> how does twitch work?',
+      content: '<@123456789> how does twitch work?',
       authorBot: false,
       isThread: false,
       isBotThread: false,
@@ -220,7 +220,7 @@ describe('MessageCreate handler', () => {
     };
 
     if (opts.isThread) {
-      channel.ownerId = opts.isBotThread ? 'bot-user-id' : 'other-user-id';
+      channel.ownerId = opts.isBotThread ? '123456789' : 'other-user-id';
       channel.messages = {
         fetch: vi.fn().mockResolvedValue(new Map([
           ['m1', { id: 'm1', content: 'prior question', author: { bot: false, username: 'Alice' } }],
@@ -267,7 +267,7 @@ describe('MessageCreate handler', () => {
     await startBot(testConfig);
     const handler = getEventHandler(Events.MessageCreate);
 
-    const msg = buildMessage({ content: '<@bot-user-id> how does twitch work?' });
+    const msg = buildMessage({ content: '<@123456789> how does twitch work?' });
     await handler!(msg);
 
     expect(mockQueryCodebase).toHaveBeenCalledWith(
@@ -281,7 +281,7 @@ describe('MessageCreate handler', () => {
     await startBot(testConfig);
     const handler = getEventHandler(Events.MessageCreate);
 
-    const msg = buildMessage({ content: '<@bot-user-id> explain the architecture', isThread: false });
+    const msg = buildMessage({ content: '<@123456789> explain the architecture', isThread: false });
     await handler!(msg);
 
     expect(mockQueryCodebase).toHaveBeenCalledWith(
@@ -296,7 +296,7 @@ describe('MessageCreate handler', () => {
     const handler = getEventHandler(Events.MessageCreate);
 
     const startThread = vi.fn().mockResolvedValue({ id: 'new-thread' });
-    const msg = buildMessage({ content: '<@bot-user-id> how does twitch work?', isThread: false, startThread });
+    const msg = buildMessage({ content: '<@123456789> how does twitch work?', isThread: false, startThread });
     await handler!(msg);
 
     expect(startThread).toHaveBeenCalledWith(expect.objectContaining({
@@ -310,7 +310,7 @@ describe('MessageCreate handler', () => {
     const handler = getEventHandler(Events.MessageCreate);
 
     const msg = buildMessage({
-      content: '<@bot-user-id> follow-up question',
+      content: '<@123456789> follow-up question',
       isThread: true,
       isBotThread: true,
     });
@@ -348,7 +348,7 @@ describe('MessageCreate handler', () => {
 
     const startThread = vi.fn().mockResolvedValue({ id: 'new-thread' });
     const msg = buildMessage({
-      content: '<@bot-user-id> question in thread',
+      content: '<@123456789> question in thread',
       isThread: true,
       isBotThread: true,
       startThread,
@@ -373,7 +373,7 @@ describe('MessageCreate handler', () => {
     const handler = getEventHandler(Events.MessageCreate);
 
     const channelSend = vi.fn().mockResolvedValue({});
-    const msg = buildMessage({ content: '<@bot-user-id> there is a bug', channelSend });
+    const msg = buildMessage({ content: '<@123456789> there is a bug', channelSend });
     await handler!(msg);
 
     expect(mockCreateIssue).toHaveBeenCalledWith(
@@ -405,7 +405,7 @@ describe('Response formatting', () => {
     const channelSend = vi.fn().mockResolvedValue({});
     const msg = {
       id: 'msg-main',
-      content: '<@bot-user-id> short question',
+      content: '<@123456789> short question',
       author: { bot: false, username: 'Alice', id: 'user-alice' },
       channel: {
         id: 'channel1',
@@ -433,7 +433,7 @@ describe('Response formatting', () => {
     const channelSend = vi.fn().mockResolvedValue({});
     const msg = {
       id: 'msg-main',
-      content: '<@bot-user-id> medium question',
+      content: '<@123456789> medium question',
       author: { bot: false, username: 'Alice', id: 'user-alice' },
       channel: {
         id: 'channel1',
@@ -463,7 +463,7 @@ describe('Response formatting', () => {
     const channelSend = vi.fn().mockResolvedValue({});
     const msg = {
       id: 'msg-main',
-      content: '<@bot-user-id> long question',
+      content: '<@123456789> long question',
       author: { bot: false, username: 'Alice', id: 'user-alice' },
       channel: {
         id: 'channel1',
