@@ -16,4 +16,6 @@ export interface BotConfig {
   githubOwner: string;
   allChatRepoPath: string;
   allChatExtensionRepoPath: string;
+  claudeCredentialsJson?: string;
+  claudeOAuthClientId?: string;
 }
