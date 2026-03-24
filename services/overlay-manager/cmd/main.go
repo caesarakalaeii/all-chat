@@ -195,6 +195,7 @@ func main() {
 		protected.GET("/:id", overlayHandler.HandleGetOverlay)
 		protected.PUT("/:id", overlayHandler.HandleUpdateOverlay)
 		protected.DELETE("/:id", overlayHandler.HandleDeleteOverlay)
+		protected.POST("/:id/clone", overlayHandler.HandleCloneOverlay)
 
 		// Source management routes (nested under /:id)
 		protected.GET("/:id/sources", sourcesHandler.HandleListSources)
