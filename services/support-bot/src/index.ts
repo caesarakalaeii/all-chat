@@ -51,10 +51,11 @@ process.on('SIGTERM', () => void shutdown(discordClient));
 async function main(): Promise<void> {
   const config = validateEnv();
 
+  let tokenManager: ClaudeTokenManager | undefined;
   if (config.claudeCredentialsJson) {
+    tokenManager = new ClaudeTokenManager(config.claudeCredentialsJson);
     try {
-      const startupManager = new ClaudeTokenManager(config.claudeCredentialsJson);
-      await startupManager.ensureFreshToken();
+      await tokenManager.ensureFreshToken();
       console.log('[startup] Claude token validated successfully');
     } catch (error) {
       console.error('[startup] Failed to obtain Claude token:', error);
@@ -63,7 +64,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    discordClient = await startBot(config);
+    discordClient = await startBot(config, tokenManager);
   } catch (error) {
     console.error('Failed to start bot:', error);
     process.exit(1);
