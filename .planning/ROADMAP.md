@@ -207,7 +207,7 @@
 **Goal:** Deploy a Discord support bot (services/support-bot) that answers user questions about All-Chat and All-Chat-Extension with codebase awareness via Claude Agent SDK, proposes code changes as GitHub issues, and responds to @mentions and /support slash commands.
 **Requirements**: BOT-01, BOT-02, BOT-03, BOT-04, BOT-05, BOT-06, BOT-07
 **Depends on:** None
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 01-01-PLAN.md — Project scaffold, types, Claude agent wrapper, GitHub issues module, env validation
