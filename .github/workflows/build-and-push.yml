@@ -42,6 +42,7 @@ jobs:
       share-service: ${{ steps.changes.outputs.share-service }}
       discord-bot: ${{ steps.changes.outputs.discord-bot }}
       discord-listener: ${{ steps.changes.outputs.discord-listener }}
+      support-bot: ${{ steps.changes.outputs.support-bot }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
     steps:
@@ -100,6 +101,8 @@ jobs:
             discord-listener:
               - 'services/discord-listener/**'
               - 'shared/**'
+            support-bot:
+              - 'services/support-bot/**'
             frontend:
               - 'frontend/**'
             shared:
@@ -165,6 +168,9 @@ jobs:
           - name: discord-listener
             changed: ${{ needs.detect-changes.outputs.discord-listener }}
             path: services/discord-listener
+          - name: support-bot
+            changed: ${{ needs.detect-changes.outputs.support-bot }}
+            path: services/support-bot
           - name: frontend
             changed: ${{ needs.detect-changes.outputs.frontend }}
             path: frontend
@@ -253,3 +259,22 @@ jobs:
           cd services/${{ matrix.service }}
           go mod download
           go test -v -short ./...
+
+  test-node:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: services/support-bot/package-lock.json
+
+      - name: Run tests for support-bot
+        run: |
+          cd services/support-bot
+          npm ci
+          npm test
