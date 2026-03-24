@@ -15,8 +15,8 @@ async function fetchThreadHistory(thread: ThreadChannel): Promise<string[]> {
   const messages = await thread.messages.fetch({ limit: 20 });
   return [...messages.values()]
     .reverse()
-    .filter(m => !m.author.bot)
-    .map(m => `[${m.author.username}]: ${m.content}`);
+    .filter(m => m.content.length > 0)
+    .map(m => `[${m.author.bot ? 'Bot' : m.author.username}]: ${m.content}`);
 }
 
 async function handleQuestion(
