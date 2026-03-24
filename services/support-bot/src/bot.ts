@@ -1,7 +1,157 @@
+import {
+  Client,
+  EmbedBuilder,
+  Events,
+  GatewayIntentBits,
+  type TextChannel,
+  type ThreadChannel,
+} from 'discord.js';
+import type { Octokit } from '@octokit/rest';
+import { queryCodebase } from './claude/agent.js';
+import { createIssue, createOctokitClient } from './github/issues.js';
 import type { BotConfig } from './types.js';
 
-export async function startBot(config: BotConfig): Promise<void> {
-  console.log('Bot starting...');
-  // Plan 02 will replace this with the full Discord implementation.
-  void config;
+async function fetchThreadHistory(thread: ThreadChannel): Promise<string[]> {
+  const messages = await thread.messages.fetch({ limit: 20 });
+  return [...messages.values()]
+    .reverse()
+    .filter(m => !m.author.bot)
+    .map(m => `[${m.author.username}]: ${m.content}`);
+}
+
+async function handleQuestion(
+  question: string,
+  repoPaths: string[],
+  config: BotConfig,
+  octokit: Octokit,
+  history: string[],
+): Promise<string> {
+  const result = await queryCodebase(question, repoPaths, history);
+  let answer = result.answer;
+
+  if (result.issueProposal !== null) {
+    const issueUrl = await createIssue(
+      octokit,
+      config.githubOwner,
+      result.issueProposal.repo,
+      result.issueProposal.title,
+      result.issueProposal.body,
+    );
+    answer = `${answer}\n\nI've created a GitHub issue for this proposed change: ${issueUrl}`;
+  }
+
+  return answer;
+}
+
+async function sendResponse(
+  channel: TextChannel | ThreadChannel,
+  text: string,
+): Promise<void> {
+  if (text.length <= 2000) {
+    await channel.send(text);
+  } else if (text.length <= 4096) {
+    await channel.send({ embeds: [new EmbedBuilder().setDescription(text)] });
+  } else {
+    const chunks = text.match(/.{1,2000}/gs) ?? [text];
+    for (const chunk of chunks) {
+      await channel.send(chunk);
+    }
+  }
+}
+
+export async function startBot(config: BotConfig): Promise<Client> {
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
+  });
+
+  const octokit = createOctokitClient(config.githubToken);
+  const repoPaths = [config.allChatRepoPath, config.allChatExtensionRepoPath];
+
+  client.on(Events.MessageCreate, async (message) => {
+    if (message.author.bot) return;
+
+    const inBotThread =
+      message.channel.isThread() &&
+      (message.channel as ThreadChannel).ownerId === client.user!.id;
+
+    if (!inBotThread && !message.mentions.has(client.user!.id)) return;
+
+    const stripped = message.content.replace(/<@!?\d+>/g, '').trim();
+
+    if (!stripped) {
+      await message.reply('Please include a question after the mention.');
+      return;
+    }
+
+    await message.channel.sendTyping();
+
+    const history = inBotThread
+      ? await fetchThreadHistory(message.channel as ThreadChannel)
+      : [];
+
+    const answer = await handleQuestion(stripped, repoPaths, config, octokit, history);
+
+    await sendResponse(message.channel as TextChannel | ThreadChannel, answer);
+
+    if (!message.channel.isThread()) {
+      await message.startThread({
+        name: stripped.slice(0, 50),
+        autoArchiveDuration: 1440,
+      });
+    }
+  });
+
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+    if (interaction.commandName !== 'support') return;
+
+    const question = interaction.options.getString('question', true);
+
+    await interaction.deferReply();
+
+    const answer = await handleQuestion(question, repoPaths, config, octokit, []);
+
+    let editPayload: string | { embeds: EmbedBuilder[] };
+    if (answer.length <= 2000) {
+      editPayload = answer;
+    } else if (answer.length <= 4096) {
+      editPayload = { embeds: [new EmbedBuilder().setDescription(answer)] };
+    } else {
+      const chunks = answer.match(/.{1,2000}/gs) ?? [answer];
+      editPayload = chunks[0] ?? answer;
+      const reply = await interaction.fetchReply();
+      await interaction.editReply(editPayload);
+      await reply.startThread({
+        name: question.slice(0, 50),
+        autoArchiveDuration: 1440,
+      });
+      // Send remaining chunks to the thread
+      const thread = reply.startThread as unknown as ThreadChannel;
+      if (chunks.length > 1) {
+        for (const chunk of chunks.slice(1)) {
+          await thread.send?.(chunk);
+        }
+      }
+      return;
+    }
+
+    const reply = await interaction.fetchReply();
+    await interaction.editReply(editPayload);
+    await reply.startThread({
+      name: question.slice(0, 50),
+      autoArchiveDuration: 1440,
+    });
+  });
+
+  client.once('ready', () => {
+    console.log(`Support bot ready as ${client.user?.tag}`);
+  });
+
+  await client.login(config.discordToken);
+
+  return client;
 }
