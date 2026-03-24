@@ -73,7 +73,19 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
   const octokit = createOctokitClient(config.githubToken);
   const repoPaths = [config.allChatRepoPath, config.allChatExtensionRepoPath];
 
-  client.on(Events.MessageCreate, async (message) => {
+  // Per-channel queue: each message waits for the previous one to finish so
+  // history is complete and responses arrive in order.
+  const queues = new Map<string, Promise<void>>();
+
+  const enqueue = (channelId: string, task: () => Promise<void>): void => {
+    const prev = queues.get(channelId) ?? Promise.resolve();
+    const next = prev.then(task, task); // run task regardless of previous outcome
+    queues.set(channelId, next);
+    // clean up once the chain is idle
+    next.then(() => { if (queues.get(channelId) === next) queues.delete(channelId); });
+  };
+
+  client.on(Events.MessageCreate, (message) => {
     if (message.author.bot) return;
 
     const inBotThread =
@@ -85,49 +97,51 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
     const stripped = message.content.replace(/<@!?\d+>/g, '').trim();
 
     if (!stripped) {
-      await message.reply('Please include a question after the mention.');
+      void message.reply('Please include a question after the mention.');
       return;
     }
 
-    await message.channel.sendTyping();
-    const typingInterval = setInterval(() => { void message.channel.sendTyping(); }, 8000);
+    enqueue(message.channelId, async () => {
+      await message.channel.sendTyping();
+      const typingInterval = setInterval(() => { void message.channel.sendTyping(); }, 8000);
 
-    try {
-      const history = inBotThread
-        ? await fetchThreadHistory(message.channel as ThreadChannel)
-        : [];
+      try {
+        const history = inBotThread
+          ? await fetchThreadHistory(message.channel as ThreadChannel)
+          : [];
 
-      // If this is a reply to another message, prepend that message as context
-      let question = stripped;
-      if (message.reference?.messageId) {
-        try {
-          const referenced = await message.channel.messages.fetch(message.reference.messageId);
-          if (!referenced.author.bot) {
-            question = `Context (message being replied to by ${referenced.author.username}): ${referenced.content}\n\nQuestion: ${stripped}`;
+        // If this is a reply to another message, prepend that message as context
+        let question = stripped;
+        if (message.reference?.messageId) {
+          try {
+            const referenced = await message.channel.messages.fetch(message.reference.messageId);
+            if (!referenced.author.bot) {
+              question = `Context (message being replied to by ${referenced.author.username}): ${referenced.content}\n\nQuestion: ${stripped}`;
+            }
+          } catch {
+            // ignore if fetch fails
           }
-        } catch {
-          // ignore if fetch fails
         }
+
+        const answer = await handleQuestion(question, repoPaths, config, octokit, history, tokenManager);
+
+        clearInterval(typingInterval);
+
+        if (message.channel.isThread()) {
+          await sendResponse(message.channel as ThreadChannel, answer);
+        } else {
+          const thread = await message.startThread({
+            name: stripped.slice(0, 50),
+            autoArchiveDuration: 1440,
+          });
+          await sendResponse(thread, answer);
+        }
+      } catch (err) {
+        clearInterval(typingInterval);
+        console.error('Error handling message:', err);
+        await message.reply('Sorry, something went wrong while processing your question. Check the bot logs for details.');
       }
-
-      const answer = await handleQuestion(question, repoPaths, config, octokit, history, tokenManager);
-
-      clearInterval(typingInterval);
-
-      if (message.channel.isThread()) {
-        await sendResponse(message.channel as ThreadChannel, answer);
-      } else {
-        const thread = await message.startThread({
-          name: stripped.slice(0, 50),
-          autoArchiveDuration: 1440,
-        });
-        await sendResponse(thread, answer);
-      }
-    } catch (err) {
-      clearInterval(typingInterval);
-      console.error('Error handling message:', err);
-      await message.reply('Sorry, something went wrong while processing your question. Check the bot logs for details.');
-    }
+    });
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
