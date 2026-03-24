@@ -1349,6 +1349,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     setIsResetting(true)
     try {
       const cloned = await overlaysApi.clone(id)
+      if (overlay) {
+        await overlaysApi.update(cloned.id, { name: overlay.name })
+      }
       await overlaysApi.delete(id)
       toastManager.add({ title: 'Overlay ID reset — redirecting…', type: 'success' })
       router.push(`/overlays/${cloned.id}`)
