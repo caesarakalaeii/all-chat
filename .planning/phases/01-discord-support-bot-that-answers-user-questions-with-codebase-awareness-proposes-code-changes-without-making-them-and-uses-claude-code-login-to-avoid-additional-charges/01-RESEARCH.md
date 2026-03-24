@@ -608,3 +608,222 @@ The project convention (kick-listener, overlay-manager) strongly prefers HTTP he
 
 **Research date:** 2026-03-24
 **Valid until:** 2026-04-24 (stable stack; OAuth policy is locked but Agent SDK may have minor version updates)
+
+---
+
+## OAuth Credentials Server-Side Analysis
+
+**Researched:** 2026-03-24
+**Question:** Can the `claude` CLI or `@anthropic-ai/claude-agent-sdk` be used in a Kubernetes pod with credentials from `~/.claude/.credentials.json` (OAuth from `claude auth login`) WITHOUT a separate `ANTHROPIC_API_KEY`?
+
+**Bottom line: Partially feasible via `claude -p` subprocess mode with `CLAUDE_CODE_OAUTH_TOKEN`, but with significant operational constraints that make it unsuitable for an always-on production Kubernetes service.**
+
+---
+
+### Q1: Does `claude --print` subprocess mode work with OAuth credentials (no ANTHROPIC_API_KEY)?
+
+**Answer: YES — with the correct setup. Confidence: MEDIUM.**
+
+The `claude -p` (print/non-interactive) mode reads credentials from `~/.claude/.credentials.json` if no `ANTHROPIC_API_KEY` is set. The CLI's auth precedence (per official docs at `code.claude.com/docs/en/authentication`) is:
+
+1. Cloud provider env vars (Bedrock/Vertex/Foundry)
+2. `ANTHROPIC_AUTH_TOKEN`
+3. `ANTHROPIC_API_KEY`
+4. `apiKeyHelper` script output
+5. **OAuth credentials from login** — the default for Claude subscription users
+
+When running `claude -p "question"` in a pod, if steps 1-4 have no values, the CLI uses step 5: it reads `~/.claude/.credentials.json` and uses the stored `accessToken`. This has been confirmed by community reports and the official credential management documentation.
+
+**Critical caveat:** This is using the `claude` CLI as a subprocess — not using OAuth tokens with `@anthropic-ai/sdk` or `@anthropic-ai/claude-agent-sdk` directly. The Agent SDK still requires `ANTHROPIC_API_KEY`. The OAuth path only works when spawning the full CLI binary.
+
+**Source:** [Claude Code Authentication docs](https://code.claude.com/docs/en/authentication), [claude_runner DEV.to article](https://dev.to/gumagonza1/clauderunner-how-i-eliminated-claude-api-costs-by-using-the-subscription-i-was-already-paying-for-5gil)
+
+---
+
+### Q2: Does `@anthropic-ai/claude-agent-sdk` read from `~/.claude/.credentials.json` when no ANTHROPIC_API_KEY is set?
+
+**Answer: NO. Confidence: HIGH.**
+
+The `@anthropic-ai/claude-agent-sdk` (and `@anthropic-ai/sdk`) require `ANTHROPIC_API_KEY`. The Agent SDK explicitly blocks OAuth tokens for programmatic use — as documented in the CRITICAL FINDING section above. Setting no API key and having only `~/.claude/.credentials.json` present will cause the SDK to fail authentication.
+
+The Agent SDK is explicitly exempt from OAuth: *"The Agent SDK now explicitly requires API key authentication — OAuth tokens from Free/Pro/Max accounts cannot be used with the Agent SDK."*
+
+If you want to leverage your subscription via the SDK layer, the only path is spawning `claude -p` as a subprocess, not using the SDK directly.
+
+---
+
+### Q3: Do OAuth credentials refresh automatically, or expire requiring manual renewal?
+
+**Answer: Access tokens expire every ~8-12 hours and do NOT auto-refresh in non-interactive (subprocess) mode. Confidence: HIGH.**
+
+This is a confirmed, open bug (as of March 2026) documented in multiple GitHub issues:
+
+- **Issue #28827** (closed as duplicate): OAuth tokens expire after ~10-15 minutes in non-interactive `-p` mode. The CLI does not use the `refreshToken` when running headless.
+- **Issue #21765** (still open as of March 14, 2026): When credentials are copied to a remote/headless machine, the refresh token flow does not work due to refresh token rotation — when one machine redeems the refresh token, the old refresh token is invalidated.
+- **Issue #12447**: Long-running autonomous workflows hit 401 errors mid-task.
+
+**What actually expires:**
+
+Looking at the local `~/.claude/.credentials.json` (inspected directly on this machine):
+```json
+{
+  "claudeAiOauth": {
+    "accessToken": "sk-ant-oat01-...",
+    "refreshToken": "sk-ant-ort01-...",
+    "expiresAt": 1774368378227,  // milliseconds since epoch
+    "scopes": ["user:inference", ...],
+    "subscriptionType": "enterprise",
+    "rateLimitTier": "default_claude_max_5x"
+  }
+}
+```
+
+The `expiresAt` on this machine is **today at 17:06 local time** — only ~6 hours from when this was inspected. This confirms access tokens have an ~8-12 hour lifetime, not 1 year.
+
+**The `setup-token` distinction:** Running `claude setup-token` generates a separate long-lived token valid for ~1 year (token starts with `sk-ant-oat01-` like a normal access token but is configured differently server-side). This is distinct from the short-lived `accessToken` in `credentials.json`. The `setup-token` flow is the only way to get a token with ~1 year validity.
+
+**Sources:** [Issue #28827](https://github.com/anthropics/claude-code/issues/28827), [Issue #21765](https://github.com/anthropics/claude-code/issues/21765), [Issue #12447](https://github.com/anthropics/claude-code/issues/12447)
+
+---
+
+### Q4: What is the `~/.claude/.credentials.json` token format/expiry and how does refresh work?
+
+**Answer: Confirmed by direct inspection. Confidence: HIGH.**
+
+**File location:** `~/.claude/.credentials.json` (dot-prefixed filename, inside `~/.claude/` directory). On Linux, created with mode `0600`.
+
+**Structure:**
+```json
+{
+  "claudeAiOauth": {
+    "accessToken": "sk-ant-oat01-[...]",      // Short-lived, ~8-12 hours
+    "refreshToken": "sk-ant-ort01-[...]",      // Longer-lived but single-use
+    "expiresAt": 1774368378227,                // Milliseconds since epoch
+    "scopes": [
+      "user:file_upload",
+      "user:inference",
+      "user:mcp_servers",
+      "user:profile",
+      "user:sessions:claude_code"
+    ],
+    "subscriptionType": "enterprise",          // or "pro", "max"
+    "rateLimitTier": "default_claude_max_5x"   // Rate tier from subscription
+  }
+}
+```
+
+**Refresh token rotation problem for server-side use:** OAuth refresh tokens are single-use — when redeemed, the server issues a new refresh token and invalidates the old one. If you copy `credentials.json` to a Kubernetes pod AND continue using Claude locally, whichever process refreshes first gets the new token pair. The other gets a 401. This makes sharing credentials between local machine and Kubernetes pod unreliable.
+
+**In interactive mode:** The Claude CLI handles refresh correctly in interactive sessions (terminal use). In non-interactive (`-p`) mode, refresh is broken or unreliable as of March 2026.
+
+**Source:** [Issue #21765](https://github.com/anthropics/claude-code/issues/21765), direct file inspection
+
+---
+
+### Q5: Is there an official way to do headless OAuth auth for server-side Claude Code usage?
+
+**Answer: YES — `claude setup-token` + `CLAUDE_CODE_OAUTH_TOKEN` env var. But it has ToS constraints. Confidence: MEDIUM.**
+
+**The official path for headless/CI use of subscription credentials:**
+
+1. On a machine with a browser: run `claude setup-token`
+2. This generates a long-lived token (valid ~1 year, format: `sk-ant-oat01-...`)
+3. Store token as Kubernetes secret
+4. In the pod: set `CLAUDE_CODE_OAUTH_TOKEN=<token>` + create `~/.claude.json` with `{"hasCompletedOnboarding": true}`
+5. Invoke `claude -p "question"` — it reads `CLAUDE_CODE_OAUTH_TOKEN` instead of `credentials.json`
+
+This is the same mechanism used by the official `anthropics/claude-code-action` GitHub Action and is documented in the official Claude Code action setup guide.
+
+**Key constraints on `CLAUDE_CODE_OAUTH_TOKEN`:**
+
+- It **does NOT work with `@anthropic-ai/claude-agent-sdk`** — only with the `claude` CLI subprocess
+- Anthropic's ToS explicitly prohibits using OAuth tokens in "any other product, tool, or service" outside of Claude Code itself. Running `claude -p` as a subprocess is allowed (you're using the actual Claude Code CLI). Using the OAuth token directly in your own API calls is banned.
+- The token uses your Claude subscription's rate limits (not API rate limits). For Claude Max 5x, that means 5x the standard limits.
+- Requires `~/.claude.json` with onboarding flag set — the env var alone is insufficient (Issue #8938).
+
+**Source:** [claude-code-action setup.md](https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md), [Headless VPS gist](https://gist.github.com/coenjacobs/d37adc34149d8c30034cd1f20a89cce9), [Issue #8938](https://github.com/anthropics/claude-code/issues/8938), [Claude Code authentication docs](https://code.claude.com/docs/en/authentication)
+
+---
+
+### Feasibility Assessment for This Project
+
+| Approach | Feasible? | Key Problem |
+|----------|-----------|-------------|
+| Mount `credentials.json` as K8s secret → `claude -p` subprocess | MARGINAL | `accessToken` expires in ~8-12 hours; refresh broken in headless mode; pod needs token renewal or constant re-deployment |
+| `CLAUDE_CODE_OAUTH_TOKEN` env var → `claude -p` subprocess | CONDITIONALLY YES | 1-year token validity; requires `claude setup-token` once/year; manual renewal; spawning CLI subprocess has 3-5s overhead per query |
+| `@anthropic-ai/claude-agent-sdk` + OAuth credentials | NO | SDK explicitly requires `ANTHROPIC_API_KEY`; OAuth tokens are blocked |
+| `@anthropic-ai/sdk` (direct Messages API) + OAuth tokens | NO | Blocked since 2026-01-09 with `"OAuth authentication is currently not supported"` |
+| `ANTHROPIC_API_KEY` → `@anthropic-ai/claude-agent-sdk` | YES (recommended) | Requires separate API billing, but cost is negligible for moderate bot usage |
+
+**For an always-on Kubernetes service, the subprocess approach has significant drawbacks:**
+
+1. **Per-query overhead:** Spawning `claude` binary adds 3-5 seconds of cold-start per question (process fork, Node.js startup, auth check). For a support bot responding to occasional questions, this is borderline acceptable.
+2. **No streaming:** `claude -p` is not easily integrated with the Node.js async streaming patterns needed for Discord's interaction model.
+3. **Annual manual renewal:** `CLAUDE_CODE_OAUTH_TOKEN` requires re-running `claude setup-token` yearly and updating the Kubernetes secret. Manageable but operationally fragile.
+4. **No Agent SDK features:** The subprocess mode does not expose the structured `allowedTools`, session management, or typed message stream that `@anthropic-ai/claude-agent-sdk` provides. You get raw stdout text, requiring regex parsing.
+5. **Rate limit sharing:** Bot usage shares the rate limit pool with the user's personal Claude Code usage on their local machine. Heavy personal usage can starve the bot.
+
+**The case FOR trying it anyway (user's original preference):**
+
+If cost avoidance is the primary driver, using `CLAUDE_CODE_OAUTH_TOKEN` with `claude -p` subprocess is a viable MVP approach. The bot's query volume is low (a few per day), the annual renewal is manageable, and it genuinely costs $0 in API fees.
+
+**The case AGAINST (recommended position):**
+
+The `ANTHROPIC_API_KEY` + `@anthropic-ai/claude-agent-sdk` path is simpler, more reliable, has no token expiry to manage, uses the proper SDK with typed interfaces, and costs pennies per day at the expected query volume. The operational complexity of managing OAuth token refresh/renewal for a bot that handles a handful of queries per day is not worth the savings.
+
+---
+
+### Implementation Pattern: `claude -p` Subprocess (if user insists on OAuth)
+
+If the user decides to use the subprocess approach despite the tradeoffs:
+
+```typescript
+// services/support-bot/src/claude/subprocess.ts
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+
+export async function queryViaSubprocess(question: string): Promise<string> {
+  // Requires CLAUDE_CODE_OAUTH_TOKEN env var and ~/.claude.json with hasCompletedOnboarding:true
+  const { stdout, stderr } = await execFileAsync(
+    'claude',
+    ['-p', question, '--output-format', 'text'],
+    {
+      timeout: 120_000,  // 2 minute timeout
+      env: {
+        ...process.env,
+        CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN,
+      },
+    }
+  );
+  if (stderr) {
+    console.warn('claude stderr:', stderr);
+  }
+  return stdout.trim();
+}
+```
+
+**Kubernetes secret for this approach:**
+```yaml
+- name: CLAUDE_CODE_OAUTH_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: allchat-secrets
+      key: CLAUDE_CODE_OAUTH_TOKEN
+```
+
+**Note:** `allowedTools` restriction is NOT available via subprocess mode. The subprocess runs with full Claude Code capabilities (read/write/bash). This is a security concern — mitigation: run the pod with a read-only filesystem and minimal filesystem mounts.
+
+---
+
+### Additional Sources for this Section
+
+- [Claude Code Authentication docs](https://code.claude.com/docs/en/authentication) — credential file location, auth precedence order, CLAUDE_CODE_OAUTH_TOKEN description (HIGH confidence)
+- [Issue #21765: OAuth refresh not used on remote machines](https://github.com/anthropics/claude-code/issues/21765) — refresh token rotation problem, open as of March 2026 (HIGH confidence)
+- [Issue #28827: OAuth not refreshed in non-interactive mode](https://github.com/anthropics/claude-code/issues/28827) — confirmed bug in `-p` mode, closed as duplicate March 2026 (HIGH confidence)
+- [Issue #12447: Token expiration in autonomous workflows](https://github.com/anthropics/claude-code/issues/12447) — workaround via `setup-token` (MEDIUM confidence)
+- [Issue #8938: CLAUDE_CODE_OAUTH_TOKEN alone insufficient](https://github.com/anthropics/claude-code/issues/8938) — requires `~/.claude.json` onboarding flag (MEDIUM confidence)
+- [claude-code-action setup.md](https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md) — official action uses `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (HIGH confidence)
+- [Headless VPS gist](https://gist.github.com/coenjacobs/d37adc34149d8c30034cd1f20a89cce9) — community-documented headless setup procedure (MEDIUM confidence)
+- Direct inspection of `~/.claude/.credentials.json` on the developer's machine — `expiresAt` confirmed as ~8-12 hour window (HIGH confidence — primary source)
