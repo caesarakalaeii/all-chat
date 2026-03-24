@@ -89,19 +89,24 @@ export async function startBot(config: BotConfig): Promise<Client> {
 
     await message.channel.sendTyping();
 
-    const history = inBotThread
-      ? await fetchThreadHistory(message.channel as ThreadChannel)
-      : [];
+    try {
+      const history = inBotThread
+        ? await fetchThreadHistory(message.channel as ThreadChannel)
+        : [];
 
-    const answer = await handleQuestion(stripped, repoPaths, config, octokit, history);
+      const answer = await handleQuestion(stripped, repoPaths, config, octokit, history);
 
-    await sendResponse(message.channel as TextChannel | ThreadChannel, answer);
+      await sendResponse(message.channel as TextChannel | ThreadChannel, answer);
 
-    if (!message.channel.isThread()) {
-      await message.startThread({
-        name: stripped.slice(0, 50),
-        autoArchiveDuration: 1440,
-      });
+      if (!message.channel.isThread()) {
+        await message.startThread({
+          name: stripped.slice(0, 50),
+          autoArchiveDuration: 1440,
+        });
+      }
+    } catch (err) {
+      console.error('Error handling message:', err);
+      await message.reply('Sorry, something went wrong while processing your question. Check the bot logs for details.');
     }
   });
 
@@ -113,7 +118,14 @@ export async function startBot(config: BotConfig): Promise<Client> {
 
     await interaction.deferReply();
 
-    const answer = await handleQuestion(question, repoPaths, config, octokit, []);
+    let answer: string;
+    try {
+      answer = await handleQuestion(question, repoPaths, config, octokit, []);
+    } catch (err) {
+      console.error('Error handling interaction:', err);
+      await interaction.editReply('Sorry, something went wrong while processing your question. Check the bot logs for details.');
+      return;
+    }
 
     let editPayload: string | { embeds: EmbedBuilder[] };
     if (answer.length <= 2000) {
