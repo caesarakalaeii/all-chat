@@ -410,6 +410,7 @@ func main() {
 		protectedAPI.GET("/overlays/:id", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/overlays/:id", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/overlays/:id", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/clone", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/config", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/overlays/:id/config", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/sources", proxyHandler.ForwardRequest)
