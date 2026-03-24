@@ -30,6 +30,34 @@ import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
 import { buildGradientCSS } from '@/lib/utils/gradient';
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css';
 import type { VisualSettings } from '@/lib/types/visual-settings';
+
+// ---- Google Font loader ---------------------------------------------------
+
+const GOOGLE_FONT_NAMES = new Set([
+  'Bebas Neue',
+  'Oswald',
+  'Rajdhani',
+  'Barlow Condensed',
+  'Exo 2',
+  'Nunito',
+  'Poppins',
+  'Roboto',
+  'Open Sans',
+  'Montserrat',
+])
+
+function ensureGoogleFontLoaded(fontFamily: string): void {
+  if (!GOOGLE_FONT_NAMES.has(fontFamily)) return
+  const slug = fontFamily.replace(/\s+/g, '-').toLowerCase()
+  if (document.getElementById('gfont-' + slug)) return
+  const link = document.createElement('link')
+  link.id = 'gfont-' + slug
+  link.rel = 'stylesheet'
+  const encodedName = encodeURIComponent(fontFamily)
+  link.href = `https://fonts.googleapis.com/css2?family=${encodedName}:wght@400;600;700&display=swap`
+  document.head.appendChild(link)
+}
+
 import { UserAvatar } from '@/components/UserAvatar';
 import { AllChatBadge } from '@/components/AllChatBadge';
 import { PremiumBadge } from '@/components/PremiumBadge';
@@ -97,7 +125,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
 
         if (data.visual_settings && typeof data.visual_settings === 'object') {
-          setVisualSettingsCss(visualSettingsToCss(data.visual_settings as Partial<VisualSettings>));
+          const vs = data.visual_settings as Partial<VisualSettings>;
+          setVisualSettingsCss(visualSettingsToCss(vs));
+          for (const key of ['fontFamily', 'usernameFontFamily', 'timestampFontFamily'] as const) {
+            if (typeof vs[key] === 'string') ensureGoogleFontLoaded(vs[key]!);
+          }
         }
 
         // Load configured channel IDs from sources
