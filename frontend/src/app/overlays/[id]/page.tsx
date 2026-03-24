@@ -982,6 +982,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [shareLoading, setShareLoading] = useState(false)
   const shareInputRef = useRef<HTMLInputElement>(null)
 
+  // --- Clone / Reset Overlay ID state ---
+  const [isCloning, setIsCloning] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
+
   // --- sendCssToIframe: post CSS generated from visualSettings to the iframe ---
   const sendCssToIframe = useCallback((settings: Partial<VisualSettings>) => {
     const css = visualSettingsToCss(settings)
@@ -1327,6 +1332,33 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  async function handleCloneOverlay() {
+    setIsCloning(true)
+    try {
+      const cloned = await overlaysApi.clone(id)
+      toastManager.add({ title: 'Overlay cloned', type: 'success' })
+      router.push(`/overlays/${cloned.id}`)
+    } catch {
+      toastManager.add({ title: 'Failed to clone overlay', type: 'error' })
+    } finally {
+      setIsCloning(false)
+    }
+  }
+
+  async function handleConfirmResetOverlayId() {
+    setIsResetting(true)
+    try {
+      const cloned = await overlaysApi.clone(id)
+      await overlaysApi.delete(id)
+      toastManager.add({ title: 'Overlay ID reset — redirecting…', type: 'success' })
+      router.push(`/overlays/${cloned.id}`)
+    } catch {
+      toastManager.add({ title: 'Failed to reset overlay ID', type: 'error' })
+      setIsResetting(false)
+    }
+    setShowResetConfirm(false)
+  }
+
   async function handleSendShareRequest() {
     const username = shareRecipient.trim()
     if (!username) return
@@ -1569,6 +1601,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 onClick={() => router.push(`/overlays/${id}/credits`)}
               >
                 Credits
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isCloning}
+                onClick={() => void handleCloneOverlay()}
+              >
+                {isCloning ? 'Cloning…' : 'Clone'}
               </Button>
             </div>
           </div>
@@ -2188,6 +2228,31 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   </div>
                 </div>
               </CollapsibleSection>
+
+              {/* Danger Zone section */}
+              <CollapsibleSection
+                id="danger-zone"
+                title="Danger Zone"
+                storageKey="editor-panel-sections-v1"
+                defaultOpen={false}
+              >
+                <div className="space-y-3">
+                  <p className="text-xs text-text-sub">
+                    Reset your overlay ID to revoke any leaked OBS URLs. A new overlay with the same
+                    configuration will be created and you will be redirected to it. The old overlay and
+                    its URL will be permanently deleted.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-destructive/50 text-destructive hover:bg-destructive/10"
+                    onClick={() => setShowResetConfirm(true)}
+                    disabled={isResetting}
+                  >
+                    {isResetting ? 'Resetting…' : 'Reset Overlay ID'}
+                  </Button>
+                </div>
+              </CollapsibleSection>
             </div>
 
             {/* Sticky Save footer — position:sticky works inside overflow-y-auto split-view-config container */}
@@ -2254,6 +2319,35 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               }}
             >
               Continue
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      {/* Reset Overlay ID confirm dialog */}
+      <Dialog.Root open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+        <Dialog.Content size="sm" showCloseButton={false}>
+          <Dialog.Title>Reset Overlay ID?</Dialog.Title>
+          <Dialog.Description>
+            This will create a new overlay with a fresh ID and permanently delete this one.
+            Any existing OBS URLs will stop working — update your browser source after the reset.
+          </Dialog.Description>
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close
+              render={
+                <Button type="button" variant="outline" size="sm">
+                  Cancel
+                </Button>
+              }
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isResetting}
+              onClick={() => void handleConfirmResetOverlayId()}
+            >
+              {isResetting ? 'Resetting…' : 'Reset ID'}
             </Button>
           </div>
         </Dialog.Content>

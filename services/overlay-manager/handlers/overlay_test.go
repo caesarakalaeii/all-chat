@@ -153,7 +153,7 @@ func TestOverlayHandler_HandleCreateOverlay(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter()
-			handler := NewOverlayHandler(tt.mockRepo)
+			handler := NewOverlayHandler(tt.mockRepo, nil, nil)
 
 			router.POST("/overlays", func(c *gin.Context) {
 				// Mock auth middleware - set user_id if provided
@@ -247,7 +247,7 @@ func TestOverlayHandler_HandleListOverlays(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter()
-			handler := NewOverlayHandler(tt.mockRepo)
+			handler := NewOverlayHandler(tt.mockRepo, nil, nil)
 
 			router.GET("/overlays", func(c *gin.Context) {
 				if tt.userID != "" {
@@ -329,7 +329,7 @@ func TestOverlayHandler_HandleGetOverlay(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter()
-			handler := NewOverlayHandler(tt.mockRepo)
+			handler := NewOverlayHandler(tt.mockRepo, nil, nil)
 
 			router.GET("/overlays/:id", func(c *gin.Context) {
 				if tt.userID != "" {
@@ -446,7 +446,7 @@ func TestOverlayHandler_HandleUpdateOverlay(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter()
-			handler := NewOverlayHandler(tt.mockRepo)
+			handler := NewOverlayHandler(tt.mockRepo, nil, nil)
 
 			router.PUT("/overlays/:id", func(c *gin.Context) {
 				if tt.userID != "" {
@@ -523,7 +523,7 @@ func TestOverlayHandler_HandleDeleteOverlay(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter()
-			handler := NewOverlayHandler(tt.mockRepo)
+			handler := NewOverlayHandler(tt.mockRepo, nil, nil)
 
 			router.DELETE("/overlays/:id", func(c *gin.Context) {
 				if tt.userID != "" {
@@ -544,7 +544,7 @@ func TestOverlayHandler_HandleDeleteOverlay(t *testing.T) {
 
 func TestOverlayHandler_RegisterRoutes(t *testing.T) {
 	router := setupTestRouter()
-	handler := NewOverlayHandler(&mockOverlayRepository{})
+	handler := NewOverlayHandler(&mockOverlayRepository{}, nil, nil)
 
 	handler.RegisterRoutes(router)
 
