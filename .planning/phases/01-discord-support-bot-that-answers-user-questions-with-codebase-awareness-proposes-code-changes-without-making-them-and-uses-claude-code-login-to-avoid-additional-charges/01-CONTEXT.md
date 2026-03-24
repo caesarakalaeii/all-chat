@@ -32,9 +32,12 @@ Build a new Discord bot service (`services/support-bot`) that answers user quest
 - File selection: Claude decides which files to read based on the question (tool-use / ReAct loop) — not keyword routing, not fixed context injection
 
 ### Claude authentication
-- Use `@anthropic-ai/sdk` with Claude Code OAuth tokens to reuse existing Claude.ai subscription
-- Token provisioning: run `claude auth login` locally once, export the OAuth token/credentials file, store as a Kubernetes secret, mount into the bot pod
-- Model: `claude-sonnet-4-6` — best balance of reasoning depth and response speed for Discord
+- Use `claude -p "question"` subprocess approach via `execa` — this reuses the Claude.ai subscription with no separate API billing
+- Token provisioning: run `claude setup-token` once locally to generate a ~1-year `CLAUDE_CODE_OAUTH_TOKEN`, store as a Kubernetes secret `CLAUDE_CODE_OAUTH_TOKEN`, pass as env var into the pod
+- The `claude` binary must be installed in the Docker image (install via `npm install -g @anthropic-ai/claude-code` in the Dockerfile)
+- Model: `claude-sonnet-4-6` — passed via `--model claude-sonnet-4-6` flag to the subprocess
+- No `@anthropic-ai/claude-agent-sdk` programmatic SDK — OAuth is blocked for server-side SDK use since 2026-01-09
+- Codebase read-only enforcement: pass `--allowedTools Read,Glob,Grep` flag to the `claude -p` subprocess to restrict tool use
 
 ### Claude's Discretion
 - Conversation threading (per-user, per-channel, or fresh context each message)
@@ -99,7 +102,7 @@ Build a new Discord bot service (`services/support-bot`) that answers user quest
 - Bot must access two repos: `all-chat` (this repo) and `all-chat-extension` (browser extension project)
 - Code change proposals go to GitHub issues — not Discord replies, not verbal descriptions
 - The bot should NOT be able to modify code — propose-only behavior is a hard requirement
-- Claude Code OAuth login is the preferred auth to avoid separate API billing
+- Claude Code OAuth login is the preferred auth to avoid separate API billing — implemented via `claude -p` subprocess with `CLAUDE_CODE_OAUTH_TOKEN` env var (~1-year token from `claude setup-token`)
 
 </specifics>
 
