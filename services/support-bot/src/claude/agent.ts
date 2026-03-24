@@ -22,6 +22,7 @@ export async function queryCodebase(
     fullPrompt = `${systemPrompt}\n\n${question}`;
   }
 
+  console.log('[claude] Starting subprocess (timeout: 120s)');
   const { stdout } = await execa(
     'claude',
     [
@@ -35,6 +36,7 @@ export async function queryCodebase(
       timeout: 120_000,
     },
   );
+  console.log('[claude] Subprocess completed, parsing response');
 
   const parsed = JSON.parse(stdout) as { result: string };
   const resultText = parsed.result;

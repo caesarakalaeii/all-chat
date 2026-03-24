@@ -135,12 +135,15 @@ export async function startBot(config: BotConfig): Promise<Client> {
     const question = interaction.options.getString('question', true);
 
     await interaction.deferReply();
+    console.log(`[interaction] Received /support question: "${question.slice(0, 80)}"`);
 
     let answer: string;
     try {
+      console.log('[interaction] Spawning claude subprocess...');
       answer = await handleQuestion(question, repoPaths, config, octokit, []);
+      console.log('[interaction] Claude responded successfully');
     } catch (err) {
-      console.error('Error handling interaction:', err);
+      console.error('[interaction] Error handling interaction:', err);
       await interaction.editReply('Sorry, something went wrong while processing your question. Check the bot logs for details.');
       return;
     }
