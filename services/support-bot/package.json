@@ -1,0 +1,23 @@
+{
+  "name": "all-chat-support-bot",
+  "version": "1.0.0",
+  "description": "Discord support bot for all-chat codebase questions",
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx src/index.ts",
+    "dev": "node --import tsx --watch src/index.ts",
+    "test": "vitest run",
+    "deploy-commands": "node --import tsx src/commands/deploy.ts"
+  },
+  "dependencies": {
+    "@octokit/rest": "^22.0.1",
+    "discord.js": "^14.14.1",
+    "execa": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

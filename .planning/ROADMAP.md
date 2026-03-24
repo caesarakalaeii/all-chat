@@ -202,5 +202,17 @@
 | 27-32 | v1.5 | 16/16 | Complete | 2026-03-16 |
 | 33-38 | v1.6 | 15/15 | Complete | 2026-03-18 |
 
+### Phase 1: Discord Support Bot
+
+**Goal:** Deploy a Discord support bot (services/support-bot) that answers user questions about All-Chat and All-Chat-Extension with codebase awareness via Claude Agent SDK, proposes code changes as GitHub issues, and responds to @mentions and /support slash commands.
+**Requirements**: BOT-01, BOT-02, BOT-03, BOT-04, BOT-05, BOT-06, BOT-07
+**Depends on:** None
+**Plans:** 2/3 plans executed
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold, types, Claude agent wrapper, GitHub issues module, env validation
+- [ ] 01-02-PLAN.md — Discord bot event handlers (@mention + slash command), handleQuestion orchestrator, command registration
+- [ ] 01-03-PLAN.md — Dockerfile, Kubernetes deployment manifests, live Discord verification
+
 ---
-*Last updated: 2026-03-18 after v1.6 milestone*
+*Last updated: 2026-03-24 after Phase 1 planning*
