@@ -95,7 +95,20 @@ export async function startBot(config: BotConfig): Promise<Client> {
         ? await fetchThreadHistory(message.channel as ThreadChannel)
         : [];
 
-      const answer = await handleQuestion(stripped, repoPaths, config, octokit, history);
+      // If this is a reply to another message, prepend that message as context
+      let question = stripped;
+      if (message.reference?.messageId) {
+        try {
+          const referenced = await message.channel.messages.fetch(message.reference.messageId);
+          if (!referenced.author.bot) {
+            question = `Context (message being replied to by ${referenced.author.username}): ${referenced.content}\n\nQuestion: ${stripped}`;
+          }
+        } catch {
+          // ignore if fetch fails
+        }
+      }
+
+      const answer = await handleQuestion(question, repoPaths, config, octokit, history);
 
       clearInterval(typingInterval);
 
