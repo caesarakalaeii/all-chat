@@ -1,3 +1,4 @@
+import type { Client } from 'discord.js';
 import type { BotConfig } from './types.js';
 import { startBot } from './bot.js';
 
@@ -35,7 +36,7 @@ export async function shutdown(client?: { destroy: () => void }): Promise<void> 
   process.exit(0);
 }
 
-let discordClient: { destroy: () => void } | undefined;
+let discordClient: Client | undefined;
 
 process.on('SIGINT', () => void shutdown(discordClient));
 process.on('SIGTERM', () => void shutdown(discordClient));
@@ -43,7 +44,7 @@ process.on('SIGTERM', () => void shutdown(discordClient));
 async function main(): Promise<void> {
   const config = validateEnv();
   try {
-    await startBot(config);
+    discordClient = await startBot(config);
   } catch (error) {
     console.error('Failed to start bot:', error);
     process.exit(1);
