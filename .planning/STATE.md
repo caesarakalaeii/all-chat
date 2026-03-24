@@ -1,17 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.7
-milestone_name: TBD
-status: milestone_complete
-stopped_at: v1.6 milestone archived
-last_updated: "2026-03-18T00:00:00.000Z"
-last_activity: 2026-03-18 — v1.6 Listener SDK milestone complete
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+stopped_at: "Checkpoint: Task 2 (verify bot in Discord) in 01-03-PLAN.md"
+last_updated: "2026-03-24T13:25:04.178Z"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 15
-  completed_plans: 15
-  percent: 100
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 8
+  completed_plans: 8
 ---
 
 # Project State
@@ -21,20 +19,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** Planning next milestone — run `/gsd:new-milestone`
+**Current focus:** Phase 01 — discord-support-bot-that-answers-user-questions-with-codebase-awareness-proposes-code-changes-without-making-them-and-uses-claude-code-login-to-avoid-additional-charges
 
 ## Current Position
 
-Phase: — (no active phases)
-Plan: — of —
-Status: Milestone complete — next milestone not yet defined
-Last activity: 2026-03-18 — v1.6 Listener SDK shipped (Phases 33-38)
-
-Progress: [##########] 100% (v1.6 — 15/15 plans complete)
+Phase: 01 (discord-support-bot-that-answers-user-questions-with-codebase-awareness-proposes-code-changes-without-making-them-and-uses-claude-code-login-to-avoid-additional-charges) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
 **Velocity (prior milestones):**
+
 - v1.0: 11 plans (3 phases)
 - v1.1: 21 plans (7 phases)
 - v1.2: 21 plans (12 phases)
@@ -66,6 +61,9 @@ Progress: [##########] 100% (v1.6 — 15/15 plans complete)
 | Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener P01 | 10min | 2 tasks | 3 files |
 | Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener P02 | 8min | 2 tasks | 2 files |
 | Phase 38 P03 | 4min | 2 tasks | 3 files |
+| Phase 01 P01 | 3 | 2 tasks | 11 files |
+| Phase 01 P02 | 248s | 2 tasks | 5 files |
+| Phase 01 P03 | 3min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -106,6 +104,19 @@ Key decisions relevant to v1.6:
 - [Phase 38-migrate-youtube-listener-and-twitch-eventsub-listener]: [Phase 38-02]: Old map-returning GetActiveChannels renamed to GetActiveChannelMap; new GetActiveChannels() []string satisfies SDK interface without breaking callers
 - [Phase 38]: coordClient still built manually with coordination.NewCoordinatorClient — NewListenerBaseFromEnv does not exist in SDK; all other migrated services use the same direct pattern
 - [Phase 38]: [Phase 38-03]: base.Start called before leader election goroutine — ensures UpdateAssignedSourceIDs is available when channelManager.Start fires on leadership acquisition
+- [Phase 01-01]: Use execa subprocess (claude -p) not @anthropic-ai/claude-agent-sdk — reuses user's Claude.ai subscription via CLAUDE_CODE_OAUTH_TOKEN
+- [Phase 01-01]: allowedTools restricted to Read,Glob,Grep only — bot can never write/edit code
+- [Phase 01-01]: PROPOSE_ISSUE:repo|||title|||body protocol for structured issue creation from LLM output
+- [Phase 01]: Mention regex uses \d+ (numeric snowflake IDs only) — Discord IDs are always numeric
+- [Phase 01]: sendResponse standalone function taking channel — separates message handler from editReply slash command path
+- [Phase 01]: InteractionCreate calls fetchReply before editReply to get message reference for thread creation
+- [Phase 01-03]: npm ci (not --production) in Dockerfile — tsx is a devDependency but required at runtime for TypeScript execution
+- [Phase 01-03]: Init containers use $GITHUB_TOKEN shell variable syntax inside sh -c — NOT $(GITHUB_TOKEN) which is Kubernetes command substitution
+- [Phase 01-03]: emptyDir volumes for cloned repos with readOnly: true mounts — ephemeral fresh clone on each pod start, bot reads only
+
+### Roadmap Evolution
+
+- Phase 1 added: Discord support bot that answers user questions with codebase awareness, proposes code changes without making them, and uses Claude Code login to avoid additional charges
 
 ### Pending Todos
 
@@ -114,19 +125,22 @@ None yet.
 ### Blockers/Concerns
 
 **Phase 33 (Pre-Migration Cleanup — research flags):**
+
 - Source ID normalization strategy: Validate whether coordinator `/assignments` response can be normalized server-side vs. normalizing all listeners client-side before choosing the fix direction
 - HandleMigrationEvent error return: Confirm `shared/coordination/migration_subscriber.go` handles the returned error gracefully (logs/ignores) before deploying the canonical signature
 
 **Phase 34 (SDK Definition — research flags):**
+
 - discordgo version: Run `go get github.com/bwmarrin/discordgo@latest` before wiring — expected v0.28.1 or higher; verify before pinning
 
 **Phase 37 (Discord migration — research flag):**
+
 - Integration test shard acquisition and release with SDK-backed LeadershipListener before deploying to confirm Discord Gateway RESUME protocol is unaffected
 
 ## Session Continuity
 
-Last session: 2026-03-18T09:08:51.721Z
-Stopped at: Completed 38-migrate-youtube-listener-and-twitch-eventsub-listener-38-03-PLAN.md
+Last session: 2026-03-24T13:24:51.345Z
+Stopped at: Checkpoint: Task 2 (verify bot in Discord) in 01-03-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
