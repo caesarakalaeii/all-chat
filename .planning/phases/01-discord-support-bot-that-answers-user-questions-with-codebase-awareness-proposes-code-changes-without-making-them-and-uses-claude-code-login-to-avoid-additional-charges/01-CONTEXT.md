@@ -39,8 +39,16 @@ Build a new Discord bot service (`services/support-bot`) that answers user quest
 - No `@anthropic-ai/claude-agent-sdk` programmatic SDK — OAuth is blocked for server-side SDK use since 2026-01-09
 - Codebase read-only enforcement: pass `--allowedTools Read,Glob,Grep` flag to the `claude -p` subprocess to restrict tool use
 
+### Conversation threading
+- **Discord thread per conversation** — on first @mention or /support, bot creates a Discord thread from the message
+- Thread name: first 50 chars of the question
+- Subsequent messages in that thread (from any user, no @mention needed) are treated as follow-ups
+- Bot collects thread message history (up to last 20 messages, excluding bot's own replies) and passes as context to claude
+- Thread messages are formatted as: `[UserName]: message content` joined with newlines, prepended to the question
+- Threads auto-archive after 24h of inactivity (Discord default)
+
 ### Claude's Discretion
-- Conversation threading (per-user, per-channel, or fresh context each message)
+- Rate limiting and concurrency handling
 - Exact GitHub issue template format
 - Rate limiting and concurrency handling
 - Error message wording
