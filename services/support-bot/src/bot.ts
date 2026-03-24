@@ -96,13 +96,14 @@ export async function startBot(config: BotConfig): Promise<Client> {
 
       const answer = await handleQuestion(stripped, repoPaths, config, octokit, history);
 
-      await sendResponse(message.channel as TextChannel | ThreadChannel, answer);
-
-      if (!message.channel.isThread()) {
-        await message.startThread({
+      if (message.channel.isThread()) {
+        await sendResponse(message.channel as ThreadChannel, answer);
+      } else {
+        const thread = await message.startThread({
           name: stripped.slice(0, 50),
           autoArchiveDuration: 1440,
         });
+        await sendResponse(thread, answer);
       }
     } catch (err) {
       console.error('Error handling message:', err);
