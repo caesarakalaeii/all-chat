@@ -21,12 +21,14 @@ type OverlayRepository interface {
 
 // OverlayHandler handles HTTP requests for overlays
 type OverlayHandler struct {
-	repo OverlayRepository
+	repo       OverlayRepository
+	sourceRepo SourceRepository
+	configRepo OverlayConfigRepository
 }
 
 // NewOverlayHandler creates a new overlay handler
-func NewOverlayHandler(repo OverlayRepository) *OverlayHandler {
-	return &OverlayHandler{repo: repo}
+func NewOverlayHandler(repo OverlayRepository, sourceRepo SourceRepository, configRepo OverlayConfigRepository) *OverlayHandler {
+	return &OverlayHandler{repo: repo, sourceRepo: sourceRepo, configRepo: configRepo}
 }
 
 // HandleCreateOverlay handles POST /overlays
@@ -216,6 +218,73 @@ func (h *OverlayHandler) HandleDeleteOverlay(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// HandleCloneOverlay handles POST /overlays/:id/clone
+func (h *OverlayHandler) HandleCloneOverlay(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	overlayID := c.Param("id")
+
+	source, err := h.repo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+
+	newOverlay := &models.Overlay{
+		UserID:             userID.(string),
+		Name:               source.Name + " (copy)",
+		Description:        source.Description,
+		IsActive:           source.IsActive,
+		IsPublicForViewers: false,
+	}
+
+	if err := h.repo.Create(c.Request.Context(), newOverlay); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to clone overlay"})
+		return
+	}
+
+	// Copy config if it exists
+	if sourceConfig, err := h.configRepo.GetByOverlayID(c.Request.Context(), overlayID); err == nil {
+		newConfig := &models.OverlayConfig{
+			OverlayID:       newOverlay.ID,
+			DisplaySettings: sourceConfig.DisplaySettings,
+			FilterSettings:  sourceConfig.FilterSettings,
+			Enable7TV:       sourceConfig.Enable7TV,
+			EnableBTTV:      sourceConfig.EnableBTTV,
+			EnableFFZ:       sourceConfig.EnableFFZ,
+			CustomCSS:       sourceConfig.CustomCSS,
+			VisualSettings:  sourceConfig.VisualSettings,
+		}
+		_ = h.configRepo.Update(c.Request.Context(), newConfig)
+	}
+
+	// Copy sources (skip shared_overlay)
+	if sourceSources, err := h.sourceRepo.ListByOverlayID(c.Request.Context(), overlayID); err == nil {
+		for _, s := range sourceSources {
+			if s.Platform == "shared_overlay" {
+				continue
+			}
+			cloned := &models.ChatSource{
+				OverlayID:     newOverlay.ID,
+				Platform:      s.Platform,
+				ChannelID:     s.ChannelID,
+				ChannelName:   s.ChannelName,
+				ChannelHandle: s.ChannelHandle,
+				AuthRequired:  s.AuthRequired,
+				IsActive:      s.IsActive,
+				Config:        s.Config,
+			}
+			_ = h.sourceRepo.Create(c.Request.Context(), cloned)
+		}
+	}
+
+	c.JSON(http.StatusCreated, newOverlay)
+}
+
 // RegisterRoutes registers overlay routes (no /overlays prefix - API Gateway strips /api/v1/overlays)
 func (h *OverlayHandler) RegisterRoutes(router gin.IRouter) {
 	router.POST("/", h.HandleCreateOverlay)
@@ -223,4 +292,5 @@ func (h *OverlayHandler) RegisterRoutes(router gin.IRouter) {
 	router.GET("/:id", h.HandleGetOverlay)
 	router.PUT("/:id", h.HandleUpdateOverlay)
 	router.DELETE("/:id", h.HandleDeleteOverlay)
+	router.POST("/:id/clone", h.HandleCloneOverlay)
 }

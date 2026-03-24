@@ -56,6 +56,13 @@ export const overlaysApi = {
   },
 
   /**
+   * Clone an overlay (creates a full copy with new ID)
+   */
+  async clone(id: string): Promise<Overlay> {
+    return apiClient.post<Overlay>(`/api/v1/overlays/${id}/clone`, {})
+  },
+
+  /**
    * Get overlay configuration (display settings, filters, emotes)
    */
   async getConfig(id: string): Promise<OverlayConfig> {
