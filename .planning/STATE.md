@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-24T11:23:58.257Z"
+stopped_at: "Checkpoint: Task 2 (verify bot in Discord) in 01-03-PLAN.md"
+last_updated: "2026-03-24T13:25:04.178Z"
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -63,6 +63,7 @@ Plan: 1 of 3
 | Phase 38 P03 | 4min | 2 tasks | 3 files |
 | Phase 01 P01 | 3 | 2 tasks | 11 files |
 | Phase 01 P02 | 248s | 2 tasks | 5 files |
+| Phase 01 P03 | 3min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,9 @@ Key decisions relevant to v1.6:
 - [Phase 01]: Mention regex uses \d+ (numeric snowflake IDs only) — Discord IDs are always numeric
 - [Phase 01]: sendResponse standalone function taking channel — separates message handler from editReply slash command path
 - [Phase 01]: InteractionCreate calls fetchReply before editReply to get message reference for thread creation
+- [Phase 01-03]: npm ci (not --production) in Dockerfile — tsx is a devDependency but required at runtime for TypeScript execution
+- [Phase 01-03]: Init containers use $GITHUB_TOKEN shell variable syntax inside sh -c — NOT $(GITHUB_TOKEN) which is Kubernetes command substitution
+- [Phase 01-03]: emptyDir volumes for cloned repos with readOnly: true mounts — ephemeral fresh clone on each pod start, bot reads only
 
 ### Roadmap Evolution
 
@@ -135,8 +139,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T11:23:58.253Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-03-24T13:24:51.345Z
+Stopped at: Checkpoint: Task 2 (verify bot in Discord) in 01-03-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
