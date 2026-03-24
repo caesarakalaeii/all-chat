@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: support-bot
+  namespace: allchat
+  labels:
+    app: support-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: support-bot
+  template:
+    metadata:
+      labels:
+        app: support-bot
+    spec:
+      initContainers:
+        - name: clone-all-chat
+          image: alpine/git
+          command: ['sh', '-c', 'git clone --depth 1 https://$GITHUB_TOKEN@github.com/$GITHUB_OWNER/all-chat.git /repos/all-chat']
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: SUPPORT_BOT_GITHUB_TOKEN
+            - name: GITHUB_OWNER
+              value: "moersener"
+          volumeMounts:
+            - name: all-chat-repo
+              mountPath: /repos/all-chat
+        - name: clone-all-chat-extension
+          image: alpine/git
+          command: ['sh', '-c', 'git clone --depth 1 https://$GITHUB_TOKEN@github.com/$GITHUB_OWNER/all-chat-extension.git /repos/all-chat-extension']
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: SUPPORT_BOT_GITHUB_TOKEN
+            - name: GITHUB_OWNER
+              value: "moersener"
+          volumeMounts:
+            - name: all-chat-extension-repo
+              mountPath: /repos/all-chat-extension
+      containers:
+        - name: support-bot
+          image: support-bot:latest
+          env:
+            - name: DISCORD_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: SUPPORT_BOT_DISCORD_TOKEN
+            - name: CLAUDE_CODE_OAUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: CLAUDE_CODE_OAUTH_TOKEN
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: SUPPORT_BOT_GITHUB_TOKEN
+            - name: GITHUB_OWNER
+              value: "moersener"
+            - name: ALL_CHAT_REPO_PATH
+              value: "/repos/all-chat"
+            - name: ALL_CHAT_EXTENSION_REPO_PATH
+              value: "/repos/all-chat-extension"
+          volumeMounts:
+            - name: all-chat-repo
+              mountPath: /repos/all-chat
+              readOnly: true
+            - name: all-chat-extension-repo
+              mountPath: /repos/all-chat-extension
+              readOnly: true
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: all-chat-repo
+          emptyDir: {}
+        - name: all-chat-extension-repo
+          emptyDir: {}
