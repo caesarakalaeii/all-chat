@@ -88,6 +88,7 @@ export async function startBot(config: BotConfig): Promise<Client> {
     }
 
     await message.channel.sendTyping();
+    const typingInterval = setInterval(() => { void message.channel.sendTyping(); }, 8000);
 
     try {
       const history = inBotThread
@@ -95,6 +96,8 @@ export async function startBot(config: BotConfig): Promise<Client> {
         : [];
 
       const answer = await handleQuestion(stripped, repoPaths, config, octokit, history);
+
+      clearInterval(typingInterval);
 
       if (message.channel.isThread()) {
         await sendResponse(message.channel as ThreadChannel, answer);
@@ -106,6 +109,7 @@ export async function startBot(config: BotConfig): Promise<Client> {
         await sendResponse(thread, answer);
       }
     } catch (err) {
+      clearInterval(typingInterval);
       console.error('Error handling message:', err);
       await message.reply('Sorry, something went wrong while processing your question. Check the bot logs for details.');
     }
@@ -127,6 +131,7 @@ export async function startBot(config: BotConfig): Promise<Client> {
       await interaction.editReply('Sorry, something went wrong while processing your question. Check the bot logs for details.');
       return;
     }
+    // Note: deferReply keeps the "thinking..." indicator alive until editReply is called, no interval needed.
 
     let editPayload: string | { embeds: EmbedBuilder[] };
     if (answer.length <= 2000) {
