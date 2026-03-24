@@ -146,36 +146,31 @@ export async function startBot(config: BotConfig): Promise<Client> {
     }
     // Note: deferReply keeps the "thinking..." indicator alive until editReply is called, no interval needed.
 
-    let editPayload: string | { embeds: EmbedBuilder[] };
+    // Send the answer (chunked if needed)
     if (answer.length <= 2000) {
-      editPayload = answer;
+      await interaction.editReply(answer);
     } else if (answer.length <= 4096) {
-      editPayload = { embeds: [new EmbedBuilder().setDescription(answer)] };
+      await interaction.editReply({ embeds: [new EmbedBuilder().setDescription(answer)] });
     } else {
       const chunks = answer.match(/.{1,2000}/gs) ?? [answer];
-      editPayload = chunks[0] ?? answer;
-      const reply = await interaction.fetchReply();
-      await interaction.editReply(editPayload);
-      await reply.startThread({
-        name: question.slice(0, 50),
-        autoArchiveDuration: 1440,
-      });
-      // Send remaining chunks to the thread
-      const thread = reply.startThread as unknown as ThreadChannel;
-      if (chunks.length > 1) {
-        for (const chunk of chunks.slice(1)) {
-          await thread.send?.(chunk);
-        }
-      }
-      return;
+      await interaction.editReply(chunks[0] ?? answer);
     }
 
+    // Create a thread and post the original question as context so history works
     const reply = await interaction.fetchReply();
-    await interaction.editReply(editPayload);
-    await reply.startThread({
+    const thread = await reply.startThread({
       name: question.slice(0, 50),
       autoArchiveDuration: 1440,
     });
+    await thread.send(`**Original question:** ${question}`);
+
+    // Post any remaining chunks into the thread
+    if (answer.length > 2000) {
+      const chunks = answer.match(/.{1,2000}/gs) ?? [];
+      for (const chunk of chunks.slice(1)) {
+        await thread.send(chunk);
+      }
+    }
   });
 
   client.once('ready', () => {
