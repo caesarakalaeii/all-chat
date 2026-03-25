@@ -35,6 +35,7 @@ type relayMessage struct {
 type Manager struct {
 	repo        RepositoryInterface
 	poster      DiscordPoster
+	provisioner *WebhookProvisioner
 	redisClient *redis.Client
 	logger      *zap.Logger
 	dbPool      *pgxpool.Pool
@@ -48,17 +49,20 @@ type Manager struct {
 	wg         sync.WaitGroup
 }
 
-// NewManager constructs a relay Manager.
+// NewManager constructs a relay Manager. The provisioner parameter is optional;
+// pass nil to disable automatic webhook provisioning (useful for tests).
 func NewManager(
 	repo RepositoryInterface,
 	poster DiscordPoster,
 	rdb *redis.Client,
 	dbPool *pgxpool.Pool,
 	logger *zap.Logger,
+	provisioner *WebhookProvisioner,
 ) *Manager {
 	return &Manager{
 		repo:        repo,
 		poster:      poster,
+		provisioner: provisioner,
 		redisClient: rdb,
 		dbPool:      dbPool,
 		logger:      logger,
@@ -109,6 +113,15 @@ func (m *Manager) Stop() {
 
 // SyncRelayConfigs queries the repository and reconciles subscriptions.
 func (m *Manager) SyncRelayConfigs(ctx context.Context) error {
+	// Auto-provision webhooks for sources that need them.
+	if m.provisioner != nil {
+		if err := m.provisioner.ProvisionPending(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("Webhook provisioning had errors", zap.Error(err))
+			}
+		}
+	}
+
 	configs, err := m.repo.GetRelayConfigs(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get relay configs: %w", err)
