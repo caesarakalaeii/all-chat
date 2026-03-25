@@ -8,7 +8,6 @@ import {
 } from 'discord.js';
 import type { Octokit } from '@octokit/rest';
 import { queryCodebase } from './claude/agent.js';
-import type { ClaudeTokenManager } from './claude/token-manager.js';
 import { createIssue, createOctokitClient } from './github/issues.js';
 import type { BotConfig } from './types.js';
 
@@ -26,9 +25,8 @@ async function handleQuestion(
   config: BotConfig,
   octokit: Octokit,
   history: string[],
-  tokenManager?: ClaudeTokenManager,
 ): Promise<string> {
-  const result = await queryCodebase(question, repoPaths, history, tokenManager);
+  const result = await queryCodebase(question, repoPaths, history);
   let answer = result.answer;
 
   if (result.issueProposal !== null) {
@@ -61,7 +59,7 @@ async function sendResponse(
   }
 }
 
-export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenManager): Promise<Client> {
+export async function startBot(config: BotConfig): Promise<Client> {
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -102,7 +100,7 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
 
     if (!inBotThread && !isMentioned) return;
 
-    const stripped = message.content.replace(/<@!?\d+>/g, '').trim();
+    const stripped = message.content.replace(/<@[!&]?\d+>/g, '').trim();
 
     enqueue(message.channelId, async () => {
       await message.channel.sendTyping();
@@ -131,11 +129,11 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
 
         if (!question) {
           clearInterval(typingInterval);
-          await message.reply('Please include a question.');
+          // Bare role/user ping with no reference — silently ignore
           return;
         }
 
-        const answer = await handleQuestion(question, repoPaths, config, octokit, history, tokenManager);
+        const answer = await handleQuestion(question, repoPaths, config, octokit, history);
 
         clearInterval(typingInterval);
 
@@ -170,7 +168,7 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
     let answer: string;
     try {
       console.log('[interaction] Spawning claude subprocess...');
-      answer = await handleQuestion(question, repoPaths, config, octokit, [], tokenManager);
+      answer = await handleQuestion(question, repoPaths, config, octokit, []);
       console.log('[interaction] Claude responded successfully');
     } catch (err) {
       console.error('[interaction] Error handling interaction:', err);
