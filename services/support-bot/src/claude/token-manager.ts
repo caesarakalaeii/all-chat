@@ -77,6 +77,12 @@ export class ClaudeTokenManager {
 
     if (!response.ok) {
       const text = await response.text();
+      const fallback = process.env['CLAUDE_CODE_OAUTH_TOKEN'];
+      if (fallback) {
+        console.warn(`[token-manager] OAuth refresh failed (${response.status}), falling back to CLAUDE_CODE_OAUTH_TOKEN`);
+        this.creds = { ...this.creds, accessToken: fallback, expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000 };
+        return;
+      }
       throw new Error(`OAuth refresh failed (${response.status}): ${text}`);
     }
 
