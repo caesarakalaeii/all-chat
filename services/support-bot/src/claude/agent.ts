@@ -27,7 +27,7 @@ export async function queryCodebase(
   const { stdout } = await execa(
     'claude',
     [
-      '-p', '-',
+      '-p',
       '--model', 'claude-sonnet-4-6',
       '--allowedTools', 'Read,Glob,Grep',
       '--output-format', 'json',
