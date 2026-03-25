@@ -116,7 +116,7 @@ func (r *Repository) GetPendingRelayConfigs(ctx context.Context) ([]pendingRelay
 func (r *Repository) StoreWebhookURL(ctx context.Context, sourceID, webhookURL string) error {
 	query := `
 		UPDATE overlay_chat_sources
-		SET config = config || jsonb_build_object('relay_webhook_url', $2),
+		SET config = config || jsonb_build_object('relay_webhook_url', $2::text),
 		    updated_at = NOW()
 		WHERE id = $1
 	`
