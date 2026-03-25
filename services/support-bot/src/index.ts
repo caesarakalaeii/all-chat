@@ -1,16 +1,12 @@
-import { mkdirSync, writeFileSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
 import type { Client } from 'discord.js';
 import type { BotConfig } from './types.js';
 import { startBot } from './bot.js';
 
 export function validateEnv(): BotConfig {
-  const credentialsJson = process.env['CLAUDE_CREDENTIALS_JSON'];
   const oauthToken = process.env['CLAUDE_CODE_OAUTH_TOKEN'];
 
-  if (!credentialsJson && !oauthToken) {
-    console.error('Missing required environment variable: CLAUDE_CREDENTIALS_JSON or CLAUDE_CODE_OAUTH_TOKEN');
+  if (!oauthToken) {
+    console.error('Missing required environment variable: CLAUDE_CODE_OAUTH_TOKEN');
     process.exit(1);
   }
 
@@ -30,7 +26,7 @@ export function validateEnv(): BotConfig {
 
   return {
     discordToken: required['DISCORD_BOT_TOKEN'] as string,
-    claudeOAuthToken: oauthToken ?? '',
+    claudeOAuthToken: oauthToken,
     githubToken: required['GITHUB_TOKEN'] as string,
     githubOwner: process.env['GITHUB_OWNER'] ?? 'moersener',
     allChatRepoPath: required['ALL_CHAT_REPO_PATH'] as string,
@@ -51,14 +47,6 @@ process.on('SIGTERM', () => void shutdown(discordClient));
 
 async function main(): Promise<void> {
   const config = validateEnv();
-
-  const credentialsJson = process.env['CLAUDE_CREDENTIALS_JSON'];
-  if (credentialsJson) {
-    const claudeDir = join(homedir(), '.claude');
-    mkdirSync(claudeDir, { recursive: true });
-    writeFileSync(join(claudeDir, '.credentials.json'), credentialsJson, { mode: 0o600 });
-    console.log('[startup] Claude credentials written to ~/.claude/.credentials.json');
-  }
 
   try {
     discordClient = await startBot(config);
