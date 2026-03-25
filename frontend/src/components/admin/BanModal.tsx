@@ -33,18 +33,21 @@ export function BanModal({ isOpen, onClose, onConfirm, username }: BanModalProps
 
   return (
     <div
-      className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[8px]"
       onClick={onClose}
     >
-      <div className="w-full max-w-md rounded-lg bg-white p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="mb-4 text-xl font-bold">Ban User: {username}</h2>
+      <div
+        className="w-full max-w-md rounded-xl border border-border bg-surface p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-4 text-xl font-bold text-text">Ban User: {username}</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="mb-2 block text-sm font-medium">Reason for ban *</label>
+            <label className="mb-2 block text-sm font-medium text-text">Reason for ban *</label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+              className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-text focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
               rows={3}
               placeholder="Spam, abuse, ToS violation, etc..."
               required
@@ -54,14 +57,14 @@ export function BanModal({ isOpen, onClose, onConfirm, username }: BanModalProps
             <button
               type="button"
               onClick={onClose}
-              className="rounded px-4 py-2 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              className="rounded-lg border border-border px-4 py-2 text-text transition-colors hover:bg-surface-2 disabled:opacity-50"
               disabled={loading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+              className="rounded-lg bg-youtube px-4 py-2 text-white transition-colors hover:bg-youtube/80 disabled:opacity-50"
               disabled={loading || !reason.trim()}
             >
               {loading ? 'Banning...' : 'Ban User'}

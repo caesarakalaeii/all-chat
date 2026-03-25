@@ -56,6 +56,7 @@ describe('visualSettingsToCss', () => {
       showBadges: 'inline',
       showTimestamps: 'block',
       showPlatformBadge: 'inline',
+      showPlatformIndicators: 'block',
       showEmotes: 'inline',
       showUsername: 'inline',
       avatarSize: '40px',
@@ -76,6 +77,8 @@ describe('visualSettingsToCss', () => {
       raidSizeModifier: '1',
       bitsSizeModifier: '1',
       membershipGiftSizeModifier: '1.2',
+      platformBadgePosition: 'before',
+      platformBadgeStyle: 'text',
     }
 
     const result = visualSettingsToCss(full)
@@ -87,8 +90,11 @@ describe('visualSettingsToCss', () => {
     expect(result).toContain('--chat-show-super-chat: block;')
     expect(result).toContain('--chat-bits-size-modifier: 1;')
     expect(result).toContain('--chat-membership-gift-size-modifier: 1.2;')
-    // All 50 properties present (49 original + membershipGiftSizeModifier)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(50)
+    // platformBadgePosition and platformBadgeStyle are not CSS properties, so not emitted
+    expect(result).not.toContain('platformBadgePosition')
+    expect(result).not.toContain('platformBadgeStyle')
+    // All 51 CSS properties present (excludes non-CSS fields)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(51)
   })
 
   it('wraps output in correct cascade layer syntax', () => {

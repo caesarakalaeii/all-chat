@@ -80,6 +80,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text');
   const [showPlatformBadge, setShowPlatformBadge] = useState(true);
+  const [showPlatformIndicators, setShowPlatformIndicators] = useState(true);
   const [invertMessageOrder, setInvertMessageOrder] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -129,6 +130,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           setVisualSettingsCss(visualSettingsToCss(vs));
           for (const key of ['fontFamily', 'usernameFontFamily', 'timestampFontFamily'] as const) {
             if (typeof vs[key] === 'string') ensureGoogleFontLoaded(vs[key]!);
+          }
+          // Override display_settings with visual_settings if present
+          if (vs.showPlatformBadge !== undefined) {
+            setShowPlatformBadge(vs.showPlatformBadge !== 'none');
+          }
+          if (vs.platformBadgePosition !== undefined) {
+            setPlatformBadgePosition(vs.platformBadgePosition);
+          }
+          if (vs.platformBadgeStyle !== undefined) {
+            setPlatformBadgeStyle(vs.platformBadgeStyle);
+          }
+          if (vs.showPlatformIndicators !== undefined) {
+            setShowPlatformIndicators(vs.showPlatformIndicators !== 'none');
           }
         }
 
@@ -649,7 +663,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       )}
 
       {/* Platform Status Indicators */}
-      <PlatformStatusIndicators activePlatforms={activePlatforms} platformStatuses={platformStatuses} />
+      {showPlatformIndicators && (
+        <PlatformStatusIndicators activePlatforms={activePlatforms} platformStatuses={platformStatuses} />
+      )}
 
       <div className="space-y-3">
         {invertMessageOrder && <div ref={messagesEndRef} className="scroll-anchor" />}

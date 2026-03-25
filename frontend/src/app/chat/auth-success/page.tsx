@@ -107,26 +107,26 @@ function AuthSuccessContent() {
   }, [searchParams, setViewerToken, setViewerInfo, router])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900">
+    <div className="flex min-h-screen items-center justify-center bg-bg">
       {loading ? (
         <div className="text-center">
-          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-b-2 border-purple-500"></div>
-          <p className="text-lg text-white">Completing authentication...</p>
-          <p className="mt-2 text-sm text-slate-400">Please wait</p>
+          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-b-2 border-twitch"></div>
+          <p className="text-lg text-text">Completing authentication...</p>
+          <p className="mt-2 text-sm text-text-sub">Please wait</p>
         </div>
       ) : !error && window.opener ? (
         <div className="text-center">
-          <div className="mb-4 text-6xl">✅</div>
-          <p className="mb-4 text-lg text-green-500">Authentication successful!</p>
-          <p className="text-sm text-slate-400">You can close this window</p>
+          <div className="mb-4 text-6xl">&#10003;</div>
+          <p className="mb-4 text-lg text-kick">Authentication successful!</p>
+          <p className="text-sm text-text-sub">You can close this window</p>
         </div>
       ) : error ? (
         <div className="text-center">
-          <div className="mb-4 text-6xl">⚠️</div>
-          <p className="mb-4 text-lg text-red-500">{error}</p>
+          <div className="mb-4 text-6xl">&#9888;&#65039;</div>
+          <p className="mb-4 text-lg text-youtube">{error}</p>
           <Link
             href="/"
-            className="inline-block rounded-lg bg-purple-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-purple-700"
+            className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-white transition-colors hover:bg-twitch/80"
           >
             Return to Home
           </Link>
@@ -140,8 +140,8 @@ export default function AuthSuccessPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-slate-900">
-          <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-purple-500"></div>
+        <div className="flex min-h-screen items-center justify-center bg-bg">
+          <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-twitch"></div>
         </div>
       }
     >

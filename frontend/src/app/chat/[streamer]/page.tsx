@@ -197,18 +197,18 @@ export default function ViewerChatPage() {
 
   if (loading || loadingStreamer) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-900">
-        <div className="text-xl text-white">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-bg">
+        <div className="text-xl text-text">Loading...</div>
       </div>
     )
   }
 
   if (loadError && !streamerInfo) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-900">
+      <div className="flex min-h-screen items-center justify-center bg-bg">
         <div className="text-center">
-          <div className="mb-4 text-xl text-red-500">{loadError}</div>
-          <Link href="/" className="text-blue-400 hover:text-blue-300">
+          <div className="mb-4 text-xl text-youtube">{loadError}</div>
+          <Link href="/" className="text-twitch hover:underline">
             Return to Home
           </Link>
         </div>
@@ -217,23 +217,23 @@ export default function ViewerChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900">
+    <div className="min-h-screen bg-bg">
       {/* Header */}
-      <nav className="border-b border-slate-700 bg-slate-800">
+      <nav className="border-b border-border bg-surface">
         <div className="container mx-auto flex items-center justify-between px-4 py-4">
-          <Link href="/" className="text-2xl font-bold text-white">
+          <Link href="/" className="text-2xl font-bold text-text">
             All-Chat
           </Link>
           <div className="flex items-center gap-4">
             {viewerInfo ? (
               <>
-                <span className="text-slate-400">
+                <span className="text-text-sub">
                   Logged in as{' '}
-                  <span className="font-semibold text-white">{viewerInfo.username}</span>
+                  <span className="font-semibold text-text">{viewerInfo.username}</span>
                 </span>
                 <button
                   onClick={viewerLogout}
-                  className="text-slate-400 transition-colors hover:text-white"
+                  className="text-text-sub transition-colors hover:text-text"
                 >
                   Logout
                 </button>
@@ -242,13 +242,13 @@ export default function ViewerChatPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => handleLogin('twitch')}
-                  className="rounded-lg bg-purple-600 px-4 py-2 text-white transition-colors hover:bg-purple-700"
+                  className="rounded-lg bg-twitch px-4 py-2 text-white transition-colors hover:bg-twitch/80"
                 >
                   Twitch
                 </button>
                 <button
                   onClick={() => handleLogin('youtube')}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700"
+                  className="rounded-lg bg-youtube px-4 py-2 text-white transition-colors hover:bg-youtube/80"
                 >
                   YouTube
                 </button>
@@ -261,39 +261,39 @@ export default function ViewerChatPage() {
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         {/* Streamer Info */}
-        <div className="mb-6 rounded-lg bg-slate-800 p-6">
-          <h1 className="mb-4 text-3xl font-bold text-white">
+        <div className="mb-6 rounded-xl border border-border bg-surface p-6">
+          <h1 className="mb-4 text-3xl font-bold text-text">
             Chat with {streamerInfo?.display_name || streamerUsername}
           </h1>
 
           {streamerInfo && streamerInfo.platforms.length > 0 ? (
             <div className="mb-4">
-              <h2 className="mb-2 text-lg font-semibold text-slate-300">Active Platforms:</h2>
+              <h2 className="mb-2 text-lg font-semibold text-text-sub">Active Platforms:</h2>
               <div className="flex gap-3">
                 {streamerInfo.platforms.map((platform) => (
                   <div
                     key={platform.platform}
-                    className="flex items-center gap-2 rounded-lg bg-slate-700 px-4 py-2"
+                    className="flex items-center gap-2 rounded-lg bg-surface-2 px-4 py-2"
                   >
-                    <span className="font-medium text-white capitalize">{platform.platform}</span>
-                    <span className="text-slate-400">•</span>
-                    <span className="text-slate-400">{platform.channel_name}</span>
+                    <span className="font-medium text-text capitalize">{platform.platform}</span>
+                    <span className="text-text-dim">&middot;</span>
+                    <span className="text-text-sub">{platform.channel_name}</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="text-slate-400">No active platforms found for this streamer.</div>
+            <div className="text-text-sub">No active platforms found for this streamer.</div>
           )}
         </div>
 
         {/* Live Chat Display */}
         {streamerInfo && (
-          <div className="mb-6 rounded-lg bg-slate-800 p-6">
-            <h2 className="mb-4 text-xl font-semibold text-white">Live Chat</h2>
-            <div className="h-96 overflow-y-auto rounded-lg bg-slate-900 p-4">
+          <div className="mb-6 rounded-xl border border-border bg-surface p-6">
+            <h2 className="mb-4 text-xl font-semibold text-text">Live Chat</h2>
+            <div className="h-96 overflow-y-auto rounded-lg bg-bg p-4">
               {chatMessages.length === 0 ? (
-                <div className="py-8 text-center text-slate-500">
+                <div className="py-8 text-center text-text-dim">
                   No messages yet. Chat will appear here when streamer is live.
                 </div>
               ) : (
@@ -321,9 +321,9 @@ export default function ViewerChatPage() {
                           >
                             {msg.user.display_name || msg.user.username}
                           </span>
-                          <span className="text-xs text-slate-500 uppercase">{msg.platform}</span>
+                          <span className="text-xs text-text-dim uppercase">{msg.platform}</span>
                         </div>
-                        <div className="break-words text-slate-200">{msg.message.text}</div>
+                        <div className="break-words text-text">{msg.message.text}</div>
                       </div>
                     </div>
                   ))}
@@ -336,8 +336,8 @@ export default function ViewerChatPage() {
 
         {/* Message Input Section */}
         {viewerInfo ? (
-          <div className="rounded-lg bg-slate-800 p-6">
-            <h2 className="mb-4 text-xl font-semibold text-white">Send a Message</h2>
+          <div className="rounded-xl border border-border bg-surface p-6">
+            <h2 className="mb-4 text-xl font-semibold text-text">Send a Message</h2>
 
             {error && (
               <ErrorDisplay
@@ -352,7 +352,7 @@ export default function ViewerChatPage() {
             )}
 
             {success && (
-              <div className="mb-4 rounded-lg border border-green-500 bg-green-900/50 px-4 py-3 text-green-200">
+              <div className="mb-4 rounded-lg border border-kick/30 bg-kick/10 px-4 py-3 text-kick">
                 {success}
               </div>
             )}
@@ -363,12 +363,12 @@ export default function ViewerChatPage() {
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Type your message here..."
-                  className="w-full resize-none rounded-lg bg-slate-700 px-4 py-3 text-white focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:outline-none"
+                  className="w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-text focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   rows={4}
                   maxLength={500}
                   disabled={sending}
                 />
-                <div className="mt-1 text-right text-sm text-slate-400">
+                <div className="mt-1 text-right text-sm text-text-dim">
                   {message.length}/500 characters
                 </div>
               </div>
@@ -376,14 +376,14 @@ export default function ViewerChatPage() {
               <button
                 type="submit"
                 disabled={!message.trim() || sending}
-                className="rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                className="rounded-lg bg-twitch px-6 py-3 font-semibold text-white transition-colors hover:bg-twitch/80 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {sending ? 'Sending...' : 'Send Message'}
               </button>
             </form>
 
-            <div className="mt-6 text-sm text-slate-400">
-              <p className="mb-2 font-semibold">Rate Limits:</p>
+            <div className="mt-6 text-sm text-text-sub">
+              <p className="mb-2 font-semibold text-text">Rate Limits:</p>
               <ul className="list-inside list-disc space-y-1">
                 <li>20 messages per minute</li>
                 <li>100 messages per hour</li>
@@ -391,18 +391,18 @@ export default function ViewerChatPage() {
             </div>
           </div>
         ) : (
-          <div className="rounded-lg bg-slate-800 p-6 text-center">
-            <p className="mb-4 text-slate-300">Please log in to send messages</p>
+          <div className="rounded-xl border border-border bg-surface p-6 text-center">
+            <p className="mb-4 text-text-sub">Please log in to send messages</p>
             <div className="flex justify-center gap-3">
               <button
                 onClick={() => handleLogin('twitch')}
-                className="rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-purple-700"
+                className="rounded-lg bg-twitch px-6 py-3 font-semibold text-white transition-colors hover:bg-twitch/80"
               >
                 Login with Twitch
               </button>
               <button
                 onClick={() => handleLogin('youtube')}
-                className="rounded-lg bg-red-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-red-700"
+                className="rounded-lg bg-youtube px-6 py-3 font-semibold text-white transition-colors hover:bg-youtube/80"
               >
                 Login with YouTube
               </button>

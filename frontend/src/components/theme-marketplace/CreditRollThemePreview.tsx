@@ -104,11 +104,11 @@ export default function CreditRollThemePreview({
       <style dangerouslySetInnerHTML={{ __html: scopedCss }} />
 
       {/* Credit roll preview container */}
-      <div className="min-h-full overflow-y-auto bg-linear-to-b from-slate-900 to-black p-4">
+      <div className="min-h-full overflow-y-auto bg-linear-to-b from-surface to-bg p-4">
         {/* Header */}
         <div className="mb-6 text-center">
           <h1 className="mb-2 text-3xl font-bold text-white">🎬 Stream Credits</h1>
-          <p className="text-sm text-slate-300">Thank you for your support!</p>
+          <p className="text-sm text-text-sub">Thank you for your support!</p>
         </div>
 
         {/* Sample Leaderboard */}
@@ -124,23 +124,23 @@ export default function CreditRollThemePreview({
                 className={clsx(
                   'flex items-center gap-4 rounded-lg p-4',
                   entry.rank === 1 && 'border-2 border-yellow-500 bg-yellow-500/20',
-                  entry.rank === 2 && 'border-2 border-slate-400 bg-slate-400/20',
+                  entry.rank === 2 && 'border-2 border-neutral-200 bg-neutral-200/20',
                   entry.rank === 3 && 'border-2 border-orange-600 bg-orange-600/20',
-                  entry.rank > 3 && 'border border-slate-700 bg-slate-800/50'
+                  entry.rank > 3 && 'border border-border bg-surface/50'
                 )}
               >
                 <div
                   className={clsx(
                     'w-12 text-center text-3xl font-bold',
                     entry.rank === 1 && 'text-yellow-400',
-                    entry.rank === 2 && 'text-slate-300',
+                    entry.rank === 2 && 'text-neutral-200',
                     entry.rank === 3 && 'text-orange-500',
-                    entry.rank > 3 && 'text-slate-500'
+                    entry.rank > 3 && 'text-text-dim'
                   )}
                 >
                   #{entry.rank}
                 </div>
-                <div className="relative h-12 w-12 overflow-hidden rounded-full bg-slate-700">
+                <div className="relative h-12 w-12 overflow-hidden rounded-full bg-surface-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={entry.avatar_url}
@@ -154,7 +154,7 @@ export default function CreditRollThemePreview({
                 </div>
                 <div className="flex-1">
                   <div className="text-xl font-semibold text-white">{entry.display_name}</div>
-                  <div className="text-sm text-slate-400 capitalize">{entry.platform}</div>
+                  <div className="text-sm text-text-sub capitalize">{entry.platform}</div>
                 </div>
                 <div className="text-2xl font-bold text-white">${entry.total_value.toFixed(2)}</div>
               </div>
@@ -165,7 +165,7 @@ export default function CreditRollThemePreview({
         {/* Footer */}
         <div className="mt-8 text-center">
           <div className="mb-2 text-2xl font-bold text-white">Thank you! ❤️</div>
-          <p className="text-sm text-slate-300">See you next stream!</p>
+          <p className="text-sm text-text-sub">See you next stream!</p>
         </div>
       </div>
     </div>

@@ -200,6 +200,20 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         }
         return
       }
+      // Non-CSS visual settings (platform badge position/style, indicators)
+      if (event.data?.type === 'VISUAL_SETTINGS_UPDATE') {
+        const s = event.data.settings
+        if (s.platformBadgePosition === 'before' || s.platformBadgePosition === 'after') {
+          setPlatformBadgePosition(s.platformBadgePosition)
+        }
+        if (s.platformBadgeStyle === 'text' || s.platformBadgeStyle === 'icon') {
+          setPlatformBadgeStyle(s.platformBadgeStyle)
+        }
+        if (s.showPlatformBadge !== undefined) {
+          setShowPlatformBadge(s.showPlatformBadge !== 'none')
+        }
+        return
+      }
       // Full theme CSS replacement (sent when user applies a new theme)
       if (event.data?.type === 'CUSTOM_CSS_UPDATE') {
         const css = event.data.css as string
@@ -246,8 +260,19 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         setUseCustomCss(Boolean(css.trim().length))
 
         // Apply saved visual settings (CSS variables) directly — no postMessage needed
-        const vcCss = visualSettingsToCss(config.visual_settings ?? {})
+        const vs = config.visual_settings ?? {}
+        const vcCss = visualSettingsToCss(vs)
         setVisualSettingsCss(vcCss)
+        // Apply non-CSS visual settings
+        if (vs.showPlatformBadge !== undefined) {
+          setShowPlatformBadge(vs.showPlatformBadge !== 'none')
+        }
+        if (vs.platformBadgePosition === 'before' || vs.platformBadgePosition === 'after') {
+          setPlatformBadgePosition(vs.platformBadgePosition)
+        }
+        if (vs.platformBadgeStyle === 'text' || vs.platformBadgeStyle === 'icon') {
+          setPlatformBadgeStyle(vs.platformBadgeStyle)
+        }
       } catch (error) {
         console.warn('[Embed] Failed to load overlay config', error)
       }

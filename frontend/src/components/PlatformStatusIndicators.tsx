@@ -122,7 +122,7 @@ export default function PlatformStatusIndicators({
   }, [platformStatuses])
 
   return (
-    <div className="platform-status-indicators fixed top-4 right-4 z-50 flex gap-2 rounded-lg bg-slate-900/80 px-3 py-2 shadow-lg backdrop-blur-sm">
+    <div className="platform-status-indicators fixed top-4 right-4 z-50 flex gap-2 rounded-lg bg-bg/80 px-3 py-2 shadow-lg backdrop-blur-sm">
       {platforms.map((platform) => {
         const isActive = activePlatforms.has(platform.name)
         const status = platformStatuses.get(platform.name)
@@ -130,7 +130,7 @@ export default function PlatformStatusIndicators({
         const Icon = platform.icon
 
         // Determine status class
-        let statusClass = isActive ? 'bg-white/10' : 'opacity-40 bg-slate-800/50'
+        let statusClass = isActive ? 'bg-white/10' : 'opacity-40 bg-surface/50'
         let tooltipText = `${platform.label} ${isActive ? '(Active)' : '(Inactive)'}`
 
         if (status) {
@@ -154,7 +154,7 @@ export default function PlatformStatusIndicators({
               statusClass = 'bg-red-500/20 opacity-100 border border-red-500/50'
               tooltipText = `${platform.label} - Auth Required`
             } else {
-              statusClass = 'opacity-20 bg-slate-800/50'
+              statusClass = 'opacity-20 bg-surface/50'
               tooltipText = status.error_message
                 ? `${platform.label} - ${status.error_message}`
                 : `${platform.label} - Offline`

@@ -42,16 +42,16 @@ export default function ThemeMarketplaceModal({
         width: 12px;
       }
       .custom-scrollbar::-webkit-scrollbar-track {
-        background: rgba(31, 41, 55, 0.5);
+        background: rgba(7, 7, 10, 0.5);
         border-radius: 6px;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(139, 92, 246, 0.6);
+        background: rgba(163, 123, 255, 0.6);
         border-radius: 6px;
-        border: 2px solid rgba(31, 41, 55, 0.5);
+        border: 2px solid rgba(7, 7, 10, 0.5);
       }
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: rgba(139, 92, 246, 0.8);
+        background: rgba(163, 123, 255, 0.8);
       }
       .theme-preview-body::-webkit-scrollbar {
         width: 6px;
@@ -134,19 +134,19 @@ export default function ThemeMarketplaceModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[8px]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-800 shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-700 p-6">
+        <div className="flex items-center justify-between border-b border-border p-6">
           <div>
-            <h2 id="theme-marketplace-title" className="text-2xl font-bold text-white">
+            <h2 id="theme-marketplace-title" className="text-2xl font-bold text-text">
               {themeType === 'creditroll' ? 'Credit Roll' : ''} Theme Marketplace
             </h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-text-sub">
               {themeType === 'creditroll'
                 ? 'Browse and apply custom CSS themes for your credit roll'
                 : 'Browse and apply custom CSS themes for your overlay'}
@@ -160,7 +160,7 @@ export default function ThemeMarketplaceModal({
                   clearCache()
                   refreshThemes()
                 }}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-purple-400"
+                className="rounded-lg p-2 text-text-dim transition-colors hover:bg-surface-2 hover:text-twitch"
                 aria-label="Force refresh themes from GitHub"
                 title="Force refresh themes (Admin)"
               >
@@ -178,7 +178,7 @@ export default function ThemeMarketplaceModal({
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
+              className="rounded-lg p-2 text-text-dim transition-colors hover:bg-surface-2 hover:text-text"
               aria-label="Close theme marketplace"
             >
               <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -194,7 +194,7 @@ export default function ThemeMarketplaceModal({
         </div>
 
         {/* Filters */}
-        <div className="border-b border-slate-700 p-6">
+        <div className="border-b border-border p-6">
           <ThemeFilters
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -212,8 +212,8 @@ export default function ThemeMarketplaceModal({
           {loading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-purple-500" />
-                <p className="text-slate-400">Loading themes...</p>
+                <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-twitch" />
+                <p className="text-text-sub">Loading themes...</p>
               </div>
             </div>
           )}
@@ -247,7 +247,7 @@ export default function ThemeMarketplaceModal({
           {!loading && themes.length === 0 && !error && (
             <div className="py-12 text-center">
               <svg
-                className="mx-auto mb-4 h-16 w-16 text-slate-600"
+                className="mx-auto mb-4 h-16 w-16 text-text-dim"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -259,8 +259,8 @@ export default function ThemeMarketplaceModal({
                   d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <p className="text-lg text-slate-400">No themes found</p>
-              <p className="mt-1 text-sm text-slate-500">Try adjusting your filters</p>
+              <p className="text-lg text-text-sub">No themes found</p>
+              <p className="mt-1 text-sm text-text-dim">Try adjusting your filters</p>
             </div>
           )}
 
@@ -268,7 +268,7 @@ export default function ThemeMarketplaceModal({
           {!loading && themes.length > 0 && (
             <>
               {/* Count */}
-              <div className="mb-4 text-sm text-slate-400">
+              <div className="mb-4 text-sm text-text-sub">
                 Showing {filteredCount} of {totalCount} themes
               </div>
 

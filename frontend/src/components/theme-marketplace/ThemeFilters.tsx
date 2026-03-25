@@ -37,11 +37,11 @@ export default function ThemeFilters({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search themes..."
-            className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 pl-10 text-white placeholder-slate-400 transition-colors focus-visible:border-purple-500 focus-visible:ring-1 focus-visible:ring-purple-500 focus-visible:outline-none"
+            className="w-full rounded-lg border border-border bg-bg px-4 py-2 pl-10 text-text placeholder-text-dim transition-colors focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
             aria-label="Search themes"
           />
           <svg
-            className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-slate-400"
+            className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-text-dim"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -59,7 +59,7 @@ export default function ThemeFilters({
         {hasActiveFilters && (
           <button
             onClick={onClearFilters}
-            className="rounded-lg bg-slate-700 px-4 py-2 font-medium whitespace-nowrap text-white transition-colors hover:bg-slate-600"
+            className="rounded-lg border border-border bg-surface-2 px-4 py-2 font-medium whitespace-nowrap text-text transition-colors hover:bg-surface-2/80"
           >
             Clear Filters
           </button>
@@ -78,8 +78,8 @@ export default function ThemeFilters({
                 className={clsx(
                   'rounded-full border px-3 py-1 text-sm font-medium transition-colors',
                   isSelected
-                    ? 'border-purple-500 bg-purple-600 text-white'
-                    : 'border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    ? 'border-twitch bg-twitch text-white'
+                    : 'border-border bg-surface-2 text-text-sub hover:bg-surface-2/80'
                 )}
               >
                 {tag}
