@@ -27,7 +27,7 @@ func TestAuthHandlerCreation(t *testing.T) {
 	})
 
 	twitchOAuth := oauth.NewTwitchOAuth("test-id", "test-secret", "http://localhost/callback")
-	youtubeOAuth := oauth.NewYouTubeOAuth("test-id", "test-secret", "http://localhost/callback", "test-api-key")
+	youtubeOAuth := oauth.NewYouTubeOAuth("test-id", "test-secret", "http://localhost/callback")
 
 	// Create a mock user repository
 	userRepo := &repository.UserRepository{} // This will fail DB operations but that's ok for construction test
