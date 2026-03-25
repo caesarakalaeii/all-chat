@@ -12,6 +12,7 @@ import type {
   StreamerInfo,
   SendMessageRequest,
   SendMessageResponse,
+  StreamerSendMessageRequest,
 } from '../types/viewer'
 
 /**
@@ -112,9 +113,17 @@ export const viewerApi = {
   },
 
   /**
-   * Send a message to the streamer's chat
+   * Send a message to the streamer's chat (as a viewer)
    */
   async sendMessage(request: SendMessageRequest): Promise<SendMessageResponse> {
     return viewerApiClient.post<SendMessageResponse>('/api/v1/auth/viewer/chat/send', request)
+  },
+
+  /**
+   * Send a message as the streamer using their own stored OAuth tokens.
+   * Uses the streamer JWT (not the viewer JWT).
+   */
+  async sendStreamerMessage(request: StreamerSendMessageRequest): Promise<SendMessageResponse> {
+    return apiClient.post<SendMessageResponse>('/api/v1/auth/chat/send', request)
   },
 }
