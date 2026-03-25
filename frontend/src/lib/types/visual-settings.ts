@@ -47,8 +47,13 @@ export interface VisualSettings {
   showBadges?: 'inline' | 'none'         // --chat-show-badges
   showTimestamps?: 'block' | 'none'      // --chat-show-timestamps
   showPlatformBadge?: 'inline' | 'none'  // --chat-show-platform-badge
+  showPlatformIndicators?: 'block' | 'none'  // --chat-show-platform-indicators
   showEmotes?: 'inline' | 'none'         // --chat-show-emotes
   showUsername?: 'inline' | 'none'       // --chat-show-username
+
+  // Platform badge options (not CSS-driven, stored for settings persistence)
+  platformBadgePosition?: 'before' | 'after'
+  platformBadgeStyle?: 'text' | 'icon'
 
   // Sizing
   avatarSize?: string   // --chat-avatar-size

@@ -25,7 +25,7 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
     },
     expired: {
       label: 'Expired',
-      className: 'bg-slate-700/40 text-slate-400 border border-slate-600/20',
+      className: 'bg-surface-2/40 text-text-sub border border-border',
       icon: '⏱',
     },
     revoked: {

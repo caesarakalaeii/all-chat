@@ -266,13 +266,13 @@ function SourceCard({
                     'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
                     source.is_active
                       ? 'border-green-500/20 bg-green-500/10 text-green-400'
-                      : 'border-slate-600/20 bg-slate-700/40 text-slate-400'
+                      : 'border-border bg-surface-2/40 text-text-sub'
                   )}
                 >
                   <span
                     className={cn(
                       'size-1.5 rounded-full',
-                      source.is_active ? 'bg-green-400' : 'bg-slate-400'
+                      source.is_active ? 'bg-green-400' : 'bg-text-sub'
                     )}
                   />
                   {source.is_active ? 'Connected' : 'Disconnected'}
@@ -934,9 +934,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [messageDuration, setMessageDuration] = useState(15)
   const [disableMessageFade, setDisableMessageFade] = useState(false)
   const [invertMessageOrder, setInvertMessageOrder] = useState(false)
-  const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
-  const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
-  const [showPlatformBadge, setShowPlatformBadge] = useState(true)
   const [enable7tv, setEnable7tv] = useState(true)
   const [enableBttv, setEnableBttv] = useState(true)
   const [enableFfz, setEnableFfz] = useState(true)
@@ -992,6 +989,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     const css = visualSettingsToCss(settings)
     iframeRef.current?.contentWindow?.postMessage(
       { type: 'VISUAL_CSS_UPDATE', css },
+      '*'
+    )
+    // Send non-CSS visual settings (platform badge position/style, indicators toggle)
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        type: 'VISUAL_SETTINGS_UPDATE',
+        settings: {
+          platformBadgePosition: settings.platformBadgePosition,
+          platformBadgeStyle: settings.platformBadgeStyle,
+          showPlatformBadge: settings.showPlatformBadge,
+          showPlatformIndicators: settings.showPlatformIndicators,
+        },
+      },
       '*'
     )
   }, [])
@@ -1120,17 +1130,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           if (typeof display.disable_message_fade === 'boolean')
             setDisableMessageFade(display.disable_message_fade)
           setInvertMessageOrder(display.invert_message_order === true)
-          if (
-            display.platform_badge_position === 'before' ||
-            display.platform_badge_position === 'after'
-          ) {
-            setPlatformBadgePosition(display.platform_badge_position)
-          }
-          if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
-            setPlatformBadgeStyle(display.platform_badge_style)
-          }
-          if (typeof display.show_platform_badge === 'boolean')
-            setShowPlatformBadge(display.show_platform_badge)
 
           if (typeof config.enable_7tv === 'boolean') setEnable7tv(config.enable_7tv)
           if (typeof config.enable_bttv === 'boolean') setEnableBttv(config.enable_bttv)
@@ -1149,7 +1148,20 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             setParsedThemeSettings(parsedFromCss)
           }
 
+          // Migrate platform badge settings from display_settings to visual_settings
+          const platformBadgeDefaults: Partial<VisualSettings> = {}
+          if (typeof display.show_platform_badge === 'boolean') {
+            platformBadgeDefaults.showPlatformBadge = display.show_platform_badge ? 'inline' : 'none'
+          }
+          if (display.platform_badge_position === 'before' || display.platform_badge_position === 'after') {
+            platformBadgeDefaults.platformBadgePosition = display.platform_badge_position
+          }
+          if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
+            platformBadgeDefaults.platformBadgeStyle = display.platform_badge_style
+          }
+
           const merged: Partial<VisualSettings> = {
+            ...platformBadgeDefaults,
             ...parsedFromCss,
             ...(savedVisual ?? {}),
             // migrate legacy font_size to visualSettings.fontSize if not already present
@@ -1490,9 +1502,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           max_messages: maxMessages,
           disable_message_fade: disableMessageFade,
           invert_message_order: invertMessageOrder,
-          platform_badge_position: platformBadgePosition,
-          platform_badge_style: platformBadgeStyle,
-          show_platform_badge: showPlatformBadge,
+          platform_badge_position: visualSettings.platformBadgePosition ?? 'before',
+          platform_badge_style: visualSettings.platformBadgeStyle ?? 'text',
+          show_platform_badge: visualSettings.showPlatformBadge !== 'none',
         },
         enable_7tv: enable7tv,
         enable_bttv: enableBttv,
@@ -1953,90 +1965,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     <p className="mt-1 ml-5 text-xs text-text-sub">
                       Show newest messages at the top instead of the bottom
                     </p>
-                  </div>
-
-                  {/* Platform Badge */}
-                  <div>
-                    <p className="mb-2 text-xs text-text-sub">Platform Badge</p>
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 text-xs text-text-sub">
-                        <input
-                          type="checkbox"
-                          checked={showPlatformBadge}
-                          onChange={(e) => {
-                            setShowPlatformBadge(e.target.checked)
-                            handleVisualSettingsChange({ showPlatformBadge: e.target.checked ? 'inline' : 'none' })
-                          }}
-                          className="accent-twitch"
-                        />
-                        Show Platform Badge
-                      </label>
-                      <div
-                        className={cn(
-                          'space-y-2',
-                          !showPlatformBadge && 'pointer-events-none opacity-50'
-                        )}
-                      >
-                        <div>
-                          <p className="mb-1 text-xs text-text-sub">Position</p>
-                          <div className="flex gap-4">
-                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
-                              <input
-                                type="radio"
-                                name="platformBadgePosition"
-                                value="before"
-                                checked={platformBadgePosition === 'before'}
-                                onChange={() => setPlatformBadgePosition('before')}
-                                className="accent-twitch"
-                                disabled={!showPlatformBadge}
-                              />
-                              Before
-                            </label>
-                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
-                              <input
-                                type="radio"
-                                name="platformBadgePosition"
-                                value="after"
-                                checked={platformBadgePosition === 'after'}
-                                onChange={() => setPlatformBadgePosition('after')}
-                                className="accent-twitch"
-                                disabled={!showPlatformBadge}
-                              />
-                              After
-                            </label>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="mb-1 text-xs text-text-sub">Style</p>
-                          <div className="flex gap-4">
-                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
-                              <input
-                                type="radio"
-                                name="platformBadgeStyle"
-                                value="text"
-                                checked={platformBadgeStyle === 'text'}
-                                onChange={() => setPlatformBadgeStyle('text')}
-                                className="accent-twitch"
-                                disabled={!showPlatformBadge}
-                              />
-                              Text
-                            </label>
-                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
-                              <input
-                                type="radio"
-                                name="platformBadgeStyle"
-                                value="icon"
-                                checked={platformBadgeStyle === 'icon'}
-                                onChange={() => setPlatformBadgeStyle('icon')}
-                                className="accent-twitch"
-                                disabled={!showPlatformBadge}
-                              />
-                              Icon
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
                   </div>
 
                   {/* Emote Providers */}

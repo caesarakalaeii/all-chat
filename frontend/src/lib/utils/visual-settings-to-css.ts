@@ -40,6 +40,7 @@ export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['showBadges',            '--chat-show-badges'],
   ['showTimestamps',        '--chat-show-timestamps'],
   ['showPlatformBadge',     '--chat-show-platform-badge'],
+  ['showPlatformIndicators','--chat-show-platform-indicators'],
   ['showEmotes',            '--chat-show-emotes'],
   ['showUsername',          '--chat-show-username'],
   // Sizing

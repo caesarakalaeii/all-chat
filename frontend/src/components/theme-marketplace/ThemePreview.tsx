@@ -68,7 +68,7 @@ export default function ThemePreview({ css, messages, themeId }: ThemePreviewPro
   }, [css, uniqueId])
 
   return (
-    <div className="theme-preview-wrapper overflow-hidden rounded-t-lg border border-slate-700 bg-slate-800">
+    <div className="theme-preview-wrapper overflow-hidden rounded-t-lg border border-border bg-surface">
       {/* Scoped styles - use data attribute to create unique scope */}
       {scopedCss && (
         <style dangerouslySetInnerHTML={{ __html: scopedCss }} data-theme-id={themeId} />
@@ -88,7 +88,7 @@ export default function ThemePreview({ css, messages, themeId }: ThemePreviewPro
       >
         <div className="theme-preview-body h-full space-y-3 overflow-y-auto p-2">
           {messages.map((msg) => (
-            <div key={msg.id} className="rounded-lg bg-slate-900 p-3 shadow-lg">
+            <div key={msg.id} className="rounded-lg bg-surface p-3 shadow-lg">
               <div className="flex items-start gap-3">
                 {/* Avatar */}
                 <div className="flex-shrink-0">

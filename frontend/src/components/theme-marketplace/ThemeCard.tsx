@@ -29,7 +29,7 @@ function getTagColor(tag: string): string {
     clean: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
     retro: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     nostalgic: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
-    dark: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+    dark: 'bg-neutral-600/20 text-neutral-400 border-neutral-600/30',
     neon: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
     classic: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
     '90s': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
@@ -37,7 +37,7 @@ function getTagColor(tag: string): string {
     simple: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
   }
 
-  return colors[tag.toLowerCase()] || 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+  return colors[tag.toLowerCase()] || 'bg-neutral-600/20 text-neutral-400 border-neutral-600/30'
 }
 
 export default function ThemeCard({

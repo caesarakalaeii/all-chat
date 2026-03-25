@@ -48,7 +48,7 @@ export default function CookieBanner() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-50 flex items-end justify-center p-4">
-      <div className="animate-slide-up pointer-events-auto w-full max-w-4xl rounded-lg border-2 border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+      <div className="animate-slide-up pointer-events-auto w-full max-w-4xl rounded-xl border border-border bg-surface shadow-2xl">
         {/* Main Banner */}
         <div className="p-6">
           <div className="flex items-start gap-4">
@@ -59,63 +59,65 @@ export default function CookieBanner() {
 
             {/* Content */}
             <div className="flex-1">
-              <h2 className="mb-2 text-xl font-semibold text-slate-900 dark:text-white">
-                Privacy & Data Storage
-              </h2>
-              <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
-                All-Chat uses <strong>browser local storage</strong> to save your authentication
-                tokens and keep you logged in. This is essential for the service to function
-                properly.
+              <h2 className="mb-2 text-xl font-semibold text-text">Privacy &amp; Data Storage</h2>
+              <p className="mb-3 text-sm text-text-sub">
+                All-Chat uses <strong className="text-text">browser local storage</strong> to save
+                your authentication tokens and keep you logged in. This is essential for the service
+                to function properly.
               </p>
-              <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
-                <strong>We do not use cookies for tracking or analytics.</strong> We do not share
-                your data with third parties for advertising purposes.
+              <p className="mb-3 text-sm text-text-sub">
+                <strong className="text-text">
+                  We do not use cookies for tracking or analytics.
+                </strong>{' '}
+                We do not share your data with third parties for advertising purposes.
               </p>
 
               {/* What we store */}
               <details className="mb-4">
-                <summary className="cursor-pointer text-sm font-medium text-slate-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400">
+                <summary className="cursor-pointer text-sm font-medium text-text transition-colors hover:text-twitch">
                   What data do we store locally?
                 </summary>
-                <div className="mt-2 space-y-2 pl-4 text-sm text-slate-600 dark:text-slate-400">
+                <div className="mt-2 space-y-2 pl-4 text-sm text-text-sub">
                   <div className="flex items-start gap-2">
-                    <span className="mt-0.5 text-green-600 dark:text-green-400">✓</span>
+                    <span className="mt-0.5 text-kick">&#10003;</span>
                     <div>
-                      <strong>Authentication tokens</strong> - Required to keep you logged in and
-                      authenticate with streaming platforms (Twitch, YouTube, TikTok, Kick)
+                      <strong className="text-text">Authentication tokens</strong> - Required to
+                      keep you logged in and authenticate with streaming platforms (Twitch, YouTube,
+                      TikTok, Kick)
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="mt-0.5 text-green-600 dark:text-green-400">✓</span>
+                    <span className="mt-0.5 text-kick">&#10003;</span>
                     <div>
-                      <strong>User preferences</strong> - Your overlay configurations and settings
+                      <strong className="text-text">User preferences</strong> - Your overlay
+                      configurations and settings
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="mt-0.5 text-red-600 dark:text-red-400">✗</span>
+                    <span className="mt-0.5 text-youtube">&#10007;</span>
                     <div>
-                      <strong>No tracking cookies</strong> - We don&apos;t track your browsing
-                      behavior
+                      <strong className="text-text">No tracking cookies</strong> - We don&apos;t
+                      track your browsing behavior
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="mt-0.5 text-red-600 dark:text-red-400">✗</span>
+                    <span className="mt-0.5 text-youtube">&#10007;</span>
                     <div>
-                      <strong>No advertising cookies</strong> - We don&apos;t serve ads or share
-                      data with advertisers
+                      <strong className="text-text">No advertising cookies</strong> - We don&apos;t
+                      serve ads or share data with advertisers
                     </div>
                   </div>
                 </div>
               </details>
 
-              <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
-                By using All-Chat, you agree to this essential data storage. For more details,
-                please read our{' '}
+              <p className="mb-4 text-sm text-text-sub">
+                By using All-Chat, you agree to this essential data storage. For more details, please
+                read our{' '}
                 <a
                   href="/legal/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  className="font-medium text-twitch underline decoration-twitch/30 underline-offset-4"
                 >
                   Privacy Policy
                 </a>{' '}
@@ -124,18 +126,18 @@ export default function CookieBanner() {
                   href="/legal/terms"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  className="font-medium text-twitch underline decoration-twitch/30 underline-offset-4"
                 >
                   Terms of Service
                 </a>
                 .
               </p>
 
-              {/* Action Button */}
+              {/* Action Buttons */}
               <div className="flex flex-wrap gap-3">
                 <button
                   onClick={acknowledgeBanner}
-                  className="rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white transition-colors hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:outline-none"
+                  className="rounded-lg bg-twitch px-6 py-2.5 font-medium text-white transition-colors hover:bg-twitch/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                 >
                   I Understand
                 </button>
@@ -143,7 +145,7 @@ export default function CookieBanner() {
                   href="/legal/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-lg bg-slate-200 px-6 py-2.5 font-medium text-slate-900 transition-colors hover:bg-slate-300 focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 focus-visible:outline-none dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
+                  className="inline-flex items-center justify-center rounded-lg border border-border bg-surface-2 px-6 py-2.5 font-medium text-text transition-colors hover:bg-surface-2/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                 >
                   Learn More
                 </a>
@@ -153,9 +155,9 @@ export default function CookieBanner() {
         </div>
 
         {/* Footer */}
-        <div className="rounded-b-lg border-t border-slate-200 bg-slate-50 px-6 py-3 dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-center text-xs text-slate-500 dark:text-slate-400">
-            🔒 Your data is stored locally in your browser and transmitted securely via HTTPS
+        <div className="rounded-b-xl border-t border-border bg-bg px-6 py-3">
+          <p className="text-center text-xs text-text-dim">
+            Your data is stored locally in your browser and transmitted securely via HTTPS
           </p>
         </div>
       </div>

@@ -78,9 +78,9 @@ export default function ErrorDisplay({
       case ChatErrorType.PLATFORM_API_ERROR:
       case ChatErrorType.UNKNOWN_ERROR:
         return {
-          bg: 'bg-red-50 dark:bg-red-900/20',
-          border: 'border-red-200 dark:border-red-800',
-          text: 'text-red-800 dark:text-red-200',
+          bg: 'bg-youtube/10',
+          border: 'border-youtube/30',
+          text: 'text-youtube',
           icon: '🚫',
         }
 
@@ -88,34 +88,34 @@ export default function ErrorDisplay({
       case ChatErrorType.UNAUTHORIZED:
       case ChatErrorType.STREAMER_OFFLINE:
         return {
-          bg: 'bg-orange-50 dark:bg-orange-900/20',
-          border: 'border-orange-200 dark:border-orange-800',
-          text: 'text-orange-800 dark:text-orange-200',
+          bg: 'bg-orange-500/10',
+          border: 'border-orange-500/30',
+          text: 'text-orange-400',
           icon: '⚠️',
         }
 
       case ChatErrorType.RATE_LIMITED:
         return {
-          bg: 'bg-yellow-50 dark:bg-yellow-900/20',
-          border: 'border-yellow-200 dark:border-yellow-800',
-          text: 'text-yellow-800 dark:text-yellow-200',
+          bg: 'bg-yellow-500/10',
+          border: 'border-yellow-500/30',
+          text: 'text-yellow-400',
           icon: '⏱️',
         }
 
       case ChatErrorType.NETWORK_ERROR:
       case ChatErrorType.VALIDATION_ERROR:
         return {
-          bg: 'bg-slate-50 dark:bg-slate-800',
-          border: 'border-slate-200 dark:border-slate-700',
-          text: 'text-slate-800 dark:text-slate-200',
+          bg: 'bg-surface-2',
+          border: 'border-border',
+          text: 'text-text-sub',
           icon: '⚠️',
         }
 
       default:
         return {
-          bg: 'bg-slate-50 dark:bg-slate-800',
-          border: 'border-slate-200 dark:border-slate-700',
-          text: 'text-slate-800 dark:text-slate-200',
+          bg: 'bg-surface-2',
+          border: 'border-border',
+          text: 'text-text-sub',
           icon: '❌',
         }
     }
@@ -228,7 +228,7 @@ export default function ErrorDisplay({
 
             {/* Technical details (collapsible) */}
             {showDetails && error.technicalDetails && (
-              <div className="mt-3 overflow-x-auto rounded bg-black/10 p-3 font-mono text-xs dark:bg-black/30">
+              <div className="mt-3 overflow-x-auto rounded bg-black/30 p-3 font-mono text-xs">
                 <pre className={style.text}>{error.technicalDetails}</pre>
               </div>
             )}
@@ -242,7 +242,7 @@ export default function ErrorDisplay({
             className={clsx('flex-shrink-0 text-xl hover:opacity-70', style.text)}
             aria-label="Dismiss error"
           >
-            ×
+            &times;
           </button>
         )}
       </div>

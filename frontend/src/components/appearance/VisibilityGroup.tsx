@@ -19,7 +19,7 @@ function isVisible(val: DisplayValue | undefined, defaultOn: boolean): boolean {
 
 function toDisplayValue(field: keyof VisualSettings, checked: boolean): DisplayValue {
   if (!checked) return 'none'
-  if (field === 'showTimestamps') return 'block'
+  if (field === 'showTimestamps' || field === 'showPlatformIndicators') return 'block'
   return 'inline'
 }
 
@@ -31,7 +31,68 @@ const ROWS: Array<{ field: keyof VisualSettings; label: string }> = [
   { field: 'showUsername', label: 'Show username' },
 ]
 
+interface RadioOption<T extends string> {
+  value: T
+  label: string
+}
+
+function RadioGroup<T extends string>({
+  name,
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  name: string
+  options: ReadonlyArray<RadioOption<T>>
+  value: T
+  onChange: (val: T) => void
+  disabled?: boolean
+}): React.ReactElement {
+  return (
+    <div className="flex gap-4">
+      {options.map((opt) => (
+        <label key={opt.value} className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
+          <input
+            type="radio"
+            name={name}
+            value={opt.value}
+            checked={value === opt.value}
+            onChange={() => onChange(opt.value)}
+            className="accent-twitch"
+            disabled={disabled}
+          />
+          {opt.label}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+const POSITION_OPTIONS: ReadonlyArray<RadioOption<'before' | 'after'>> = [
+  { value: 'before', label: 'Before username' },
+  { value: 'after', label: 'After username' },
+]
+
+const STYLE_OPTIONS: ReadonlyArray<RadioOption<'text' | 'icon'>> = [
+  { value: 'text', label: 'Text' },
+  { value: 'icon', label: 'Icon' },
+]
+
 export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults = {} }: VisibilityGroupProps): React.ReactElement {
+  const platformBadgeVisible = isVisible(
+    (visualSettings as Record<string, DisplayValue | undefined>)['showPlatformBadge'],
+    isVisible((visibilityDefaults as Record<string, DisplayValue | undefined>)['showPlatformBadge'], true),
+  )
+
+  const platformIndicatorsVisible = isVisible(
+    (visualSettings as Record<string, DisplayValue | undefined>)['showPlatformIndicators'],
+    isVisible((visibilityDefaults as Record<string, DisplayValue | undefined>)['showPlatformIndicators'], true),
+  )
+
+  const badgePosition = visualSettings.platformBadgePosition ?? 'before'
+  const badgeStyle = visualSettings.platformBadgeStyle ?? 'text'
+
   return (
     <div className="space-y-3">
       {ROWS.map((row) => {
@@ -48,6 +109,46 @@ export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults =
           />
         )
       })}
+
+      {/* Platform Badge */}
+      <div className="border-t border-border pt-3">
+        <ToggleSwitch
+          label="Show platform badge"
+          checked={platformBadgeVisible}
+          onChange={(next) => onChange({ showPlatformBadge: next ? 'inline' : 'none' })}
+        />
+        <div className={`mt-2 space-y-2 pl-2 ${!platformBadgeVisible ? 'pointer-events-none opacity-40' : ''}`}>
+          <div>
+            <p className="mb-1 text-xs text-text-sub">Position</p>
+            <RadioGroup
+              name="platformBadgePosition"
+              options={POSITION_OPTIONS}
+              value={badgePosition}
+              onChange={(val) => onChange({ platformBadgePosition: val })}
+              disabled={!platformBadgeVisible}
+            />
+          </div>
+          <div>
+            <p className="mb-1 text-xs text-text-sub">Style</p>
+            <RadioGroup
+              name="platformBadgeStyle"
+              options={STYLE_OPTIONS}
+              value={badgeStyle}
+              onChange={(val) => onChange({ platformBadgeStyle: val })}
+              disabled={!platformBadgeVisible}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Platform Indicators */}
+      <div className="border-t border-border pt-3">
+        <ToggleSwitch
+          label="Show platform indicators"
+          checked={platformIndicatorsVisible}
+          onChange={(next) => onChange({ showPlatformIndicators: next ? 'block' : 'none' })}
+        />
+      </div>
     </div>
   )
 }
