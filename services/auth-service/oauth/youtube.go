@@ -17,7 +17,6 @@ import (
 type YouTubeOAuth struct {
 	config *oauth2.Config
 	client *http.Client
-	apiKey string
 }
 
 // YouTubeChannelInfo contains channel metadata resolved via the YouTube API
@@ -28,7 +27,7 @@ type YouTubeChannelInfo struct {
 }
 
 // NewYouTubeOAuth creates a new YouTube OAuth handler
-func NewYouTubeOAuth(clientID, clientSecret, redirectURL, apiKey string) *YouTubeOAuth {
+func NewYouTubeOAuth(clientID, clientSecret, redirectURL string) *YouTubeOAuth {
 	config := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -44,7 +43,6 @@ func NewYouTubeOAuth(clientID, clientSecret, redirectURL, apiKey string) *YouTub
 	return &YouTubeOAuth{
 		config: config,
 		client: &http.Client{Timeout: 10 * time.Second},
-		apiKey: apiKey,
 	}
 }
 

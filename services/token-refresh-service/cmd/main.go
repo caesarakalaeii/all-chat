@@ -58,15 +58,14 @@ func main() {
 	twitchClientSecret := os.Getenv("TWITCH_CLIENT_SECRET")
 	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
-	youtubeAPIKey := os.Getenv("YOUTUBE_API_KEY")
 	kickClientID := os.Getenv("KICK_CLIENT_ID")
 	kickClientSecret := os.Getenv("KICK_CLIENT_SECRET")
 
 	if twitchClientID == "" || twitchClientSecret == "" {
 		log.Fatal("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are required")
 	}
-	if youtubeClientID == "" || youtubeClientSecret == "" || youtubeAPIKey == "" {
-		log.Fatal("YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, and YOUTUBE_API_KEY are required")
+	if youtubeClientID == "" || youtubeClientSecret == "" {
+		log.Fatal("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET are required")
 	}
 	if kickClientID == "" || kickClientSecret == "" {
 		log.Fatal("KICK_CLIENT_ID and KICK_CLIENT_SECRET are required")
@@ -130,7 +129,7 @@ func main() {
 	kickRedirectURL := fmt.Sprintf("%s/api/v1/auth/kick/callback", frontendURL)
 
 	twitchOAuth := authOAuth.NewTwitchOAuth(twitchClientID, twitchClientSecret, twitchRedirectURL)
-	youtubeOAuth := authOAuth.NewYouTubeOAuth(youtubeClientID, youtubeClientSecret, youtubeRedirectURL, youtubeAPIKey)
+	youtubeOAuth := authOAuth.NewYouTubeOAuth(youtubeClientID, youtubeClientSecret, youtubeRedirectURL)
 	kickOAuth := authOAuth.NewKickOAuth(kickClientID, kickClientSecret, kickRedirectURL)
 
 	providers := map[authOAuth.Platform]authOAuth.OAuthProvider{
