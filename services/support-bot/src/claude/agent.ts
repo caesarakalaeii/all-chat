@@ -27,13 +27,13 @@ export async function queryCodebase(
   const { stdout } = await execa(
     'claude',
     [
-      '-p',
+      '-p', fullPrompt,
       '--model', 'claude-sonnet-4-6',
       '--allowedTools', 'Read,Glob,Grep',
       '--output-format', 'json',
     ],
     {
-      input: fullPrompt,
+      stdin: 'ignore',
       env: { ...process.env },
       timeout: 120_000,
     },
