@@ -305,6 +305,9 @@ func main() {
 		protected.POST("/logout", legacyAuthHandler.HandleLogout)
 		protected.DELETE("/me", legacyAuthHandler.HandleDeleteAccount)
 
+		// Streamer chat send (uses streamer's own OAuth tokens)
+		protected.POST("/chat/send", chatSendHandler.HandleStreamerSendMessage)
+
 		// Add-source routes (require JWT for account linking)
 		protected.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))
 		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))

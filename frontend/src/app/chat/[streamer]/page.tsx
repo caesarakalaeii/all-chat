@@ -21,6 +21,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import clsx from 'clsx'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
+import { useAuthStore } from '@/lib/stores/auth-store'
 import { viewerApi } from '@/lib/api/viewer'
 import { apiClient } from '@/lib/api/client'
 import type { StreamerInfo, SendMessageRequest } from '@/lib/types/viewer'
@@ -35,6 +36,11 @@ export default function ViewerChatPage() {
   const streamerUsername = params.streamer as string
 
   const { viewerInfo, viewerToken, loading, setStreamer, viewerLogout } = useViewerAuthStore()
+  const { user: streamerUser, token: streamerToken } = useAuthStore()
+
+  // Detect if the logged-in streamer is viewing their own chat page
+  const isOwnChat = !!(streamerUser && streamerToken &&
+    streamerUser.username.toLowerCase() === streamerUsername.toLowerCase())
 
   const [streamerInfo, setStreamerInfo] = useState<StreamerInfo | null>(null)
   const [loadingStreamer, setLoadingStreamer] = useState(true)
@@ -155,37 +161,46 @@ export default function ViewerChatPage() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !viewerToken) return
+    if (!message.trim()) return
+
+    // Must have either viewer auth or streamer auth (own chat)
+    if (!viewerToken && !isOwnChat) return
 
     try {
       setSending(true)
       setError(null)
       setSuccess(null)
 
-      const request: SendMessageRequest = {
-        streamer_username: streamerUsername,
-        message: message.trim(),
-        platform: viewerInfo?.platform || 'twitch', // Use viewer's actual login platform
+      let response
+      if (isOwnChat) {
+        // Streamer sending in their own chat — use streamer endpoint with their stored OAuth tokens
+        const activePlatform = streamerInfo?.platforms?.find(p => p.is_active)
+        response = await viewerApi.sendStreamerMessage({
+          message: message.trim(),
+          platform: activePlatform?.platform || streamerUser!.auth_provider || 'twitch',
+        })
+      } else {
+        // Viewer sending — use viewer endpoint
+        const request: SendMessageRequest = {
+          streamer_username: streamerUsername,
+          message: message.trim(),
+          platform: viewerInfo?.platform || 'twitch',
+        }
+        response = await viewerApi.sendMessage(request)
       }
-
-      const response = await viewerApi.sendMessage(request)
 
       if (response.success) {
         setSuccess('Message sent successfully!')
         setMessage('')
-        // Clear success message after 3 seconds
         setTimeout(() => setSuccess(null), 3000)
       }
     } catch (err: any) {
       console.error('Failed to send message:', err)
 
-      // Parse the error using our smart error parser
       let parsedError: ChatError
       if (err.response && err.data) {
-        // Error from API with response and data attached
         parsedError = parseApiError(err.response, err.data)
       } else {
-        // Network error or other fetch failure
         parsedError = parseFetchError(err)
       }
 
@@ -335,9 +350,11 @@ export default function ViewerChatPage() {
         )}
 
         {/* Message Input Section */}
-        {viewerInfo ? (
+        {(viewerInfo || isOwnChat) ? (
           <div className="rounded-xl border border-border bg-surface p-6">
-            <h2 className="mb-4 text-xl font-semibold text-text">Send a Message</h2>
+            <h2 className="mb-4 text-xl font-semibold text-text">
+              {isOwnChat ? 'Send a Message (as Streamer)' : 'Send a Message'}
+            </h2>
 
             {error && (
               <ErrorDisplay
@@ -382,13 +399,15 @@ export default function ViewerChatPage() {
               </button>
             </form>
 
-            <div className="mt-6 text-sm text-text-sub">
-              <p className="mb-2 font-semibold text-text">Rate Limits:</p>
-              <ul className="list-inside list-disc space-y-1">
-                <li>20 messages per minute</li>
-                <li>100 messages per hour</li>
-              </ul>
-            </div>
+            {!isOwnChat && (
+              <div className="mt-6 text-sm text-text-sub">
+                <p className="mb-2 font-semibold text-text">Rate Limits:</p>
+                <ul className="list-inside list-disc space-y-1">
+                  <li>20 messages per minute</li>
+                  <li>100 messages per hour</li>
+                </ul>
+              </div>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-surface p-6 text-center">

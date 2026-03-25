@@ -35,7 +35,9 @@ type ViewerRepositoryInterface interface {
 
 // UserRepositoryInterface defines the interface for user repository operations
 type UserRepositoryInterface interface {
+	GetByID(ctx context.Context, id string) (*models.User, error)
 	GetByUsername(ctx context.Context, username string) (*models.User, error)
+	UpdateTokens(ctx context.Context, userID, accessToken, refreshToken string, expiresAt time.Time) error
 }
 
 // OAuthTokenRefresher defines the interface for OAuth token refresh operations
@@ -252,6 +254,274 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 		Success: true,
 		Message: "Message sent successfully",
 	})
+}
+
+// StreamerSendMessageRequest is the request body for a streamer sending a message in their own chat
+type StreamerSendMessageRequest struct {
+	Message  string `json:"message" binding:"required"`
+	Platform string `json:"platform" binding:"required"` // Which platform to send to
+}
+
+// HandleStreamerSendMessage handles POST /chat/send for authenticated streamers.
+// Unlike the viewer flow, this uses the streamer's own stored OAuth tokens.
+func (h *ChatSendHandler) HandleStreamerSendMessage(c *gin.Context) {
+	// Extract user_id from JWT claims (streamer token)
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user_id not found in token"})
+		return
+	}
+
+	userID, ok := userIDVal.(string)
+	if !ok || userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user_id format"})
+		return
+	}
+
+	// Parse request body
+	var req StreamerSendMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: message and platform are required"})
+		return
+	}
+
+	// Validate message length
+	if len(req.Message) == 0 || len(req.Message) > maxMessageLength {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("message must be between 1 and %d characters", maxMessageLength)})
+		return
+	}
+
+	// Get streamer user record (includes decrypted OAuth tokens)
+	ctx := c.Request.Context()
+	user, err := h.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		h.log.Error("Failed to get streamer user", zap.Error(err), zap.String("user_id", userID))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
+		return
+	}
+
+	if user.IsBanned {
+		c.JSON(http.StatusForbidden, gin.H{"error": "your account is banned"})
+		return
+	}
+
+	// Refresh token if expired or expiring soon
+	if err := h.refreshStreamerTokenIfNeeded(ctx, user); err != nil {
+		h.log.Error("Failed to refresh streamer token", zap.Error(err))
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "token expired, please re-authenticate"})
+		return
+	}
+
+	h.log.Info("Streamer sending message",
+		zap.String("platform", req.Platform),
+		zap.String("user_id", userID),
+		zap.String("username", user.Username))
+
+	// Send message based on target platform
+	var messageErr error
+	switch req.Platform {
+	case "twitch":
+		messageErr = h.sendStreamerTwitchMessage(ctx, user, req.Message)
+	case "youtube":
+		messageErr = h.sendStreamerYouTubeMessage(ctx, user, req.Message)
+	case "kick":
+		messageErr = h.sendStreamerKickMessage(ctx, user, req.Message)
+	case "tiktok":
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "TikTok message sending not yet implemented"})
+		return
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported platform"})
+		return
+	}
+
+	if messageErr != nil {
+		h.log.Error("Failed to send streamer message", zap.Error(messageErr), zap.String("platform", req.Platform))
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to send message", "details": messageErr.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, SendMessageResponse{
+		Success: true,
+		Message: "Message sent successfully",
+	})
+}
+
+// refreshStreamerTokenIfNeeded refreshes the streamer's OAuth token if expired
+func (h *ChatSendHandler) refreshStreamerTokenIfNeeded(ctx context.Context, user *models.User) error {
+	if user.TokenExpiresAt.After(time.Now().Add(5 * time.Minute)) {
+		return nil
+	}
+
+	h.log.Info("Streamer access token expired or expiring soon, refreshing",
+		zap.String("auth_provider", user.AuthProvider),
+		zap.Time("expires_at", user.TokenExpiresAt))
+
+	if user.RefreshToken == "" {
+		return fmt.Errorf("no refresh token available")
+	}
+
+	var newToken *oauth2.Token
+	var err error
+	switch user.AuthProvider {
+	case "twitch":
+		newToken, err = h.twitchProvider.RefreshToken(ctx, user.RefreshToken)
+	case "youtube":
+		newToken, err = h.youtubeProvider.RefreshToken(ctx, user.RefreshToken)
+	case "kick":
+		newToken, err = h.kickProvider.RefreshToken(ctx, user.RefreshToken)
+	default:
+		return fmt.Errorf("unsupported auth provider for token refresh: %s", user.AuthProvider)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to refresh token: %w", err)
+	}
+
+	refreshToken := newToken.RefreshToken
+	if refreshToken == "" {
+		refreshToken = user.RefreshToken
+	}
+
+	if err := h.userRepo.UpdateTokens(ctx, user.ID, newToken.AccessToken, refreshToken, newToken.Expiry); err != nil {
+		return fmt.Errorf("failed to update tokens: %w", err)
+	}
+
+	// Update in-memory user so the rest of the handler uses the new token
+	user.AccessToken = newToken.AccessToken
+	user.RefreshToken = refreshToken
+	user.TokenExpiresAt = newToken.Expiry
+
+	return nil
+}
+
+// sendStreamerTwitchMessage sends a message to Twitch chat as the streamer (broadcaster)
+func (h *ChatSendHandler) sendStreamerTwitchMessage(ctx context.Context, user *models.User, message string) error {
+	if user.TwitchID == nil || *user.TwitchID == "" {
+		return fmt.Errorf("no Twitch account linked")
+	}
+	broadcasterID := *user.TwitchID
+
+	reqBody := map[string]string{
+		"broadcaster_id": broadcasterID,
+		"sender_id":      broadcasterID, // streamer sends as themselves
+		"message":        message,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.twitch.tv/helix/chat/messages", bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", user.AccessToken))
+	req.Header.Set("Client-Id", h.clientID)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("twitch API error: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// sendStreamerYouTubeMessage sends a message to YouTube live chat as the streamer
+func (h *ChatSendHandler) sendStreamerYouTubeMessage(ctx context.Context, user *models.User, message string) error {
+	channelID, err := h.getActiveYouTubeChannelID(ctx, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get YouTube channel ID: %w", err)
+	}
+
+	liveChatID, err := h.getYouTubeLiveChatID(ctx, user.AccessToken, channelID)
+	if err != nil {
+		return fmt.Errorf("failed to get live chat ID: %w", err)
+	}
+
+	reqBody := map[string]interface{}{
+		"snippet": map[string]interface{}{
+			"liveChatId": liveChatID,
+			"type":       "textMessageEvent",
+			"textMessageDetails": map[string]string{
+				"messageText": message,
+			},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	url := "https://www.googleapis.com/youtube/v3/liveChat/messages?part=snippet"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", user.AccessToken))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("youtube API error: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// sendStreamerKickMessage sends a message to Kick chat as the streamer
+func (h *ChatSendHandler) sendStreamerKickMessage(ctx context.Context, user *models.User, message string) error {
+	if user.KickID == nil || *user.KickID == "" {
+		return fmt.Errorf("no Kick account linked")
+	}
+
+	reqBody := map[string]interface{}{
+		"type":                "user",
+		"content":             message,
+		"broadcaster_user_id": *user.KickID,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.kick.com/public/v1/chat", bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", user.AccessToken))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("kick API error: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }
 
 // checkRateLimit checks if the viewer is within rate limits

@@ -44,6 +44,11 @@ export interface SendMessageRequest {
   platform?: string
 }
 
+export interface StreamerSendMessageRequest {
+  message: string
+  platform: string
+}
+
 export interface SendMessageResponse {
   success: boolean
   message: string
