@@ -31,6 +31,14 @@ func (r *stubRepository) GetRelayConfigs(_ context.Context) ([]relayConfig, erro
 	return r.configs, nil
 }
 
+func (r *stubRepository) GetPendingRelayConfigs(_ context.Context) ([]pendingRelayConfig, error) {
+	return nil, nil
+}
+
+func (r *stubRepository) StoreWebhookURL(_ context.Context, _, _ string) error {
+	return nil
+}
+
 func TestRelayManager_DiscordPlatformFiltered(t *testing.T) {
 	poster := &captureCallsPoster{}
 	mgr := &Manager{
