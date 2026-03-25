@@ -73,6 +73,10 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
   const octokit = createOctokitClient(config.githubToken);
   const repoPaths = [config.allChatRepoPath, config.allChatExtensionRepoPath];
 
+  // Track thread IDs the bot has created or posted in this session.
+  // Used to recognise bot-managed threads even if ownerId doesn't match.
+  const botThreadIds = new Set<string>();
+
   // Per-channel queue: each message waits for the previous one to finish so
   // history is complete and responses arrive in order.
   const queues = new Map<string, Promise<void>>();
@@ -89,17 +93,16 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
     if (message.author.bot) return;
 
     const inBotThread =
-      message.channel.isThread() &&
-      (message.channel as ThreadChannel).ownerId === client.user!.id;
+      message.channel.isThread() && (
+        (message.channel as ThreadChannel).ownerId === client.user!.id ||
+        botThreadIds.has(message.channelId)
+      );
 
-    if (!inBotThread && !message.mentions.has(client.user!.id)) return;
+    const isMentioned = message.mentions.has(client.user!.id);
+
+    if (!inBotThread && !isMentioned) return;
 
     const stripped = message.content.replace(/<@!?\d+>/g, '').trim();
-
-    if (!stripped) {
-      void message.reply('Please include a question after the mention.');
-      return;
-    }
 
     enqueue(message.channelId, async () => {
       await message.channel.sendTyping();
@@ -110,17 +113,26 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
           ? await fetchThreadHistory(message.channel as ThreadChannel)
           : [];
 
-        // If this is a reply to another message, prepend that message as context
+        // Build question: if user replied to another message, use that as context.
+        // If stripped is empty (e.g. bare @mention reply), use the referenced message as the question.
         let question = stripped;
         if (message.reference?.messageId) {
           try {
             const referenced = await message.channel.messages.fetch(message.reference.messageId);
             if (!referenced.author.bot) {
-              question = `Context (message being replied to by ${referenced.author.username}): ${referenced.content}\n\nQuestion: ${stripped}`;
+              question = stripped
+                ? `Context (message being replied to by ${referenced.author.username}): ${referenced.content}\n\nQuestion: ${stripped}`
+                : referenced.content;
             }
           } catch {
             // ignore if fetch fails
           }
+        }
+
+        if (!question) {
+          clearInterval(typingInterval);
+          await message.reply('Please include a question.');
+          return;
         }
 
         const answer = await handleQuestion(question, repoPaths, config, octokit, history, tokenManager);
@@ -128,12 +140,14 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
         clearInterval(typingInterval);
 
         if (message.channel.isThread()) {
+          botThreadIds.add(message.channelId);
           await sendResponse(message.channel as ThreadChannel, answer);
         } else {
           const thread = await message.startThread({
-            name: stripped.slice(0, 50),
+            name: (stripped || question).slice(0, 50),
             autoArchiveDuration: 1440,
           });
+          botThreadIds.add(thread.id);
           await sendResponse(thread, answer);
         }
       } catch (err) {
@@ -181,6 +195,7 @@ export async function startBot(config: BotConfig, tokenManager?: ClaudeTokenMana
       name: question.slice(0, 50),
       autoArchiveDuration: 1440,
     });
+    botThreadIds.add(thread.id);
     await thread.send(`**Original question:** ${question}`);
 
     // Post any remaining chunks into the thread
