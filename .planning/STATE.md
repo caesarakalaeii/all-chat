@@ -3,8 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 260325-ljj-PLAN.md (discord relay webhook-based sending)
-last_updated: "2026-03-25T14:41:23.664Z"
+stopped_at: Completed 260325-lwo-PLAN.md (auto-create Discord webhook)
+last_updated: "2026-03-25T15:01:38.736Z"
+last_activity: "2026-03-25 - Completed quick task 260325-ljj: Discord relay webhook-based sending with sender identity"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -113,6 +114,7 @@ Key decisions relevant to v1.6:
 - [Phase 01-03]: npm ci (not --production) in Dockerfile — tsx is a devDependency but required at runtime for TypeScript execution
 - [Phase 01-03]: Init containers use $GITHUB_TOKEN shell variable syntax inside sh -c — NOT $(GITHUB_TOKEN) which is Kubernetes command substitution
 - [Phase 01-03]: emptyDir volumes for cloned repos with readOnly: true mounts — ephemeral fresh clone on each pod start, bot reads only
+- [Phase quick-260325-lwo]: Webhook name 'AllChat Relay' as idempotency key; pg_notify after StoreWebhookURL for immediate sync
 
 ### Roadmap Evolution
 
@@ -142,12 +144,13 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260325-ljj | Discord relay webhook-based sending with sender identity | 2026-03-25 | f7ab0eb | [260325-ljj-discord-relay-webhook-based-sending-with](./quick/260325-ljj-discord-relay-webhook-based-sending-with/) |
+| 260325-lwo | Auto-create Discord webhook when relay enabled | 2026-03-25 | 5b776b3 | [260325-lwo-auto-create-discord-webhook-when-relay-e](./quick/260325-lwo-auto-create-discord-webhook-when-relay-e/) |
 
 ## Session Continuity
 
-Last session: 2026-03-25T14:41:23.660Z
-Last activity: 2026-03-25 - Completed quick task 260325-ljj: Discord relay webhook-based sending with sender identity
-Stopped at: Completed 260325-ljj-PLAN.md (discord relay webhook-based sending)
+Last session: 2026-03-25T15:01:31.388Z
+Last activity: 2026-03-25 - Completed quick task 260325-lwo: Auto-create Discord webhook when relay enabled
+Stopped at: Completed 260325-lwo-PLAN.md (auto-create Discord webhook)
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)
