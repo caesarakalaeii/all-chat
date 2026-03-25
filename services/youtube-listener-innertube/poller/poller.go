@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -425,6 +426,28 @@ func (p *Poller) poll() {
 				zap.Int("zero_action_polls", p.zeroActionThreshold),
 			)
 			if fresh, freshVisitorData, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID); err != nil {
+				// If the error indicates the stream ended (no liveChatRenderer),
+				// treat it as offline rather than continuing to poll forever.
+				errStr := err.Error()
+				if strings.Contains(errStr, "stream may have ended") || strings.Contains(errStr, "isReplay") {
+					p.logger.Info("Stream ended during stale-continuation refresh",
+						zap.String("channel_id", p.channelID),
+						zap.String("video_id", p.videoID),
+						zap.Error(err),
+					)
+					p.state.SetState(StateOffline)
+					p.state.SetError(nil)
+					if p.repository != nil && p.videoID != "" {
+						if err := HandleStreamOffline(p.ctx, p.channelID, p.videoID, p.repository, p.publisher, p.logger); err != nil {
+							p.logger.Debug("HandleStreamOffline completed",
+								zap.String("channel_id", p.channelID))
+						}
+					}
+					if p.cancel != nil {
+						p.cancel()
+					}
+					return
+				}
 				p.logger.Warn("Failed to refresh continuation, continuing with current token",
 					zap.String("video_id", p.videoID),
 					zap.Error(err),
