@@ -181,7 +181,7 @@ func main() {
 	defer dbPool.Close()
 
 	relayRepo := relay.NewRepository(dbPool)
-	relayPoster := relay.NewHTTPPoster(botToken, &http.Client{Timeout: 10 * time.Second}, log)
+	relayPoster := relay.NewWebhookPoster(&http.Client{Timeout: 10 * time.Second}, log)
 	relayMgr := relay.NewManager(relayRepo, relayPoster, rdb, dbPool, log)
 
 	// Leadership coordination via SDK
