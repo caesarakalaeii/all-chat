@@ -9,8 +9,8 @@ import (
 
 // relayConfig holds per-overlay relay routing information.
 type relayConfig struct {
-	OverlayID      string
-	RelayChannelID string
+	OverlayID  string
+	WebhookURL string
 }
 
 // RepositoryInterface is the database contract for relay config queries.
@@ -28,17 +28,17 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-// GetRelayConfigs returns all (overlay_id, relay_channel_id) pairs for active,
-// relay-enabled discord sources.
+// GetRelayConfigs returns all (overlay_id, webhook_url) pairs for active,
+// relay-enabled discord sources that have a webhook URL configured.
 func (r *Repository) GetRelayConfigs(ctx context.Context) ([]relayConfig, error) {
 	query := `
 		SELECT ocs.overlay_id,
-		       ocs.config->>'relay_channel_id' AS relay_channel_id
+		       ocs.config->>'relay_webhook_url' AS webhook_url
 		FROM overlay_chat_sources ocs
 		JOIN overlays o ON o.id = ocs.overlay_id
 		WHERE ocs.platform = 'discord'
 		  AND (ocs.config->>'relay_enabled')::boolean = true
-		  AND ocs.config->>'relay_channel_id' IS NOT NULL
+		  AND ocs.config->>'relay_webhook_url' IS NOT NULL
 		  AND o.is_active = true
 	`
 
@@ -51,7 +51,7 @@ func (r *Repository) GetRelayConfigs(ctx context.Context) ([]relayConfig, error)
 	var configs []relayConfig
 	for rows.Next() {
 		var cfg relayConfig
-		if err := rows.Scan(&cfg.OverlayID, &cfg.RelayChannelID); err != nil {
+		if err := rows.Scan(&cfg.OverlayID, &cfg.WebhookURL); err != nil {
 			return nil, fmt.Errorf("failed to scan relay config row: %w", err)
 		}
 		configs = append(configs, cfg)

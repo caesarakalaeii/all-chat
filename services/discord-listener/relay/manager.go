@@ -21,7 +21,9 @@ type relayMessage struct {
 	Platform  string `json:"platform"`
 	OverlayID string `json:"overlay_id"`
 	User      struct {
-		Username string `json:"username"`
+		Username    string `json:"username"`
+		DisplayName string `json:"display_name"`
+		AvatarURL   string `json:"avatar_url"`
 	} `json:"user"`
 	Message struct {
 		Text string `json:"text"`
@@ -114,23 +116,23 @@ func (m *Manager) SyncRelayConfigs(ctx context.Context) error {
 
 	desired := make(map[string]string, len(configs))
 	for _, cfg := range configs {
-		desired[cfg.OverlayID] = cfg.RelayChannelID
+		desired[cfg.OverlayID] = cfg.WebhookURL
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// Subscribe to new overlays.
-	for overlayID, channelID := range desired {
+	for overlayID, webhookURL := range desired {
 		if _, active := m.activeSubs[overlayID]; active {
 			continue
 		}
 		sub := m.redisClient.Subscribe(ctx, "overlay:"+overlayID)
 		m.activeSubs[overlayID] = sub
-		m.activeConf[overlayID] = channelID
+		m.activeConf[overlayID] = webhookURL
 
 		m.wg.Add(1)
-		go m.drainOverlay(ctx, overlayID, sub, channelID)
+		go m.drainOverlay(ctx, overlayID, sub, webhookURL)
 	}
 
 	// Unsubscribe from removed overlays.
@@ -151,7 +153,7 @@ func (m *Manager) SyncRelayConfigs(ctx context.Context) error {
 }
 
 // drainOverlay reads messages from a Redis Pub/Sub subscription and relays them.
-func (m *Manager) drainOverlay(ctx context.Context, overlayID string, sub *redis.PubSub, relayChannelID string) {
+func (m *Manager) drainOverlay(ctx context.Context, overlayID string, sub *redis.PubSub, webhookURL string) {
 	defer m.wg.Done()
 
 	ch := sub.Channel()
@@ -175,16 +177,21 @@ func (m *Manager) drainOverlay(ctx context.Context, overlayID string, sub *redis
 			if rm.Platform == "discord" {
 				continue
 			}
-			username := formatWebhookUsername(rm.User.Username, rm.Platform)
-			payload := RelayPayload{
-				Content:  rm.Message.Text,
-				Username: username,
+			displayName := rm.User.DisplayName
+			if displayName == "" {
+				displayName = rm.User.Username
 			}
-			if err := m.poster.Post(ctx, relayChannelID, payload); err != nil {
+			username := formatWebhookUsername(displayName, rm.Platform)
+			payload := RelayPayload{
+				Content:   rm.Message.Text,
+				Username:  username,
+				AvatarURL: rm.User.AvatarURL,
+			}
+			if err := m.poster.Post(ctx, webhookURL, payload); err != nil {
 				if m.logger != nil {
 					m.logger.Error("Failed to post relay message to Discord",
 						zap.String("overlay_id", overlayID),
-						zap.String("webhook_url", relayChannelID),
+						zap.String("webhook_url", webhookURL),
 						zap.Error(err),
 					)
 				}
