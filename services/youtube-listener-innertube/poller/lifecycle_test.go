@@ -204,7 +204,7 @@ func TestStartDiscoveryLoop_Success(t *testing.T) {
 // mockInnerTubeClient is a minimal mock for testing discovery
 type mockInnerTubeClient struct{}
 
-func (m *mockInnerTubeClient) GetLiveChatReplay(ctx context.Context, continuation string) (*innertube.LiveChatResponse, error) {
+func (m *mockInnerTubeClient) GetLiveChatReplay(ctx context.Context, continuation string, visitorData string) (*innertube.LiveChatResponse, error) {
 	return nil, nil
 }
 

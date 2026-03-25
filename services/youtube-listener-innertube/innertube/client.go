@@ -76,7 +76,7 @@ func NewClient(opts ClientOptions) *Client {
 
 // GetLiveChatReplay fetches live chat messages using a continuation token
 // For live streams, this uses the get_live_chat endpoint
-func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string) (*LiveChatResponse, error) {
+func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string, visitorData string) (*LiveChatResponse, error) {
 	if continuation == "" {
 		return nil, fmt.Errorf("continuation token is required")
 	}
@@ -85,13 +85,17 @@ func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string) (*L
 	url := fmt.Sprintf("%s?key=%s", InnerTubeEndpoint, c.apiKey)
 
 	// Build request payload matching InnerTube format
+	clientContext := map[string]interface{}{
+		"clientName":    "WEB",
+		"clientVersion": c.clientVersion,
+	}
+	if visitorData != "" {
+		clientContext["visitorData"] = visitorData
+	}
 	payload := map[string]interface{}{
 		"continuation": continuation,
 		"context": map[string]interface{}{
-			"client": map[string]interface{}{
-				"clientName":    "WEB",
-				"clientVersion": c.clientVersion,
-			},
+			"client": clientContext,
 		},
 	}
 

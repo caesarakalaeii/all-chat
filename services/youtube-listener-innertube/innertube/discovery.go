@@ -235,7 +235,7 @@ func collectVideoIDsFromBrowse(data interface{}) []string {
 // Uses the InnerTube /next API (JSON, no HTML scraping, no rate limiting).
 // The token is found at: contents.twoColumnWatchNextResults.conversationBar.liveChatRenderer
 // Only returns a token when the stream is currently live (liveChatRenderer only present for live streams).
-func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) (string, error) {
+func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) (string, string, error) {
 	d.logger.Info("fetching initial continuation token",
 		zap.String("video_id", videoID),
 	)
@@ -252,48 +252,57 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 	}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("marshal payload: %w", err)
+		return "", "", fmt.Errorf("marshal payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, nextURL, bytes.NewReader(jsonPayload))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", "", fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("fetch next API: %w", err)
+		return "", "", fmt.Errorf("fetch next API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code from next API: %d", resp.StatusCode)
+		return "", "", fmt.Errorf("unexpected status code from next API: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read response body: %w", err)
+		return "", "", fmt.Errorf("read response body: %w", err)
 	}
 
 	var nextData map[string]interface{}
 	if err := json.Unmarshal(body, &nextData); err != nil {
-		return "", fmt.Errorf("parse next API response: %w", err)
+		return "", "", fmt.Errorf("parse next API response: %w", err)
+	}
+
+	// Extract visitorData from responseContext
+	var visitorData string
+	if rc, ok := nextData["responseContext"].(map[string]interface{}); ok {
+		if vd, ok := rc["visitorData"].(string); ok {
+			visitorData = vd
+		}
 	}
 
 	// Walk the known path to the liveChatRenderer
 	token := extractContinuationFromNextAPI(nextData)
 	if token == "" {
-		return "", fmt.Errorf("no live chat continuation found in next API for video %s (stream may have ended)", videoID)
+		return "", "", fmt.Errorf("no live chat continuation found in next API for video %s (stream may have ended)", videoID)
 	}
 
 	d.logger.Info("extracted initial continuation token from next API",
 		zap.String("video_id", videoID),
 		zap.Int("token_length", len(token)),
+		zap.Bool("has_visitor_data", visitorData != ""),
 	)
 
-	return token, nil
+	return token, visitorData, nil
 }
 
 // extractContinuationFromNextAPI extracts the live chat continuation token from

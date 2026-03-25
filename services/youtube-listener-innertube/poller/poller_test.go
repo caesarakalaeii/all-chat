@@ -20,7 +20,7 @@ type MockClient struct {
 	pollIntervals  []time.Duration
 }
 
-func (m *MockClient) GetLiveChatReplay(ctx context.Context, continuation string) (*innertube.LiveChatResponse, error) {
+func (m *MockClient) GetLiveChatReplay(ctx context.Context, continuation string, visitorData string) (*innertube.LiveChatResponse, error) {
 	if m.callCount >= len(m.responses) {
 		// Return last error repeatedly if out of responses
 		if len(m.errors) > 0 {

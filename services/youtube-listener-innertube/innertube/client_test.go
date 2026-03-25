@@ -148,7 +148,7 @@ func TestGetLiveChatReplay(t *testing.T) {
 			// Test empty continuation early
 			if tt.continuation == "" {
 				client := NewClient(ClientOptions{})
-				_, err := client.GetLiveChatReplay(ctx, tt.continuation)
+				_, err := client.GetLiveChatReplay(ctx, tt.continuation, "")
 				if (err != nil) != tt.wantErr {
 					t.Errorf("GetLiveChatReplay() error = %v, wantErr %v", err, tt.wantErr)
 				}

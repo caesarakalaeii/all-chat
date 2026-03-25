@@ -13,7 +13,7 @@ import (
 
 // ClientInterface defines the methods needed from innertube.Client for testing
 type ClientInterface interface {
-	GetLiveChatReplay(ctx context.Context, continuation string) (*innertube.LiveChatResponse, error)
+	GetLiveChatReplay(ctx context.Context, continuation string, visitorData string) (*innertube.LiveChatResponse, error)
 	ExtractContinuation(resp *innertube.LiveChatResponse) string
 	GetPollInterval(resp *innertube.LiveChatResponse) time.Duration
 }
@@ -21,7 +21,7 @@ type ClientInterface interface {
 // ContinuationRefresher can fetch a fresh continuation token for a video.
 // Used to recover when a continuation goes stale (persistent zero-action responses).
 type ContinuationRefresher interface {
-	GetInitialContinuation(ctx context.Context, videoID string) (string, error)
+	GetInitialContinuation(ctx context.Context, videoID string) (string, string, error)
 }
 
 // MessageCallback is called with parsed messages after each successful poll
@@ -43,6 +43,7 @@ type MessageCallback func(messages []*innertube.RawChatMessage)
 type Poller struct {
 	client          ClientInterface
 	continuation    string
+	visitorData     string
 	channelID       string
 	videoID         string // Current video ID being polled
 	interval        time.Duration
@@ -82,6 +83,9 @@ type PollerOptions struct {
 
 	// VideoID is the current video ID being polled (optional)
 	VideoID string
+
+	// VisitorData is the YouTube visitor data token required by get_live_chat endpoint
+	VisitorData string
 
 	// Repository for lifecycle operations (optional, for offline detection)
 	Repository *Repository
@@ -158,6 +162,7 @@ func NewPoller(
 	return &Poller{
 		client:              client,
 		continuation:        initialContinuation,
+		visitorData:         opts.VisitorData,
 		channelID:           channelID,
 		videoID:             opts.VideoID,
 		interval:            interval,
@@ -271,7 +276,7 @@ func (p *Poller) pollingLoop() {
 // poll executes a single poll iteration, then sleeps for the YouTube-recommended interval.
 func (p *Poller) poll() {
 	// Call InnerTube API
-	resp, err := p.client.GetLiveChatReplay(p.ctx, p.continuation)
+	resp, err := p.client.GetLiveChatReplay(p.ctx, p.continuation, p.visitorData)
 	if err != nil {
 		p.handleError(err)
 		p.sleep(p.interval)
@@ -299,9 +304,12 @@ func (p *Poller) poll() {
 				zap.Int("attempt", p.emptyContCount),
 				zap.Int("threshold", p.emptyContThreshold),
 			)
-			if fresh, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID); err == nil {
+			if fresh, freshVisitorData, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID); err == nil {
 				// Stream is still live – resume with the fresh token.
 				p.continuation = fresh
+				if freshVisitorData != "" {
+					p.visitorData = freshVisitorData
+				}
 				p.emptyContCount = 0
 				p.logger.Info("Stream still live, resuming with fresh continuation",
 					zap.String("channel_id", p.channelID),
@@ -416,13 +424,16 @@ func (p *Poller) poll() {
 				zap.String("video_id", p.videoID),
 				zap.Int("zero_action_polls", p.zeroActionThreshold),
 			)
-			if fresh, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID); err != nil {
+			if fresh, freshVisitorData, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID); err != nil {
 				p.logger.Warn("Failed to refresh continuation, continuing with current token",
 					zap.String("video_id", p.videoID),
 					zap.Error(err),
 				)
 			} else {
 				p.continuation = fresh
+				if freshVisitorData != "" {
+					p.visitorData = freshVisitorData
+				}
 				p.logger.Info("Continuation refreshed successfully",
 					zap.String("channel_id", p.channelID),
 					zap.String("video_id", p.videoID),
