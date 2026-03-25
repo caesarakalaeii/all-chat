@@ -38,7 +38,7 @@ type Manager struct {
 	dbPool      *pgxpool.Pool
 
 	activeSubs map[string]*redis.PubSub // key: overlay_id
-	activeConf map[string]string        // key: overlay_id → relay_channel_id
+	activeConf map[string]string        // key: overlay_id → webhook_url
 	mu         sync.Mutex
 
 	syncTicker *time.Ticker
@@ -175,12 +175,16 @@ func (m *Manager) drainOverlay(ctx context.Context, overlayID string, sub *redis
 			if rm.Platform == "discord" {
 				continue
 			}
-			content := formatRelayContent(rm.Platform, rm.User.Username, rm.Message.Text)
-			if err := m.poster.Post(ctx, relayChannelID, content); err != nil {
+			username := formatWebhookUsername(rm.User.Username, rm.Platform)
+			payload := RelayPayload{
+				Content:  rm.Message.Text,
+				Username: username,
+			}
+			if err := m.poster.Post(ctx, relayChannelID, payload); err != nil {
 				if m.logger != nil {
 					m.logger.Error("Failed to post relay message to Discord",
 						zap.String("overlay_id", overlayID),
-						zap.String("relay_channel_id", relayChannelID),
+						zap.String("webhook_url", relayChannelID),
 						zap.Error(err),
 					)
 				}
@@ -196,12 +200,20 @@ func (m *Manager) drainOverlay(ctx context.Context, overlayID string, sub *redis
 
 // HandleMessage provides a synchronous injection point for tests.
 // It applies the loop-safety filter and calls poster.Post directly.
-func (m *Manager) HandleMessage(ctx context.Context, platform, username, text, overlayID, relayChannelID string) error {
+func (m *Manager) HandleMessage(ctx context.Context, platform, username, displayName, avatarURL, text, overlayID, webhookURL string) error {
 	if platform == "discord" {
 		return nil
 	}
-	content := formatRelayContent(platform, username, text)
-	return m.poster.Post(ctx, relayChannelID, content)
+	name := displayName
+	if name == "" {
+		name = username
+	}
+	payload := RelayPayload{
+		Content:   text,
+		Username:  formatWebhookUsername(name, platform),
+		AvatarURL: avatarURL,
+	}
+	return m.poster.Post(ctx, webhookURL, payload)
 }
 
 // syncLoop periodically re-syncs relay configs from the database.
