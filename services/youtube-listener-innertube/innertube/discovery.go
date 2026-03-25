@@ -395,53 +395,51 @@ func searchLiveChatRenderer(data interface{}) string {
 }
 
 // extractContinuationFromLiveChatRenderer extracts the continuation token
-// from a liveChatRenderer object, preferring the "Live chat" (all messages)
-// token over "Top chat" (filtered subset).
+// from a liveChatRenderer object.
 //
-// YouTube exposes two chat views via subMenuItems in the viewSelector:
-//   - "Top chat"  – filtered; hides ~80-90% of messages on busy streams
-//   - "Live chat" – unfiltered; all messages visible
-//
-// We look for the "Live chat" token in the subMenuItems first. If it isn't
-// present (older streams, members-only, etc.) we fall back to the legacy
-// continuations array.
+// The main continuations array contains the full reload token accepted by
+// the get_live_chat endpoint. The subMenuItem tokens ("Live chat" / "Top chat")
+// are shorter view-selector tokens that YouTube's get_live_chat endpoint
+// rejects with HTTP 400 as of March 2026. We therefore prefer the main
+// continuations array and only fall back to subMenuItems if it's absent.
 func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 	m, ok := renderer.(map[string]interface{})
 	if !ok {
 		return ""
 	}
 
-	// Prefer "Live chat" token from the view selector subMenuItems.
+	// Prefer the main continuations array — these are the full reload tokens
+	// accepted by the get_live_chat endpoint.
+	continuations, ok := m["continuations"].([]interface{})
+	if ok {
+		for _, cont := range continuations {
+			contMap, ok := cont.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if reload, ok := contMap["reloadContinuationData"].(map[string]interface{}); ok {
+				if token, ok := reload["continuation"].(string); ok && token != "" {
+					return token
+				}
+			}
+			if timed, ok := contMap["timedContinuationData"].(map[string]interface{}); ok {
+				if token, ok := timed["continuation"].(string); ok && token != "" {
+					return token
+				}
+			}
+			if inv, ok := contMap["invalidationContinuationData"].(map[string]interface{}); ok {
+				if token, ok := inv["continuation"].(string); ok && token != "" {
+					return token
+				}
+			}
+		}
+	}
+
+	// Fallback: "Live chat" subMenuItem token (shorter, may not work with all endpoints).
 	if token := extractLiveChatSubMenuToken(m); token != "" {
 		return token
 	}
 
-	// Fallback: legacy continuations array (may be Top Chat on busy streams).
-	continuations, ok := m["continuations"].([]interface{})
-	if !ok {
-		return ""
-	}
-	for _, cont := range continuations {
-		contMap, ok := cont.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if reload, ok := contMap["reloadContinuationData"].(map[string]interface{}); ok {
-			if token, ok := reload["continuation"].(string); ok && token != "" {
-				return token
-			}
-		}
-		if timed, ok := contMap["timedContinuationData"].(map[string]interface{}); ok {
-			if token, ok := timed["continuation"].(string); ok && token != "" {
-				return token
-			}
-		}
-		if inv, ok := contMap["invalidationContinuationData"].(map[string]interface{}); ok {
-			if token, ok := inv["continuation"].(string); ok && token != "" {
-				return token
-			}
-		}
-	}
 	return ""
 }
 
