@@ -1,12 +1,10 @@
 import { execa } from 'execa';
 import type { QueryResult, IssueProposal } from '../types.js';
-import type { ClaudeTokenManager } from './token-manager.js';
 
 export async function queryCodebase(
   question: string,
   repoPaths: string[],
   conversationHistory?: string[],
-  tokenManager?: ClaudeTokenManager,
 ): Promise<QueryResult> {
   const systemPrompt = [
     'You are a support bot for the All-Chat project.',
@@ -25,10 +23,6 @@ export async function queryCodebase(
     fullPrompt = `${systemPrompt}\n\n${question}`;
   }
 
-  const oauthToken = tokenManager
-    ? await tokenManager.ensureFreshToken()
-    : (process.env['CLAUDE_CODE_OAUTH_TOKEN'] ?? '');
-
   console.log('[claude] Starting subprocess (timeout: 120s)');
   const { stdout } = await execa(
     'claude',
@@ -39,7 +33,7 @@ export async function queryCodebase(
       '--output-format', 'json',
     ],
     {
-      env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: oauthToken },
+      env: { ...process.env },
       timeout: 120_000,
     },
   );

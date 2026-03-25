@@ -1,7 +1,9 @@
+import { mkdirSync, writeFileSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 import type { Client } from 'discord.js';
 import type { BotConfig } from './types.js';
 import { startBot } from './bot.js';
-import { ClaudeTokenManager } from './claude/token-manager.js';
 
 export function validateEnv(): BotConfig {
   const credentialsJson = process.env['CLAUDE_CREDENTIALS_JSON'];
@@ -33,7 +35,6 @@ export function validateEnv(): BotConfig {
     githubOwner: process.env['GITHUB_OWNER'] ?? 'moersener',
     allChatRepoPath: required['ALL_CHAT_REPO_PATH'] as string,
     allChatExtensionRepoPath: required['ALL_CHAT_EXTENSION_REPO_PATH'] as string,
-    claudeCredentialsJson: credentialsJson,
   };
 }
 
@@ -51,20 +52,16 @@ process.on('SIGTERM', () => void shutdown(discordClient));
 async function main(): Promise<void> {
   const config = validateEnv();
 
-  let tokenManager: ClaudeTokenManager | undefined;
-  if (config.claudeCredentialsJson) {
-    tokenManager = new ClaudeTokenManager(config.claudeCredentialsJson);
-    try {
-      await tokenManager.ensureFreshToken();
-      console.log('[startup] Claude token validated successfully');
-    } catch (error) {
-      console.error('[startup] Failed to obtain Claude token:', error);
-      process.exit(1);
-    }
+  const credentialsJson = process.env['CLAUDE_CREDENTIALS_JSON'];
+  if (credentialsJson) {
+    const claudeDir = join(homedir(), '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, '.credentials.json'), credentialsJson, { mode: 0o600 });
+    console.log('[startup] Claude credentials written to ~/.claude/.credentials.json');
   }
 
   try {
-    discordClient = await startBot(config, tokenManager);
+    discordClient = await startBot(config);
   } catch (error) {
     console.error('Failed to start bot:', error);
     process.exit(1);
