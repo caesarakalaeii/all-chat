@@ -322,15 +322,12 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 
 	channelInfo, err := h.youtubeOAuth.GetPrimaryChannel(c.Request.Context(), token.AccessToken)
 	if err != nil {
-		h.logger.Error("Failed to resolve YouTube channel", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resolve channel"})
-		return
-	}
-
-	// Store YouTube OAuth tokens for YouTube Listener
-	if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, channelInfo.ChannelID, token); err != nil {
-		h.logger.Error("Failed to store YouTube tokens", zap.Error(err))
-		// Don't fail the login, just log the error
+		h.logger.Warn("Failed to resolve YouTube channel (non-fatal, skipping token store)", zap.Error(err))
+	} else {
+		// Store YouTube OAuth tokens for YouTube Listener
+		if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, channelInfo.ChannelID, token); err != nil {
+			h.logger.Error("Failed to store YouTube tokens", zap.Error(err))
+		}
 	}
 
 	// Generate JWT
