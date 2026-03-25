@@ -539,7 +539,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           <span className="text-4xl event-icon leading-none">{getEventIcon()}</span>
           <div className="flex-1">
             <div className="text-lg font-bold event-title text-white">{getEventTitle()}</div>
-            <div className="text-sm font-semibold event-user" style={{ color: message.user?.color || '#FFFFFF' }}>
+            <div className="text-sm font-semibold event-user" style={{ color: message.user?.color || 'var(--chat-username-color, #FFFFFF)' }}>
               {message.user?.display_name || message.user?.username}
             </div>
           </div>
@@ -759,7 +759,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   ) : (
                     <span
                       className="font-semibold text-sm"
-                      style={{ color: message.user?.color || '#FFFFFF' }}
+                      style={{ color: message.user?.color || 'var(--chat-username-color, #FFFFFF)' }}
                     >
                       {message.user?.display_name || message.user?.username}
                     </span>
