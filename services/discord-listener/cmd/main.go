@@ -182,7 +182,8 @@ func main() {
 
 	relayRepo := relay.NewRepository(dbPool)
 	relayPoster := relay.NewWebhookPoster(&http.Client{Timeout: 10 * time.Second}, log)
-	relayMgr := relay.NewManager(relayRepo, relayPoster, rdb, dbPool, log)
+	relayProvisioner := relay.NewWebhookProvisioner(botToken, &http.Client{Timeout: 10 * time.Second}, relayRepo, log)
+	relayMgr := relay.NewManager(relayRepo, relayPoster, rdb, dbPool, log, relayProvisioner)
 
 	// Leadership coordination via SDK
 	base := listener.NewListenerBase(listener.ListenerConfig{}, nil, nil, "", log)
