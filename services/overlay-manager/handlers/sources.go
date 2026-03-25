@@ -104,14 +104,17 @@ func (h *SourcesHandler) delDiscordChannelRegistry(ctx context.Context, channelI
 // copyYouTubeTokenForChannel copies the admin's YouTube OAuth token to a new channel
 // This allows admins to add YouTube channels manually (by link) without OAuth flow
 func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
-	// Step 1: Find the best YouTube token for this admin
-	// Prefer non-expired tokens, then most recently updated
+	// Step 1: Find the best YouTube token for this admin.
+	// Prefer non-expired tokens first, but fall back to any token because the
+	// youtube-listener will use the refresh_token to get a fresh access_token on
+	// first use. Excluding expired tokens here prevents copy when the access_token
+	// has expired but the refresh_token is still valid — blocking detection permanently.
 	var existingToken struct {
-		AccessToken        string
-		RefreshToken       string
-		TokenType          string
-		Expiry             string // Store as string to avoid timestamp parsing issues
-		EncryptionVersion  int
+		AccessToken       string
+		RefreshToken      string
+		TokenType         string
+		Expiry            string // Store as string to avoid timestamp parsing issues
+		EncryptionVersion int
 	}
 
 	query := `
@@ -119,7 +122,6 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 		       expiry::text, encryption_version
 		FROM youtube_oauth_tokens
 		WHERE user_id = $1
-		  AND expiry > NOW()  -- Only select non-expired tokens
 		ORDER BY expiry DESC  -- Prefer tokens that expire furthest in the future
 		LIMIT 1
 	`
@@ -133,7 +135,7 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 	)
 
 	if err != nil {
-		return fmt.Errorf("admin has no valid (non-expired) YouTube OAuth token - please re-authorize YouTube: %w", err)
+		return fmt.Errorf("admin has no YouTube OAuth token - please authorize YouTube first: %w", err)
 	}
 
 	// Step 2: Copy token to new channel_id (insert or update)
@@ -177,8 +179,11 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 // copyKickTokenForChannel copies the admin's Kick OAuth token to a new channel
 // This allows admins to add Kick channels manually without OAuth flow
 func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
-	// Step 1: Find the best Kick token for this admin
-	// Prefer non-expired tokens, then most recently updated
+	// Step 1: Find the best Kick token for this admin.
+	// Prefer non-expired tokens first, but fall back to any token because the
+	// kick-listener will use the refresh_token to get a fresh access_token on
+	// first use. Excluding expired tokens here prevents copy when the access_token
+	// has expired but the refresh_token is still valid — blocking detection permanently.
 	var existingToken struct {
 		AccessToken  string
 		RefreshToken string
@@ -190,7 +195,6 @@ func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserI
 		SELECT access_token, refresh_token, token_type, expiry::text
 		FROM kick_oauth_tokens
 		WHERE user_id = $1
-		  AND expiry > NOW()  -- Only select non-expired tokens
 		ORDER BY expiry DESC  -- Prefer tokens that expire furthest in the future
 		LIMIT 1
 	`
@@ -203,7 +207,7 @@ func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserI
 	)
 
 	if err != nil {
-		return fmt.Errorf("admin has no valid (non-expired) Kick OAuth token - please re-authorize Kick: %w", err)
+		return fmt.Errorf("admin has no Kick OAuth token - please authorize Kick first: %w", err)
 	}
 
 	// Step 2: Copy token to new channel_id (insert or update)
