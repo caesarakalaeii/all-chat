@@ -214,5 +214,15 @@ Plans:
 - [ ] 01-02-PLAN.md — Discord bot event handlers (@mention + slash command), handleQuestion orchestrator, command registration
 - [ ] 01-03-PLAN.md — Dockerfile, Kubernetes deployment manifests, live Discord verification
 
+### Phase 2: Support Bot Operational Awareness
+
+**Goal:** Give the support bot access to Grafana logs and Kubernetes cluster state to detect ongoing infrastructure errors (missing secrets, crashed pods, OOMKills) so it can distinguish code bugs from operational issues. Bot must NEVER leak raw logs to Discord users. Recognize lead developer (caesarlp, configured via LEAD_DEVELOPER_DISCORD_ID env var) and ping them when infrastructure issues are detected.
+**Requirements**: TBD
+**Depends on:** Phase 1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 2 to break down)
+
 ---
 *Last updated: 2026-03-24 after Phase 1 planning*
