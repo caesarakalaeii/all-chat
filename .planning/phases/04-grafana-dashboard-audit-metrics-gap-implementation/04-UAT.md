@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 04-grafana-dashboard-audit-metrics-gap-implementation
 source: [04-01-SUMMARY.md, 04-02-SUMMARY.md, 04-03-SUMMARY.md, 04-04-SUMMARY.md, 04-05-SUMMARY.md]
 started: 2026-03-26T20:30:00Z
@@ -65,9 +65,12 @@ skipped: 0
   reason: "youtube-listener-innertube has no shared/metrics wiring — Plan 02 never added RecordConnection/RecordMessage. Overview dashboard InnerTube stat panel queries listener_connection_status{platform='youtube_innertube'} which doesn't exist. Local youtube_listener_* metrics work fine."
   severity: major
   test: 2
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Plan 02 explicitly excluded innertube from shared/metrics wiring (CRITICAL comment in plan: importing shared/metrics causes promauto duplicate registration panic with local metrics package). But no task was created to adapt the Overview dashboard panel to use local metrics instead."
+  artifacts:
+    - path: "../caesar-deployment/apps/platform/kube-prometheus-stack/dashboards/allchat-grafana-dashboards.yaml"
+      issue: "Overview dashboard InnerTube stat panel queries listener_connection_status{platform='youtube_innertube'} which cannot exist"
+  missing:
+    - "Change Overview dashboard InnerTube panel query to: sum(rate(youtube_listener_messages_published_total{service='youtube-listener-innertube-canary'}[5m])) — non-zero when innertube is actively publishing"
   debug_session: ""
 
 - truth: "Overview dashboard InnerTube stat panel shows connection status"
@@ -75,9 +78,12 @@ skipped: 0
   reason: "Same root cause as Test 2 — listener_connection_status{platform='youtube_innertube'} doesn't exist because shared/metrics never wired into innertube service."
   severity: major
   test: 5
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Same as gap 1 — Overview dashboard panel uses wrong metric name for innertube. Fix is dashboard-only (no code change needed)."
+  artifacts:
+    - path: "../caesar-deployment/apps/platform/kube-prometheus-stack/dashboards/allchat-grafana-dashboards.yaml"
+      issue: "allchat-overview.json InnerTube panel queries non-existent metric"
+  missing:
+    - "Change InnerTube stat panel query and value mappings to use youtube_listener_messages_published_total rate"
   debug_session: ""
 
 - truth: "pipeline-stall alert fires only when no messages are being processed"
@@ -85,7 +91,10 @@ skipped: 0
   reason: "pipeline-stall uses per-series rate(processor_messages_consumed_total[5m]) == 0 but platform='system' series is always 0, causing false positive. Needs sum(rate(...)) to aggregate across platforms before comparing."
   severity: major
   test: 7
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Ref A query returns a vector (one series per platform label). The math expression $A == 0 && $B > 0 evaluates per-series. The platform='system' series always has rate=0, triggering the alert despite active message processing on other platforms. Fix: wrap in sum() to collapse to scalar."
+  artifacts:
+    - path: "../caesar-deployment/apps/platform/kube-prometheus-stack/grafana-alerts/allchat-alerts.yaml"
+      issue: "pipeline-stall Ref A: rate(processor_messages_consumed_total[5m]) returns vector, needs sum() wrapping"
+  missing:
+    - "Change Ref A expr from rate(processor_messages_consumed_total[5m]) to sum(rate(processor_messages_consumed_total[5m]))"
   debug_session: ""
