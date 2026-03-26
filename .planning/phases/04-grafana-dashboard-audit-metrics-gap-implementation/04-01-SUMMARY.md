@@ -19,9 +19,10 @@ key_files:
 decisions:
   - "youtube-listener-innertube Service had no app label — added app: youtube-listener-innertube so the ServiceMonitor matchExpressions selector can match it"
   - "Live Prometheus audit via Grafana MCP was not possible (cluster unreachable during automated execution); gap matrix produced from code audit instead — live verification is the purpose of the Task 3 checkpoint"
+requirements-completed: [AUDIT-01, AUDIT-02, SM-01]
 metrics:
   duration_seconds: 658
-  tasks_completed: 2
+  tasks_completed: 3
   tasks_total: 3
   files_modified: 3
   completed_date: "2026-03-26"
@@ -39,10 +40,11 @@ metrics:
 |---|------|--------|-------|
 | 1 | Add three missing listeners to ServiceMonitor | 0a77d69 (caesar-deployment) | servicemonitor.yaml, youtube-listener-innertube-deployment.yaml |
 | 2 | Run audit and produce confirmed gap matrix | a9a75de | .planning/04-GAP-MATRIX.md |
+| 3 | User reviews gap matrix and approves metrics wiring plan | checkpoint:human-verify — approved | Live Prometheus confirmed all 14 services up=1 |
 
-## Task 3 (Checkpoint)
+## Task 3 (Checkpoint — Approved)
 
-Task 3 is `type="checkpoint:human-verify"` — paused for user review of gap matrix and ServiceMonitor changes.
+Task 3 is `type="checkpoint:human-verify"` — **APPROVED by user on 2026-03-26**. Live Prometheus query confirmed all 14 services are scraped (up=1). Gap matrix validated against live data.
 
 ---
 
@@ -118,5 +120,8 @@ The allchat-listeners ServiceMonitor previously covered 4 listeners. Three new l
 - [x] 04-GAP-MATRIX.md contains "Metrics Emission" section
 - [x] 04-GAP-MATRIX.md contains "Dashboard Gaps" section
 - [x] 04-GAP-MATRIX.md covers all 14 services
+
+### Task 3 complete:
+- [x] User approved gap matrix on 2026-03-26 — live Prometheus query confirmed all 14 services at up=1
 
 ## Self-Check: PASSED
