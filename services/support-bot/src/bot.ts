@@ -9,6 +9,7 @@ import {
 import type { Octokit } from '@octokit/rest';
 import { queryCodebase } from './claude/agent.js';
 import { createIssue, createOctokitClient } from './github/issues.js';
+import { MemoryRepository, extractTagsFromQuestion } from './memory/repository.js';
 import type { BotConfig } from './types.js';
 
 async function fetchThreadHistory(thread: ThreadChannel): Promise<string[]> {
@@ -25,9 +26,24 @@ async function handleQuestion(
   config: BotConfig,
   octokit: Octokit,
   history: string[],
+  memoryRepo: MemoryRepository,
 ): Promise<string> {
-  const result = await queryCodebase(question, repoPaths, history);
+  // Retrieve relevant memories before calling Claude
+  const tags = extractTagsFromQuestion(question);
+  const memories = await memoryRepo.retrieveMemories(tags);
+
+  const result = await queryCodebase(question, repoPaths, history, memories);
   let answer = result.answer;
+
+  // Store memory if Claude emitted STORE_MEMORY marker (errors do not block the Discord answer)
+  if (result.memoryMarker) {
+    await memoryRepo.storeMemory(result.memoryMarker);
+  }
+
+  // Update memory if Claude emitted UPDATE_MEMORY marker (errors do not block the Discord answer)
+  if (result.updateMemoryMarker) {
+    await memoryRepo.updateMemory(result.updateMemoryMarker.id, result.updateMemoryMarker.content);
+  }
 
   if (result.issueProposal !== null) {
     const issueUrl = await createIssue(
@@ -67,7 +83,7 @@ async function sendResponse(
   }
 }
 
-export async function startBot(config: BotConfig): Promise<Client> {
+export async function startBot(config: BotConfig, memoryRepo: MemoryRepository): Promise<Client> {
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -142,7 +158,7 @@ export async function startBot(config: BotConfig): Promise<Client> {
           return;
         }
 
-        const answer = await handleQuestion(question, repoPaths, config, octokit, history);
+        const answer = await handleQuestion(question, repoPaths, config, octokit, history, memoryRepo);
 
         clearInterval(typingInterval);
 
@@ -177,7 +193,7 @@ export async function startBot(config: BotConfig): Promise<Client> {
     let answer: string;
     try {
       console.log('[interaction] Spawning claude subprocess...');
-      answer = await handleQuestion(question, repoPaths, config, octokit, []);
+      answer = await handleQuestion(question, repoPaths, config, octokit, [], memoryRepo);
       console.log('[interaction] Claude responded successfully');
     } catch (err) {
       console.error('[interaction] Error handling interaction:', err);
