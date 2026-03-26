@@ -130,6 +130,7 @@ func main() {
 		assigner,
 		repo,
 		redisClient,
+		db,
 		heartbeatMonitor,
 		migrationPublisher,
 		loadMonitor,

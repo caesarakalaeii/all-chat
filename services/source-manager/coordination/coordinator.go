@@ -10,6 +10,7 @@ import (
 	"github.com/caesar/all-chat/services/source-manager/models"
 	"github.com/caesar/all-chat/services/source-manager/registry"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -31,6 +32,7 @@ type Coordinator struct {
 	assigner           *Assigner
 	sourceRepo         *registry.Repository
 	redisClient        *redis.Client
+	db                 *pgxpool.Pool // Optional — used for PostgreSQL LISTEN/NOTIFY
 	heartbeatMonitor   *HeartbeatMonitor
 	migrationPublisher *MigrationPublisher
 	loadMonitor        *LoadMonitor
@@ -41,16 +43,21 @@ type Coordinator struct {
 
 	reconcileInterval             time.Duration
 	stopCh                        chan struct{}
-	incompleteRebalancingAttempts int // Counter for persistent imbalance
-	previousPodCount              int // Track pod count changes for HPA detection
+	notifyCh                      chan struct{} // Receives signals from pg NOTIFY listener
+	incompleteRebalancingAttempts int          // Counter for persistent imbalance
+	previousPodCount              int          // Track pod count changes for HPA detection
 }
 
-// NewCoordinator creates a new coordinator instance
+// NewCoordinator creates a new coordinator instance.
+// db is optional (may be nil) — when non-nil, the coordinator subscribes to the
+// chat_source_changes PostgreSQL NOTIFY channel and triggers immediate reconciliation
+// whenever a source is added, updated, or removed.
 func NewCoordinator(
 	registry *AssignmentRegistry,
 	assigner *Assigner,
 	sourceRepo *registry.Repository,
 	redisClient *redis.Client,
+	db *pgxpool.Pool,
 	heartbeatMonitor *HeartbeatMonitor,
 	migrationPublisher *MigrationPublisher,
 	loadMonitor *LoadMonitor,
@@ -64,6 +71,7 @@ func NewCoordinator(
 		assigner:                      assigner,
 		sourceRepo:                    sourceRepo,
 		redisClient:                   redisClient,
+		db:                            db,
 		heartbeatMonitor:              heartbeatMonitor,
 		migrationPublisher:            migrationPublisher,
 		loadMonitor:                   loadMonitor,
@@ -73,13 +81,24 @@ func NewCoordinator(
 		logger:                        logger,
 		reconcileInterval:             30 * time.Second, // Default: 30s per user constraint
 		stopCh:                        make(chan struct{}),
+		notifyCh:                      make(chan struct{}, 1), // Buffered: one pending reconcile is enough
 		incompleteRebalancingAttempts: 0,
 		previousPodCount:              0,
 	}
 }
 
-// Run starts the leader election loop
+// Run starts the leader election loop.
+// It also launches a PostgreSQL LISTEN/NOTIFY goroutine (when c.db != nil) that
+// signals notifyCh whenever a row is inserted/updated/deleted in overlay_chat_sources.
+// The reconcile loop (leader only) reads notifyCh and triggers an immediate
+// computeAssignments(), eliminating the up-to-30s wait for the next periodic tick.
 func (c *Coordinator) Run(ctx context.Context) error {
+	// Start pg NOTIFY listener. Runs independently of leadership so it is ready
+	// the moment this pod wins the election.
+	if c.db != nil {
+		go c.listenForSourceChanges(ctx)
+	}
+
 	// Create in-cluster Kubernetes client
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -162,11 +181,35 @@ func (c *Coordinator) reconcile(ctx context.Context) {
 
 	c.logger.Info("Reconciliation loop started", zap.Duration("interval", c.reconcileInterval))
 
+	// Run immediately on leadership acquisition instead of waiting for the first
+	// ticker tick (which would delay the initial assignment computation by up to
+	// reconcileInterval=30s after leader election completes).
+	if err := c.computeAssignments(ctx); err != nil {
+		c.logger.Error("Failed initial assignment computation", zap.Error(err))
+	}
+
 	for {
 		select {
 		case <-ticker.C:
 			if err := c.computeAssignments(ctx); err != nil {
 				c.logger.Error("Failed to compute assignments", zap.Error(err))
+			}
+		case <-c.notifyCh:
+			// Source change detected via PostgreSQL NOTIFY — recompute assignments
+			// immediately instead of waiting up to reconcileInterval for the next tick.
+			c.logger.Info("Source change notification received, triggering immediate reconciliation")
+			if err := c.computeAssignments(ctx); err != nil {
+				c.logger.Error("Failed to compute assignments after source change", zap.Error(err))
+			}
+			// Drain any extra notifications that arrived while we were reconciling
+			// to avoid cascading back-to-back reconciliations for bulk source changes.
+		drainLoop:
+			for {
+				select {
+				case <-c.notifyCh:
+				default:
+					break drainLoop
+				}
 			}
 		case <-c.stopCh:
 			c.logger.Info("Reconciliation loop stopped")
@@ -699,6 +742,102 @@ func (c *Coordinator) executeRebalancingPlans(ctx context.Context, plans []Migra
 func (c *Coordinator) Stop() {
 	c.logger.Info("Stopping coordinator")
 	close(c.stopCh)
+}
+
+// listenForSourceChanges subscribes to the chat_source_changes PostgreSQL NOTIFY channel
+// and sends a signal to c.notifyCh whenever a source is added, updated, or deleted.
+// The reconcile loop (running on the leader only) drains notifyCh and calls
+// computeAssignments() immediately, eliminating the up-to-30s wait for the next
+// periodic tick.
+//
+// This goroutine restarts automatically on connection errors using exponential backoff.
+func (c *Coordinator) listenForSourceChanges(ctx context.Context) {
+	const (
+		listenChannel = "chat_source_changes"
+		initialBackoff = time.Second
+		maxBackoff     = 30 * time.Second
+	)
+
+	backoff := initialBackoff
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		if err := c.listenAndNotify(ctx, listenChannel); err != nil {
+			// Context cancelled — clean exit.
+			if ctx.Err() != nil {
+				return
+			}
+			c.logger.Warn("PostgreSQL LISTEN error in source-manager, retrying",
+				zap.String("channel", listenChannel),
+				zap.Duration("backoff", backoff),
+				zap.Error(err),
+			)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
+		}
+
+		// listenAndNotify returned nil: context was cancelled cleanly.
+		return
+	}
+}
+
+// listenAndNotify acquires a dedicated connection from the pool, issues LISTEN,
+// and forwards each notification to c.notifyCh. Returns nil on clean context
+// cancellation, or an error when the connection breaks.
+func (c *Coordinator) listenAndNotify(ctx context.Context, channel string) error {
+	conn, err := c.db.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to acquire connection for LISTEN: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, "LISTEN "+channel); err != nil {
+		return fmt.Errorf("failed to LISTEN on %s: %w", channel, err)
+	}
+
+	c.logger.Info("PostgreSQL LISTEN active in source-manager",
+		zap.String("channel", channel),
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		notification, err := conn.Conn().WaitForNotification(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("notification wait failed: %w", err)
+		}
+
+		c.logger.Info("Source change notification received in source-manager, triggering reconciliation",
+			zap.String("payload", notification.Payload),
+		)
+
+		// Non-blocking send: if notifyCh already has a pending signal, drop the
+		// duplicate — the reconcile loop will pick up all changes on the next run.
+		select {
+		case c.notifyCh <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // waitForMigrationConfirmation waits for a migration confirmation in Redis Streams (MIGRATE-03)
