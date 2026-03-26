@@ -31,6 +31,9 @@ export function validateEnv(): BotConfig {
     githubOwner: process.env['GITHUB_OWNER'] ?? 'moersener',
     allChatRepoPath: required['ALL_CHAT_REPO_PATH'] as string,
     allChatExtensionRepoPath: required['ALL_CHAT_EXTENSION_REPO_PATH'] as string,
+    leadDeveloperDiscordId: process.env['LEAD_DEVELOPER_DISCORD_ID'] ?? '',
+    grafanaUrl: process.env['GRAFANA_URL'] ?? '',
+    grafanaServiceAccountToken: process.env['GRAFANA_SERVICE_ACCOUNT_TOKEN'] ?? '',
   };
 }
 
