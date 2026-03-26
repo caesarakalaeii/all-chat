@@ -33,6 +33,10 @@ func (m *mockChannelRegistry) Subscribe(_ context.Context, _ chan<- string) erro
 	return nil
 }
 
+func (m *mockChannelRegistry) ListConfiguredChannels(_ context.Context) (map[string]string, error) {
+	return nil, nil
+}
+
 // capturePublisher records Publish calls for assertion.
 type capturePublisher struct {
 	calls int
@@ -107,7 +111,8 @@ func TestHandleMessageCreate_UnknownChannel(t *testing.T) {
 	assert.Equal(t, 0, pub.calls, "expected no publish for unknown channel")
 }
 
-// TestHandleMessageCreate_EmptyContent verifies that empty content on first message returns an error.
+// TestHandleMessageCreate_EmptyContent verifies that empty content on first message
+// is dropped without error (logs a warning about missing MESSAGE_CONTENT intent).
 func TestHandleMessageCreate_EmptyContent(t *testing.T) {
 	pub := &capturePublisher{}
 	reg := &mockChannelRegistry{overlayID: "overlay-1", found: true}
@@ -135,8 +140,8 @@ func TestHandleMessageCreate_EmptyContent(t *testing.T) {
 	}
 
 	err := client.HandleMessageCreate(context.Background(), msg)
-	assert.Error(t, err, "expected error when first message has empty content")
-	assert.Equal(t, 0, pub.calls, "expected no publish on empty content halt")
+	assert.NoError(t, err, "empty content should be dropped silently (no halt)")
+	assert.Equal(t, 0, pub.calls, "expected no publish on empty content")
 }
 
 // TestHandleMessageCreate_HappyPath verifies that a valid message is published exactly once.

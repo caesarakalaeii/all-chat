@@ -95,7 +95,7 @@ func TestResumeWhenSessionExists(t *testing.T) {
 
 	store := newMemStateStore(map[string]string{
 		gateway.RedisKeySessionID: "sid1",
-		gateway.RedisKeyResumeURL: "wss://resume.gateway.discord.gg",
+		gateway.RedisKeyResumeURL: wsURLFromHTTP(srv.URL), // must point to test server, not real Discord
 		gateway.RedisKeySeq:       "42",
 	})
 
@@ -161,11 +161,8 @@ func TestInvalidSessionFalseClears(t *testing.T) {
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 
-	store := newMemStateStore(map[string]string{
-		gateway.RedisKeySessionID: "sid1",
-		gateway.RedisKeyResumeURL: "wss://resume.gateway.discord.gg",
-		gateway.RedisKeySeq:       "42",
-	})
+	// Store is populated after server creation so resume_url points to test server.
+	store := newMemStateStore(nil)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -191,6 +188,11 @@ func TestInvalidSessionFalseClears(t *testing.T) {
 		// Close after sending
 	}))
 	defer srv.Close()
+
+	// Populate store now that the test server URL is available.
+	store.data[gateway.RedisKeySessionID] = "sid1"
+	store.data[gateway.RedisKeyResumeURL] = wsURLFromHTTP(srv.URL)
+	store.data[gateway.RedisKeySeq] = "42"
 
 	log, _ := zap.NewDevelopment()
 	client := gateway.NewGatewayClient(
@@ -221,11 +223,7 @@ func TestInvalidSessionTruePreserves(t *testing.T) {
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 
-	store := newMemStateStore(map[string]string{
-		gateway.RedisKeySessionID: "sid1",
-		gateway.RedisKeyResumeURL: "wss://resume.gateway.discord.gg",
-		gateway.RedisKeySeq:       "42",
-	})
+	store := newMemStateStore(nil)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -249,6 +247,10 @@ func TestInvalidSessionTruePreserves(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	store.data[gateway.RedisKeySessionID] = "sid1"
+	store.data[gateway.RedisKeyResumeURL] = wsURLFromHTTP(srv.URL)
+	store.data[gateway.RedisKeySeq] = "42"
+
 	log, _ := zap.NewDevelopment()
 	client := gateway.NewGatewayClient(
 		"bot-token",
@@ -265,7 +267,7 @@ func TestInvalidSessionTruePreserves(t *testing.T) {
 	seq, _ := store.Get(context.Background(), gateway.RedisKeySeq)
 
 	assert.Equal(t, "sid1", sessionID, "session_id must be preserved on InvalidSession d=true")
-	assert.Equal(t, "wss://resume.gateway.discord.gg", resumeURL, "resume_url must be preserved on InvalidSession d=true")
+	assert.Equal(t, wsURLFromHTTP(srv.URL), resumeURL, "resume_url must be preserved on InvalidSession d=true")
 	assert.Equal(t, "42", seq, "seq must be preserved on InvalidSession d=true")
 }
 
@@ -275,11 +277,7 @@ func TestReconnectPreservesSession(t *testing.T) {
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 
-	store := newMemStateStore(map[string]string{
-		gateway.RedisKeySessionID: "sid-reconnect",
-		gateway.RedisKeyResumeURL: "wss://resume.gateway.discord.gg",
-		gateway.RedisKeySeq:       "99",
-	})
+	store := newMemStateStore(nil)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -301,6 +299,10 @@ func TestReconnectPreservesSession(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	store.data[gateway.RedisKeySessionID] = "sid-reconnect"
+	store.data[gateway.RedisKeyResumeURL] = wsURLFromHTTP(srv.URL)
+	store.data[gateway.RedisKeySeq] = "99"
+
 	log, _ := zap.NewDevelopment()
 	client := gateway.NewGatewayClient(
 		"bot-token",
@@ -317,6 +319,6 @@ func TestReconnectPreservesSession(t *testing.T) {
 	seq, _ := store.Get(context.Background(), gateway.RedisKeySeq)
 
 	assert.Equal(t, "sid-reconnect", sessionID, "session_id must be preserved on Reconnect")
-	assert.Equal(t, "wss://resume.gateway.discord.gg", resumeURL, "resume_url must be preserved on Reconnect")
+	assert.Equal(t, wsURLFromHTTP(srv.URL), resumeURL, "resume_url must be preserved on Reconnect")
 	assert.Equal(t, "99", seq, "seq must be preserved on Reconnect")
 }
