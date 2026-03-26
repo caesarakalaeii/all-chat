@@ -39,6 +39,7 @@ type Coordinator struct {
 	rebalancer         *Rebalancer
 	throttler          *Throttler
 	metrics            *metrics.ShardMetrics
+	businessMetrics    *metrics.BusinessMetrics
 	logger             *zap.Logger
 
 	reconcileInterval             time.Duration
@@ -64,6 +65,7 @@ func NewCoordinator(
 	rebalancer *Rebalancer,
 	throttler *Throttler,
 	shardMetrics *metrics.ShardMetrics,
+	businessMetrics *metrics.BusinessMetrics,
 	logger *zap.Logger,
 ) *Coordinator {
 	return &Coordinator{
@@ -78,6 +80,7 @@ func NewCoordinator(
 		rebalancer:                    rebalancer,
 		throttler:                     throttler,
 		metrics:                       shardMetrics,
+		businessMetrics:               businessMetrics,
 		logger:                        logger,
 		reconcileInterval:             30 * time.Second, // Default: 30s per user constraint
 		stopCh:                        make(chan struct{}),
@@ -298,8 +301,17 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 
 	// Step 2.5: Build source lookup map for migration trigger
 	sourceMap := make(map[string]*models.ActiveSource)
+	platformCounts := make(map[string]int)
 	for _, source := range sources {
 		sourceMap[source.ID] = source
+		platformCounts[source.Platform]++
+	}
+
+	// Update business metrics: active sources per platform
+	if c.businessMetrics != nil {
+		for platform, count := range platformCounts {
+			c.businessMetrics.SetActiveSourcesTotal(platform, count)
+		}
 	}
 
 	// Step 2.6: Trigger migrations for failed pods (if any)
@@ -479,6 +491,9 @@ func (c *Coordinator) computeAssignments(ctx context.Context) error {
 			updateSpan.End()
 
 			c.metrics.AssignmentsTotal.Inc()
+			if c.businessMetrics != nil {
+				c.businessMetrics.RecordSourceOperation("assign", source.Platform, "success")
+			}
 			assignmentCount++
 		}
 	}
