@@ -121,7 +121,9 @@ describe('MemoryRepository', () => {
       expect(mockQuery).toHaveBeenCalledTimes(2);
       const secondCall = mockQuery.mock.calls[1];
       expect(secondCall[0]).toMatch(/UPDATE.*bot_memories/i);
-      expect(secondCall[1]).toContain(42);
+      // params are passed as [ids] where ids is an array, so secondCall[1] is [[42]]
+      const idsParam = (secondCall[1] as number[][])[0];
+      expect(idsParam).toContain(42);
     });
 
     it('returns empty array when no rows match (no access_count bump needed)', async () => {
