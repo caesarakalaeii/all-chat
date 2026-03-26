@@ -156,6 +156,15 @@ func main() {
 				Metadata map[string]interface{} `json:"metadata"`
 			} `json:"event"`
 		}
+		if err := json.Unmarshal(message, &unifiedMsg); err == nil {
+			// Record message received from Redis pub/sub
+			platform := unifiedMsg.Platform
+			if platform == "" {
+				platform = "unknown"
+			}
+			gatewayMetrics.RecordMessageReceived("api-gateway", overlayID, platform)
+		}
+
 		if err := json.Unmarshal(message, &unifiedMsg); err == nil && unifiedMsg.Event != nil && unifiedMsg.Event.Type == "message_deletion" {
 			// Add deletion event to replay buffer (best-effort, don't fail broadcast)
 			deletionEvent := &replay.DeletionEvent{
@@ -211,6 +220,14 @@ func main() {
 			zap.String("overlay_id", overlayID),
 			zap.Int("connections", count),
 		)
+
+		// Record per-connection delivery metrics
+		for i := 0; i < count; i++ {
+			gatewayMetrics.RecordMessageSent("api-gateway", overlayID, "success")
+		}
+		if count == 0 {
+			gatewayMetrics.RecordMessageDropped("api-gateway", "no_clients")
+		}
 	}
 
 	subscriber := subscription.NewSubscriber(redisClient, log, messageHandler)
