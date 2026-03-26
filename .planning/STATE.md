@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02-03-PLAN.md (awaiting human-verify checkpoint)
-last_updated: "2026-03-26T08:56:47.585Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-26T08:59:09.831Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -66,6 +66,7 @@ Plan: 1 of 3
 | Phase 01 P02 | 248s | 2 tasks | 5 files |
 | Phase 01 P03 | 3min | 1 tasks | 3 files |
 | Phase 02 P03 | 1min | 2 tasks | 3 files |
+| Phase 02 P01 | 3min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,9 @@ Key decisions relevant to v1.6:
 - [Phase quick-260325-lwo]: Webhook name 'AllChat Relay' as idempotency key; pg_notify after StoreWebhookURL for immediate sync
 - [Phase 02]: kubectl installed via apk curl + install to /usr/local/bin before USER node; mcp-grafana via tar.gz extraction with 0755 permissions — both available to non-root node user at runtime
 - [Phase 02]: RBAC split into two roles: support-bot-secret-patcher (existing write to secrets) and support-bot-cluster-reader (new read-only to pods/events/deployments/replicasets/metrics)
+- [Phase 02-01]: Read GRAFANA_URL and GRAFANA_SERVICE_ACCOUNT_TOKEN directly from process.env in agent.ts (not passed as function params) — avoids signature change, keeps callers clean
+- [Phase 02-01]: Bash(kubectl:*) always included in allowedTools (not conditional) — infra checks always useful even without Grafana
+- [Phase 02-01]: INFRA_VERDICT stripped from answer before PROPOSE_ISSUE is parsed — correct ordering since INFRA_VERDICT appears at end of response
 
 ### Roadmap Evolution
 
@@ -152,9 +156,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T08:56:47.582Z
+Last session: 2026-03-26T08:59:09.828Z
 Last activity: 2026-03-26
-Stopped at: Completed 02-03-PLAN.md (awaiting human-verify checkpoint)
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
 
 **Next action:** `/gsd:plan-phase 33` to plan Phase 33 (Pre-Migration Cleanup)

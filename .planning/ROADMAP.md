@@ -219,7 +219,7 @@ Plans:
 **Goal:** Give the support bot access to Grafana logs and Kubernetes cluster state to detect ongoing infrastructure errors (missing secrets, crashed pods, OOMKills) so it can distinguish code bugs from operational issues. Bot must NEVER leak raw logs to Discord users. Recognize lead developer (caesarlp, configured via LEAD_DEVELOPER_DISCORD_ID env var) and ping them when infrastructure issues are detected.
 **Requirements**: OPS-01, OPS-02, OPS-03, OPS-04, OPS-05, OPS-06, OPS-07, OPS-08, OPS-09
 **Depends on:** Phase 1
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 02-01-PLAN.md — Extend agent.ts with Grafana MCP config, kubectl tools, leak-prevention prompt, INFRA_VERDICT parsing
