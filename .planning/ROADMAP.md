@@ -217,12 +217,14 @@ Plans:
 ### Phase 2: Support Bot Operational Awareness
 
 **Goal:** Give the support bot access to Grafana logs and Kubernetes cluster state to detect ongoing infrastructure errors (missing secrets, crashed pods, OOMKills) so it can distinguish code bugs from operational issues. Bot must NEVER leak raw logs to Discord users. Recognize lead developer (caesarlp, configured via LEAD_DEVELOPER_DISCORD_ID env var) and ping them when infrastructure issues are detected.
-**Requirements**: TBD
+**Requirements**: OPS-01, OPS-02, OPS-03, OPS-04, OPS-05, OPS-06, OPS-07, OPS-08, OPS-09
 **Depends on:** Phase 1
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 2 to break down)
+- [ ] 02-01-PLAN.md — Extend agent.ts with Grafana MCP config, kubectl tools, leak-prevention prompt, INFRA_VERDICT parsing
+- [ ] 02-02-PLAN.md — Lead dev @mention logic in bot.ts, new env var validation in index.ts
+- [ ] 02-03-PLAN.md — Dockerfile binary installs (kubectl, mcp-grafana), K8s deployment env vars, RBAC for cluster read access
 
 ---
-*Last updated: 2026-03-24 after Phase 1 planning*
+*Last updated: 2026-03-26 after Phase 2 planning*
