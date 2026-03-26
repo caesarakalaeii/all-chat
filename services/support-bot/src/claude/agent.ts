@@ -1,10 +1,11 @@
 import { execa } from 'execa';
-import type { QueryResult, IssueProposal, InfraVerdict } from '../types.js';
+import type { QueryResult, IssueProposal, InfraVerdict, StoredMemory, ParsedMemoryMarker, ParsedUpdateMemoryMarker, MemoryType } from '../types.js';
 
 export async function queryCodebase(
   question: string,
   repoPaths: string[],
   conversationHistory?: string[],
+  memories?: StoredMemory[],
 ): Promise<QueryResult> {
   const systemPrompt = [
     'You are a friendly support bot for All-Chat, a platform that lets streamers combine chat messages from Twitch, YouTube, Kick, and TikTok into a single overlay.',
@@ -37,13 +38,28 @@ export async function queryCodebase(
     'INFRA_VERDICT:code|||<one-sentence summary>',
     '',
     'Always include INFRA_VERDICT: at the end of responses where you checked infrastructure.',
+    '',
+    'You have access to a memory bank of past observations about this codebase. When the section "Relevant memories" appears below, treat these as verified past knowledge -- weave relevant memories naturally into your answer.',
+    'When you observe something memory-worthy (a correction from a user, a recurring error pattern, or a non-obvious codebase insight), append to your response:',
+    'STORE_MEMORY:type|||tag1,tag2,tag3|||one or two sentence description',
+    'where type is one of: error_pattern, correction, codebase_insight',
+    'Tags should be service names (e.g. kick-listener), error types (e.g. OOMKill), or concepts (e.g. quota).',
+    'Memory content must be concise -- one to two sentences maximum.',
+    'If you need to update an existing memory you can see above, append: UPDATE_MEMORY:id|||updated content',
+    'Emit STORE_MEMORY or UPDATE_MEMORY at most once per response, after INFRA_VERDICT and PROPOSE_ISSUE.',
   ].join('\n');
+
+  let memoriesBlock = '';
+  if (memories && memories.length > 0) {
+    const lines = memories.map(m => `- [${m.type}] (id:${m.id}) ${m.content}`).join('\n');
+    memoriesBlock = `\n\n## Relevant memories:\n${lines}`;
+  }
 
   let fullPrompt: string;
   if (conversationHistory && conversationHistory.length > 0) {
-    fullPrompt = `${systemPrompt}\n\n## Conversation so far:\n${conversationHistory.join('\n')}\n\n## New question:\n${question}`;
+    fullPrompt = `${systemPrompt}${memoriesBlock}\n\n## Conversation so far:\n${conversationHistory.join('\n')}\n\n## New question:\n${question}`;
   } else {
-    fullPrompt = `${systemPrompt}\n\n${question}`;
+    fullPrompt = `${systemPrompt}${memoriesBlock}\n\n${question}`;
   }
 
   const grafanaUrl = process.env['GRAFANA_URL'];
@@ -137,5 +153,40 @@ export async function queryCodebase(
     cleanAnswer = cleanAnswer.slice(0, proposeIndex).trimEnd();
   }
 
-  return { answer: cleanAnswer, issueProposal, infraVerdict };
+  // Parse and strip STORE_MEMORY marker
+  const storeMarker = 'STORE_MEMORY:';
+  const storeIndex = cleanAnswer.indexOf(storeMarker);
+  let memoryMarker: ParsedMemoryMarker | null = null;
+  if (storeIndex !== -1) {
+    const markerString = cleanAnswer.slice(storeIndex + storeMarker.length).split('\n')[0];
+    const parts = markerString.split('|||');
+    if (parts.length >= 3) {
+      const type = parts[0].trim() as MemoryType;
+      const tags = parts[1].trim().split(',').map(t => t.trim()).filter(Boolean);
+      const content = parts.slice(2).join('|||').trim();
+      if (['error_pattern', 'correction', 'codebase_insight'].includes(type)) {
+        memoryMarker = { type, tags, content };
+      }
+    }
+    cleanAnswer = cleanAnswer.slice(0, storeIndex).trimEnd();
+  }
+
+  // Parse and strip UPDATE_MEMORY marker
+  const updateMarker = 'UPDATE_MEMORY:';
+  const updateIndex = cleanAnswer.indexOf(updateMarker);
+  let updateMemoryMarker: ParsedUpdateMemoryMarker | null = null;
+  if (updateIndex !== -1) {
+    const markerString = cleanAnswer.slice(updateIndex + updateMarker.length).split('\n')[0];
+    const parts = markerString.split('|||');
+    if (parts.length >= 2) {
+      const id = parseInt(parts[0].trim(), 10);
+      const content = parts.slice(1).join('|||').trim();
+      if (!isNaN(id)) {
+        updateMemoryMarker = { id, content };
+      }
+    }
+    cleanAnswer = cleanAnswer.slice(0, updateIndex).trimEnd();
+  }
+
+  return { answer: cleanAnswer, issueProposal, infraVerdict, memoryMarker, updateMemoryMarker };
 }
