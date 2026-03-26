@@ -231,7 +231,7 @@ Plans:
 **Goal:** Add persistent memory storage to the support bot so it learns from past interactions -- stores common error patterns, user corrections, and codebase insights in PostgreSQL, retrieves relevant memories via tag matching, and injects them into the Claude prompt. Memory creation is auto-detected via STORE_MEMORY marker protocol.
 **Requirements**: MEM-01, MEM-02, MEM-03, MEM-04, MEM-05, MEM-06, MEM-07, MEM-08, MEM-09
 **Depends on:** Phase 2
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 03-01-PLAN.md — Types, migration SQL, pg dependency, MemoryRepository class with tests

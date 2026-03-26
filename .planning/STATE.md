@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-26T15:38:39.672Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-26T15:49:46.474Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -69,6 +69,7 @@ Plan: 1 of 3
 | Phase 02 P01 | 3min | 1 tasks | 4 files |
 | Phase 02 P02 | 15min | 1 tasks | 4 files |
 | Phase 03 P01 | 282 | 1 tasks | 5 files |
+| Phase 03 P02 | 489 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,9 @@ Key decisions relevant to v1.6:
 - [Phase 03]: pg installed as runtime dep (not devDep) — used at runtime for DB connection
 - [Phase 03]: [Phase 03-01]: MemoryRepository constructor takes pg.Pool for dependency injection — enables vi.mock('pg') pattern in tests
 - [Phase 03]: [Phase 03-01]: pruneIfNeeded uses two queries (COUNT then conditional DELETE) — cleaner for testability with mocked pool
+- [Phase 03]: STORE_MEMORY and UPDATE_MEMORY parsed after INFRA_VERDICT and PROPOSE_ISSUE — tail markers strip cleanly in sequence
+- [Phase 03]: [Phase 03-02]: System prompt instruction uses 'Relevant memories' (no ## prefix) to avoid colliding with injected block assertion in tests
+- [Phase 03]: [Phase 03-02]: bot.test.ts mocks MemoryRepository module entirely — preserves isolation without pg dependency in unit tests
 
 ### Roadmap Evolution
 
@@ -165,9 +169,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T15:38:30.156Z
+Last session: 2026-03-26T15:49:46.471Z
 Last activity: 2026-03-26
-Stopped at: Completed 03-01-PLAN.md
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
 
 **Next action:** Phase 02 complete.
