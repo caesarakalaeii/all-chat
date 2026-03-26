@@ -10,7 +10,9 @@ import (
 // All fields have sensible defaults; use DefaultConfig() to start.
 type ListenerConfig struct {
 	// HeartbeatInterval controls how often PublishHeartbeat is called.
-	// Default: 30s (matches v1.1 production value).
+	// Default: 10s — must be strictly less than the source-manager HeartbeatTimeout (15s)
+	// to prevent pods from being falsely detected as failed between heartbeats.
+	// Previously 30s, which caused intermittent "no pods available" assignments.
 	HeartbeatInterval time.Duration
 
 	// AssignmentRefreshInterval controls how often QueryAssignments is called.
@@ -51,7 +53,7 @@ func DefaultConfig() ListenerConfig {
 		}
 	}
 	return ListenerConfig{
-		HeartbeatInterval:         30 * time.Second,
+		HeartbeatInterval:         10 * time.Second,
 		AssignmentRefreshInterval: 10 * time.Second,
 		StartupJitterMax:          jitterMax,
 	}
