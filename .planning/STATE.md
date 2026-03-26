@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-26T18:26:00.000Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-03-26T19:12:13.890Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 25
-  completed_plans: 21
+  completed_plans: 23
 ---
 
 # Project State
@@ -75,6 +75,7 @@ Plan: 2 of 5
 | Phase 04 P01 | 658 | 2 tasks | 3 files |
 | Phase 04 P01 | 65min | 3 tasks | 3 files |
 | Phase 04 P02 | 34min | 3 tasks | 10 files |
+| Phase 04 P03 | 38min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,8 @@ Key decisions relevant to v1.6:
 - [Phase 04]: [Phase 04-02]: discord-listener uses local package-level functions for new message metrics — no shared/metrics import to avoid promauto duplicate registration
 - [Phase 04]: [Phase 04-02]: api-gateway RecordMessageReceived fires once per Redis pub/sub message; RecordMessageSent fires per WebSocket client connection in BroadcastToOverlay result
 - [Phase 04]: [Phase 04-02]: message-processor emote enricher uses SetMetrics() post-construction injection to avoid changing NewEnricher signature; stream lag computed from Redis stream ID millisecond prefix
+- [Phase 04]: [Phase 04-03]: httpMetricsMiddleware defined locally in each service's cmd/main.go — avoids importing GatewayMetrics (semantically wrong for non-gateway) while keeping metric names consistent
+- [Phase 04]: [Phase 04-03]: categorizeRefreshError helper uses string matching consistent with existing isNonRetryableError pattern — classifies into token_revoked, invalid_client, network_error, other
 
 ### Roadmap Evolution
 
@@ -191,9 +194,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T18:26:00Z
+Last session: 2026-03-26T19:12:13.886Z
 Last activity: 2026-03-26
-Stopped at: Completed 04-02-PLAN.md
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None
 
 **Next action:** Phase 04 Plan 03 — listener dashboards (Discord, InnerTube, twitch-eventsub panels).
