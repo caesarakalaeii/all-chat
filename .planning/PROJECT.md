@@ -87,6 +87,14 @@ Listener SDK shipped: all 6 Go listeners migrated to shared `shared/listener` SD
 - ✓ All 6 Go listeners migrated to shared SDK (twitch, kick, youtube, youtube-innertube, discord, twitch-eventsub) — v1.6
 - ✓ `make build-all` CI target + compile-time assertions + goroutine leak smoke tests in every listener — v1.6
 
+**Support Bot Operational Awareness (v2.0 Phase 02):**
+- ✓ Grafana MCP integration (Loki logs, Prometheus metrics) via mcp-grafana v0.11.3 — v2.0
+- ✓ kubectl read-only access (pods, events, deployments, replicasets, metrics) via RBAC — v2.0
+- ✓ Leak prevention guardrails (raw logs, secrets, hostnames never in user-visible responses) — v2.0
+- ✓ INFRA_VERDICT structured marker parsing (infrastructure vs code classification) — v2.0
+- ✓ Lead developer @mention on infrastructure verdicts and issue proposals — v2.0
+- ✓ Required env var validation at startup (GRAFANA_URL, GRAFANA_SERVICE_ACCOUNT_TOKEN, LEAD_DEVELOPER_DISCORD_ID) — v2.0
+
 ### Active
 
 <!-- Next milestone not yet defined — run /gsd:new-milestone to start -->
@@ -186,4 +194,4 @@ Listener SDK shipped: all 6 Go listeners migrated to shared `shared/listener` SD
 | **discord-listener: LeadershipListener as container only** | Start/Stop not called on ListenerBase; custom shutdown sequence unchanged; Gateway RESUME unaffected | ✓ Good — No regression in Discord shard ownership or relay |
 
 ---
-*Last updated: 2026-03-18 after v1.6 milestone*
+*Last updated: 2026-03-26 after v2.0 Phase 02 (support bot operational awareness)*
