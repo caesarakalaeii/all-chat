@@ -26,3 +26,25 @@ export interface BotConfig {
   grafanaUrl: string;
   grafanaServiceAccountToken: string;
 }
+
+export type MemoryType = 'error_pattern' | 'correction' | 'codebase_insight';
+
+export interface StoredMemory {
+  id: number;
+  type: MemoryType;
+  tags: string[];
+  content: string;
+  accessCount: number;
+  updatedAt: Date;
+}
+
+export interface ParsedMemoryMarker {
+  type: MemoryType;
+  tags: string[];
+  content: string;
+}
+
+export interface ParsedUpdateMemoryMarker {
+  id: number;
+  content: string;
+}
