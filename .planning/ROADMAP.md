@@ -172,7 +172,7 @@
 <details>
 <summary>✅ v1.6 Listener SDK (Phases 33-38) — SHIPPED 2026-03-18</summary>
 
-**Milestone Goal:** Extract load balancing, leader election, and channel management into a shared SDK that all listeners import, eliminating 80–150 lines of duplicated startup wiring from every listener and making future listeners trivial to build.
+**Milestone Goal:** Extract load balancing, leader election, and channel management into a shared SDK that all listeners import, eliminating 80-150 lines of duplicated startup wiring from every listener and making future listeners trivial to build.
 
 - [x] **Phase 33: Pre-Migration Cleanup** — Source ID suffix normalization + HandleMigrationEvent error signature canonicalized (2/2 plans, completed 2026-03-17)
 - [x] **Phase 34: SDK Package Definition** — shared/listener package: ListenerBase, LeadershipListener, ChannelManager, ShutdownCoordinator, make build-all CI target (3/3 plans, completed 2026-03-17)
@@ -226,5 +226,17 @@ Plans:
 - [ ] 02-02-PLAN.md — Lead dev @mention logic in bot.ts, new env var validation in index.ts
 - [ ] 02-03-PLAN.md — Dockerfile binary installs (kubectl, mcp-grafana), K8s deployment env vars, RBAC for cluster read access
 
+### Phase 3: Support Bot Persistent Memory
+
+**Goal:** Add persistent memory storage to the support bot so it learns from past interactions -- stores common error patterns, user corrections, and codebase insights in PostgreSQL, retrieves relevant memories via tag matching, and injects them into the Claude prompt. Memory creation is auto-detected via STORE_MEMORY marker protocol.
+**Requirements**: MEM-01, MEM-02, MEM-03, MEM-04, MEM-05, MEM-06, MEM-07, MEM-08, MEM-09
+**Depends on:** Phase 2
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Types, migration SQL, pg dependency, MemoryRepository class with tests
+- [ ] 03-02-PLAN.md — Agent.ts memory injection + marker parsing, bot.ts wiring, index.ts DB init
+- [ ] 03-03-PLAN.md — Kubernetes deployment DATABASE_URL env var and migration init container
+
 ---
-*Last updated: 2026-03-26 after Phase 2 planning*
+*Last updated: 2026-03-26 after Phase 3 planning*
