@@ -102,9 +102,20 @@ vi.mock('../github/issues.js', () => ({
   createIssue: vi.fn().mockResolvedValue('https://github.com/owner/repo/issues/123'),
 }));
 
+// Mock the memory repository module
+vi.mock('../memory/repository.js', () => ({
+  MemoryRepository: vi.fn().mockImplementation(() => ({
+    retrieveMemories: vi.fn().mockResolvedValue([]),
+    storeMemory: vi.fn().mockResolvedValue(undefined),
+    updateMemory: vi.fn().mockResolvedValue(undefined),
+  })),
+  extractTagsFromQuestion: vi.fn().mockReturnValue([]),
+}));
+
 import { Client, GatewayIntentBits, Events, EmbedBuilder } from 'discord.js';
 import { queryCodebase } from '../claude/agent.js';
 import { createIssue, createOctokitClient } from '../github/issues.js';
+import { MemoryRepository } from '../memory/repository.js';
 import { startBot } from '../bot.js';
 
 const mockQueryCodebase = vi.mocked(queryCodebase);
@@ -121,7 +132,12 @@ const testConfig = {
   leadDeveloperDiscordId: '198569499228766208',
   grafanaUrl: 'https://grafana.caes.ar',
   grafanaServiceAccountToken: 'test-grafana-token',
+  databaseUrl: 'postgresql://test:test@localhost:5432/testdb',
 };
+
+function createMockMemoryRepo() {
+  return new MemoryRepository({} as import('pg').Pool);
+}
 
 function getClientInstance() {
   return vi.mocked(Client).mock.results[0]?.value as ReturnType<typeof Client>;
@@ -141,11 +157,13 @@ describe('startBot', () => {
       answer: 'Twitch uses IRC protocol for chat.',
       issueProposal: null,
       infraVerdict: null,
+      memoryMarker: null,
+      updateMemoryMarker: null,
     });
   });
 
   it('creates a Discord client with Guilds, GuildMessages, and MessageContent intents', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
 
     expect(Client).toHaveBeenCalledWith({
       intents: expect.arrayContaining([
@@ -157,14 +175,14 @@ describe('startBot', () => {
   });
 
   it('logs in with the discord token', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
 
     const instance = getClientInstance();
     expect(instance.login).toHaveBeenCalledWith(testConfig.discordToken);
   });
 
   it('registers MessageCreate and InteractionCreate handlers', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
 
     const instance = getClientInstance();
     const registeredEvents = vi.mocked(instance.on).mock.calls.map(([event]) => event);
@@ -173,7 +191,7 @@ describe('startBot', () => {
   });
 
   it('returns the Discord client', async () => {
-    const client = await startBot(testConfig);
+    const client = await startBot(testConfig, createMockMemoryRepo());
 
     expect(client).toBeDefined();
     expect(client).toBe(getClientInstance());
@@ -244,11 +262,13 @@ describe('MessageCreate handler', () => {
       answer: 'Twitch uses IRC.',
       issueProposal: null,
       infraVerdict: null,
+      memoryMarker: null,
+      updateMemoryMarker: null,
     });
   });
 
   it('ignores messages from bots', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
     expect(handler).toBeDefined();
 
@@ -259,7 +279,7 @@ describe('MessageCreate handler', () => {
   });
 
   it('ignores messages that are not mentions and not in bot threads', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const msg = buildMessage({ mentionsBot: false, isThread: false });
@@ -269,7 +289,7 @@ describe('MessageCreate handler', () => {
   });
 
   it('strips mention tags from content before calling queryCodebase', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const msg = buildMessage({ content: '<@123456789> how does twitch work?' });
@@ -279,11 +299,12 @@ describe('MessageCreate handler', () => {
       'how does twitch work?',
       [testConfig.allChatRepoPath, testConfig.allChatExtensionRepoPath],
       [],
+      [],
     );
   });
 
   it('calls queryCodebase with empty history for @mention in non-thread channel', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const msg = buildMessage({ content: '<@123456789> explain the architecture', isThread: false });
@@ -293,11 +314,12 @@ describe('MessageCreate handler', () => {
       'explain the architecture',
       expect.any(Array),
       [],
+      expect.any(Array),
     );
   });
 
   it('creates a thread after replying to @mention in non-thread channel', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const startThread = vi.fn().mockResolvedValue({ id: 'new-thread' });
@@ -311,7 +333,7 @@ describe('MessageCreate handler', () => {
   });
 
   it('collects thread history when @mentioned in a bot-owned thread', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const msg = buildMessage({
@@ -325,11 +347,12 @@ describe('MessageCreate handler', () => {
       'follow-up question',
       expect.any(Array),
       expect.arrayContaining(['[Alice]: prior question']),
+      expect.any(Array),
     );
   });
 
   it('handles message in bot-owned thread without @mention as follow-up', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const msg = buildMessage({
@@ -344,11 +367,12 @@ describe('MessageCreate handler', () => {
       'follow-up without mention',
       expect.any(Array),
       expect.any(Array),
+      expect.any(Array),
     );
   });
 
   it('does NOT create a new thread when already in a thread', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const startThread = vi.fn().mockResolvedValue({ id: 'new-thread' });
@@ -372,10 +396,12 @@ describe('MessageCreate handler', () => {
         body: 'Bug body',
       },
       infraVerdict: null,
+      memoryMarker: null,
+      updateMemoryMarker: null,
     });
     mockCreateIssue.mockResolvedValueOnce('https://github.com/testowner/all-chat/issues/42');
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const threadSend = vi.fn().mockResolvedValue({});
@@ -421,9 +447,11 @@ describe('Lead developer @mention', () => {
       answer: 'There is a memory leak in the pod.',
       issueProposal: null,
       infraVerdict: { type: 'infrastructure', summary: 'Memory leak' },
+      memoryMarker: null,
+      updateMemoryMarker: null,
     });
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const content = await getSentContent();
 
     expect(content).toMatch(/^<@198569499228766208>/);
@@ -435,9 +463,11 @@ describe('Lead developer @mention', () => {
       answer: 'Here is a proposal.',
       issueProposal: { repo: 'all-chat', title: 'New issue', body: 'Body text' },
       infraVerdict: null,
+      memoryMarker: null,
+      updateMemoryMarker: null,
     });
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const content = await getSentContent();
 
     expect(content).toMatch(/^<@198569499228766208>/);
@@ -448,9 +478,11 @@ describe('Lead developer @mention', () => {
       answer: 'Here is a code-level answer.',
       issueProposal: null,
       infraVerdict: null,
+      memoryMarker: null,
+      updateMemoryMarker: null,
     });
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const content = await getSentContent();
 
     expect(content).not.toContain('<@198569499228766208>');
@@ -461,9 +493,11 @@ describe('Lead developer @mention', () => {
       answer: 'The issue is in the frontend code.',
       issueProposal: null,
       infraVerdict: { type: 'code', summary: 'Frontend code issue' },
+      memoryMarker: null,
+      updateMemoryMarker: null,
     });
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const content = await getSentContent();
 
     expect(content).not.toContain('<@198569499228766208>');
@@ -475,9 +509,11 @@ describe('Lead developer @mention', () => {
       answer: 'Infrastructure problem with a proposal.',
       issueProposal: { repo: 'all-chat', title: 'Fix infra', body: 'Body' },
       infraVerdict: { type: 'infrastructure', summary: 'Critical infra issue' },
+      memoryMarker: null,
+      updateMemoryMarker: null,
     });
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const content = await getSentContent();
 
     const mentionCount = (content.match(/<@198569499228766208>/g) ?? []).length;
@@ -492,9 +528,9 @@ describe('Response formatting', () => {
 
   it('sends response <= 2000 chars as plain text', async () => {
     const shortAnswer = 'Short answer.';
-    mockQueryCodebase.mockResolvedValueOnce({ answer: shortAnswer, issueProposal: null, infraVerdict: null });
+    mockQueryCodebase.mockResolvedValueOnce({ answer: shortAnswer, issueProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null });
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const threadSend = vi.fn().mockResolvedValue({});
@@ -510,9 +546,9 @@ describe('Response formatting', () => {
 
   it('sends response 2001-4096 chars as an embed', async () => {
     const mediumAnswer = 'A'.repeat(2001);
-    mockQueryCodebase.mockResolvedValueOnce({ answer: mediumAnswer, issueProposal: null, infraVerdict: null });
+    mockQueryCodebase.mockResolvedValueOnce({ answer: mediumAnswer, issueProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null });
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const threadSend = vi.fn().mockResolvedValue({});
@@ -530,9 +566,9 @@ describe('Response formatting', () => {
 
   it('splits response > 4096 chars into 2000-char chunks', async () => {
     const longAnswer = 'B'.repeat(5000);
-    mockQueryCodebase.mockResolvedValueOnce({ answer: longAnswer, issueProposal: null, infraVerdict: null });
+    mockQueryCodebase.mockResolvedValueOnce({ answer: longAnswer, issueProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null });
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
 
     const threadSend = vi.fn().mockResolvedValue({});
@@ -560,6 +596,8 @@ describe('InteractionCreate handler (/support slash command)', () => {
       answer: 'Slash command answer.',
       issueProposal: null,
       infraVerdict: null,
+      memoryMarker: null,
+      updateMemoryMarker: null,
     });
   });
 
@@ -584,7 +622,7 @@ describe('InteractionCreate handler (/support slash command)', () => {
   }
 
   it('ignores interactions that are not chat input commands', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.InteractionCreate);
 
     const interaction = buildInteraction({ isChatInputCommand: false });
@@ -594,7 +632,7 @@ describe('InteractionCreate handler (/support slash command)', () => {
   });
 
   it('ignores interactions for other commands', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.InteractionCreate);
 
     const interaction = buildInteraction({ commandName: 'other' });
@@ -610,10 +648,10 @@ describe('InteractionCreate handler (/support slash command)', () => {
     mockQueryCodebase.mockImplementationOnce(async () => {
       queryCalled = true;
       expect(deferCalled).toBe(true);
-      return { answer: 'answer', issueProposal: null };
+      return { answer: 'answer', issueProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null };
     });
 
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.InteractionCreate);
 
     const interaction = buildInteraction();
@@ -628,7 +666,7 @@ describe('InteractionCreate handler (/support slash command)', () => {
   });
 
   it('calls queryCodebase with the slash command question and empty history', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.InteractionCreate);
 
     const interaction = buildInteraction({ question: 'how does it work?' });
@@ -638,11 +676,12 @@ describe('InteractionCreate handler (/support slash command)', () => {
       'how does it work?',
       [testConfig.allChatRepoPath, testConfig.allChatExtensionRepoPath],
       [],
+      expect.any(Array),
     );
   });
 
   it('calls editReply after queryCodebase completes', async () => {
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.InteractionCreate);
 
     const interaction = buildInteraction();
@@ -653,7 +692,7 @@ describe('InteractionCreate handler (/support slash command)', () => {
 
   it('creates a thread on the reply after slash command', async () => {
     const startThread = vi.fn().mockResolvedValue({ id: 'slash-reply-thread', send: vi.fn().mockResolvedValue({}) });
-    await startBot(testConfig);
+    await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.InteractionCreate);
 
     const interaction = buildInteraction({ fetchReplyStartThread: startThread });

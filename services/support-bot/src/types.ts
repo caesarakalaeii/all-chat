@@ -27,6 +27,7 @@ export interface BotConfig {
   leadDeveloperDiscordId: string;
   grafanaUrl: string;
   grafanaServiceAccountToken: string;
+  databaseUrl: string;
 }
 
 export type MemoryType = 'error_pattern' | 'correction' | 'codebase_insight';

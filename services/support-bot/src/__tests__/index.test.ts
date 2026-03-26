@@ -18,6 +18,7 @@ describe('validateEnv', () => {
       LEAD_DEVELOPER_DISCORD_ID: '198569499228766208',
       GRAFANA_URL: 'https://grafana.caes.ar',
       GRAFANA_SERVICE_ACCOUNT_TOKEN: 'test-grafana-token',
+      DATABASE_URL: 'postgresql://test:test@localhost:5432/testdb',
     };
   });
 
@@ -161,6 +162,23 @@ describe('validateEnv', () => {
     consoleSpy.mockRestore();
   });
 
+  it('calls process.exit(1) when DATABASE_URL is missing', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    delete process.env['DATABASE_URL'];
+
+    const { validateEnv } = await import('../index.js');
+    validateEnv();
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const errorMessages = consoleSpy.mock.calls.map((call) => String(call[0]));
+    expect(errorMessages.some((msg) => msg.includes('DATABASE_URL'))).toBe(true);
+
+    exitSpy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
   it('returns a BotConfig when all required vars are set', async () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
@@ -177,6 +195,7 @@ describe('validateEnv', () => {
     expect(config.leadDeveloperDiscordId).toBe('198569499228766208');
     expect(config.grafanaUrl).toBe('https://grafana.caes.ar');
     expect(config.grafanaServiceAccountToken).toBe('test-grafana-token');
+    expect(config.databaseUrl).toBe('postgresql://test:test@localhost:5432/testdb');
 
     exitSpy.mockRestore();
   });
@@ -204,6 +223,21 @@ describe('shutdown', () => {
 
     const { shutdown } = await import('../index.js');
     await expect(shutdown()).resolves.not.toThrow();
+
+    exitSpy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
+  it('calls pool.end() when pool is provided', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const { shutdown } = await import('../index.js');
+    const mockPool = { end: vi.fn().mockResolvedValue(undefined) };
+    await shutdown(undefined, mockPool as unknown as import('pg').Pool);
+
+    expect(mockPool.end).toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
 
     exitSpy.mockRestore();
     consoleSpy.mockRestore();
