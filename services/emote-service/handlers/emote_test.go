@@ -196,7 +196,7 @@ func TestEmoteHandler_GetChannelEmotes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := zaptest.NewLogger(t)
-			handler := NewEmoteHandler(tt.setupClients(), tt.setupCache(), logger)
+			handler := NewEmoteHandler(tt.setupClients(), tt.setupCache(), logger, nil)
 
 			router := gin.New()
 			router.GET("/emotes/channel/:channel", handler.GetChannelEmotes)
@@ -306,7 +306,7 @@ func TestEmoteHandler_GetProviderEmotes(t *testing.T) {
 			clients := map[string]EmoteClient{
 				tt.provider: tt.setupClient(),
 			}
-			handler := NewEmoteHandler(clients, tt.setupCache(), logger)
+			handler := NewEmoteHandler(clients, tt.setupCache(), logger, nil)
 
 			router := gin.New()
 			router.GET("/emotes/:provider/:channel", handler.GetProviderEmotes)
@@ -439,7 +439,7 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := zaptest.NewLogger(t)
-			handler := NewEmoteHandler(tt.setupClients(), tt.setupCache(), logger)
+			handler := NewEmoteHandler(tt.setupClients(), tt.setupCache(), logger, nil)
 
 			router := gin.New()
 			router.GET("/emotes/channel/:channel", handler.GetChannelEmotes)

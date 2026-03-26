@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -30,6 +31,7 @@ type SourcesHandler struct {
 	db          *pgxpool.Pool
 	redis       redis.Cmdable
 	logger      *zap.Logger
+	bm          *metrics.BusinessMetrics
 }
 
 // discordChannelEntry is the JSON value stored at discord:channels:{channel_id}.
@@ -41,13 +43,15 @@ type discordChannelEntry struct {
 // NewSourcesHandler creates a new sources handler.
 // redisClient is used to maintain the Discord channel registry keys.
 // It accepts redis.Cmdable for testability; *redis.Client implements this interface.
-func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger, redisClient redis.Cmdable) *SourcesHandler {
+// bm is the shared business metrics instance (may be nil — metrics are skipped if nil).
+func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger, redisClient redis.Cmdable, bm *metrics.BusinessMetrics) *SourcesHandler {
 	return &SourcesHandler{
 		sourceRepo:  sourceRepo,
 		overlayRepo: overlayRepo,
 		db:          db,
 		redis:       redisClient,
 		logger:      logger,
+		bm:          bm,
 	}
 }
 
@@ -477,6 +481,10 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		}
 	}
 
+	if h.bm != nil {
+		h.bm.RecordSourceOperation("create", req.Platform, "success")
+	}
+
 	c.JSON(http.StatusCreated, source)
 }
 
@@ -520,6 +528,10 @@ func (h *SourcesHandler) HandleDeleteSource(c *gin.Context) {
 			inboundChannelID = v
 		}
 		h.delDiscordChannelRegistry(c.Request.Context(), inboundChannelID)
+	}
+
+	if h.bm != nil {
+		h.bm.RecordSourceOperation("delete", source.Platform, "success")
 	}
 
 	c.Status(http.StatusNoContent)

@@ -12,6 +12,7 @@ import (
 	"github.com/caesar/all-chat/services/emote-service/cache"
 	"github.com/caesar/all-chat/services/emote-service/models"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -39,18 +40,21 @@ type EmoteHandler struct {
 	cache        EmoteCache
 	logger       *zap.Logger
 	fetchTimeout time.Duration
+	apiCalls     *prometheus.CounterVec
 }
 
 // Allow human-readable channel names (letters, numbers, spaces, dash, dot, underscore)
 var channelPattern = regexp.MustCompile(`^[A-Za-z0-9 _.-]+$`)
 
-// NewEmoteHandler creates a new emote handler
-func NewEmoteHandler(clients map[string]EmoteClient, cache EmoteCache, logger *zap.Logger) *EmoteHandler {
+// NewEmoteHandler creates a new emote handler.
+// apiCalls is a counter tracking emote provider API calls (may be nil — skipped if nil).
+func NewEmoteHandler(clients map[string]EmoteClient, cache EmoteCache, logger *zap.Logger, apiCalls *prometheus.CounterVec) *EmoteHandler {
 	return &EmoteHandler{
 		clients:      clients,
 		cache:        cache,
 		logger:       logger,
 		fetchTimeout: 3 * time.Second,
+		apiCalls:     apiCalls,
 	}
 }
 
@@ -233,7 +237,14 @@ func (h *EmoteHandler) fetchWithCache(ctx context.Context, client EmoteClient, p
 
 	emotes, err = client.FetchEmotes(ctx, channel)
 	if err != nil {
+		if h.apiCalls != nil {
+			h.apiCalls.WithLabelValues("emote-service", provider, "error").Inc()
+		}
 		return nil, err
+	}
+
+	if h.apiCalls != nil {
+		h.apiCalls.WithLabelValues("emote-service", provider, "success").Inc()
 	}
 
 	// Store in cache (best effort - don't fail if cache set fails)
@@ -288,7 +299,14 @@ func (h *EmoteHandler) fetchWithCacheAndUser(ctx context.Context, client EmoteCl
 
 	emotes, err = combinedClient.FetchCombinedEmotes(ctx, channel, platform, userID)
 	if err != nil {
+		if h.apiCalls != nil {
+			h.apiCalls.WithLabelValues("emote-service", provider, "error").Inc()
+		}
 		return nil, err
+	}
+
+	if h.apiCalls != nil {
+		h.apiCalls.WithLabelValues("emote-service", provider, "success").Inc()
 	}
 
 	// Store in cache (best effort - don't fail if cache set fails)
