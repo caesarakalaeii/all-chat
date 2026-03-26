@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-03-26T09:03:00.000Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-26T09:18:12.225Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 4
@@ -67,6 +67,7 @@ Plan: 3 of 3
 | Phase 01 P03 | 3min | 1 tasks | 3 files |
 | Phase 02 P03 | 1min | 2 tasks | 3 files |
 | Phase 02 P01 | 3min | 1 tasks | 4 files |
+| Phase 02 P02 | 15min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,9 @@ Key decisions relevant to v1.6:
 - [Phase 02-01]: Read GRAFANA_URL and GRAFANA_SERVICE_ACCOUNT_TOKEN directly from process.env in agent.ts (not passed as function params) — avoids signature change, keeps callers clean
 - [Phase 02-01]: Bash(kubectl:*) always included in allowedTools (not conditional) — infra checks always useful even without Grafana
 - [Phase 02-01]: INFRA_VERDICT stripped from answer before PROPOSE_ISSUE is parsed — correct ordering since INFRA_VERDICT appears at end of response
+- [Phase 02]: shouldPingLeadDev is a derived boolean evaluated after issue creation so one mention covers both infraVerdict and issueProposal conditions
+- [Phase 02]: enqueue returns Promise<void> instead of void for testable async Discord event handlers — Discord.js ignores return value
+- [Phase 02]: [Phase 02-02]: LEAD_DEVELOPER_DISCORD_ID, GRAFANA_URL, GRAFANA_SERVICE_ACCOUNT_TOKEN moved to required env var Record — fail-fast consistent with other vars
 
 ### Roadmap Evolution
 
@@ -156,9 +160,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T09:03:00.000Z
+Last session: 2026-03-26T09:18:12.221Z
 Last activity: 2026-03-26
-Stopped at: Completed 02-03-PLAN.md
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
 
 **Next action:** Phase 02 complete.
