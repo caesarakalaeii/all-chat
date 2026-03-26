@@ -13,6 +13,8 @@ export interface QueryResult {
   answer: string;
   issueProposal: IssueProposal | null;
   infraVerdict: InfraVerdict | null;
+  memoryMarker: ParsedMemoryMarker | null;
+  updateMemoryMarker: ParsedUpdateMemoryMarker | null;
 }
 
 export interface BotConfig {
