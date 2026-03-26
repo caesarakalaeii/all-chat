@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-26T17:52:05.358Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-26T18:26:00.000Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 7
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 04 (grafana-dashboard-audit-metrics-gap-implementation) — EXECUTING
-Plan: 1 of 5
+Plan: 2 of 5
 
 ## Performance Metrics
 
@@ -74,6 +74,7 @@ Plan: 1 of 5
 | Phase 03 P03 | 1min | 2 tasks | 1 files |
 | Phase 04 P01 | 658 | 2 tasks | 3 files |
 | Phase 04 P01 | 65min | 3 tasks | 3 files |
+| Phase 04 P02 | 34min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,11 @@ Key decisions relevant to v1.6:
 - [Phase 04]: youtube-listener-innertube Service had no app label — added app: youtube-listener-innertube so the ServiceMonitor matchExpressions selector can match it (was invisible to Prometheus before)
 - [Phase 04]: [Phase 04-01]: Gap matrix produced from code audit (live Prometheus unreachable during execution) — scrape status is expected state post-SM-fix; live verification via Grafana checkpoint
 - [Phase 04]: [Phase 04-01]: Live Prometheus audit via Grafana MCP was not possible during automated execution; gap matrix produced from code audit instead — live verification confirmed via user checkpoint (all 14 services up=1)
+- [Phase 04]: [Phase 04-02]: youtube-listener RecordMessage/RecordPublish wired in MessageHandler (cmd package) not in poller — keeps shared/metrics import out of streams package, publish point is in cmd anyway
+- [Phase 04]: [Phase 04-02]: twitch-eventsub-listener metrics injected into webhooks.Handler; RecordMessage per notification before routing, RecordPublish after routeEvent success/failure
+- [Phase 04]: [Phase 04-02]: discord-listener uses local package-level functions for new message metrics — no shared/metrics import to avoid promauto duplicate registration
+- [Phase 04]: [Phase 04-02]: api-gateway RecordMessageReceived fires once per Redis pub/sub message; RecordMessageSent fires per WebSocket client connection in BroadcastToOverlay result
+- [Phase 04]: [Phase 04-02]: message-processor emote enricher uses SetMetrics() post-construction injection to avoid changing NewEnricher signature; stream lag computed from Redis stream ID millisecond prefix
 
 ### Roadmap Evolution
 
@@ -185,9 +191,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T18:42:53Z
+Last session: 2026-03-26T18:26:00Z
 Last activity: 2026-03-26
-Stopped at: Completed quick-260326-r4m
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
 
-**Next action:** Phase 02 complete.
+**Next action:** Phase 04 Plan 03 — listener dashboards (Discord, InnerTube, twitch-eventsub panels).

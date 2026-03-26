@@ -243,7 +243,7 @@ Plans:
 **Goal:** Audit all Grafana dashboards and Prometheus metrics across all 14 services, wire missing RecordX() calls into the message pipeline and platform ops services, add 3 listeners to ServiceMonitor, create 5 tiered dashboards as code, and add 4 alert groups covering listener disconnections, pipeline stalls, WebSocket drops, and error rate spikes.
 **Requirements**: AUDIT-01, AUDIT-02, SM-01, WIRE-01, WIRE-02, WIRE-03, WIRE-04, WIRE-05, WIRE-06, WIRE-07, WIRE-08, WIRE-09, WIRE-10, DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, ALERT-01, ALERT-02, ALERT-03, ALERT-04, ALERT-05
 **Depends on:** Phase 3
-**Plans:** 1/5 plans executed
+**Plans:** 3/5 plans executed
 
 Plans:
 - [ ] 04-01-PLAN.md — ServiceMonitor update + live Prometheus audit + confirmed gap matrix
