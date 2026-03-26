@@ -4,9 +4,15 @@ export interface IssueProposal {
   body: string;
 }
 
+export interface InfraVerdict {
+  type: 'infrastructure' | 'code';
+  summary: string;
+}
+
 export interface QueryResult {
   answer: string;
   issueProposal: IssueProposal | null;
+  infraVerdict: InfraVerdict | null;
 }
 
 export interface BotConfig {
@@ -16,4 +22,7 @@ export interface BotConfig {
   githubOwner: string;
   allChatRepoPath: string;
   allChatExtensionRepoPath: string;
+  leadDeveloperDiscordId: string;
+  grafanaUrl: string;
+  grafanaServiceAccountToken: string;
 }

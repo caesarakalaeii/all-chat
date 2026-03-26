@@ -1,5 +1,5 @@
 import { execa } from 'execa';
-import type { QueryResult, IssueProposal } from '../types.js';
+import type { QueryResult, IssueProposal, InfraVerdict } from '../types.js';
 
 export async function queryCodebase(
   question: string,
@@ -15,6 +15,28 @@ export async function queryCodebase(
     'Keep answers concise and actionable. Use step-by-step instructions when guiding users through setup or troubleshooting.',
     "If a code change or improvement is needed, end your response with exactly: PROPOSE_ISSUE:repo_name|||title|||body",
     "repo_name must be 'all-chat' or 'all-chat-extension'",
+    '',
+    'IMPORTANT -- Infrastructure data handling rules:',
+    '1. NEVER include raw log lines, stack traces, or raw error messages in your response.',
+    '2. NEVER include environment variable values, secret names with their values, or internal hostnames (*.svc.cluster.local, pod IPs) in your response.',
+    '3. DO summarize counts and patterns: "auth-service logged 47 connection timeout errors in the last 15 minutes"',
+    '4. DO name the service and error type: "kick-listener had 2 OOMKill restarts in the last hour"',
+    '5. DO state your verdict: begin infrastructure analysis summary with "Infrastructure status:" and end with INFRA_VERDICT:',
+    '6. When kubectl returns secret information, report only whether a secret EXISTS or is MISSING -- never its value or key count.',
+    '',
+    'For EVERY question, also check infrastructure health:',
+    '- Use kubectl to check pod status, restarts, and recent warning events in the allchat namespace',
+    '- Use Grafana Loki to check for recent error logs (last 15 min) across allchat services',
+    '- Use Grafana Prometheus to check pod restart counts and resource pressure',
+    '- Summarize infrastructure findings transparently without raw data',
+    '',
+    'When you determine the issue is infrastructure-related (pod crashes, OOMKills, missing secrets, high error rates, connectivity issues), append to your response:',
+    'INFRA_VERDICT:infrastructure|||<one-sentence summary of the infrastructure issue>',
+    '',
+    'When the issue is code-related (bug in logic, missing feature, configuration error in code), append:',
+    'INFRA_VERDICT:code|||<one-sentence summary>',
+    '',
+    'Always include INFRA_VERDICT: at the end of responses where you checked infrastructure.',
   ].join('\n');
 
   let fullPrompt: string;
@@ -24,19 +46,55 @@ export async function queryCodebase(
     fullPrompt = `${systemPrompt}\n\n${question}`;
   }
 
-  console.log('[claude] Starting subprocess (timeout: 120s)');
+  const grafanaUrl = process.env['GRAFANA_URL'];
+  const grafanaToken = process.env['GRAFANA_SERVICE_ACCOUNT_TOKEN'];
+  const hasGrafana = Boolean(grafanaUrl) && Boolean(grafanaToken);
+
+  let mcpConfigArg: string[] = [];
+  if (hasGrafana) {
+    const mcpConfig = JSON.stringify({
+      mcpServers: {
+        'grafana-caesar': {
+          command: '/usr/local/bin/mcp-grafana',
+          args: [],
+          env: {
+            GRAFANA_URL: grafanaUrl,
+            GRAFANA_SERVICE_ACCOUNT_TOKEN: grafanaToken,
+          },
+        },
+      },
+    });
+    mcpConfigArg = ['--mcp-config', mcpConfig];
+  }
+
+  const baseTools = ['Read', 'Glob', 'Grep', 'Bash(kubectl:*)'];
+  const grafanaTools = hasGrafana
+    ? [
+        'mcp__grafana-caesar__query_loki_logs',
+        'mcp__grafana-caesar__query_loki_stats',
+        'mcp__grafana-caesar__query_prometheus',
+        'mcp__grafana-caesar__list_loki_label_names',
+        'mcp__grafana-caesar__list_loki_label_values',
+        'mcp__grafana-caesar__list_prometheus_metric_names',
+        'mcp__grafana-caesar__list_datasources',
+      ]
+    : [];
+  const allowedTools = [...baseTools, ...grafanaTools].join(',');
+
+  console.log('[claude] Starting subprocess (timeout: 180s)');
   const { stdout } = await execa(
     'claude',
     [
       '-p', fullPrompt,
       '--model', 'claude-sonnet-4-6',
-      '--allowedTools', 'Read,Glob,Grep',
+      '--allowedTools', allowedTools,
+      ...mcpConfigArg,
       '--output-format', 'json',
     ],
     {
       stdin: 'ignore',
       env: { ...process.env },
-      timeout: 120_000,
+      timeout: 180_000,
     },
   );
   console.log('[claude] Subprocess completed, parsing response');
@@ -44,11 +102,31 @@ export async function queryCodebase(
   const parsed = JSON.parse(stdout) as { result: string };
   const resultText = parsed.result;
 
+  // Parse and strip INFRA_VERDICT marker
+  let infraVerdict: InfraVerdict | null = null;
+  const verdictMarker = 'INFRA_VERDICT:';
+  const verdictIndex = resultText.indexOf(verdictMarker);
+  if (verdictIndex !== -1) {
+    const verdictString = resultText.slice(verdictIndex + verdictMarker.length).split('\n')[0];
+    const parts = verdictString.split('|||');
+    if (parts.length >= 2) {
+      const type = parts[0].trim() as 'infrastructure' | 'code';
+      const summary = parts[1].trim();
+      infraVerdict = { type, summary };
+    }
+  }
+
+  let cleanAnswer = resultText;
+  if (verdictIndex !== -1) {
+    cleanAnswer = resultText.slice(0, verdictIndex).trimEnd();
+  }
+
+  // Parse and strip PROPOSE_ISSUE marker
   let issueProposal: IssueProposal | null = null;
   const proposeMarker = 'PROPOSE_ISSUE:';
-  const proposeIndex = resultText.indexOf(proposeMarker);
+  const proposeIndex = cleanAnswer.indexOf(proposeMarker);
   if (proposeIndex !== -1) {
-    const proposeString = resultText.slice(proposeIndex + proposeMarker.length);
+    const proposeString = cleanAnswer.slice(proposeIndex + proposeMarker.length);
     const parts = proposeString.split('|||');
     if (parts.length >= 3) {
       const repoName = parts[0].trim() as 'all-chat' | 'all-chat-extension';
@@ -56,7 +134,8 @@ export async function queryCodebase(
       const body = parts.slice(2).join('|||').trim();
       issueProposal = { repo: repoName, title, body };
     }
+    cleanAnswer = cleanAnswer.slice(0, proposeIndex).trimEnd();
   }
 
-  return { answer: resultText, issueProposal };
+  return { answer: cleanAnswer, issueProposal, infraVerdict };
 }
