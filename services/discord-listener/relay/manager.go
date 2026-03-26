@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -25,6 +26,15 @@ const (
 
 	// batchWebhookUsername is the generic username used for batched multi-user messages.
 	batchWebhookUsername = "Chat Relay"
+
+	// rateLimitCooldown is how long drainOverlay skips posting after a 429.
+	// During cooldown the goroutine keeps draining the Pub/Sub channel
+	// (discarding messages) so the go-redis buffer doesn't overflow.
+	rateLimitCooldown = 30 * time.Second
+
+	// pubsubChannelSize is the go-redis Pub/Sub channel buffer size.
+	// Default is 100 which overflows in <1s for busy streams.
+	pubsubChannelSize = 1000
 )
 
 // relayMessage is the local representation of a normalized chat message from
@@ -154,6 +164,8 @@ func (m *Manager) SyncRelayConfigs(ctx context.Context) error {
 			continue
 		}
 		sub := m.redisClient.Subscribe(ctx, "overlay:"+overlayID)
+		// Increase channel buffer to avoid "channel is full" drops during rate-limit cooldowns.
+		// Default go-redis buffer is 100, which overflows in <1s for busy streams.
 		m.activeSubs[overlayID] = sub
 		m.activeConf[overlayID] = webhookURL
 
@@ -182,11 +194,17 @@ func (m *Manager) SyncRelayConfigs(ctx context.Context) error {
 // Uses adaptive batching: single messages are posted individually (preserving
 // per-user webhook username and avatar), while bursts are batched into a single
 // webhook POST to stay within Discord's ~30 req/60s rate limit.
+//
+// When Discord returns a long 429, the poster returns ErrRateLimited immediately
+// (instead of blocking). drainOverlay then enters a cooldown period where it keeps
+// reading from the Pub/Sub channel (preventing go-redis buffer overflow) but
+// discards messages until the cooldown expires.
 func (m *Manager) drainOverlay(ctx context.Context, overlayID string, sub *redis.PubSub, webhookURL string) {
 	defer m.wg.Done()
 
-	ch := sub.Channel()
+	ch := sub.ChannelSize(pubsubChannelSize)
 	var batch []RelayPayload
+	var cooldownUntil time.Time // zero = no cooldown
 	ticker := time.NewTicker(batchFlushInterval)
 	defer ticker.Stop()
 
@@ -197,6 +215,12 @@ func (m *Manager) drainOverlay(ctx context.Context, overlayID string, sub *redis
 				m.flushBatch(ctx, webhookURL, batch, overlayID)
 				return
 			}
+
+			// During rate-limit cooldown, drain but discard.
+			if time.Now().Before(cooldownUntil) {
+				continue
+			}
+
 			payload, ok := m.parseRelayPayload(msg.Payload, overlayID)
 			if !ok {
 				continue
@@ -206,13 +230,14 @@ func (m *Manager) drainOverlay(ctx context.Context, overlayID string, sub *redis
 			// If nothing else is queued, flush immediately — single messages
 			// keep per-user username and avatar for a nicer Discord experience.
 			if len(ch) == 0 {
-				m.flushBatch(ctx, webhookURL, batch, overlayID)
-				batch = batch[:0]
+				if m.flushBatchWithCooldown(ctx, webhookURL, batch, overlayID, &cooldownUntil) {
+					batch = batch[:0]
+				}
 			}
 
 		case <-ticker.C:
-			if len(batch) > 0 {
-				m.flushBatch(ctx, webhookURL, batch, overlayID)
+			if len(batch) > 0 && !time.Now().Before(cooldownUntil) {
+				m.flushBatchWithCooldown(ctx, webhookURL, batch, overlayID, &cooldownUntil)
 				batch = batch[:0]
 			}
 
@@ -252,13 +277,31 @@ func (m *Manager) parseRelayPayload(payload string, overlayID string) (RelayPayl
 	}, true
 }
 
+// flushBatchWithCooldown calls flushBatch and enters rate-limit cooldown if
+// the poster returns ErrRateLimited. Returns true if the batch was processed
+// (successfully or with errors), false if it should be retried.
+func (m *Manager) flushBatchWithCooldown(ctx context.Context, webhookURL string, batch []RelayPayload, overlayID string, cooldownUntil *time.Time) bool {
+	rateLimited := m.flushBatch(ctx, webhookURL, batch, overlayID)
+	if rateLimited {
+		*cooldownUntil = time.Now().Add(rateLimitCooldown)
+		if m.logger != nil {
+			m.logger.Warn("Entering rate-limit cooldown — messages will be discarded",
+				zap.String("overlay_id", overlayID),
+				zap.Duration("cooldown", rateLimitCooldown),
+			)
+		}
+	}
+	return true
+}
+
 // flushBatch sends accumulated messages to Discord. Single messages are posted
 // individually (preserving username/avatar). Multiple messages are combined into
 // one webhook POST with a "**user**: message" format per line, splitting into
 // multiple POSTs if the content exceeds Discord's 2000-char limit.
-func (m *Manager) flushBatch(ctx context.Context, webhookURL string, batch []RelayPayload, overlayID string) {
+// Returns true if a rate-limit error was encountered.
+func (m *Manager) flushBatch(ctx context.Context, webhookURL string, batch []RelayPayload, overlayID string) bool {
 	if len(batch) == 0 {
-		return
+		return false
 	}
 
 	// Single message — post normally with per-user username and avatar.
@@ -270,8 +313,9 @@ func (m *Manager) flushBatch(ctx context.Context, webhookURL string, batch []Rel
 					zap.Error(err),
 				)
 			}
+			return errors.Is(err, ErrRateLimited)
 		}
-		return
+		return false
 	}
 
 	// Multiple messages — batch into combined content POSTs.
@@ -284,7 +328,9 @@ func (m *Manager) flushBatch(ctx context.Context, webhookURL string, batch []Rel
 
 		// Flush current batch if adding this line would exceed the limit.
 		if contentLen+lineLen > maxBatchContentLen && len(lines) > 0 {
-			m.postBatchedContent(ctx, webhookURL, lines, overlayID)
+			if m.postBatchedContent(ctx, webhookURL, lines, overlayID) {
+				return true // rate limited — stop sending
+			}
 			lines = lines[:0]
 			contentLen = 0
 		}
@@ -295,12 +341,14 @@ func (m *Manager) flushBatch(ctx context.Context, webhookURL string, batch []Rel
 
 	// Flush remaining lines.
 	if len(lines) > 0 {
-		m.postBatchedContent(ctx, webhookURL, lines, overlayID)
+		return m.postBatchedContent(ctx, webhookURL, lines, overlayID)
 	}
+	return false
 }
 
 // postBatchedContent sends a combined multi-line message via the webhook.
-func (m *Manager) postBatchedContent(ctx context.Context, webhookURL string, lines []string, overlayID string) {
+// Returns true if rate-limited.
+func (m *Manager) postBatchedContent(ctx context.Context, webhookURL string, lines []string, overlayID string) bool {
 	content := ""
 	for i, line := range lines {
 		if i > 0 {
@@ -321,7 +369,9 @@ func (m *Manager) postBatchedContent(ctx context.Context, webhookURL string, lin
 				zap.Error(err),
 			)
 		}
+		return errors.Is(err, ErrRateLimited)
 	}
+	return false
 }
 
 // HandleMessage provides a synchronous injection point for tests.
