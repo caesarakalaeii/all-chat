@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,16 @@ import (
 
 	"go.uber.org/zap"
 )
+
+// ErrRateLimited is returned when Discord responds with 429 and a Retry-After
+// that exceeds maxRetryAfter. Callers should back off and drain queued messages
+// instead of blocking the goroutine.
+var ErrRateLimited = errors.New("discord webhook rate limited")
+
+// maxRetryAfter is the longest the poster will sleep on a 429 before returning
+// ErrRateLimited. Anything longer blocks the drain goroutine and causes the
+// Redis Pub/Sub channel to overflow.
+const maxRetryAfter = 5 * time.Second
 
 // RelayPayload holds the fields sent to a Discord webhook.
 type RelayPayload struct {
@@ -95,21 +106,34 @@ func (p *webhookPoster) doPost(ctx context.Context, webhookURL string, msg Relay
 		return nil
 
 	case resp.StatusCode == http.StatusTooManyRequests:
-		if isRetry {
-			return fmt.Errorf("discord rate limit persists after retry (webhook %s)", webhookURL)
-		}
 		retryAfterStr := resp.Header.Get("Retry-After")
 		retryAfterSec, parseErr := strconv.ParseFloat(retryAfterStr, 64)
 		if parseErr != nil || retryAfterSec < 0 {
 			retryAfterSec = 1.0
 		}
+		retryAfterDur := time.Duration(retryAfterSec * float64(time.Second))
+
+		// If the wait is too long, return immediately so the caller can drain
+		// queued messages instead of blocking the goroutine for minutes.
+		if retryAfterDur > maxRetryAfter || isRetry {
+			if p.logger != nil {
+				p.logger.Warn("Discord webhook 429: returning rate-limit error",
+					zap.String("webhook_url", webhookURL),
+					zap.Duration("retry_after", retryAfterDur),
+					zap.Bool("is_retry", isRetry),
+				)
+			}
+			return fmt.Errorf("%w (retry_after=%s)", ErrRateLimited, retryAfterDur)
+		}
+
+		// Short wait — sleep and retry once.
 		if p.logger != nil {
 			p.logger.Warn("Discord webhook 429: sleeping before retry",
 				zap.String("webhook_url", webhookURL),
-				zap.Float64("retry_after_seconds", retryAfterSec),
+				zap.Duration("retry_after", retryAfterDur),
 			)
 		}
-		timer := time.NewTimer(time.Duration(retryAfterSec * float64(time.Second)))
+		timer := time.NewTimer(retryAfterDur)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

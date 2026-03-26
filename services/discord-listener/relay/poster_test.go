@@ -151,6 +151,20 @@ func TestWebhookPoster_429RetriesOnce(t *testing.T) {
 	assert.Equal(t, 2, callCount, "expected exactly 2 HTTP calls (original + one retry)")
 }
 
+func TestWebhookPoster_429LongRetryAfter_ReturnsRateLimited(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "600") // 10 minutes — way over maxRetryAfter
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	poster := NewWebhookPoster(server.Client(), nil)
+	poster.(*webhookPoster).baseURL = server.URL
+
+	err := poster.Post(context.Background(), server.URL+"/webhook", RelayPayload{Content: "test", Username: "u"})
+	assert.ErrorIs(t, err, ErrRateLimited, "long retry-after should return ErrRateLimited immediately")
+}
+
 func TestWebhookPoster_403SilentDrop(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
