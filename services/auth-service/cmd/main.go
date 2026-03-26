@@ -23,6 +23,8 @@ import (
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -226,10 +228,23 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Initialize HTTP metrics
+	httpRequestsTotal := promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "Total HTTP requests",
+	}, []string{"service", "method", "path", "status"})
+
+	httpRequestDuration := promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "http_request_duration_seconds",
+		Help:    "HTTP request duration in seconds",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"service", "method", "path"})
+
 	// Create router
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.Logging(log))
+	router.Use(httpMetricsMiddleware(httpRequestsTotal, httpRequestDuration, "auth-service"))
 
 	// Add tracing middleware if enabled
 	if tracingEnabled {
@@ -450,4 +465,19 @@ func getEnvAsIntOrDefault(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// httpMetricsMiddleware records HTTP request count and duration metrics
+func httpMetricsMiddleware(requests *prometheus.CounterVec, duration *prometheus.HistogramVec, service string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		status := strconv.Itoa(c.Writer.Status())
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+		requests.WithLabelValues(service, c.Request.Method, path, status).Inc()
+		duration.WithLabelValues(service, c.Request.Method, path).Observe(time.Since(start).Seconds())
+	}
 }

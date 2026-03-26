@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -21,6 +22,8 @@ import (
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
@@ -102,8 +105,20 @@ func main() {
 	log.Info("Connected to Redis successfully")
 
 	// Initialize metrics (available via /metrics endpoint)
-	_ = metrics.NewBusinessMetrics()
+	bm := metrics.NewBusinessMetrics()
 	log.Info("Initialized Prometheus metrics")
+
+	// HTTP metrics counters for overlay-manager
+	httpRequestsTotal := promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "Total HTTP requests",
+	}, []string{"service", "method", "path", "status"})
+
+	httpRequestDuration := promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "http_request_duration_seconds",
+		Help:    "HTTP request duration in seconds",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"service", "method", "path"})
 
 	// Initialize repositories with the connection string
 	overlayRepo, err := repository.NewOverlayRepository(connString)
@@ -135,7 +150,7 @@ func main() {
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, tracingEnabled, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo, sourceRepo, configRepo)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo)
-	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient)
+	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient, bm)
 	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient, log)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)
@@ -162,6 +177,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(httpMetricsMiddleware(httpRequestsTotal, httpRequestDuration, "overlay-manager"))
 
 	// Add tracing middleware if enabled
 	if tracingEnabled {
@@ -314,4 +330,19 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// httpMetricsMiddleware records HTTP request count and duration metrics
+func httpMetricsMiddleware(requests *prometheus.CounterVec, duration *prometheus.HistogramVec, service string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		status := strconv.Itoa(c.Writer.Status())
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+		requests.WithLabelValues(service, c.Request.Method, path, status).Inc()
+		duration.WithLabelValues(service, c.Request.Method, path).Observe(time.Since(start).Seconds())
+	}
 }

@@ -20,6 +20,8 @@ import (
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
@@ -81,6 +83,24 @@ func main() {
 	_ = metrics.NewProcessorMetrics()
 	log.Info("Initialized Prometheus metrics")
 
+	// HTTP metrics for emote-service
+	httpRequestsTotal := promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "Total HTTP requests",
+	}, []string{"service", "method", "path", "status"})
+
+	httpRequestDuration := promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "http_request_duration_seconds",
+		Help:    "HTTP request duration in seconds",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"service", "method", "path"})
+
+	// Emote provider API call counter
+	emoteAPICalls := promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "emote_api_calls_total",
+		Help: "Total emote provider API calls (cache misses that hit the upstream API)",
+	}, []string{"service", "provider", "result"})
+
 	// Initialize emote cache
 	emoteCache := cache.NewEmoteCache(redisClient, log, cacheTTL)
 
@@ -121,7 +141,7 @@ func main() {
 	cheermoteClient := clients.NewTwitchCheermoteClient(twitchClient, log)
 
 	// Initialize handlers
-	emoteHandler := handlers.NewEmoteHandler(emoteClients, emoteCache, log)
+	emoteHandler := handlers.NewEmoteHandler(emoteClients, emoteCache, log, emoteAPICalls)
 	cheermoteHandler := handlers.NewCheermoteHandler(cheermoteClient, redisClient, log)
 	healthHandler := handlers.NewHealthHandler(redisClient, log)
 
@@ -130,6 +150,7 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(ginLogger(log))
+	router.Use(httpMetricsMiddleware(httpRequestsTotal, httpRequestDuration, "emote-service"))
 	if tracingEnabled {
 		router.Use(tracing.GinMiddleware("emote-service"))
 	}
@@ -289,6 +310,21 @@ func newRedisRateLimiter(client sharedRedis.Client, limit int, window time.Durat
 		limit:  limit,
 		window: window,
 		client: client,
+	}
+}
+
+// httpMetricsMiddleware records HTTP request count and duration metrics
+func httpMetricsMiddleware(requests *prometheus.CounterVec, duration *prometheus.HistogramVec, service string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		status := strconv.Itoa(c.Writer.Status())
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+		requests.WithLabelValues(service, c.Request.Method, path, status).Inc()
+		duration.WithLabelValues(service, c.Request.Method, path).Observe(time.Since(start).Seconds())
 	}
 }
 
