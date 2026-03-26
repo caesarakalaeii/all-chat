@@ -56,7 +56,7 @@ completed: 2026-03-26
 - **Duration:** ~1 min
 - **Started:** 2026-03-26T08:55:02Z
 - **Completed:** 2026-03-26T08:55:49Z
-- **Tasks:** 2 of 3 complete (Task 3 is human-verify checkpoint)
+- **Tasks:** 3 of 3 complete (Task 3 checkpoint approved by user)
 - **Files modified:** 3
 
 ## Accomplishments
@@ -72,7 +72,7 @@ Each task was committed atomically:
 1. **Task 1: Install kubectl and mcp-grafana binaries in Dockerfile** - `3d21232` (feat)
 2. **Task 2: Add env vars to deployment and extend RBAC for kubectl read access** - `880d744` (feat, caesar-deployment repo)
 
-**Plan metadata:** (docs commit pending after checkpoint approval)
+3. **Task 3: Human review checkpoint** - Approved by user; `support-bot-grafana-token` added to SOPS-encrypted `allchat-secret.enc.yaml`
 
 ## Files Created/Modified
 
@@ -95,23 +95,16 @@ None - plan executed exactly as written.
 
 None.
 
-## User Setup Required
+## User Setup Completed
 
-Before deploying, add the `support-bot-grafana-token` key to the `allchat-secrets` Kubernetes Secret with your Grafana service account token value:
-
-```bash
-kubectl -n allchat patch secret allchat-secrets --type merge \
-  -p '{"data":{"support-bot-grafana-token":"<base64-encoded-token>"}}'
-```
-
-Or via sealed-secrets if the cluster uses that workflow.
+The `support-bot-grafana-token` key was added to the SOPS-encrypted `allchat-secret.enc.yaml` by the user during the checkpoint review. No further manual steps required before deployment.
 
 ## Next Phase Readiness
 
 - Container has kubectl and mcp-grafana binaries at /usr/local/bin — available to Claude subprocess via PATH
 - Deployment has Grafana credentials and lead developer Discord ID as env vars
 - RBAC grants read-only cluster inspection in allchat namespace
-- Prerequisite: Add `support-bot-grafana-token` to allchat-secrets before pod restart
+- Grafana token added to SOPS-encrypted allchat-secret.enc.yaml — ready for deployment
 
 ---
 *Phase: 02-support-bot-operational-awareness*
