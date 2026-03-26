@@ -20,6 +20,7 @@ import (
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -168,6 +169,10 @@ func main() {
 
 	base := listener.NewListenerBase(cfg, coordClient, redisClient, podName, log)
 
+	// Initialize metrics (available via /metrics endpoint)
+	listenerMetrics := metrics.NewListenerMetrics("twitch-eventsub", "twitch-eventsub-listener")
+	log.Info("Initialized Prometheus metrics")
+
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
@@ -182,7 +187,7 @@ func main() {
 	defer base.Stop()
 
 	// Create webhook handler
-	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, log)
+	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, log)
 
 	// Leader election state (use struct with mutex for thread-safe access from HTTP handlers)
 	state := &leaderState{}

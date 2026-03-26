@@ -14,6 +14,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/models"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,21 +32,23 @@ type StreamEndEvent struct {
 
 // Handler handles Twitch EventSub webhook callbacks
 type Handler struct {
-	secret    []byte
-	redis     *redis.Client
-	db        *pgxpool.Pool // for twitch_id -> user_id lookup
-	publisher *publisher.StreamPublisher
-	logger    *zap.Logger
+	secret          []byte
+	redis           *redis.Client
+	db              *pgxpool.Pool // for twitch_id -> user_id lookup
+	publisher       *publisher.StreamPublisher
+	listenerMetrics *metrics.ListenerMetrics
+	logger          *zap.Logger
 }
 
 // NewHandler creates a new webhook handler
-func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher *publisher.StreamPublisher, logger *zap.Logger) *Handler {
+func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher *publisher.StreamPublisher, listenerMetrics *metrics.ListenerMetrics, logger *zap.Logger) *Handler {
 	return &Handler{
-		secret:    []byte(secret),
-		redis:     redis,
-		db:        db,
-		publisher: publisher,
-		logger:    logger,
+		secret:          []byte(secret),
+		redis:           redis,
+		db:              db,
+		publisher:       publisher,
+		listenerMetrics: listenerMetrics,
+		logger:          logger,
 	}
 }
 
@@ -146,6 +149,11 @@ func (h *Handler) handleChallenge(c *gin.Context, body []byte) {
 		zap.String("type", challenge.Subscription.Type),
 	)
 
+	// Record webhook verification (connection confirmed)
+	if h.listenerMetrics != nil {
+		h.listenerMetrics.RecordConnection("twitch-eventsub", "twitch-eventsub-listener", "webhook", true)
+	}
+
 	// Respond with challenge string
 	c.String(http.StatusOK, challenge.Challenge)
 }
@@ -178,13 +186,24 @@ func (h *Handler) handleNotification(c *gin.Context, body []byte, messageID stri
 		return
 	}
 
+	// Record message received
+	if h.listenerMetrics != nil {
+		h.listenerMetrics.RecordMessage("twitch-eventsub", "twitch-eventsub-listener", "", notification.Subscription.Type)
+	}
+
 	// Route to appropriate handler based on subscription type
 	if err := h.routeEvent(ctx, notification.Subscription.Type, notification.Event); err != nil {
 		h.logger.Error("Failed to process event",
 			zap.String("subscription_type", notification.Subscription.Type),
 			zap.Error(err),
 		)
+		if h.listenerMetrics != nil {
+			h.listenerMetrics.RecordPublish("twitch-eventsub", "twitch-eventsub-listener", "error")
+			h.listenerMetrics.RecordError("twitch-eventsub", "twitch-eventsub-listener", "publish", "error")
+		}
 		// Still return 204 to acknowledge receipt
+	} else if h.listenerMetrics != nil {
+		h.listenerMetrics.RecordPublish("twitch-eventsub", "twitch-eventsub-listener", "success")
 	}
 
 	// Mark as processed (TTL: 24 hours)
