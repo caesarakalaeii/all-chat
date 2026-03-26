@@ -123,7 +123,7 @@ func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWith
 func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
 	query := `
 		SELECT id, platform, username, display_name,
-		       access_token, refresh_token, token_expires_at
+		       access_token, refresh_token, token_expires_at, user_id
 		FROM viewer_sessions
 		WHERE (
 		    (token_expires_at < $1 AND token_expires_at > NOW())
@@ -146,6 +146,7 @@ func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWi
 	for rows.Next() {
 		var token ExpiringToken
 		var encAccessToken, encRefreshToken string
+		var userID *string
 
 		err := rows.Scan(
 			&token.SessionID,
@@ -155,7 +156,11 @@ func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWi
 			&encAccessToken,
 			&encRefreshToken,
 			&token.ExpiresAt,
+			&userID,
 		)
+		if err == nil && userID != nil {
+			token.ID = *userID
+		}
 		if err != nil {
 			r.logger.Warn("Failed to scan viewer token row", zap.Error(err))
 			continue

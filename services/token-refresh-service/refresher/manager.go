@@ -322,6 +322,16 @@ func (m *Manager) isNonRetryableError(err error) bool {
 
 // publishWarning publishes a token expiration warning event to Redis Stream
 func (m *Manager) publishWarning(ctx context.Context, token *repository.ExpiringToken, platform, reason string) {
+	// Viewer sessions without a linked user account have no overlays to warn
+	if token.ID == "" {
+		m.logger.Debug("Skipping warning for token without user ID",
+			zap.String("token_type", token.TokenType),
+			zap.String("session_id", token.SessionID),
+			zap.String("platform", platform),
+		)
+		return
+	}
+
 	// Rate limiting: Only send warning once per 30 minutes per user/platform
 	cacheKey := fmt.Sprintf("%s:%s:%s", token.ID, platform, token.TokenType)
 	m.mu.Lock()
