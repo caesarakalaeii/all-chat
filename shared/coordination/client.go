@@ -190,9 +190,16 @@ func (c *CoordinatorClient) QueryAssignments(ctx context.Context, podID string) 
 	}
 }
 
-// PublishHeartbeat publishes a heartbeat to the coordinator
-// Returns nil on success (200 status), error otherwise
+// PublishHeartbeat publishes a heartbeat to the coordinator.
+// Uses a tight 3s deadline to fail fast — heartbeats are time-critical and must
+// not be delayed by slow assignment queries sharing the same HTTP connection pool.
 func (c *CoordinatorClient) PublishHeartbeat(ctx context.Context, podID string) error {
+	// Heartbeat-specific timeout: 3s is plenty for a simple Redis ZADD on the
+	// source-manager side. Using the parent context's 10s timeout risks staleness
+	// when the HTTP connection pool is congested by slow /assignments queries.
+	hbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
 	url := fmt.Sprintf("%s/heartbeat", c.baseURL)
 
 	// Create request body
@@ -205,7 +212,7 @@ func (c *CoordinatorClient) PublishHeartbeat(ctx context.Context, podID string) 
 		return fmt.Errorf("failed to marshal heartbeat request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(bodyBytes)))
+	req, err := http.NewRequestWithContext(hbCtx, http.MethodPost, url, strings.NewReader(string(bodyBytes)))
 	if err != nil {
 		return fmt.Errorf("failed to create heartbeat request: %w", err)
 	}
