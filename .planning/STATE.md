@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 3 context gathered
-last_updated: "2026-03-26T11:18:52.666Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-26T15:38:39.672Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 20
+  completed_plans: 18
 ---
 
 # Project State
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** Phase 02 — support-bot-operational-awareness-grafana-logs-and-k8s-cluster-state-access-with-leak-prevention-infrastructure-error-detection-and-lead-developer-pinging
+**Current focus:** Phase 03 — discord-support-bot-persistent-memory-storage-for-learning-and-improvement-over-time
 
 ## Current Position
 
-Phase: 02 (support-bot-operational-awareness-grafana-logs-and-k8s-cluster-state-access-with-leak-prevention-infrastructure-error-detection-and-lead-developer-pinging) — COMPLETE
-Plan: 3 of 3
+Phase: 03 (discord-support-bot-persistent-memory-storage-for-learning-and-improvement-over-time) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Plan: 3 of 3
 | Phase 02 P03 | 1min | 2 tasks | 3 files |
 | Phase 02 P01 | 3min | 1 tasks | 4 files |
 | Phase 02 P02 | 15min | 1 tasks | 4 files |
+| Phase 03 P01 | 282 | 1 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,9 @@ Key decisions relevant to v1.6:
 - [Phase 02]: shouldPingLeadDev is a derived boolean evaluated after issue creation so one mention covers both infraVerdict and issueProposal conditions
 - [Phase 02]: enqueue returns Promise<void> instead of void for testable async Discord event handlers — Discord.js ignores return value
 - [Phase 02]: [Phase 02-02]: LEAD_DEVELOPER_DISCORD_ID, GRAFANA_URL, GRAFANA_SERVICE_ACCOUNT_TOKEN moved to required env var Record — fail-fast consistent with other vars
+- [Phase 03]: pg installed as runtime dep (not devDep) — used at runtime for DB connection
+- [Phase 03]: [Phase 03-01]: MemoryRepository constructor takes pg.Pool for dependency injection — enables vi.mock('pg') pattern in tests
+- [Phase 03]: [Phase 03-01]: pruneIfNeeded uses two queries (COUNT then conditional DELETE) — cleaner for testability with mocked pool
 
 ### Roadmap Evolution
 
@@ -161,9 +165,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T11:18:52.662Z
+Last session: 2026-03-26T15:38:30.156Z
 Last activity: 2026-03-26
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-discord-support-bot-persistent-memory-storage-for-learning-and-improvement-over-time/03-CONTEXT.md
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None
 
 **Next action:** Phase 02 complete.
