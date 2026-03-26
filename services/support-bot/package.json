@@ -12,10 +12,12 @@
   "dependencies": {
     "@octokit/rest": "^22.0.1",
     "discord.js": "^14.14.1",
-    "execa": "^9.0.0"
+    "execa": "^9.0.0",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
