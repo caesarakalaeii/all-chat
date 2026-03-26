@@ -118,6 +118,9 @@ const testConfig = {
   githubOwner: 'testowner',
   allChatRepoPath: '/repos/all-chat',
   allChatExtensionRepoPath: '/repos/all-chat-extension',
+  leadDeveloperDiscordId: '198569499228766208',
+  grafanaUrl: 'https://grafana.caes.ar',
+  grafanaServiceAccountToken: 'test-grafana-token',
 };
 
 function getClientInstance() {
@@ -137,6 +140,7 @@ describe('startBot', () => {
     mockQueryCodebase.mockResolvedValue({
       answer: 'Twitch uses IRC protocol for chat.',
       issueProposal: null,
+      infraVerdict: null,
     });
   });
 
@@ -176,71 +180,72 @@ describe('startBot', () => {
   });
 });
 
+function buildMessage(overrides: Partial<{
+  content: string;
+  authorBot: boolean;
+  isThread: boolean;
+  isBotThread: boolean;
+  mentionsBot: boolean;
+  channelSend: ReturnType<typeof vi.fn>;
+  startThread: ReturnType<typeof vi.fn>;
+}> = {}) {
+  const defaults = {
+    content: '<@123456789> how does twitch work?',
+    authorBot: false,
+    isThread: false,
+    isBotThread: false,
+    mentionsBot: true,
+    channelSend: vi.fn().mockResolvedValue({}),
+    startThread: vi.fn().mockResolvedValue({ id: 'new-thread', send: vi.fn().mockResolvedValue({}) }),
+  };
+  const opts = { ...defaults, ...overrides };
+
+  const channel: {
+    id: string;
+    isThread: () => boolean;
+    ownerId?: string;
+    send: ReturnType<typeof vi.fn>;
+    sendTyping: ReturnType<typeof vi.fn>;
+    messages?: { fetch: ReturnType<typeof vi.fn> };
+  } = {
+    id: 'channel1',
+    isThread: () => opts.isThread,
+    send: opts.channelSend,
+    sendTyping: vi.fn().mockResolvedValue(undefined),
+  };
+
+  if (opts.isThread) {
+    channel.ownerId = opts.isBotThread ? '123456789' : 'other-user-id';
+    channel.messages = {
+      fetch: vi.fn().mockResolvedValue(new Map([
+        ['m1', { id: 'm1', content: 'prior question', author: { bot: false, username: 'Alice' } }],
+        ['m2', { id: 'm2', content: 'bot reply', author: { bot: true, username: 'Bot' } }],
+      ])),
+    };
+  }
+
+  return {
+    id: 'msg-main',
+    content: opts.content,
+    author: { bot: opts.authorBot, username: 'Alice', id: 'user-alice' },
+    channel,
+    mentions: {
+      has: vi.fn().mockReturnValue(opts.mentionsBot),
+    },
+    reply: vi.fn().mockResolvedValue({ id: 'reply1', startThread: vi.fn().mockResolvedValue({ id: 'r-thread', send: vi.fn().mockResolvedValue({}) }) }),
+    startThread: opts.startThread,
+  };
+}
+
 describe('MessageCreate handler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueryCodebase.mockResolvedValue({
       answer: 'Twitch uses IRC.',
       issueProposal: null,
+      infraVerdict: null,
     });
   });
-
-  function buildMessage(overrides: Partial<{
-    content: string;
-    authorBot: boolean;
-    isThread: boolean;
-    isBotThread: boolean;
-    mentionsBot: boolean;
-    channelSend: ReturnType<typeof vi.fn>;
-    startThread: ReturnType<typeof vi.fn>;
-  }> = {}) {
-    const defaults = {
-      content: '<@123456789> how does twitch work?',
-      authorBot: false,
-      isThread: false,
-      isBotThread: false,
-      mentionsBot: true,
-      channelSend: vi.fn().mockResolvedValue({}),
-      startThread: vi.fn().mockResolvedValue({ id: 'new-thread' }),
-    };
-    const opts = { ...defaults, ...overrides };
-
-    const channel: {
-      id: string;
-      isThread: () => boolean;
-      ownerId?: string;
-      send: ReturnType<typeof vi.fn>;
-      sendTyping: ReturnType<typeof vi.fn>;
-      messages?: { fetch: ReturnType<typeof vi.fn> };
-    } = {
-      id: 'channel1',
-      isThread: () => opts.isThread,
-      send: opts.channelSend,
-      sendTyping: vi.fn().mockResolvedValue(undefined),
-    };
-
-    if (opts.isThread) {
-      channel.ownerId = opts.isBotThread ? '123456789' : 'other-user-id';
-      channel.messages = {
-        fetch: vi.fn().mockResolvedValue(new Map([
-          ['m1', { id: 'm1', content: 'prior question', author: { bot: false, username: 'Alice' } }],
-          ['m2', { id: 'm2', content: 'bot reply', author: { bot: true, username: 'Bot' } }],
-        ])),
-      };
-    }
-
-    return {
-      id: 'msg-main',
-      content: opts.content,
-      author: { bot: opts.authorBot, username: 'Alice', id: 'user-alice' },
-      channel,
-      mentions: {
-        has: vi.fn().mockReturnValue(opts.mentionsBot),
-      },
-      reply: vi.fn().mockResolvedValue({ id: 'reply1', startThread: vi.fn().mockResolvedValue({}) }),
-      startThread: opts.startThread,
-    };
-  }
 
   it('ignores messages from bots', async () => {
     await startBot(testConfig);
@@ -366,14 +371,18 @@ describe('MessageCreate handler', () => {
         title: 'Fix bug',
         body: 'Bug body',
       },
+      infraVerdict: null,
     });
     mockCreateIssue.mockResolvedValueOnce('https://github.com/testowner/all-chat/issues/42');
 
     await startBot(testConfig);
     const handler = getEventHandler(Events.MessageCreate);
 
-    const channelSend = vi.fn().mockResolvedValue({});
-    const msg = buildMessage({ content: '<@123456789> there is a bug', channelSend });
+    const threadSend = vi.fn().mockResolvedValue({});
+    const msg = buildMessage({
+      content: '<@123456789> there is a bug',
+      startThread: vi.fn().mockResolvedValue({ id: 'issue-thread', send: threadSend }),
+    });
     await handler!(msg);
 
     expect(mockCreateIssue).toHaveBeenCalledWith(
@@ -384,9 +393,95 @@ describe('MessageCreate handler', () => {
       'Bug body',
     );
     // The sent message should contain the issue URL
-    const sendCalls = channelSend.mock.calls;
+    const sendCalls = threadSend.mock.calls;
     const allSentContent = sendCalls.map(([arg]) => typeof arg === 'string' ? arg : JSON.stringify(arg)).join(' ');
     expect(allSentContent).toContain('https://github.com/testowner/all-chat/issues/42');
+  });
+});
+
+describe('Lead developer @mention', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function getSentContent(): Promise<string> {
+    const handler = getEventHandler(Events.MessageCreate);
+    const threadSend = vi.fn().mockResolvedValue({});
+    const msg = buildMessage({
+      content: '<@123456789> question',
+      startThread: vi.fn().mockResolvedValue({ id: 'mention-thread', send: threadSend }),
+    });
+    await handler!(msg);
+    const sendCalls = threadSend.mock.calls;
+    return sendCalls.map(([arg]) => typeof arg === 'string' ? arg : JSON.stringify(arg)).join(' ');
+  }
+
+  it('prepends lead dev @mention when infraVerdict.type is infrastructure', async () => {
+    mockQueryCodebase.mockResolvedValueOnce({
+      answer: 'There is a memory leak in the pod.',
+      issueProposal: null,
+      infraVerdict: { type: 'infrastructure', summary: 'Memory leak' },
+    });
+
+    await startBot(testConfig);
+    const content = await getSentContent();
+
+    expect(content).toMatch(/^<@198569499228766208>/);
+  });
+
+  it('prepends lead dev @mention when issueProposal is not null and infraVerdict is null', async () => {
+    mockCreateIssue.mockResolvedValueOnce('https://github.com/testowner/all-chat/issues/99');
+    mockQueryCodebase.mockResolvedValueOnce({
+      answer: 'Here is a proposal.',
+      issueProposal: { repo: 'all-chat', title: 'New issue', body: 'Body text' },
+      infraVerdict: null,
+    });
+
+    await startBot(testConfig);
+    const content = await getSentContent();
+
+    expect(content).toMatch(/^<@198569499228766208>/);
+  });
+
+  it('does NOT prepend lead dev @mention when infraVerdict is null and issueProposal is null', async () => {
+    mockQueryCodebase.mockResolvedValueOnce({
+      answer: 'Here is a code-level answer.',
+      issueProposal: null,
+      infraVerdict: null,
+    });
+
+    await startBot(testConfig);
+    const content = await getSentContent();
+
+    expect(content).not.toContain('<@198569499228766208>');
+  });
+
+  it('does NOT prepend lead dev @mention when infraVerdict.type is code and issueProposal is null', async () => {
+    mockQueryCodebase.mockResolvedValueOnce({
+      answer: 'The issue is in the frontend code.',
+      issueProposal: null,
+      infraVerdict: { type: 'code', summary: 'Frontend code issue' },
+    });
+
+    await startBot(testConfig);
+    const content = await getSentContent();
+
+    expect(content).not.toContain('<@198569499228766208>');
+  });
+
+  it('prepends @mention exactly once when both infraVerdict.type is infrastructure AND issueProposal is not null', async () => {
+    mockCreateIssue.mockResolvedValueOnce('https://github.com/testowner/all-chat/issues/77');
+    mockQueryCodebase.mockResolvedValueOnce({
+      answer: 'Infrastructure problem with a proposal.',
+      issueProposal: { repo: 'all-chat', title: 'Fix infra', body: 'Body' },
+      infraVerdict: { type: 'infrastructure', summary: 'Critical infra issue' },
+    });
+
+    await startBot(testConfig);
+    const content = await getSentContent();
+
+    const mentionCount = (content.match(/<@198569499228766208>/g) ?? []).length;
+    expect(mentionCount).toBe(1);
   });
 });
 
@@ -397,91 +492,61 @@ describe('Response formatting', () => {
 
   it('sends response <= 2000 chars as plain text', async () => {
     const shortAnswer = 'Short answer.';
-    mockQueryCodebase.mockResolvedValueOnce({ answer: shortAnswer, issueProposal: null });
+    mockQueryCodebase.mockResolvedValueOnce({ answer: shortAnswer, issueProposal: null, infraVerdict: null });
 
     await startBot(testConfig);
     const handler = getEventHandler(Events.MessageCreate);
 
-    const channelSend = vi.fn().mockResolvedValue({});
-    const msg = {
-      id: 'msg-main',
+    const threadSend = vi.fn().mockResolvedValue({});
+    const msg = buildMessage({
       content: '<@123456789> short question',
-      author: { bot: false, username: 'Alice', id: 'user-alice' },
-      channel: {
-        id: 'channel1',
-        isThread: () => false,
-        send: channelSend,
-        sendTyping: vi.fn().mockResolvedValue(undefined),
-      },
-      mentions: { has: vi.fn().mockReturnValue(true) },
-      reply: vi.fn().mockResolvedValue({ id: 'r1', startThread: vi.fn().mockResolvedValue({}) }),
-      startThread: vi.fn().mockResolvedValue({}),
-    };
+      startThread: vi.fn().mockResolvedValue({ id: 't1', send: threadSend }),
+    });
 
     await handler!(msg);
 
-    expect(channelSend).toHaveBeenCalledWith(shortAnswer);
+    expect(threadSend).toHaveBeenCalledWith(shortAnswer);
   });
 
   it('sends response 2001-4096 chars as an embed', async () => {
     const mediumAnswer = 'A'.repeat(2001);
-    mockQueryCodebase.mockResolvedValueOnce({ answer: mediumAnswer, issueProposal: null });
+    mockQueryCodebase.mockResolvedValueOnce({ answer: mediumAnswer, issueProposal: null, infraVerdict: null });
 
     await startBot(testConfig);
     const handler = getEventHandler(Events.MessageCreate);
 
-    const channelSend = vi.fn().mockResolvedValue({});
-    const msg = {
-      id: 'msg-main',
+    const threadSend = vi.fn().mockResolvedValue({});
+    const msg = buildMessage({
       content: '<@123456789> medium question',
-      author: { bot: false, username: 'Alice', id: 'user-alice' },
-      channel: {
-        id: 'channel1',
-        isThread: () => false,
-        send: channelSend,
-        sendTyping: vi.fn().mockResolvedValue(undefined),
-      },
-      mentions: { has: vi.fn().mockReturnValue(true) },
-      reply: vi.fn().mockResolvedValue({ id: 'r1', startThread: vi.fn().mockResolvedValue({}) }),
-      startThread: vi.fn().mockResolvedValue({}),
-    };
+      startThread: vi.fn().mockResolvedValue({ id: 't1', send: threadSend }),
+    });
 
     await handler!(msg);
 
-    expect(channelSend).toHaveBeenCalledWith(
+    expect(threadSend).toHaveBeenCalledWith(
       expect.objectContaining({ embeds: expect.any(Array) }),
     );
   });
 
   it('splits response > 4096 chars into 2000-char chunks', async () => {
     const longAnswer = 'B'.repeat(5000);
-    mockQueryCodebase.mockResolvedValueOnce({ answer: longAnswer, issueProposal: null });
+    mockQueryCodebase.mockResolvedValueOnce({ answer: longAnswer, issueProposal: null, infraVerdict: null });
 
     await startBot(testConfig);
     const handler = getEventHandler(Events.MessageCreate);
 
-    const channelSend = vi.fn().mockResolvedValue({});
-    const msg = {
-      id: 'msg-main',
+    const threadSend = vi.fn().mockResolvedValue({});
+    const msg = buildMessage({
       content: '<@123456789> long question',
-      author: { bot: false, username: 'Alice', id: 'user-alice' },
-      channel: {
-        id: 'channel1',
-        isThread: () => false,
-        send: channelSend,
-        sendTyping: vi.fn().mockResolvedValue(undefined),
-      },
-      mentions: { has: vi.fn().mockReturnValue(true) },
-      reply: vi.fn().mockResolvedValue({ id: 'r1', startThread: vi.fn().mockResolvedValue({}) }),
-      startThread: vi.fn().mockResolvedValue({}),
-    };
+      startThread: vi.fn().mockResolvedValue({ id: 't1', send: threadSend }),
+    });
 
     await handler!(msg);
 
     // 5000 chars -> 3 chunks of 2000/2000/1000
-    expect(channelSend).toHaveBeenCalledTimes(3);
+    expect(threadSend).toHaveBeenCalledTimes(3);
     // Each call should be a string (plain text chunk)
-    for (const call of channelSend.mock.calls) {
+    for (const call of threadSend.mock.calls) {
       expect(typeof call[0]).toBe('string');
       expect((call[0] as string).length).toBeLessThanOrEqual(2000);
     }
@@ -494,6 +559,7 @@ describe('InteractionCreate handler (/support slash command)', () => {
     mockQueryCodebase.mockResolvedValue({
       answer: 'Slash command answer.',
       issueProposal: null,
+      infraVerdict: null,
     });
   });
 
@@ -503,7 +569,8 @@ describe('InteractionCreate handler (/support slash command)', () => {
     question: string;
     fetchReplyStartThread: ReturnType<typeof vi.fn>;
   }> = {}) {
-    const startThread = overrides.fetchReplyStartThread ?? vi.fn().mockResolvedValue({});
+    const mockThreadWithSend = { id: 'slash-thread', send: vi.fn().mockResolvedValue({}) };
+    const startThread = overrides.fetchReplyStartThread ?? vi.fn().mockResolvedValue(mockThreadWithSend);
     return {
       isChatInputCommand: vi.fn().mockReturnValue(overrides.isChatInputCommand ?? true),
       commandName: overrides.commandName ?? 'support',
@@ -585,7 +652,7 @@ describe('InteractionCreate handler (/support slash command)', () => {
   });
 
   it('creates a thread on the reply after slash command', async () => {
-    const startThread = vi.fn().mockResolvedValue({});
+    const startThread = vi.fn().mockResolvedValue({ id: 'slash-reply-thread', send: vi.fn().mockResolvedValue({}) });
     await startBot(testConfig);
     const handler = getEventHandler(Events.InteractionCreate);
 

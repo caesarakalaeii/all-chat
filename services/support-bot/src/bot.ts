@@ -40,6 +40,14 @@ async function handleQuestion(
     answer = `${answer}\n\nI've created a GitHub issue for this proposed change: ${issueUrl}`;
   }
 
+  const shouldPingLeadDev =
+    result.infraVerdict?.type === 'infrastructure' ||
+    result.issueProposal !== null;
+
+  if (shouldPingLeadDev && config.leadDeveloperDiscordId) {
+    answer = `<@${config.leadDeveloperDiscordId}> ${answer}`;
+  }
+
   return answer;
 }
 
@@ -79,12 +87,13 @@ export async function startBot(config: BotConfig): Promise<Client> {
   // history is complete and responses arrive in order.
   const queues = new Map<string, Promise<void>>();
 
-  const enqueue = (channelId: string, task: () => Promise<void>): void => {
+  const enqueue = (channelId: string, task: () => Promise<void>): Promise<void> => {
     const prev = queues.get(channelId) ?? Promise.resolve();
     const next = prev.then(task, task); // run task regardless of previous outcome
     queues.set(channelId, next);
     // clean up once the chain is idle
     next.then(() => { if (queues.get(channelId) === next) queues.delete(channelId); });
+    return next;
   };
 
   client.on(Events.MessageCreate, (message) => {
@@ -102,7 +111,7 @@ export async function startBot(config: BotConfig): Promise<Client> {
 
     const stripped = message.content.replace(/<@[!&]?\d+>/g, '').trim();
 
-    enqueue(message.channelId, async () => {
+    return enqueue(message.channelId, async () => {
       await message.channel.sendTyping();
       const typingInterval = setInterval(() => { void message.channel.sendTyping(); }, 8000);
 
