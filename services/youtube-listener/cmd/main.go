@@ -203,7 +203,7 @@ func main() {
 	}()
 
 	// Create message handler that publishes to Redis Streams and tracks quota
-	messageHandler := NewMessageHandler(streamPublisher, quotaTracker, msgIDRegistry, log)
+	messageHandler := NewMessageHandler(streamPublisher, quotaTracker, msgIDRegistry, listenerMetrics, log)
 
 	podName := listener.Env("HOSTNAME", "youtube-listener-unknown")
 	cfg := listener.DefaultConfig()

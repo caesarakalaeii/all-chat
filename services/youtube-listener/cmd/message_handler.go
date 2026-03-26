@@ -7,15 +7,17 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/models"
 	"github.com/caesar/all-chat/services/youtube-listener/publisher"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
+	"github.com/caesar/all-chat/shared/metrics"
 	"go.uber.org/zap"
 )
 
 // MessageHandler handles parsed YouTube chat messages
 type MessageHandler struct {
-	publisher    *publisher.StreamPublisher
-	quotaTracker *quota.Tracker
-	registry     registry.MessageIDRegistry
-	logger       *zap.Logger
+	publisher       *publisher.StreamPublisher
+	quotaTracker    *quota.Tracker
+	registry        registry.MessageIDRegistry
+	listenerMetrics *metrics.ListenerMetrics
+	logger          *zap.Logger
 }
 
 // NewMessageHandler creates a new message handler
@@ -23,13 +25,15 @@ func NewMessageHandler(
 	publisher *publisher.StreamPublisher,
 	quotaTracker *quota.Tracker,
 	registry registry.MessageIDRegistry,
+	listenerMetrics *metrics.ListenerMetrics,
 	logger *zap.Logger,
 ) *MessageHandler {
 	return &MessageHandler{
-		publisher:    publisher,
-		quotaTracker: quotaTracker,
-		registry:     registry,
-		logger:       logger,
+		publisher:       publisher,
+		quotaTracker:    quotaTracker,
+		registry:        registry,
+		listenerMetrics: listenerMetrics,
+		logger:          logger,
 	}
 }
 
@@ -45,6 +49,11 @@ func (h *MessageHandler) HandleMessages(ctx context.Context, messages []*models.
 	// Add to registry IMMEDIATELY at capture point (follows Twitch pattern)
 	// This happens BEFORE publishing to Redis Streams to ensure registry is populated first
 	for _, rawMsg := range messages {
+		// Record each message received
+		if h.listenerMetrics != nil {
+			h.listenerMetrics.RecordMessage("youtube", "youtube-listener", rawMsg.ChannelID, "chat")
+		}
+
 		if platformMsgID := rawMsg.Tags["youtube_message_id"]; platformMsgID != "" {
 			if err := h.registry.Add(ctx, rawMsg.Platform, rawMsg.ChannelID, platformMsgID, rawMsg.MessageID); err != nil {
 				h.logger.Warn("Failed to add YouTube message to registry",
@@ -63,7 +72,18 @@ func (h *MessageHandler) HandleMessages(ctx context.Context, messages []*models.
 			zap.Int("count", len(messages)),
 			zap.Error(err),
 		)
+		if h.listenerMetrics != nil {
+			h.listenerMetrics.RecordPublish("youtube", "youtube-listener", "error")
+			h.listenerMetrics.RecordError("youtube", "youtube-listener", "publish", "error")
+		}
 		return err
+	}
+
+	// Record successful batch publish (one RecordPublish per message in batch)
+	if h.listenerMetrics != nil {
+		for range messages {
+			h.listenerMetrics.RecordPublish("youtube", "youtube-listener", "success")
+		}
 	}
 
 	h.logger.Debug("Successfully published messages",
