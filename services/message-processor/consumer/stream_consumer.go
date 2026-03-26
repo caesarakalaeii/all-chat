@@ -3,6 +3,8 @@ package consumer
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
@@ -137,12 +139,18 @@ func (c *StreamConsumer) readAndProcess(ctx context.Context) error {
 		if err == redis.Nil {
 			return nil
 		}
+		c.metrics.RecordStreamError("message-processor", "read_error")
 		return fmt.Errorf("failed to read from stream: %w", err)
 	}
 
 	// Process each stream (we only have one)
 	for _, stream := range streams {
 		for _, message := range stream.Messages {
+			// Calculate and record stream lag from Redis stream entry timestamp
+			if lag, ok := streamEntryLag(message.ID); ok {
+				c.metrics.SetStreamLag("message-processor", StreamKey, ConsumerGroup, lag)
+			}
+
 			if err := c.processMessage(ctx, message); err != nil {
 				c.logger.Error("Failed to process message",
 					zap.String("stream_id", message.ID),
@@ -309,4 +317,23 @@ func (c *StreamConsumer) processDeletionEvent(ctx context.Context, raw *models.R
 	c.metrics.ProcessingDuration.WithLabelValues("message-processor", raw.Platform).Observe(time.Since(start).Seconds())
 
 	return nil
+}
+
+// streamEntryLag parses the Redis stream entry ID to compute the age of the message.
+// Redis stream IDs have the format "{unix_ms}-{sequence}". Returns lag in seconds and true on success.
+func streamEntryLag(streamID string) (float64, bool) {
+	parts := strings.SplitN(streamID, "-", 2)
+	if len(parts) == 0 {
+		return 0, false
+	}
+	ms, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	msgTime := time.UnixMilli(ms)
+	lagSeconds := time.Since(msgTime).Seconds()
+	if lagSeconds < 0 {
+		lagSeconds = 0
+	}
+	return lagSeconds, true
 }
