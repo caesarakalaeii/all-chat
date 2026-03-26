@@ -119,6 +119,7 @@ Key decisions relevant to v1.6:
 ### Roadmap Evolution
 
 - Phase 1 added: Discord support bot that answers user questions with codebase awareness, proposes code changes without making them, and uses Claude Code login to avoid additional charges
+- Phase 2 added: Support bot operational awareness — Grafana logs and K8s cluster state access with leak prevention, infrastructure error detection, and lead developer pinging
 
 ### Pending Todos
 
