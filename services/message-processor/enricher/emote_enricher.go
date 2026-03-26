@@ -12,6 +12,7 @@ import (
 
 	"github.com/caesar/all-chat/services/message-processor/cache"
 	"github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/shared/metrics"
 	"go.uber.org/zap"
 )
 
@@ -131,9 +132,10 @@ func (c *HTTPEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, chann
 
 // Enricher enriches messages with third-party emotes
 type Enricher struct {
-	client EmoteServiceClient
-	cache  cache.Store
-	logger *zap.Logger
+	client          EmoteServiceClient
+	cache           cache.Store
+	processorMetrics *metrics.ProcessorMetrics
+	logger          *zap.Logger
 }
 
 // NewEnricher creates a new emote enricher
@@ -143,6 +145,11 @@ func NewEnricher(client EmoteServiceClient, cacheStore cache.Store, logger *zap.
 		cache:  cacheStore,
 		logger: logger,
 	}
+}
+
+// SetMetrics sets the processor metrics instance for recording emote enrichment telemetry.
+func (e *Enricher) SetMetrics(m *metrics.ProcessorMetrics) {
+	e.processorMetrics = m
 }
 
 // Enrich adds third-party emotes (7TV, BTTV, FFZ) to the message
@@ -228,6 +235,9 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID st
 				zap.String("user_id", userID),
 				zap.Int("count", len(cached)),
 			)
+			if e.processorMetrics != nil {
+				e.processorMetrics.RecordEmoteCacheOperation("message-processor", "hit", "all")
+			}
 			return cached, nil
 		} else if !errors.Is(err, cache.ErrCacheMiss) {
 			e.logger.Warn("Emote cache error",
@@ -243,6 +253,9 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID st
 				zap.String("channel", channel),
 				zap.Int("count", len(cached)),
 			)
+			if e.processorMetrics != nil {
+				e.processorMetrics.RecordEmoteCacheOperation("message-processor", "hit", "all")
+			}
 			return cached, nil
 		} else if !errors.Is(err, cache.ErrCacheMiss) {
 			e.logger.Warn("Emote cache error",
@@ -250,6 +263,11 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID st
 				zap.Error(err),
 			)
 		}
+	}
+
+	// Cache miss — record and fetch from emote service
+	if e.processorMetrics != nil {
+		e.processorMetrics.RecordEmoteCacheOperation("message-processor", "miss", "all")
 	}
 
 	// Fetch from emote service
@@ -265,6 +283,26 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID st
 	if err != nil {
 		return nil, err
 	}
+
+	// Record per-provider lookup results
+	if e.processorMetrics != nil {
+		providersSeen := make(map[string]bool)
+		for _, emote := range thirdPartyEmotes {
+			provider := strings.ToLower(emote.Provider)
+			if provider == "" {
+				provider = "unknown"
+			}
+			if !providersSeen[provider] {
+				providersSeen[provider] = true
+				e.processorMetrics.RecordEmoteLookup("message-processor", provider, "hit")
+			}
+		}
+		// If no emotes returned from API, record a generic miss
+		if len(thirdPartyEmotes) == 0 {
+			e.processorMetrics.RecordEmoteLookup("message-processor", "all", "miss")
+		}
+	}
+
 	converted := convertToCached(thirdPartyEmotes)
 
 	// Store in cache

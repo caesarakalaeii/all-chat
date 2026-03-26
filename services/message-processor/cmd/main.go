@@ -147,6 +147,7 @@ func main() {
 	emoteClient := enricher.NewHTTPEmoteClient(emoteServiceURL, log)
 	emoteCacheStore := cache.NewEmoteCache(redisClient, log, 0)
 	emoteEnricher := enricher.NewEnricher(emoteClient, emoteCacheStore, log)
+	emoteEnricher.SetMetrics(processorMetrics)
 
 	// Initialize cheermote enricher (Twitch bits visual emotes)
 	cheermoteClient := enricher.NewHTTPCheermoteClient(emoteServiceURL, log)
