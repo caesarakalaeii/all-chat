@@ -11,6 +11,8 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/token-refresh-service/repository"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	oauth2Lib "golang.org/x/oauth2"
@@ -28,6 +30,10 @@ type Manager struct {
 	expiryBuffer    time.Duration
 	batchSize       int
 	retryAttempts   int
+
+	// Prometheus metrics
+	refreshTotal  *prometheus.CounterVec
+	refreshErrors *prometheus.CounterVec
 
 	// State
 	mu           sync.RWMutex
@@ -68,6 +74,14 @@ func NewManager(
 		batchSize:       batchSize,
 		retryAttempts:   retryAttempts,
 		warningCache:    make(map[string]time.Time),
+		refreshTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "token_refresh_attempts_total",
+			Help: "Total token refresh attempts",
+		}, []string{"service", "platform", "result"}),
+		refreshErrors: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "token_refresh_errors_total",
+			Help: "Token refresh errors by platform and error category",
+		}, []string{"service", "platform", "error_type"}),
 	}
 }
 
@@ -214,6 +228,10 @@ func (m *Manager) refreshPlatform(ctx context.Context, platform oauth.Platform, 
 				zap.Error(err),
 			)
 
+			m.refreshTotal.WithLabelValues("token-refresh-service", string(platform), "error").Inc()
+			errorCategory := categorizeRefreshError(err)
+			m.refreshErrors.WithLabelValues("token-refresh-service", string(platform), errorCategory).Inc()
+
 			// Publish warning event
 			m.publishWarning(ctx, token, string(platform), "refresh_failed")
 			failed++
@@ -250,6 +268,7 @@ func (m *Manager) refreshPlatform(ctx context.Context, platform oauth.Platform, 
 			zap.String("username", token.Username),
 			zap.Time("new_expiry", newToken.Expiry),
 		)
+		m.refreshTotal.WithLabelValues("token-refresh-service", string(platform), "success").Inc()
 		refreshed++
 	}
 
@@ -292,6 +311,24 @@ func (m *Manager) refreshWithRetry(ctx context.Context, provider oauth.OAuthProv
 	}
 
 	return nil, fmt.Errorf("refresh failed after %d attempts", m.retryAttempts)
+}
+
+// categorizeRefreshError classifies a refresh error into a label-safe category string
+func categorizeRefreshError(err error) string {
+	if err == nil {
+		return "unknown"
+	}
+	errStr := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(errStr, "invalid_grant") || strings.Contains(errStr, "token_revoked"):
+		return "token_revoked"
+	case strings.Contains(errStr, "unauthorized_client") || strings.Contains(errStr, "invalid_client"):
+		return "invalid_client"
+	case strings.Contains(errStr, "network") || strings.Contains(errStr, "connection") || strings.Contains(errStr, "timeout"):
+		return "network_error"
+	default:
+		return "other"
+	}
 }
 
 // isNonRetryableError checks if an error should not be retried

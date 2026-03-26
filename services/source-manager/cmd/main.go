@@ -90,7 +90,7 @@ func main() {
 	log.Info("Connected to Redis")
 
 	// Initialize metrics (available via /metrics endpoint)
-	_ = metrics.NewBusinessMetrics()
+	businessMetrics := metrics.NewBusinessMetrics()
 	shardMetrics := metrics.NewShardMetrics()
 	log.Info("Initialized Prometheus metrics")
 
@@ -137,6 +137,7 @@ func main() {
 		rebalancer,
 		throttler,
 		shardMetrics,
+		businessMetrics,
 		log,
 	)
 
