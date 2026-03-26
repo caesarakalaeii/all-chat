@@ -913,7 +913,9 @@ func (c *Coordinator) waitForMigrationConfirmation(ctx context.Context, migratio
 	}
 }
 
-// triggerMigrationForFailedPods triggers migrations for all channels assigned to failed pods
+// triggerMigrationForFailedPods triggers migrations for all channels assigned to failed pods.
+// Uses platform-aware assignment to ensure sources are only migrated to pods that handle
+// the same platform (e.g., kick sources only migrate to kick-listener pods).
 func (c *Coordinator) triggerMigrationForFailedPods(ctx context.Context, failedPods []string, healthyPodIDs []string, sourceMap map[string]*models.ActiveSource) error {
 	if len(failedPods) == 0 {
 		return nil
@@ -923,6 +925,13 @@ func (c *Coordinator) triggerMigrationForFailedPods(ctx context.Context, failedP
 		zap.Strings("failed_pods", failedPods),
 		zap.Int("healthy_pods", len(healthyPodIDs)),
 	)
+
+	// Build platform-aware assigners so migrations respect platform boundaries
+	podsByPlatform := groupPodsByPlatform(healthyPodIDs)
+	platformAssigners := make(map[string]*Assigner)
+	for platform, pods := range podsByPlatform {
+		platformAssigners[platform] = NewAssigner(pods)
+	}
 
 	// For each failed pod
 	for _, failedPodID := range failedPods {
@@ -950,20 +959,31 @@ func (c *Coordinator) triggerMigrationForFailedPods(ctx context.Context, failedP
 
 		// Trigger migration for each channel
 		for _, assignment := range assignments {
-			// Use bounded-load algorithm to select target pod
-			newPodID, err := c.assigner.AssignChannel(assignment.SourceID)
-			if err != nil {
-				c.logger.Error("Failed to select target pod for migration",
-					zap.String("source_id", assignment.SourceID),
-					zap.Error(err),
-				)
-				continue
-			}
-
 			// Get platform for source from sourceMap
 			platform := "unknown"
 			if source, ok := sourceMap[assignment.SourceID]; ok {
 				platform = source.Platform
+			}
+
+			// Use platform-specific assigner to select target pod
+			assigner, ok := platformAssigners[platform]
+			if !ok || assigner == nil {
+				c.logger.Warn("No healthy pods available for platform, skipping migration",
+					zap.String("platform", platform),
+					zap.String("source_id", assignment.SourceID),
+					zap.String("failed_pod", failedPodID),
+				)
+				continue
+			}
+
+			newPodID, err := assigner.AssignChannel(assignment.SourceID)
+			if err != nil {
+				c.logger.Error("Failed to select target pod for migration",
+					zap.String("source_id", assignment.SourceID),
+					zap.String("platform", platform),
+					zap.Error(err),
+				)
+				continue
 			}
 
 			event := &MigrationEvent{

@@ -88,7 +88,10 @@ export class MigrationSubscriber {
       // Parse migration event
       const event: MigrationEvent = JSON.parse(message);
 
-      this.logger.info('Received migration event', {
+      // Log at debug level — the migration:events channel carries events for ALL platforms
+      // (twitch, youtube, kick, tiktok). Logging at info here would spam the tiktok-listener
+      // with events that are handled by other listener services and immediately discarded here.
+      this.logger.debug('Received migration event', {
         migration_id: event.migration_id,
         channel_id: event.channel_id,
         platform: event.platform,

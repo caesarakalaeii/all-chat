@@ -646,7 +646,18 @@ class TikTokListenerService {
    * Per CONTEXT.md: "TikTok connection state migration for unofficial library - Cannot transfer connection handles, must disconnect/reconnect"
    */
   private async handleMigrationEvent(event: MigrationEvent): Promise<void> {
-    logger.info('Processing migration event', {
+    // Only handle TikTok platform events. Log non-TikTok events at debug to avoid spam —
+    // the migration:events channel carries events for ALL platforms and non-TikTok events
+    // are irrelevant to this service.
+    if (event.platform !== 'tiktok') {
+      logger.debug('Ignoring non-TikTok migration event', {
+        migration_id: event.migration_id,
+        platform: event.platform
+      });
+      return;
+    }
+
+    logger.info('Processing TikTok migration event', {
       migration_id: event.migration_id,
       channel_id: event.channel_id,
       platform: event.platform,
@@ -656,15 +667,6 @@ class TikTokListenerService {
       is_new_pod: event.to_pod === POD_NAME,
       is_old_pod: event.from_pod === POD_NAME
     });
-
-    // Only handle TikTok platform events
-    if (event.platform !== 'tiktok') {
-      logger.debug('Ignoring non-TikTok migration event', {
-        migration_id: event.migration_id,
-        platform: event.platform
-      });
-      return;
-    }
 
     // Get username from source_id via database query
     // source_id is a UUID, need to get channel_id (username)
