@@ -8,9 +8,9 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
-## Current State (v1.6 shipped 2026-03-18)
+## Current State (v2.0 — Phase 04 complete 2026-03-26)
 
-Listener SDK shipped: all 6 Go listeners migrated to shared `shared/listener` SDK in 2 days. 18 requirements satisfied across 6 phases. `cmd/main.go` files reduced to service-specific logic only; two archetypes (`ListenerBase`, `LeadershipListener`) cover all load-balancing patterns.
+Phase 04 complete: Grafana dashboard audit, metrics gap implementation, and alerting. All 14 services now emit Prometheus metrics (was endpoint-only for most). 5 tiered Grafana dashboards replace 6 stale ones. 8 alert rules across 4 groups cover listener disconnections, pipeline stalls, WebSocket drops, and error rate spikes.
 
 ## Requirements
 
@@ -94,6 +94,13 @@ Listener SDK shipped: all 6 Go listeners migrated to shared `shared/listener` SD
 - ✓ INFRA_VERDICT structured marker parsing (infrastructure vs code classification) — v2.0
 - ✓ Lead developer @mention on infrastructure verdicts and issue proposals — v2.0
 - ✓ Required env var validation at startup (GRAFANA_URL, GRAFANA_SERVICE_ACCOUNT_TOKEN, LEAD_DEVELOPER_DISCORD_ID) — v2.0
+
+**Observability & Alerting (v2.0 Phase 04):**
+- ✓ ServiceMonitor coverage for all 14 services (3 new listeners added) — v2.0
+- ✓ Message flow metrics wired: RecordMessage/RecordPublish/RecordConnection across 5 pipeline services — v2.0
+- ✓ Platform ops metrics wired: HTTP request counters, business metrics across 5 services — v2.0
+- ✓ 5 tiered Grafana dashboards (Overview, Listeners, Message Processing, Delivery, Platform Ops) — v2.0
+- ✓ 8 alert rules across 4 groups with inline remediation steps — v2.0
 
 ### Active
 
