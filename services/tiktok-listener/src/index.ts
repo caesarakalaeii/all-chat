@@ -359,17 +359,11 @@ class TikTokListenerService {
 
         // If coordinator integration is enabled, check assignments
         if (this.coordinatorClient) {
-          // Pod is ready if:
-          // 1. Redis is ready
-          // 2. Not shutting down
-          // 3. Have received assignments from coordinator (assignedSourceIDs.size > 0)
-          // 4. At least one connection is active OR no assignments to connect to
-          const hasAssignments = this.assignedSourceIDs.size > 0;
-          const hasActiveConnections = this.activeStreams.size > 0;
-          const noAssignments = this.assignedSourceIDs.size === 0;
-
-          isReady = isReady && hasAssignments;
-
+          // Pod is ready if Redis is connected and not shutting down.
+          // A pod with 0 assignments is still ready — the coordinator simply
+          // hasn't distributed work to it yet (normal during rolling updates).
+          // Requiring assignments caused rollout deadlocks: the old pod held
+          // all sources, the new pod never got any, and the rollout stalled.
           res.writeHead(isReady ? 200 : 503, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             status: isReady ? 'ready' : 'not ready',
