@@ -25,6 +25,16 @@ var (
 		Name: "discord_listener_resume_attempts_total",
 		Help: "Gateway RESUME attempts",
 	}, []string{"result"})
+
+	messagesReceivedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "discord_listener_messages_received_total",
+		Help: "Total chat messages received from Discord",
+	}, []string{"guild_id", "channel_id"})
+
+	messagesPublishedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "discord_listener_messages_published_total",
+		Help: "Total messages published to Redis",
+	}, []string{"result"})
 )
 
 func labelValue(v string) string {
@@ -53,4 +63,16 @@ func SetShardOwnership(held int) {
 // result values: "success", "fallback_identify".
 func IncResumeAttempt(result string) {
 	resumeAttemptsTotal.WithLabelValues(labelValue(result)).Inc()
+}
+
+// IncMessageReceived increments the messages received counter.
+// guildID and channelID identify the source of the message.
+func IncMessageReceived(guildID, channelID string) {
+	messagesReceivedTotal.WithLabelValues(labelValue(guildID), labelValue(channelID)).Inc()
+}
+
+// IncMessagePublished increments the messages published counter.
+// result values: "success", "error".
+func IncMessagePublished(result string) {
+	messagesPublishedTotal.WithLabelValues(labelValue(result)).Inc()
 }

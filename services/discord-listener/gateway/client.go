@@ -460,7 +460,15 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 		"timestamp":    ts,
 	}
 
-	return c.publisher.Publish(ctx, rawMsg)
+	// Record message received (passed all filters, about to publish)
+	metrics.IncMessageReceived(msg.GuildID, msg.ChannelID)
+
+	if err := c.publisher.Publish(ctx, rawMsg); err != nil {
+		metrics.IncMessagePublished("error")
+		return err
+	}
+	metrics.IncMessagePublished("success")
+	return nil
 }
 
 // writeJSON sends a payload on the WebSocket connection, serialized as JSON.
