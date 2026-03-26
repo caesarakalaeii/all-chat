@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-03-26T19:27:14.611Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-03-26T19:28:47.871Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 25
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -77,6 +77,7 @@ Plan: 2 of 5
 | Phase 04 P02 | 34min | 3 tasks | 10 files |
 | Phase 04 P03 | 38min | 2 tasks | 10 files |
 | Phase 04 P05 | 310s | 2 tasks | 1 files |
+| Phase 04 P04 | 362s | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,8 @@ Key decisions relevant to v1.6:
 - [Phase 04]: [Phase 04-05]: listener-disconnected rules use separate UIDs for kick and discord because they expose local metric packages instead of shared/metrics — one rule per distinct metric name
 - [Phase 04]: [Phase 04-05]: pipeline-stall alert uses math expression type (not threshold) to express  == 0 &&  > 0 multi-condition logic; noDataState: OK on all new rules to avoid noise during quiet periods
 - [Phase 04]: [Phase 04-05]: websocket-connections-zero severity: warning (not critical) — zero connections during off-stream hours is expected; websocket-connections-drop >50% is critical
+- [Phase 04]: [Phase 04-04]: Replaced all 6 existing dashboards (not just 4) with 5 tiered ones — listener-observability and service-health were also stale/redundant
+- [Phase 04]: [Phase 04-04]: Listeners dashboard uses collapsed rows with sub-panels array for 7 listeners; datasourceUid lowercase 'prometheus' matches kube-prometheus-stack registration
 
 ### Roadmap Evolution
 
@@ -198,9 +201,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T19:27:14.606Z
+Last session: 2026-03-26T19:28:47.867Z
 Last activity: 2026-03-26
-Stopped at: Completed 04-05-PLAN.md
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None
 
 **Next action:** Phase 04 Plan 03 — listener dashboards (Discord, InnerTube, twitch-eventsub panels).
