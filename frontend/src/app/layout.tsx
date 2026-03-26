@@ -34,9 +34,50 @@ const dmMono = DM_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'All-Chat - Multi-Platform Chat Aggregation',
-  description: 'Aggregate chat from Twitch, YouTube, and more in one overlay for OBS',
-  keywords: ['twitch', 'youtube', 'chat', 'overlay', 'streaming', 'obs'],
+  metadataBase: new URL('https://allch.at'),
+  title: {
+    default: 'All-Chat - Multi-Platform Chat Aggregation for Streamers',
+    template: '%s | All-Chat',
+  },
+  description:
+    'Aggregate chat from Twitch, YouTube, Kick, and TikTok into a single real-time overlay for OBS. Supports 7TV, BTTV, and FFZ emotes. Free and open source.',
+  keywords: [
+    'twitch chat',
+    'youtube chat',
+    'kick chat',
+    'tiktok chat',
+    'chat overlay',
+    'obs overlay',
+    'streaming',
+    'multistream',
+    'chat aggregator',
+    '7tv',
+    'bttv',
+    'ffz',
+    'emotes',
+    'streamer tools',
+    'live streaming',
+    'multi-platform chat',
+  ],
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://allch.at',
+    siteName: 'All-Chat',
+    title: 'All-Chat - Multi-Platform Chat Aggregation for Streamers',
+    description:
+      'Aggregate chat from Twitch, YouTube, Kick, and TikTok into one real-time overlay. 7TV, BTTV, and FFZ emote support included.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'All-Chat - Multi-Platform Chat Aggregation for Streamers',
+    description:
+      'Aggregate chat from Twitch, YouTube, Kick, and TikTok into one real-time overlay. 7TV, BTTV, and FFZ emote support included.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
