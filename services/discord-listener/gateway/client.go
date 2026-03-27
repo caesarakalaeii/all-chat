@@ -42,6 +42,12 @@ type MessagePublisher interface {
 	Publish(ctx context.Context, msg interface{}) error
 }
 
+// DemandChecker checks if a Discord channel currently has overlay demand.
+// When nil, all channels are considered to have demand (backward compat).
+type DemandChecker interface {
+	HasDemand(channelID string) bool
+}
+
 // GuildCache provides channel and role name lookups backed by Redis (or an in-memory map for tests).
 // Keys are Discord Snowflake ID strings. The cache is populated on GUILD_CREATE and kept
 // current via CHANNEL_*/GUILD_ROLE_* dispatch events.
@@ -87,6 +93,7 @@ type GatewayClient struct {
 	registry         ChannelRegistry
 	publisher        MessagePublisher
 	guildCache       GuildCache
+	demandChecker    DemandChecker
 	log              *zap.Logger
 	conn             *websocket.Conn
 	mu               sync.Mutex
@@ -112,6 +119,12 @@ func NewGatewayClient(token, gatewayURL string, store SessionStore, log *zap.Log
 		log:        log,
 		done:       make(chan struct{}),
 	}
+}
+
+// SetDemandChecker wires a DemandChecker into the GatewayClient.
+// When set, HandleMessageCreate drops messages for channels without active overlay demand.
+func (c *GatewayClient) SetDemandChecker(dc DemandChecker) {
+	c.demandChecker = dc
 }
 
 // Connect opens the Gateway WebSocket, runs HELLO/IDENTIFY/READY, starts heartbeat.
@@ -385,6 +398,16 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 	if !found {
 		if c.log != nil {
 			c.log.Debug("Channel not configured, dropping message",
+				zap.String("channel_id", msg.ChannelID),
+			)
+		}
+		return nil
+	}
+
+	// 2b. Demand check — drop messages for channels without active overlay demand
+	if c.demandChecker != nil && !c.demandChecker.HasDemand(msg.ChannelID) {
+		if c.log != nil {
+			c.log.Debug("Channel has no overlay demand, dropping message",
 				zap.String("channel_id", msg.ChannelID),
 			)
 		}
