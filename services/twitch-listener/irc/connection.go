@@ -79,12 +79,21 @@ func NewConnectionManager(
 	return cm
 }
 
+// staleConnectionTimeout is how long without any IRC activity (including Twitch PINGs)
+// before we consider the connection dead. Twitch sends PINGs every ~5 minutes,
+// so 6 minutes without any activity means the connection is zombie.
+const staleConnectionTimeout = 6 * time.Minute
+
 // Connect establishes connection to Twitch IRC with automatic reconnection.
 // If the underlying client.Connect() returns (connection permanently lost),
 // a new client is created and reconnected after a backoff delay.
 func (cm *ConnectionManager) Connect(ctx context.Context) error {
 	cm.logger.Info("Connecting to Twitch IRC")
 	cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "attempting")
+
+	// Start watchdog that detects zombie connections
+	cm.wg.Add(1)
+	go cm.connectionWatchdog(ctx)
 
 	cm.wg.Add(1)
 	go func() {
@@ -170,6 +179,49 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 	}()
 
 	return nil
+}
+
+// connectionWatchdog periodically checks for zombie IRC connections.
+// Twitch sends PING every ~5 minutes; if we receive no IRC activity at all
+// for staleConnectionTimeout, the connection is silently dead.
+// Forces a disconnect to trigger the reconnect loop.
+func (cm *ConnectionManager) connectionWatchdog(ctx context.Context) {
+	defer cm.wg.Done()
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cm.stopChan:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cm.mu.RLock()
+			connected := cm.connected
+			lastActivity := cm.lastActivityAt
+			client := cm.client
+			cm.mu.RUnlock()
+
+			if !connected || lastActivity.IsZero() {
+				continue
+			}
+
+			stale := time.Since(lastActivity)
+			if stale > staleConnectionTimeout {
+				cm.logger.Warn("IRC connection appears zombie, forcing reconnect",
+					zap.Duration("idle_duration", stale),
+					zap.Duration("threshold", staleConnectionTimeout),
+				)
+				cm.metrics.RecordError("twitch", "twitch-listener", "connection", "stale_reconnect")
+
+				// Disconnect triggers the reconnect loop in Connect()
+				if err := client.Disconnect(); err != nil {
+					cm.logger.Warn("Error forcing disconnect on stale connection", zap.Error(err))
+				}
+			}
+		}
+	}
 }
 
 // Disconnect gracefully disconnects from Twitch IRC
