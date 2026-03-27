@@ -430,9 +430,31 @@ func extractMessageText(message MessageContent) (string, []EmoteEntry) {
 					})
 				}
 			} else {
-				// Unicode emoji: text placeholder only, no image entry
+				// Non-custom emoji: could be a YouTube built-in emoji (with thumbnails)
+				// or a real unicode emoji (no thumbnails). Only create an emote entry
+				// when thumbnail images are available.
+				code := ""
 				if len(run.Emoji.Shortcuts) > 0 {
-					parts = append(parts, run.Emoji.Shortcuts[0])
+					code = run.Emoji.Shortcuts[0]
+				} else if run.Emoji.EmojiID != "" {
+					code = ":" + run.Emoji.EmojiID + ":"
+				}
+				if code != "" {
+					parts = append(parts, code)
+				}
+				thumbs := run.Emoji.Image.Thumbnails
+				if len(thumbs) > 0 && run.Emoji.EmojiID != "" {
+					url := ""
+					if len(thumbs) > 1 {
+						url = thumbs[1].URL
+					} else {
+						url = thumbs[0].URL
+					}
+					emotes = append(emotes, EmoteEntry{
+						Code: code,
+						URL:  url,
+						ID:   run.Emoji.EmojiID,
+					})
 				}
 			}
 		}

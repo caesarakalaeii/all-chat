@@ -164,10 +164,11 @@ func main() {
 	}
 	defer seventvManager.Stop()
 
-	// Avatar enricher for Twitch users
+	// Avatar enricher for Twitch and TikTok users
 	twitchClientID := getEnvOrDefault("TWITCH_CLIENT_ID", "")
 	twitchClientSecret := getEnvOrDefault("TWITCH_CLIENT_SECRET", "")
-	avatarEnricher := enricher.NewAvatarEnricher(redisClient, twitchClientID, twitchClientSecret, log)
+	gatewayBaseURL := getEnvOrDefault("GATEWAY_BASE_URL", "http://api-gateway:8080")
+	avatarEnricher := enricher.NewAvatarEnricher(redisClient, twitchClientID, twitchClientSecret, gatewayBaseURL, log)
 	badgeEnricher := enricher.NewBadgeEnricher(redisClient, twitchClientID, twitchClientSecret, log)
 	viewerBadgeEnricher := enricher.NewViewerBadgeEnricher(redisClient, db, log)
 	log.Info("Initialized ViewerBadge enricher")

@@ -265,6 +265,7 @@ func main() {
 	proxyHandler := handlers.NewProxyHandler(registry)
 	healthHandler := handlers.NewHealthHandler(registry)
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
+	avatarProxyHandler := handlers.NewAvatarProxyHandler(redisClient, log)
 	statsHandler := handlers.NewStatsHandler(redisClient)
 	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, statusSubscriber, jwtSecret, replayBuffer, log)
 
@@ -399,6 +400,9 @@ func main() {
 	// Twitch badge proxy endpoints (public, but not part of /api/v1 service registry)
 	router.GET("/api/twitch/badges/global", badgeHandler.GetGlobalBadges)
 	router.GET("/api/twitch/badges/channels/:room_id", badgeHandler.GetChannelBadges)
+
+	// Avatar proxy endpoint (serves cached avatar images for platforms with expiring CDN URLs)
+	router.GET("/api/avatars/:platform/:user_id", avatarProxyHandler.GetAvatar)
 
 	// Protected routes (JWT auth required for streamers/admins and viewers)
 	protectedAPI := router.Group("/api/v1")
