@@ -15,7 +15,6 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/webhooks"
-	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/listener"
@@ -23,7 +22,6 @@ import (
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -31,25 +29,9 @@ import (
 )
 
 const (
-	// LeaderElectionKey is the Redis key for global leader election
-	LeaderElectionKey = "leader:twitch-eventsub"
-
-	// Rebuild trigger
-	// LeaderLockTTL is the TTL for the leader lock
-	LeaderLockTTL = 10 * time.Second
-
-	// LeaderRenewalInterval is how often to renew leadership
-	LeaderRenewalInterval = 5 * time.Second
-
 	// ChannelSyncInterval is how often to sync active channels from database
 	ChannelSyncInterval = 30 * time.Second
 )
-
-// leaderState holds the shared leadership state with thread-safe access
-type leaderState struct {
-	sync.RWMutex
-	isLeader bool
-}
 
 func main() {
 	// Initialize logger
@@ -81,7 +63,6 @@ func main() {
 	}
 
 	ctx := context.Background()
-	instanceID := uuid.New().String()
 
 	// Get configuration from environment
 	twitchClientID := strings.TrimSpace(os.Getenv("TWITCH_CLIENT_ID"))
@@ -147,27 +128,11 @@ func main() {
 		log.Fatal("Failed to initialize token cipher", zap.Error(err))
 	}
 
-	// Initialize SDK — ListenerBase owns heartbeat, assignment refresh, migration subscriber, JWT refresh
-	podName := listener.Env("HOSTNAME", "twitch-eventsub-listener-unknown")
-	cfg := listener.DefaultConfig()
-	cfg.Platform = "twitch-eventsub"
-
-	serviceJWT := os.Getenv("SERVICE_JWT_SECRET")
-	if serviceJWT == "" {
-		log.Fatal("SERVICE_JWT_SECRET is required for coordinator authentication")
+	// Initialize LeadershipListener — per D-12/D-13 EventSub gets demand gating
+	ll, err := listener.NewLeadershipListenerFromEnv("twitch-eventsub", redisClient, log)
+	if err != nil {
+		log.Fatal("Failed to initialize leadership listener", zap.Error(err))
 	}
-
-	coordClient := coordination.NewCoordinatorClient(
-		listener.Env("COORDINATOR_URL", "http://source-manager:8088"),
-		serviceJWT,
-		"twitch-eventsub-listener",
-		log,
-	)
-	log.Info("Initialized coordinator client",
-		zap.String("coordinator_url", listener.Env("COORDINATOR_URL", "http://source-manager:8088")),
-	)
-
-	base := listener.NewListenerBase(cfg, coordClient, redisClient, podName, log)
 
 	// Initialize metrics (available via /metrics endpoint)
 	listenerMetrics := metrics.NewListenerMetrics("twitch-eventsub", "twitch-eventsub-listener")
@@ -178,27 +143,27 @@ func main() {
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
 	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher, ChannelSyncInterval)
 
-	// Start ListenerBase — handles startup jitter, initial assignment query, channelManager.Start,
-	// JWT refresh, and launches heartbeat/assignment-refresh/migration-subscriber goroutines
-	// MUST be called before the leader election goroutine starts
-	if err := base.Start(ctx, channelManager); err != nil {
-		log.Fatal("Failed to start ListenerBase", zap.Error(err))
+	// Start LeadershipListener — runs demand subscriber; channel manager started after leadership
+	if err := ll.Start(ctx, channelManager); err != nil {
+		log.Fatal("Failed to start leadership listener", zap.Error(err))
 	}
-	defer base.Stop()
 
 	// Create webhook handler
 	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, log)
 
-	// Leader election state (use struct with mutex for thread-safe access from HTTP handlers)
-	state := &leaderState{}
+	// isLeader tracks whether this pod currently holds EventSub leadership.
+	// Protected by mu; read by subscription callback and HTTP handlers.
+	var isLeaderMu sync.RWMutex
+	isLeader := false
+	isLeaderFn := func() bool {
+		isLeaderMu.RLock()
+		defer isLeaderMu.RUnlock()
+		return isLeader
+	}
 
 	// Set up channel manager callback (creates/deletes subscriptions for all event types)
 	channelManager.SetSubscriptionCallback(func(broadcasterID string, accessToken string, action string) error {
-		state.RLock()
-		isLdr := state.isLeader
-		state.RUnlock()
-
-		if !isLdr {
+		if !isLeaderFn() {
 			// Only leader creates/deletes subscriptions
 			return nil
 		}
@@ -354,75 +319,44 @@ func main() {
 		return nil
 	})
 
-	// Leader election loop
-	leaderCtx, leaderCancel := context.WithCancel(ctx)
-	defer leaderCancel()
-
+	// Leadership acquisition goroutine — replaces old Redis SETNX loop
 	go func() {
-		ticker := time.NewTicker(LeaderRenewalInterval)
-		defer ticker.Stop()
-
-		// Try to acquire leadership immediately on startup
-		acquired, err := tryAcquireLeadership(ctx, redisClient, instanceID)
-		if err != nil {
-			log.Error("Initial leader election failed", zap.Error(err))
-		} else {
-			state.Lock()
-			state.isLeader = acquired
-			state.Unlock()
-
-			if acquired {
-				log.Info("Acquired leadership", zap.String("instance_id", instanceID))
-				// Start channel manager (creates/deletes EventSub subscriptions)
-				if err := channelManager.Start(ctx); err != nil {
-					log.Error("Channel manager start failed", zap.Error(err))
-				}
+		lc := ll.LeadershipCoordinator()
+		if lc == nil {
+			log.Info("Leadership coordination disabled — acting as standalone leader")
+			isLeaderMu.Lock()
+			isLeader = true
+			isLeaderMu.Unlock()
+			if err := channelManager.Start(ctx); err != nil {
+				log.Error("Channel manager start failed", zap.Error(err))
 			}
+			return
 		}
 
-		for {
-			select {
-			case <-leaderCtx.Done():
-				return
-			case <-ticker.C:
-				// Try to acquire/renew leadership
-				state.RLock()
-				wasLeader := state.isLeader
-				state.RUnlock()
-
-				acquired, err := tryAcquireLeadership(ctx, redisClient, instanceID)
-				if err != nil {
-					log.Error("Leader election failed", zap.Error(err))
-					continue
-				}
-
-				state.Lock()
-				state.isLeader = acquired
-				state.Unlock()
-
-				if !wasLeader && acquired {
-					// Became leader - start managing subscriptions
-					log.Info("Acquired leadership", zap.String("instance_id", instanceID))
-
-					// Start channel manager (creates/deletes EventSub subscriptions)
-					if err := channelManager.Start(ctx); err != nil {
-						log.Error("Channel manager start failed", zap.Error(err))
-					}
-
-				} else if wasLeader && !acquired {
-					// Lost leadership - stop managing subscriptions
-					log.Warn("Lost leadership", zap.String("instance_id", instanceID))
-
-					// Stop channel manager (stops creating/deleting subscriptions)
-					// Note: Webhook HTTP server continues running on all instances
-					channelManager.Stop()
-				}
+		acquired, err := lc.EnsureLeadership(ctx, "shard:0", func() {
+			log.Warn("Lost EventSub leadership — stopping subscription management")
+			isLeaderMu.Lock()
+			isLeader = false
+			isLeaderMu.Unlock()
+			channelManager.Stop()
+		})
+		if err != nil {
+			log.Error("Leadership acquisition failed", zap.Error(err))
+			return
+		}
+		if acquired {
+			log.Info("Acquired EventSub leadership")
+			isLeaderMu.Lock()
+			isLeader = true
+			isLeaderMu.Unlock()
+			if err := channelManager.Start(ctx); err != nil {
+				log.Error("Channel manager start failed", zap.Error(err))
 			}
 		}
 	}()
 
 	// Start HTTP server for health checks and webhook endpoint
-	startHTTPServer(log, listener.Env("PORT", "8090"), state, webhookHandler, db, redisClient, tracingEnabled)
+	startHTTPServer(log, listener.Env("PORT", "8090"), isLeaderFn, webhookHandler, db, redisClient, tracingEnabled)
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
@@ -431,54 +365,15 @@ func main() {
 
 	log.Info("Shutting down...")
 
-	// Release leadership
-	state.RLock()
-	isLdr := state.isLeader
-	state.RUnlock()
-
-	if isLdr {
-		releaseLeadership(context.Background(), redisClient, instanceID)
-		channelManager.Stop()
-	}
+	channelManager.Stop()
+	ll.Stop()
 
 	log.Info("Shutdown complete")
 }
 
-// tryAcquireLeadership attempts to acquire or renew leadership
-func tryAcquireLeadership(ctx context.Context, client *redis.Client, instanceID string) (bool, error) {
-	// Check current leader
-	currentLeader, err := client.Get(ctx, LeaderElectionKey).Result()
-	if err == redis.Nil {
-		// No leader, try to acquire
-		success, err := client.SetNX(ctx, LeaderElectionKey, instanceID, LeaderLockTTL).Result()
-		return success, err
-	}
-	if err != nil {
-		return false, err
-	}
-
-	if currentLeader == instanceID {
-		// We are leader, renew lock
-		if err := client.Expire(ctx, LeaderElectionKey, LeaderLockTTL).Err(); err != nil {
-			return false, err
-		}
-		return true, nil
-	}
-
-	// Someone else is leader
-	return false, nil
-}
-
-// releaseLeadership releases leadership if held
-func releaseLeadership(ctx context.Context, client *redis.Client, instanceID string) {
-	currentLeader, err := client.Get(ctx, LeaderElectionKey).Result()
-	if err == nil && currentLeader == instanceID {
-		client.Del(ctx, LeaderElectionKey)
-	}
-}
-
-// startHTTPServer starts the HTTP server for health checks and webhook endpoint
-func startHTTPServer(log *zap.Logger, port string, state *leaderState, webhookHandler *webhooks.Handler, db *pgxpool.Pool, redis *redis.Client, tracingEnabled bool) {
+// startHTTPServer starts the HTTP server for health checks and webhook endpoint.
+// isLeaderFn is a nil-safe function returning the current leadership state.
+func startHTTPServer(log *zap.Logger, port string, isLeaderFn func() bool, webhookHandler *webhooks.Handler, db *pgxpool.Pool, redis *redis.Client, tracingEnabled bool) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -510,24 +405,16 @@ func startHTTPServer(log *zap.Logger, port string, state *leaderState, webhookHa
 			return
 		}
 
-		state.RLock()
-		isLdr := state.isLeader
-		state.RUnlock()
-
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "ready",
-			"is_leader": isLdr,
+			"is_leader": isLeaderFn(),
 		})
 	})
 
 	// Status endpoint
 	router.GET("/status", func(c *gin.Context) {
-		state.RLock()
-		isLdr := state.isLeader
-		state.RUnlock()
-
 		c.JSON(http.StatusOK, gin.H{
-			"is_leader": isLdr,
+			"is_leader": isLeaderFn(),
 			"transport": "webhook",
 		})
 	})
