@@ -225,6 +225,28 @@ func TestDemandHandler_GetDemand(t *testing.T) {
 	assert.Equal(t, "source-2", twitchSources[0].SourceID)
 }
 
+// TestGetSourcesForOverlays tests the mockRepository directly (documents the interface contract)
+func TestGetSourcesForOverlays(t *testing.T) {
+	repo := &mockRepository{
+		sources: map[string][]*models.ActiveSource{
+			"overlay-1": {
+				{ID: "source-1", OverlayID: "overlay-1", ChannelID: "chan-1", Platform: "tiktok"},
+			},
+			"overlay-2": {
+				{ID: "source-2", OverlayID: "overlay-2", ChannelID: "chan-2", Platform: "twitch"},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	sources, err := repo.GetSourcesForOverlays(ctx, []string{"overlay-1", "overlay-2"})
+	require.NoError(t, err)
+	require.Len(t, sources, 2)
+
+	ids := []string{sources[0].ID, sources[1].ID}
+	assert.ElementsMatch(t, []string{"source-1", "source-2"}, ids)
+}
+
 // TestEmptyDemand tests that when no overlays are connected, DemandUpdate.Sources is empty (not nil)
 func TestEmptyDemand(t *testing.T) {
 	_, client := newTestRedis(t)
