@@ -14,8 +14,12 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
-import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+  SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
+} from '@opentelemetry/semantic-conventions';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-node';
 
 // Global SDK instance
@@ -48,13 +52,11 @@ export function initTracing(): void {
 
   try {
     // Create resource with service information
-    const resource = Resource.default().merge(
-      new Resource({
-        [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
-        [SemanticResourceAttributes.SERVICE_VERSION]: serviceVersion,
-        [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: environment,
-      })
-    );
+    const resource = resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: serviceName,
+      [ATTR_SERVICE_VERSION]: serviceVersion,
+      [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: environment,
+    });
 
     // Create OTLP exporter
     const traceExporter = new OTLPTraceExporter({
@@ -67,10 +69,9 @@ export function initTracing(): void {
       spanProcessor: new BatchSpanProcessor(traceExporter),
       instrumentations: [
         getNodeAutoInstrumentations({
-          // Automatically instrument common libraries
           '@opentelemetry/instrumentation-http': { enabled: true },
           '@opentelemetry/instrumentation-pg': { enabled: true },
-          '@opentelemetry/instrumentation-redis-4': { enabled: true },
+          '@opentelemetry/instrumentation-ioredis': { enabled: true },
         }),
       ],
     });
