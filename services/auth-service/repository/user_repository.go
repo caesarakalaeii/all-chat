@@ -583,6 +583,35 @@ func (r *UserRepository) BanPlatformID(ctx context.Context, platform, platformID
 	return nil
 }
 
+// FindExistingUserBySource checks if any existing user has an overlay chat source
+// with the given platform and channel_id. Returns the owning user's username if
+// found, empty string otherwise. This is used during registration to detect
+// duplicate accounts (same streamer registering via different platforms).
+// Shared overlay sources (platform='shared_overlay') are excluded.
+func (r *UserRepository) FindExistingUserBySource(ctx context.Context, platform, channelID string) (string, error) {
+	query := `
+		SELECT u.username
+		FROM overlay_chat_sources ocs
+		JOIN overlays o ON ocs.overlay_id = o.id
+		JOIN users u ON o.user_id = u.id
+		WHERE ocs.platform = $1
+		  AND LOWER(ocs.channel_id) = LOWER($2)
+		  AND ocs.platform != 'shared_overlay'
+		LIMIT 1
+	`
+
+	var username string
+	err := r.db.QueryRow(ctx, query, platform, channelID).Scan(&username)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to check for existing user by source: %w", err)
+	}
+
+	return username, nil
+}
+
 // IsPlatformIDBanned checks if a platform ID is banned
 func (r *UserRepository) IsPlatformIDBanned(ctx context.Context, platform, platformID string) (bool, error) {
 	var exists bool

@@ -21,6 +21,16 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// ErrDuplicateAccount is returned when a new registration is blocked because
+// an existing account already has a matching platform source configured.
+type ErrDuplicateAccount struct {
+	ExistingUsername string
+	Platform         string
+	Message          string
+}
+
+func (e *ErrDuplicateAccount) Error() string { return e.Message }
+
 // PlatformAuthHandlerV2 handles authentication for any OAuth platform with enhanced state management
 type PlatformAuthHandlerV2 struct {
 	providers         map[oauth.Platform]oauth.OAuthProvider
@@ -502,8 +512,22 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			)
 		} else {
 			// Regular login: get or create user
-			user, err = h.getOrCreateUser(c.Request.Context(), platform, platformUser, token)
+			user, err = h.getOrCreateUser(c.Request.Context(), platform, platformUser, token, youtubeChannel)
 			if err != nil {
+				var dupErr *ErrDuplicateAccount
+				if errors.As(err, &dupErr) {
+					h.logger.Warn("Duplicate account registration blocked",
+						zap.String("platform", string(platform)),
+						zap.String("existing_username", dupErr.ExistingUsername),
+					)
+					redirectURL := fmt.Sprintf("%s/auth/callback?error=duplicate_account&existing_username=%s&platform=%s",
+						h.frontendURL,
+						dupErr.ExistingUsername,
+						dupErr.Platform,
+					)
+					h.redirectWithTombstone(c, platform, oauthState.CSRFToken, redirectURL)
+					return
+				}
 				h.logger.Error("Failed to get or create user",
 					zap.String("platform", string(platform)),
 					zap.Error(err),
@@ -619,12 +643,16 @@ func (h *PlatformAuthHandlerV2) exchangeCodeForToken(
 	return provider.ExchangeCode(ctx, code)
 }
 
-// getOrCreateUser gets an existing user or creates a new one
+// getOrCreateUser gets an existing user or creates a new one.
+// youtubeChannel is optional (nil for non-YouTube platforms or when channel
+// resolution was skipped during login). When present, its ChannelID is used
+// for duplicate account detection against existing overlay sources.
 func (h *PlatformAuthHandlerV2) getOrCreateUser(
 	ctx context.Context,
 	platform oauth.Platform,
 	platformUser oauth.PlatformUserInfo,
 	token *oauth2.Token,
+	youtubeChannel *oauth.YouTubeChannelInfo,
 ) (*models.User, error) {
 	var user *models.User
 	var err error
@@ -646,7 +674,50 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 	}
 
 	if err != nil {
-		// User doesn't exist, create new one
+		// For YouTube login flow, channel info was skipped to save quota.
+		// Now that we know this is a NEW user, fetch it for duplicate detection.
+		if platform == oauth.PlatformYouTube && youtubeChannel == nil {
+			if ytProvider, ok := h.providers[oauth.PlatformYouTube].(*oauth.YouTubeOAuth); ok {
+				channelInfo, channelErr := ytProvider.GetPrimaryChannel(ctx, token.AccessToken)
+				if channelErr != nil {
+					h.logger.Info("Could not resolve YouTube channel for new user duplicate check",
+						zap.Error(channelErr),
+						zap.String("platform_user_id", platformUser.GetID()))
+				} else {
+					youtubeChannel = channelInfo
+				}
+			}
+		}
+
+		// User doesn't exist — before creating, check if a duplicate account
+		// exists by looking for an overlay source with the same channel_id.
+		// This catches the case where a streamer already registered via a
+		// different platform and has the current platform configured as a source.
+		if sourceChannelID := h.getSourceChannelID(platform, platformUser, youtubeChannel); sourceChannelID != "" {
+			existingUsername, lookupErr := h.userRepo.FindExistingUserBySource(ctx, string(platform), sourceChannelID)
+			if lookupErr != nil {
+				h.logger.Warn("Failed to check for duplicate account by source",
+					zap.Error(lookupErr),
+					zap.String("platform", string(platform)),
+					zap.String("channel_id", sourceChannelID))
+				// Continue with creation — don't block on a lookup failure
+			} else if existingUsername != "" {
+				h.logger.Warn("Blocked duplicate account creation — existing account has source configured",
+					zap.String("platform", string(platform)),
+					zap.String("channel_id", sourceChannelID),
+					zap.String("existing_username", existingUsername))
+				return nil, &ErrDuplicateAccount{
+					ExistingUsername: existingUsername,
+					Platform:         string(platform),
+					Message: fmt.Sprintf(
+						"a channel matching your %s account is already configured on the account '%s'. "+
+							"Please log in with that account and link %s from your account settings",
+						platform, existingUsername, platform),
+				}
+			}
+		}
+
+		// Create new user
 		platformID := platformUser.GetID()
 		user = &models.User{
 			AuthProvider:    string(platform),
@@ -696,6 +767,26 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 	}
 
 	return user, nil
+}
+
+// getSourceChannelID returns the channel identifier that would be stored in
+// overlay_chat_sources for this platform. For Twitch and Kick this is the
+// platform username; for YouTube it's the channel ID (UCxxx) from the
+// YouTubeChannelInfo if available.
+func (h *PlatformAuthHandlerV2) getSourceChannelID(platform oauth.Platform, user oauth.PlatformUserInfo, ytChannel *oauth.YouTubeChannelInfo) string {
+	switch platform {
+	case oauth.PlatformTwitch:
+		return user.GetUsername() // Twitch login (lowercase)
+	case oauth.PlatformKick:
+		return user.GetUsername() // Kick username
+	case oauth.PlatformYouTube:
+		if ytChannel != nil {
+			return ytChannel.ChannelID // UCxxx format
+		}
+		return ""
+	default:
+		return ""
+	}
 }
 
 // linkPlatformToUser links a new platform to an existing user account
