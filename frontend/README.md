@@ -1,10 +1,10 @@
 # All-Chat Frontend
 
-Modern web application for managing multi-platform chat overlays, built with **Next.js 14**, **React 18**, and **TypeScript**.
+Modern web application for managing multi-platform chat overlays, built with **Next.js 16**, **React 19**, and **TypeScript**.
 
 ## Why This Stack?
 
-- **Next.js 14** - Modern React framework with SSR, optimized for LLMs to understand
+- **Next.js 16** - Modern React framework with SSR, optimized for LLMs to understand
 - **TypeScript** - Full type safety, easier for LLMs to work with
 - **Zustand** - Simple state management, minimal boilerplate
 - **TailwindCSS** - Utility-first CSS, highly composable
@@ -380,5 +380,5 @@ See repository root LICENSE file.
 
 ---
 
-**Built with**: Next.js 14 • React 18 • TypeScript • TailwindCSS • Zustand
+**Built with**: Next.js 16 • React 19 • TypeScript • TailwindCSS • Zustand
 **Optimized for**: LLM collaboration and rapid development

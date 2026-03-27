@@ -103,12 +103,16 @@ Each service has a detailed README:
 - [auth-service](./services/auth-service/README.md) - OAuth flows, JWT tokens
 - [emote-service](./services/emote-service/README.md) - 7TV, BTTV, FFZ emote APIs
 - [twitch-listener](./services/twitch-listener/README.md) - IRC client, channel management
+- [twitch-eventsub-listener](./services/twitch-eventsub-listener/README.md) - EventSub webhooks (channel points, moderation)
 - [youtube-listener](./services/youtube-listener/README.md) - HTTP polling, quota tracking
+- [youtube-listener-innertube](./services/youtube-listener-innertube/README.md) - InnerTube API polling (no quota cost)
 - [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
+- [discord-listener](./services/discord-listener/README.md) - Discord channel chat relay
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
+- [share-service](./services/share-service/README.md) - Shareable overlay links
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 
 ### Development Guides
@@ -121,9 +125,9 @@ Each service has a detailed README:
 
 ## Tech Stack
 
-**Backend**: Go 1.23+, Gin (HTTP), PostgreSQL 16 (pgx/v5), Redis 7 (go-redis/v9), Zap (logging)
+**Backend**: Go 1.25+, Gin (HTTP), PostgreSQL 16 (pgx/v5), Redis 7 (go-redis/v9), Zap (logging)
 
-**Frontend**: React 18+, Next.js 14+ (App Router), TypeScript, Tailwind CSS
+**Frontend**: React 19+, Next.js 16+ (App Router), TypeScript, Tailwind CSS, Zustand
 
 **Infrastructure**: Kubernetes (CNPG for PostgreSQL), Docker Compose (local dev)
 

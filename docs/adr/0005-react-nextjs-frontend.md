@@ -111,7 +111,7 @@ All-Chat requires a frontend for:
 
 ### Option 4: React + Next.js (App Router)
 
-**Stack**: React 18 + Next.js 14+ (App Router, Server Components)
+**Stack**: React 19 + Next.js 16+ (App Router, Server Components)
 
 **✅ Pros**:
 - **LLM accuracy**: 90%+ accuracy (most training data, millions of examples)
@@ -156,7 +156,7 @@ All-Chat requires a frontend for:
 
 ## Decision Outcome
 
-**Chosen**: **Option 4 - React + Next.js 14+ (App Router)**
+**Chosen**: **Option 4 - React + Next.js 16+ (App Router)**
 
 **Rationale**:
 
@@ -435,7 +435,7 @@ export default function LandingPage() {
 
 ## Summary
 
-**Decision**: Use React 18 + Next.js 14+ with App Router for all frontend development.
+**Decision**: Use React 19 + Next.js 16+ with App Router for all frontend development.
 
 **Reason**: 90%+ LLM code generation accuracy, massive ecosystem, SSR/SEO support, team familiarity.
 
