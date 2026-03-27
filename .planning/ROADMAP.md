@@ -268,3 +268,15 @@ Plans:
 - [x] 05-04-PLAN.md — Wire demand into kick/twitch-eventsub SDK config + leadership-only listener subscriptions + E2E verify
 - [x] 05-05-PLAN.md — Gap closure: wire demand gating into innertube, discord, and youtube-listener stream managers
 - [x] 05-06-PLAN.md — Gap closure: E2E demand signal verification checkpoint
+
+### Phase 6: Unify all listeners to leadership-based coordination
+
+**Goal:** Eliminate the dual coordinator/leadership architecture by merging ListenerBase into LeadershipListener, migrating twitch-listener, twitch-eventsub-listener, and kick-listener to the unified type, then removing all coordinator infrastructure (shared/coordination, source-manager coordination subsystem, port 8088) and consolidating source-manager to port 8083.
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17
+**Depends on:** Phase 5
+**Plans:** 3 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — SDK refactor: merge ListenerBase into LeadershipListener, update ChannelManager interface, remove coordinator loops
+- [ ] 06-02-PLAN.md — Migrate twitch-listener + twitch-eventsub-listener + kick-listener to LeadershipListener
+- [ ] 06-03-PLAN.md — Remove coordinator from source-manager, delete shared/coordination, consolidate to port 8083, update K8s manifests
