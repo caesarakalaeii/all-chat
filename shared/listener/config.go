@@ -37,7 +37,15 @@ type ListenerConfig struct {
 	// Platform is the platform identifier for this listener (e.g. "kick", "twitch", "youtube").
 	// When set, the migration subscriber will silently drop events for other platforms,
 	// eliminating cross-platform log noise and unnecessary handler invocations.
+	// The demand subscriber loop also uses this to filter incoming demand updates to only
+	// sources matching this platform.
 	Platform string
+
+	// DisableDemandFiltering treats all assigned sources as having demand.
+	// When true, the SDK demand subscriber loop exits immediately without subscribing
+	// to source:demand Pub/Sub. Use for backward compatibility during rollout or for
+	// listeners that should always connect to all assigned sources (e.g., twitch IRC).
+	DisableDemandFiltering bool
 }
 
 // DefaultConfig returns a ListenerConfig with production-ready defaults.
