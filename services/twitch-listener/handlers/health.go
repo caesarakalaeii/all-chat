@@ -58,20 +58,12 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 		reason = "IRC not connected"
 	}
 
-	// Check 1b: IRC connection liveness — detect silently dead connections
-	// If we have active channels but no IRC activity for 10 minutes, connection is stale
-	const staleThreshold = 10 * time.Minute
+	// Expose last activity for observability (not a readiness gate — quiet channels
+	// may legitimately have no messages for extended periods, and go-twitch-irc handles
+	// PING/PONG internally without exposing a callback we could track).
 	lastActivity := h.ircConn.LastActivityAt()
 	if !lastActivity.IsZero() {
 		checks["irc_last_activity_seconds_ago"] = int(time.Since(lastActivity).Seconds())
-		activeCount := h.chanMgr.GetActiveChannelCount()
-		if activeCount > 0 && time.Since(lastActivity) > staleThreshold {
-			ready = false
-			if reason == "" {
-				reason = "IRC connection stale (no activity)"
-			}
-			checks["irc_stale"] = true
-		}
 	}
 
 	// Check 2: Redis connection
