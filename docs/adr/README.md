@@ -153,7 +153,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Status**: ✅ Accepted
 **Date**: 2025-11-11
 **Problem**: Minimize manual frontend coding, maximize LLM code generation
-**Decision**: Next.js 14+ with App Router and Server Components
+**Decision**: Next.js 16+ with App Router and Server Components
 **Impact**: LLMs generate 90%+ of frontend code, SSR for SEO, streaming overlays
 **→ Read**: [0005-react-nextjs-frontend.md](./0005-react-nextjs-frontend.md)
 

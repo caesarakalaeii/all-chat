@@ -199,11 +199,26 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **Latency**: ~100ms (real-time WebSocket)
 - **→ Documentation**: [services/kick-listener/README.md](../../services/kick-listener/README.md)
 
-**TikTok Listener** (`:8090` - planned)
+**TikTok Listener** (`:8090`)
 - **Purpose**: Connect to TikTok Live, publish raw messages to Redis Streams
 - **Protocol**: Unofficial TikTok Live library
-- **Status**: ✅ Implemented (username-based, no OAuth)
+- **Features**: Username-based connection, no OAuth required
 - **→ Documentation**: [services/tiktok-listener/README.md](../../services/tiktok-listener/README.md)
+
+**Discord Listener** (`:8091`)
+- **Purpose**: Relay messages from configured Discord channels to Redis Streams
+- **Protocol**: Discord Gateway WebSocket
+- **→ Documentation**: [services/discord-listener/README.md](../../services/discord-listener/README.md)
+
+**Twitch EventSub Listener** (`:8092`)
+- **Purpose**: Receive Twitch EventSub webhooks (channel points, moderation actions)
+- **Protocol**: HTTP webhooks from Twitch
+- **→ Documentation**: [services/twitch-eventsub-listener/README.md](../../services/twitch-eventsub-listener/README.md)
+
+**YouTube Listener InnerTube** (`:8093`)
+- **Purpose**: Poll YouTube via InnerTube API (no quota cost)
+- **Protocol**: HTTP polling (InnerTube internal API)
+- **→ Documentation**: [services/youtube-listener-innertube/README.md](../../services/youtube-listener-innertube/README.md)
 
 ### Processing Layer
 
@@ -233,6 +248,10 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **Scaling**: 1 replica (CronJob)
 - **→ Documentation**: [services/token-refresh-service/README.md](../../services/token-refresh-service/README.md)
 
+**Share Service** (`:8094`)
+- **Purpose**: Generate and serve shareable overlay links for viewers
+- **→ Documentation**: [services/share-service/README.md](../../services/share-service/README.md)
+
 ---
 
 ## Technology Stack
@@ -241,7 +260,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 
 | Technology | Purpose | Version |
 |------------|---------|---------|
-| **Go** | Microservices language | 1.23+ |
+| **Go** | Microservices language | 1.25+ |
 | **Gin** | HTTP framework | Latest |
 | **pgx/v5** | PostgreSQL driver | v5 |
 | **go-redis/v9** | Redis client | v9 |
@@ -254,8 +273,8 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 
 | Technology | Purpose | Version |
 |------------|---------|---------|
-| **React** | UI library | 18+ |
-| **Next.js** | SSR framework | 14+ (App Router) |
+| **React** | UI library | 19+ |
+| **Next.js** | SSR framework | 16+ (App Router) |
 | **TypeScript** | Type safety | Latest |
 | **Tailwind CSS** | Styling | Latest |
 
@@ -403,7 +422,7 @@ All platforms normalized to common schema:
 
 ### Why React + Next.js?
 
-**Decision**: Use React 18+ with Next.js 14+ (App Router) for frontend.
+**Decision**: Use React 19+ with Next.js 16+ (App Router) for frontend.
 
 **Rationale**:
 - LLMs excel at generating React code (90%+ accuracy)

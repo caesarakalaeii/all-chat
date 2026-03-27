@@ -17,7 +17,7 @@ This guide covers deploying your own instance of All-Chat. If you just want to u
 
 ### Required Software
 
-- **Go 1.23+** - Backend services
+- **Go 1.25+** - Backend services
 - **Docker & Docker Compose** - Containerization
 - **PostgreSQL 16** - Database (or use Docker)
 - **Redis 7** - Cache and messaging (or use Docker)

@@ -6,7 +6,7 @@ This document provides comprehensive instructions for testing the All-Chat front
 
 The All-Chat frontend is built with:
 
-- **Next.js 14+** with App Router
+- **Next.js 16+** with App Router
 - **TypeScript** for type safety
 - **Tailwind CSS** for styling
 - **Zustand** for state management

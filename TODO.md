@@ -104,7 +104,7 @@
 
 ### Frontend & UI
 - [x] **Build React + Next.js frontend** ✅ COMPLETE
-  - Location: `frontend/` (Next.js 14+ App Router)
+  - Location: `frontend/` (Next.js 16+ App Router)
   - Status: Fully implemented with TypeScript and Tailwind CSS
   - Features: Overlay display, admin dashboard, auth pages, settings, legal pages
   - Impact: Better user experience for streamers achieved

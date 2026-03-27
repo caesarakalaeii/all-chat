@@ -880,7 +880,7 @@ Events are special messages that appear in your overlay when viewers:
 - **Twitch**: Subscribe, gift subs, raid, cheer bits, redeem channel points
 - **YouTube**: Send Super Chats, buy memberships, celebrate milestones
 - **TikTok**: Send gifts, follow, like, share
-- **Kick**: Subscribe, send gifts/donations (coming soon)
+- **Kick**: Subscribe, send gifts/donations
 
 Events are controlled via the **Event Settings** page at `/overlays/{id}/events`.
 
