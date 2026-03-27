@@ -555,13 +555,16 @@ func main() {
 			publishedToAnyOverlay = true
 		}
 
-		// Increment 24h platform message counter once per unique message.
+		// Increment daily platform message counter once per unique message.
 		// Placed after the overlay loop so multi-overlay fanout counts as one message.
-		// Key expires 24h after first write; EXPIRE NX avoids resetting the window.
+		// Uses daily buckets (chat:stats:daily:{platform}:{YYYY-MM-DD}) so the
+		// API can sum the last 7 days for a stable rolling window.
 		if publishedToAnyOverlay {
-			statsKey := "chat:stats:24h:" + rawMsg.Platform
+			day := time.Now().UTC().Format("2006-01-02")
+			statsKey := "chat:stats:daily:" + rawMsg.Platform + ":" + day
 			if redisClient.Incr(ctx, statsKey).Err() == nil {
-				redisClient.ExpireNX(ctx, statsKey, 24*time.Hour)
+				// Each daily bucket expires after 8 days (7d window + 1d grace).
+				redisClient.ExpireNX(ctx, statsKey, 8*24*time.Hour)
 			}
 		}
 
