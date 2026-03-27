@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/caesar/all-chat/shared/coordination"
@@ -20,16 +21,21 @@ type coordinatorClient interface {
 	StopJWTRefresh()
 }
 
-// ListenerBase manages the three background goroutine loops shared by all listeners:
-// heartbeat, assignment refresh, and migration subscriber.
+// ListenerBase manages the four background goroutine loops shared by all listeners:
+// heartbeat, assignment refresh, migration subscriber, and demand subscriber.
 type ListenerBase struct {
-	config      ListenerConfig
-	client      coordinatorClient
-	redisClient *redis.Client
-	logger      *zap.Logger
-	podID       string
-	cancel      context.CancelFunc
-	wg          sync.WaitGroup
+	config               ListenerConfig
+	client               coordinatorClient
+	redisClient          *redis.Client
+	logger               *zap.Logger
+	podID                string
+	cancel               context.CancelFunc
+	wg                   sync.WaitGroup
+	hasInitialAssignments atomic.Bool
+
+	// assignedMu protects assignedSourceIDs.
+	assignedMu        sync.RWMutex
+	assignedSourceIDs map[string]bool
 }
 
 // NewListenerBase creates a new ListenerBase.
@@ -73,7 +79,12 @@ func (b *ListenerBase) Start(ctx context.Context, mgr ChannelManager) error {
 		assignedIDs = map[string]bool{}
 	}
 
+	b.assignedMu.Lock()
+	b.assignedSourceIDs = assignedIDs
+	b.assignedMu.Unlock()
+
 	mgr.UpdateAssignedSourceIDs(assignedIDs)
+	b.hasInitialAssignments.Store(true)
 
 	if err := mgr.Start(ctx); err != nil {
 		return err
@@ -84,10 +95,11 @@ func (b *ListenerBase) Start(ctx context.Context, mgr ChannelManager) error {
 
 	b.client.StartJWTRefresh(internalCtx)
 
-	b.wg.Add(3)
+	b.wg.Add(4)
 	go b.startHeartbeatLoop(internalCtx)
 	go b.startAssignmentRefreshLoop(internalCtx, mgr)
 	go b.startMigrationSubscriberLoop(internalCtx, mgr)
+	go b.startDemandSubscriberLoop(internalCtx, mgr)
 
 	return nil
 }
@@ -185,6 +197,9 @@ func (b *ListenerBase) startAssignmentRefreshLoop(ctx context.Context, mgr Chann
 				for _, a := range assignments {
 					ids[a.SourceID] = true
 				}
+				b.assignedMu.Lock()
+				b.assignedSourceIDs = ids
+				b.assignedMu.Unlock()
 				mgr.UpdateAssignedSourceIDs(ids)
 			}
 		}

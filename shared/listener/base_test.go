@@ -18,13 +18,14 @@ import (
 // mockChannelManager satisfies listener.ChannelManager for unit tests.
 type mockChannelManager struct{}
 
-func (m *mockChannelManager) Start(_ context.Context) error                                { return nil }
-func (m *mockChannelManager) Stop()                                                         {}
-func (m *mockChannelManager) HandleMigrationEvent(_ *coordination.MigrationEvent) error    { return nil }
-func (m *mockChannelManager) UpdateAssignedSourceIDs(_ map[string]bool)                    {}
-func (m *mockChannelManager) GetFilteredAssignmentCount() int                               { return 0 }
-func (m *mockChannelManager) GetActiveChannels() []string                                   { return nil }
-func (m *mockChannelManager) GetActiveChannelCount() int                                    { return 0 }
+func (m *mockChannelManager) Start(_ context.Context) error                                     { return nil }
+func (m *mockChannelManager) Stop()                                                              {}
+func (m *mockChannelManager) HandleMigrationEvent(_ *coordination.MigrationEvent) error         { return nil }
+func (m *mockChannelManager) UpdateAssignedSourceIDs(_ map[string]bool)                         {}
+func (m *mockChannelManager) UpdateDemandedSourceIDs(_ map[string]listener.DemandedSource)      {}
+func (m *mockChannelManager) GetFilteredAssignmentCount() int                                    { return 0 }
+func (m *mockChannelManager) GetActiveChannels() []string                                        { return nil }
+func (m *mockChannelManager) GetActiveChannelCount() int                                         { return 0 }
 
 func testConfig() listener.ListenerConfig {
 	return listener.ListenerConfig{
