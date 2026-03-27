@@ -32,6 +32,7 @@ type ConnectionManager struct {
 	activeChannelsFn func() []string          // Returns currently active channels for reconnect status publish
 	statusPublisher  *status.Publisher        // Publishes platform status on IRC reconnect
 	onDisconnect     func()                   // Called when IRC connection is lost (for channel manager reset)
+	onConnect        func()                   // Called when a new IRC connection is established (for channel re-join)
 }
 
 // Config holds the configuration for IRC connection
@@ -305,6 +306,7 @@ func (cm *ConnectionManager) handleConnect() {
 	cm.lastActivityAt = now
 	activeChannelsFn := cm.activeChannelsFn
 	statusPublisher := cm.statusPublisher
+	onConnect := cm.onConnect
 	cm.mu.Unlock()
 
 	// Record successful connection
@@ -313,8 +315,20 @@ func (cm *ConnectionManager) handleConnect() {
 
 	cm.logger.Info("Connected to Twitch IRC")
 
+	// Clear stale activeChans populated during the reconnect backoff window.
+	// When the watchdog forces a disconnect, the channel manager's periodic sync may
+	// run and issue Join() calls on the OLD disconnected client (during the 5-second
+	// backoff before the new client is created). Those joins fail silently but mark
+	// channels as active. Clearing activeChans here ensures the next SyncChannels
+	// call re-joins all channels on the freshly connected client.
+	if onConnect != nil {
+		onConnect()
+	}
+
 	// On IRC reconnect, re-publish connected status for all currently active channels.
 	// This covers the case where the IRC client reconnects after a network interruption.
+	// Note: this runs AFTER onConnect clears activeChans, so we query the now-empty list.
+	// The channels will be re-published once they are re-joined via SyncChannels.
 	if activeChannelsFn != nil && statusPublisher != nil {
 		channels := activeChannelsFn()
 		if len(channels) > 0 {
@@ -355,6 +369,16 @@ func (cm *ConnectionManager) SetOnDisconnect(fn func()) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	cm.onDisconnect = fn
+}
+
+// SetOnConnect registers a callback invoked when a new IRC connection is established.
+// The channel manager uses this to clear activeChans that were populated while the
+// previous client was disconnected (race between the periodic sync and reconnect backoff),
+// so the next sync re-joins all channels on the fresh client.
+func (cm *ConnectionManager) SetOnConnect(fn func()) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.onConnect = fn
 }
 
 // handlePrivateMessage processes incoming PRIVMSG from Twitch
