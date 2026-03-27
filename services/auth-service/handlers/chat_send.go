@@ -179,6 +179,11 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 		return
 	}
 
+	// Check if the resolved user has the required platform configured.
+	// If not, try to find an alternate account (duplicate account scenario:
+	// same person registered separately via different platforms).
+	streamerUser = h.resolveStreamerForPlatform(ctx, streamerUser, session.Platform)
+
 	// Send message based on platform
 	h.log.Info("Sending message to platform",
 		zap.String("platform", session.Platform),
@@ -643,6 +648,102 @@ func (h *ChatSendHandler) refreshTokenIfNeeded(ctx context.Context, session *mod
 		zap.Time("new_expiry", newToken.Expiry))
 
 	return nil
+}
+
+// resolveStreamerForPlatform checks if the resolved streamer user has the
+// required platform configured. If not, it searches for an alternate user
+// account with the same display name that does have the platform configured.
+// This handles the duplicate-account scenario where a streamer registered
+// separately via different platforms (e.g., Twitch and YouTube as two accounts).
+func (h *ChatSendHandler) resolveStreamerForPlatform(ctx context.Context, streamer *models.User, platform string) *models.User {
+	if h.streamerHasPlatformCtx(ctx, streamer, platform) {
+		return streamer
+	}
+
+	h.log.Warn("Streamer missing platform, searching for alternate account",
+		zap.String("streamer_username", streamer.Username),
+		zap.String("streamer_display_name", streamer.DisplayName),
+		zap.String("required_platform", platform))
+
+	// Search for another user with the same display name who has the required
+	// platform configured and an active public overlay with a source for it.
+	query := `
+		SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider,
+		       u.username, u.display_name, u.profile_image_url,
+		       u.is_admin, u.is_premium, u.is_banned,
+		       u.banned_at, u.banned_reason, u.banned_by,
+		       u.access_token, u.refresh_token, u.token_expires_at,
+		       u.created_at, u.updated_at
+		FROM users u
+		JOIN overlays o ON o.user_id = u.id
+		JOIN overlay_chat_sources ocs ON ocs.overlay_id = o.id
+		WHERE LOWER(u.display_name) = LOWER($1)
+		  AND u.id != $2
+		  AND u.is_banned = false
+		  AND o.is_active = true
+		  AND o.is_public_for_viewers = true
+		  AND ocs.platform = $3
+		  AND ocs.is_active = true
+		LIMIT 1
+	`
+
+	row := h.db.QueryRow(ctx, query, streamer.DisplayName, streamer.ID, platform)
+
+	alt := &models.User{}
+	err := row.Scan(
+		&alt.ID, &alt.TwitchID, &alt.GoogleID, &alt.KickID, &alt.AuthProvider,
+		&alt.Username, &alt.DisplayName, &alt.ProfileImageURL,
+		&alt.IsAdmin, &alt.IsPremium, &alt.IsBanned,
+		&alt.BannedAt, &alt.BannedReason, &alt.BannedBy,
+		&alt.AccessToken, &alt.RefreshToken, &alt.TokenExpiresAt,
+		&alt.CreatedAt, &alt.UpdatedAt,
+	)
+	if err != nil {
+		h.log.Warn("No alternate account found for platform",
+			zap.String("display_name", streamer.DisplayName),
+			zap.String("platform", platform),
+			zap.Error(err))
+		return streamer
+	}
+
+	h.log.Info("Resolved alternate streamer account for platform",
+		zap.String("original_username", streamer.Username),
+		zap.String("alternate_username", alt.Username),
+		zap.String("platform", platform))
+
+	return alt
+}
+
+// streamerHasPlatform checks if a streamer user has the given platform configured.
+// For YouTube, it checks overlay_chat_sources rather than google_id since the
+// active channel may differ from the user's Google account ID.
+func (h *ChatSendHandler) streamerHasPlatformCtx(ctx context.Context, streamer *models.User, platform string) bool {
+	switch platform {
+	case "twitch":
+		return streamer.TwitchID != nil && *streamer.TwitchID != ""
+	case "youtube":
+		// YouTube is checked via overlay sources in sendYouTubeMessage,
+		// so we verify the user has an active YouTube source configured
+		query := `
+			SELECT EXISTS(
+				SELECT 1 FROM overlay_chat_sources ocs
+				JOIN overlays o ON ocs.overlay_id = o.id
+				WHERE o.user_id = $1
+				  AND ocs.platform = 'youtube'
+				  AND ocs.is_active = true
+				  AND o.is_public_for_viewers = true
+			)
+		`
+		var exists bool
+		if err := h.db.QueryRow(ctx, query, streamer.ID).Scan(&exists); err != nil {
+			return false
+		}
+		return exists
+	case "kick":
+		return streamer.KickID != nil && *streamer.KickID != ""
+	default:
+		return false
+	}
 }
 
 // sendTwitchMessage sends a message to Twitch chat using the Helix API
