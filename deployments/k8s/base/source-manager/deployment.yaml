@@ -23,11 +23,11 @@ spec:
         image: localhost:5000/allchat-source-manager:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 8088
+        - containerPort: 8083
           name: http
         env:
         - name: PORT
-          value: "8088"
+          value: "8083"
         - name: LOG_LEVEL
           valueFrom:
             configMapKeyRef:
@@ -86,14 +86,14 @@ spec:
         livenessProbe:
           httpGet:
             path: /health/live
-            port: 8088
+            port: 8083
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /health/ready
-            port: 8088
+            port: 8083
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
@@ -108,8 +108,8 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - port: 8088
-    targetPort: 8088
+  - port: 8083
+    targetPort: 8083
     protocol: TCP
     name: http
   selector:
