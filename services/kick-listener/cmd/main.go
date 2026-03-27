@@ -18,7 +18,6 @@ import (
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
 	"github.com/caesar/all-chat/services/kick-listener/status"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
-	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/logger"
@@ -100,21 +99,8 @@ func main() {
 
 	// SDK setup
 	podName := listener.Env("HOSTNAME", "kick-listener-0")
-	cfg := listener.DefaultConfig()
-	cfg.Platform = "kick"
-	// kick-listener always uses coordinator filtering (no rollback knob needed)
-	// DisableCoordinatorFiltering = false is the default
 
-	coordClient := coordination.NewCoordinatorClient(
-		listener.Env("COORDINATOR_URL", "http://source-manager:8088"),
-		listener.Env("SERVICE_JWT_SECRET", "dev-service-secret"),
-		"kick-listener",
-		log,
-	)
-
-	base := listener.NewListenerBase(cfg, coordClient, redisClient, podName, log)
-
-	l, err := listener.NewLeadershipListenerFromEnv(base, "kick", log)
+	ll, err := listener.NewLeadershipListenerFromEnv("kick", redisClient, log)
 	if err != nil {
 		log.Fatal("Failed to initialize leadership listener", zap.Error(err))
 	}
@@ -164,8 +150,8 @@ func main() {
 	})
 
 	// Now initialize channel manager with the WebSocket client
-	// Pass nil for assignedSourceIDs — SDK populates via UpdateAssignedSourceIDs inside l.Start
-	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, l.LeadershipCoordinator(), nil, redisClient, podName, log)
+	// Pass nil for assignedSourceIDs — SDK populates via UpdateAssignedSourceIDs inside ll.Start
+	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, ll.LeadershipCoordinator(), nil, redisClient, podName, log)
 
 	// Inject status publisher into channel manager
 	channelMgr.SetStatusPublisher(statusPublisher)
@@ -178,7 +164,7 @@ func main() {
 	// Wait a bit for WebSocket connection to establish
 	time.Sleep(2 * time.Second)
 
-	if err := l.Start(ctx, channelMgr); err != nil {
+	if err := ll.Start(ctx, channelMgr); err != nil {
 		log.Fatal("Failed to start listener", zap.Error(err))
 	}
 
@@ -243,7 +229,7 @@ func main() {
 
 	log.Info("Shutting down service...")
 
-	listener.ShutdownCoordinator(l.ListenerBase, channelMgr,
+	listener.ShutdownCoordinator(ll, channelMgr,
 		func() { _ = wsClient.Disconnect() },
 		srv,
 		log,

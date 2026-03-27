@@ -15,12 +15,10 @@ import (
 	"github.com/caesar/all-chat/services/twitch-listener/irc"
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
 	"github.com/caesar/all-chat/services/twitch-listener/status"
-	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
-	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -112,31 +110,12 @@ func main() {
 		log.Warn("HOSTNAME not set, using default pod name", zap.String("pod_name", podName))
 	}
 
-	// Initialize coordinator client
-	serviceJWT := os.Getenv("SERVICE_JWT_SECRET")
-	if serviceJWT == "" {
-		log.Fatal("SERVICE_JWT_SECRET is required for coordinator authentication")
+	// Initialize LeadershipListener — per D-10/D-11 Twitch IRC stays always-connected
+	ll, err := listener.NewLeadershipListenerFromEnv("twitch", redisClient, log)
+	if err != nil {
+		log.Fatal("Failed to initialize leadership listener", zap.Error(err))
 	}
-
-	coordClient := coordination.NewCoordinatorClient(
-		listener.Env("COORDINATOR_URL", "http://source-manager:8088"),
-		serviceJWT,
-		"twitch-listener",
-		log,
-	)
-	log.Info("Initialized coordinator client",
-		zap.String("coordinator_url", listener.Env("COORDINATOR_URL", "http://source-manager:8088")),
-	)
-
-	// Feature flag for coordinator filtering (allows instant rollback)
-	enableFiltering := listener.Env("ENABLE_COORDINATOR_FILTERING", "false") == "true"
-	cfg := listener.DefaultConfig()
-	cfg.Platform = "twitch"
-	cfg.DisableCoordinatorFiltering = !enableFiltering
-	cfg.DisableDemandFiltering = true // Twitch IRC always connected to all assigned channels
-
-	// Initialize ListenerBase — owns heartbeat, assignment refresh, migration subscriber, JWT refresh
-	base := listener.NewListenerBase(cfg, coordClient, redisClient, podName, log)
+	ll.SetDisableDemandFiltering(true) // Per D-10/D-11: Twitch IRC always connected
 
 	// Initialize IRC components
 	parser := irc.NewParser()
@@ -152,21 +131,14 @@ func main() {
 	}
 	ircConn := irc.NewConnectionManager(ircConfig, parser, streamPublisher, msgRegistry, log, listenerMetrics)
 
-	// Twitch Listener does NOT use leadership coordination
-	// Twitch IRC is stateless and event-driven (push, not pull like YouTube polling)
-	// Multiple IRC clients can connect to the same channels without conflicts
-	// Each message gets a unique UUID, and Redis Streams consumer groups handle deduplication
-	var leaderCoord *sourcemanager.LeadershipCoordinator = nil
-	log.Info("Twitch Listener running without leadership coordination (IRC is stateless)")
-
 	// Initialize status publisher for platform status indicators
 	statusPublisher := status.NewPublisher(redisClient, log)
 	log.Info("Initialized platform status publisher")
 
-	// Initialize channel manager — pass nil for assignedSourceIDs; SDK calls UpdateAssignedSourceIDs inside base.Start
+	// Initialize channel manager — pass nil for assignedSourceIDs; SDK calls UpdateAssignedSourceIDs inside ll.Start
 	channelRepo := channels.NewRepository(db)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, leaderCoord, nil, redisClient, podName, log, listenerMetrics)
+	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, ll.LeadershipCoordinator(), nil, redisClient, podName, log, listenerMetrics)
 
 	// Inject status publisher into channel manager
 	channelMgr.SetStatusPublisher(statusPublisher)
@@ -194,10 +166,9 @@ func main() {
 	// Wait a bit for IRC connection to establish (IRC-specific, required before Start)
 	time.Sleep(2 * time.Second)
 
-	// Start ListenerBase — handles startup jitter, initial assignment query, channelMgr.Start,
-	// JWT refresh, and launches heartbeat/assignment-refresh/migration-subscriber goroutines
-	if err := base.Start(ctx, channelMgr); err != nil {
-		log.Fatal("Failed to start listener base", zap.Error(err))
+	// Start LeadershipListener — runs demand subscriber and channel manager
+	if err := ll.Start(ctx, channelMgr); err != nil {
+		log.Fatal("Failed to start leadership listener", zap.Error(err))
 	}
 
 	// Record per-pod channel count metric (after filtering by coordinator assignments)
@@ -260,8 +231,8 @@ func main() {
 
 	log.Info("Shutting down service...")
 
-	// SDK-owned graceful shutdown: stops base goroutines + channelMgr + IRC + HTTP server
-	listener.ShutdownCoordinator(base, channelMgr, func() { _ = ircConn.Disconnect() }, srv, log)
+	// Graceful shutdown: stops leadership listener goroutines + channelMgr + IRC + HTTP server
+	listener.ShutdownCoordinator(ll, channelMgr, func() { _ = ircConn.Disconnect() }, srv, log)
 
 	log.Info("Service exited")
 }
