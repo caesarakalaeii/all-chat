@@ -602,12 +602,21 @@ func (m *Manager) GetFilteredAssignmentCount() int {
 	return m.filteredAssignmentCount
 }
 
-// UpdateAssignedSourceIDs updates the assigned source IDs from coordinator
-// Thread-safe update with mutex protection
+// UpdateAssignedSourceIDs updates the assigned source IDs from coordinator.
+// Thread-safe update with mutex protection.
 func (m *Manager) UpdateAssignedSourceIDs(newAssignedIDs map[string]bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.assignedSourceIDs = newAssignedIDs
+}
+
+// UpdateDemandedSourceIDs is a no-op for the Twitch IRC listener.
+// Twitch IRC is excluded from demand-driven behavior — it always connects to all
+// assigned channels because IRC is a push protocol with no per-source connection cost.
+// The SDK's DisableDemandFiltering=true config prevents this method from being called
+// by the demand loop, but the interface must be satisfied.
+func (m *Manager) UpdateDemandedSourceIDs(_ map[string]listener.DemandedSource) {
+	// No-op: Twitch IRC always connected to all assigned channels.
 }
 
 // joinChannelsMultipleConnections creates multiple IRC connections for >100 channels (TWITCH-03)

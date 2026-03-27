@@ -42,7 +42,8 @@ type Manager struct {
 	channels map[string]*Channel // broadcaster_id -> Channel
 
 	// Coordinator integration for sharding
-	assignedSourceIDs map[string]bool // source_id -> bool (assigned to this pod)
+	assignedSourceIDs map[string]bool                    // source_id -> bool (assigned to this pod)
+	demandedSourceIDs map[string]listener.DemandedSource // nil = no demand filtering
 	podName           string
 	assignmentMu      sync.RWMutex
 
@@ -86,7 +87,7 @@ func (m *Manager) SetAssignedSourceIDs(assignedSourceIDs map[string]bool, podNam
 	)
 }
 
-// UpdateAssignedSourceIDs updates the assigned source IDs (for dynamic assignment refresh)
+// UpdateAssignedSourceIDs updates the assigned source IDs (for dynamic assignment refresh).
 func (m *Manager) UpdateAssignedSourceIDs(assignedSourceIDs map[string]bool) {
 	m.assignmentMu.Lock()
 	defer m.assignmentMu.Unlock()
@@ -96,6 +97,24 @@ func (m *Manager) UpdateAssignedSourceIDs(assignedSourceIDs map[string]bool) {
 	m.logger.Info("Updated assigned source IDs",
 		zap.Int("count", len(assignedSourceIDs)),
 		zap.String("pod_name", m.podName),
+	)
+}
+
+// UpdateDemandedSourceIDs stores the demanded source set and triggers reconciliation.
+// For EventSub, "demand" means subscriptions should exist only for demanded sources.
+// Sources that lose demand are unsubscribed on the next SyncChannels cycle; the SDK
+// is responsible for filtering before calling this method.
+//
+// Note: EventSub subscriptions are leader-managed — only the leader creates/deletes
+// subscriptions. This method stores the demand state; actual reconciliation happens
+// in SyncChannels to avoid double-locking.
+func (m *Manager) UpdateDemandedSourceIDs(demanded map[string]listener.DemandedSource) {
+	m.assignmentMu.Lock()
+	m.demandedSourceIDs = demanded
+	m.assignmentMu.Unlock()
+
+	m.logger.Debug("Demand update received",
+		zap.Int("demanded_sources", len(demanded)),
 	)
 }
 

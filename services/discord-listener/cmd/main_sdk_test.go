@@ -20,10 +20,11 @@ func (m *mockChannelManagerForTest) Stop()                         {}
 func (m *mockChannelManagerForTest) HandleMigrationEvent(_ *coordination.MigrationEvent) error {
 	return nil
 }
-func (m *mockChannelManagerForTest) UpdateAssignedSourceIDs(_ map[string]bool) {}
-func (m *mockChannelManagerForTest) GetFilteredAssignmentCount() int            { return 0 }
-func (m *mockChannelManagerForTest) GetActiveChannels() []string                { return nil }
-func (m *mockChannelManagerForTest) GetActiveChannelCount() int                 { return 0 }
+func (m *mockChannelManagerForTest) UpdateAssignedSourceIDs(_ map[string]bool)             {}
+func (m *mockChannelManagerForTest) UpdateDemandedSourceIDs(_ map[string]listener.DemandedSource) {}
+func (m *mockChannelManagerForTest) GetFilteredAssignmentCount() int                         { return 0 }
+func (m *mockChannelManagerForTest) GetActiveChannels() []string                             { return nil }
+func (m *mockChannelManagerForTest) GetActiveChannelCount() int                              { return 0 }
 
 func TestListenerBase_StartStop_NoGoroutineLeak(t *testing.T) {
 	defer goleak.VerifyNone(t)
