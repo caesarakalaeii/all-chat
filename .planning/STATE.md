@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-27T10:58:58.931Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-27T11:23:01.443Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 35
-  completed_plans: 32
+  completed_plans: 33
 ---
 
 # Project State
@@ -79,6 +79,7 @@ Plan: 1 of 4
 | Phase 04 P05 | 310s | 2 tasks | 1 files |
 | Phase 04 P04 | 362s | 2 tasks | 1 files |
 | Phase 05 P01 | 226s | 2 tasks | 5 files |
+| Phase 05 P02 | 1622 | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -167,6 +168,9 @@ Key decisions relevant to v1.6:
 - [Phase 05]: sourceRepository interface in demand package allows mock injection in tests without importing registry package
 - [Phase 05]: hydrate() called before subscribeLoop() in Start() prevents empty DemandUpdate snapshot on source-manager restart
 - [Phase 05]: GetDemandedSources() returns make([]DemandSource, 0) not nil — ensures JSON marshals as [] not null
+- [Phase 05]: assignedSourceIDs tracked in ListenerBase for intersection logic in demand loop without inter-interface calls
+- [Phase 05]: Redis testutil moved to testutil/redisutil subpackage to avoid miniredis dependency in service-level go.mod files
+- [Phase 05]: trackedChannel.SourceID added to kick-listener for O(1) slug-to-sourceID lookup in reconcileDemand
 
 ### Roadmap Evolution
 
@@ -206,9 +210,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T10:58:58.928Z
+Last session: 2026-03-27T11:23:01.441Z
 Last activity: 2026-03-27
-Stopped at: Completed 05-01-PLAN.md
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
 
 **Next action:** Phase 04 Plan 03 — listener dashboards (Discord, InnerTube, twitch-eventsub panels).
