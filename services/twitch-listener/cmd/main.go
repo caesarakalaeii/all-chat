@@ -180,6 +180,12 @@ func main() {
 	// Wire disconnect callback — clears stale activeChans so next sync re-joins all channels
 	ircConn.SetOnDisconnect(channelMgr.ClearActiveChannels)
 
+	// Wire connect callback — clears activeChans again when the new client connects.
+	// This handles the race where the periodic sync joins channels on the OLD disconnected
+	// client during the reconnect backoff window, leaving them marked active but unjoined
+	// in the new IRC session. Clearing on connect ensures a clean re-join on the fresh client.
+	ircConn.SetOnConnect(channelMgr.ClearActiveChannels)
+
 	// Connect to Twitch IRC
 	if err := ircConn.Connect(ctx); err != nil {
 		log.Fatal("Failed to connect to Twitch IRC", zap.Error(err))
