@@ -258,7 +258,7 @@ Plans:
 **Goal:** Make all listeners except Twitch IRC demand-driven: source-manager subscribes to overlay connection events, resolves which sources have demand, and publishes demand signals via Redis Pub/Sub. Go listener SDK gains a demand subscriber loop. TikTok listener replaces DB polling with demand-driven activation. All non-Twitch listeners only connect when overlays are open.
 **Requirements**: DEMAND-01, DEMAND-02, DEMAND-03, DEMAND-04, DEMAND-05, DEMAND-06, DEMAND-07, DEMAND-08, DEMAND-09
 **Depends on:** Phase 4
-**Plans:** 4 plans
+**Plans:** 5/5 plans complete
 
 Plans:
 - [ ] 05-01-PLAN.md — Source-manager demand subscriber, DemandUpdate Pub/Sub, GET /demand endpoint, repository extension
