@@ -11,6 +11,7 @@ import (
 
 	"github.com/caesar/all-chat/services/source-manager/cleanup"
 	"github.com/caesar/all-chat/services/source-manager/coordination"
+	"github.com/caesar/all-chat/services/source-manager/demand"
 	"github.com/caesar/all-chat/services/source-manager/election"
 	"github.com/caesar/all-chat/services/source-manager/handlers"
 	"github.com/caesar/all-chat/services/source-manager/registry"
@@ -100,6 +101,10 @@ func main() {
 	leaderManager := election.NewManager(redisClient, log)
 	cleanupJob := cleanup.NewJob(db, log)
 
+	// Initialize demand subscriber (Phase 5)
+	demandSubscriber := demand.NewOverlayDemandSubscriber(redisClient, repo, log)
+	log.Info("Initialized demand subscriber")
+
 	// Initialize coordinator components
 	assignmentRegistry := coordination.NewAssignmentRegistry(redisClient)
 	assigner := coordination.NewAssigner([]string{}) // Empty initially, populated by reconcile
@@ -186,6 +191,10 @@ func main() {
 	protected.POST("/leadership/release", sourceHandler.ReleaseLeadership)
 	protected.GET("/leadership", sourceHandler.GetLeadershipStatus)
 
+	// Demand handlers (Phase 5)
+	demandHandler := demand.NewDemandHandler(demandSubscriber)
+	protected.GET("/demand", demandHandler.GetDemand)
+
 	// Assignment handlers
 	assignmentHandler := handlers.NewAssignmentHandler(
 		assignmentRegistry,
@@ -225,6 +234,14 @@ func main() {
 		log.Info("Starting shard coordinator")
 		if err := coordinator.Run(ctx); err != nil {
 			log.Error("Coordinator failed", zap.Error(err))
+		}
+	}()
+
+	// Start demand subscriber (Phase 5)
+	go func() {
+		log.Info("Starting demand subscriber")
+		if err := demandSubscriber.Start(ctx); err != nil {
+			log.Error("Demand subscriber failed", zap.Error(err))
 		}
 	}()
 
