@@ -277,6 +277,6 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — SDK refactor: merge ListenerBase into LeadershipListener, update ChannelManager interface, remove coordinator loops
-- [ ] 06-02-PLAN.md — Migrate twitch-listener + twitch-eventsub-listener + kick-listener to LeadershipListener
-- [ ] 06-03-PLAN.md — Remove coordinator from source-manager, delete shared/coordination, consolidate to port 8083, update K8s manifests
+- [x] 06-01-PLAN.md — SDK refactor: merge ListenerBase into LeadershipListener, update ChannelManager interface, remove coordinator loops
+- [x] 06-02-PLAN.md — Migrate twitch-listener + twitch-eventsub-listener + kick-listener to LeadershipListener
+- [x] 06-03-PLAN.md — Remove coordinator from source-manager, delete shared/coordination, consolidate to port 8083, update K8s manifests
