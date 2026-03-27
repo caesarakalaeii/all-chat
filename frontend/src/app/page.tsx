@@ -269,7 +269,7 @@ export default function LandingPage() {
                 <div className={cn('mb-1 text-2xl font-bold', PLATFORM_COLORS[platform].text)}>
                   {count != null ? formatCount(count) : '—'}
                 </div>
-                <div className="text-xs text-text-sub">messages / 24h</div>
+                <div className="text-xs text-text-sub">messages / 7d</div>
               </MagGlowCard>
             )
           })}

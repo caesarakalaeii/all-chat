@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -17,7 +18,7 @@ func NewStatsHandler(redis *redis.Client) *StatsHandler {
 	return &StatsHandler{redis: redis}
 }
 
-// GetPlatformStats returns message counts per platform for the last 24 hours.
+// GetPlatformStats returns message counts per platform for the last 7 days.
 // GET /api/v1/stats — public, no auth required.
 func (h *StatsHandler) GetPlatformStats(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -25,12 +26,22 @@ func (h *StatsHandler) GetPlatformStats(c *gin.Context) {
 	platforms := []string{"twitch", "youtube", "kick", "tiktok"}
 	result := make(map[string]int64, len(platforms))
 
+	// Build list of the last 7 daily bucket suffixes (YYYY-MM-DD).
+	now := time.Now().UTC()
+	days := make([]string, 7)
+	for i := range days {
+		days[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
+	}
+
 	for _, platform := range platforms {
-		val, err := h.redis.Get(ctx, "chat:stats:24h:"+platform).Int64()
-		if err != nil {
-			val = 0 // key missing = no messages yet
+		var total int64
+		for _, day := range days {
+			val, err := h.redis.Get(ctx, "chat:stats:daily:"+platform+":"+day).Int64()
+			if err == nil {
+				total += val
+			}
 		}
-		result[platform] = val
+		result[platform] = total
 	}
 
 	c.JSON(http.StatusOK, result)
