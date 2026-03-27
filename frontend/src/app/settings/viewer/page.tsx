@@ -270,6 +270,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
               <span className="text-xs text-green-400 ml-2">Saved ✓</span>
             )}
           </div>
+          <p className="text-xs text-text-sub mt-2">Changes save automatically</p>
 
           {/* Live preview */}
           <div className="mt-4 pt-4 border-t border-border">
