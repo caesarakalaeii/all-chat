@@ -10,14 +10,12 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/source-manager/cleanup"
-	"github.com/caesar/all-chat/services/source-manager/coordination"
 	"github.com/caesar/all-chat/services/source-manager/demand"
 	"github.com/caesar/all-chat/services/source-manager/election"
 	"github.com/caesar/all-chat/services/source-manager/handlers"
 	"github.com/caesar/all-chat/services/source-manager/registry"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
-	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
@@ -90,9 +88,6 @@ func main() {
 
 	log.Info("Connected to Redis")
 
-	// Initialize metrics (available via /metrics endpoint)
-	businessMetrics := metrics.NewBusinessMetrics()
-	shardMetrics := metrics.NewShardMetrics()
 	log.Info("Initialized Prometheus metrics")
 
 	// Initialize components
@@ -104,47 +99,6 @@ func main() {
 	// Initialize demand subscriber (Phase 5)
 	demandSubscriber := demand.NewOverlayDemandSubscriber(redisClient, repo, log)
 	log.Info("Initialized demand subscriber")
-
-	// Initialize coordinator components
-	assignmentRegistry := coordination.NewAssignmentRegistry(redisClient)
-	assigner := coordination.NewAssigner([]string{}) // Empty initially, populated by reconcile
-
-	// Initialize heartbeat monitor
-	heartbeatMonitor := coordination.NewHeartbeatMonitor(redisClient, log, shardMetrics)
-	log.Info("Initialized heartbeat monitor")
-
-	// Initialize migration publisher
-	migrationPublisher := coordination.NewMigrationPublisher(redisClient, shardMetrics, log)
-	log.Info("Initialized migration publisher")
-
-	// Initialize load monitor (Phase 7)
-	prometheusURL := getEnvOrDefault("PROMETHEUS_URL", "http://prometheus:9090")
-	loadMonitor := coordination.NewLoadMonitor(redisClient, prometheusURL, shardMetrics, log)
-	log.Info("Initialized load monitor", zap.String("prometheus_url", prometheusURL))
-
-	// Initialize rebalancer (Phase 7)
-	rebalancer := coordination.NewRebalancer(assignmentRegistry, assigner, migrationPublisher, prometheusURL, log)
-	log.Info("Initialized rebalancer")
-
-	// Initialize throttler (Phase 7)
-	throttler := coordination.NewThrottler(redisClient, 5*time.Minute, shardMetrics, log)
-	log.Info("Initialized throttler", zap.Duration("cooldown_duration", 5*time.Minute))
-
-	coordinator := coordination.NewCoordinator(
-		assignmentRegistry,
-		assigner,
-		repo,
-		redisClient,
-		db,
-		heartbeatMonitor,
-		migrationPublisher,
-		loadMonitor,
-		rebalancer,
-		throttler,
-		shardMetrics,
-		businessMetrics,
-		log,
-	)
 
 	// Start registry
 	if err := sourceRegistry.Start(ctx); err != nil {
@@ -195,18 +149,8 @@ func main() {
 	demandHandler := demand.NewDemandHandler(demandSubscriber)
 	protected.GET("/demand", demandHandler.GetDemand)
 
-	// Assignment handlers
-	assignmentHandler := handlers.NewAssignmentHandler(
-		assignmentRegistry,
-		heartbeatMonitor,
-		shardMetrics,
-		log,
-	)
-	protected.GET("/assignments", assignmentHandler.GetAssignments)
-	protected.POST("/heartbeat", assignmentHandler.PublishHeartbeat)
-
 	// Get port
-	port := getEnvOrDefault("PORT", "8088")
+	port := getEnvOrDefault("PORT", "8083")
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -229,14 +173,6 @@ func main() {
 		}
 	}()
 
-	// Start coordinator
-	go func() {
-		log.Info("Starting shard coordinator")
-		if err := coordinator.Run(ctx); err != nil {
-			log.Error("Coordinator failed", zap.Error(err))
-		}
-	}()
-
 	// Start demand subscriber (Phase 5)
 	go func() {
 		log.Info("Starting demand subscriber")
@@ -251,9 +187,6 @@ func main() {
 	<-quit
 
 	log.Info("Shutting down service...")
-
-	// Stop coordinator
-	coordinator.Stop()
 
 	// Stop registry and cleanup job
 	sourceRegistry.Stop()

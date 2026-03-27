@@ -212,8 +212,7 @@ func main() {
 	relayMgr := relay.NewManager(relayRepo, relayPoster, rdb, dbPool, log, relayProvisioner)
 
 	// Leadership coordination via SDK
-	base := listener.NewListenerBase(listener.ListenerConfig{}, nil, nil, "", log)
-	ll, err := listener.NewLeadershipListenerFromEnv(base, "discord", log)
+	ll, err := listener.NewLeadershipListenerFromEnv("discord", rdb, log)
 	if err != nil {
 		log.Fatal("Failed to initialize leadership listener", zap.Error(err))
 	}
