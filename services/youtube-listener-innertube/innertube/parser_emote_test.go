@@ -87,6 +87,36 @@ func TestExtractMessageText_UnicodeEmoji_NoCustom(t *testing.T) {
 	assert.Empty(t, emotes, "unicode emoji should not produce an emote entry")
 }
 
+// TestExtractMessageText_BuiltInEmoji_WithThumbnails tests that a non-custom emoji
+// WITH thumbnails (YouTube built-in emoji like :face-blue-smiling:) produces an EmoteEntry.
+func TestExtractMessageText_BuiltInEmoji_WithThumbnails(t *testing.T) {
+	message := MessageContent{
+		Runs: []MessageRun{
+			{
+				Emoji: &EmojiData{
+					EmojiID:       "face-blue-smiling",
+					IsCustomEmoji: false,
+					Shortcuts:     []string{":face-blue-smiling:"},
+					Image: Thumbnails{
+						Thumbnails: []Thumbnail{
+							{URL: "https://www.youtube.com/s/gaming/emoji/small.png", Width: 24, Height: 24},
+							{URL: "https://www.youtube.com/s/gaming/emoji/large.png", Width: 48, Height: 48},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	text, emotes := extractMessageText(message)
+
+	assert.Equal(t, ":face-blue-smiling:", text, "built-in emoji text should use shortcut")
+	require.Len(t, emotes, 1, "built-in emoji with thumbnails should produce an emote entry")
+	assert.Equal(t, ":face-blue-smiling:", emotes[0].Code)
+	assert.Equal(t, "https://www.youtube.com/s/gaming/emoji/large.png", emotes[0].URL, "should use index 1 thumbnail")
+	assert.Equal(t, "face-blue-smiling", emotes[0].ID)
+}
+
 // TestExtractMessageText_EmoteURL_UsesIndex1 tests that with 2 thumbnails,
 // the emote URL uses index 1 (larger image).
 func TestExtractMessageText_EmoteURL_UsesIndex1(t *testing.T) {
