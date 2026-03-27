@@ -72,10 +72,11 @@ type Manager struct {
 	statusPublisher *status.Publisher // Publishes platform status to Redis Pub/Sub
 
 	// Coordinator integration
-	assignedSourceIDs       map[string]bool      // From coordinator
-	filteredAssignmentCount int                  // Number of assigned sources that have database channels
-	migrationMu             sync.RWMutex         // Protects migration state
-	firstMessageChan        map[int]chan struct{} // Per-chatroom first message signal (key: chatroom ID)
+	assignedSourceIDs       map[string]bool                    // From coordinator
+	demandedSourceIDs       map[string]listener.DemandedSource // nil = no demand filtering
+	filteredAssignmentCount int                                // Number of assigned sources that have database channels
+	migrationMu             sync.RWMutex                       // Protects migration state
+	firstMessageChan        map[int]chan struct{}               // Per-chatroom first message signal (key: chatroom ID)
 
 	// Track active subscriptions
 	subscriptions map[string]*trackedChannel // key: channel_slug
@@ -130,6 +131,7 @@ func (m *Manager) SetStatusPublisher(pub *status.Publisher) {
 
 type trackedChannel struct {
 	ChannelSlug string
+	SourceID    string // UUID from overlay_chat_sources.id
 	ChatroomID  int
 	OverlayIDs  map[string]struct{}
 }
@@ -537,6 +539,7 @@ func (m *Manager) buildChannelPlans(channels []*ActiveChannel) map[string]*chann
 			plan = &channelPlan{
 				channel: &trackedChannel{
 					ChannelSlug: ch.ChannelSlug,
+					SourceID:    ch.SourceID,
 					ChatroomID:  ch.ChatroomID,
 					OverlayIDs:  make(map[string]struct{}),
 				},
@@ -1007,12 +1010,76 @@ func (m *Manager) GetActiveChannelCount() int {
 	return len(m.subscriptions)
 }
 
-// UpdateAssignedSourceIDs updates the assigned source IDs from coordinator
-// Thread-safe update with mutex protection
+// UpdateAssignedSourceIDs updates the assigned source IDs from coordinator.
+// Thread-safe update with mutex protection.
 func (m *Manager) UpdateAssignedSourceIDs(newAssignedIDs map[string]bool) {
 	m.migrationMu.Lock()
 	defer m.migrationMu.Unlock()
 	m.assignedSourceIDs = newAssignedIDs
+}
+
+// UpdateDemandedSourceIDs is called by the SDK demand subscriber loop whenever
+// the set of demanded sources changes. demanded is the intersection of assigned
+// sources and sources with active overlay clients. An empty map means no sources
+// are demanded and this listener should disconnect all active channels.
+//
+// The method stores the new demanded set and triggers reconciliation: channels
+// that lost demand are immediately unsubscribed; newly demanded channels are
+// picked up on the next syncChannels cycle.
+func (m *Manager) UpdateDemandedSourceIDs(demanded map[string]listener.DemandedSource) {
+	m.subsMu.Lock()
+	m.demandedSourceIDs = demanded
+	m.subsMu.Unlock()
+
+	m.reconcileDemand()
+}
+
+// reconcileDemand unsubscribes channels whose source_id is no longer in demandedSourceIDs.
+// Called after UpdateDemandedSourceIDs; must not hold subsMu on entry.
+func (m *Manager) reconcileDemand() {
+	m.subsMu.Lock()
+	defer m.subsMu.Unlock()
+
+	demanded := m.demandedSourceIDs
+	// nil demandedSourceIDs means no filtering (backward compat / feature not yet applied).
+	if demanded == nil {
+		return
+	}
+
+	// Build a reverse index: slug -> sourceID for active subscriptions.
+	// subscriptions is keyed by slug; we need source_id to cross-reference demanded.
+	// We use the chatroomIndex to find trackedChannels but slugs are the primary key.
+	for slug, ch := range m.subscriptions {
+		// Determine the source_id for this subscription.
+		sourceID := ch.SourceID
+		if sourceID == "" {
+			continue
+		}
+		if _, ok := demanded[sourceID]; !ok {
+			// This source lost demand — unsubscribe immediately.
+			m.logger.Info("Demand lost, unsubscribing channel",
+				zap.String("channel", slug),
+				zap.String("source_id", sourceID),
+			)
+			if err := m.wsClient.Unsubscribe(ch.ChatroomID); err != nil {
+				m.logger.Error("Failed to unsubscribe on demand loss",
+					zap.String("channel", slug),
+					zap.Error(err),
+				)
+			}
+			delete(m.subscriptions, slug)
+			delete(m.chatroomIndex, ch.ChatroomID)
+			m.releaseLeadership(slug)
+
+			if m.statusPublisher != nil {
+				m.statusPublisher.Publish(m.ctx, status.Message{
+					Platform:  "kick",
+					ChannelID: slug,
+					Status:    "offline",
+				})
+			}
+		}
+	}
 }
 
 // GetSubscriptionCount returns the number of active subscriptions (KICK-05)

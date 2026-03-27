@@ -11,6 +11,7 @@ import (
 	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/listener/testutil"
+	"github.com/caesar/all-chat/shared/listener/testutil/redisutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -90,7 +91,7 @@ func demandUpdateJSON(sources []map[string]string) string {
 // TestDemandFiltering verifies that only assigned sources that appear in the demand update
 // are passed to UpdateDemandedSourceIDs (intersection logic).
 func TestDemandFiltering(t *testing.T) {
-	mr, rc := testutil.StartTestRedisWithClient(t)
+	mr, rc := redisutil.StartTestRedisWithClient(t)
 	defer func() {
 		rc.Close()
 		mr.Close()
@@ -150,7 +151,7 @@ func TestDemandFiltering(t *testing.T) {
 // TestDemandBeforeAssignments verifies that demand updates received before
 // initial assignments are loaded do NOT call UpdateDemandedSourceIDs.
 func TestDemandBeforeAssignments(t *testing.T) {
-	mr, rc := testutil.StartTestRedisWithClient(t)
+	mr, rc := redisutil.StartTestRedisWithClient(t)
 	defer func() {
 		rc.Close()
 		mr.Close()
@@ -160,7 +161,7 @@ func TestDemandBeforeAssignments(t *testing.T) {
 
 	// Coordinator that delays QueryAssignments so the demand update
 	// arrives before assignments are set.
-	blockingMock := &testutil.DelayedMockCoordinator{Delay: 300 * time.Millisecond}
+	blockingMock := &redisutil.DelayedMockCoordinator{Delay: 300 * time.Millisecond}
 
 	cfg := listener.ListenerConfig{
 		HeartbeatInterval:         50 * time.Millisecond,
@@ -238,7 +239,7 @@ func TestDemandWithDisableFiltering(t *testing.T) {
 // TestDemandEmptySources verifies that a DemandUpdate with an empty sources array
 // calls UpdateDemandedSourceIDs with an empty map, causing all listeners to disconnect.
 func TestDemandEmptySources(t *testing.T) {
-	mr, rc := testutil.StartTestRedisWithClient(t)
+	mr, rc := redisutil.StartTestRedisWithClient(t)
 	defer func() {
 		rc.Close()
 		mr.Close()
@@ -286,7 +287,7 @@ func TestDemandEmptySources(t *testing.T) {
 // TestDemandSubscriberReconnect verifies that after a simulated disconnect (context cancel +
 // restart), the demand state is restored from the next DemandUpdate.
 func TestDemandSubscriberReconnect(t *testing.T) {
-	mr, rc := testutil.StartTestRedisWithClient(t)
+	mr, rc := redisutil.StartTestRedisWithClient(t)
 	defer func() {
 		rc.Close()
 		mr.Close()

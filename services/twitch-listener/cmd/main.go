@@ -133,6 +133,7 @@ func main() {
 	cfg := listener.DefaultConfig()
 	cfg.Platform = "twitch"
 	cfg.DisableCoordinatorFiltering = !enableFiltering
+	cfg.DisableDemandFiltering = true // Twitch IRC always connected to all assigned channels
 
 	// Initialize ListenerBase — owns heartbeat, assignment refresh, migration subscriber, JWT refresh
 	base := listener.NewListenerBase(cfg, coordClient, redisClient, podName, log)

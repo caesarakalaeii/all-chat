@@ -1,4 +1,7 @@
-package testutil
+// Package redisutil provides in-memory Redis test helpers for demand subscriber tests.
+// It is intentionally separate from the testutil package so service-level smoke tests
+// can import testutil (MockCoordinator only) without pulling in the miniredis dependency.
+package redisutil
 
 import (
 	"context"
@@ -56,7 +59,7 @@ func NewTestRedisClient(t *testing.T, addr string) *redis.Client {
 	return rc
 }
 
-// DelayedMockCoordinator is a MockCoordinator that delays QueryAssignments
+// DelayedMockCoordinator is a coordinator stub that delays QueryAssignments
 // for a configurable duration to simulate slow initial assignment loading.
 type DelayedMockCoordinator struct {
 	Delay       time.Duration
