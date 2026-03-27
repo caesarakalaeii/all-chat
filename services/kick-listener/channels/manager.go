@@ -1080,6 +1080,14 @@ func (m *Manager) reconcileDemand() {
 			}
 		}
 	}
+
+	// Keep filteredAssignmentCount in sync with the post-demand subscription count.
+	// syncChannels sets filteredAssignmentCount to the number of channels with valid
+	// chatroom IDs, but when demand filtering removes subscriptions that count becomes
+	// stale. The readiness probe compares subscriptionCount < filteredAssignmentCount
+	// to detect "still connecting" state; if filteredAssignmentCount is never updated
+	// here the probe returns 503 indefinitely whenever all channels lose demand.
+	m.filteredAssignmentCount = len(m.subscriptions)
 }
 
 // GetSubscriptionCount returns the number of active subscriptions (KICK-05)
