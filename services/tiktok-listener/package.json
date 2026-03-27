@@ -8,7 +8,7 @@
     "start": "node dist/index.js",
     "dev": "ts-node-esm src/index.ts",
     "build": "tsc",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "vitest run"
   },
   "keywords": [
     "tiktok",
@@ -37,7 +37,8 @@
     "@types/node": "^20.10.0",
     "@types/pg": "^8.10.9",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.2"
   },
   "engines": {
     "node": ">=18.0.0"
