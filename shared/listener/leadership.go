@@ -123,3 +123,9 @@ func (ll *LeadershipListener) LeadershipCoordinator() *sourcemanager.LeadershipC
 func (ll *LeadershipListener) SMClient() *sourcemanager.Client {
 	return ll.smClient
 }
+
+// SetDisableDemandFiltering configures whether the demand subscriber loop is skipped.
+// Must be called before Start. When true, all platform sources are treated as in-demand.
+func (ll *LeadershipListener) SetDisableDemandFiltering(v bool) {
+	ll.config.DisableDemandFiltering = v
+}
