@@ -134,6 +134,19 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
+// ClearActiveChannels resets the active channel map.
+// Called when the IRC connection is lost so the next sync cycle re-joins all channels
+// instead of believing they are still connected.
+func (m *Manager) ClearActiveChannels() {
+	m.mu.Lock()
+	count := len(m.activeChans)
+	m.activeChans = make(map[string]bool)
+	m.mu.Unlock()
+	m.logger.Warn("Cleared active channels due to IRC disconnect",
+		zap.Int("cleared_count", count),
+	)
+}
+
 // Stop gracefully stops the channel manager
 func (m *Manager) Stop() {
 	close(m.stopChan)
@@ -268,9 +281,14 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		}
 
 		// Filter to only assigned channels
+		// Coordinator uses composite keys for Twitch (e.g. "uuid:twitch") — strip platform suffix
 		filteredChannels := make([]string, 0, len(m.assignedSourceIDs))
-		for uuid := range m.assignedSourceIDs {
-			if channelName, ok := uuidToChannelMap[uuid]; ok {
+		for compositeID := range m.assignedSourceIDs {
+			bareID := compositeID
+			if colonIdx := strings.LastIndexByte(compositeID, ':'); colonIdx != -1 {
+				bareID = compositeID[:colonIdx]
+			}
+			if channelName, ok := uuidToChannelMap[bareID]; ok {
 				filteredChannels = append(filteredChannels, channelName)
 			}
 		}
