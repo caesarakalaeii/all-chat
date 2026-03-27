@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -163,6 +164,52 @@ func main() {
 	if err := streamManager.Start(ctx); err != nil {
 		logger.Fatal("Failed to start stream manager", zap.Error(err))
 	}
+
+	// Demand-driven activation (Phase 5)
+	// Leadership-only listeners don't call base.Start so the SDK demand loop
+	// doesn't run automatically. Subscribe directly to source:demand here.
+	go func() {
+		const platformFilter = "youtube"
+		pubsub := redisClient.Subscribe(ctx, "source:demand")
+		defer pubsub.Close()
+
+		logger.Info("Subscribed to source:demand for demand-driven activation",
+			zap.String("platform", platformFilter))
+
+		ch := pubsub.Channel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
+				var update struct {
+					Type    string `json:"type"`
+					Sources []struct {
+						SourceID  string `json:"source_id"`
+						ChannelID string `json:"channel_id"`
+						Platform  string `json:"platform"`
+						OverlayID string `json:"overlay_id"`
+					} `json:"sources"`
+				}
+				if err := json.Unmarshal([]byte(msg.Payload), &update); err != nil {
+					logger.Warn("Failed to parse demand update", zap.Error(err))
+					continue
+				}
+				demanded := make(map[string]bool)
+				for _, s := range update.Sources {
+					if s.Platform == platformFilter {
+						demanded[s.ChannelID] = true
+					}
+				}
+				logger.Info("Demand update received",
+					zap.Int("total_sources", len(update.Sources)),
+					zap.Int("platform_sources", len(demanded)))
+			}
+		}
+	}()
 
 	// 7. HTTP server with metrics and health checks
 	if logLevel == "debug" {
