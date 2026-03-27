@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-27T11:23:01.443Z"
+stopped_at: Completed 05-04-PLAN.md (checkpoint:human-verify for Task 3)
+last_updated: "2026-03-27T11:27:00.000Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 35
-  completed_plans: 33
+  completed_plans: 34
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 05 (tiktok-listener-demand-driven-polling) — EXECUTING
-Plan: 1 of 4
+Plan: 4 of 4 (Tasks 1-2 complete; awaiting checkpoint:human-verify for Task 3)
 
 ## Performance Metrics
 
@@ -171,6 +171,8 @@ Key decisions relevant to v1.6:
 - [Phase 05]: assignedSourceIDs tracked in ListenerBase for intersection logic in demand loop without inter-interface calls
 - [Phase 05]: Redis testutil moved to testutil/redisutil subpackage to avoid miniredis dependency in service-level go.mod files
 - [Phase 05]: trackedChannel.SourceID added to kick-listener for O(1) slug-to-sourceID lookup in reconcileDemand
+- [Phase 05-04]: Leadership-only listeners (innertube, discord, youtube) add direct source:demand Pub/Sub goroutine in main.go — pragmatic minimum since they don't call base.Start; connect/disconnect gating into stream managers deferred to follow-up
+- [Phase 05-04]: kick-listener and twitch-eventsub-listener already had Platform set from prior migration phases (36, 38) — no code changes required
 
 ### Roadmap Evolution
 
@@ -210,9 +212,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T11:23:01.441Z
+Last session: 2026-03-27T11:27:00.000Z
 Last activity: 2026-03-27
-Stopped at: Completed 05-02-PLAN.md
+Stopped at: Completed 05-04-PLAN.md Tasks 1-2; paused at checkpoint:human-verify (Task 3)
 Resume file: None
 
-**Next action:** Phase 04 Plan 03 — listener dashboards (Discord, InnerTube, twitch-eventsub panels).
+**Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
