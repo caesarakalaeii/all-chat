@@ -16,6 +16,7 @@ import (
 // ConnectionManager manages the Twitch IRC connection
 type ConnectionManager struct {
 	client           *twitch.Client
+	config           Config
 	parser           *Parser
 	publisher        *publisher.StreamPublisher
 	registry         registry.MessageIDRegistry // Registry for message ID tracking
@@ -23,12 +24,14 @@ type ConnectionManager struct {
 	metrics          *metrics.ListenerMetrics
 	connected        bool
 	connectedAt      time.Time
+	lastActivityAt   time.Time // Last time any IRC message (chat, event, PING) was received
 	mu               sync.RWMutex
 	stopChan         chan struct{}
 	wg               sync.WaitGroup
 	firstMessageChan map[string]chan struct{} // Per-channel first message signal for migration
 	activeChannelsFn func() []string          // Returns currently active channels for reconnect status publish
 	statusPublisher  *status.Publisher        // Publishes platform status on IRC reconnect
+	onDisconnect     func()                   // Called when IRC connection is lost (for channel manager reset)
 }
 
 // Config holds the configuration for IRC connection
@@ -50,6 +53,7 @@ func NewConnectionManager(
 
 	cm := &ConnectionManager{
 		client:           client,
+		config:           config,
 		parser:           parser,
 		publisher:        pub,
 		registry:         reg,
@@ -75,20 +79,93 @@ func NewConnectionManager(
 	return cm
 }
 
-// Connect establishes connection to Twitch IRC
+// Connect establishes connection to Twitch IRC with automatic reconnection.
+// If the underlying client.Connect() returns (connection permanently lost),
+// a new client is created and reconnected after a backoff delay.
 func (cm *ConnectionManager) Connect(ctx context.Context) error {
 	cm.logger.Info("Connecting to Twitch IRC")
 	cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "attempting")
 
-	// Start client in goroutine
 	cm.wg.Add(1)
 	go func() {
 		defer cm.wg.Done()
-		if err := cm.client.Connect(); err != nil {
-			cm.logger.Error("IRC connection error", zap.Error(err))
-			cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "failed")
-			cm.metrics.RecordConnection("twitch", "twitch-listener", "irc", false)
-			cm.metrics.RecordError("twitch", "twitch-listener", "connection", "error")
+		backoff := 5 * time.Second
+		const maxBackoff = 60 * time.Second
+
+		for {
+			err := cm.client.Connect()
+
+			// Mark disconnected immediately when Connect() returns
+			cm.mu.Lock()
+			wasConnected := cm.connected
+			cm.connected = false
+			cm.mu.Unlock()
+
+			if wasConnected {
+				cm.metrics.RecordConnection("twitch", "twitch-listener", "irc", false)
+				cm.logger.Warn("IRC connection lost", zap.Error(err))
+
+				// Notify channel manager to clear stale activeChans
+				cm.mu.RLock()
+				onDisconnect := cm.onDisconnect
+				cm.mu.RUnlock()
+				if onDisconnect != nil {
+					onDisconnect()
+				}
+			}
+
+			// Check if we should stop (graceful shutdown)
+			select {
+			case <-cm.stopChan:
+				cm.logger.Info("IRC reconnect loop stopped (shutdown)")
+				return
+			default:
+			}
+
+			if err != nil {
+				cm.logger.Error("IRC connection error, reconnecting",
+					zap.Error(err),
+					zap.Duration("backoff", backoff),
+				)
+				cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "failed")
+				cm.metrics.RecordError("twitch", "twitch-listener", "connection", "error")
+			} else {
+				cm.logger.Warn("IRC connection closed cleanly, reconnecting",
+					zap.Duration("backoff", backoff),
+				)
+			}
+
+			// Wait before reconnecting (with shutdown check)
+			select {
+			case <-cm.stopChan:
+				cm.logger.Info("IRC reconnect loop stopped during backoff (shutdown)")
+				return
+			case <-time.After(backoff):
+			}
+
+			// Increase backoff for next attempt (capped)
+			backoff = backoff * 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+
+			// Create fresh client — the old client's internal state is stale after Connect() returns
+			cm.logger.Info("Creating new IRC client for reconnection")
+			cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "attempting")
+
+			newClient := twitch.NewClient(cm.config.Username, cm.config.OAuth)
+			newClient.OnPrivateMessage(cm.handlePrivateMessage)
+			newClient.OnUserNoticeMessage(cm.handleUserNotice)
+			newClient.OnClearMessage(cm.handleClearMessage)
+			newClient.OnClearChatMessage(cm.handleClearChat)
+			newClient.OnConnect(cm.handleConnect)
+
+			cm.mu.Lock()
+			cm.client = newClient
+			cm.mu.Unlock()
+
+			// Reset backoff on successful connect (handleConnect sets connected=true)
+			backoff = 5 * time.Second
 		}
 	}()
 
@@ -109,7 +186,10 @@ func (cm *ConnectionManager) Disconnect() error {
 	}
 	cm.mu.RUnlock()
 
-	if err := cm.client.Disconnect(); err != nil {
+	cm.mu.RLock()
+	client := cm.client
+	cm.mu.RUnlock()
+	if err := client.Disconnect(); err != nil {
 		cm.logger.Warn("Error during disconnect", zap.Error(err))
 		cm.metrics.RecordError("twitch", "twitch-listener", "connection", "warning")
 	}
@@ -125,13 +205,19 @@ func (cm *ConnectionManager) Disconnect() error {
 
 // Join joins a Twitch channel
 func (cm *ConnectionManager) Join(channel string) {
-	cm.client.Join(channel)
+	cm.mu.RLock()
+	client := cm.client
+	cm.mu.RUnlock()
+	client.Join(channel)
 	cm.logger.Debug("IRC JOIN", zap.String("channel", channel))
 }
 
 // Depart leaves a Twitch channel
 func (cm *ConnectionManager) Depart(channel string) {
-	cm.client.Depart(channel)
+	cm.mu.RLock()
+	client := cm.client
+	cm.mu.RUnlock()
+	client.Depart(channel)
 	cm.logger.Debug("IRC PART", zap.String("channel", channel))
 }
 
@@ -160,9 +246,11 @@ func (cm *ConnectionManager) SetActiveChannelsFn(fn func() []string, pub *status
 
 // handleConnect is called when connection is established
 func (cm *ConnectionManager) handleConnect() {
+	now := time.Now()
 	cm.mu.Lock()
 	cm.connected = true
-	cm.connectedAt = time.Now()
+	cm.connectedAt = now
+	cm.lastActivityAt = now
 	activeChannelsFn := cm.activeChannelsFn
 	statusPublisher := cm.statusPublisher
 	cm.mu.Unlock()
@@ -193,8 +281,33 @@ func (cm *ConnectionManager) handleConnect() {
 	}
 }
 
+// recordActivity updates the last activity timestamp.
+// Called on every incoming IRC message to detect stale connections.
+func (cm *ConnectionManager) recordActivity() {
+	cm.mu.Lock()
+	cm.lastActivityAt = time.Now()
+	cm.mu.Unlock()
+}
+
+// LastActivityAt returns when the last IRC message was received.
+// Used by health checks to detect silently dead connections.
+func (cm *ConnectionManager) LastActivityAt() time.Time {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.lastActivityAt
+}
+
+// SetOnDisconnect registers a callback invoked when the IRC connection is lost.
+// The channel manager uses this to clear stale activeChans so the next sync re-joins.
+func (cm *ConnectionManager) SetOnDisconnect(fn func()) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.onDisconnect = fn
+}
+
 // handlePrivateMessage processes incoming PRIVMSG from Twitch
 func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage) {
+	cm.recordActivity()
 	start := time.Now()
 
 	// Record message received
@@ -271,6 +384,7 @@ func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage)
 
 // handleUserNotice processes incoming USERNOTICE events from Twitch (subs, raids, bits, etc.)
 func (cm *ConnectionManager) handleUserNotice(message twitch.UserNoticeMessage) {
+	cm.recordActivity()
 	start := time.Now()
 
 	// Record event received
@@ -320,6 +434,7 @@ func (cm *ConnectionManager) handleUserNotice(message twitch.UserNoticeMessage) 
 
 // handleClearMessage processes CLEARMSG (single message deletion)
 func (cm *ConnectionManager) handleClearMessage(message twitch.ClearMessage) {
+	cm.recordActivity()
 	start := time.Now()
 
 	// Record deletion event received
@@ -364,6 +479,7 @@ func (cm *ConnectionManager) handleClearMessage(message twitch.ClearMessage) {
 
 // handleClearChat processes CLEARCHAT (user timeout/ban or full clear)
 func (cm *ConnectionManager) handleClearChat(message twitch.ClearChatMessage) {
+	cm.recordActivity()
 	start := time.Now()
 
 	cm.metrics.RecordMessage("twitch", "twitch-listener", message.Channel, "deletion")
@@ -405,5 +521,7 @@ func (cm *ConnectionManager) handleClearChat(message twitch.ClearChatMessage) {
 
 // GetClient returns the underlying Twitch client (for testing)
 func (cm *ConnectionManager) GetClient() *twitch.Client {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
 	return cm.client
 }

@@ -176,6 +176,9 @@ func main() {
 	// Wire status publisher and active channels callback to IRC connection for reconnect
 	ircConn.SetActiveChannelsFn(channelMgr.GetActiveChannels, statusPublisher)
 
+	// Wire disconnect callback — clears stale activeChans so next sync re-joins all channels
+	ircConn.SetOnDisconnect(channelMgr.ClearActiveChannels)
+
 	// Connect to Twitch IRC
 	if err := ircConn.Connect(ctx); err != nil {
 		log.Fatal("Failed to connect to Twitch IRC", zap.Error(err))

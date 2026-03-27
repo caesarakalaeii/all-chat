@@ -58,6 +58,22 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 		reason = "IRC not connected"
 	}
 
+	// Check 1b: IRC connection liveness — detect silently dead connections
+	// If we have active channels but no IRC activity for 10 minutes, connection is stale
+	const staleThreshold = 10 * time.Minute
+	lastActivity := h.ircConn.LastActivityAt()
+	if !lastActivity.IsZero() {
+		checks["irc_last_activity_seconds_ago"] = int(time.Since(lastActivity).Seconds())
+		activeCount := h.chanMgr.GetActiveChannelCount()
+		if activeCount > 0 && time.Since(lastActivity) > staleThreshold {
+			ready = false
+			if reason == "" {
+				reason = "IRC connection stale (no activity)"
+			}
+			checks["irc_stale"] = true
+		}
+	}
+
 	// Check 2: Redis connection
 	redisErr := h.publisher.Ping(ctx)
 	checks["redis_connected"] = redisErr == nil
@@ -112,12 +128,19 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 func (h *HealthHandler) Status(c *gin.Context) {
 	activeChannels := h.chanMgr.GetActiveChannels()
 
+	lastAct := h.ircConn.LastActivityAt()
+	var lastActivityAgo string
+	if !lastAct.IsZero() {
+		lastActivityAgo = time.Since(lastAct).Truncate(time.Second).String()
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ok",
 		"irc": gin.H{
-			"connected":       h.ircConn.IsConnected(),
-			"active_channels": len(activeChannels),
-			"channels":        activeChannels,
+			"connected":         h.ircConn.IsConnected(),
+			"active_channels":   len(activeChannels),
+			"channels":          activeChannels,
+			"last_activity_ago": lastActivityAgo,
 		},
 	})
 }
