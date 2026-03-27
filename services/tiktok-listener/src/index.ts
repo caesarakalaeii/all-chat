@@ -334,11 +334,13 @@ class TikTokListenerService {
       // Initialize demand subscriber (Phase 5)
       // Replaces old pollActiveStreams / startDatabaseListener approach.
       // source-manager publishes full-snapshot DemandUpdates to "source:demand".
+      // No assignment-based filtering — tiktok-listener is leadership-based,
+      // so all demanded tiktok sources are accepted. Pods claim streams
+      // independently via live status checks.
       this.demandSubscriber = new DemandSubscriber(
         this.redis,
         (demanded) => this.handleDemandUpdate(demanded),
-        logger,
-        this.assignedSourceIDs
+        logger
       );
       await this.demandSubscriber.subscribe();
       logger.info('Demand subscriber started');
@@ -578,9 +580,7 @@ class TikTokListenerService {
       const sources = await this.coordinatorClient.getDemand('tiktok');
       const demanded = new Map<string, DemandSource>();
       for (const source of sources) {
-        if (this.assignedSourceIDs.size === 0 || this.assignedSourceIDs.has(source.source_id)) {
-          demanded.set(source.channel_id, source);
-        }
+        demanded.set(source.channel_id, source);
       }
       await this.handleDemandUpdate(demanded);
     } catch (err) {
@@ -686,12 +686,6 @@ class TikTokListenerService {
         timeout_ms: 30000
       });
 
-      // Add to assigned source IDs and update demand subscriber
-      this.assignedSourceIDs.add(event.channel_id);
-      if (this.demandSubscriber) {
-        this.demandSubscriber.updateAssignedSourceIDs(this.assignedSourceIDs);
-      }
-
       // Set up promise to wait for first message or timeout
       const firstMessagePromise = new Promise<void>((resolve) => {
         this.firstMessageCallbacks.set(username, () => {
@@ -733,12 +727,6 @@ class TikTokListenerService {
         migration_id: event.migration_id,
         username
       });
-
-      // Remove from assigned source IDs and update demand subscriber
-      this.assignedSourceIDs.delete(event.channel_id);
-      if (this.demandSubscriber) {
-        this.demandSubscriber.updateAssignedSourceIDs(this.assignedSourceIDs);
-      }
 
       // Disconnect from stream
       await this.disconnectFromStream(username);
