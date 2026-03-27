@@ -253,5 +253,18 @@ Plans:
 - [ ] 04-05-PLAN.md — 4 alert groups as code (listener disconnect, pipeline stall, WebSocket drop, error rate)
 - [ ] 04-06-PLAN.md — Gap closure: fix InnerTube dashboard panel query + pipeline-stall alert false positive
 
+### Phase 5: TikTok listener demand-driven polling — only poll when overlay has connected clients
+
+**Goal:** Make all listeners except Twitch IRC demand-driven: source-manager subscribes to overlay connection events, resolves which sources have demand, and publishes demand signals via Redis Pub/Sub. Go listener SDK gains a demand subscriber loop. TikTok listener replaces DB polling with demand-driven activation. All non-Twitch listeners only connect when overlays are open.
+**Requirements**: DEMAND-01, DEMAND-02, DEMAND-03, DEMAND-04, DEMAND-05, DEMAND-06, DEMAND-07, DEMAND-08, DEMAND-09
+**Depends on:** Phase 4
+**Plans:** 4 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Source-manager demand subscriber, DemandUpdate Pub/Sub, GET /demand endpoint, repository extension
+- [ ] 05-02-PLAN.md — Go SDK demand loop, ChannelManager UpdateDemandedSourceIDs, all listener implementations
+- [ ] 05-03-PLAN.md — TikTok listener DemandSubscriber replacing pollActiveStreams, LiveStreamPoller idle control
+- [ ] 05-04-PLAN.md — Wire demand into kick/twitch-eventsub SDK config + leadership-only listener subscriptions + E2E verify
+
 ---
-*Last updated: 2026-03-26 after Phase 4 gap closure planning*
+*Last updated: 2026-03-27 after Phase 5 planning*
