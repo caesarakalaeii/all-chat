@@ -170,3 +170,17 @@ None — all changes are structural deletions and API migrations. No data flows 
 ---
 *Phase: 06-unify-all-listeners-to-leadership-based-coordination*
 *Completed: 2026-03-28*
+
+## Self-Check: PASSED
+
+- shared/coordination/: CONFIRMED DELETED
+- services/source-manager/coordination/: CONFIRMED DELETED
+- services/source-manager/handlers/assignments.go: CONFIRMED DELETED
+- services/source-manager/cmd/main.go port 8083: FOUND
+- deployments/k8s/base/configmap.yaml SOURCE_MANAGER_URL :8083: FOUND
+- deployments/k8s/base/kick-listener/deployment.yaml COORDINATOR_URL: CONFIRMED ABSENT
+- deployments/k8s/base/twitch-eventsub-listener/deployment.yaml SOURCE_MANAGER_URL: FOUND
+- No shared/coordination references in any .go file: CONFIRMED
+- Commit 5f5b51b: FOUND
+- Commit afbca2d: FOUND
+- 06-03-SUMMARY.md: FOUND
