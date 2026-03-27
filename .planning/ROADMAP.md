@@ -258,13 +258,14 @@ Plans:
 **Goal:** Make all listeners except Twitch IRC demand-driven: source-manager subscribes to overlay connection events, resolves which sources have demand, and publishes demand signals via Redis Pub/Sub. Go listener SDK gains a demand subscriber loop. TikTok listener replaces DB polling with demand-driven activation. All non-Twitch listeners only connect when overlays are open.
 **Requirements**: DEMAND-01, DEMAND-02, DEMAND-03, DEMAND-04, DEMAND-05, DEMAND-06, DEMAND-07, DEMAND-08, DEMAND-09
 **Depends on:** Phase 4
-**Plans:** 5/5 plans complete
+**Plans:** 6 plans (4 original + 2 gap closure)
 
 Plans:
 - [ ] 05-01-PLAN.md — Source-manager demand subscriber, DemandUpdate Pub/Sub, GET /demand endpoint, repository extension
 - [ ] 05-02-PLAN.md — Go SDK demand loop, ChannelManager UpdateDemandedSourceIDs, all listener implementations
 - [ ] 05-03-PLAN.md — TikTok listener DemandSubscriber replacing pollActiveStreams, LiveStreamPoller idle control
 - [ ] 05-04-PLAN.md — Wire demand into kick/twitch-eventsub SDK config + leadership-only listener subscriptions + E2E verify
+- [ ] 05-05-PLAN.md — Gap closure: wire demand gating into innertube, discord, and youtube-listener stream managers
+- [ ] 05-06-PLAN.md — Gap closure: E2E demand signal verification checkpoint
 
----
-*Last updated: 2026-03-27 after Phase 5 planning*
+*Last updated: 2026-03-27 after Phase 5 gap closure planning*
