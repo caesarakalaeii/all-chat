@@ -81,6 +81,16 @@ spec:
             secretKeyRef:
               name: twitch-eventsub-creds
               key: client-secret
+        - name: SOURCE_MANAGER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: SOURCE_MANAGER_URL
+        - name: SOURCE_MANAGER_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: SERVICE_JWT_SECRET
         resources:
           requests:
             memory: "128Mi"
