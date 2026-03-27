@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 05-04-PLAN.md (checkpoint:human-verify for Task 3)
-last_updated: "2026-03-27T11:27:00.000Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-03-27T11:32:54.883Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 35
-  completed_plans: 34
+  completed_plans: 35
 ---
 
 # Project State
@@ -80,6 +80,7 @@ Plan: 4 of 4 (Tasks 1-2 complete; awaiting checkpoint:human-verify for Task 3)
 | Phase 04 P04 | 362s | 2 tasks | 1 files |
 | Phase 05 P01 | 226s | 2 tasks | 5 files |
 | Phase 05 P02 | 1622 | 2 tasks | 16 files |
+| Phase 05 P03 | 380 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -173,6 +174,9 @@ Key decisions relevant to v1.6:
 - [Phase 05]: trackedChannel.SourceID added to kick-listener for O(1) slug-to-sourceID lookup in reconcileDemand
 - [Phase 05-04]: Leadership-only listeners (innertube, discord, youtube) add direct source:demand Pub/Sub goroutine in main.go — pragmatic minimum since they don't call base.Start; connect/disconnect gating into stream managers deferred to follow-up
 - [Phase 05-04]: kick-listener and twitch-eventsub-listener already had Platform set from prior migration phases (36, 38) — no code changes required
+- [Phase 05]: assignedSourceIDs changed from Map<string,boolean> to Set<string> to align with DemandSubscriber constructor signature
+- [Phase 05]: getDemand() added to CoordinatorClient to avoid exposing raw auth headers; uses existing axios interceptor for JWT
+- [Phase 05]: livePollerRunning boolean guards LiveStreamPoller start/stop — poller does not start until first non-empty demand update
 
 ### Roadmap Evolution
 
@@ -212,9 +216,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T11:27:00.000Z
+Last session: 2026-03-27T11:32:54.880Z
 Last activity: 2026-03-27
-Stopped at: Completed 05-04-PLAN.md Tasks 1-2; paused at checkpoint:human-verify (Task 3)
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
