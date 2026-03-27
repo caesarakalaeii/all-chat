@@ -3,22 +3,16 @@ package channels
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/twitch-listener/status"
-	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -654,147 +648,3 @@ func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels 
 	}
 }
 
-// HandleMigrationEvent handles migration events from Redis Pub/Sub (TWITCH-04, TWITCH-05)
-func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) error {
-	// Extract trace context from event (from Redis Streams message)
-	carrier := propagation.MapCarrier{
-		"traceparent": event.TraceParent,
-		"tracestate":  event.TraceState,
-	}
-	ctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
-
-	tracer := otel.Tracer("twitch-listener")
-	ctx, span := tracer.Start(ctx, "handle-migration",
-		trace.WithAttributes(
-			attribute.String("migration_id", event.MigrationID),
-			attribute.String("channel_id", event.ChannelID),
-			attribute.String("from_pod", event.FromPod),
-			attribute.String("to_pod", event.ToPod),
-		),
-	)
-	defer span.End()
-
-	m.migrationMu.Lock()
-	defer m.migrationMu.Unlock()
-
-	if event.Platform != "twitch" {
-		return nil // Not for this listener
-	}
-
-	// Check if this pod is involved
-	podName := os.Getenv("HOSTNAME")
-
-	if event.ToPod == podName {
-		// New pod: connect and wait for first message (TWITCH-04)
-		m.handleMigrationAsNewPod(ctx, event)
-	} else if event.FromPod == podName {
-		// Old pod: disconnect after confirmation (TWITCH-05)
-		m.handleMigrationAsOldPod(ctx, event)
-	}
-	return nil
-}
-
-// handleMigrationAsNewPod handles migration as the new pod (TWITCH-04)
-func (m *Manager) handleMigrationAsNewPod(ctx context.Context, event *coordination.MigrationEvent) {
-	// Per CONTEXT.md: "New pod waits for first message OR 30s timeout (whichever comes first)"
-	channel := m.getChannelForSourceID(event.ChannelID)
-	if channel == "" {
-		m.logger.Error("Cannot resolve channel for source ID", zap.String("source_id", event.ChannelID))
-		return
-	}
-
-	// Create first message signal channel
-	firstMsgChan := make(chan struct{}, 1)
-	m.firstMessageChan[channel] = firstMsgChan
-
-	// Join channel
-	m.joinParter.Join(channel)
-	m.mu.Lock()
-	m.activeChans[channel] = true
-	m.mu.Unlock()
-
-	// Wait for first message or timeout
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	select {
-	case <-firstMsgChan:
-		// Success! Connection confirmed
-		m.logger.Info("Migration successful (new pod)", zap.String("channel", channel))
-		// Publish confirmation to Redis Streams
-		if err := m.publishMigrationConfirmation(ctx, event.MigrationID, "connected", 0); err != nil {
-			m.logger.Error("Failed to publish migration success", zap.Error(err))
-		}
-	case <-timeoutCtx.Done():
-		// Timeout - connection failed
-		m.logger.Error("Migration timeout (new pod)", zap.String("channel", channel))
-		// Publish failure to Redis Streams
-		if err := m.publishMigrationConfirmation(context.Background(), event.MigrationID, "failed", 0); err != nil {
-			m.logger.Error("Failed to publish migration failure", zap.Error(err))
-		}
-	}
-
-	delete(m.firstMessageChan, channel)
-}
-
-// handleMigrationAsOldPod handles migration as the old pod (TWITCH-05)
-func (m *Manager) handleMigrationAsOldPod(ctx context.Context, event *coordination.MigrationEvent) {
-	// Per CONTEXT.md: "Old pod disconnects immediately after seeing new pod's confirmation"
-	channel := m.getChannelForSourceID(event.ChannelID)
-	if channel == "" {
-		m.logger.Error("Cannot resolve channel for source ID", zap.String("source_id", event.ChannelID))
-		return
-	}
-
-	// PART channel immediately (TWITCH-05)
-	m.joinParter.Depart(channel)
-	m.mu.Lock()
-	delete(m.activeChans, channel)
-	m.mu.Unlock()
-
-	m.logger.Info("Migration handoff complete (old pod)", zap.String("channel", channel))
-}
-
-// publishMigrationConfirmation publishes migration confirmation to Redis Streams
-func (m *Manager) publishMigrationConfirmation(ctx context.Context, migrationID, status string, sequenceNum int64) error {
-	event := map[string]interface{}{
-		"migration_id":    migrationID,
-		"status":          status, // "connected" or "failed"
-		"pod_id":          m.podID,
-		"timestamp":       time.Now().Unix(),
-		"sequence_number": sequenceNum,
-	}
-
-	_, err := m.redisClient.XAdd(ctx, &redis.XAddArgs{
-		Stream: "migration:log",
-		Values: event,
-	}).Result()
-
-	if err != nil {
-		m.logger.Error("Failed to publish migration confirmation",
-			zap.String("migration_id", migrationID),
-			zap.Error(err))
-		return err
-	}
-
-	m.logger.Info("Published migration confirmation",
-		zap.String("migration_id", migrationID),
-		zap.String("status", status))
-	return nil
-}
-
-// getChannelForSourceID resolves a source ID to a channel name
-func (m *Manager) getChannelForSourceID(sourceID string) string {
-	// Query database for channel name by source ID
-	ctx := context.Background()
-	_, err := m.repo.GetActiveChannels(ctx)
-	if err != nil {
-		m.logger.Error("Failed to get active channels for source ID lookup", zap.Error(err))
-		return ""
-	}
-
-	// Note: This is a simplified implementation
-	// In production, we'd need a more efficient lookup or caching
-	// For now, return empty string as we don't have a direct source_id -> channel_name mapping
-	return ""
-}

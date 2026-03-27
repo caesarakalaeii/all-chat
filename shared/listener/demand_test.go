@@ -8,9 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/listener"
-	"github.com/caesar/all-chat/shared/listener/testutil"
 	"github.com/caesar/all-chat/shared/listener/testutil/redisutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,21 +19,13 @@ import (
 // demandCapturingManager records UpdateDemandedSourceIDs calls for test assertions.
 type demandCapturingManager struct {
 	mu              sync.Mutex
-	assignedIDs     map[string]bool
 	demandCalls     []map[string]listener.DemandedSource
 	demandCallCount atomic.Int64
 }
 
-func (m *demandCapturingManager) Start(_ context.Context) error { return nil }
-func (m *demandCapturingManager) Stop()                         {}
-func (m *demandCapturingManager) HandleMigrationEvent(_ *coordination.MigrationEvent) error {
-	return nil
-}
-func (m *demandCapturingManager) UpdateAssignedSourceIDs(ids map[string]bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.assignedIDs = ids
-}
+func (m *demandCapturingManager) Start(_ context.Context) error                                { return nil }
+func (m *demandCapturingManager) Stop()                                                        {}
+func (m *demandCapturingManager) UpdateAssignedSourceIDs(_ map[string]bool)                   {}
 func (m *demandCapturingManager) UpdateDemandedSourceIDs(demanded map[string]listener.DemandedSource) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -88,8 +78,8 @@ func demandUpdateJSON(sources []map[string]string) string {
 	return string(b)
 }
 
-// TestDemandFiltering verifies that only assigned sources that appear in the demand update
-// are passed to UpdateDemandedSourceIDs (intersection logic).
+// TestDemandFiltering verifies that demand updates are filtered by platform only.
+// Sources from other platforms are excluded; sources from this platform pass through.
 func TestDemandFiltering(t *testing.T) {
 	mr, rc := redisutil.StartTestRedisWithClient(t)
 	defer func() {
@@ -99,35 +89,25 @@ func TestDemandFiltering(t *testing.T) {
 		goleak.VerifyNone(t)
 	}()
 
-	mock := &testutil.MockCoordinator{
-		Assignments: []*coordination.Assignment{
-			{SourceID: "A"},
-			{SourceID: "B"},
-			{SourceID: "C"},
-		},
-	}
-	cfg := listener.ListenerConfig{
-		HeartbeatInterval:         50 * time.Millisecond,
-		AssignmentRefreshInterval: 50 * time.Millisecond,
-		StartupJitterMax:          0,
-		Platform:                  "kick",
-	}
+	ll, err := listener.NewLeadershipListener(listener.LeadershipConfig{
+		Platform: "kick",
+	}, rc, zap.NewNop())
+	require.NoError(t, err)
 
-	base := listener.NewListenerBase(cfg, mock, rc, "test-pod", zap.NewNop())
 	mgr := &demandCapturingManager{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	require.NoError(t, base.Start(ctx, mgr))
+	require.NoError(t, ll.Start(ctx, mgr))
 
 	// Give the demand subscriber goroutine time to establish its Redis subscription.
 	time.Sleep(50 * time.Millisecond)
 
-	// Publish demand update containing A (assigned) and D (not assigned).
-	// Expected intersection: {A}.
+	// Publish demand update containing kick sources and a twitch source.
+	// Only kick sources should pass through the platform filter.
 	payload := demandUpdateJSON([]map[string]string{
 		{"source_id": "A", "channel_id": "chan-a", "platform": "kick", "overlay_id": "ov-1"},
-		{"source_id": "D", "channel_id": "chan-d", "platform": "kick", "overlay_id": "ov-2"},
+		{"source_id": "D", "channel_id": "chan-d", "platform": "twitch", "overlay_id": "ov-2"},
 	})
 
 	require.NoError(t, rc.Publish(ctx, "source:demand", payload).Err())
@@ -140,70 +120,11 @@ func TestDemandFiltering(t *testing.T) {
 	got, ok := mgr.getLastDemandCall()
 	require.True(t, ok)
 
-	assert.Contains(t, got, "A", "A is assigned and demanded — must be in result")
-	assert.NotContains(t, got, "D", "D is not assigned — must NOT be in result")
-	assert.NotContains(t, got, "B", "B is assigned but not in demand update — must NOT be in result")
+	assert.Contains(t, got, "A", "A is a kick source — must be in result")
+	assert.NotContains(t, got, "D", "D is a twitch source — must NOT be in result after platform filter")
 
 	cancel()
-	base.Stop()
-}
-
-// TestDemandBeforeAssignments verifies that demand updates received before
-// initial assignments are loaded do NOT call UpdateDemandedSourceIDs.
-func TestDemandBeforeAssignments(t *testing.T) {
-	mr, rc := redisutil.StartTestRedisWithClient(t)
-	defer func() {
-		rc.Close()
-		mr.Close()
-		time.Sleep(10 * time.Millisecond)
-		goleak.VerifyNone(t)
-	}()
-
-	// Coordinator that delays QueryAssignments so the demand update
-	// arrives before assignments are set.
-	blockingMock := &redisutil.DelayedMockCoordinator{Delay: 300 * time.Millisecond}
-
-	cfg := listener.ListenerConfig{
-		HeartbeatInterval:         50 * time.Millisecond,
-		AssignmentRefreshInterval: 500 * time.Millisecond,
-		StartupJitterMax:          0,
-		Platform:                  "kick",
-	}
-
-	base := listener.NewListenerBase(cfg, blockingMock, rc, "test-pod", zap.NewNop())
-	mgr := &demandCapturingManager{}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Start base in a goroutine because it will block on QueryAssignments.
-	startDone := make(chan error, 1)
-	go func() {
-		startDone <- base.Start(ctx, mgr)
-	}()
-
-	// Wait briefly to ensure the demand loop goroutine is spawned but assignments
-	// have NOT been loaded yet (blockingMock delays 300ms).
-	time.Sleep(50 * time.Millisecond)
-
-	// Publish demand update before assignments complete.
-	payload := demandUpdateJSON([]map[string]string{
-		{"source_id": "X", "channel_id": "chan-x", "platform": "kick", "overlay_id": "ov-1"},
-	})
-	require.NoError(t, rc.Publish(ctx, "source:demand", payload).Err())
-
-	// Give a short time for the demand loop to process the early message.
-	time.Sleep(100 * time.Millisecond)
-
-	// UpdateDemandedSourceIDs must NOT have been called yet.
-	assert.Equal(t, int64(0), mgr.demandCallCount.Load(),
-		"UpdateDemandedSourceIDs must not be called before initial assignments are loaded")
-
-	// Wait for base.Start to complete (after blockingMock's delay).
-	require.NoError(t, <-startDone)
-
-	cancel()
-	base.Stop()
+	ll.Stop()
 }
 
 // TestDemandWithDisableFiltering verifies that when DisableDemandFiltering=true,
@@ -212,20 +133,15 @@ func TestDemandBeforeAssignments(t *testing.T) {
 func TestDemandWithDisableFiltering(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	mock := &testutil.MockCoordinator{}
-	cfg := listener.ListenerConfig{
-		HeartbeatInterval:         50 * time.Millisecond,
-		AssignmentRefreshInterval: 50 * time.Millisecond,
-		StartupJitterMax:          0,
-		DisableDemandFiltering:    true,
-	}
+	ll, err := listener.NewLeadershipListener(listener.LeadershipConfig{
+		DisableDemandFiltering: true,
+	}, nil, zap.NewNop())
+	require.NoError(t, err)
 
-	// nil Redis client — demand loop must handle this without panic when disabled.
-	base := listener.NewListenerBase(cfg, mock, nil, "test-pod", zap.NewNop())
 	mgr := &demandCapturingManager{}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, base.Start(ctx, mgr))
+	require.NoError(t, ll.Start(ctx, mgr))
 
 	// Give a brief window — UpdateDemandedSourceIDs must NOT be called.
 	time.Sleep(50 * time.Millisecond)
@@ -233,7 +149,7 @@ func TestDemandWithDisableFiltering(t *testing.T) {
 		"DisableDemandFiltering=true: UpdateDemandedSourceIDs must NOT be called by demand loop")
 
 	cancel()
-	base.Stop()
+	ll.Stop()
 }
 
 // TestDemandEmptySources verifies that a DemandUpdate with an empty sources array
@@ -247,23 +163,14 @@ func TestDemandEmptySources(t *testing.T) {
 		goleak.VerifyNone(t)
 	}()
 
-	mock := &testutil.MockCoordinator{
-		Assignments: []*coordination.Assignment{
-			{SourceID: "A"},
-		},
-	}
-	cfg := listener.ListenerConfig{
-		HeartbeatInterval:         50 * time.Millisecond,
-		AssignmentRefreshInterval: 50 * time.Millisecond,
-		StartupJitterMax:          0,
-	}
+	ll, err := listener.NewLeadershipListener(listener.LeadershipConfig{}, rc, zap.NewNop())
+	require.NoError(t, err)
 
-	base := listener.NewListenerBase(cfg, mock, rc, "test-pod", zap.NewNop())
 	mgr := &demandCapturingManager{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	require.NoError(t, base.Start(ctx, mgr))
+	require.NoError(t, ll.Start(ctx, mgr))
 
 	// Give the demand subscriber goroutine time to establish its Redis subscription.
 	time.Sleep(50 * time.Millisecond)
@@ -281,7 +188,7 @@ func TestDemandEmptySources(t *testing.T) {
 	assert.Empty(t, got, "empty sources must result in empty demanded map")
 
 	cancel()
-	base.Stop()
+	ll.Stop()
 }
 
 // TestDemandSubscriberReconnect verifies that after a simulated disconnect (context cancel +
@@ -295,24 +202,15 @@ func TestDemandSubscriberReconnect(t *testing.T) {
 		goleak.VerifyNone(t)
 	}()
 
-	mock := &testutil.MockCoordinator{
-		Assignments: []*coordination.Assignment{
-			{SourceID: "A"},
-		},
-	}
-	cfg := listener.ListenerConfig{
-		HeartbeatInterval:         50 * time.Millisecond,
-		AssignmentRefreshInterval: 50 * time.Millisecond,
-		StartupJitterMax:          0,
-	}
+	mgr := &demandCapturingManager{}
 
 	// First run.
-	base1 := listener.NewListenerBase(cfg, mock, rc, "test-pod", zap.NewNop())
-	mgr := &demandCapturingManager{}
+	ll1, err := listener.NewLeadershipListener(listener.LeadershipConfig{}, rc, zap.NewNop())
+	require.NoError(t, err)
 
 	ctx1, cancel1 := context.WithCancel(context.Background())
 
-	require.NoError(t, base1.Start(ctx1, mgr))
+	require.NoError(t, ll1.Start(ctx1, mgr))
 
 	// Give the demand subscriber goroutine time to establish its Redis subscription.
 	time.Sleep(50 * time.Millisecond)
@@ -327,17 +225,19 @@ func TestDemandSubscriberReconnect(t *testing.T) {
 		return mgr.demandCallCount.Load() >= 1
 	}, 3*time.Second, 20*time.Millisecond)
 
-	// Simulate disconnect: stop the first base.
+	// Simulate disconnect: stop the first listener.
 	cancel1()
-	base1.Stop()
+	ll1.Stop()
 
 	prevCount := mgr.demandCallCount.Load()
 
-	// Second run — fresh base, same manager.
-	base2 := listener.NewListenerBase(cfg, mock, rc, "test-pod", zap.NewNop())
+	// Second run — fresh listener, same manager.
+	ll2, err := listener.NewLeadershipListener(listener.LeadershipConfig{}, rc, zap.NewNop())
+	require.NoError(t, err)
+
 	ctx2, cancel2 := context.WithCancel(context.Background())
 
-	require.NoError(t, base2.Start(ctx2, mgr))
+	require.NoError(t, ll2.Start(ctx2, mgr))
 
 	// Give the demand subscriber goroutine time to establish its Redis subscription.
 	time.Sleep(50 * time.Millisecond)
@@ -350,5 +250,48 @@ func TestDemandSubscriberReconnect(t *testing.T) {
 	}, 3*time.Second, 20*time.Millisecond, "demand state should be restored after reconnect")
 
 	cancel2()
-	base2.Stop()
+	ll2.Stop()
+}
+
+// TestDemandNoPlatformFilter verifies that when Platform is empty, all sources pass through.
+func TestDemandNoPlatformFilter(t *testing.T) {
+	mr, rc := redisutil.StartTestRedisWithClient(t)
+	defer func() {
+		rc.Close()
+		mr.Close()
+		time.Sleep(10 * time.Millisecond)
+		goleak.VerifyNone(t)
+	}()
+
+	ll, err := listener.NewLeadershipListener(listener.LeadershipConfig{
+		Platform: "", // no platform filter
+	}, rc, zap.NewNop())
+	require.NoError(t, err)
+
+	mgr := &demandCapturingManager{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	require.NoError(t, ll.Start(ctx, mgr))
+
+	time.Sleep(50 * time.Millisecond)
+
+	payload := demandUpdateJSON([]map[string]string{
+		{"source_id": "A", "channel_id": "chan-a", "platform": "kick", "overlay_id": "ov-1"},
+		{"source_id": "B", "channel_id": "chan-b", "platform": "twitch", "overlay_id": "ov-2"},
+		{"source_id": "C", "channel_id": "chan-c", "platform": "youtube", "overlay_id": "ov-3"},
+	})
+	require.NoError(t, rc.Publish(ctx, "source:demand", payload).Err())
+
+	require.Eventually(t, func() bool {
+		return mgr.demandCallCount.Load() >= 1
+	}, 3*time.Second, 20*time.Millisecond)
+
+	got, ok := mgr.getLastDemandCall()
+	require.True(t, ok)
+	assert.Contains(t, got, "A", "A should pass through with no platform filter")
+	assert.Contains(t, got, "B", "B should pass through with no platform filter")
+	assert.Contains(t, got, "C", "C should pass through with no platform filter")
+
+	cancel()
+	ll.Stop()
 }

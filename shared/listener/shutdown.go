@@ -11,11 +11,11 @@ import (
 
 // ShutdownCoordinator performs ordered graceful shutdown in three phases:
 //
-//  1. Stop mgr and base concurrently — waits for both to complete.
+//  1. Stop mgr and listener concurrently — waits for both to complete.
 //  2. Call platformDisconnect() if non-nil — disconnects the platform client.
 //  3. Drain the HTTP server with a 10-second timeout.
-func ShutdownCoordinator(base *ListenerBase, mgr ChannelManager, platformDisconnect func(), srv *http.Server, logger *zap.Logger) {
-	// Phase 1: stop channel manager and base goroutines concurrently.
+func ShutdownCoordinator(listener interface{ Stop() }, mgr ChannelManager, platformDisconnect func(), srv *http.Server, logger *zap.Logger) {
+	// Phase 1: stop channel manager and listener goroutines concurrently.
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -24,7 +24,7 @@ func ShutdownCoordinator(base *ListenerBase, mgr ChannelManager, platformDisconn
 	}()
 	go func() {
 		defer wg.Done()
-		base.Stop()
+		listener.Stop()
 	}()
 	wg.Wait()
 
@@ -37,6 +37,8 @@ func ShutdownCoordinator(base *ListenerBase, mgr ChannelManager, platformDisconn
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error", zap.Error(err))
+		if logger != nil {
+			logger.Error("HTTP server shutdown error", zap.Error(err))
+		}
 	}
 }

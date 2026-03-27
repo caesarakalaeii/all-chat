@@ -1,6 +1,6 @@
 // Package redisutil provides in-memory Redis test helpers for demand subscriber tests.
 // It is intentionally separate from the testutil package so service-level smoke tests
-// can import testutil (MockCoordinator only) without pulling in the miniredis dependency.
+// can import testutil without pulling in the miniredis dependency.
 package redisutil
 
 import (
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -58,29 +57,3 @@ func NewTestRedisClient(t *testing.T, addr string) *redis.Client {
 	t.Cleanup(func() { rc.Close() })
 	return rc
 }
-
-// DelayedMockCoordinator is a coordinator stub that delays QueryAssignments
-// for a configurable duration to simulate slow initial assignment loading.
-type DelayedMockCoordinator struct {
-	Delay       time.Duration
-	Assignments []*coordination.Assignment
-}
-
-func (m *DelayedMockCoordinator) PublishHeartbeat(_ context.Context, _ string) error {
-	return nil
-}
-
-func (m *DelayedMockCoordinator) QueryAssignments(ctx context.Context, _ string) ([]*coordination.Assignment, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-time.After(m.Delay):
-	}
-	if m.Assignments != nil {
-		return m.Assignments, nil
-	}
-	return []*coordination.Assignment{}, nil
-}
-
-func (m *DelayedMockCoordinator) StartJWTRefresh(_ context.Context) {}
-func (m *DelayedMockCoordinator) StopJWTRefresh()                    {}
