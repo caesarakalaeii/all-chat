@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/caesar/all-chat/shared/coordination"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -366,42 +365,3 @@ func (m *Manager) decryptToken(encryptedToken string) (string, error) {
 	return m.cipher.DecryptString(encryptedToken)
 }
 
-// HandleMigrationEvent handles migration events from Redis Pub/Sub (EVENTSUB-04, EVENTSUB-05)
-// Note: For EventSub, migrations are simpler than other listeners:
-//   - Only the leader creates/deletes subscriptions
-//   - Webhook events are received on all pods (stateless HTTP endpoint)
-//   - Migration is about subscription ownership, not active connections
-func (m *Manager) HandleMigrationEvent(event *coordination.MigrationEvent) error {
-	// EventSub migrations don't require immediate action because:
-	// 1. Webhooks are stateless - all pods can receive events
-	// 2. Only leader creates/deletes subscriptions
-	// 3. Subscription ownership transfers via leader election, not migration events
-
-	// However, we still log the event for observability and metrics
-	m.logger.Info("Received migration event",
-		zap.String("migration_id", event.MigrationID),
-		zap.String("channel_id", event.ChannelID),
-		zap.String("platform", event.Platform),
-		zap.String("from_pod", event.FromPod),
-		zap.String("to_pod", event.ToPod),
-		zap.String("reason", event.Reason),
-	)
-
-	// If this pod is the target (to_pod), ensure we have the subscription in our next sync
-	m.assignmentMu.RLock()
-	podName := m.podName
-	m.assignmentMu.RUnlock()
-
-	if event.ToPod == podName {
-		m.logger.Info("Migration target is this pod, subscription will be created on next sync",
-			zap.String("migration_id", event.MigrationID),
-			zap.String("channel_id", event.ChannelID),
-		)
-	} else if event.FromPod == podName {
-		m.logger.Info("Migration source is this pod, subscription will be removed on next sync",
-			zap.String("migration_id", event.MigrationID),
-			zap.String("channel_id", event.ChannelID),
-		)
-	}
-	return nil
-}

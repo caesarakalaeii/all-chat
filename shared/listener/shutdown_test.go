@@ -8,11 +8,9 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/shared/listener"
-	"github.com/caesar/all-chat/shared/listener/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-	"go.uber.org/zap"
 )
 
 // startTestServer starts an HTTP server on a random port and returns it with its listener.
@@ -30,30 +28,29 @@ func startTestServer(t *testing.T) *http.Server {
 	return srv
 }
 
-func shutdownListenerConfig() listener.ListenerConfig {
-	return listener.ListenerConfig{
-		HeartbeatInterval:         20 * time.Millisecond,
-		AssignmentRefreshInterval: 20 * time.Millisecond,
-		StartupJitterMax:          0,
-	}
+func newTestLeadershipListener(t *testing.T) *listener.LeadershipListener {
+	t.Helper()
+	ll, err := listener.NewLeadershipListener(listener.LeadershipConfig{
+		DisableDemandFiltering: true,
+	}, nil, nil)
+	require.NoError(t, err)
+	return ll
 }
 
 func TestShutdownCoordinator_CallsStopAndDrainsServer(t *testing.T) {
 	defer goleak.VerifyNone(t)
-	logger := zap.NewNop()
-	mock := &testutil.MockCoordinator{}
-	base := listener.NewListenerBase(shutdownListenerConfig(), mock, nil, "test-pod", logger)
+	ll := newTestLeadershipListener(t)
 	mgr := &mockChannelManager{}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, base.Start(ctx, mgr))
+	require.NoError(t, ll.Start(ctx, mgr))
 	cancel() // trigger ctx cancellation so goroutines begin draining
 
 	srv := startTestServer(t)
 	// ShutdownCoordinator must complete without panic and return before test ends
 	done := make(chan struct{})
 	go func() {
-		listener.ShutdownCoordinator(base, mgr, nil, srv, logger)
+		listener.ShutdownCoordinator(ll, mgr, nil, srv, nil)
 		close(done)
 	}()
 
@@ -67,38 +64,34 @@ func TestShutdownCoordinator_CallsStopAndDrainsServer(t *testing.T) {
 
 func TestShutdownCoordinator_PlatformDisconnectCalled(t *testing.T) {
 	defer goleak.VerifyNone(t)
-	logger := zap.NewNop()
-	mock := &testutil.MockCoordinator{}
-	base := listener.NewListenerBase(shutdownListenerConfig(), mock, nil, "test-pod", logger)
+	ll := newTestLeadershipListener(t)
 	mgr := &mockChannelManager{}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, base.Start(ctx, mgr))
+	require.NoError(t, ll.Start(ctx, mgr))
 	cancel()
 
 	var disconnectCalled bool
 	platformDisconnect := func() { disconnectCalled = true }
 
 	srv := startTestServer(t)
-	listener.ShutdownCoordinator(base, mgr, platformDisconnect, srv, logger)
+	listener.ShutdownCoordinator(ll, mgr, platformDisconnect, srv, nil)
 
 	assert.True(t, disconnectCalled, "platformDisconnect should have been called")
 }
 
 func TestShutdownCoordinator_NilPlatformDisconnect(t *testing.T) {
 	defer goleak.VerifyNone(t)
-	logger := zap.NewNop()
-	mock := &testutil.MockCoordinator{}
-	base := listener.NewListenerBase(shutdownListenerConfig(), mock, nil, "test-pod", logger)
+	ll := newTestLeadershipListener(t)
 	mgr := &mockChannelManager{}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, base.Start(ctx, mgr))
+	require.NoError(t, ll.Start(ctx, mgr))
 	cancel()
 
 	srv := startTestServer(t)
 	// Must not panic when platformDisconnect is nil
 	assert.NotPanics(t, func() {
-		listener.ShutdownCoordinator(base, mgr, nil, srv, logger)
+		listener.ShutdownCoordinator(ll, mgr, nil, srv, nil)
 	})
 }
