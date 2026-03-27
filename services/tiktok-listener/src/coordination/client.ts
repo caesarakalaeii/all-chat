@@ -239,6 +239,35 @@ export class CoordinatorClient {
   }
 
   /**
+   * GetDemand queries the coordinator for the current demanded sources.
+   * Used by the 60s safety-net poll to restore state after missed Pub/Sub events.
+   *
+   * @param platform - Optional platform filter (e.g., "tiktok")
+   * @returns Promise resolving to array of DemandSource objects
+   */
+  async getDemand(platform?: string): Promise<{ source_id: string; channel_id: string; platform: string; overlay_id: string }[]> {
+    const url = platform
+      ? `/demand?platform=${encodeURIComponent(platform)}`
+      : '/demand';
+
+    try {
+      const response = await this.httpClient.get<{ sources: { source_id: string; channel_id: string; platform: string; overlay_id: string }[] }>(url);
+      return response.data.sources;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError;
+        this.logger.error('Failed to get demand from coordinator', {
+          platform,
+          error: axiosError.message,
+          status_code: axiosError.response?.status,
+        });
+        throw new Error(`Failed to get demand: ${axiosError.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Sleep helper for backoff logic.
    *
    * @param ms - Milliseconds to sleep

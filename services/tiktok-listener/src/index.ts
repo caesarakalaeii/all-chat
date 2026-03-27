@@ -21,7 +21,7 @@ initTracing();
 
 import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
-import { Pool, Client, Notification } from 'pg';
+import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
 import http from 'http';
 import { EventEmitter } from 'events';
@@ -39,6 +39,9 @@ import { CoordinatorClient } from './coordination/client.js';
 import { MigrationSubscriber } from './coordination/subscriber.js';
 import { MigrationEvent, Assignment } from './coordination/models.js';
 
+// Import demand subscriber (Phase 5)
+import { DemandSubscriber, DemandSource } from './demand/subscriber.js';
+
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 const LOG_FORMAT = process.env.LOG_FORMAT || 'json'; // 'json' or 'simple'
@@ -50,7 +53,7 @@ const DATABASE_USER = process.env.DATABASE_USER || 'allchat';
 const DATABASE_PASSWORD = process.env.DATABASE_PASSWORD || 'allchat_dev_password';
 const DATABASE_NAME = process.env.DATABASE_NAME || 'allchat';
 const HTTP_PORT = parseInt(process.env.PORT || '8089');
-const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '30000'); // 30 seconds
+const DEMAND_SAFETY_INTERVAL_MS = parseInt(process.env.DEMAND_SAFETY_INTERVAL_MS || '60000'); // 60 seconds
 
 // Coordinator configuration (Phase 6)
 const COORDINATOR_URL = process.env.COORDINATOR_URL || 'http://source-manager:8088';
@@ -72,9 +75,6 @@ const TIKTOK_HEARTBEAT_TIMEOUT_MS = parseInt(process.env.TIKTOK_HEARTBEAT_TIMEOU
 const TIKTOK_DEDUP_TTL_MS = parseInt(process.env.TIKTOK_DEDUP_TTL_MS || '300000'); // 5 minutes
 const TIKTOK_DEDUP_CLEANUP_INTERVAL_MS = parseInt(process.env.TIKTOK_DEDUP_CLEANUP_INTERVAL_MS || '60000'); // 1 minute
 const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_SIZE || '10000');
-
-// Notification debouncing configuration
-const NOTIFICATION_DEBOUNCE_MS = parseInt(process.env.NOTIFICATION_DEBOUNCE_MS || '1000'); // 1 second
 
 // Import logger interface
 import { Logger } from './types/logger.js';
@@ -158,10 +158,8 @@ interface ActiveStream {
 class TikTokListenerService {
   private redis: RedisClientType;
   private db: Pool;
-  private listenClient?: Client; // Dedicated client for PostgreSQL LISTEN
   private activeStreams: Map<string, ActiveStream> = new Map();
   private isShuttingDown = false;
-  private pollTimer?: NodeJS.Timeout;
   private httpServer?: http.Server;
 
   // New live detection modules
@@ -184,20 +182,21 @@ class TikTokListenerService {
   private readonly LIKE_AGGREGATION_WINDOW_MS = 30000; // 30 seconds
   private readonly LIKE_PUBLISH_INTERVAL_MS = 5000; // Publish updates every 5 seconds
 
-  // Notification debouncing
-  private notificationDebounceTimer?: NodeJS.Timeout;
-  private pendingNotificationCount = 0;
-
   // Connection state tracking to prevent concurrent connections
   private connectingStreams: Set<string> = new Set();
 
   // Coordinator integration (Phase 6)
   private coordinatorClient?: CoordinatorClient;
   private migrationSubscriber?: MigrationSubscriber;
-  private assignedSourceIDs: Map<string, boolean> = new Map(); // source_id -> true
+  private assignedSourceIDs: Set<string> = new Set(); // source_id set for demand filtering
   private filteredAssignmentCount: number = 0; // Number of assigned sources that have database channels
   private heartbeatTimer?: NodeJS.Timeout;
   private firstMessageCallbacks: Map<string, () => void> = new Map(); // username -> callback
+
+  // Demand subscriber (Phase 5)
+  private demandSubscriber: DemandSubscriber | null = null;
+  private demandSafetyInterval: ReturnType<typeof setInterval> | null = null;
+  private livePollerRunning: boolean = false;
 
   constructor() {
     // Initialize Redis client
@@ -302,9 +301,9 @@ class TikTokListenerService {
           pod_id: POD_NAME
         });
 
-        // Extract assigned source IDs into map for filtering (TIKTOK-02)
+        // Extract assigned source IDs into set for demand filtering (TIKTOK-02)
         for (const assignment of assignments) {
-          this.assignedSourceIDs.set(assignment.source_id, true);
+          this.assignedSourceIDs.add(assignment.source_id);
         }
 
         // Start migration subscriber (TIKTOK-03, TIKTOK-04)
@@ -322,10 +321,6 @@ class TikTokListenerService {
       // Wire Redis client to livePoller for lifecycle event publishing (EXPIRY-06)
       this.livePoller.setRedisClient(this.redis);
 
-      // Start live stream poller
-      this.livePoller.start();
-      logger.info('Live stream poller started');
-
       // Start message deduplicator cleanup
       this.messageDeduplicator.start();
       logger.info('Message deduplicator started');
@@ -336,8 +331,31 @@ class TikTokListenerService {
       // Start HTTP server for health checks
       this.startHttpServer();
 
-      // Start polling for active streams
-      this.startPolling();
+      // Initialize demand subscriber (Phase 5)
+      // Replaces old pollActiveStreams / startDatabaseListener approach.
+      // source-manager publishes full-snapshot DemandUpdates to "source:demand".
+      this.demandSubscriber = new DemandSubscriber(
+        this.redis,
+        (demanded) => this.handleDemandUpdate(demanded),
+        logger,
+        this.assignedSourceIDs
+      );
+      await this.demandSubscriber.subscribe();
+      logger.info('Demand subscriber started');
+
+      // Start 60s safety-net poll to restore state after Redis reconnect / missed events
+      this.demandSafetyInterval = setInterval(async () => {
+        try {
+          await this.pollDemandFallback();
+        } catch (err) {
+          logger.error('Demand safety-net poll failed', { error: String(err) });
+        }
+      }, DEMAND_SAFETY_INTERVAL_MS);
+
+      // Start periodic metrics update (every 1 minute)
+      setInterval(() => {
+        this.updateBackoffMetrics();
+      }, 60000);
 
       logger.info('TikTok Listener Service started successfully');
     } catch (error) {
@@ -498,94 +516,75 @@ class TikTokListenerService {
     });
   }
 
-  private startPolling(): void {
-    logger.info('Starting active stream polling', { interval_ms: POLL_INTERVAL_MS });
+  /**
+   * Handle a demand update from source-manager (Phase 5).
+   * Called on every DemandUpdate received via Redis Pub/Sub "source:demand".
+   * Full-replacement snapshot: connects new streams, disconnects removed ones.
+   * Goes fully idle (stops LiveStreamPoller) when demand is empty.
+   */
+  private async handleDemandUpdate(demanded: Map<string, DemandSource>): Promise<void> {
+    if (this.isShuttingDown) return;
 
-    // Poll immediately
-    this.pollActiveStreams();
+    logger.info('Demand update received', { demanded_count: demanded.size });
 
-    // Then poll on interval
-    this.pollTimer = setInterval(() => {
-      this.pollActiveStreams();
-    }, POLL_INTERVAL_MS);
+    if (demanded.size === 0) {
+      // Full idle: disconnect all streams and stop livePoller
+      for (const [username] of this.activeStreams.entries()) {
+        await this.disconnectFromStream(username);
+      }
+      if (this.livePollerRunning) {
+        this.livePoller.stop();
+        this.livePollerRunning = false;
+        logger.info('LiveStreamPoller stopped (zero demand)');
+      }
+      return;
+    }
 
-    // Start periodic metrics update (every 1 minute)
-    setInterval(() => {
-      this.updateBackoffMetrics();
-    }, 60000);
+    // Start livePoller if not running
+    if (!this.livePollerRunning) {
+      this.livePoller.start();
+      this.livePollerRunning = true;
+      logger.info('LiveStreamPoller started (demand present)');
+    }
 
-    // Start PostgreSQL LISTEN for instant notifications
-    this.startDatabaseListener();
+    // Disconnect streams that lost demand
+    const demandedUsernames = new Set(demanded.keys());
+    for (const [username] of this.activeStreams.entries()) {
+      if (!demandedUsernames.has(username)) {
+        await this.disconnectFromStream(username);
+      }
+    }
+
+    // Connect new demanded streams
+    for (const [username, source] of demanded.entries()) {
+      if (!this.activeStreams.has(username) && !this.connectingStreams.has(username)) {
+        await this.connectToStream(username, source.overlay_id);
+      }
+    }
+
+    this.filteredAssignmentCount = demanded.size;
   }
 
-  private async startDatabaseListener(): Promise<void> {
+  /**
+   * Safety-net poll that queries source-manager GET /demand endpoint.
+   * Runs every 60s to restore correct state after Redis reconnect / missed Pub/Sub events.
+   * Only runs when coordinator integration is enabled.
+   */
+  private async pollDemandFallback(): Promise<void> {
+    if (this.isShuttingDown) return;
+    if (!this.coordinatorClient) return;
+
     try {
-      // Create dedicated client for LISTEN (Pool doesn't support notifications)
-      this.listenClient = new Client({
-        host: DATABASE_HOST,
-        port: DATABASE_PORT,
-        user: DATABASE_USER,
-        password: DATABASE_PASSWORD,
-        database: DATABASE_NAME
-      });
-
-      await this.listenClient.connect();
-
-      // Listen for chat source changes
-      await this.listenClient.query('LISTEN chat_source_changes');
-
-      logger.info('PostgreSQL LISTEN active for instant source updates', {
-        channel: 'chat_source_changes'
-      });
-
-      // Set up notification handler with debouncing to prevent thundering herd
-      this.listenClient.on('notification', (msg: Notification) => {
-        if (msg.channel === 'chat_source_changes') {
-          this.pendingNotificationCount++;
-
-          logger.debug('Source change notification received (debouncing)', {
-            payload: msg.payload,
-            pending_count: this.pendingNotificationCount
-          });
-
-          // Clear existing timer if present
-          if (this.notificationDebounceTimer) {
-            clearTimeout(this.notificationDebounceTimer);
-          }
-
-          // Set new timer - only sync after debounce period
-          this.notificationDebounceTimer = setTimeout(() => {
-            const count = this.pendingNotificationCount;
-            this.pendingNotificationCount = 0;
-            this.notificationDebounceTimer = undefined;
-
-            logger.info('Processing debounced notifications', {
-              notification_count: count,
-              debounce_ms: NOTIFICATION_DEBOUNCE_MS
-            });
-
-            // Trigger sync after debounce
-            this.pollActiveStreams().catch(err => {
-              logger.error('Failed to sync after notification', { error: err });
-            });
-          }, NOTIFICATION_DEBOUNCE_MS);
+      const sources = await this.coordinatorClient.getDemand('tiktok');
+      const demanded = new Map<string, DemandSource>();
+      for (const source of sources) {
+        if (this.assignedSourceIDs.size === 0 || this.assignedSourceIDs.has(source.source_id)) {
+          demanded.set(source.channel_id, source);
         }
-      });
-
-      // Handle connection errors
-      this.listenClient.on('error', (err: Error) => {
-        logger.error('PostgreSQL LISTEN connection error', { error: err.message });
-      });
-
-      // Handle unexpected disconnection
-      this.listenClient.on('end', () => {
-        logger.warn('PostgreSQL LISTEN connection ended, will rely on polling');
-        this.listenClient = undefined;
-      });
-
-    } catch (error) {
-      logger.error('Failed to start PostgreSQL LISTEN', { error });
-      logger.info('Will rely on periodic polling only');
+      }
+      await this.handleDemandUpdate(demanded);
+    } catch (err) {
+      logger.error('Demand fallback poll error', { error: String(err) });
     }
   }
 
@@ -687,8 +686,11 @@ class TikTokListenerService {
         timeout_ms: 30000
       });
 
-      // Add to assigned source IDs
-      this.assignedSourceIDs.set(event.channel_id, true);
+      // Add to assigned source IDs and update demand subscriber
+      this.assignedSourceIDs.add(event.channel_id);
+      if (this.demandSubscriber) {
+        this.demandSubscriber.updateAssignedSourceIDs(this.assignedSourceIDs);
+      }
 
       // Set up promise to wait for first message or timeout
       const firstMessagePromise = new Promise<void>((resolve) => {
@@ -732,8 +734,11 @@ class TikTokListenerService {
         username
       });
 
-      // Remove from assigned source IDs
+      // Remove from assigned source IDs and update demand subscriber
       this.assignedSourceIDs.delete(event.channel_id);
+      if (this.demandSubscriber) {
+        this.demandSubscriber.updateAssignedSourceIDs(this.assignedSourceIDs);
+      }
 
       // Disconnect from stream
       await this.disconnectFromStream(username);
@@ -777,117 +782,9 @@ class TikTokListenerService {
     }
   }
 
-  private async pollActiveStreams(): Promise<void> {
-    if (this.isShuttingDown) return;
-
-    try {
-      // Get list of overlays with active WebSocket connections from Redis
-      // API Gateway uses individual TTL keys: overlay:connected:{overlay_id}
-      const keys = await this.redis.keys('overlay:connected:*');
-      const connectedOverlays = keys.map(key => key.replace('overlay:connected:', ''));
-
-      if (connectedOverlays.length === 0) {
-        logger.debug('No overlays with active connections, skipping poll');
-
-        // Disconnect all streams since no one is watching
-        for (const [username, _] of this.activeStreams.entries()) {
-          await this.disconnectFromStream(username);
-        }
-
-        return;
-      }
-
-      logger.debug('Polling for active TikTok streams', {
-        connected_overlays_count: connectedOverlays.length
-      });
-
-      // Query database for TikTok channels that belong to overlays with active connections
-      // Note: We don't filter by is_active here - the listener will set is_active=true after successful connection
-      // PHASE 6: Also fetch source ID for assignment filtering
-      const result = await this.db.query(`
-        SELECT DISTINCT
-          ocs.id as source_id,
-          ocs.overlay_id,
-          ocs.channel_id as tiktok_username
-        FROM overlay_chat_sources ocs
-        WHERE ocs.platform = 'tiktok'
-          AND ocs.overlay_id = ANY($1::uuid[])
-      `, [connectedOverlays]);
-
-      const activeUsernames = new Map<string, string>(); // username -> overlay_id
-
-      for (const row of result.rows) {
-        const sourceId = row.source_id;
-        const username = row.tiktok_username;
-        const overlayId = row.overlay_id;
-
-        // TIKTOK-02: Filter channels by assignedSourceIDs
-        // If coordinator integration is enabled, only connect to assigned channels
-        if (this.coordinatorClient && this.assignedSourceIDs.size > 0) {
-          if (!this.assignedSourceIDs.has(sourceId)) {
-            logger.debug('Skipping channel (not assigned to this pod)', {
-              username,
-              source_id: sourceId,
-              pod_id: POD_NAME
-            });
-            continue;
-          }
-        }
-
-        activeUsernames.set(username, overlayId);
-      }
-
-      // Update filtered assignment count (for consistency with Go listeners)
-      // This represents the number of assigned sources that have database channels
-      if (this.coordinatorClient && this.assignedSourceIDs.size > 0) {
-        this.filteredAssignmentCount = activeUsernames.size;
-      } else {
-        this.filteredAssignmentCount = activeUsernames.size;
-      }
-
-      logger.debug('Found TikTok sources for connected overlays', {
-        source_count: activeUsernames.size,
-        connected_overlays_count: connectedOverlays.length,
-        sources: Array.from(activeUsernames.keys())
-      });
-
-      // Connect to new streams (prevent concurrent connections to same stream)
-      for (const [username, overlayId] of activeUsernames.entries()) {
-        if (!this.activeStreams.has(username) && !this.connectingStreams.has(username)) {
-          await this.connectToStream(username, overlayId);
-        }
-      }
-
-      // Disconnect from streams no longer active
-      for (const [username, stream] of this.activeStreams.entries()) {
-        if (!activeUsernames.has(username)) {
-          await this.disconnectFromStream(username);
-        }
-      }
-
-      // Update status for all connected streams to keep updated_at fresh
-      // This prevents the 5-minute stale cleanup from marking them inactive
-      let statusUpdates = 0;
-      for (const [username, stream] of this.activeStreams.entries()) {
-        if (stream.is_connected) {
-          await this.setSourceActive(username, true);
-          statusUpdates++;
-        }
-      }
-
-      logger.debug('Active streams poll complete', {
-        total: activeUsernames.size,
-        connected: this.activeStreams.size,
-        status_updates: statusUpdates
-      });
-    } catch (error) {
-      logger.error('Failed to poll active streams', { error });
-    }
-  }
-
   /**
-   * Get filtered assignment count (number of assigned sources that have database channels)
-   * Used for consistency with Go listeners and observability
+   * Get filtered assignment count (number of demanded sources).
+   * Used for observability in health check endpoint.
    */
   private getFilteredAssignmentCount(): number {
     return this.filteredAssignmentCount;
@@ -1527,8 +1424,10 @@ class TikTokListenerService {
       this.livePoller.addTarget(username, overlayId);
     }
 
-    // Trigger immediate poll
-    this.pollActiveStreams();
+    // Trigger a demand fallback poll to restore state
+    this.pollDemandFallback().catch(err => {
+      logger.error('Force retry demand poll failed', { error: String(err) });
+    });
   }
 
   /**
@@ -1553,8 +1452,10 @@ class TikTokListenerService {
       this.backoffManager.removeState(username);
     }
 
-    // Trigger immediate poll
-    this.pollActiveStreams();
+    // Trigger a demand fallback poll to restore state
+    this.pollDemandFallback().catch(err => {
+      logger.error('Reset all backoff demand poll failed', { error: String(err) });
+    });
 
     return usernames.length;
   }
@@ -1564,9 +1465,16 @@ class TikTokListenerService {
     this.isShuttingDown = true;
     logger.info('Shutting down TikTok Listener Service...');
 
-    // Stop polling
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+    // Stop demand safety-net interval (Phase 5)
+    if (this.demandSafetyInterval) {
+      clearInterval(this.demandSafetyInterval);
+      this.demandSafetyInterval = null;
+    }
+
+    // Unsubscribe demand subscriber (Phase 5)
+    if (this.demandSubscriber) {
+      await this.demandSubscriber.unsubscribe();
+      logger.info('Demand subscriber stopped');
     }
 
     // Stop heartbeat publisher (Phase 6)
@@ -1575,15 +1483,12 @@ class TikTokListenerService {
       logger.info('Heartbeat publisher stopped');
     }
 
-    // Clear debounce timer
-    if (this.notificationDebounceTimer) {
-      clearTimeout(this.notificationDebounceTimer);
-      this.notificationDebounceTimer = undefined;
+    // Stop live stream poller (only if running)
+    if (this.livePollerRunning) {
+      this.livePoller.stop();
+      this.livePollerRunning = false;
+      logger.info('Live stream poller stopped');
     }
-
-    // Stop live stream poller
-    this.livePoller.stop();
-    logger.info('Live stream poller stopped');
 
     // Stop all heartbeat monitoring
     this.heartbeatMonitor.stopAll();
@@ -1614,12 +1519,6 @@ class TikTokListenerService {
     // Close Redis connection
     await this.redis.quit();
     logger.info('Redis connection closed');
-
-    // Close LISTEN client
-    if (this.listenClient) {
-      await this.listenClient.end();
-      logger.info('PostgreSQL LISTEN connection closed');
-    }
 
     // Close database pool
     await this.db.end();
