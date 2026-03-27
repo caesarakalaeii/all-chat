@@ -5,8 +5,8 @@
  * assignedSourceIDs filtering, and calls the handler with the correct Map.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DemandSubscriber, DemandSource, DemandUpdate } from './subscriber.js';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
+import { DemandSubscriber, DemandSource, DemandUpdate, DemandHandler } from './subscriber.js';
 import { Logger } from '../types/logger.js';
 
 // Create a minimal mock logger
@@ -50,11 +50,11 @@ function makeMockRedisClient() {
 
 describe('DemandSubscriber', () => {
   let mockRedis: ReturnType<typeof makeMockRedisClient>;
-  let handler: ReturnType<typeof vi.fn>;
+  let handler: MockInstance & DemandHandler;
 
   beforeEach(() => {
     mockRedis = makeMockRedisClient();
-    handler = vi.fn().mockResolvedValue(undefined);
+    handler = vi.fn().mockResolvedValue(undefined) as unknown as MockInstance & DemandHandler;
     vi.clearAllMocks();
   });
 
