@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 5 context gathered
-last_updated: "2026-03-27T10:31:24.293Z"
-last_activity: 2026-03-26
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-27T10:58:58.931Z"
+last_activity: 2026-03-27
 progress:
   total_phases: 9
   completed_phases: 8
-  total_plans: 31
-  completed_plans: 31
+  total_plans: 35
+  completed_plans: 32
 ---
 
 # Project State
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** Phase 04 — grafana-dashboard-audit-metrics-gap-implementation
+**Current focus:** Phase 05 — tiktok-listener-demand-driven-polling
 
 ## Current Position
 
-Phase: 04 (grafana-dashboard-audit-metrics-gap-implementation) — EXECUTING
-Plan: 2 of 5
+Phase: 05 (tiktok-listener-demand-driven-polling) — EXECUTING
+Plan: 1 of 4
 
 ## Performance Metrics
 
@@ -78,6 +78,7 @@ Plan: 2 of 5
 | Phase 04 P03 | 38min | 2 tasks | 10 files |
 | Phase 04 P05 | 310s | 2 tasks | 1 files |
 | Phase 04 P04 | 362s | 2 tasks | 1 files |
+| Phase 05 P01 | 226s | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -163,6 +164,9 @@ Key decisions relevant to v1.6:
 - [Phase 04]: [Phase 04-05]: websocket-connections-zero severity: warning (not critical) — zero connections during off-stream hours is expected; websocket-connections-drop >50% is critical
 - [Phase 04]: [Phase 04-04]: Replaced all 6 existing dashboards (not just 4) with 5 tiered ones — listener-observability and service-health were also stale/redundant
 - [Phase 04]: [Phase 04-04]: Listeners dashboard uses collapsed rows with sub-panels array for 7 listeners; datasourceUid lowercase 'prometheus' matches kube-prometheus-stack registration
+- [Phase 05]: sourceRepository interface in demand package allows mock injection in tests without importing registry package
+- [Phase 05]: hydrate() called before subscribeLoop() in Start() prevents empty DemandUpdate snapshot on source-manager restart
+- [Phase 05]: GetDemandedSources() returns make([]DemandSource, 0) not nil — ensures JSON marshals as [] not null
 
 ### Roadmap Evolution
 
@@ -202,9 +206,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T10:31:24.291Z
-Last activity: 2026-03-26
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-tiktok-listener-demand-driven-polling-only-poll-when-overlay-has-connected-clients/05-CONTEXT.md
+Last session: 2026-03-27T10:58:58.928Z
+Last activity: 2026-03-27
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None
 
 **Next action:** Phase 04 Plan 03 — listener dashboards (Discord, InnerTube, twitch-eventsub panels).
