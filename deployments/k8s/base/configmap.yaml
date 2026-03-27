@@ -9,7 +9,7 @@ data:
   OVERLAY_SERVICE_URL: http://overlay-manager.allchat.svc.cluster.local:8082
   EMOTE_SERVICE_URL: http://emote-service.allchat.svc.cluster.local:8083
   MESSAGE_PROCESSOR_URL: http://message-processor.allchat.svc.cluster.local:8087
-  SOURCE_MANAGER_URL: http://source-manager.allchat.svc.cluster.local:8088
+  SOURCE_MANAGER_URL: http://source-manager.allchat.svc.cluster.local:8083
 
   # Database Configuration
   DATABASE_HOST: allchat-cluster-rw.allchat.svc.cluster.local

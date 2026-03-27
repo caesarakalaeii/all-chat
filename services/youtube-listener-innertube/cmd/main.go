@@ -140,8 +140,7 @@ func main() {
 		zap.Int("max_size", 1000))
 
 	// Leadership coordination via SDK
-	base := listener.NewListenerBase(listener.ListenerConfig{}, nil, nil, "", logger)
-	ll, err := listener.NewLeadershipListenerFromEnv(base, "youtube", logger)
+	ll, err := listener.NewLeadershipListenerFromEnv("youtube", redisClient, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize leadership listener", zap.Error(err))
 	}

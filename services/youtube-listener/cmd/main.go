@@ -206,11 +206,7 @@ func main() {
 	// Create message handler that publishes to Redis Streams and tracks quota
 	messageHandler := NewMessageHandler(streamPublisher, quotaTracker, msgIDRegistry, listenerMetrics, log)
 
-	podName := listener.Env("HOSTNAME", "youtube-listener-unknown")
-	cfg := listener.DefaultConfig()
-	cfg.Platform = "youtube"
-	base := listener.NewListenerBase(cfg, nil, redisClient, podName, log)
-	ll, err := listener.NewLeadershipListenerFromEnv(base, "youtube", log)
+	ll, err := listener.NewLeadershipListenerFromEnv("youtube", redisClient, log)
 	if err != nil {
 		log.Fatal("Failed to initialize LeadershipListener", zap.Error(err))
 	}
