@@ -77,6 +77,10 @@ type Manager struct {
 	connectedOverlays map[string]time.Time      // overlay_id → connection_time
 	channelConnectedOverlays map[string]map[string]struct{} // channel_id → overlay_ids
 
+	// Demand-driven gating (Phase 5 gap closure)
+	demandMu        sync.RWMutex
+	demandedChannels map[string]bool // channelID -> has demand; nil = no filtering (backward compat)
+
 	stopChan chan struct{}
 	wg       sync.WaitGroup
 }
@@ -760,6 +764,22 @@ func (m *Manager) syncSources(ctx context.Context) {
 		}
 	}
 
+	// Filter by demand: only process channels with active overlay demand
+	m.demandMu.RLock()
+	demanded := m.demandedChannels
+	m.demandMu.RUnlock()
+
+	if demanded != nil {
+		for channelID := range channelOverlays {
+			if _, ok := demanded[channelID]; !ok {
+				delete(channelOverlays, channelID)
+			}
+		}
+		m.logger.Debug("Filtered sources by demand",
+			zap.Int("demanded_channels", len(demanded)),
+			zap.Int("active_channels", len(channelOverlays)))
+	}
+
 	// For each channel, ensure we have a poller or discovery in progress
 	for channelID, overlayIDs := range channelOverlays {
 		m.mu.RLock()
@@ -812,6 +832,60 @@ func (m *Manager) syncSources(ctx context.Context) {
 				)
 				m.startAsyncDiscovery(channelID, overlayIDs[0])
 			}
+		}
+	}
+}
+
+// UpdateDemandedChannels receives the set of channel IDs that currently have overlay demand.
+// nil means no demand filtering (backward compat). Empty map means zero demand.
+// Calling this method also triggers reconcileDemand to stop pollers/discovery for channels
+// that lost demand.
+func (m *Manager) UpdateDemandedChannels(demanded map[string]bool) {
+	m.demandMu.Lock()
+	m.demandedChannels = demanded
+	m.demandMu.Unlock()
+
+	m.logger.Info("Demanded channels updated",
+		zap.Int("demanded_count", len(demanded)))
+
+	// Stop pollers and cancel discovery for channels that lost demand
+	m.reconcileDemand()
+}
+
+// reconcileDemand stops pollers and cancels discovery for channels that are no longer demanded.
+func (m *Manager) reconcileDemand() {
+	m.demandMu.RLock()
+	demanded := m.demandedChannels
+	m.demandMu.RUnlock()
+
+	if demanded == nil {
+		return // nil = no filtering (backward compat)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Stop pollers for channels without demand
+	for videoID, stream := range m.activeStreams {
+		if _, ok := demanded[stream.ChannelID]; !ok {
+			if p, exists := m.pollers[videoID]; exists {
+				p.Stop()
+				delete(m.pollers, videoID)
+				m.logger.Info("Demand lost, stopping poller",
+					zap.String("channel_id", stream.ChannelID),
+					zap.String("video_id", videoID))
+			}
+			delete(m.activeStreams, videoID)
+		}
+	}
+
+	// Cancel discovery for channels without demand
+	for channelID, state := range m.discovering {
+		if _, ok := demanded[channelID]; !ok {
+			state.CancelFunc()
+			delete(m.discovering, channelID)
+			m.logger.Info("Demand lost, cancelling discovery",
+				zap.String("channel_id", channelID))
 		}
 	}
 }

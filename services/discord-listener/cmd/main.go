@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -138,6 +139,31 @@ func (r *redisGuildCache) DeleteRoleName(ctx context.Context, roleID string) err
 	return r.client.Del(ctx, "discord:guild:roles:"+roleID).Err()
 }
 
+// demandSet is a thread-safe set of Discord channel IDs with active overlay demand.
+// It implements gateway.DemandChecker.
+type demandSet struct {
+	mu       sync.RWMutex
+	channels map[string]bool
+}
+
+// HasDemand returns true if the channel has active overlay demand.
+// Returns true when channels is nil (no filtering / backward compat).
+func (d *demandSet) HasDemand(channelID string) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.channels == nil {
+		return true // nil = no filtering
+	}
+	return d.channels[channelID]
+}
+
+// UpdateDemandedChannels atomically replaces the set of demanded channel IDs.
+func (d *demandSet) UpdateDemandedChannels(demanded map[string]bool) {
+	d.mu.Lock()
+	d.channels = demanded
+	d.mu.Unlock()
+}
+
 // publisherAdapter adapts *publisher.StreamPublisher to gateway.MessagePublisher.
 // The gateway package uses interface{} to avoid a circular import.
 type publisherAdapter struct{ pub *publisher.StreamPublisher }
@@ -200,6 +226,10 @@ func main() {
 	pubAdapter := &publisherAdapter{pub: streamPub}
 
 	gwClient := gateway.NewGatewayClient(botToken, gatewayURL, store, log, registry, pubAdapter, guildCache)
+
+	// Wire demand-driven message filtering
+	ds := &demandSet{}
+	gwClient.SetDemandChecker(ds)
 
 	// After each READY event, check that configured Discord channels are actually
 	// accessible to the bot. Channels missing VIEW_CHANNEL trigger a system error
@@ -307,6 +337,7 @@ func main() {
 				log.Info("Demand update received",
 					zap.Int("total_sources", len(update.Sources)),
 					zap.Int("platform_sources", len(demanded)))
+				ds.UpdateDemandedChannels(demanded)
 			}
 		}
 	}()

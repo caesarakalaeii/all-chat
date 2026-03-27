@@ -207,6 +207,7 @@ func main() {
 				logger.Info("Demand update received",
 					zap.Int("total_sources", len(update.Sources)),
 					zap.Int("platform_sources", len(demanded)))
+				streamManager.UpdateDemandedChannels(demanded)
 			}
 		}
 	}()
