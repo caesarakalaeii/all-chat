@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-27T22:56:33.932Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 06-03-PLAN.md — Phase 06 complete
+last_updated: "2026-03-27T23:04:12.374Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 11
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 48
-  completed_plans: 47
+  completed_plans: 48
 ---
 
 # Project State
@@ -84,6 +84,7 @@ Plan: 3 of 3
 | Phase 05 P05 | 4min | 2 tasks | 6 files |
 | Phase 06 P01 | 15min | 1 tasks | 18 files |
 | Phase 06 P02 | 10min | 2 tasks | 4 files |
+| Phase 06 P03 | 381 | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -187,6 +188,8 @@ Key decisions relevant to v1.6:
 - [Phase 06]: SetDisableDemandFiltering added to LeadershipListener — enables post-construction config without re-exposing LeadershipConfig struct
 - [Phase 06]: isLeaderFn func() bool closure replaces *leaderState struct in startHTTPServer — decouples HTTP handlers from leadership tracking implementation
 - [Phase 06]: EnsureLeadership lostCallback replaces Redis SETNX renewal loop in twitch-eventsub-listener per D-12/D-13
+- [Phase 06]: shared/coordination fully deleted per D-01/D-02 — no deprecated fallback; Plans 01+02 already removed all callers
+- [Phase 06]: source-manager port changed from 8088 to 8083 per D-05 — coordinator-only port eliminated, consolidates to single leadership/demand API port
 
 ### Roadmap Evolution
 
@@ -227,9 +230,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T22:56:33.929Z
+Last session: 2026-03-27T23:04:12.371Z
 Last activity: 2026-03-27
-Stopped at: Completed 06-02-PLAN.md
+Stopped at: Completed 06-03-PLAN.md — Phase 06 complete
 Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
