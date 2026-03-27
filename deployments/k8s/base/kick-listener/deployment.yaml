@@ -69,16 +69,6 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: REDIS_PORT
-        - name: COORDINATOR_URL
-          valueFrom:
-            configMapKeyRef:
-              name: allchat-config
-              key: SOURCE_MANAGER_URL
-        - name: SERVICE_JWT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: allchat-secrets
-              key: SERVICE_JWT_SECRET
         - name: SOURCE_MANAGER_URL
           valueFrom:
             configMapKeyRef:
