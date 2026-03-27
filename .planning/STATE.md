@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-03-27T11:32:54.883Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-03-27T12:27:07.519Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 9
-  completed_phases: 9
-  total_plans: 35
-  completed_plans: 35
+  completed_phases: 8
+  total_plans: 37
+  completed_plans: 36
 ---
 
 # Project State
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** Phase 05 — tiktok-listener-demand-driven-polling
+**Current focus:** Phase 05 — sharding-infrastructure-coordinator-service
 
 ## Current Position
 
-Phase: 05 (tiktok-listener-demand-driven-polling) — EXECUTING
-Plan: 4 of 4 (Tasks 1-2 complete; awaiting checkpoint:human-verify for Task 3)
+Phase: 05 (sharding-infrastructure-coordinator-service) — EXECUTING
+Plan: 1 of 5
 
 ## Performance Metrics
 
@@ -81,6 +81,7 @@ Plan: 4 of 4 (Tasks 1-2 complete; awaiting checkpoint:human-verify for Task 3)
 | Phase 05 P01 | 226s | 2 tasks | 5 files |
 | Phase 05 P02 | 1622 | 2 tasks | 16 files |
 | Phase 05 P03 | 380 | 2 tasks | 6 files |
+| Phase 05 P05 | 4min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -177,6 +178,7 @@ Key decisions relevant to v1.6:
 - [Phase 05]: assignedSourceIDs changed from Map<string,boolean> to Set<string> to align with DemandSubscriber constructor signature
 - [Phase 05]: getDemand() added to CoordinatorClient to avoid exposing raw auth headers; uses existing axios interceptor for JWT
 - [Phase 05]: livePollerRunning boolean guards LiveStreamPoller start/stop — poller does not start until first non-empty demand update
+- [Phase 05]: youtube-listener demand filter placed after inactive source validation; DemandChecker interface in gateway package avoids circular import; SetDemandChecker setter preserves existing call sites; cleanupInactivePollers naturally handles demand-removed channels without extra code
 
 ### Roadmap Evolution
 
@@ -216,9 +218,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T11:32:54.880Z
+Last session: 2026-03-27T12:27:07.516Z
 Last activity: 2026-03-27
-Stopped at: Completed 05-03-PLAN.md
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
