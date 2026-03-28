@@ -48,32 +48,7 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 		return
 	}
 
-	// Check 2: Assignments received from coordinator
-	assignmentCount := h.channelMgr.GetAssignmentCount()
-	if assignmentCount == 0 {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "not ready",
-			"reason": "no assignments from coordinator",
-		})
-		return
-	}
-
-	// Check 3: Active subscriptions match filtered assignment count (all filtered chatrooms subscribed)
-	// Use GetFilteredAssignmentCount() instead of GetAssignmentCount() to compare against
-	// the number of assigned sources that actually have database channels
-	subscriptionCount := h.channelMgr.GetSubscriptionCount()
-	filteredAssignmentCount := h.channelMgr.GetFilteredAssignmentCount()
-	if subscriptionCount < filteredAssignmentCount {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":      "not ready",
-			"reason":      "subscriptions connecting",
-			"expected":    filteredAssignmentCount,
-			"subscribed":  subscriptionCount,
-		})
-		return
-	}
-
-	// Check 4: Redis connection
+	// Check 2: Redis connection
 	if !h.publisher.IsHealthy(c.Request.Context()) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "not ready",
@@ -82,11 +57,28 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 		return
 	}
 
+	// Check 3: Active subscriptions match filtered demand count.
+	// Phase 06 uses demand-based coordination: channels are only subscribed when an overlay
+	// is actively watching. Zero subscriptions is valid when no overlays are connected.
+	// We only gate readiness on subscription count when demand is non-nil and > 0
+	// (i.e. there are sources with active viewers that we should be subscribed to).
+	subscriptionCount := h.channelMgr.GetSubscriptionCount()
+	filteredAssignmentCount := h.channelMgr.GetFilteredAssignmentCount()
+	if filteredAssignmentCount > 0 && subscriptionCount < filteredAssignmentCount {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":     "not ready",
+			"reason":     "subscriptions connecting",
+			"expected":   filteredAssignmentCount,
+			"subscribed": subscriptionCount,
+		})
+		return
+	}
+
 	// All checks passed
 	c.JSON(http.StatusOK, gin.H{
 		"status":        "ready",
-		"assignments":   assignmentCount,
 		"subscriptions": subscriptionCount,
+		"demanded":      filteredAssignmentCount,
 	})
 }
 

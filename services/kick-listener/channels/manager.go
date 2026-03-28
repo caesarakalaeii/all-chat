@@ -338,20 +338,32 @@ func (m *Manager) syncChannels() error {
 		return fmt.Errorf("failed to get active channels: %w", err)
 	}
 
-	// Filter channels to only assigned ones (KICK-02)
-	assignedChannels := make([]*ActiveChannel, 0)
-	for _, ch := range channels {
-		if m.assignedSourceIDs[ch.SourceID] {
-			assignedChannels = append(assignedChannels, ch)
+	// Filter channels by demand (Phase 06: demand-based, replaces assignment-based KICK-02).
+	// demandedSourceIDs is populated by the SDK demand subscriber loop via UpdateDemandedSourceIDs.
+	// nil means the first demand update has not yet arrived — skip filtering so the initial
+	// sync does not block startup (reconcileDemand will unsubscribe non-demanded channels once
+	// demand is known). An empty (non-nil) map means zero demand: subscribe to nothing.
+	m.subsMu.RLock()
+	demanded := m.demandedSourceIDs
+	m.subsMu.RUnlock()
+
+	if demanded != nil {
+		filtered := make([]*ActiveChannel, 0, len(demanded))
+		for _, ch := range channels {
+			if _, ok := demanded[ch.SourceID]; ok {
+				filtered = append(filtered, ch)
+			}
 		}
+		m.logger.Info("Filtered channels by demand",
+			zap.Int("total_channels", len(channels)),
+			zap.Int("demanded_channels", len(filtered)),
+		)
+		channels = filtered
+	} else {
+		m.logger.Info("Demand not yet received, syncing all channels",
+			zap.Int("total_channels", len(channels)),
+		)
 	}
-
-	m.logger.Info("Filtered channels by coordinator assignments",
-		zap.Int("total_channels", len(channels)),
-		zap.Int("assigned_channels", len(assignedChannels)),
-	)
-
-	channels = assignedChannels
 
 	plans := m.buildChannelPlans(channels)
 	m.ensureChatroomIDs(plans)
