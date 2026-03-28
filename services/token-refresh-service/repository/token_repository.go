@@ -11,6 +11,59 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// permanentFailSuppressDuration is pushed onto token_expires_at when a
+// non-retryable refresh error is detected. The token will be excluded from
+// all future batches until the user re-authenticates (which resets the column
+// to a real expiry). 30 days is long enough that it is effectively permanent
+// without being infinite.
+const permanentFailSuppressDuration = 30 * 24 * time.Hour
+
+// QueryGetExpiringUserTokens is exported so that unit tests can assert the
+// SQL contains a bounded recovery window instead of the unbounded form.
+const QueryGetExpiringUserTokens = `
+	SELECT id, auth_provider, username, display_name,
+	       access_token, refresh_token, token_expires_at
+	FROM users
+	WHERE (
+	    (token_expires_at < $1 AND token_expires_at > NOW())
+	    OR (token_expires_at BETWEEN NOW() - INTERVAL '48 hours' AND NOW())
+	  )
+	  AND refresh_token IS NOT NULL
+	  AND refresh_token != ''
+	  AND is_banned = false
+	ORDER BY token_expires_at ASC
+	LIMIT 100
+`
+
+// QueryGetExpiringViewerTokens is exported for test assertions.
+const QueryGetExpiringViewerTokens = `
+	SELECT id, platform, username, display_name,
+	       access_token, refresh_token, token_expires_at, user_id
+	FROM viewer_sessions
+	WHERE (
+	    (token_expires_at < $1 AND token_expires_at > NOW())
+	    OR (token_expires_at BETWEEN NOW() - INTERVAL '48 hours' AND NOW())
+	  )
+	  AND refresh_token IS NOT NULL
+	  AND refresh_token != ''
+	ORDER BY token_expires_at ASC
+	LIMIT 100
+`
+
+// QueryGetExpiringYouTubeTokens is exported for test assertions.
+const QueryGetExpiringYouTubeTokens = `
+	SELECT user_id, channel_id, access_token, refresh_token, expiry
+	FROM youtube_oauth_tokens
+	WHERE (
+	    (expiry < $1 AND expiry > NOW())
+	    OR (expiry BETWEEN NOW() - INTERVAL '48 hours' AND NOW())
+	  )
+	  AND refresh_token IS NOT NULL
+	  AND refresh_token != ''
+	ORDER BY expiry ASC
+	LIMIT 100
+`
+
 // ExpiringToken represents a token that needs to be refreshed
 type ExpiringToken struct {
 	// Common fields
@@ -44,26 +97,13 @@ func NewTokenRepository(db *pgxpool.Pool, cipher *encryption.AESEncryptor, logge
 	}
 }
 
-// GetExpiringUserTokens returns user tokens expiring within the specified duration
-// Also includes ALL already-expired tokens for recovery and warning
+// GetExpiringUserTokens returns user tokens expiring within the specified duration.
+// Also recovers already-expired tokens within the last 48 hours to handle transient
+// failures. Tokens older than 48 hours are excluded — they are considered permanently
+// failed and should have been suppressed by MarkUserTokenPermanentlyFailed.
 func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
-	query := `
-		SELECT id, auth_provider, username, display_name,
-		       access_token, refresh_token, token_expires_at
-		FROM users
-		WHERE (
-		    (token_expires_at < $1 AND token_expires_at > NOW())
-		    OR (token_expires_at < NOW())
-		  )
-		  AND refresh_token IS NOT NULL
-		  AND refresh_token != ''
-		  AND is_banned = false
-		ORDER BY token_expires_at ASC
-		LIMIT 100
-	`
-
 	expiryThreshold := time.Now().Add(expiresWithin)
-	rows, err := r.db.Query(ctx, query, expiryThreshold)
+	rows, err := r.db.Query(ctx, QueryGetExpiringUserTokens, expiryThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expiring user tokens: %w", err)
 	}
@@ -118,25 +158,12 @@ func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWith
 	return tokens, nil
 }
 
-// GetExpiringViewerTokens returns viewer session tokens expiring within the specified duration
-// Also includes ALL already-expired tokens for recovery and warning
+// GetExpiringViewerTokens returns viewer session tokens expiring within the specified duration.
+// Only recovers tokens that expired within the last 48 hours. Older expired tokens are
+// assumed to have been permanently failed and suppressed via MarkViewerTokenPermanentlyFailed.
 func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
-	query := `
-		SELECT id, platform, username, display_name,
-		       access_token, refresh_token, token_expires_at, user_id
-		FROM viewer_sessions
-		WHERE (
-		    (token_expires_at < $1 AND token_expires_at > NOW())
-		    OR (token_expires_at < NOW())
-		  )
-		  AND refresh_token IS NOT NULL
-		  AND refresh_token != ''
-		ORDER BY token_expires_at ASC
-		LIMIT 100
-	`
-
 	expiryThreshold := time.Now().Add(expiresWithin)
-	rows, err := r.db.Query(ctx, query, expiryThreshold)
+	rows, err := r.db.Query(ctx, QueryGetExpiringViewerTokens, expiryThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expiring viewer tokens: %w", err)
 	}
@@ -196,24 +223,12 @@ func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWi
 	return tokens, nil
 }
 
-// GetExpiringYouTubeTokens returns YouTube channel tokens expiring within the specified duration
-// Also includes already-expired tokens from the last 24 hours for recovery
+// GetExpiringYouTubeTokens returns YouTube channel tokens expiring within the specified duration.
+// Only recovers tokens that expired within the last 48 hours. Older expired tokens are
+// assumed to have been permanently failed and suppressed via MarkYouTubeTokenPermanentlyFailed.
 func (r *TokenRepository) GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
-	query := `
-		SELECT user_id, channel_id, access_token, refresh_token, expiry
-		FROM youtube_oauth_tokens
-		WHERE (
-		    (expiry < $1 AND expiry > NOW())
-		    OR (expiry < NOW())
-		  )
-		  AND refresh_token IS NOT NULL
-		  AND refresh_token != ''
-		ORDER BY expiry ASC
-		LIMIT 100
-	`
-
 	expiryThreshold := time.Now().Add(expiresWithin)
-	rows, err := r.db.Query(ctx, query, expiryThreshold)
+	rows, err := r.db.Query(ctx, QueryGetExpiringYouTubeTokens, expiryThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expiring YouTube tokens: %w", err)
 	}
@@ -398,6 +413,68 @@ func (r *TokenRepository) GetUserOverlays(ctx context.Context, userID string) ([
 	}
 
 	return overlayIDs, nil
+}
+
+// MarkUserTokenPermanentlyFailed pushes the user's token_expires_at forward by
+// suppressDuration (typically 30 days). This removes the token from future refresh
+// batches. The user must re-authenticate through the normal login flow to reset the
+// expiry to a real value.
+func (r *TokenRepository) MarkUserTokenPermanentlyFailed(ctx context.Context, userID string, suppressDuration time.Duration) error {
+	query := `
+		UPDATE users
+		SET token_expires_at = NOW() + $2::interval,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+	interval := fmt.Sprintf("%d seconds", int(suppressDuration.Seconds()))
+	result, err := r.db.Exec(ctx, query, userID, interval)
+	if err != nil {
+		return fmt.Errorf("failed to mark user token permanently failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found: %s", userID)
+	}
+	return nil
+}
+
+// MarkViewerTokenPermanentlyFailed pushes the viewer session's token_expires_at
+// forward by suppressDuration, removing it from future refresh batches.
+func (r *TokenRepository) MarkViewerTokenPermanentlyFailed(ctx context.Context, sessionID string, suppressDuration time.Duration) error {
+	query := `
+		UPDATE viewer_sessions
+		SET token_expires_at = NOW() + $2::interval,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+	interval := fmt.Sprintf("%d seconds", int(suppressDuration.Seconds()))
+	result, err := r.db.Exec(ctx, query, sessionID, interval)
+	if err != nil {
+		return fmt.Errorf("failed to mark viewer token permanently failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("viewer session not found: %s", sessionID)
+	}
+	return nil
+}
+
+// MarkYouTubeTokenPermanentlyFailed pushes the YouTube channel token's expiry
+// forward by suppressDuration, removing it from future refresh batches.
+func (r *TokenRepository) MarkYouTubeTokenPermanentlyFailed(ctx context.Context, userID, channelID string, suppressDuration time.Duration) error {
+	query := `
+		UPDATE youtube_oauth_tokens
+		SET expiry = NOW() + $3::interval,
+		    updated_at = NOW()
+		WHERE user_id = $1 AND channel_id = $2
+	`
+	interval := fmt.Sprintf("%d seconds", int(suppressDuration.Seconds()))
+	result, err := r.db.Exec(ctx, query, userID, channelID, interval)
+	if err != nil {
+		return fmt.Errorf("failed to mark YouTube token permanently failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("YouTube token not found: user_id=%s, channel_id=%s", userID, channelID)
+	}
+	return nil
 }
 
 // encryptToken encrypts a token string

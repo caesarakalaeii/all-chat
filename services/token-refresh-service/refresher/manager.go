@@ -18,9 +18,32 @@ import (
 	oauth2Lib "golang.org/x/oauth2"
 )
 
+// TokenRepo is the repository interface used by the Manager. Defining it here
+// keeps the refresher package testable without a real database.
+type TokenRepo interface {
+	GetExpiringUserTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
+	GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
+	GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
+
+	UpdateUserTokens(ctx context.Context, userID string, token *oauth2Lib.Token) error
+	UpdateViewerTokens(ctx context.Context, sessionID string, token *oauth2Lib.Token) error
+	UpdateYouTubeTokens(ctx context.Context, userID, channelID string, token *oauth2Lib.Token) error
+
+	GetUserOverlays(ctx context.Context, userID string) ([]string, error)
+
+	MarkUserTokenPermanentlyFailed(ctx context.Context, userID string, suppressDuration time.Duration) error
+	MarkViewerTokenPermanentlyFailed(ctx context.Context, sessionID string, suppressDuration time.Duration) error
+	MarkYouTubeTokenPermanentlyFailed(ctx context.Context, userID, channelID string, suppressDuration time.Duration) error
+}
+
+// permanentFailSuppress is the duration pushed onto token_expires_at after a
+// non-retryable refresh error. It must be long enough to stop the retry loop
+// until the user re-authenticates. 30 days is the canonical value.
+const permanentFailSuppress = 30 * 24 * time.Hour
+
 // Manager handles periodic OAuth token refresh for all platforms
 type Manager struct {
-	repo      *repository.TokenRepository
+	repo      TokenRepo
 	providers map[oauth.Platform]oauth.OAuthProvider
 	redis     *redis.Client
 	logger    *zap.Logger
@@ -53,7 +76,7 @@ type Stats struct {
 	IsRunning         bool      `json:"is_running"`
 }
 
-// NewManager creates a new token refresh manager
+// NewManager creates a new token refresh manager backed by a real *repository.TokenRepository.
 func NewManager(
 	repo *repository.TokenRepository,
 	providers map[oauth.Platform]oauth.OAuthProvider,
@@ -64,6 +87,29 @@ func NewManager(
 	batchSize int,
 	retryAttempts int,
 ) *Manager {
+	return NewManagerWithRepo(repo, providers, redis, logger, refreshInterval, expiryBuffer, batchSize, retryAttempts, nil)
+}
+
+// NewManagerWithRepo creates a new token refresh manager from a TokenRepo interface.
+// Pass a non-nil prometheus.Registerer to use an isolated registry (useful in tests
+// to avoid duplicate-metric-registration panics). Pass nil to use the default global
+// registry (production behaviour).
+func NewManagerWithRepo(
+	repo TokenRepo,
+	providers map[oauth.Platform]oauth.OAuthProvider,
+	redis *redis.Client,
+	logger *zap.Logger,
+	refreshInterval time.Duration,
+	expiryBuffer time.Duration,
+	batchSize int,
+	retryAttempts int,
+	reg prometheus.Registerer,
+) *Manager {
+	if reg == nil {
+		reg = prometheus.DefaultRegisterer
+	}
+	factory := promauto.With(reg)
+
 	return &Manager{
 		repo:            repo,
 		providers:       providers,
@@ -74,11 +120,11 @@ func NewManager(
 		batchSize:       batchSize,
 		retryAttempts:   retryAttempts,
 		warningCache:    make(map[string]time.Time),
-		refreshTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+		refreshTotal: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "token_refresh_attempts_total",
 			Help: "Total token refresh attempts",
 		}, []string{"service", "platform", "result"}),
-		refreshErrors: promauto.NewCounterVec(prometheus.CounterOpts{
+		refreshErrors: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "token_refresh_errors_total",
 			Help: "Token refresh errors by platform and error category",
 		}, []string{"service", "platform", "error_type"}),
@@ -208,6 +254,13 @@ func (m *Manager) groupByPlatform(tokens []*repository.ExpiringToken) map[oauth.
 	return grouped
 }
 
+// ExposedRefreshPlatform is a test helper that exposes refreshPlatform for
+// unit tests in the refresher_test package. It must not be called from
+// production code paths.
+func (m *Manager) ExposedRefreshPlatform(ctx context.Context, platform oauth.Platform, tokens []*repository.ExpiringToken) (refreshed, failed int64) {
+	return m.refreshPlatform(ctx, platform, tokens)
+}
+
 // refreshPlatform refreshes all tokens for a specific platform
 func (m *Manager) refreshPlatform(ctx context.Context, platform oauth.Platform, tokens []*repository.ExpiringToken) (refreshed, failed int64) {
 	provider, ok := m.providers[platform]
@@ -231,6 +284,13 @@ func (m *Manager) refreshPlatform(ctx context.Context, platform oauth.Platform, 
 			m.refreshTotal.WithLabelValues("token-refresh-service", string(platform), "error").Inc()
 			errorCategory := categorizeRefreshError(err)
 			m.refreshErrors.WithLabelValues("token-refresh-service", string(platform), errorCategory).Inc()
+
+			// Suppress permanently-failed tokens so they are excluded from future batches.
+			// The token_expires_at column is pushed 30 days into the future; the user
+			// must re-authenticate through the normal login flow to restore access.
+			if isNonRetryableErrorString(err.Error()) {
+				m.markTokenPermanentlyFailed(ctx, token)
+			}
 
 			// Publish warning event
 			m.publishWarning(ctx, token, string(platform), "refresh_failed")
@@ -336,10 +396,15 @@ func (m *Manager) isNonRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
+	return isNonRetryableErrorString(err.Error())
+}
 
-	errStr := strings.ToLower(err.Error())
-
-	// OAuth errors that indicate revoked/invalid tokens
+// isNonRetryableErrorString is the pure-string form used both by isNonRetryableError
+// and by the permanent-failure marking path.
+func isNonRetryableErrorString(errStr string) bool {
+	lower := strings.ToLower(errStr)
+	// OAuth errors that indicate revoked/invalid tokens — these cannot be resolved
+	// by retrying; the user must re-authenticate.
 	nonRetryable := []string{
 		"invalid_grant",
 		"unauthorized_client",
@@ -347,14 +412,51 @@ func (m *Manager) isNonRetryableError(err error) bool {
 		"token_revoked",
 		"access_denied",
 	}
-
 	for _, pattern := range nonRetryable {
-		if strings.Contains(errStr, pattern) {
+		if strings.Contains(lower, pattern) {
 			return true
 		}
 	}
-
 	return false
+}
+
+// markTokenPermanentlyFailed pushes the token's expiry far into the future so
+// that it is excluded from future refresh batches. The appropriate repository
+// method is chosen based on token.TokenType.
+func (m *Manager) markTokenPermanentlyFailed(ctx context.Context, token *repository.ExpiringToken) {
+	var markErr error
+	switch token.TokenType {
+	case "user":
+		markErr = m.repo.MarkUserTokenPermanentlyFailed(ctx, token.ID, permanentFailSuppress)
+	case "viewer":
+		markErr = m.repo.MarkViewerTokenPermanentlyFailed(ctx, token.SessionID, permanentFailSuppress)
+	case "youtube_channel":
+		markErr = m.repo.MarkYouTubeTokenPermanentlyFailed(ctx, token.ID, token.ChannelID, permanentFailSuppress)
+	default:
+		m.logger.Warn("Unknown token type for permanent-failure marking",
+			zap.String("token_type", token.TokenType),
+			zap.String("id", token.ID),
+		)
+		return
+	}
+
+	if markErr != nil {
+		m.logger.Error("Failed to mark token as permanently failed",
+			zap.String("token_type", token.TokenType),
+			zap.String("id", token.ID),
+			zap.String("session_id", token.SessionID),
+			zap.Error(markErr),
+		)
+		return
+	}
+
+	m.logger.Warn("Token marked as permanently failed — user must re-authenticate",
+		zap.String("token_type", token.TokenType),
+		zap.String("platform", token.Platform),
+		zap.String("username", token.Username),
+		zap.String("id", token.ID),
+		zap.Duration("suppress_duration", permanentFailSuppress),
+	)
 }
 
 // publishWarning publishes a token expiration warning event to Redis Stream
