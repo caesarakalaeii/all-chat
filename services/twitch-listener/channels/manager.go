@@ -624,6 +624,7 @@ func (m *Manager) UpdateDemandedSourceIDs(_ map[string]listener.DemandedSource) 
 
 // joinChannelsMultipleConnections creates multiple IRC connections for >100 channels (TWITCH-03)
 // Per RESEARCH.md: Distribute channels evenly across connections (90 channels per connection, safe margin below 100)
+// Leadership election is performed per channel so that pods split channels between them.
 func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels []string) {
 	// Create multiple IRC clients: 90 channels per connection (safe margin below 100)
 	clientCount := (len(channels) / 90) + 1
@@ -647,6 +648,30 @@ func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels 
 		}
 
 		for _, ch := range channels[start:end] {
+			// Perform leadership election per channel so pods split channels
+			// between them rather than both joining all channels.
+			if m.leader != nil {
+				ok, err := m.leader.EnsureLeadership(ctx, ch, func(channel string) func() {
+					lossCtx := context.Background()
+					return func() {
+						m.handleLeadershipLoss(lossCtx, channel)
+					}
+				}(ch))
+				if err != nil {
+					m.logger.Error("Failed to claim leadership",
+						zap.String("channel", ch),
+						zap.Error(err),
+					)
+					continue
+				}
+				if !ok {
+					m.logger.Debug("Skipping channel because another instance is leader",
+						zap.String("channel", ch),
+					)
+					continue
+				}
+			}
+
 			if err := m.rateLimiter.Wait(ctx); err != nil {
 				m.logger.Warn("Rate limiter wait interrupted", zap.Error(err))
 				break
