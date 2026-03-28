@@ -227,12 +227,13 @@ None yet.
 | 260325-lwo | Auto-create Discord webhook when relay enabled | 2026-03-25 | 5b776b3 | [260325-lwo-auto-create-discord-webhook-when-relay-e](./quick/260325-lwo-auto-create-discord-webhook-when-relay-e/) |
 | 260326-poh | Update Open Graph and meta embed tags for allch.at | 2026-03-26 | f544bab | [260326-poh-update-open-graph-and-meta-embed-tags-fo](./quick/260326-poh-update-open-graph-and-meta-embed-tags-fo/) |
 | 260326-r4m | Fix closed dependabot PRs after force push — update all Go and npm deps | 2026-03-26 | 38225be | [260326-r4m-fix-closed-dependabot-prs-after-force-pu](./quick/260326-r4m-fix-closed-dependabot-prs-after-force-pu/) |
+| 260328-tqh | Enable tracing in the tiktok-listener service | 2026-03-28 | 01effa3 | [260328-tqh-enable-tracing-in-the-tiktok-listener-se](./quick/260328-tqh-enable-tracing-in-the-tiktok-listener-se/) |
 
 ## Session Continuity
 
-Last session: 2026-03-27T23:04:12.371Z
-Last activity: 2026-03-27
-Stopped at: Completed 06-03-PLAN.md — Phase 06 complete
+Last session: 2026-03-28T00:00:00Z
+Last activity: 2026-03-28
+Stopped at: Completed quick task 260328-tqh — enable tracing in tiktok-listener
 Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
