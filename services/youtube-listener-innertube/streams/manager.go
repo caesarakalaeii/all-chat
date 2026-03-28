@@ -753,14 +753,28 @@ func (m *Manager) syncSources(ctx context.Context) {
 	}
 
 	// Rebalance leadership leases before acquiring new ones.
+	// Released video IDs will have their pollers stopped below.
 	if m.leader != nil {
 		if released, err := m.leader.Rebalance(ctx, len(sources)); err != nil {
 			m.logger.Warn("Leadership rebalance failed", zap.Error(err))
-		} else if released > 0 {
+		} else if len(released) > 0 {
 			m.logger.Info("Rebalanced: released excess streams",
-				zap.Int("released", released),
+				zap.Int("released", len(released)),
 				zap.Int("total_sources", len(sources)),
 			)
+			// Stop pollers for released video IDs so another pod can take over
+			m.mu.Lock()
+			for _, videoID := range released {
+				if p, exists := m.pollers[videoID]; exists {
+					m.logger.Info("Stopping poller (rebalanced away)",
+						zap.String("video_id", videoID),
+					)
+					p.Stop()
+					delete(m.pollers, videoID)
+					delete(m.activeStreams, videoID)
+				}
+			}
+			m.mu.Unlock()
 		}
 	}
 
