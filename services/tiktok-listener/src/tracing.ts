@@ -15,8 +15,7 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
 import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-node';
+import { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_SERVICE_VERSION, SEMRESATTRS_DEPLOYMENT_ENVIRONMENT } from '@opentelemetry/semantic-conventions';
 
 // Global SDK instance
 let sdk: NodeSDK | null = null;
@@ -49,9 +48,9 @@ export function initTracing(): void {
   try {
     // Create resource with service information
     const resource = new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
-      [SemanticResourceAttributes.SERVICE_VERSION]: serviceVersion,
-      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: environment,
+      [SEMRESATTRS_SERVICE_NAME]: serviceName,
+      [SEMRESATTRS_SERVICE_VERSION]: serviceVersion,
+      [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: environment,
     });
 
     // Create OTLP exporter
@@ -62,7 +61,7 @@ export function initTracing(): void {
     // Initialize Node SDK with auto-instrumentations
     sdk = new NodeSDK({
       resource,
-      spanProcessor: new BatchSpanProcessor(traceExporter),
+      traceExporter,
       instrumentations: [
         getNodeAutoInstrumentations({
           '@opentelemetry/instrumentation-http': { enabled: true },
