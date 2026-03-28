@@ -208,6 +208,7 @@ func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int)
 		peerCount = 1
 	}
 	leadershipPeerCount.WithLabelValues(sanitizeLabel(c.platform)).Set(float64(peerCount))
+	leadershipDesired.WithLabelValues(sanitizeLabel(c.platform)).Set(float64(totalStreams))
 
 	// ceil(totalStreams / peerCount)
 	maxPerPod := (totalStreams + peerCount - 1) / peerCount
@@ -255,6 +256,8 @@ func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int)
 			c.observe("rebalance_released")
 		}(id)
 	}
+
+	leadershipRebalanceReleased.WithLabelValues(sanitizeLabel(c.platform)).Add(float64(len(toRelease)))
 
 	if c.logger != nil {
 		c.logger.Info("Rebalanced leadership leases",

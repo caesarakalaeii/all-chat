@@ -20,6 +20,16 @@ var (
 		Name: "source_manager_leadership_peer_count",
 		Help: "Number of active peers registered for this platform",
 	}, []string{"platform"})
+
+	leadershipDesired = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "source_manager_leadership_desired_total",
+		Help: "Total number of streams that should be covered across all pods for this platform",
+	}, []string{"platform"})
+
+	leadershipRebalanceReleased = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "source_manager_leadership_rebalance_released_total",
+		Help: "Cumulative number of leases released by rebalancing",
+	}, []string{"platform"})
 )
 
 func observeLeadershipEvent(platform, event string) {
