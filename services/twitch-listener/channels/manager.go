@@ -671,54 +671,59 @@ func (m *Manager) UpdateDemandedSourceIDs(_ map[string]listener.DemandedSource) 
 
 // joinChannelsMultipleConnections creates multiple IRC connections for >100 channels (TWITCH-03)
 // Per RESEARCH.md: Distribute channels evenly across connections (90 channels per connection, safe margin below 100)
-// Leadership election is performed per channel so that pods split channels between them.
+// Leadership election is performed per channel first so that IRC connections are only
+// created for the channels this pod actually owns — preventing OOM on startup when the
+// full channel list is large but this pod only handles a fraction.
 func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels []string) {
-	// Create multiple IRC clients: 90 channels per connection (safe margin below 100)
-	clientCount := (len(channels) / 90) + 1
+	// Filter channels through leadership first to determine how many this pod owns.
+	var wonChannels []string
+	for _, ch := range channels {
+		if m.leader != nil {
+			ok, err := m.leader.EnsureLeadership(ctx, ch, func(channel string) func() {
+				lossCtx := context.Background()
+				return func() {
+					m.handleLeadershipLoss(lossCtx, channel)
+				}
+			}(ch))
+			if err != nil {
+				m.logger.Error("Failed to claim leadership",
+					zap.String("channel", ch),
+					zap.Error(err),
+				)
+				continue
+			}
+			if !ok {
+				m.logger.Debug("Skipping channel because another instance is leader",
+					zap.String("channel", ch),
+				)
+				continue
+			}
+		}
+		wonChannels = append(wonChannels, ch)
+	}
+
+	if len(wonChannels) == 0 {
+		m.logger.Info("No channels won via leadership, skipping IRC connections")
+		return
+	}
+
+	// Create IRC connections sized to the channels this pod actually owns.
+	clientCount := (len(wonChannels) / 90) + 1
 
 	m.logger.Info("Creating multiple IRC connections",
-		zap.Int("channel_count", len(channels)),
+		zap.Int("total_candidates", len(channels)),
+		zap.Int("won_channels", len(wonChannels)),
 		zap.Int("client_count", clientCount),
 	)
 
 	for i := 0; i < clientCount; i++ {
-		// Note: We're storing JoinParterInterface, but actual IRC client creation
-		// would need access to IRC config. For now, this is a placeholder that
-		// assumes the primary joinParter can handle the load.
-		// In production, this would create new IRC clients.
-
-		// Distribute channels across clients
 		start := i * 90
 		end := start + 90
-		if end > len(channels) {
-			end = len(channels)
+		if end > len(wonChannels) {
+			end = len(wonChannels)
 		}
 
-		for _, ch := range channels[start:end] {
-			// Perform leadership election per channel so pods split channels
-			// between them rather than both joining all channels.
-			if m.leader != nil {
-				ok, err := m.leader.EnsureLeadership(ctx, ch, func(channel string) func() {
-					lossCtx := context.Background()
-					return func() {
-						m.handleLeadershipLoss(lossCtx, channel)
-					}
-				}(ch))
-				if err != nil {
-					m.logger.Error("Failed to claim leadership",
-						zap.String("channel", ch),
-						zap.Error(err),
-					)
-					continue
-				}
-				if !ok {
-					m.logger.Debug("Skipping channel because another instance is leader",
-						zap.String("channel", ch),
-					)
-					continue
-				}
-			}
-
+		for _, ch := range wonChannels[start:end] {
 			if err := m.rateLimiter.Wait(ctx); err != nil {
 				m.logger.Warn("Rate limiter wait interrupted", zap.Error(err))
 				break
