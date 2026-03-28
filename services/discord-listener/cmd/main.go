@@ -255,10 +255,14 @@ func main() {
 			}
 
 			acquired, err := ll.LeadershipCoordinator().EnsureLeadership(ctx, "shard:0", func() {
-				log.Warn("Lost gateway shard ownership — disconnecting")
-				if ll.LeadershipCoordinator() != nil {
-					metrics.SetShardOwnership(0)
-				}
+				log.Warn("Lost gateway shard ownership — closing active connection")
+				metrics.SetShardOwnership(0)
+				// Close the active Gateway connection so Connect() returns immediately.
+				// Without this, Connect() blocks until Discord naturally disconnects (minutes),
+				// leaving shard_ownership=0 while the socket is still live and causing
+				// false "Listener Disconnected" alerts. Closing here collapses the window to
+				// <10s, within the alert's 2-minute for-duration.
+				gwClient.Close()
 			})
 			if err != nil || !acquired {
 				log.Info("Waiting for shard ownership...")

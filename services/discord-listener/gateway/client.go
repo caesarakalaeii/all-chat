@@ -129,7 +129,20 @@ func (c *GatewayClient) SetDemandChecker(dc DemandChecker) {
 
 // Connect opens the Gateway WebSocket, runs HELLO/IDENTIFY/READY, starts heartbeat.
 // This method blocks until the connection closes or ctx is cancelled.
+// Each call to Connect resets the done channel so that a previous Close() call
+// (e.g. from a leadership-lost callback) does not prevent reconnection.
 func (c *GatewayClient) Connect(ctx context.Context) error {
+	// Reset done channel so a previous Close() does not short-circuit this new session.
+	c.mu.Lock()
+	select {
+	case <-c.done:
+		// Channel was closed (by a prior Close() call) — create a fresh one.
+		c.done = make(chan struct{})
+	default:
+		// Channel is still open — no reset needed.
+	}
+	c.mu.Unlock()
+
 	// Use resume_gateway_url when a prior session exists — Discord requires RESUME to be sent
 	// to the resume URL, not the standard gateway URL (sending RESUME to the wrong URL → 4002).
 	connectURL := c.gatewayURL
