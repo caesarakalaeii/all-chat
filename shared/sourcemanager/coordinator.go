@@ -2,6 +2,7 @@ package sourcemanager
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -158,6 +159,116 @@ func (c *LeadershipCoordinator) Stop() {
 			}
 		}(id)
 	}
+}
+
+// LeaseCount returns the number of active leases held by this coordinator.
+func (c *LeadershipCoordinator) LeaseCount() int {
+	if c == nil {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.leases)
+}
+
+// HeldStreamIDs returns the stream IDs currently held by this coordinator.
+func (c *LeadershipCoordinator) HeldStreamIDs() []string {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ids := make([]string, 0, len(c.leases))
+	for id := range c.leases {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// Rebalance checks the number of active peers for this platform and releases
+// excess leases so that each pod holds at most ceil(totalStreams/peerCount).
+// It returns the number of released leases.
+func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int) (int, error) {
+	if c == nil || c.client == nil {
+		return 0, nil
+	}
+
+	peerCount, err := c.client.RegisterPeer(ctx, c.platform, c.callerID)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Warn("Failed to register peer for rebalancing",
+				zap.String("platform", c.platform),
+				zap.Error(err),
+			)
+		}
+		return 0, err
+	}
+
+	if peerCount <= 0 {
+		peerCount = 1
+	}
+	leadershipPeerCount.WithLabelValues(sanitizeLabel(c.platform)).Set(float64(peerCount))
+
+	// ceil(totalStreams / peerCount)
+	maxPerPod := (totalStreams + peerCount - 1) / peerCount
+
+	c.mu.Lock()
+	currentCount := len(c.leases)
+	excess := currentCount - maxPerPod
+	if excess <= 0 {
+		c.mu.Unlock()
+		return 0, nil
+	}
+
+	// Collect stream IDs and sort alphabetically for deterministic release
+	streamIDs := make([]string, 0, currentCount)
+	for id := range c.leases {
+		streamIDs = append(streamIDs, id)
+	}
+	sort.Strings(streamIDs)
+
+	// Release the last `excess` streams (keep the first maxPerPod alphabetically)
+	toRelease := streamIDs[maxPerPod:]
+	for _, id := range toRelease {
+		if entry, ok := c.leases[id]; ok {
+			close(entry.stopCh)
+			delete(c.leases, id)
+		}
+	}
+	c.setActiveGaugeLocked()
+	c.mu.Unlock()
+
+	// Release leadership on source-manager asynchronously
+	for _, id := range toRelease {
+		go func(streamID string) {
+			if err := c.client.ReleaseLeadership(context.Background(), c.platform, streamID, c.callerID); err != nil {
+				if c.logger != nil {
+					c.logger.Warn("Failed to release leadership during rebalance",
+						zap.String("platform", c.platform),
+						zap.String("stream_id", streamID),
+						zap.Error(err),
+					)
+				}
+				c.observe("rebalance_release_error")
+				return
+			}
+			c.observe("rebalance_released")
+		}(id)
+	}
+
+	if c.logger != nil {
+		c.logger.Info("Rebalanced leadership leases",
+			zap.String("platform", c.platform),
+			zap.Int("peer_count", peerCount),
+			zap.Int("total_streams", totalStreams),
+			zap.Int("max_per_pod", maxPerPod),
+			zap.Int("had", currentCount),
+			zap.Int("released", len(toRelease)),
+			zap.Int("kept", maxPerPod),
+		)
+	}
+
+	return len(toRelease), nil
 }
 
 func (c *LeadershipCoordinator) heartbeat(entry *leaseEntry) {

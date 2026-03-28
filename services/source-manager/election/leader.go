@@ -21,6 +21,12 @@ const (
 
 	// DefaultHeartbeatInterval is how often to renew the lock (5 seconds)
 	DefaultHeartbeatInterval = 5 * time.Second
+
+	// PeerKeyPrefix is the prefix for peer registration keys in Redis
+	PeerKeyPrefix = "peer"
+
+	// PeerTTL is the TTL for peer registration keys (30 seconds, matches sync interval)
+	PeerTTL = 30 * time.Second
 )
 
 // Manager handles leader election using Redis distributed locks
@@ -245,6 +251,34 @@ func (m *Manager) GetAllLeadership(ctx context.Context) ([]*models.LeadershipSta
 	}
 
 	return statuses, nil
+}
+
+// RegisterPeer registers a caller as an active peer for the given platform and returns
+// the total number of active peers. Peers expire after PeerTTL if not re-registered.
+func (m *Manager) RegisterPeer(ctx context.Context, platform, callerID string) (int, error) {
+	key := m.peerKey(platform, callerID)
+
+	if err := m.client.Set(ctx, key, "1", PeerTTL).Err(); err != nil {
+		return 0, fmt.Errorf("failed to register peer: %w", err)
+	}
+
+	// Count all peers for this platform
+	pattern := fmt.Sprintf("%s:%s:*", PeerKeyPrefix, platform)
+	var count int
+	iter := m.client.Scan(ctx, 0, pattern, 0).Iterator()
+	for iter.Next(ctx) {
+		count++
+	}
+	if err := iter.Err(); err != nil {
+		return 0, fmt.Errorf("failed to count peers: %w", err)
+	}
+
+	return count, nil
+}
+
+// peerKey generates the Redis key for a peer registration
+func (m *Manager) peerKey(platform, callerID string) string {
+	return fmt.Sprintf("%s:%s:%s", PeerKeyPrefix, platform, callerID)
 }
 
 // leaderKey generates the Redis key for a leader lock

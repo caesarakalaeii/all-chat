@@ -752,6 +752,18 @@ func (m *Manager) syncSources(ctx context.Context) {
 		return
 	}
 
+	// Rebalance leadership leases before acquiring new ones.
+	if m.leader != nil {
+		if released, err := m.leader.Rebalance(ctx, len(sources)); err != nil {
+			m.logger.Warn("Leadership rebalance failed", zap.Error(err))
+		} else if released > 0 {
+			m.logger.Info("Rebalanced: released excess streams",
+				zap.Int("released", released),
+				zap.Int("total_sources", len(sources)),
+			)
+		}
+	}
+
 	m.logger.Debug("Synced YouTube sources from source-manager",
 		zap.Int("source_count", len(sources)),
 	)

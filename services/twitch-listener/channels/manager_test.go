@@ -403,6 +403,10 @@ func (m *mockLeadershipClient) ReleaseLeadership(_ context.Context, _, streamID,
 	return nil
 }
 
+func (m *mockLeadershipClient) RegisterPeer(_ context.Context, _, _ string) (int, error) {
+	return 2, nil // simulate 2 peers
+}
+
 // TestManager_JoinChannelsMultipleConnections_RespectsLeadership is a regression test for
 // the bug where joinChannelsMultipleConnections bypassed EnsureLeadership, causing both
 // twitch-listener pods to join ALL channels instead of splitting them.

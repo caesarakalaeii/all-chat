@@ -252,6 +252,71 @@ func TestLeaderKey(t *testing.T) {
 	assert.Equal(t, "leader:youtube:stream123", key)
 }
 
+func TestRegisterPeer_ReturnsCount(t *testing.T) {
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
+
+	logger := zap.NewNop()
+	manager := NewManager(client, logger)
+
+	// Register first peer
+	count, err := manager.RegisterPeer(context.Background(), "twitch", "caller-a")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Register second peer
+	count, err = manager.RegisterPeer(context.Background(), "twitch", "caller-b")
+	assert.NoError(t, err)
+	assert.Equal(t, 2, count)
+
+	// Re-register first peer (should still be 2)
+	count, err = manager.RegisterPeer(context.Background(), "twitch", "caller-a")
+	assert.NoError(t, err)
+	assert.Equal(t, 2, count)
+}
+
+func TestRegisterPeer_PlatformIsolation(t *testing.T) {
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
+
+	logger := zap.NewNop()
+	manager := NewManager(client, logger)
+
+	// Register peers for different platforms
+	count, err := manager.RegisterPeer(context.Background(), "twitch", "caller-a")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	count, err = manager.RegisterPeer(context.Background(), "kick", "caller-b")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count) // Different platform, count is 1
+}
+
+func TestRegisterPeer_Expiry(t *testing.T) {
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
+
+	logger := zap.NewNop()
+	manager := NewManager(client, logger)
+
+	// Register two peers
+	_, err := manager.RegisterPeer(context.Background(), "twitch", "caller-a")
+	assert.NoError(t, err)
+	_, err = manager.RegisterPeer(context.Background(), "twitch", "caller-b")
+	assert.NoError(t, err)
+
+	// Fast-forward past TTL
+	mr.FastForward(PeerTTL + time.Second)
+
+	// Register new peer — old ones should have expired
+	count, err := manager.RegisterPeer(context.Background(), "twitch", "caller-c")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
+
 func TestParseLeaderKey(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()

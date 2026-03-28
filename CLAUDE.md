@@ -95,6 +95,7 @@ cd frontend && npm run dev  # Start frontend
   - ADR-0004: No ports/adapters abstraction
   - ADR-0005: React + Next.js frontend
   - ADR-0006: YouTube quota reserve-confirm-rollback
+  - ADR-0007: Leadership rebalancing for auto-scaling
 
 ### Service Documentation
 

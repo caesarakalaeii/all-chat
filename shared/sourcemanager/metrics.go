@@ -15,6 +15,11 @@ var (
 		Name: "source_manager_leadership_active",
 		Help: "Number of active leadership leases held by this instance per platform",
 	}, []string{"platform"})
+
+	leadershipPeerCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "source_manager_leadership_peer_count",
+		Help: "Number of active peers registered for this platform",
+	}, []string{"platform"})
 )
 
 func observeLeadershipEvent(platform, event string) {
