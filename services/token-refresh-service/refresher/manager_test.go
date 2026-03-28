@@ -248,6 +248,43 @@ func TestRefreshPlatform_NonRetryableError_MarksYouTubeToken(t *testing.T) {
 	}
 }
 
+// TestRefreshPlatform_InvalidRefreshToken_MarksUserToken verifies that Twitch's
+// "Invalid refresh token" error (distinct from invalid_grant) is also treated
+// as non-retryable and marks the token as permanently failed.
+func TestRefreshPlatform_InvalidRefreshToken_MarksUserToken(t *testing.T) {
+	repo := &fakeRepo{}
+	provider := &fakeProvider{
+		platform: authOAuth.PlatformTwitch,
+		err:      errors.New("refresh failed after 3 attempts: failed to refresh token: oauth2: cannot fetch token: 400 Bad Request\nResponse: {\"status\":400,\"message\":\"Invalid refresh token\"}"),
+	}
+	providers := map[authOAuth.Platform]authOAuth.OAuthProvider{
+		authOAuth.PlatformTwitch: provider,
+	}
+	mgr := newTestManager(repo, providers)
+
+	token := &repository.ExpiringToken{
+		ID:           "user-bad-refresh",
+		Platform:     "twitch",
+		Username:     "badrefreshuser",
+		TokenType:    "user",
+		RefreshToken: "revoked-refresh-token",
+		ExpiresAt:    time.Now().Add(-1 * time.Hour),
+	}
+
+	mgr.ExposedRefreshPlatform(context.Background(), authOAuth.PlatformTwitch, []*repository.ExpiringToken{token})
+
+	repo.mu.Lock()
+	marked := repo.markedUsers
+	repo.mu.Unlock()
+
+	if len(marked) != 1 {
+		t.Fatalf("expected 1 MarkUserTokenPermanentlyFailed call for 'Invalid refresh token', got %d", len(marked))
+	}
+	if marked[0].id != "user-bad-refresh" {
+		t.Errorf("expected id=user-bad-refresh, got %s", marked[0].id)
+	}
+}
+
 // TestRefreshPlatform_RetryableError_DoesNotMarkToken verifies that transient
 // network errors do NOT trigger the permanent-failure mark.
 func TestRefreshPlatform_RetryableError_DoesNotMarkToken(t *testing.T) {
