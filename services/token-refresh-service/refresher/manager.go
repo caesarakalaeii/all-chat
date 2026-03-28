@@ -411,6 +411,7 @@ func isNonRetryableErrorString(errStr string) bool {
 		"invalid_client",
 		"token_revoked",
 		"access_denied",
+		"invalid refresh token",
 	}
 	for _, pattern := range nonRetryable {
 		if strings.Contains(lower, pattern) {
