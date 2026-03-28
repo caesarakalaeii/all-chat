@@ -187,10 +187,10 @@ func (c *LeadershipCoordinator) HeldStreamIDs() []string {
 
 // Rebalance checks the number of active peers for this platform and releases
 // excess leases so that each pod holds at most ceil(totalStreams/peerCount).
-// It returns the number of released leases.
-func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int) (int, error) {
+// It returns the stream IDs that were released so the caller can disconnect them.
+func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int) ([]string, error) {
 	if c == nil || c.client == nil {
-		return 0, nil
+		return nil, nil
 	}
 
 	peerCount, err := c.client.RegisterPeer(ctx, c.platform, c.callerID)
@@ -201,7 +201,7 @@ func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int)
 				zap.Error(err),
 			)
 		}
-		return 0, err
+		return nil, err
 	}
 
 	if peerCount <= 0 {
@@ -217,7 +217,7 @@ func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int)
 	excess := currentCount - maxPerPod
 	if excess <= 0 {
 		c.mu.Unlock()
-		return 0, nil
+		return nil, nil
 	}
 
 	// Collect stream IDs and sort alphabetically for deterministic release
@@ -268,7 +268,7 @@ func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int)
 		)
 	}
 
-	return len(toRelease), nil
+	return toRelease, nil
 }
 
 func (c *LeadershipCoordinator) heartbeat(entry *leaseEntry) {

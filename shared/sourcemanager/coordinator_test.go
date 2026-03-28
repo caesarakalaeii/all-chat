@@ -88,7 +88,7 @@ func TestRebalance_ShedsExcess(t *testing.T) {
 	// Rebalance with 2 peers and 10 total streams → max 5 per pod
 	released, err := coord.Rebalance(ctx, 10)
 	require.NoError(t, err)
-	assert.Equal(t, 5, released)
+	assert.Len(t, released, 5)
 	assert.Equal(t, 5, coord.LeaseCount())
 }
 
@@ -109,7 +109,7 @@ func TestRebalance_NoExcess(t *testing.T) {
 	// Rebalance with 2 peers and 10 total → max 5, already at 5
 	released, err := coord.Rebalance(ctx, 10)
 	require.NoError(t, err)
-	assert.Equal(t, 0, released)
+	assert.Nil(t, released)
 	assert.Equal(t, 5, coord.LeaseCount())
 }
 
@@ -130,7 +130,7 @@ func TestRebalance_ThreePods(t *testing.T) {
 	// Rebalance with 3 peers and 144 total → max 48 per pod
 	released, err := coord.Rebalance(ctx, 144)
 	require.NoError(t, err)
-	assert.Equal(t, 96, released)
+	assert.Len(t, released, 96)
 	assert.Equal(t, 48, coord.LeaseCount())
 }
 
@@ -151,7 +151,7 @@ func TestRebalance_SinglePod(t *testing.T) {
 	// Rebalance with 1 peer → max 10, no shedding
 	released, err := coord.Rebalance(ctx, 10)
 	require.NoError(t, err)
-	assert.Equal(t, 0, released)
+	assert.Nil(t, released)
 	assert.Equal(t, 10, coord.LeaseCount())
 }
 
@@ -173,7 +173,7 @@ func TestRebalance_ScaleDown(t *testing.T) {
 	client.setPeerCount(2)
 	released, err := coord.Rebalance(ctx, 144)
 	require.NoError(t, err)
-	assert.Equal(t, 0, released)
+	assert.Nil(t, released)
 	assert.Equal(t, 48, coord.LeaseCount())
 }
 
@@ -195,9 +195,13 @@ func TestRebalance_ReleasesAlphabetically(t *testing.T) {
 	// Rebalance: 2 peers, 6 total → max 3, release 3
 	released, err := coord.Rebalance(ctx, 6)
 	require.NoError(t, err)
-	assert.Equal(t, 3, released)
+	assert.Len(t, released, 3)
 
 	// Should keep the first 3 alphabetically: alpha, bravo, charlie
+	// Released should be: delta, echo, foxtrot
+	sort.Strings(released)
+	assert.Equal(t, []string{"delta", "echo", "foxtrot"}, released)
+
 	remaining := coord.HeldStreamIDs()
 	sort.Strings(remaining)
 	assert.Equal(t, []string{"alpha", "bravo", "charlie"}, remaining)
@@ -207,7 +211,7 @@ func TestRebalance_NilCoordinator(t *testing.T) {
 	var coord *LeadershipCoordinator
 	released, err := coord.Rebalance(context.Background(), 10)
 	assert.NoError(t, err)
-	assert.Equal(t, 0, released)
+	assert.Nil(t, released)
 }
 
 func TestRebalance_CeilDivision(t *testing.T) {
@@ -227,7 +231,7 @@ func TestRebalance_CeilDivision(t *testing.T) {
 	// 3 peers, 10 total → ceil(10/3) = 4 max per pod
 	released, err := coord.Rebalance(ctx, 10)
 	require.NoError(t, err)
-	assert.Equal(t, 6, released)
+	assert.Len(t, released, 6)
 	assert.Equal(t, 4, coord.LeaseCount())
 }
 

@@ -339,12 +339,17 @@ func (m *Manager) syncChannels() error {
 	}
 
 	// Rebalance leadership leases before acquiring new ones.
+	var rebalancedOut map[string]bool
 	if m.leader != nil {
 		if released, err := m.leader.Rebalance(m.ctx, len(channels)); err != nil {
 			m.logger.Warn("Leadership rebalance failed", zap.Error(err))
-		} else if released > 0 {
+		} else if len(released) > 0 {
+			rebalancedOut = make(map[string]bool, len(released))
+			for _, id := range released {
+				rebalancedOut[id] = true
+			}
 			m.logger.Info("Rebalanced: released excess channels",
-				zap.Int("released", released),
+				zap.Int("released", len(released)),
 				zap.Int("total_desired", len(channels)),
 			)
 		}
@@ -383,6 +388,9 @@ func (m *Manager) syncChannels() error {
 
 	desiredChannels := make(map[string]*trackedChannel, len(plans))
 	for slug, plan := range plans {
+		if rebalancedOut != nil && rebalancedOut[slug] {
+			continue // Leadership was released during rebalance; let another pod take it
+		}
 		desiredChannels[slug] = plan.channel
 	}
 

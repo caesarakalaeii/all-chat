@@ -264,12 +264,19 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	// Rebalance leadership leases before acquiring new ones.
 	// This ensures that when pods scale up/down, excess leases are shed so
 	// new pods can claim their fair share on the next sync cycle.
+	// Released channels are removed from desiredChannels so the PART logic
+	// disconnects them from IRC.
+	var rebalancedOut map[string]bool
 	if m.leader != nil {
 		if released, err := m.leader.Rebalance(ctx, len(desiredChannels)); err != nil {
 			m.logger.Warn("Leadership rebalance failed", zap.Error(err))
-		} else if released > 0 {
+		} else if len(released) > 0 {
+			rebalancedOut = make(map[string]bool, len(released))
+			for _, id := range released {
+				rebalancedOut[id] = true
+			}
 			m.logger.Info("Rebalanced: released excess channels",
-				zap.Int("released", released),
+				zap.Int("released", len(released)),
 				zap.Int("total_desired", len(desiredChannels)),
 			)
 		}
@@ -330,9 +337,12 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	// Store filtered count for readiness probe
 	m.filteredAssignmentCount = filteredCount
 
-	// Convert to map for easier lookup
+	// Convert to map for easier lookup, excluding channels shed by rebalancing
 	desiredMap := make(map[string]bool)
 	for _, ch := range desiredChannels {
+		if rebalancedOut != nil && rebalancedOut[ch] {
+			continue // Leadership was released during rebalance; let another pod take it
+		}
 		desiredMap[ch] = true
 	}
 
