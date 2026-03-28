@@ -78,18 +78,24 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 	}
 
 	// Check 3: Assignments received from coordinator (TWITCH-06, TWITCH-07)
-	assignmentCount := h.chanMgr.GetAssignmentCount()
-	checks["assignments"] = assignmentCount
-	if assignmentCount == 0 {
-		ready = false
-		if reason == "" {
-			reason = "no assignments from coordinator"
+	// Skip when coordination is disabled (SOURCE_MANAGER_SECRET not set) — in that case
+	// Twitch IRC operates without assignment filtering (all channels always joined).
+	coordinationEnabled := h.chanMgr.IsCoordinationEnabled()
+	checks["coordination_enabled"] = coordinationEnabled
+	if coordinationEnabled {
+		assignmentCount := h.chanMgr.GetAssignmentCount()
+		checks["assignments"] = assignmentCount
+		if assignmentCount == 0 {
+			ready = false
+			if reason == "" {
+				reason = "no assignments from coordinator"
+			}
 		}
 	}
 
-	// Check 4: Active channels match filtered assignment count (all filtered channels connected)
-	// Use GetFilteredAssignmentCount() instead of GetAssignmentCount() to compare against
-	// the number of assigned sources that actually have database channels
+	// Check 4: Active channels match filtered assignment count (all filtered channels connected).
+	// When coordination is disabled, filteredAssignmentCount reflects all DB channels so we
+	// still verify the IRC joins completed.
 	activeChannelCount := h.chanMgr.GetActiveChannelCount()
 	filteredAssignmentCount := h.chanMgr.GetFilteredAssignmentCount()
 	checks["active_channels"] = activeChannelCount

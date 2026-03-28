@@ -156,30 +156,9 @@ func main() {
 	// Inject status publisher into channel manager
 	channelMgr.SetStatusPublisher(statusPublisher)
 
-	// Connect to Kick Pusher WebSocket
-	if err := wsClient.Connect(); err != nil {
-		log.Fatal("Failed to connect to Kick WebSocket", zap.Error(err))
-	}
-
-	// Wait a bit for WebSocket connection to establish
-	time.Sleep(2 * time.Second)
-
-	if err := ll.Start(ctx, channelMgr); err != nil {
-		log.Fatal("Failed to start listener", zap.Error(err))
-	}
-
-	// Record per-pod channel count metric (after filtering by coordinator assignments)
-	filteredCount := channelMgr.GetFilteredAssignmentCount()
-	shardMetrics.PodChannelCount.WithLabelValues(podName).Set(float64(filteredCount))
-	log.Info("Recorded channel count metric",
-		zap.String("pod_id", podName),
-		zap.Int("channel_count", filteredCount),
-	)
-
-	// Handle reconnections
-	go handleReconnections(wsClient, channelMgr, log)
-
-	// Set up HTTP server for health checks
+	// Set up HTTP server for health checks — must start BEFORE ll.Start() because
+	// ll.Start() → mgr.Start() → SyncChannels may block while subscribing to channels.
+	// Starting the server first ensures the liveness probe never times out during init.
 	if logLevel == "debug" {
 		gin.SetMode(gin.DebugMode)
 	} else {
@@ -211,7 +190,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start HTTP server in goroutine
+	// Start HTTP server in goroutine before the blocking ll.Start() call
 	go func() {
 		log.Info("HTTP server listening",
 			zap.String("port", port),
@@ -221,6 +200,29 @@ func main() {
 			log.Fatal("Failed to start HTTP server", zap.Error(err))
 		}
 	}()
+
+	// Connect to Kick Pusher WebSocket
+	if err := wsClient.Connect(); err != nil {
+		log.Fatal("Failed to connect to Kick WebSocket", zap.Error(err))
+	}
+
+	// Wait a bit for WebSocket connection to establish
+	time.Sleep(2 * time.Second)
+
+	if err := ll.Start(ctx, channelMgr); err != nil {
+		log.Fatal("Failed to start listener", zap.Error(err))
+	}
+
+	// Record per-pod channel count metric (after filtering by coordinator assignments)
+	filteredCount := channelMgr.GetFilteredAssignmentCount()
+	shardMetrics.PodChannelCount.WithLabelValues(podName).Set(float64(filteredCount))
+	log.Info("Recorded channel count metric",
+		zap.String("pod_id", podName),
+		zap.Int("channel_count", filteredCount),
+	)
+
+	// Handle reconnections
+	go handleReconnections(wsClient, channelMgr, log)
 
 	// Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)

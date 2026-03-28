@@ -583,6 +583,15 @@ func (m *Manager) IsChannelActive(channel string) bool {
 	return m.activeChans[channel]
 }
 
+// IsCoordinationEnabled reports whether leadership coordination is active.
+// Returns false when SOURCE_MANAGER_SECRET was not set and assignedSourceIDs was
+// passed as nil — in that case assignment-based readiness checks are meaningless.
+func (m *Manager) IsCoordinationEnabled() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.assignedSourceIDs != nil
+}
+
 // GetAssignmentCount returns the number of assigned sources
 func (m *Manager) GetAssignmentCount() int {
 	return len(m.assignedSourceIDs)

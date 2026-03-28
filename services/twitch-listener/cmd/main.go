@@ -158,28 +158,10 @@ func main() {
 	// in the new IRC session. Clearing on connect ensures a clean re-join on the fresh client.
 	ircConn.SetOnConnect(channelMgr.ClearActiveChannels)
 
-	// Connect to Twitch IRC
-	if err := ircConn.Connect(ctx); err != nil {
-		log.Fatal("Failed to connect to Twitch IRC", zap.Error(err))
-	}
-
-	// Wait a bit for IRC connection to establish (IRC-specific, required before Start)
-	time.Sleep(2 * time.Second)
-
-	// Start LeadershipListener — runs demand subscriber and channel manager
-	if err := ll.Start(ctx, channelMgr); err != nil {
-		log.Fatal("Failed to start leadership listener", zap.Error(err))
-	}
-
-	// Record per-pod channel count metric (after filtering by coordinator assignments)
-	filteredCount := channelMgr.GetFilteredAssignmentCount()
-	shardMetrics.PodChannelCount.WithLabelValues(podName).Set(float64(filteredCount))
-	log.Info("Recorded channel count metric",
-		zap.String("pod_id", podName),
-		zap.Int("channel_count", filteredCount),
-	)
-
-	// Set up HTTP server for health checks
+	// Set up HTTP server for health checks — must start BEFORE ll.Start() because
+	// ll.Start() → mgr.Start() → SyncChannels → joinChannelsMultipleConnections blocks for
+	// ~72s joining 144 channels at the Twitch rate limit (20 channels/10s). The liveness
+	// probe fires at 30s and kills the pod if the server is not yet listening.
 	if logLevel == "debug" {
 		gin.SetMode(gin.DebugMode)
 	} else {
@@ -213,7 +195,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start HTTP server in goroutine
+	// Start HTTP server in goroutine before the blocking ll.Start() call
 	go func() {
 		log.Info("HTTP server listening",
 			zap.String("port", port),
@@ -223,6 +205,28 @@ func main() {
 			log.Fatal("Failed to start HTTP server", zap.Error(err))
 		}
 	}()
+
+	// Connect to Twitch IRC
+	if err := ircConn.Connect(ctx); err != nil {
+		log.Fatal("Failed to connect to Twitch IRC", zap.Error(err))
+	}
+
+	// Wait a bit for IRC connection to establish (IRC-specific, required before Start)
+	time.Sleep(2 * time.Second)
+
+	// Start LeadershipListener — runs demand subscriber and channel manager.
+	// This call blocks during the initial SyncChannels (joining all channels with rate limiting).
+	if err := ll.Start(ctx, channelMgr); err != nil {
+		log.Fatal("Failed to start leadership listener", zap.Error(err))
+	}
+
+	// Record per-pod channel count metric (after filtering by coordinator assignments)
+	filteredCount := channelMgr.GetFilteredAssignmentCount()
+	shardMetrics.PodChannelCount.WithLabelValues(podName).Set(float64(filteredCount))
+	log.Info("Recorded channel count metric",
+		zap.String("pod_id", podName),
+		zap.Int("channel_count", filteredCount),
+	)
 
 	// Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)
