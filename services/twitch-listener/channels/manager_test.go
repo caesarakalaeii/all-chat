@@ -2,11 +2,13 @@ package channels
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/caesar/all-chat/services/twitch-listener/models"
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -359,4 +361,109 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+// mockLeadershipClient is a LeadershipClient that grants leadership to the first claimer
+// and denies it to all subsequent claimers, simulating two-pod channel splitting.
+type mockLeadershipClient struct {
+	mu      sync.Mutex
+	claimed map[string]string // streamID -> callerID that owns it
+}
+
+func newMockLeadershipClient() *mockLeadershipClient {
+	return &mockLeadershipClient{claimed: make(map[string]string)}
+}
+
+func (m *mockLeadershipClient) ClaimLeadership(_ context.Context, _, streamID, callerID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.claimed[streamID]; exists {
+		return false, nil // already claimed by another pod
+	}
+	m.claimed[streamID] = callerID
+	return true, nil
+}
+
+func (m *mockLeadershipClient) RenewLeadership(_ context.Context, _, streamID, callerID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	owner, exists := m.claimed[streamID]
+	if !exists {
+		return false, nil
+	}
+	return owner == callerID, nil
+}
+
+func (m *mockLeadershipClient) ReleaseLeadership(_ context.Context, _, streamID, callerID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.claimed[streamID] == callerID {
+		delete(m.claimed, streamID)
+	}
+	return nil
+}
+
+// TestManager_JoinChannelsMultipleConnections_RespectsLeadership is a regression test for
+// the bug where joinChannelsMultipleConnections bypassed EnsureLeadership, causing both
+// twitch-listener pods to join ALL channels instead of splitting them.
+//
+// This test simulates two concurrent managers (pod A and pod B) joining the same 100+
+// channels. With correct leadership, each channel must be joined by exactly one pod.
+func TestManager_JoinChannelsMultipleConnections_RespectsLeadership(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	// Build 110 channels to force the multi-connection path (>= 100)
+	allChannels := make([]string, 110)
+	for i := range allChannels {
+		allChannels[i] = fmt.Sprintf("channel%d", i)
+	}
+
+	// Shared leadership backend — simulates the Redis-backed source-manager
+	sharedClient := newMockLeadershipClient()
+
+	newPod := func() (*Manager, *MockJoinParter) {
+		repo := &MockRepository{channels: allChannels}
+		jp := NewMockJoinParter()
+		coord := sourcemanager.NewLeadershipCoordinator("twitch", sharedClient, 5*time.Second, logger)
+		mgr := NewManager(repo, jp, nil, coord, nil, nil, "", logger, nil)
+		return mgr, jp
+	}
+
+	mgrA, jpA := newPod()
+	mgrB, jpB := newPod()
+
+	// Both pods sync concurrently, mimicking a real deployment rollout
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); require.NoError(t, mgrA.SyncChannels(ctx)) }()
+	go func() { defer wg.Done(); require.NoError(t, mgrB.SyncChannels(ctx)) }()
+	wg.Wait()
+
+	joinedA := jpA.GetJoined()
+	joinedB := jpB.GetJoined()
+
+	// Each channel should be joined by exactly one pod
+	allJoined := make(map[string]int, len(allChannels))
+	for _, ch := range joinedA {
+		allJoined[ch]++
+	}
+	for _, ch := range joinedB {
+		allJoined[ch]++
+	}
+
+	for _, ch := range allChannels {
+		assert.Equal(t, 1, allJoined[ch],
+			"channel %q should be joined by exactly one pod (was joined %d times)", ch, allJoined[ch])
+	}
+
+	// Both pods together must cover all channels
+	assert.Equal(t, len(allChannels), len(joinedA)+len(joinedB),
+		"total joined channels across both pods should equal total channels")
+
+	// Neither pod alone should have all channels (verify splitting happened)
+	assert.Less(t, len(joinedA), len(allChannels),
+		"pod A should not have joined all channels")
+	assert.Less(t, len(joinedB), len(allChannels),
+		"pod B should not have joined all channels")
 }
