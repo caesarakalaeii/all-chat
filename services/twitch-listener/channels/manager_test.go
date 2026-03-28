@@ -467,3 +467,60 @@ func TestManager_JoinChannelsMultipleConnections_RespectsLeadership(t *testing.T
 	assert.Less(t, len(joinedB), len(allChannels),
 		"pod B should not have joined all channels")
 }
+
+// TestManager_IsInitialSyncComplete verifies that the flag is false before
+// SyncChannels runs and true afterwards, regardless of how many channels the
+// pod actually joins (including zero, as happens when a peer holds all locks).
+func TestManager_IsInitialSyncComplete(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{channels: []string{"xqc", "summit1g"}}
+	mockJP := NewMockJoinParter()
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	// Before any sync the flag must be false.
+	assert.False(t, manager.IsInitialSyncComplete(), "should be false before first sync")
+
+	require.NoError(t, manager.SyncChannels(ctx))
+
+	// After a successful sync the flag must be true even if the pod joined channels.
+	assert.True(t, manager.IsInitialSyncComplete(), "should be true after first sync")
+}
+
+// TestManager_IsInitialSyncComplete_ZeroChannels verifies that the flag is set
+// to true even when the sync results in 0 active channels.  This is the
+// production scenario where the first pod holds all Redis leadership locks and
+// the second pod wins none — the second pod must still become ready.
+func TestManager_IsInitialSyncComplete_ZeroChannels(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	// Empty channel list → 0 channels joined.
+	repo := &MockRepository{channels: []string{}}
+	mockJP := NewMockJoinParter()
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	require.NoError(t, manager.SyncChannels(ctx))
+
+	assert.Equal(t, 0, manager.GetActiveChannelCount())
+	assert.True(t, manager.IsInitialSyncComplete(),
+		"should be true even when 0 channels are active (peer holds all locks)")
+}
+
+// TestManager_IsLeadershipEnabled verifies that the flag reflects whether a
+// LeadershipCoordinator was injected.
+func TestManager_IsLeadershipEnabled(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	repo := &MockRepository{}
+	mockJP := NewMockJoinParter()
+
+	// Without a leader the flag must be false.
+	noLeader := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+	assert.False(t, noLeader.IsLeadershipEnabled())
+
+	// With a real LeadershipCoordinator the flag must be true.
+	lc := sourcemanager.NewLeadershipCoordinator("twitch", nil, 0, logger)
+	withLeader := NewManager(repo, mockJP, nil, lc, nil, nil, "", logger, nil)
+	assert.True(t, withLeader.IsLeadershipEnabled())
+}

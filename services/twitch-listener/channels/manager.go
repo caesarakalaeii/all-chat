@@ -59,6 +59,7 @@ type Manager struct {
 	redisClient      *redis.Client                // Redis client for migration confirmations
 	podID            string                       // Pod ID for migration confirmations
 	statusPublisher  *status.Publisher            // Publishes platform status to Redis Pub/Sub
+	initialSyncDone  bool                         // Set to true after the first SyncChannels completes
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -413,6 +414,11 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		zap.Int("status_updates", statusUpdates),
 	)
 
+	// Mark initial sync as done after first successful completion.
+	// When leadership is enabled the pod may own 0 channels (all locks held by peer),
+	// so the readiness probe uses this flag instead of requiring activeChannelCount > 0.
+	m.initialSyncDone = true
+
 	return nil
 }
 
@@ -603,6 +609,23 @@ func (m *Manager) GetFilteredAssignmentCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.filteredAssignmentCount
+}
+
+// IsInitialSyncComplete returns true after the first SyncChannels has completed successfully.
+// When leadership is enabled a pod may legitimately own 0 channels (all Redis locks held by
+// peer), so the readiness probe uses this flag rather than requiring activeChannelCount > 0.
+func (m *Manager) IsInitialSyncComplete() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.initialSyncDone
+}
+
+// IsLeadershipEnabled returns true when the manager is configured with a
+// LeadershipCoordinator.  In this mode multiple pods split channels between
+// them, so a pod that owns 0 channels is still healthy (the peer owns them
+// all).  The readiness probe must not gate on activeChannelCount in this case.
+func (m *Manager) IsLeadershipEnabled() bool {
+	return m.leader != nil
 }
 
 // UpdateAssignedSourceIDs updates the assigned source IDs from coordinator.
