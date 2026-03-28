@@ -93,19 +93,37 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 		}
 	}
 
-	// Check 4: Active channels match filtered assignment count (all filtered channels connected).
-	// When coordination is disabled, filteredAssignmentCount reflects all DB channels so we
-	// still verify the IRC joins completed.
+	// Check 4: Verify IRC channels are initialised.
+	//
+	// When leadership election is enabled (SOURCE_MANAGER_SECRET set) multiple pods
+	// split channels between them via Redis locks.  A pod that wins 0 locks is still
+	// healthy — the peer holds them all.  Requiring activeChannelCount >= filteredAssignmentCount
+	// would permanently fail the second pod, preventing the rolling deploy from completing.
+	//
+	// Therefore: when leadership is enabled, require only that the initial SyncChannels
+	// call has finished (i.e. the pod attempted leadership election and set its activeChans).
+	// When leadership is disabled (single-pod mode), keep the strict channel count check.
 	activeChannelCount := h.chanMgr.GetActiveChannelCount()
 	filteredAssignmentCount := h.chanMgr.GetFilteredAssignmentCount()
 	checks["active_channels"] = activeChannelCount
-	if activeChannelCount < filteredAssignmentCount {
-		ready = false
-		if reason == "" {
-			reason = "channels connecting"
+	if h.chanMgr.IsLeadershipEnabled() {
+		// Leadership mode: ready once the initial sync completed (0 active channels is valid).
+		if !h.chanMgr.IsInitialSyncComplete() {
+			ready = false
+			if reason == "" {
+				reason = "initial channel sync not yet complete"
+			}
 		}
-		checks["expected"] = filteredAssignmentCount
-		checks["connected"] = activeChannelCount
+	} else {
+		// Single-pod mode: all filtered channels must be active.
+		if activeChannelCount < filteredAssignmentCount {
+			ready = false
+			if reason == "" {
+				reason = "channels connecting"
+			}
+			checks["expected"] = filteredAssignmentCount
+			checks["connected"] = activeChannelCount
+		}
 	}
 
 	status := "ready"
