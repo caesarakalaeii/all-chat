@@ -165,6 +165,31 @@ func (h *SourceHandler) ActivateSource(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"activated": n > 0, "rows_updated": n})
 }
 
+// RegisterPeer registers a caller as an active peer and returns the peer count
+func (h *SourceHandler) RegisterPeer(c *gin.Context) {
+	var req struct {
+		Platform string `json:"platform" binding:"required"`
+		CallerID string `json:"caller_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	count, err := h.leaderManager.RegisterPeer(c.Request.Context(), req.Platform, req.CallerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register peer"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"peer_count": count,
+		"platform":   req.Platform,
+		"caller_id":  req.CallerID,
+	})
+}
+
 // GetLeadershipStatus returns leadership status
 func (h *SourceHandler) GetLeadershipStatus(c *gin.Context) {
 	platform := c.Query("platform")

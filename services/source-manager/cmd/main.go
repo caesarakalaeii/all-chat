@@ -144,6 +144,7 @@ func main() {
 	protected.POST("/leadership/renew", sourceHandler.RenewLeadership)
 	protected.POST("/leadership/release", sourceHandler.ReleaseLeadership)
 	protected.GET("/leadership", sourceHandler.GetLeadershipStatus)
+	protected.POST("/leadership/peers/register", sourceHandler.RegisterPeer)
 
 	// Demand handlers (Phase 5)
 	demandHandler := demand.NewDemandHandler(demandSubscriber)

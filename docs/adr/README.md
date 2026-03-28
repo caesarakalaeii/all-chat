@@ -170,6 +170,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0007: Leadership Rebalancing for Auto-Scaling
+
+**Status**: Accepted
+**Date**: 2026-03-28
+**Problem**: Leadership locks held indefinitely — new pods from auto-scaling get 0 work
+**Decision**: Peer-aware rebalancing: pods register in Redis, shed excess leases based on peer count
+**Impact**: Even channel distribution across N pods within ~30s of scale event
+**Read**: [0007-leadership-rebalancing.md](./0007-leadership-rebalancing.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -291,7 +302,7 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 6
+**Total ADRs**: 7
 **Status**: All accepted (✅)
 **Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking)
 

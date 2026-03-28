@@ -30,6 +30,7 @@ type LeadershipClient interface {
 	ClaimLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error)
 	RenewLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error)
 	ReleaseLeadership(ctx context.Context, platform, streamID, callerID string) error
+	RegisterPeer(ctx context.Context, platform, callerID string) (peerCount int, err error)
 }
 
 // Client talks to the Source Manager HTTP API.
@@ -204,6 +205,40 @@ func (c *Client) ReleaseLeadership(ctx context.Context, platform, streamID, call
 	}
 
 	return nil
+}
+
+// RegisterPeer registers this instance as an active peer for the given platform
+// and returns the total number of active peers for that platform.
+func (c *Client) RegisterPeer(ctx context.Context, platform, callerID string) (int, error) {
+	reqBody := map[string]string{
+		"platform":  platform,
+		"caller_id": callerID,
+	}
+
+	req, err := c.newRequest(ctx, http.MethodPost, "/leadership/peers/register", nil, reqBody)
+	if err != nil {
+		return 0, err
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return 0, ErrUnauthorized
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, c.decodeError(resp)
+	}
+
+	var payload PeerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return 0, fmt.Errorf("failed to decode peer response: %w", err)
+	}
+
+	return payload.PeerCount, nil
 }
 
 // ActivateSource marks a channel's source as active in the DB.

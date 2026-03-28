@@ -261,6 +261,20 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		return err
 	}
 
+	// Rebalance leadership leases before acquiring new ones.
+	// This ensures that when pods scale up/down, excess leases are shed so
+	// new pods can claim their fair share on the next sync cycle.
+	if m.leader != nil {
+		if released, err := m.leader.Rebalance(ctx, len(desiredChannels)); err != nil {
+			m.logger.Warn("Leadership rebalance failed", zap.Error(err))
+		} else if released > 0 {
+			m.logger.Info("Rebalanced: released excess channels",
+				zap.Int("released", released),
+				zap.Int("total_desired", len(desiredChannels)),
+			)
+		}
+	}
+
 	// Filter channels by coordinator assignments (TWITCH-02)
 	// Always filter when coordinator integration is enabled (assignedSourceIDs != nil)
 	// Even if empty map (0 assignments), should connect to 0 channels

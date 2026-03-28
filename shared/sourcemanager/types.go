@@ -29,3 +29,10 @@ type RenewResponse struct {
 	Platform   string `json:"platform"`
 	StreamID   string `json:"stream_id"`
 }
+
+// PeerResponse models the JSON response returned when registering a peer.
+type PeerResponse struct {
+	PeerCount int    `json:"peer_count"`
+	Platform  string `json:"platform"`
+	CallerID  string `json:"caller_id"`
+}

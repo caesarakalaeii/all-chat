@@ -338,6 +338,18 @@ func (m *Manager) syncChannels() error {
 		return fmt.Errorf("failed to get active channels: %w", err)
 	}
 
+	// Rebalance leadership leases before acquiring new ones.
+	if m.leader != nil {
+		if released, err := m.leader.Rebalance(m.ctx, len(channels)); err != nil {
+			m.logger.Warn("Leadership rebalance failed", zap.Error(err))
+		} else if released > 0 {
+			m.logger.Info("Rebalanced: released excess channels",
+				zap.Int("released", released),
+				zap.Int("total_desired", len(channels)),
+			)
+		}
+	}
+
 	// Filter channels by demand (Phase 06: demand-based, replaces assignment-based KICK-02).
 	// demandedSourceIDs is populated by the SDK demand subscriber loop via UpdateDemandedSourceIDs.
 	// nil means the first demand update has not yet arrived — skip filtering so the initial
