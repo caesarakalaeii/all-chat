@@ -290,7 +290,7 @@ export default function LandingPage() {
             )}
           >
             <LayoutGrid className="h-5 w-5" aria-hidden="true" />
-            Go to Dashboard
+            {user?.is_admin ? 'Welcome aboard, captain!' : 'Go to Dashboard'}
           </Link>
         ) : (
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
