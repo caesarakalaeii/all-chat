@@ -22,6 +22,8 @@ type ViewerSession struct {
 	MessageCount1Hour int       `json:"message_count_1hour"` // Messages in last 1 hour
 	RateLimitReset1Min *time.Time `json:"rate_limit_reset_1min"` // 1-minute counter reset
 	RateLimitReset1Hour *time.Time `json:"rate_limit_reset_1hour"` // 1-hour counter reset
+	IsPremium        bool       `json:"is_premium"`         // Whether viewer has premium access
+	ViewerID         *uuid.UUID `json:"viewer_id"`          // Linked viewer identity ID
 	IsBanned         bool       `json:"is_banned"`          // Whether viewer is banned
 	BannedAt         *time.Time `json:"banned_at"`          // When viewer was banned
 	BannedReason     *string    `json:"banned_reason"`      // Reason for ban

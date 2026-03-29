@@ -282,14 +282,17 @@ func (r *ViewerRepository) DecryptRefreshToken(token string) (string, error) {
 // ListAll returns all viewer sessions with pagination
 func (r *ViewerRepository) ListAll(ctx context.Context, limit, offset int) ([]models.ViewerSession, error) {
 	query := `
-		SELECT id, platform, platform_user_id, username, display_name, avatar_url,
-		       access_token, refresh_token, token_expires_at,
-		       last_message_at, message_count_1min, message_count_1hour,
-		       rate_limit_reset_1min, rate_limit_reset_1hour,
-		       is_banned, banned_at, banned_reason,
-		       created_at, updated_at
-		FROM viewer_sessions
-		ORDER BY created_at DESC
+		SELECT vs.id, vs.platform, vs.platform_user_id, vs.username, vs.display_name, vs.avatar_url,
+		       vs.access_token, vs.refresh_token, vs.token_expires_at,
+		       vs.last_message_at, vs.message_count_1min, vs.message_count_1hour,
+		       vs.rate_limit_reset_1min, vs.rate_limit_reset_1hour,
+		       COALESCE(v.is_premium, false) AS is_premium,
+		       vs.viewer_id,
+		       vs.is_banned, vs.banned_at, vs.banned_reason,
+		       vs.created_at, vs.updated_at
+		FROM viewer_sessions vs
+		LEFT JOIN viewers v ON vs.viewer_id = v.id
+		ORDER BY vs.created_at DESC
 		LIMIT $1 OFFSET $2
 	`
 
@@ -317,6 +320,8 @@ func (r *ViewerRepository) ListAll(ctx context.Context, limit, offset int) ([]mo
 			&session.MessageCount1Hour,
 			&session.RateLimitReset1Min,
 			&session.RateLimitReset1Hour,
+			&session.IsPremium,
+			&session.ViewerID,
 			&session.IsBanned,
 			&session.BannedAt,
 			&session.BannedReason,
@@ -373,6 +378,26 @@ func (r *ViewerRepository) UnbanViewer(ctx context.Context, sessionID uuid.UUID)
 
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("viewer session not found")
+	}
+
+	return nil
+}
+
+// SetViewerPremium updates the is_premium flag on the viewers table for a given viewer_session ID.
+func (r *ViewerRepository) SetViewerPremium(ctx context.Context, sessionID uuid.UUID, isPremium bool) error {
+	query := `
+		UPDATE viewers
+		SET is_premium = $2
+		WHERE id = (SELECT viewer_id FROM viewer_sessions WHERE id = $1 AND viewer_id IS NOT NULL)
+	`
+
+	result, err := r.db.Exec(ctx, query, sessionID, isPremium)
+	if err != nil {
+		return fmt.Errorf("failed to set viewer premium: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("viewer not found or no linked viewer identity")
 	}
 
 	return nil

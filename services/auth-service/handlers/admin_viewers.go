@@ -112,3 +112,45 @@ func (h *AdminViewerHandler) HandleUnbanViewer(c *gin.Context) {
 	h.log.Info("Viewer unbanned", zap.String("session_id", sessionIDStr))
 	c.JSON(http.StatusOK, gin.H{"message": "Viewer unbanned successfully"})
 }
+
+// SetPremiumRequest is the request body for setting viewer premium status
+type SetPremiumRequest struct {
+	IsPremium bool `json:"is_premium"`
+}
+
+// HandleSetViewerPremium grants or revokes premium status for a viewer
+func (h *AdminViewerHandler) HandleSetViewerPremium(c *gin.Context) {
+	sessionIDStr := c.Param("session_id")
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session ID"})
+		return
+	}
+
+	var req SetPremiumRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := h.viewerRepo.SetViewerPremium(ctx, sessionID, req.IsPremium); err != nil {
+		h.log.Error("Failed to set viewer premium", zap.Error(err), zap.String("session_id", sessionIDStr))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update viewer premium status"})
+		return
+	}
+
+	action := "granted"
+	if !req.IsPremium {
+		action = "revoked"
+	}
+	h.log.Info("Viewer premium status updated",
+		zap.String("session_id", sessionIDStr),
+		zap.Bool("is_premium", req.IsPremium),
+	)
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "Viewer premium " + action + " successfully",
+		"session_id": sessionIDStr,
+		"is_premium": req.IsPremium,
+	})
+}
