@@ -55,6 +55,9 @@ export function parseCssToVisualSettings(css: string): Partial<VisualSettings> {
     if (openParens !== closeParens) continue
     const field = REVERSE_MAP.get(cssVar)
     if (field !== undefined && !(field in result)) {
+      // Reject 'auto' for sizing fields — it makes images render at natural
+      // resolution (e.g. 300x300 Twitch avatars) instead of the intended size.
+      if (fallback === 'auto' && (field === 'avatarSize' || field === 'badgeSize')) continue
       ;(result as Record<string, string>)[field] = fallback
     }
   }

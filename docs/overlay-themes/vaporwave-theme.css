@@ -184,8 +184,8 @@ body {
 }
 
 .flex-shrink-0 img {
-  width: var(--chat-avatar-size, auto) !important;
-  height: var(--chat-avatar-size, auto) !important;
+  width: var(--chat-avatar-size, 2.5rem) !important;
+  height: var(--chat-avatar-size, 2.5rem) !important;
   border: 3px solid transparent !important;
   border-image: linear-gradient(135deg, #ff0080, #00ffff, #ff00ff) 1 !important;
   border-radius: 8px !important;

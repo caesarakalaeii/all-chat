@@ -342,6 +342,8 @@
     height: var(--chat-avatar-size, 2.5rem) !important;
     min-width: var(--chat-avatar-size, 2.5rem) !important;
     min-height: var(--chat-avatar-size, 2.5rem) !important;
+    max-width: 4rem !important;
+    max-height: 4rem !important;
   }
 
   /* ── User badges (subscriber/mod/bits icons) ───────────────────────── */
