@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 08-04-PLAN.md
-last_updated: "2026-03-29T21:14:16.041Z"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-03-29T21:20:07.984Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 62
-  completed_plans: 59
+  completed_plans: 60
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 08 (message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 
 ## Performance Metrics
 
@@ -91,6 +91,7 @@ Plan: 3 of 6
 | Phase 07 P04 | 117 | 2 tasks | 2 files |
 | Phase 08 P02 | 252s | 1 tasks | 4 files |
 | Phase 08 P04 | 268 | 2 tasks | 4 files |
+| Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline P01 | 612 | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -212,6 +213,9 @@ Key decisions relevant to v1.6:
 - [Phase 08]: NewGatewayMetricsForTest() uses promauto.With(fresh registry) — prevents duplicate metric registration panics in tests calling metrics constructors multiple times
 - [Phase 08]: RingBufferPublisher uses prometheus.Registerer injection (not promauto) to allow per-test isolated registries — prevents duplicate registration panics in tests
 - [Phase 08]: drainOneTick uses requeue on retry failure — head item restored at front, FIFO ordering preserved, no thundering-herd retry within single tick
+- [Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline]: processAndAck is canonical ACK path: retry → DLQ write → always ACK to drain PEL
+- [Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline]: DLQ write is best-effort (no retry on writeToDLQ itself) per D-11 pitfall 5 — avoids infinite retry loops
+- [Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline]: PublishToMultiple uses individual retried calls not pipeline — error returned only if ALL overlays fail
 
 ### Roadmap Evolution
 
@@ -257,9 +261,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-29T21:14:16.038Z
+Last session: 2026-03-29T21:20:07.981Z
 Last activity: 2026-03-29
-Stopped at: Completed 08-04-PLAN.md
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
