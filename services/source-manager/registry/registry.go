@@ -153,6 +153,13 @@ func (r *Registry) ActivateSource(ctx context.Context, platform, channelID strin
 	return r.repository.ActivateSource(ctx, platform, channelID)
 }
 
+// DeactivateSource marks a source inactive in the DB immediately.
+// Listeners call this when they stop polling so the admin panel reflects the
+// actual state instead of waiting 24 h for the cleanup job to run.
+func (r *Registry) DeactivateSource(ctx context.Context, platform, channelID string) (int64, error) {
+	return r.repository.DeactivateSource(ctx, platform, channelID)
+}
+
 // GetStats returns registry statistics
 func (r *Registry) GetStats() map[string]interface{} {
 	r.mu.RLock()

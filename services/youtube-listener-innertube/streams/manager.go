@@ -654,6 +654,19 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 					ChannelID: channelID,
 					Status:    "offline",
 				})
+
+				// Mark source inactive so admin panel reflects actual state immediately
+				// rather than waiting up to 24 h for the cleanup job.
+				if m.smClient != nil {
+					go func(chID string) {
+						if err := m.smClient.DeactivateSource(context.Background(), "youtube", chID); err != nil {
+							m.logger.Warn("Failed to deactivate source in DB",
+								zap.String("channel_id", chID),
+								zap.Error(err),
+							)
+						}
+					}(channelID)
+				}
 			}
 			break
 		}
@@ -704,6 +717,20 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, videoID string) {
 			ChannelID: channelID,
 			Status:    "offline",
 		})
+
+		// Mark source inactive. The pod that wins the new leadership election will
+		// call ActivateSource when it starts its poller; this pod must deactivate
+		// to avoid both appearing active simultaneously.
+		if m.smClient != nil {
+			go func(chID string) {
+				if err := m.smClient.DeactivateSource(context.Background(), "youtube", chID); err != nil {
+					m.logger.Warn("Failed to deactivate source after leadership loss",
+						zap.String("channel_id", chID),
+						zap.Error(err),
+					)
+				}
+			}(channelID)
+		}
 	}
 }
 
@@ -902,6 +929,19 @@ func (m *Manager) reconcileDemand() {
 					zap.String("video_id", videoID))
 			}
 			delete(m.activeStreams, videoID)
+
+			// Mark source inactive so admin panel reflects actual state immediately.
+			if m.smClient != nil {
+				chID := stream.ChannelID
+				go func() {
+					if err := m.smClient.DeactivateSource(context.Background(), "youtube", chID); err != nil {
+						m.logger.Warn("Failed to deactivate source after demand loss",
+							zap.String("channel_id", chID),
+							zap.Error(err),
+						)
+					}
+				}()
+			}
 		}
 	}
 
@@ -931,7 +971,8 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	}
 	m.mu.Unlock()
 
-	// Stop all pollers
+	// Stop all pollers and collect channel IDs to deactivate
+	var channelsToDeactivate []string
 	m.mu.Lock()
 	for videoID, p := range m.pollers {
 		m.logger.Info("Stopping poller",
@@ -944,9 +985,24 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 			m.leader.Release(videoID)
 		}
 	}
+	for _, stream := range m.activeStreams {
+		channelsToDeactivate = append(channelsToDeactivate, stream.ChannelID)
+	}
 	m.pollers = make(map[string]*poller.Poller)
 	m.activeStreams = make(map[string]*Stream)
 	m.mu.Unlock()
+
+	// Mark all active sources inactive so admin panel reflects actual state after restart.
+	if m.smClient != nil {
+		for _, channelID := range channelsToDeactivate {
+			if err := m.smClient.DeactivateSource(ctx, "youtube", channelID); err != nil {
+				m.logger.Warn("Failed to deactivate source during shutdown",
+					zap.String("channel_id", channelID),
+					zap.Error(err),
+				)
+			}
+		}
+	}
 
 	// Wait for goroutines with timeout
 	done := make(chan struct{})

@@ -267,6 +267,33 @@ func (c *Client) ActivateSource(ctx context.Context, platform, channelID string)
 	return nil
 }
 
+// DeactivateSource marks a channel's source as inactive in the DB immediately.
+// Listeners call this when they stop polling (stream ended, overlay disconnected,
+// demand lost, service shutdown) so the admin panel reflects the actual polling
+// state rather than waiting for the cleanup job.
+func (c *Client) DeactivateSource(ctx context.Context, platform, channelID string) error {
+	reqBody := map[string]string{
+		"platform":   platform,
+		"channel_id": channelID,
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, "/sources/deactivate", nil, reqBody)
+	if err != nil {
+		return err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return ErrUnauthorized
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.decodeError(resp)
+	}
+	return nil
+}
+
 func (c *Client) newRequest(ctx context.Context, method, endpoint string, query url.Values, body interface{}) (*http.Request, error) {
 	if c.tokenSource == nil {
 		return nil, fmt.Errorf("token source is required")
