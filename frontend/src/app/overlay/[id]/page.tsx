@@ -755,6 +755,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         if (el) {
                           el.style.setProperty('text-shadow', 'none', 'important')
                           el.style.setProperty('-webkit-text-stroke', '0.5px rgba(0,0,0,0.5)', 'important')
+                          el.style.setProperty('color', 'transparent', 'important')
+                          el.style.setProperty('-webkit-text-fill-color', 'transparent', 'important')
+                          el.style.setProperty('background-clip', 'text', 'important')
+                          el.style.setProperty('-webkit-background-clip', 'text', 'important')
                         }
                       }}
                       className="font-semibold text-sm bg-clip-text text-transparent username-gradient"
