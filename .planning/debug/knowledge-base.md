@@ -28,3 +28,11 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Files changed:** services/twitch-listener/irc/connection.go, services/twitch-listener/handlers/health.go, services/twitch-listener/irc/connection_stale_test.go, services/twitch-listener/handlers/health_test.go
 ---
 
+## twitch-messages-not-reaching-overlay-hesplayingroblox — Twitch pipeline working; stale Redis PEL entries from past pod crashes cleaned up operationally
+- **Date:** 2026-03-29
+- **Error patterns:** messages not appearing, overlay, twitch-listener, chat:raw, stale PEL, pending messages, XPENDING, XAUTOCLAIM, consumer group, hesplayingroblox
+- **Root cause:** Pipeline was fully operational when investigated. The original user report likely coincided with a past pod restart that caused the same race condition as the CaesarLP bug (channel joined on dead IRC client) — already fixed by onConnect callback deployment. 44,632 stale pending entries in chat:raw PEL from pod crashes spanning December 2025 to March 2026 were found but did not block processing (lag=0 for new messages). TikTok listener was also identified as missing SERVICE_JWT_SECRET causing both pods to connect to all streams, producing ~8% duplicate rate in chat:raw.
+- **Fix:** Operational cleanup only. Used XAUTOCLAIM + XACK to clear stale PEL entries for processor-1 consumer. No code changes. Separate bug: TikTok listener needs SERVICE_JWT_SECRET env var added to Kubernetes deployment to enable coordinator-based stream assignment.
+- **Files changed:** none
+---
+
