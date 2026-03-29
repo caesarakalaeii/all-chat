@@ -37,6 +37,55 @@ func NewViewerCosmeticsHandler(
 	}
 }
 
+// HandleGetCosmetics handles GET /viewer/cosmetics.
+// Returns the current cosmetics for the authenticated viewer.
+func (h *ViewerCosmeticsHandler) HandleGetCosmetics(c *gin.Context) {
+	viewerIDStr, exists := c.Get("viewer_id")
+	if !exists || viewerIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	viewerID, err := uuid.Parse(viewerIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid viewer ID"})
+		return
+	}
+
+	cosmetics, err := h.identityRepo.GetFullCosmetics(c.Request.Context(), viewerID)
+	if err != nil {
+		h.logger.Error("Failed to get cosmetics", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	if cosmetics == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"name_color":      nil,
+			"name_gradient":   nil,
+			"avatar_frame_id": nil,
+			"avatar_flair_id": nil,
+		})
+		return
+	}
+
+	// Parse name_gradient from raw JSON for the response
+	var gradientResponse interface{}
+	if len(cosmetics.NameGradient) > 0 && string(cosmetics.NameGradient) != "null" {
+		var g interface{}
+		if json.Unmarshal(cosmetics.NameGradient, &g) == nil {
+			gradientResponse = g
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"name_color":      cosmetics.NameColor,
+		"name_gradient":   gradientResponse,
+		"avatar_frame_id": cosmetics.AvatarFrameID,
+		"avatar_flair_id": cosmetics.AvatarFlairID,
+	})
+}
+
 // HandlePatchCosmetics handles PATCH /viewer/cosmetics.
 //
 // Requires a viewer JWT with a non-empty viewer_id claim (Phase 28+ tokens).

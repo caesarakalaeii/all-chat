@@ -351,6 +351,7 @@ func main() {
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
 		viewerProtected.POST("/chat/send", chatSendHandler.HandleSendMessage)
+		viewerProtected.GET("/cosmetics", viewerCosmeticsHandler.HandleGetCosmetics)
 		viewerProtected.PATCH("/cosmetics", viewerCosmeticsHandler.HandlePatchCosmetics)
 		viewerProtected.GET("/linked-platforms", viewerAuthHandler.HandleGetLinkedPlatforms)
 		viewerProtected.DELETE("/linked-platforms/:platform", viewerAuthHandler.HandleUnlinkPlatform)

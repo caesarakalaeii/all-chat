@@ -423,6 +423,7 @@ func main() {
 		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/viewer/logout", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/viewer/chat/send", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
 		protectedAPI.PATCH("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/auth/viewer/linked-platforms", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/viewer/linked-platforms/:platform", proxyHandler.ForwardRequest)

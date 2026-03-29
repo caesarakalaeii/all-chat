@@ -154,6 +154,40 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
   const [savedFeedback, setSavedFeedback] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ------ Gradient state ------
+  const [gradientStops, setGradientStops] = useState<string[]>(['#9146ff', '#00b5ad'])
+  const [gradientAngle, setGradientAngle] = useState<number>(90)
+
+  // Fetch saved cosmetics from the backend on mount so values persist across
+  // page loads (the JWT does not carry cosmetic data).
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('viewer_jwt_token') : null
+    if (!token || !claims.viewer_id) return
+
+    fetch('/api/v1/auth/viewer/cosmetics', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then((data: { name_color?: string | null; name_gradient?: NameGradient | null } | null) => {
+        if (!data) return
+        if (data.name_color) {
+          setNameColor(data.name_color)
+        }
+        if (data.name_gradient) {
+          setActiveTab('gradient')
+          if (data.name_gradient.colors && data.name_gradient.colors.length >= 2) {
+            setGradientStops(data.name_gradient.colors)
+          }
+          if (data.name_gradient.angle != null) {
+            setGradientAngle(data.name_gradient.angle)
+          }
+        }
+      })
+      .catch(() => {
+        // Best-effort — fall back to JWT defaults / hardcoded defaults
+      })
+  }, [claims.viewer_id])
+
   const saveColor = useCallback(async (color: string) => {
     setNameColor(color)
     try {
@@ -182,13 +216,6 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
       if (/^#[0-9a-fA-F]{6}$/.test(color)) saveColor(color)
     }, 400)
   }, [saveColor])
-
-  // ------ Gradient state ------
-  const initialStops = claims.name_gradient?.colors ?? ['#9146ff', '#00b5ad']
-  const [gradientStops, setGradientStops] = useState<string[]>(
-    initialStops.length >= 2 ? initialStops : ['#9146ff', '#00b5ad']
-  )
-  const [gradientAngle, setGradientAngle] = useState<number>(claims.name_gradient?.angle ?? 90)
   const [gradientSaving, setGradientSaving] = useState(false)
   const [gradientError, setGradientError] = useState<string | null>(null)
 
