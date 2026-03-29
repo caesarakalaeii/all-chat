@@ -280,9 +280,10 @@ func main() {
 			log.Info("Starting Gateway connection")
 			if err := gwClient.Connect(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("Gateway disconnected, reconnecting in 5s", zap.Error(err))
-				if ll.LeadershipCoordinator() != nil {
-					metrics.SetShardOwnership(0)
-				}
+				// Don't clear shard_ownership here — the pod still holds the lease.
+				// The onLoss callback (above) handles actual lease loss.
+				// Clearing here caused false "Listener Disconnected" alerts on
+				// transient Gateway disconnects.
 				select {
 				case <-time.After(5 * time.Second):
 				case <-ctx.Done():
