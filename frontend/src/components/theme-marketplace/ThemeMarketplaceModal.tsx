@@ -207,7 +207,7 @@ export default function ThemeMarketplaceModal({
         </div>
 
         {/* Content */}
-        <div className="custom-scrollbar flex-1 overflow-y-auto p-6">
+        <div className="@container custom-scrollbar flex-1 overflow-y-auto p-6">
           {/* Loading State */}
           {loading && (
             <div className="flex items-center justify-center py-12">
@@ -273,7 +273,7 @@ export default function ThemeMarketplaceModal({
               </div>
 
               {/* Grid */}
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 @[480px]:grid-cols-2 @[768px]:grid-cols-3">
                 {themes.map((theme) => (
                   <ThemeCard
                     key={theme.id}
