@@ -64,26 +64,43 @@ func NewConnectionManager(
 		firstMessageChan: make(map[string]chan struct{}),
 	}
 
-	// Set up message handler
-	client.OnPrivateMessage(cm.handlePrivateMessage)
-
-	// Set up event handlers
-	client.OnUserNoticeMessage(cm.handleUserNotice)
-
-	// Set up deletion handlers
-	client.OnClearMessage(cm.handleClearMessage)
-	client.OnClearChatMessage(cm.handleClearChat)
-
-	// Set up connection handlers
-	client.OnConnect(cm.handleConnect)
+	cm.setupClientCallbacks(client)
 
 	return cm
 }
 
-// staleConnectionTimeout is how long without any IRC activity (including Twitch PINGs)
-// before we consider the connection dead. Twitch sends PINGs every ~5 minutes,
-// so 6 minutes without any activity means the connection is zombie.
-const staleConnectionTimeout = 6 * time.Minute
+// setupClientCallbacks wires all event callbacks onto a freshly created twitch client.
+// Called from NewConnectionManager and from the reconnect loop when creating a new client.
+func (cm *ConnectionManager) setupClientCallbacks(client *twitch.Client) {
+	// Chat and event handlers
+	client.OnPrivateMessage(cm.handlePrivateMessage)
+	client.OnUserNoticeMessage(cm.handleUserNotice)
+
+	// Deletion handlers
+	client.OnClearMessage(cm.handleClearMessage)
+	client.OnClearChatMessage(cm.handleClearChat)
+
+	// Connection handler
+	client.OnConnect(cm.handleConnect)
+
+	// PING sent by our client — update activity so the watchdog knows the TCP
+	// connection is still alive even when no chat messages are flowing.
+	client.OnPingSent(cm.recordActivity)
+}
+
+const (
+	// staleConnectionTimeout is how long without any IRC activity (PING/PONG or chat)
+	// before the watchdog considers the connection dead and forces a reconnect.
+	// Twitch sends PINGs every ~5 minutes; we also call recordActivity on OnPingSent
+	// so 6 minutes without any activity means the connection is zombie.
+	staleConnectionTimeout = 6 * time.Minute
+
+	// staleLivenessThreshold is how long without any IRC activity before the
+	// liveness probe returns 503. This is intentionally longer than
+	// staleConnectionTimeout to give the watchdog multiple attempts to recover
+	// before Kubernetes restarts the pod.
+	staleLivenessThreshold = 10 * time.Minute
+)
 
 // Connect establishes connection to Twitch IRC with automatic reconnection.
 // If the underlying client.Connect() returns (connection permanently lost),
@@ -164,11 +181,7 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 			cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "attempting")
 
 			newClient := twitch.NewClient(cm.config.Username, cm.config.OAuth)
-			newClient.OnPrivateMessage(cm.handlePrivateMessage)
-			newClient.OnUserNoticeMessage(cm.handleUserNotice)
-			newClient.OnClearMessage(cm.handleClearMessage)
-			newClient.OnClearChatMessage(cm.handleClearChat)
-			newClient.OnConnect(cm.handleConnect)
+			cm.setupClientCallbacks(newClient)
 
 			cm.mu.Lock()
 			cm.client = newClient
@@ -361,6 +374,21 @@ func (cm *ConnectionManager) LastActivityAt() time.Time {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.lastActivityAt
+}
+
+// IsStale returns true when the connection has gone silent for longer than
+// staleLivenessThreshold.  A zero lastActivityAt (never connected) returns
+// false so the pod is not killed before the initial connection is established.
+// Used by the liveness probe to trigger a Kubernetes pod restart when the
+// watchdog's Disconnect() call fails to unblock the stuck Connect() goroutine.
+func (cm *ConnectionManager) IsStale() bool {
+	cm.mu.RLock()
+	last := cm.lastActivityAt
+	cm.mu.RUnlock()
+	if last.IsZero() {
+		return false
+	}
+	return time.Since(last) > staleLivenessThreshold
 }
 
 // SetOnDisconnect registers a callback invoked when the IRC connection is lost.
