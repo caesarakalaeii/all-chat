@@ -149,8 +149,8 @@ body {
 }
 
 .flex-shrink-0 img {
-  width: var(--chat-avatar-size, auto) !important;
-  height: var(--chat-avatar-size, auto) !important;
+  width: var(--chat-avatar-size, 2.5rem) !important;
+  height: var(--chat-avatar-size, 2.5rem) !important;
   border: 3px solid #000000 !important;
   border-radius: 0 !important;
   box-shadow:
