@@ -100,7 +100,7 @@ export async function queryCodebase(
     : [];
   const allowedTools = [...baseTools, ...grafanaTools].join(',');
 
-  console.log('[claude] Starting subprocess (timeout: 180s)');
+  console.log('[claude] Starting subprocess (timeout: 600s)');
   const { stdout } = await execa(
     'claude',
     [
@@ -113,7 +113,7 @@ export async function queryCodebase(
     {
       stdin: 'ignore',
       env: { ...process.env },
-      timeout: 180_000,
+      timeout: 600_000,
     },
   );
   console.log('[claude] Subprocess completed, parsing response');
