@@ -309,12 +309,12 @@ Plans:
 **Goal:** Fix all 24 silent failure modes across the complete message pipeline (Listeners -> Redis Streams -> Message Processor -> Redis Pub/Sub -> API Gateway WebSocket). Every fix eliminates a path where messages are silently dropped without logging or alerting. Adds DLQ infrastructure, PEL drain on startup, exponential backoff retry, Pub/Sub reconnect, and ring buffer publish safety net.
 **Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17
 **Depends on:** Phase 7
-**Plans:** 2/6 plans executed
+**Plans:** 3/6 plans executed
 
 Plans:
 - [ ] 08-01-PLAN.md — Message-processor stream consumer hardening: unique consumer names, PEL drain, DLQ routing, retry logic, admin replay endpoint
 - [x] 08-02-PLAN.md — API Gateway Subscriber Pub/Sub reconnect on channel close, goroutine tracking, ref count guard, pubsub_reconnect_total metric
 - [x] 08-03-PLAN.md — API Gateway StatusSubscriber nil-channel guard, reconnect, WaitGroup shutdown, pubsub_reconnect_total metric
-- [ ] 08-04-PLAN.md — Shared listener SDK ring buffer for XADD failure buffering with retry, ADR-0009
+- [x] 08-04-PLAN.md — Shared listener SDK ring buffer for XADD failure buffering with retry, ADR-0009
 - [ ] 08-05-PLAN.md — Prometheus alert rules (including pubsub_reconnect_total) and Grafana dashboard panels for all new resilience metrics
 - [ ] 08-06-PLAN.md — Wire RingBufferPublisher into all 5 Go listeners (twitch, kick, youtube-innertube, discord, twitch-eventsub)
