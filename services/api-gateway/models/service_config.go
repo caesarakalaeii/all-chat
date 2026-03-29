@@ -97,6 +97,36 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		RewritePrefix: "/admin/sources", // Rewrite to /admin/sources for overlay-manager
 	}
 
+	// Admin routes - Auth Service (stats dashboard)
+	registry.Services["admin-stats"] = &ServiceConfig{
+		Name:          "admin-stats",
+		BaseURL:       authURL,
+		HealthPath:    "/health/live",
+		PathPrefix:    "/api/v1/admin/stats",
+		StripPrefix:   true,
+		RewritePrefix: "/admin/stats",
+	}
+
+	// Admin routes - Auth Service (viewers)
+	registry.Services["admin-viewers"] = &ServiceConfig{
+		Name:          "admin-viewers",
+		BaseURL:       authURL,
+		HealthPath:    "/health/live",
+		PathPrefix:    "/api/v1/admin/viewers",
+		StripPrefix:   true,
+		RewritePrefix: "/admin/viewers",
+	}
+
+	// Admin routes - Auth Service (cosmetics)
+	registry.Services["admin-cosmetics"] = &ServiceConfig{
+		Name:          "admin-cosmetics",
+		BaseURL:       authURL,
+		HealthPath:    "/health/live",
+		PathPrefix:    "/api/v1/admin/cosmetics",
+		StripPrefix:   true,
+		RewritePrefix: "/admin/cosmetics",
+	}
+
 	// Share Service
 	shareURL := getEnvOrDefault("SHARE_SERVICE_URL", "http://localhost:8090")
 	registry.Services["share-service-shares"] = &ServiceConfig{
