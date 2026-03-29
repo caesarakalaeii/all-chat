@@ -14,6 +14,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/auth"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -28,6 +29,7 @@ type AuthHandler struct {
 	jwtSecret    string
 	jwtExpiry    time.Duration
 	logger       *zap.Logger
+	metrics      *metrics.BusinessMetrics
 }
 
 // NewAuthHandler creates a new auth handler
@@ -49,6 +51,12 @@ func NewAuthHandler(
 		jwtExpiry:    time.Duration(jwtExpiryHours) * time.Hour,
 		logger:       logger,
 	}
+}
+
+// WithMetrics attaches a BusinessMetrics instance for recording user registration events.
+func (h *AuthHandler) WithMetrics(m *metrics.BusinessMetrics) *AuthHandler {
+	h.metrics = m
+	return h
 }
 
 // HandleLogin initiates the OAuth flow
@@ -168,6 +176,10 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 			h.logger.Error("Failed to create user", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 			return
+		}
+
+		if h.metrics != nil {
+			h.metrics.RecordUserRegistration("twitch")
 		}
 	} else {
 		// Check if existing user is banned
@@ -289,6 +301,10 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 			h.logger.Error("Failed to create YouTube user", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 			return
+		}
+
+		if h.metrics != nil {
+			h.metrics.RecordUserRegistration("youtube")
 		}
 
 		h.logger.Info("Created new YouTube user",

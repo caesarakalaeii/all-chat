@@ -153,7 +153,7 @@ func main() {
 	log.Info("Connected to Redis")
 
 	// Initialize metrics (available via /metrics endpoint)
-	_ = metrics.NewBusinessMetrics()
+	businessMetrics := metrics.NewBusinessMetrics()
 	log.Info("Initialized Prometheus metrics")
 
 	// Initialize components
@@ -208,8 +208,8 @@ func main() {
 	viewerIdentityRepo := repository.NewViewerIdentityRepository(db)
 
 	// Create handlers
-	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log)
-	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log)
+	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)
+	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log).WithMetrics(businessMetrics)
 	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, jwtSecret)
