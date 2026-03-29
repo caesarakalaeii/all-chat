@@ -282,3 +282,21 @@ Plans:
 - [x] 06-01-PLAN.md — SDK refactor: merge ListenerBase into LeadershipListener, update ChannelManager interface, remove coordinator loops
 - [x] 06-02-PLAN.md — Migrate twitch-listener + twitch-eventsub-listener + kick-listener to LeadershipListener
 - [x] 06-03-PLAN.md — Remove coordinator from source-manager, delete shared/coordination, consolidate to port 8083, update K8s manifests
+
+### Phase 7: Feature Gate Infrastructure
+
+**Goal:** Add capability-level premium toggling so experimental features ship as premium, community tests them, and they can be flipped to free at any time without code changes.
+
+**Scope:**
+- New `feature_gates` Postgres table (feature_key, is_premium, description)
+- Redis Pub/Sub invalidation + in-memory cache per service (zero request-time DB hits)
+- Rewrite `RequirePremium` middleware to check feature gate before user premium status
+- Admin panel UI (`/admin/features`) with toggle switches
+- Day-one gates: `sharing` + future experimental features
+- Cosmetics keep existing per-item `is_premium` flag (no change — already supports event/collab flairs as free, custom flairs as premium)
+
+**Depends on:** None (independent of Phase 6)
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 7 to break down)
