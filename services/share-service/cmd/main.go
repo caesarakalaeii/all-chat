@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/share-service/cycles"
+	"github.com/caesar/all-chat/services/share-service/featuregates"
 	"github.com/caesar/all-chat/services/share-service/handlers"
 	"github.com/caesar/all-chat/services/share-service/jobs"
 	localMiddleware "github.com/caesar/all-chat/services/share-service/middleware"
@@ -82,6 +83,12 @@ func main() {
 		defer redisClient.Close()
 	}
 
+	// Initialize feature gate cache (D-07: DB source of truth + Redis Pub/Sub invalidation)
+	gateCache := featuregates.NewFeatureGateCache(dbPool, redisClientForJobs, log)
+	if err := gateCache.Start(context.Background()); err != nil {
+		log.Fatal("Failed to start feature gate cache", zap.Error(err))
+	}
+
 	// Initialize repositories
 	premiumRepo := repository.NewPremiumRepository(dbPool, log)
 	userSearchRepo := repository.NewUserSearchRepository(dbPool, log)
@@ -102,6 +109,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(premiumRepo, log)
 	searchHandler := handlers.NewSearchHandler(userSearchRepo, log)
 	shareHandler := handlers.NewShareHandler(shareRepo, userSearchRepo, dbPool, log, cycleDetector)
+	adminFGHandler := handlers.NewAdminFeatureGatesHandler(dbPool, redisClientForJobs, log)
 
 	// Setup Gin router
 	if config.GinMode == "release" {
@@ -160,7 +168,7 @@ func main() {
 
 		// Premium-only routes (only creating a share requires premium)
 		premiumRoutes := api.Group("")
-		premiumRoutes.Use(localMiddleware.RequirePremium(dbPool, log)) // Premium middleware
+		premiumRoutes.Use(localMiddleware.RequirePremium(dbPool, gateCache, featuregates.GateSharing, log)) // Premium middleware
 		{
 			premiumRoutes.POST("/shares", shareHandler.CreateRequest)
 		}
@@ -175,6 +183,14 @@ func main() {
 		adminRoutes.Use(middleware.AdminOnly())
 		{
 			adminRoutes.POST("/users/:id", adminHandler.SetUserPremium)
+		}
+
+		// Feature gate admin routes (separate from /admin/premium to avoid path conflict)
+		featureGateRoutes := api.Group("/admin/feature-gates")
+		featureGateRoutes.Use(middleware.AdminOnly())
+		{
+			featureGateRoutes.GET("", adminFGHandler.ListGates)
+			featureGateRoutes.PATCH("/:key", adminFGHandler.UpdateGate)
 		}
 	}
 

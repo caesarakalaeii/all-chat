@@ -465,6 +465,10 @@ func main() {
 		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)           // -> share-service
 		protectedAPI.POST("/admin/premium/users/:id", proxyHandler.ForwardRequest)         // -> share-service
 
+		// Admin feature gate management (protected — JWT auth; admin role enforced at share-service)
+		protectedAPI.GET("/admin/feature-gates", proxyHandler.ForwardRequest)        // -> share-service
+		protectedAPI.PATCH("/admin/feature-gates/:key", proxyHandler.ForwardRequest) // -> share-service
+
 		// Admin routes (protected - TODO: add admin role check)
 		protectedAPI.GET("/admin/users", proxyHandler.ForwardRequest)           // -> auth-service
 		protectedAPI.GET("/admin/users/:id", proxyHandler.ForwardRequest)       // -> auth-service
