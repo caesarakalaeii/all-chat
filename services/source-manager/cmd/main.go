@@ -140,6 +140,7 @@ func main() {
 	sourceHandler := handlers.NewSourceHandler(sourceRegistry, leaderManager)
 	protected.GET("/sources", sourceHandler.GetSources)
 	protected.POST("/sources/activate", sourceHandler.ActivateSource)
+	protected.POST("/sources/deactivate", sourceHandler.DeactivateSource)
 	protected.POST("/leadership/claim", sourceHandler.ClaimLeadership)
 	protected.POST("/leadership/renew", sourceHandler.RenewLeadership)
 	protected.POST("/leadership/release", sourceHandler.ReleaseLeadership)

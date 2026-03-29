@@ -165,6 +165,29 @@ func (h *SourceHandler) ActivateSource(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"activated": n > 0, "rows_updated": n})
 }
 
+// DeactivateSource marks a source as inactive immediately.
+// Listeners POST to this when they stop polling a channel (stream ended, overlay
+// disconnected, demand lost, or service shutdown) so the admin panel reflects
+// the actual polling state rather than waiting for the cleanup job.
+func (h *SourceHandler) DeactivateSource(c *gin.Context) {
+	var req struct {
+		Platform  string `json:"platform" binding:"required"`
+		ChannelID string `json:"channel_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	n, err := h.registry.DeactivateSource(c.Request.Context(), req.Platform, req.ChannelID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to deactivate source"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"deactivated": n > 0, "rows_updated": n})
+}
+
 // RegisterPeer registers a caller as an active peer and returns the peer count
 func (h *SourceHandler) RegisterPeer(c *gin.Context) {
 	var req struct {

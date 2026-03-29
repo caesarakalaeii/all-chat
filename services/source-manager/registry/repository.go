@@ -230,3 +230,20 @@ func (r *Repository) ActivateSource(ctx context.Context, platform, channelID str
 	}
 	return result.RowsAffected(), nil
 }
+
+// DeactivateSource marks a source as inactive immediately.
+// Called by listeners when they stop polling a channel (stream ended, overlay
+// disconnected, demand lost, or service shutdown) so the admin panel reflects
+// the actual polling state rather than waiting 24 h for cleanup.
+func (r *Repository) DeactivateSource(ctx context.Context, platform, channelID string) (int64, error) {
+	query := `
+		UPDATE overlay_chat_sources
+		SET is_active = false, updated_at = NOW()
+		WHERE platform = $1 AND channel_id = $2 AND is_active = true
+	`
+	result, err := r.db.Exec(ctx, query, platform, channelID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to deactivate source: %w", err)
+	}
+	return result.RowsAffected(), nil
+}
