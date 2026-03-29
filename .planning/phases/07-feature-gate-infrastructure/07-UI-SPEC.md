@@ -55,11 +55,11 @@ All values from `globals.css @theme`. This phase uses exactly 4 sizes and 2 weig
 | Role | Size | Weight | Line Height | Token |
 |------|------|--------|-------------|-------|
 | Body | 14px (`--text-base: 0.875rem`) | 400 (regular) | 1.5 | `text-base` |
-| Label | 13px (`--text-sm: 0.8125rem`) | 500 (medium) | 1.4 | `text-sm` |
+| Label | 13px (`--text-sm: 0.8125rem`) | 700 (bold) | 1.4 | `text-sm font-bold` |
 | Heading | 24px (`--text-2xl: 1.5rem`) | 700 (bold) | 1.2 | `text-2xl font-bold` |
-| Sub-heading | 16px (`--text-lg: 1rem`) | 500 (medium) | 1.3 | `text-lg font-medium` |
+| Sub-heading | 16px (`--text-lg: 1rem`) | 700 (bold) | 1.3 | `text-lg font-bold` |
 
-Weight constraint: 2 weights only — 400 (body, description text) and 700 (headings). Label medium (500) is the only exception, already present in existing admin pages (`font-medium` utility).
+Weight constraint: exactly 2 weights — 400 (body, description text) and 700 (headings, labels, sub-headings). Weight 500 (medium) is not used in this phase.
 
 ---
 
@@ -113,7 +113,7 @@ Page header
   p:  "Manage capability-level premium gates. Toggle a feature free to grant access to all users without a code deploy."  [text-sm text-text-sub]
 
 Gate list (Card)
-  Card header: "Feature Gates ({count})"  [text-base font-medium]
+  Card header: "Feature Gates ({count})"  [text-base font-bold]
   For each gate row:
     - Feature key  [font-mono text-sm text-text]
     - Description  [text-sm text-text-sub]
@@ -144,12 +144,12 @@ Column widths (single Card, no split panel — this page has few enough items):
 
 Use Dialog for both directions (premium→free AND free→premium). Feature gates affect access for all users — both directions need confirmation.
 
-| Direction | Dialog Title | Description |
-|-----------|-------------|-------------|
-| Premium → Free | "Make sharing free for all users?" | "All authenticated users will gain access to this feature immediately. No code deploy required." |
-| Free → Premium | "Restrict sharing to premium users?" | "Only users with premium access will be able to use this feature." |
+| Direction | Dialog Title | Description | Confirm button | Cancel button |
+|-----------|-------------|-------------|----------------|---------------|
+| Premium → Free | "Make sharing free for all users?" | "All authenticated users will gain access to this feature immediately. No code deploy required." | "Make Free" | "No, keep as-is" |
+| Free → Premium | "Restrict sharing to premium users?" | "Only users with premium access will be able to use this feature." | "Make Premium" | "No, keep as-is" |
 
-Dialog actions: `Cancel` (outline), `Confirm` (default variant — NOT destructive, as making a feature free is the intended lifecycle action).
+Dialog confirm uses default variant (NOT destructive — making a feature free or premium is the intended lifecycle action). Dialog cancel uses outline variant.
 
 ---
 
@@ -174,8 +174,9 @@ Dialog actions: `Cancel` (outline), `Confirm` (default variant — NOT destructi
 | Dialog — premium→free body | "All authenticated users will gain access immediately. No code deploy required." |
 | Dialog — free→premium title | "Restrict sharing to premium users?" |
 | Dialog — free→premium body | "Only users with premium access will be able to use this feature." |
-| Dialog cancel | "Cancel" |
-| Dialog confirm | "Confirm" |
+| Dialog cancel (both directions) | "No, keep as-is" |
+| Dialog confirm (premium→free) | "Make Free" |
+| Dialog confirm (free→premium) | "Make Premium" |
 
 No destructive actions: toggling a gate to free or back to premium is reversible and does not delete data. No red `variant="destructive"` buttons on this page.
 
@@ -208,6 +209,8 @@ No third-party registries. No blocks to vet.
 | Route: `/admin/features` | CONTEXT.md D-12 |
 | Toggle confirmation: PATCH endpoint | CONTEXT.md D-13, D-14 |
 | No destructive actions | Copywriting derived from CONTEXT.md D-15/D-16 (reversible toggles) |
+| Dialog button labels (specific verb+noun) | UI-SPEC revision — checker feedback 2026-03-29 |
+| Typography weight consolidated to 2 | UI-SPEC revision — checker feedback 2026-03-29 |
 
 ---
 
