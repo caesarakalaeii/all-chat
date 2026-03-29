@@ -245,6 +245,7 @@ func main() {
 		admin.GET("/overlays", adminHandler.ListOverlays)
 		admin.GET("/overlays/:id/sources", adminHandler.GetOverlaySources)
 		admin.GET("/sources", adminHandler.ListAllSources)
+		admin.GET("/users/:id/overlays", adminHandler.GetUserOverlays)
 	}
 
 	// Create HTTP server
