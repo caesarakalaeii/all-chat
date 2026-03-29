@@ -19,7 +19,8 @@ import clsx from 'clsx'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { WebSocketClient } from '@/lib/api/websocket'
 import { overlaysApi } from '@/lib/api/overlays'
-import type { ChatMessage } from '@/lib/types/message'
+import type { ChatMessage, NameGradient } from '@/lib/types/message'
+import { buildGradientCSS } from '@/lib/utils/gradient'
 import { renderMessageContent } from '@/lib/renderMessage'
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
@@ -292,6 +293,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     wsClient.connect(id, token)
 
     const unsubscribe = wsClient.onMessage(async (incoming) => {
+      // Parse gradient JSON string → object (message processor sends it as a string)
+      if (incoming.user?.name_gradient && typeof incoming.user.name_gradient === 'string') {
+        incoming.user.name_gradient = JSON.parse(incoming.user.name_gradient as unknown as string) as NameGradient
+      }
       const message = sortMessageBadges(await resolveTwitchBadgeIcons(incoming))
       setMessages((prev) => [...prev, message].slice(-maxMessages))
     })
@@ -576,12 +581,27 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             )}
 
                           {/* Username */}
-                          <span
-                            className="text-sm font-semibold"
-                            style={{ color: message.user.color || '#FFFFFF' }}
-                          >
-                            {message.user.display_name}
-                          </span>
+                          {message.user.name_gradient ? (
+                            <span
+                              ref={(el) => {
+                                if (el) {
+                                  el.style.setProperty('text-shadow', 'none', 'important')
+                                  el.style.setProperty('-webkit-text-stroke', '0.5px rgba(0,0,0,0.5)', 'important')
+                                }
+                              }}
+                              className="text-sm font-semibold bg-clip-text text-transparent username-gradient"
+                              style={{ backgroundImage: buildGradientCSS(message.user.name_gradient) }}
+                            >
+                              {message.user.display_name}
+                            </span>
+                          ) : (
+                            <span
+                              className="text-sm font-semibold"
+                              style={{ color: message.user.color || '#FFFFFF' }}
+                            >
+                              {message.user.display_name}
+                            </span>
+                          )}
 
                           {/* Platform badge after username */}
                           {showPlatformBadge &&
