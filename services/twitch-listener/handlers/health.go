@@ -11,14 +11,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ircConnectionHealth is the subset of irc.ConnectionManager used by the health handler.
+// Defined as an interface so that tests can inject a stub without constructing a full IRC client.
+type ircConnectionHealth interface {
+	IsConnected() bool
+	LastActivityAt() time.Time
+	IsStale() bool
+}
+
 // HealthHandler handles health check endpoints
 type HealthHandler struct {
-	ircConn   *irc.ConnectionManager
+	ircConn   ircConnectionHealth
 	publisher *publisher.StreamPublisher
 	chanMgr   *channels.Manager
 }
 
-// NewHealthHandler creates a new health handler
+// NewHealthHandler creates a new health handler from concrete types.
 func NewHealthHandler(
 	ircConn *irc.ConnectionManager,
 	pub *publisher.StreamPublisher,
@@ -31,8 +39,24 @@ func NewHealthHandler(
 	}
 }
 
-// LivenessProbe checks if the service is alive (HTTP 200 = alive)
+// LivenessProbe checks if the service is alive (HTTP 200 = alive, 503 = restart needed).
+// Returns 503 when the IRC connection has gone silent for longer than the stale liveness
+// threshold. This indicates the connection-watchdog has failed to recover a zombie IRC
+// connection (e.g., go-twitch-irc's Connect() goroutine is permanently blocked). Kubernetes
+// will restart the pod, which cleanly re-establishes the IRC connection and releases all
+// leadership locks so the healthy peer pod can take over affected channels immediately.
 func (h *HealthHandler) LivenessProbe(c *gin.Context) {
+	if h.ircConn.IsStale() {
+		lastAct := h.ircConn.LastActivityAt()
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "dead",
+			"service": "twitch-listener",
+			"reason":  "IRC connection zombie — no activity for over 10 minutes despite watchdog attempts",
+			"last_activity_seconds_ago": int(time.Since(lastAct).Seconds()),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "alive",
 		"service": "twitch-listener",
@@ -58,9 +82,9 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 		reason = "IRC not connected"
 	}
 
-	// Expose last activity for observability (not a readiness gate — quiet channels
-	// may legitimately have no messages for extended periods, and go-twitch-irc handles
-	// PING/PONG internally without exposing a callback we could track).
+	// Expose last activity for observability.
+	// go-twitch-irc fires OnPingSent (wired to recordActivity) so this reflects
+	// actual keep-alive cadence, not just chat message arrival.
 	lastActivity := h.ircConn.LastActivityAt()
 	if !lastActivity.IsZero() {
 		checks["irc_last_activity_seconds_ago"] = int(time.Since(lastActivity).Seconds())
