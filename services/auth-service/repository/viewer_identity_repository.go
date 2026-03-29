@@ -213,6 +213,68 @@ func (r *ViewerIdentityRepository) LinkPlatformToViewer(ctx context.Context, vie
 	return nil
 }
 
+// LinkedPlatform represents a single platform linked to a viewer.
+type LinkedPlatform struct {
+	Platform       string
+	PlatformUserID string
+}
+
+// GetLinkedPlatforms returns all platforms currently linked to a viewer.
+func (r *ViewerIdentityRepository) GetLinkedPlatforms(ctx context.Context, viewerID uuid.UUID) ([]LinkedPlatform, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT platform, platform_user_id FROM viewer_platform_identities WHERE viewer_id = $1 ORDER BY created_at`,
+		viewerID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query linked platforms: %w", err)
+	}
+	defer rows.Close()
+
+	var platforms []LinkedPlatform
+	for rows.Next() {
+		var lp LinkedPlatform
+		if err := rows.Scan(&lp.Platform, &lp.PlatformUserID); err != nil {
+			return nil, fmt.Errorf("failed to scan linked platform: %w", err)
+		}
+		platforms = append(platforms, lp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate linked platforms: %w", err)
+	}
+	return platforms, nil
+}
+
+// UnlinkPlatform removes a platform identity from a viewer.
+// Returns ErrLastPlatform if the viewer only has one platform linked (must retain at least one).
+// Returns ErrNotFound if the platform is not linked to this viewer.
+func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error {
+	// Count how many platforms the viewer currently has.
+	var count int
+	err := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM viewer_platform_identities WHERE viewer_id = $1`,
+		viewerID,
+	).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to count linked platforms: %w", err)
+	}
+	if count <= 1 {
+		return ErrLastPlatform
+	}
+
+	// Delete the platform identity row.
+	tag, err := r.db.Exec(ctx,
+		`DELETE FROM viewer_platform_identities WHERE viewer_id = $1 AND platform = $2`,
+		viewerID, platform,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete platform identity: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // GetViewerIsPremium returns the is_premium flag for a viewer.
 func (r *ViewerIdentityRepository) GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error) {
 	var isPremium bool

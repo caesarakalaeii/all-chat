@@ -31,6 +31,8 @@ type ViewerIdentityRepo interface {
 	LinkPlatformToViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) error
 	LinkViewerToUser(ctx context.Context, platform, platformUserID string, userID string, isPremium bool) error
 	GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error)
+	GetLinkedPlatforms(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
+	UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error
 }
 
 // ViewerAuthHandler handles authentication for viewers who want to send messages
@@ -864,6 +866,88 @@ func (h *ViewerAuthHandler) resolveViewerID(ctx context.Context, platform, platf
 		return uuid.Nil, err
 	}
 	return viewerID, nil
+}
+
+// HandleGetLinkedPlatforms returns all platforms linked to the authenticated viewer.
+//
+// GET /viewer/linked-platforms
+// Requires viewer JWT. Returns:
+//
+//	{ "platforms": ["twitch", "youtube"] }
+func (h *ViewerAuthHandler) HandleGetLinkedPlatforms(c *gin.Context) {
+	viewerIDStr, exists := c.Get("viewer_id")
+	if !exists || viewerIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	viewerID, err := uuid.Parse(viewerIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid viewer ID"})
+		return
+	}
+
+	linked, err := h.identityRepo.GetLinkedPlatforms(c.Request.Context(), viewerID)
+	if err != nil {
+		h.logger.Error("Failed to get linked platforms", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	platforms := make([]string, 0, len(linked))
+	for _, lp := range linked {
+		platforms = append(platforms, lp.Platform)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"platforms": platforms})
+}
+
+// HandleUnlinkPlatform removes a platform identity from the authenticated viewer.
+//
+// DELETE /viewer/linked-platforms/:platform
+// Requires viewer JWT. The current JWT platform cannot be unlinked (you'd lose your session).
+// Returns 409 if this is the last platform, 400 if trying to unlink the current JWT platform.
+func (h *ViewerAuthHandler) HandleUnlinkPlatform(c *gin.Context) {
+	viewerIDStr, exists := c.Get("viewer_id")
+	if !exists || viewerIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	viewerID, err := uuid.Parse(viewerIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid viewer ID"})
+		return
+	}
+
+	targetPlatform := c.Param("platform")
+	if targetPlatform == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Platform parameter required"})
+		return
+	}
+
+	// Prevent unlinking the platform the viewer is currently authenticated with —
+	// doing so would leave them with no way to re-authenticate this session.
+	currentPlatform, _ := c.Get("platform")
+	if currentPlatform != nil && currentPlatform.(string) == targetPlatform {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot unlink the platform you are currently signed in with"})
+		return
+	}
+
+	if err := h.identityRepo.UnlinkPlatform(c.Request.Context(), viewerID, targetPlatform); err != nil {
+		switch err {
+		case repository.ErrLastPlatform:
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case repository.ErrNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": "Platform not linked"})
+		default:
+			h.logger.Error("Failed to unlink platform", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Platform unlinked successfully"})
 }
 
 // sanitizeRedirectPath ensures redirect_to is a safe relative path (starts with /, no scheme).

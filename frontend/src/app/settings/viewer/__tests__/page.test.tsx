@@ -345,6 +345,120 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     })
   })
 
+  it('Linked Platforms shows all platforms Connected when API returns multiple', async () => {
+    const jwt = buildFakeJWT({
+      viewer_id: 'v-123',
+      display_name: 'StreamFan',
+      platform: 'twitch',
+    })
+    stubLocalStorage({ viewer_jwt_token: jwt })
+
+    // API returns both twitch and youtube as linked
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/linked-platforms')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ platforms: ['twitch', 'youtube'] }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    render(<ViewerSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Linked Platforms')).toBeInTheDocument()
+    })
+
+    // Both Twitch and YouTube should show Connected badges
+    await waitFor(() => {
+      const connectedBadges = screen.getAllByText('Connected')
+      expect(connectedBadges.length).toBe(2)
+    })
+
+    // Kick should still show a Connect button
+    const connectButtons = screen.getAllByRole('button', { name: /^Connect$/ })
+    expect(connectButtons.length).toBe(1)
+  })
+
+  it('Disconnect button shown for non-current connected platform', async () => {
+    const jwt = buildFakeJWT({
+      viewer_id: 'v-123',
+      display_name: 'StreamFan',
+      platform: 'twitch',
+    })
+    stubLocalStorage({ viewer_jwt_token: jwt })
+
+    // API returns both twitch and youtube as linked
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/linked-platforms')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ platforms: ['twitch', 'youtube'] }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    render(<ViewerSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Linked Platforms')).toBeInTheDocument()
+    })
+
+    // YouTube is connected but not the current JWT platform — should have Disconnect
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Disconnect$/ })).toBeInTheDocument()
+    })
+
+    // Twitch is the current platform — no Disconnect button for it
+    const disconnectButtons = screen.getAllByRole('button', { name: /^Disconnect$/ })
+    expect(disconnectButtons.length).toBe(1)
+  })
+
+  it('Disconnect button calls DELETE /linked-platforms/:platform', async () => {
+    const jwt = buildFakeJWT({
+      viewer_id: 'v-123',
+      display_name: 'StreamFan',
+      platform: 'twitch',
+    })
+    stubLocalStorage({ viewer_jwt_token: jwt })
+
+    mockFetch.mockImplementation((url: string, opts?: RequestInit) => {
+      if (typeof url === 'string' && url.includes('/linked-platforms') && (!opts || opts.method !== 'DELETE')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ platforms: ['twitch', 'youtube'] }),
+        })
+      }
+      if (typeof url === 'string' && url.includes('/linked-platforms/youtube') && opts?.method === 'DELETE') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ message: 'Platform unlinked successfully' }) })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    render(<ViewerSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Disconnect$/ })).toBeInTheDocument()
+    })
+
+    const disconnectBtn = screen.getByRole('button', { name: /^Disconnect$/ })
+    await act(async () => {
+      fireEvent.click(disconnectBtn)
+    })
+
+    await waitFor(() => {
+      const calls = mockFetch.mock.calls
+      const deleteCall = calls.find((args) =>
+        typeof args[0] === 'string' &&
+        args[0].includes('/linked-platforms/youtube') &&
+        (args[1] as RequestInit)?.method === 'DELETE'
+      )
+      expect(deleteCall).toBeDefined()
+    })
+  })
+
   it('gradient save sends null name_color', async () => {
     const jwt = buildFakeJWT({
       viewer_id: 'v-premium',
