@@ -200,3 +200,10 @@
   box-shadow: none !important;
   animation: none !important;
 }
+
+/* Gradient usernames: override theme text-shadow to prevent black outline
+   from hiding the gradient. Uses !important to beat theme !important rules. */
+.username-gradient {
+  text-shadow: none !important;
+  -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.5);
+}
