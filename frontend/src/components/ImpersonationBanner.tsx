@@ -1,50 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useHydrated } from '@/hooks/useHydrated'
+import { useAuthStore } from '@/lib/stores/auth-store'
 
 export default function ImpersonationBanner() {
   const router = useRouter()
-  const isHydrated = useHydrated()
-  const [isImpersonating, setIsImpersonating] = useState(false)
-  const [impersonatedUser, setImpersonatedUser] = useState<string>('')
+  const { isImpersonating, impersonatedUsername, stopImpersonation, init } = useAuthStore()
 
-  useEffect(() => {
-    if (!isHydrated) return // Wait for hydration
+  const handleExitImpersonation = async () => {
+    stopImpersonation()
 
-    const checkImpersonation = () => {
-      const impersonating = localStorage.getItem('impersonating') === 'true'
-      const user = localStorage.getItem('impersonated_user') || ''
-      setIsImpersonating(impersonating)
-      setImpersonatedUser(user)
-    }
+    // Re-initialise the auth store so user/token state reflects the restored admin session
+    await init()
 
-    checkImpersonation()
-
-    // Listen for storage changes (in case impersonation starts/stops in another tab)
-    window.addEventListener('storage', checkImpersonation)
-    return () => window.removeEventListener('storage', checkImpersonation)
-  }, [isHydrated])
-
-  const handleExitImpersonation = () => {
-    // Restore the original admin token
-    const adminToken = localStorage.getItem('admin_token')
-    if (adminToken) {
-      localStorage.setItem('jwt_token', adminToken)
-      localStorage.removeItem('admin_token')
-    }
-
-    // Clear impersonation flags
-    localStorage.removeItem('impersonating')
-    localStorage.removeItem('impersonated_user')
-
-    // Redirect to admin panel
+    // Redirect back to admin panel
     router.push('/admin/users')
-    router.refresh()
   }
 
-  if (!isHydrated || !isImpersonating) {
+  if (!isImpersonating) {
     return null
   }
 
@@ -61,7 +34,7 @@ export default function ImpersonationBanner() {
         </svg>
         <div>
           <span className="font-semibold">Admin Mode:</span> Viewing as{' '}
-          <span className="font-mono">{impersonatedUser}</span>
+          <span className="font-mono">{impersonatedUsername}</span>
         </div>
       </div>
       <button
