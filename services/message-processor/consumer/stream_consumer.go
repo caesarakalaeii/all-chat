@@ -21,9 +21,6 @@ const (
 	// ConsumerGroup is the consumer group name
 	ConsumerGroup = "message-processor"
 
-	// ConsumerName is this consumer's identifier
-	ConsumerName = "processor-1"
-
 	// ReadCount is how many messages to read in one batch
 	ReadCount = 100
 
@@ -46,8 +43,9 @@ type StreamConsumer struct {
 	consumerName   string
 }
 
-// NewStreamConsumer creates a new Redis Streams consumer
-func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.ProcessorMetrics, handler MessageHandler, msgIDRegistry registry.MessageIDRegistry, deletionBuffer registry.DeletionBuffer) *StreamConsumer {
+// NewStreamConsumer creates a new Redis Streams consumer.
+// consumerName should be set to os.Hostname() by the caller for unique per-pod identification.
+func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.ProcessorMetrics, handler MessageHandler, msgIDRegistry registry.MessageIDRegistry, deletionBuffer registry.DeletionBuffer, consumerName string) *StreamConsumer {
 	return &StreamConsumer{
 		client:         client,
 		logger:         logger,
@@ -56,6 +54,7 @@ func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.Proc
 		stopCh:         make(chan struct{}),
 		msgIDRegistry:  msgIDRegistry,
 		deletionBuffer: deletionBuffer,
+		consumerName:   consumerName,
 	}
 }
 
@@ -66,10 +65,18 @@ func (c *StreamConsumer) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create consumer group: %w", err)
 	}
 
+	// MP-02: Drain PEL messages idle > 5 minutes before entering normal read loop.
+	// This reclaims orphaned entries from crashed/restarted replicas.
+	c.drainPEL(ctx)
+	c.logger.Info("PEL drain complete, starting consume loop")
+
+	// DQ-02: Launch hourly DLQ trim goroutine
+	go c.trimDLQ(ctx)
+
 	c.logger.Info("Stream consumer started",
 		zap.String("stream", StreamKey),
 		zap.String("group", ConsumerGroup),
-		zap.String("consumer", ConsumerName),
+		zap.String("consumer", c.consumerName),
 	)
 
 	// Start consuming
@@ -91,7 +98,7 @@ func (c *StreamConsumer) createConsumerGroup(ctx context.Context) error {
 	err := c.client.XGroupCreateMkStream(ctx, StreamKey, ConsumerGroup, "$").Err()
 	if err != nil {
 		// BUSYGROUP error means group already exists, which is fine
-		if err.Error() != "BUSYGROUP Consumer Group name already exists" {
+		if !strings.Contains(err.Error(), "BUSYGROUP") {
 			return err
 		}
 		c.logger.Debug("Consumer group already exists",
@@ -116,6 +123,10 @@ func (c *StreamConsumer) consumeLoop(ctx context.Context) {
 			return
 		default:
 			if err := c.readAndProcess(ctx); err != nil {
+				// MP-08: Context cancellation is not an error — exit cleanly
+				if ctx.Err() != nil {
+					return
+				}
 				c.logger.Error("Error reading messages", zap.Error(err))
 				time.Sleep(1 * time.Second) // Back off on error
 			}
@@ -129,7 +140,7 @@ func (c *StreamConsumer) readAndProcess(ctx context.Context) error {
 	// ">" means only new messages not yet delivered to this consumer
 	streams, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    ConsumerGroup,
-		Consumer: ConsumerName,
+		Consumer: c.consumerName,
 		Streams:  []string{StreamKey, ">"},
 		Count:    ReadCount,
 		Block:    ReadBlockTime,
@@ -152,21 +163,14 @@ func (c *StreamConsumer) readAndProcess(ctx context.Context) error {
 				c.metrics.SetStreamLag("message-processor", StreamKey, ConsumerGroup, lag)
 			}
 
-			if err := c.processMessage(ctx, message); err != nil {
-				c.logger.Error("Failed to process message",
+			// MP-03: processAndAck handles retry, DLQ routing, and ACK ordering.
+			// Messages are ACKed regardless of processing outcome (after DLQ write on failure).
+			if err := c.processAndAck(ctx, message); err != nil {
+				c.logger.Error("Failed to process message (sent to DLQ)",
 					zap.String("stream_id", message.ID),
 					zap.Error(err),
 				)
-				// Continue processing other messages even if one fails
-				continue
-			}
-
-			// ACK the message after successful processing
-			if err := c.client.XAck(ctx, StreamKey, ConsumerGroup, message.ID).Err(); err != nil {
-				c.logger.Warn("Failed to ACK message",
-					zap.String("stream_id", message.ID),
-					zap.Error(err),
-				)
+				// Continue processing other messages
 			}
 		}
 	}
