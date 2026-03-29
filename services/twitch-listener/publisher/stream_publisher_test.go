@@ -2,6 +2,7 @@ package publisher
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -11,6 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
+
+// parseDataField extracts a RawChatMessage from the "data" JSON field in a stream entry.
+func parseDataField(t *testing.T, entry redis.XMessage) *models.RawChatMessage {
+	t.Helper()
+	dataStr, ok := entry.Values["data"].(string)
+	require.True(t, ok, "stream entry should have a 'data' string field")
+	var msg models.RawChatMessage
+	require.NoError(t, json.Unmarshal([]byte(dataStr), &msg))
+	return &msg
+}
 
 func TestStreamPublisher_Publish(t *testing.T) {
 	// Skip if Redis is not available
@@ -62,16 +73,15 @@ func TestStreamPublisher_Publish(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 
-	// Verify message fields
-	entry := result[0]
-	assert.Equal(t, "test-msg-1", entry.Values["message_id"])
-	assert.Equal(t, "twitch", entry.Values["platform"])
-	assert.Equal(t, "xqc", entry.Values["channel_id"])
-	assert.Equal(t, "12345", entry.Values["user_id"])
-	assert.Equal(t, "testuser", entry.Values["username"])
-	assert.Equal(t, "Hello World", entry.Values["text"])
-	assert.NotEmpty(t, entry.Values["timestamp"])
-	assert.NotEmpty(t, entry.Values["data"]) // JSON data
+	// Verify message fields from the "data" JSON blob
+	parsed := parseDataField(t, result[0])
+	assert.Equal(t, "test-msg-1", parsed.MessageID)
+	assert.Equal(t, "twitch", parsed.Platform)
+	assert.Equal(t, "xqc", parsed.ChannelID)
+	assert.Equal(t, "12345", parsed.UserID)
+	assert.Equal(t, "testuser", parsed.Username)
+	assert.Equal(t, "Hello World", parsed.Text)
+	assert.False(t, parsed.Timestamp.IsZero())
 }
 
 func TestStreamPublisher_PublishBatch(t *testing.T) {
@@ -140,10 +150,10 @@ func TestStreamPublisher_PublishBatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, result, 3)
 
-	// Verify message IDs
-	assert.Equal(t, "batch-1", result[0].Values["message_id"])
-	assert.Equal(t, "batch-2", result[1].Values["message_id"])
-	assert.Equal(t, "batch-3", result[2].Values["message_id"])
+	// Verify message IDs from the "data" JSON blobs
+	assert.Equal(t, "batch-1", parseDataField(t, result[0]).MessageID)
+	assert.Equal(t, "batch-2", parseDataField(t, result[1]).MessageID)
+	assert.Equal(t, "batch-3", parseDataField(t, result[2]).MessageID)
 }
 
 func TestStreamPublisher_PublishBatch_Empty(t *testing.T) {
