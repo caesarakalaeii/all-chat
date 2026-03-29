@@ -41,6 +41,12 @@ const (
 	defaultProtocolVersion = 7
 	defaultClientName      = "js"
 	defaultClientVersion   = "8.4.0-rc2"
+
+	// staleLivenessThreshold is how long without any WebSocket activity (Pusher ping/pong
+	// or chat message) before the liveness probe returns 503. The Pusher read deadline is
+	// 150 s; 5 minutes is well above that, so a healthy connection will always have reset
+	// lastActivityAt before this threshold is reached.
+	staleLivenessThreshold = 5 * time.Minute
 )
 
 // Config controls how the Pusher client connects
@@ -138,6 +144,9 @@ type Client struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// Activity tracking for zombie connection detection
+	lastActivityAt time.Time
 }
 
 // NewClient creates a new Pusher WebSocket client
@@ -375,6 +384,37 @@ func (c *Client) GetSocketID() string {
 	return c.socketID
 }
 
+// recordActivity updates the last activity timestamp.
+// Called on every successful WebSocket read and on every chat/deletion message received.
+func (c *Client) recordActivity() {
+	c.connMu.Lock()
+	c.lastActivityAt = time.Now()
+	c.connMu.Unlock()
+}
+
+// LastActivityAt returns when the last WebSocket message was received.
+// Used by health checks to detect silently dead connections.
+func (c *Client) LastActivityAt() time.Time {
+	c.connMu.RLock()
+	defer c.connMu.RUnlock()
+	return c.lastActivityAt
+}
+
+// IsStale returns true when the WebSocket connection has gone silent for longer than
+// staleLivenessThreshold. A zero lastActivityAt (never connected) returns false so
+// the pod is not killed before the initial connection is established.
+// Used by the liveness probe to trigger a Kubernetes pod restart when the Pusher
+// connection is zombie (read deadline extended but no actual messages flowing).
+func (c *Client) IsStale() bool {
+	c.connMu.RLock()
+	last := c.lastActivityAt
+	c.connMu.RUnlock()
+	if last.IsZero() {
+		return false
+	}
+	return time.Since(last) > staleLivenessThreshold
+}
+
 // formatChannelName returns a Kick chat channel string
 func (c *Client) formatChannelName(chatroomID int) string {
 	return fmt.Sprintf(kickChannelFormat, chatroomID)
@@ -559,6 +599,10 @@ func (c *Client) readPump() {
 			}
 			return
 		}
+
+		// Record activity on every successful read so the liveness probe and any
+		// future watchdog logic can detect a silently dead connection.
+		c.recordActivity()
 
 		// Reset read deadline on every message (Pusher uses application-level ping/pong, not WebSocket frames)
 		conn.SetReadDeadline(time.Now().Add(pongWait))
