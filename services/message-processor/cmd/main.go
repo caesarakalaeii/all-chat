@@ -15,6 +15,7 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/dedup"
 	"github.com/caesar/all-chat/services/message-processor/enricher"
 	"github.com/caesar/all-chat/services/message-processor/filter"
+	"github.com/caesar/all-chat/services/message-processor/handlers"
 	"github.com/caesar/all-chat/services/message-processor/models"
 	"github.com/caesar/all-chat/services/message-processor/normalizer"
 	"github.com/caesar/all-chat/services/message-processor/publisher"
@@ -176,7 +177,7 @@ func main() {
 	overlayRepo := router.NewRepository(db)
 	overlayRouter := router.NewRouter(overlayRepo, log)
 
-	pubsubPublisher := publisher.NewPubSubPublisher(redisClient, log)
+	pubsubPublisher := publisher.NewPubSubPublisher(redisClient, log, processorMetrics)
 
 	// Create deduplicator to prevent duplicate message publishing
 	deduplicator := dedup.NewDeduplicator(redisClient, log)
@@ -572,8 +573,19 @@ func main() {
 		return nil
 	}
 
+	// MP-01: Resolve unique consumer name from hostname for per-pod identification
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = fmt.Sprintf("processor-unknown-%d", time.Now().UnixNano())
+		log.Warn("Failed to get hostname, using fallback consumer name",
+			zap.String("consumer_name", hostname),
+			zap.Error(err),
+		)
+	}
+	log.Info("Consumer name resolved", zap.String("consumer_name", hostname))
+
 	// Create and start stream consumer
-	streamConsumer := consumer.NewStreamConsumer(redisClient, log, processorMetrics, messageHandler, msgIDRegistry, deletionBuffer)
+	streamConsumer := consumer.NewStreamConsumer(redisClient, log, processorMetrics, messageHandler, msgIDRegistry, deletionBuffer, hostname)
 	if err := streamConsumer.Start(ctx); err != nil {
 		log.Fatal("Failed to start stream consumer", zap.Error(err))
 	}
@@ -633,6 +645,9 @@ func main() {
 			},
 		})
 	})
+
+	// DQ-03: Admin DLQ replay endpoint
+	router.POST("/admin/dlq/replay", handlers.HandleDLQReplay(redisClient, log))
 
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
