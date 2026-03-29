@@ -297,6 +297,16 @@ func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID 
 		return ErrLastPlatform
 	}
 
+	// Look up the platform_user_id before deleting so we can clear viewer_sessions.
+	var platformUserID string
+	err = r.db.QueryRow(ctx,
+		`SELECT platform_user_id FROM viewer_platform_identities WHERE viewer_id = $1 AND platform = $2`,
+		viewerID, platform,
+	).Scan(&platformUserID)
+	if err != nil {
+		return ErrNotFound
+	}
+
 	// Delete the platform identity row.
 	tag, err := r.db.Exec(ctx,
 		`DELETE FROM viewer_platform_identities WHERE viewer_id = $1 AND platform = $2`,
@@ -308,6 +318,14 @@ func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID 
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
+
+	// Clear viewer_id on sessions that belonged to the unlinked platform identity
+	// so they are no longer associated with the viewer.
+	_, _ = r.db.Exec(ctx,
+		`UPDATE viewer_sessions SET viewer_id = NULL WHERE platform = $1 AND platform_user_id = $2 AND viewer_id = $3`,
+		platform, platformUserID, viewerID,
+	)
+
 	return nil
 }
 
