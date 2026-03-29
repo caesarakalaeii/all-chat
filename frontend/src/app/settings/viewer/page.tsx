@@ -629,6 +629,37 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
 
 function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
   const [connecting, setConnecting] = useState<string | null>(null)
+  const [disconnecting, setDisconnecting] = useState<string | null>(null)
+  // linkedPlatforms: null = loading, string[] = fetched set
+  const [linkedPlatforms, setLinkedPlatforms] = useState<Set<string> | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+
+  // Fetch all linked platforms from the backend on mount.
+  useEffect(() => {
+    if (!claims.viewer_id) return
+
+    const token = localStorage.getItem('viewer_jwt_token')
+    if (!token) return
+
+    fetch('/api/v1/auth/viewer/linked-platforms', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => res.json())
+      .then((data: { platforms?: string[]; error?: string }) => {
+        if (data.platforms) {
+          setLinkedPlatforms(new Set(data.platforms))
+        } else {
+          // Fallback: show at least the current JWT platform
+          setLinkedPlatforms(new Set(claims.platform ? [claims.platform] : []))
+          if (data.error) setFetchError(data.error)
+        }
+      })
+      .catch(() => {
+        // On network error fall back to JWT platform so UI still shows something
+        setLinkedPlatforms(new Set(claims.platform ? [claims.platform] : []))
+        setFetchError('Could not load linked platforms')
+      })
+  }, [claims.viewer_id, claims.platform])
 
   const handleConnect = async (key: 'twitch' | 'youtube' | 'kick') => {
     if (!claims.viewer_id) return
@@ -638,15 +669,51 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
     setConnecting(null)
   }
 
+  const handleDisconnect = async (key: 'twitch' | 'youtube' | 'kick') => {
+    if (!claims.viewer_id) return
+    const token = localStorage.getItem('viewer_jwt_token')
+    if (!token) return
+
+    setDisconnecting(key)
+    try {
+      const res = await fetch(`/api/v1/auth/viewer/linked-platforms/${key}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        setLinkedPlatforms(prev => {
+          const next = new Set(prev)
+          next.delete(key)
+          return next
+        })
+      } else {
+        const data = await res.json() as { error?: string }
+        setFetchError(data.error ?? 'Failed to disconnect platform')
+      }
+    } catch {
+      setFetchError('Failed to disconnect platform')
+    } finally {
+      setDisconnecting(null)
+    }
+  }
+
+  // While loading, fall back to showing the JWT platform as connected so there's
+  // no jarring flash of all "Connect" buttons.
+  const effectiveLinked = linkedPlatforms ?? new Set(claims.platform ? [claims.platform] : [])
+
   return (
     <Card className="p-6">
       <h2 className="text-lg font-semibold text-text mb-1">Linked Platforms</h2>
       <p className="text-text-sub text-sm mb-4">
         Connect additional platforms to share your cosmetics across all your chats
       </p>
+      {fetchError && (
+        <p className="text-xs text-red-400 mb-3">{fetchError}</p>
+      )}
       <div className="flex flex-col gap-3">
         {PLATFORMS.map(({ key, label, color }) => {
-          const isConnected = claims.platform === key
+          const isConnected = effectiveLinked.has(key)
+          const isCurrentPlatform = claims.platform === key
           return (
             <div
               key={key}
@@ -657,9 +724,21 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
                 <span className="text-sm text-text">{label}</span>
               </div>
               {isConnected ? (
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">
-                  Connected
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">
+                    Connected
+                  </span>
+                  {/* Cannot disconnect the platform the viewer is currently signed in with */}
+                  {!isCurrentPlatform && (
+                    <button
+                      onClick={() => handleDisconnect(key)}
+                      disabled={disconnecting === key}
+                      className="text-xs font-medium px-3 py-1 rounded-md border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {disconnecting === key ? 'Disconnecting…' : 'Disconnect'}
+                    </button>
+                  )}
+                </div>
               ) : (
                 <button
                   onClick={() => handleConnect(key)}
