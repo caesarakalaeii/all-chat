@@ -30,10 +30,12 @@ export default function OverlaysPage() {
   const [overlays, setOverlays] = useState<Overlay[]>([])
   const [selectedOverlay, setSelectedOverlay] = useState<Overlay | null>(null)
   const [sources, setSources] = useState<OverlaySource[]>([])
+  const [activeOverlayIds, setActiveOverlayIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [sourcesLoading, setSourcesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [showConnectedOnly, setShowConnectedOnly] = useState(false)
 
   // Fetch all overlays
   useEffect(() => {
@@ -67,6 +69,26 @@ export default function OverlaysPage() {
     }
 
     fetchOverlays()
+
+    async function fetchActiveOverlays() {
+      try {
+        const token = localStorage.getItem('jwt_token')
+        if (!token) return
+        const response = await fetch('/api/v1/admin/overlays/active', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (response.ok) {
+          const ids: string[] = await response.json()
+          setActiveOverlayIds(new Set(ids))
+        }
+      } catch (err) {
+        console.error('Failed to load active overlays:', err)
+      }
+    }
+
+    fetchActiveOverlays()
+    const interval = setInterval(fetchActiveOverlays, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   // Fetch sources for selected overlay
@@ -104,8 +126,10 @@ export default function OverlaysPage() {
     fetchSources()
   }, [selectedOverlay])
 
-  // Filter overlays by search term
+  // Filter overlays by search term and connected status
+  const connectedCount = overlays.filter((o) => activeOverlayIds.has(o.id)).length
   const filteredOverlays = overlays.filter((o) => {
+    if (showConnectedOnly && !activeOverlayIds.has(o.id)) return false
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return (
@@ -151,14 +175,26 @@ export default function OverlaysPage() {
                 </h3>
 
                 {/* Search Input */}
-                <div className="mt-4">
+                <div className="mt-4 flex items-center gap-3">
                   <input
                     type="text"
                     placeholder="Search by overlay name, ID, or user ID..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                    className="focus-visible:ring-ring flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                   />
+                  <button
+                    onClick={() => setShowConnectedOnly(!showConnectedOnly)}
+                    className={clsx(
+                      'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                      showConnectedOnly
+                        ? 'border-kick/30 bg-kick/10 text-kick'
+                        : 'border-border bg-surface-2 text-text-sub hover:text-text'
+                    )}
+                  >
+                    <span className="inline-block h-2 w-2 rounded-full bg-kick" />
+                    Connected ({connectedCount})
+                  </button>
                 </div>
               </div>
               <ul className="divide-y divide-border">
@@ -174,6 +210,9 @@ export default function OverlaysPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center">
+                          {activeOverlayIds.has(overlay.id) && (
+                            <span className="mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-kick" title="Connected" />
+                          )}
                           <p className="text-sm font-medium text-text">{overlay.name}</p>
                           <span className="ml-2 inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-sub">
                             {overlay.sources_count || 0} sources

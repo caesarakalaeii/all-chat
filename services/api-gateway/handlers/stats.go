@@ -46,3 +46,35 @@ func (h *StatsHandler) GetPlatformStats(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
+
+// GetActiveOverlays returns the IDs of overlays with active WebSocket connections.
+// GET /api/v1/admin/overlays/active — requires admin auth.
+func (h *StatsHandler) GetActiveOverlays(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var activeIDs []string
+	var cursor uint64
+	for {
+		keys, next, err := h.redis.Scan(ctx, cursor, "overlay:connected:*", 100).Result()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to scan active overlays"})
+			return
+		}
+		for _, key := range keys {
+			// key format: "overlay:connected:{id}"
+			id := key[len("overlay:connected:"):]
+			if id != "" {
+				activeIDs = append(activeIDs, id)
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+
+	if activeIDs == nil {
+		activeIDs = []string{}
+	}
+	c.JSON(http.StatusOK, activeIDs)
+}
