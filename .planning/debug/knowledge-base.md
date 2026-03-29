@@ -20,3 +20,11 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Files changed:** services/twitch-listener/channels/manager.go, services/twitch-listener/channels/manager_test.go, services/twitch-listener/handlers/health.go, caesar-deployment/apps/workloads/all-chat/tiktok-listener-deployment.yaml
 ---
 
+## new-twitch-source-no-messages — Zombie IRC connection on one pod blocked new channels via unconditional 200 liveness probe
+- **Date:** 2026-03-29
+- **Error patterns:** no messages, IRC zombie, connectionWatchdog, idle_duration, liveness probe 200, leadership lock, channels not receiving
+- **Root cause:** Pod's go-twitch-irc Connect() goroutine became permanently stuck (pinger blocked on TCP write, wg.Wait() never returns). The connectionWatchdog correctly called Disconnect() every 60s but it returned ErrConnectionIsNotOpen (connActive=false during TCP dial retry) — so reconnect never happened. The liveness probe returned HTTP 200 unconditionally, so Kubernetes never restarted the pod. That pod held the leadership lock for the newly-added channel (ironmouse), preventing the healthy peer pod from claiming it.
+- **Fix:** (1) Registered OnPingSent callback to update lastActivityAt — go-twitch-irc fires this every 15s (IdlePingInterval default) so it works even on quiet channels with no chat. (2) Added IsStale() returning true when lastActivityAt > 10 minutes old and not zero. (3) Liveness probe returns HTTP 503 when IsStale() — Kubernetes restarts the pod in ~30s, releasing all leadership locks.
+- **Files changed:** services/twitch-listener/irc/connection.go, services/twitch-listener/handlers/health.go, services/twitch-listener/irc/connection_stale_test.go, services/twitch-listener/handlers/health_test.go
+---
+
