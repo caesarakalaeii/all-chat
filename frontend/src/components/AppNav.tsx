@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
 import { InfinityLogo } from '@/components/InfinityLogo'
 
 const activeClass =
@@ -17,10 +18,20 @@ const inactiveClass =
 
 export function AppNav() {
   const pathname = usePathname()
-  const { user } = useAuthStore()
+  const router = useRouter()
+  const { user, token, logout } = useAuthStore()
+  const { viewerToken, viewerLogout } = useViewerAuthStore()
+
+  const isLoggedIn = !!token || !!viewerToken
 
   function isActive(href: string): boolean {
     return pathname === href || pathname.startsWith(href + '/')
+  }
+
+  function handleLogout() {
+    if (token) logout()
+    if (viewerToken) viewerLogout()
+    router.push('/')
   }
 
   return (
@@ -51,6 +62,14 @@ export function AppNav() {
           Settings
         </Link>
       </div>
+      {isLoggedIn && (
+        <button
+          onClick={handleLogout}
+          className="ml-auto text-sm text-text-sub hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch rounded-sm px-3 py-1.5"
+        >
+          Log out
+        </button>
+      )}
     </nav>
   )
 }
