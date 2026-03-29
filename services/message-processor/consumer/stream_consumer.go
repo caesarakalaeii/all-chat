@@ -43,6 +43,7 @@ type StreamConsumer struct {
 	stopCh         chan struct{}
 	msgIDRegistry  registry.MessageIDRegistry
 	deletionBuffer registry.DeletionBuffer
+	consumerName   string
 }
 
 // NewStreamConsumer creates a new Redis Streams consumer
@@ -251,6 +252,32 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 	c.metrics.ProcessingDuration.WithLabelValues("message-processor", rawMsg.Platform).Observe(time.Since(start).Seconds())
 
 	return nil
+}
+
+// processAndAck processes a single stream message and ACKs it after completion.
+// On handler error, retries via retryOp. On exhaustion, routes to DLQ then ACKs
+// (message must leave PEL regardless of processing outcome).
+func (c *StreamConsumer) processAndAck(ctx context.Context, msg redis.XMessage) error {
+	var processErr error
+	err := retryOp(ctx, func() error {
+		processErr = c.processMessage(ctx, msg)
+		return processErr
+	})
+
+	if err != nil {
+		// All retries exhausted — route to DLQ then ACK
+		c.writeToDLQ(ctx, msg.ID, "message-processor", err.Error(), 3, msg.Values)
+	}
+
+	// Always ACK to remove from PEL (even on failure — message is in DLQ)
+	if ackErr := c.client.XAck(ctx, StreamKey, ConsumerGroup, msg.ID).Err(); ackErr != nil {
+		c.logger.Warn("Failed to ACK message after DLQ routing",
+			zap.String("stream_id", msg.ID),
+			zap.Error(ackErr),
+		)
+	}
+
+	return processErr
 }
 
 // GetPendingCount returns the number of pending messages for this consumer
