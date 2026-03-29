@@ -8,9 +8,9 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
-## Current State (v2.0 — Phase 04 complete 2026-03-26)
+## Current State (v2.0 — Phase 08 complete 2026-03-29)
 
-Phase 04 complete: Grafana dashboard audit, metrics gap implementation, and alerting. All 14 services now emit Prometheus metrics (was endpoint-only for most). 5 tiered Grafana dashboards replace 6 stale ones. 8 alert rules across 4 groups cover listener disconnections, pipeline stalls, WebSocket drops, and error rate spikes.
+Phase 08 complete: Message pipeline resilience — fixed 24 silent failure modes across the full message pipeline. DLQ infrastructure, PEL drain, exponential backoff retry, Pub/Sub reconnect with WaitGroup lifecycle, and RingBufferPublisher safety net for all 5 Go listeners. 5 new Prometheus alert rules and 6 Grafana dashboard panels for pipeline health monitoring.
 
 ## Requirements
 
@@ -201,4 +201,4 @@ Phase 04 complete: Grafana dashboard audit, metrics gap implementation, and aler
 | **discord-listener: LeadershipListener as container only** | Start/Stop not called on ListenerBase; custom shutdown sequence unchanged; Gateway RESUME unaffected | ✓ Good — No regression in Discord shard ownership or relay |
 
 ---
-*Last updated: 2026-03-26 after v2.0 Phase 02 (support bot operational awareness)*
+*Last updated: 2026-03-29 after v2.0 Phase 08 (message pipeline resilience)*
