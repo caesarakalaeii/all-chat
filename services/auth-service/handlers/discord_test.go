@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/oauth2"
 )
@@ -38,6 +39,10 @@ func (m *mockDiscordOAuth) ExchangeCode(_ context.Context, _ string) (*oauth2.To
 func (m *mockDiscordOAuth) CheckBotPermissions(_ context.Context, _ string) ([]string, error) {
 	m.checkPermsCalled = true
 	return m.missingPerms, m.checkPermsErr
+}
+
+func (m *mockDiscordOAuth) GetGuildInfo(_ context.Context, _ string) (*oauth.GuildInfo, error) {
+	return nil, nil
 }
 
 type mockDiscordRepo struct {

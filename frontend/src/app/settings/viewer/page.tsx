@@ -52,9 +52,34 @@ function PlatformBadge({ platform }: { platform: string }) {
   )
 }
 
+/**
+ * Start a viewer OAuth login for initial sign-in (no existing viewer session).
+ */
 async function viewerLogin(platform: 'twitch' | 'youtube' | 'kick') {
   try {
     const params = new URLSearchParams({ redirect_to: '/settings/viewer' })
+    const response = await fetch(`/api/v1/auth/viewer/${platform}/login?${params}`)
+    const data = await response.json()
+    if (data.auth_url) {
+      window.location.href = data.auth_url
+    }
+  } catch {
+    // silently ignore — user stays on page
+  }
+}
+
+/**
+ * Start a viewer OAuth connect flow that links the new platform to the existing
+ * viewer identity.  The current viewer_id from localStorage is passed as
+ * link_viewer_id so the backend can associate the new platform session with
+ * the same viewer record instead of creating a fresh one.
+ */
+async function viewerConnect(platform: 'twitch' | 'youtube' | 'kick', viewerID: string) {
+  try {
+    const params = new URLSearchParams({
+      redirect_to: '/settings/viewer',
+      link_viewer_id: viewerID,
+    })
     const response = await fetch(`/api/v1/auth/viewer/${platform}/login?${params}`)
     const data = await response.json()
     if (data.auth_url) {
@@ -599,6 +624,60 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
 }
 
 // ---------------------------------------------------------------------------
+// LinkedPlatformsCard — shows connected platforms and lets users link more
+// ---------------------------------------------------------------------------
+
+function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
+  const [connecting, setConnecting] = useState<string | null>(null)
+
+  const handleConnect = async (key: 'twitch' | 'youtube' | 'kick') => {
+    if (!claims.viewer_id) return
+    setConnecting(key)
+    await viewerConnect(key, claims.viewer_id)
+    // If viewerConnect redirects the page, this line is never reached.
+    setConnecting(null)
+  }
+
+  return (
+    <Card className="p-6">
+      <h2 className="text-lg font-semibold text-text mb-1">Linked Platforms</h2>
+      <p className="text-text-sub text-sm mb-4">
+        Connect additional platforms to share your cosmetics across all your chats
+      </p>
+      <div className="flex flex-col gap-3">
+        {PLATFORMS.map(({ key, label, color }) => {
+          const isConnected = claims.platform === key
+          return (
+            <div
+              key={key}
+              className="flex items-center justify-between rounded-lg border border-border px-4 py-3"
+            >
+              <div className="flex items-center gap-3">
+                <span className={`w-3 h-3 rounded-full ${color}`} aria-hidden="true" />
+                <span className="text-sm text-text">{label}</span>
+              </div>
+              {isConnected ? (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">
+                  Connected
+                </span>
+              ) : (
+                <button
+                  onClick={() => handleConnect(key)}
+                  disabled={connecting === key || !claims.viewer_id}
+                  className="text-xs font-medium px-3 py-1 rounded-md border border-border text-text hover:bg-surface-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {connecting === key ? 'Connecting…' : 'Connect'}
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // ViewerSettingsContent — main authenticated view
 // ---------------------------------------------------------------------------
 
@@ -645,43 +724,7 @@ function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
         <AvatarCosmeticsCard claims={claims} />
 
         {/* Linked Platforms section */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text mb-1">Linked Platforms</h2>
-          <p className="text-text-sub text-sm mb-4">
-            Sign in with each platform to enable cosmetics across all your chats
-          </p>
-          <div className="flex flex-col gap-3">
-            {PLATFORMS.map(({ key, label, color }) => {
-              const isConnected = claims.platform === key
-              return (
-                <div
-                  key={key}
-                  className="flex items-center justify-between rounded-lg border border-border px-4 py-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className={`w-3 h-3 rounded-full ${color}`} aria-hidden="true" />
-                    <span className="text-sm text-text">{label}</span>
-                  </div>
-                  {isConnected ? (
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">
-                      Connected
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => viewerLogin(key)}
-                      className="text-xs font-medium px-3 py-1 rounded-md border border-border text-text hover:bg-surface-2 transition-colors"
-                    >
-                      Connect
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <p className="text-text-sub text-xs mt-3">
-            Multi-platform account linking will be available in a future update.
-          </p>
-        </Card>
+        <LinkedPlatformsCard claims={claims} />
       </main>
     </div>
   )
