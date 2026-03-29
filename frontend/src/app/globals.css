@@ -202,8 +202,9 @@
 }
 
 /* Gradient usernames: override theme text-shadow to prevent black outline
-   from hiding the gradient. Uses !important to beat theme !important rules. */
-.username-gradient {
+   from hiding the gradient. Selector must be more specific than theme rules
+   like .font-semibold.text-sm which also use !important. */
+span.font-semibold.text-sm.username-gradient {
   text-shadow: none !important;
-  -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.5);
+  -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.5) !important;
 }
