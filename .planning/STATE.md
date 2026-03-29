@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-03-29T13:31:17.793Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-29T13:32:41.562Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 12
   completed_phases: 11
   total_plans: 52
-  completed_plans: 49
+  completed_plans: 50
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 07 (feature-gate-infrastructure) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 
 ## Performance Metrics
 
@@ -86,6 +86,7 @@ Plan: 2 of 4
 | Phase 06 P02 | 10min | 2 tasks | 4 files |
 | Phase 06 P03 | 381 | 2 tasks | 13 files |
 | Phase 07 P02 | 116 | 1 tasks | 2 files |
+| Phase 07 P01 | 4 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -194,6 +195,9 @@ Key decisions relevant to v1.6:
 - [Phase 07]: [Phase 07-02]: featureGateDB and featureGateRedis narrow interfaces defined in handler file for mock injection without pgxmock dependency
 - [Phase 07]: [Phase 07-02]: *bool pointer for IsPremium in updateFeatureGateRequest avoids Gin binding:required rejecting false
 - [Phase 07]: [Phase 07-02]: featureGatesPubSubChannel const defined locally to avoid Plan 01 compile dependency; Plan 03 unifies to featuregates.PubSubChannel
+- [Phase 07]: Cache lives in share-service/featuregates/ not shared/ — avoids premature abstraction; move when second service needs it
+- [Phase 07]: Unknown gate keys return true (premium required) — safe default per D-10 pitfall 2
+- [Phase 07]: miniredis v2.37.0 added as direct dep in share-service for Redis Pub/Sub testing
 
 ### Roadmap Evolution
 
@@ -237,9 +241,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-29T13:31:17.790Z
+Last session: 2026-03-29T13:32:41.559Z
 Last activity: 2026-03-29
-Stopped at: Completed 07-02-PLAN.md
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
