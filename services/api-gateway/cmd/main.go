@@ -230,11 +230,11 @@ func main() {
 		}
 	}
 
-	subscriber := subscription.NewSubscriber(redisClient, log, messageHandler)
+	subscriber := subscription.NewSubscriber(redisClient, log, messageHandler, gatewayMetrics)
 	defer subscriber.Stop()
 
 	// Create status subscriber for platform connection status
-	statusSubscriber := subscription.NewStatusSubscriber(redisClient, wsManager, log)
+	statusSubscriber := subscription.NewStatusSubscriber(redisClient, wsManager, log, gatewayMetrics)
 	if err := statusSubscriber.Start(ctx); err != nil {
 		log.Fatal("Failed to start status subscriber", zap.Error(err))
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -18,21 +19,29 @@ type Subscriber struct {
 	client        *redis.Client
 	logger        *zap.Logger
 	handler       MessageHandler
+	metrics       *metrics.GatewayMetrics
 	subscriptions map[string]*redis.PubSub // overlay_id -> subscription
 	refCounts     map[string]int           // overlay_id -> number of connections
-	mu            sync.RWMutex
-	stopChan      chan struct{}
-	wg            sync.WaitGroup
+	// viewerOnly tracks whether each subscription was created by SubscribeViewerOnly
+	// (single main channel) vs Subscribe (main + updates channels)
+	viewerOnly map[string]bool
+	mu         sync.RWMutex
+	stopChan   chan struct{}
+	wg         sync.WaitGroup
 }
 
-// NewSubscriber creates a new Redis Pub/Sub subscriber
-func NewSubscriber(client *redis.Client, logger *zap.Logger, handler MessageHandler) *Subscriber {
+// NewSubscriber creates a new Redis Pub/Sub subscriber.
+// The metrics parameter may be nil; if provided, pubsub_reconnect_total is incremented
+// on each Pub/Sub reconnect attempt.
+func NewSubscriber(client *redis.Client, logger *zap.Logger, handler MessageHandler, m *metrics.GatewayMetrics) *Subscriber {
 	return &Subscriber{
 		client:        client,
 		logger:        logger,
 		handler:       handler,
+		metrics:       m,
 		subscriptions: make(map[string]*redis.PubSub),
 		refCounts:     make(map[string]int),
+		viewerOnly:    make(map[string]bool),
 		stopChan:      make(chan struct{}),
 	}
 }
@@ -68,6 +77,7 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 	}
 
 	s.subscriptions[overlayID] = pubsub
+	s.viewerOnly[overlayID] = false
 
 	s.logger.Info("Subscribed to overlay channels",
 		zap.String("overlay_id", overlayID),
@@ -77,7 +87,7 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 
 	// Start listening for messages
 	s.wg.Add(1)
-	go s.listen(ctx, overlayID, pubsub)
+	go s.listen(context.Background(), overlayID, pubsub)
 
 	return nil
 }
@@ -87,6 +97,15 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 func (s *Subscriber) Unsubscribe(ctx context.Context, overlayID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// AG-03: Guard against reference count underflow
+	if s.refCounts[overlayID] <= 0 {
+		s.logger.Warn("Unsubscribe called with zero ref count",
+			zap.String("overlay_id", overlayID),
+		)
+		delete(s.refCounts, overlayID)
+		return nil
+	}
 
 	// Decrement reference count
 	s.refCounts[overlayID]--
@@ -118,6 +137,7 @@ func (s *Subscriber) Unsubscribe(ctx context.Context, overlayID string) error {
 	}
 
 	delete(s.subscriptions, overlayID)
+	delete(s.viewerOnly, overlayID)
 
 	s.logger.Info("Unsubscribed from overlay channel",
 		zap.String("overlay_id", overlayID),
@@ -126,7 +146,9 @@ func (s *Subscriber) Unsubscribe(ctx context.Context, overlayID string) error {
 	return nil
 }
 
-// listen listens for messages on a subscription
+// listen listens for messages on a subscription.
+// When the channel is closed (ok == false), it triggers resubscribe() in a new
+// goroutine and returns so the WaitGroup counter is decremented correctly.
 func (s *Subscriber) listen(ctx context.Context, overlayID string, pubsub *redis.PubSub) {
 	defer s.wg.Done()
 
@@ -140,10 +162,13 @@ func (s *Subscriber) listen(ctx context.Context, overlayID string, pubsub *redis
 			return
 		case msg, ok := <-ch:
 			if !ok {
-				s.logger.Warn("Subscription channel closed",
+				// AG-01: Channel closed — trigger re-subscription.
+				// The new goroutine adds itself to wg before this one exits (AG-05).
+				s.logger.Warn("Subscription channel closed — re-subscribing",
 					zap.String("overlay_id", overlayID),
 				)
-				return
+				go s.resubscribe(overlayID)
+				return // Current goroutine exits; wg.Done() fires via defer
 			}
 
 			// Call handler with message and channel name
@@ -152,7 +177,69 @@ func (s *Subscriber) listen(ctx context.Context, overlayID string, pubsub *redis
 	}
 }
 
-// Stop stops all subscriptions
+// resubscribe creates a new Pub/Sub subscription for the given overlay after
+// the previous one was closed (e.g., on Redis reconnect). It increments the
+// pubsub_reconnect_total metric (D-14), stores the new subscription, and starts
+// a new listen goroutine tracked in s.wg.
+//
+// AG-05: The new listen goroutine is added to wg before resubscribe returns,
+// ensuring Stop() waits for it.
+func (s *Subscriber) resubscribe(overlayID string) {
+	// AG-01: Do not re-subscribe if Stop has already been signalled
+	select {
+	case <-s.stopChan:
+		return
+	default:
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// D-14: Increment reconnect metric
+	if s.metrics != nil {
+		s.metrics.PubSubReconnectTotal.WithLabelValues("api-gateway", overlayID).Inc()
+	}
+
+	// Close the stale subscription if it still exists
+	if oldPubsub, exists := s.subscriptions[overlayID]; exists {
+		oldPubsub.Close()
+	}
+
+	// Determine whether this was a viewer-only subscription (main channel only)
+	// or a full subscription (main + updates channels).
+	isViewerOnly := s.viewerOnly[overlayID]
+
+	var pubsub *redis.PubSub
+	if isViewerOnly {
+		channel := fmt.Sprintf("overlay:%s", overlayID)
+		pubsub = s.client.Subscribe(context.Background(), channel)
+	} else {
+		mainChannel := fmt.Sprintf("overlay:%s", overlayID)
+		updateChannel := fmt.Sprintf("overlay:%s:updates", overlayID)
+		pubsub = s.client.Subscribe(context.Background(), mainChannel, updateChannel)
+	}
+
+	if _, err := pubsub.Receive(context.Background()); err != nil {
+		s.logger.Error("Failed to re-subscribe after channel close",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+		delete(s.subscriptions, overlayID)
+		delete(s.viewerOnly, overlayID)
+		return
+	}
+
+	s.subscriptions[overlayID] = pubsub
+	s.logger.Info("Re-subscribed to overlay channel after close",
+		zap.String("overlay_id", overlayID),
+	)
+
+	// AG-05: Track the new goroutine in WaitGroup before spawning it
+	s.wg.Add(1)
+	go s.listen(context.Background(), overlayID, pubsub)
+}
+
+// Stop stops all subscriptions and waits for all goroutines to finish.
 func (s *Subscriber) Stop() {
 	close(s.stopChan)
 
@@ -165,6 +252,7 @@ func (s *Subscriber) Stop() {
 	}
 	s.subscriptions = make(map[string]*redis.PubSub)
 	s.refCounts = make(map[string]int)
+	s.viewerOnly = make(map[string]bool)
 	s.mu.Unlock()
 
 	s.wg.Wait()
@@ -189,9 +277,15 @@ func (s *Subscriber) IsSubscribed(overlayID string) bool {
 	return exists
 }
 
-// SubscribeViewerOnly subscribes to an overlay channel for viewer connections
-// Same as Subscribe() but does NOT publish connection events to avoid triggering YouTube polling
-// This is critical for viewer-only WebSocket connections at /ws/chat/{streamer}
+// SubscribeViewerOnly subscribes to an overlay channel for viewer connections.
+// Same as Subscribe() but does NOT publish connection events to avoid triggering
+// YouTube polling. This is critical for viewer-only WebSocket connections at
+// /ws/chat/{streamer}.
+//
+// AG-04 (interleaving): If a full Subscribe() already exists for the overlay,
+// viewer connections share that existing Pub/Sub subscription (ref count is
+// incremented). The viewer-only flag only governs which Redis channels to use
+// when a brand-new subscription must be created for this overlay.
 func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -208,7 +302,7 @@ func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) 
 		return nil
 	}
 
-	// Subscribe to Redis channel
+	// Subscribe to Redis channel (viewer-only: main channel only, no updates channel)
 	channel := fmt.Sprintf("overlay:%s", overlayID)
 	pubsub := s.client.Subscribe(ctx, channel)
 
@@ -218,6 +312,7 @@ func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) 
 	}
 
 	s.subscriptions[overlayID] = pubsub
+	s.viewerOnly[overlayID] = true
 
 	s.logger.Info("Subscribed to overlay channel (viewer-only, no polling trigger)",
 		zap.String("overlay_id", overlayID),
@@ -226,7 +321,7 @@ func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) 
 
 	// Start listening for messages
 	s.wg.Add(1)
-	go s.listen(ctx, overlayID, pubsub)
+	go s.listen(context.Background(), overlayID, pubsub)
 
 	return nil
 }
@@ -236,6 +331,15 @@ func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) 
 func (s *Subscriber) UnsubscribeViewerOnly(ctx context.Context, overlayID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// AG-03: Guard against reference count underflow
+	if s.refCounts[overlayID] <= 0 {
+		s.logger.Warn("UnsubscribeViewerOnly called with zero ref count",
+			zap.String("overlay_id", overlayID),
+		)
+		delete(s.refCounts, overlayID)
+		return nil
+	}
 
 	// Decrement reference count
 	s.refCounts[overlayID]--
@@ -267,6 +371,7 @@ func (s *Subscriber) UnsubscribeViewerOnly(ctx context.Context, overlayID string
 	}
 
 	delete(s.subscriptions, overlayID)
+	delete(s.viewerOnly, overlayID)
 
 	s.logger.Info("Unsubscribed from overlay channel (viewer-only)",
 		zap.String("overlay_id", overlayID),
