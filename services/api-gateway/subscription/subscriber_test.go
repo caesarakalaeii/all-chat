@@ -19,7 +19,8 @@ func newTestSubscriber(t *testing.T, addr string) (*Subscriber, *metrics.Gateway
 	client := redis.NewClient(&redis.Options{Addr: addr})
 	t.Cleanup(func() { client.Close() })
 	logger := zap.NewNop()
-	m := metrics.NewGatewayMetrics()
+	// Use per-test registry to avoid duplicate metric registration panics
+	m := metrics.NewGatewayMetricsForTest()
 	handler := func(overlayID, channel string, message []byte) {}
 	sub := NewSubscriber(client, logger, handler, m)
 	return sub, m
@@ -159,7 +160,8 @@ func TestSubscriberResubscribeMetric(t *testing.T) {
 	defer client.Close()
 
 	logger := zap.NewNop()
-	m := metrics.NewGatewayMetrics()
+	// Use per-test registry to avoid duplicate metric registration panics
+	m := metrics.NewGatewayMetricsForTest()
 	handler := func(overlayID, channel string, message []byte) {}
 	sub := NewSubscriber(client, logger, handler, m)
 
