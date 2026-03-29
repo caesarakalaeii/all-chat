@@ -2,28 +2,62 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
 
+// gatewayConnectionHealth is the subset of gateway.GatewayClient used by the health handler.
+// Defined as an interface so tests can inject a stub without constructing a full Gateway client.
+type gatewayConnectionHealth interface {
+	LastActivityAt() time.Time
+	IsStale() bool
+}
+
 // HealthHandler provides liveness and readiness probe handlers for Kubernetes health checks.
 type HealthHandler struct {
-	redis *redis.Client
+	redis       *redis.Client
+	gatewayConn gatewayConnectionHealth
 }
 
-// NewHealthHandler creates a new HealthHandler with the provided Redis client.
-func NewHealthHandler(redis *redis.Client) *HealthHandler {
-	return &HealthHandler{redis: redis}
+// NewHealthHandler creates a new HealthHandler with the provided Redis client and Gateway client.
+// gatewayConn may be nil (liveness probe degrades gracefully when not set).
+func NewHealthHandler(rdb *redis.Client, gw gatewayConnectionHealth) *HealthHandler {
+	return &HealthHandler{redis: rdb, gatewayConn: gw}
 }
 
-// CheckLive handles GET /health/live — always returns 200 OK.
+// CheckLive handles GET /health/live.
+// Returns 503 when the Gateway WebSocket connection has gone silent for longer than
+// staleLivenessThreshold (3 minutes). This indicates a zombie connection that the
+// reconnect loop has failed to recover. Kubernetes will restart the pod, which cleanly
+// re-establishes the Gateway session.
+// Returns 200 during startup (lastActivityAt is zero) so the pod is not killed before
+// the initial session is established.
 func (h *HealthHandler) CheckLive(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	if h.gatewayConn != nil && h.gatewayConn.IsStale() {
+		lastAct := h.gatewayConn.LastActivityAt()
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "dead",
+			"service": "discord-listener",
+			"reason":  "Gateway WebSocket zombie — no activity for over 3 minutes",
+			"last_activity_seconds_ago": int(time.Since(lastAct).Seconds()),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "alive",
+		"service": "discord-listener",
+	})
 }
 
 // CheckReady handles GET /health/ready — returns 200 only when Redis is reachable.
 func (h *HealthHandler) CheckReady(c *gin.Context) {
+	if h.redis == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "redis unavailable", "error": "redis client not configured"})
+		return
+	}
 	ctx := c.Request.Context()
 	if err := h.redis.Ping(ctx).Err(); err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "redis unavailable", "error": err.Error()})
