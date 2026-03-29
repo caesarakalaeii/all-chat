@@ -265,6 +265,10 @@ func main() {
 		logger.Error("Stream manager shutdown error", zap.Error(err))
 	}
 
+	// Stop ring buffer publisher — drains retry goroutine before closing Redis.
+	streamPublisher.Stop()
+	logger.Info("Stream publisher ring buffer stopped")
+
 	// Shutdown deletion buffer (flush all remaining events)
 	deletionBuffer.Shutdown()
 	logger.Info("Deletion buffer shutdown complete")

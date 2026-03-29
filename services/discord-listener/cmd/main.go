@@ -375,6 +375,8 @@ func main() {
 	log.Info("Shutting down discord-listener")
 	gwClient.Close()
 	relayMgr.Stop()
+	// Stop ring buffer publisher — drains retry goroutine before closing Redis.
+	streamPub.Stop()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)

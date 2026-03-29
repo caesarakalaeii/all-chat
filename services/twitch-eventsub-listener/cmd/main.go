@@ -365,6 +365,9 @@ func main() {
 
 	log.Info("Shutting down...")
 
+	// Stop ring buffer publisher — drains retry goroutine before closing Redis.
+	streamPublisher.Stop()
+
 	channelManager.Stop()
 	ll.Stop()
 
