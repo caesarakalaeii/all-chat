@@ -296,10 +296,10 @@ Plans:
 - Cosmetics keep existing per-item `is_premium` flag (no change — already supports event/collab flairs as free, custom flairs as premium)
 
 **Depends on:** None (independent of Phase 6)
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 - [x] 07-01-PLAN.md — Migration 044, FeatureGateCache (in-memory + Pub/Sub + TTL), unit tests, ADR-0008
 - [x] 07-02-PLAN.md — Admin feature gates handler (GET list + PATCH toggle), unit tests
-- [ ] 07-03-PLAN.md — Rewrite RequirePremium middleware, wire cache + routes into share-service, API gateway proxy routes
+- [x] 07-03-PLAN.md — Rewrite RequirePremium middleware, wire cache + routes into share-service, API gateway proxy routes
 - [ ] 07-04-PLAN.md — Admin features page (/admin/features) with toggle switches, AdminNav link, visual checkpoint

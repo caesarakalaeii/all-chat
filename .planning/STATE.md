@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-29T13:32:41.562Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-03-29T13:39:37.273Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 12
   completed_phases: 11
   total_plans: 52
-  completed_plans: 50
+  completed_plans: 51
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 07 (feature-gate-infrastructure) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
@@ -87,6 +87,7 @@ Plan: 3 of 4
 | Phase 06 P03 | 381 | 2 tasks | 13 files |
 | Phase 07 P02 | 116 | 1 tasks | 2 files |
 | Phase 07 P01 | 4 | 2 tasks | 7 files |
+| Phase 07 P03 | 267 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,9 @@ Key decisions relevant to v1.6:
 - [Phase 07]: Cache lives in share-service/featuregates/ not shared/ — avoids premature abstraction; move when second service needs it
 - [Phase 07]: Unknown gate keys return true (premium required) — safe default per D-10 pitfall 2
 - [Phase 07]: miniredis v2.37.0 added as direct dep in share-service for Redis Pub/Sub testing
+- [Phase 07]: [Phase 07-03]: RequirePremium checks authentication first (401 for no user_id), then gate, then user premium status — standard AuthN/AuthZ ordering
+- [Phase 07]: [Phase 07-03]: RequirePremiumWithQuerier added as testable variant accepting premiumQuerier func — avoids pgxmock dependency
+- [Phase 07]: [Phase 07-03]: featureGatesPubSubChannel local const replaced with featuregates.PubSubChannel import — eliminates duplicate constant
 
 ### Roadmap Evolution
 
@@ -241,9 +245,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-29T13:32:41.559Z
+Last session: 2026-03-29T13:39:37.268Z
 Last activity: 2026-03-29
-Stopped at: Completed 07-01-PLAN.md
+Stopped at: Completed 07-03-PLAN.md
 Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
