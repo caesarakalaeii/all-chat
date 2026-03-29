@@ -350,7 +350,7 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 
-	healthHandler := handlers.NewHealthHandler(rdb)
+	healthHandler := handlers.NewHealthHandler(rdb, gwClient)
 	router.GET("/health/live", healthHandler.CheckLive)
 	router.GET("/health/ready", healthHandler.CheckReady)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))

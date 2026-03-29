@@ -85,6 +85,16 @@ func HandleReady(ctx context.Context, data ReadyEventData, store SessionStore) e
 	return nil
 }
 
+const (
+	// staleLivenessThreshold is how long without any Gateway activity (heartbeat ACK or
+	// any successful ReadMessage) before the liveness probe returns 503.
+	// Discord sends HELLO with heartbeat_interval ~41s; 3 x 41s ≈ 2min, so 3 minutes
+	// provides comfortable headroom while still catching zombie connections quickly.
+	// A zero lastActivityAt (never connected) skips the check so the pod is not killed
+	// before the initial session is established.
+	staleLivenessThreshold = 3 * time.Minute
+)
+
 // GatewayClient manages the Discord Gateway WebSocket connection.
 type GatewayClient struct {
 	token            string
@@ -98,6 +108,7 @@ type GatewayClient struct {
 	conn             *websocket.Conn
 	mu               sync.Mutex
 	seq              int
+	lastActivityAt   time.Time // Last time any Gateway message was received or heartbeat ACK was processed
 	done             chan struct{}
 	firstMessageSeen bool
 	// OnReady is called in a goroutine after each successful READY event.
@@ -190,6 +201,9 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 			}
 			return fmt.Errorf("gateway read error: %w", err)
 		}
+		// Record activity on every successful read so the liveness probe detects
+		// zombie connections (ReadMessage blocked with no data for >3 minutes).
+		c.recordActivity()
 
 		var payload GatewayPayload
 		if err := json.Unmarshal(msg, &payload); err != nil {
@@ -364,6 +378,9 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 
 		case OpHeartbeatACK:
 			c.log.Debug("Heartbeat ACK received")
+			// Explicitly record activity on HeartbeatACK: this is the primary keep-alive
+			// signal when no chat messages are flowing through configured channels.
+			c.recordActivity()
 		}
 	}
 }
@@ -375,6 +392,38 @@ func (c *GatewayClient) Close() {
 	default:
 		close(c.done)
 	}
+}
+
+// recordActivity updates the last-activity timestamp.
+// Called on every successful conn.ReadMessage() and on every HeartbeatACK to ensure
+// the liveness probe reflects actual Gateway keep-alive cadence, not just chat traffic.
+func (c *GatewayClient) recordActivity() {
+	c.mu.Lock()
+	c.lastActivityAt = time.Now()
+	c.mu.Unlock()
+}
+
+// LastActivityAt returns when the last Gateway message was received.
+// Used by the health handler to surface idle duration in readiness responses.
+func (c *GatewayClient) LastActivityAt() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.lastActivityAt
+}
+
+// IsStale returns true when the Gateway connection has gone silent for longer than
+// staleLivenessThreshold.  A zero lastActivityAt (never connected) returns false
+// so the pod is not killed before the initial session is established.
+// Used by the liveness probe to trigger a Kubernetes pod restart when the Gateway
+// connection is a zombie (ReadMessage blocks indefinitely with no data).
+func (c *GatewayClient) IsStale() bool {
+	c.mu.Lock()
+	last := c.lastActivityAt
+	c.mu.Unlock()
+	if last.IsZero() {
+		return false
+	}
+	return time.Since(last) > staleLivenessThreshold
 }
 
 // HandleMessageCreate processes a MESSAGE_CREATE dispatch event.
