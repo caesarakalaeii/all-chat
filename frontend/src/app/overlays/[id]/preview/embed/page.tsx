@@ -25,6 +25,8 @@ import { renderMessageContent } from '@/lib/renderMessage'
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import { AllChatBadge } from '@/components/AllChatBadge'
+import { PremiumBadge } from '@/components/PremiumBadge'
 import '@/styles/events.css'
 
 // ---- Utilities (identical to preview/page.tsx) ----------------------------
@@ -563,20 +565,26 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             message.user.badges &&
                             message.user.badges.length > 0 && (
                               <div className="flex gap-1">
-                                {message.user.badges.map((badge, index) => (
-                                  <Image
-                                    key={`${badge.name}-${index}`}
-                                    src={badge.icon_url}
-                                    alt={badge.name}
-                                    title={`${badge.name} (${badge.version})`}
-                                    width={16}
-                                    height={16}
-                                    className="h-4 w-4 object-contain"
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none'
-                                    }}
-                                  />
-                                ))}
+                                {message.user.badges.map((badge, index) =>
+                                  badge.name === 'allchat' ? (
+                                    <AllChatBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                  ) : badge.name === 'premium' ? (
+                                    <PremiumBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                  ) : badge.icon_url ? (
+                                    <Image
+                                      key={`${badge.name}-${index}`}
+                                      src={badge.icon_url}
+                                      alt={badge.name}
+                                      title={`${badge.name} (${badge.version})`}
+                                      width={16}
+                                      height={16}
+                                      className="h-4 w-4 object-contain"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none'
+                                      }}
+                                    />
+                                  ) : null
+                                )}
                               </div>
                             )}
 
@@ -633,20 +641,26 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             message.user.badges &&
                             message.user.badges.length > 0 && (
                               <div className="flex gap-1">
-                                {message.user.badges.map((badge, index) => (
-                                  <Image
-                                    key={`${badge.name}-${index}`}
-                                    src={badge.icon_url}
-                                    alt={badge.name}
-                                    title={`${badge.name} (${badge.version})`}
-                                    width={16}
-                                    height={16}
-                                    className="h-4 w-4 object-contain"
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none'
-                                    }}
-                                  />
-                                ))}
+                                {message.user.badges.map((badge, index) =>
+                                  badge.name === 'allchat' ? (
+                                    <AllChatBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                  ) : badge.name === 'premium' ? (
+                                    <PremiumBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                  ) : badge.icon_url ? (
+                                    <Image
+                                      key={`${badge.name}-${index}`}
+                                      src={badge.icon_url}
+                                      alt={badge.name}
+                                      title={`${badge.name} (${badge.version})`}
+                                      width={16}
+                                      height={16}
+                                      className="h-4 w-4 object-contain"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none'
+                                      }}
+                                    />
+                                  ) : null
+                                )}
                               </div>
                             )}
                         </div>

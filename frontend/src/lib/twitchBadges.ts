@@ -1,5 +1,12 @@
 import type { ChatMessage, Badge } from '@/lib/types/message'
 
+// AllChat-native badge names that must not be resolved against Twitch's badge API.
+// These badges are rendered by dedicated React components (AllChatBadge, PremiumBadge)
+// and do not have Twitch CDN icon URLs.  The Twitch global badge API happens to have a
+// "premium" badge set (Amazon Prime Gaming) which would overwrite the AllChat premium
+// badge icon_url with the prime crown — so we explicitly skip them here.
+const ALLCHAT_NATIVE_BADGE_NAMES = new Set(['allchat', 'premium'])
+
 type TwitchBadgeVersion = {
   id: string
   image_url_1x?: string
@@ -110,7 +117,9 @@ export async function resolveTwitchBadgeIcons(message: ChatMessage): Promise<Cha
   }
 
   const updatedBadges = message.user.badges.map((badge) =>
-    resolveBadgeIcon(badge, channelBadges, globalBadges)
+    ALLCHAT_NATIVE_BADGE_NAMES.has(badge.name)
+      ? badge
+      : resolveBadgeIcon(badge, channelBadges, globalBadges)
   )
 
   return {
