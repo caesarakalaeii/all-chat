@@ -212,7 +212,17 @@ func (r *ViewerIdentityRepository) LinkPlatformToViewer(ctx context.Context, vie
 		if existingViewerID == viewerID {
 			return nil
 		}
-		return ErrPlatformAlreadyLinked
+		// The platform belongs to a different viewer. In the connect flow the
+		// user explicitly asked to link this platform to their current account,
+		// so move it by updating the viewer_id.
+		_, updateErr := r.db.Exec(ctx,
+			`UPDATE viewer_platform_identities SET viewer_id = $1 WHERE platform = $2 AND platform_user_id = $3`,
+			viewerID, platform, platformUserID,
+		)
+		if updateErr != nil {
+			return fmt.Errorf("failed to re-link platform identity: %w", updateErr)
+		}
+		return nil
 	}
 	if err != pgx.ErrNoRows {
 		return fmt.Errorf("failed to check existing platform identity: %w", err)
