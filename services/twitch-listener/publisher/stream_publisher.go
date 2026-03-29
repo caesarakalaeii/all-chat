@@ -3,9 +3,10 @@ package publisher
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/caesar/all-chat/services/twitch-listener/models"
+	sharedlistener "github.com/caesar/all-chat/shared/listener"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -16,78 +17,86 @@ const (
 
 	// MaxStreamLength is the maximum number of messages to keep in the stream (sliding window)
 	MaxStreamLength = 1000000 // 1 million messages
+
+	// ringBufferCapacity is the number of messages the ring buffer can hold before dropping.
+	ringBufferCapacity = 1000
 )
 
-// StreamPublisher publishes raw chat messages to Redis Streams
+// StreamPublisher publishes raw chat messages to Redis Streams, wrapped with a
+// RingBufferPublisher so transient XADD failures are buffered for retry rather
+// than silently dropped (eliminates LI-01, LI-02, LI-03).
 type StreamPublisher struct {
-	client *redis.Client
-	logger *zap.Logger
+	client     *redis.Client
+	logger     *zap.Logger
+	ringBuffer *sharedlistener.RingBufferPublisher
 }
 
-// NewStreamPublisher creates a new Redis Streams publisher
+// NewStreamPublisher creates a new Redis Streams publisher backed by a RingBufferPublisher.
 func NewStreamPublisher(client *redis.Client, logger *zap.Logger) *StreamPublisher {
+	return newStreamPublisherWithRingBuffer(
+		buildXAddFunc(client),
+		logger,
+		prometheus.DefaultRegisterer,
+	)
+}
+
+// newStreamPublisherWithRingBuffer is the internal constructor used by both
+// production code and tests (tests supply a custom publishFn and isolated registry).
+func newStreamPublisherWithRingBuffer(
+	publishFn sharedlistener.PublishFunc,
+	logger *zap.Logger,
+	reg prometheus.Registerer,
+) *StreamPublisher {
+	rb := sharedlistener.NewRingBufferPublisherWithRegisterer(
+		ringBufferCapacity,
+		publishFn,
+		logger,
+		"twitch-listener",
+		reg,
+	)
+
 	return &StreamPublisher{
-		client: client,
-		logger: logger,
+		logger:     logger,
+		ringBuffer: rb,
 	}
 }
 
-// Publish publishes a raw chat message to Redis Streams
+// buildXAddFunc returns a PublishFunc that writes a pre-serialised JSON payload
+// to the chat:raw Redis Stream using the "data" field (the only field that
+// message-processor reads from stream entries).
+func buildXAddFunc(client *redis.Client) sharedlistener.PublishFunc {
+	return func(ctx context.Context, payload []byte) error {
+		args := &redis.XAddArgs{
+			Stream: StreamKey,
+			MaxLen: MaxStreamLength,
+			Approx: true,
+			Values: map[string]interface{}{
+				"data": string(payload),
+			},
+		}
+		_, err := client.XAdd(ctx, args).Result()
+		return err
+	}
+}
+
+// Publish serialises msg to JSON and delegates to the ring buffer. If the XADD
+// call fails, the payload is buffered for retry and nil is returned to the caller.
 func (p *StreamPublisher) Publish(ctx context.Context, msg *models.RawChatMessage) error {
-	// Convert message to JSON
 	jsonBytes, err := msg.ToJSON()
 	if err != nil {
 		return fmt.Errorf("failed to marshal message to JSON: %w", err)
 	}
 
-	// Prepare stream entry
-	values := map[string]interface{}{
-		"message_id": msg.MessageID,
-		"platform":   msg.Platform,
-		"channel_id": msg.ChannelID,
-		"user_id":    msg.UserID,
-		"username":   msg.Username,
-		"text":       msg.Text,
-		"timestamp":  msg.Timestamp.Format(time.RFC3339Nano),
-		"data":       string(jsonBytes), // Full JSON for easy processing
-	}
-
-	// Publish to stream with MAXLEN ~1000000 (approximate trimming)
-	args := &redis.XAddArgs{
-		Stream: StreamKey,
-		MaxLen: MaxStreamLength,
-		Approx: true, // Use ~ for efficient trimming
-		Values: values,
-	}
-
-	streamID, err := p.client.XAdd(ctx, args).Result()
-	if err != nil {
-		p.logger.Error("Failed to publish message to Redis Streams",
-			zap.String("stream", StreamKey),
-			zap.String("message_id", msg.MessageID),
-			zap.Error(err),
-		)
-		return fmt.Errorf("failed to publish to Redis Streams: %w", err)
-	}
-
-	p.logger.Debug("Published message to Redis Streams",
-		zap.String("stream", StreamKey),
-		zap.String("stream_id", streamID),
-		zap.String("message_id", msg.MessageID),
-		zap.String("channel", msg.ChannelID),
-		zap.String("username", msg.Username),
-	)
-
-	return nil
+	return p.ringBuffer.Publish(ctx, jsonBytes)
 }
 
-// PublishBatch publishes multiple messages in a single pipeline for better performance
+// PublishBatch publishes multiple messages via the ring buffer individually.
+// Each message is published separately so partial failures are buffered rather
+// than losing the entire batch (replaces the pipeline approach which had LI-02).
 func (p *StreamPublisher) PublishBatch(ctx context.Context, messages []*models.RawChatMessage) error {
 	if len(messages) == 0 {
 		return nil
 	}
-
-	pipe := p.client.Pipeline()
 
 	for _, msg := range messages {
 		jsonBytes, err := msg.ToJSON()
@@ -98,33 +107,8 @@ func (p *StreamPublisher) PublishBatch(ctx context.Context, messages []*models.R
 			)
 			continue
 		}
-
-		values := map[string]interface{}{
-			"message_id": msg.MessageID,
-			"platform":   msg.Platform,
-			"channel_id": msg.ChannelID,
-			"user_id":    msg.UserID,
-			"username":   msg.Username,
-			"text":       msg.Text,
-			"timestamp":  msg.Timestamp.Format(time.RFC3339Nano),
-			"data":       string(jsonBytes),
-		}
-
-		pipe.XAdd(ctx, &redis.XAddArgs{
-			Stream: StreamKey,
-			MaxLen: MaxStreamLength,
-			Approx: true,
-			Values: values,
-		})
-	}
-
-	_, err := pipe.Exec(ctx)
-	if err != nil {
-		p.logger.Error("Failed to execute batch publish",
-			zap.Int("batch_size", len(messages)),
-			zap.Error(err),
-		)
-		return fmt.Errorf("failed to execute batch publish: %w", err)
+		// Ring buffer absorbs transient failures; PublishBatch always returns nil.
+		_ = p.ringBuffer.Publish(ctx, jsonBytes)
 	}
 
 	p.logger.Debug("Published batch to Redis Streams",
@@ -135,7 +119,18 @@ func (p *StreamPublisher) PublishBatch(ctx context.Context, messages []*models.R
 	return nil
 }
 
-// Ping checks if Redis connection is alive
+// Stop signals the ring buffer retry goroutine to exit and waits for it to finish.
+// Call this during graceful shutdown.
+func (p *StreamPublisher) Stop() {
+	if p.ringBuffer != nil {
+		p.ringBuffer.Stop()
+	}
+}
+
+// Ping checks if Redis connection is alive.
 func (p *StreamPublisher) Ping(ctx context.Context) error {
+	if p.client == nil {
+		return nil
+	}
 	return p.client.Ping(ctx).Err()
 }
