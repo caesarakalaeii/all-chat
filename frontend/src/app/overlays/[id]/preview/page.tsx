@@ -1,4 +1,7 @@
 /**
+ * @deprecated This route is superseded by /overlays/[id] (the overlay management page
+ * with embedded preview). Remove in a future cleanup pass.
+ *
  * Overlay Preview Page
  *
  * Real-time preview of the overlay with live chat messages via WebSocket.
