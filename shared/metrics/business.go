@@ -7,39 +7,57 @@ import (
 
 // BusinessMetrics provides business-level metrics for the platform
 type BusinessMetrics struct {
+	// User Growth
+	UserRegistrations *prometheus.CounterVec
+
 	// User Engagement
 	ActiveOverlays         *prometheus.GaugeVec
 	OverlayViews           *prometheus.CounterVec
 	OverlaySessionDuration *prometheus.HistogramVec
 
 	// Platform Usage
-	MessagesByPlatform     *prometheus.CounterVec
-	ActiveUsers            *prometheus.GaugeVec
+	MessagesByPlatform        *prometheus.CounterVec
+	ActiveUsers               *prometheus.GaugeVec
 	ConnectedPlatformsPerUser *prometheus.GaugeVec
 
 	// Source Management
-	ActiveSourcesTotal     *prometheus.GaugeVec
-	SourceOperations       *prometheus.CounterVec
+	ActiveSourcesTotal *prometheus.GaugeVec
+	SourceOperations   *prometheus.CounterVec
 }
 
-// NewBusinessMetrics creates a new set of business metrics
+// NewBusinessMetrics creates a new set of business metrics registered with the
+// default prometheus registry (via promauto).
 func NewBusinessMetrics() *BusinessMetrics {
+	return newBusinessMetricsWithRegistry(prometheus.DefaultRegisterer)
+}
+
+// newBusinessMetricsWithRegistry creates BusinessMetrics registered with the
+// provided registerer. Used by tests to avoid conflicts with the default registry.
+func newBusinessMetricsWithRegistry(reg prometheus.Registerer) *BusinessMetrics {
+	factory := promauto.With(reg)
 	return &BusinessMetrics{
-		ActiveOverlays: promauto.NewGaugeVec(
+		UserRegistrations: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "allchat_user_registrations_total",
+				Help: "Total new user registrations by auth platform",
+			},
+			[]string{"platform"},
+		),
+		ActiveOverlays: factory.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "allchat_active_overlays_total",
 				Help: "Number of actively used overlays (with WebSocket connections)",
 			},
 			[]string{},
 		),
-		OverlayViews: promauto.NewCounterVec(
+		OverlayViews: factory.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "allchat_overlay_views_total",
 				Help: "Overlay page views",
 			},
 			[]string{"overlay_id", "view_type"},
 		),
-		OverlaySessionDuration: promauto.NewHistogramVec(
+		OverlaySessionDuration: factory.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "allchat_overlay_session_duration_seconds",
 				Help:    "How long overlays are actively viewed/used",
@@ -47,35 +65,35 @@ func NewBusinessMetrics() *BusinessMetrics {
 			},
 			[]string{},
 		),
-		MessagesByPlatform: promauto.NewCounterVec(
+		MessagesByPlatform: factory.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "allchat_messages_by_platform_total",
 				Help: "Total messages delivered by platform",
 			},
 			[]string{"platform"},
 		),
-		ActiveUsers: promauto.NewGaugeVec(
+		ActiveUsers: factory.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "allchat_active_users_total",
 				Help: "Number of users with active sessions",
 			},
 			[]string{},
 		),
-		ConnectedPlatformsPerUser: promauto.NewGaugeVec(
+		ConnectedPlatformsPerUser: factory.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "allchat_connected_platforms_per_user",
 				Help: "Average platforms connected per user",
 			},
 			[]string{},
 		),
-		ActiveSourcesTotal: promauto.NewGaugeVec(
+		ActiveSourcesTotal: factory.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "allchat_active_sources_total",
 				Help: "Total number of active chat sources across all platforms",
 			},
 			[]string{"platform"},
 		),
-		SourceOperations: promauto.NewCounterVec(
+		SourceOperations: factory.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "allchat_source_operations_total",
 				Help: "Source management operations (add, remove, update)",
@@ -83,6 +101,11 @@ func NewBusinessMetrics() *BusinessMetrics {
 			[]string{"operation", "platform", "result"},
 		),
 	}
+}
+
+// RecordUserRegistration increments the user registration counter for the given platform.
+func (m *BusinessMetrics) RecordUserRegistration(platform string) {
+	m.UserRegistrations.WithLabelValues(platform).Inc()
 }
 
 // SetActiveOverlays sets the number of active overlays

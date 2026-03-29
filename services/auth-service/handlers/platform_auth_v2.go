@@ -15,6 +15,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/auth"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -41,6 +42,7 @@ type PlatformAuthHandlerV2 struct {
 	logger            *zap.Logger
 	frontendURL       string
 	overlayManagerURL string
+	metrics           *metrics.BusinessMetrics
 }
 
 // NewPlatformAuthHandlerV2 creates a new platform auth handler v2
@@ -64,6 +66,12 @@ func NewPlatformAuthHandlerV2(
 		overlayManagerURL: overlayManagerURL,
 		logger:            logger,
 	}
+}
+
+// WithMetrics attaches a BusinessMetrics instance for recording user registration events.
+func (h *PlatformAuthHandlerV2) WithMetrics(m *metrics.BusinessMetrics) *PlatformAuthHandlerV2 {
+	h.metrics = m
+	return h
 }
 
 // HandleLogin initiates the OAuth flow for user login
@@ -741,6 +749,10 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 
 		if err := h.userRepo.Create(ctx, user); err != nil {
 			return nil, fmt.Errorf("failed to create user: %w", err)
+		}
+
+		if h.metrics != nil {
+			h.metrics.RecordUserRegistration(string(platform))
 		}
 
 		h.logger.Info("Created new user",
