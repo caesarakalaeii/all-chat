@@ -199,6 +199,7 @@ Key decisions relevant to v1.6:
 - Phase 4 added: Grafana Dashboard Audit & Metrics Gap Implementation
 - Phase 5 added: TikTok listener demand-driven polling — only poll when overlay has connected clients
 - Phase 6 added: Unify all listeners to leadership-based coordination — remove assignment-based pattern, single resilient architecture
+- Phase 7 added: Feature Gate Infrastructure — capability-level premium toggling with DB + Redis cache, admin UI
 
 ### Pending Todos
 
