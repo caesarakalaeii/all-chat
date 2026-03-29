@@ -284,6 +284,67 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     })
   })
 
+  it('Linked Platforms shows Connected for current platform', async () => {
+    const jwt = buildFakeJWT({
+      viewer_id: 'v-123',
+      display_name: 'StreamFan',
+      platform: 'twitch',
+    })
+    stubLocalStorage({ viewer_jwt_token: jwt })
+
+    render(<ViewerSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Linked Platforms')).toBeInTheDocument()
+    })
+
+    // Twitch should show "Connected" badge
+    expect(screen.getByText('Connected')).toBeInTheDocument()
+
+    // YouTube and Kick should show "Connect" buttons
+    const connectButtons = screen.getAllByRole('button', { name: /^Connect$/ })
+    expect(connectButtons.length).toBe(2)
+  })
+
+  it('Connect button calls login API with link_viewer_id', async () => {
+    const viewerID = 'v-twitch-123'
+    const jwt = buildFakeJWT({
+      viewer_id: viewerID,
+      display_name: 'StreamFan',
+      platform: 'twitch',
+    })
+    stubLocalStorage({ viewer_jwt_token: jwt })
+
+    // Mock fetch to return an auth_url (but not actually redirect)
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ auth_url: 'https://oauth.example.com' }),
+    })
+
+    render(<ViewerSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /^Connect$/ }).length).toBeGreaterThan(0)
+    })
+
+    // Click the first "Connect" button (YouTube when logged in via Twitch)
+    const connectBtn = screen.getAllByRole('button', { name: /^Connect$/ })[0]
+    await act(async () => {
+      fireEvent.click(connectBtn)
+    })
+
+    // Verify that fetch was called and the URL included link_viewer_id
+    await waitFor(() => {
+      const calls = mockFetch.mock.calls
+      const connectCall = calls.find((args) =>
+        typeof args[0] === 'string' &&
+        args[0].includes('/api/v1/auth/viewer/') &&
+        args[0].includes('link_viewer_id=' + viewerID)
+      )
+      expect(connectCall).toBeDefined()
+    })
+  })
+
   it('gradient save sends null name_color', async () => {
     const jwt = buildFakeJWT({
       viewer_id: 'v-premium',

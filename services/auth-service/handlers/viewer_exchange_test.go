@@ -90,7 +90,7 @@ func TestGenerateViewerJWT_HasViewerID(t *testing.T) {
 		DisplayName:    "Test User",
 	}
 
-	tokenStr, err := h.generateViewerJWT(session, viewerID)
+	tokenStr, err := h.generateViewerJWT(session, viewerID, nil)
 	if err != nil {
 		t.Fatalf("generateViewerJWT returned error: %v", err)
 	}

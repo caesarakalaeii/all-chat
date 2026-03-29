@@ -24,13 +24,22 @@ type StringEncryptor interface {
 	Decrypt(ciphertext string) (string, error)
 }
 
+// ViewerIdentityRepo abstracts the viewer identity repository operations used
+// by ViewerAuthHandler. This interface enables unit testing without a real database.
+type ViewerIdentityRepo interface {
+	GetOrCreateViewerByPlatform(ctx context.Context, platform, platformUserID string) (uuid.UUID, error)
+	LinkPlatformToViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) error
+	LinkViewerToUser(ctx context.Context, platform, platformUserID string, userID string, isPremium bool) error
+	GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error)
+}
+
 // ViewerAuthHandler handles authentication for viewers who want to send messages
 type ViewerAuthHandler struct {
 	twitchProvider  *oauth.ViewerTwitchOAuth
 	youtubeProvider *oauth.ViewerYouTubeOAuth
 	kickProvider    *oauth.ViewerKickOAuth
 	viewerRepo      *repository.ViewerRepository
-	identityRepo    *repository.ViewerIdentityRepository
+	identityRepo    ViewerIdentityRepo
 	userRepo        *repository.UserRepository
 	redis           *redis.Client
 	jwtSecret       string
@@ -117,6 +126,11 @@ func (h *ViewerAuthHandler) HandleTwitchLogin(c *gin.Context) {
 	}
 	if redirectTo := sanitizeRedirectPath(c.Query("redirect_to")); redirectTo != "" {
 		stateData["redirect_to"] = redirectTo
+	}
+	// link_viewer_id: when set, the new platform will be linked to the existing
+	// viewer instead of creating a fresh identity.
+	if linkViewerID := c.Query("link_viewer_id"); linkViewerID != "" {
+		stateData["link_viewer_id"] = linkViewerID
 	}
 
 	stateJSON, err := json.Marshal(stateData)
@@ -226,9 +240,17 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		return
 	}
 
-	// Get or create durable viewer identity (ensures viewer_id is in JWT)
-	viewerID, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
-	if err == nil && viewerID != uuid.Nil && linkedStreamer != nil {
+	// Resolve the durable viewer identity.
+	// If link_viewer_id is present in state, add this platform to the existing viewer
+	// (multi-platform linking flow). Otherwise create/fetch independently.
+	viewerID, err := h.resolveViewerID(c.Request.Context(), session.Platform, session.PlatformUserID, stateData)
+	if err != nil {
+		h.logger.Error("Failed to resolve viewer identity", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to resolve viewer identity")
+		return
+	}
+
+	if viewerID != uuid.Nil && linkedStreamer != nil {
 		// Link viewer session to user account and propagate premium/admin status
 		// so the message enricher can read badges without extra lookups.
 		if linkErr := h.identityRepo.LinkViewerToUser(
@@ -237,10 +259,6 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		); linkErr != nil {
 			h.logger.Warn("Failed to link viewer to user account", zap.Error(linkErr))
 		}
-	}
-	if err != nil {
-		h.logger.Error("Failed to get/create viewer identity", zap.Error(err))
-		viewerID = uuid.Nil
 	}
 
 	// Generate JWT for viewer
@@ -399,7 +417,7 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, vie
 	// Look up viewer-level premium flag.
 	// Soft failure: if DB is unavailable, default to false (safe degradation).
 	var isPremium bool
-	if viewerID != uuid.Nil {
+	if viewerID != uuid.Nil && h.identityRepo != nil {
 		var premErr error
 		isPremium, premErr = h.identityRepo.GetViewerIsPremium(context.Background(), viewerID)
 		if premErr != nil {
@@ -464,6 +482,9 @@ func (h *ViewerAuthHandler) HandleYouTubeLogin(c *gin.Context) {
 	}
 	if redirectTo := sanitizeRedirectPath(c.Query("redirect_to")); redirectTo != "" {
 		stateData["redirect_to"] = redirectTo
+	}
+	if linkViewerID := c.Query("link_viewer_id"); linkViewerID != "" {
+		stateData["link_viewer_id"] = linkViewerID
 	}
 
 	stateJSON, _ := json.Marshal(stateData)
@@ -569,19 +590,21 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	// Get or create durable viewer identity (ensures viewer_id is in JWT)
-	viewerIDYT, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
-	if err == nil && viewerIDYT != uuid.Nil && linkedStreamerYT != nil {
+	// Resolve the durable viewer identity.
+	viewerIDYT, err := h.resolveViewerID(c.Request.Context(), session.Platform, session.PlatformUserID, storedState)
+	if err != nil {
+		h.logger.Error("Failed to resolve viewer identity", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to resolve viewer identity")
+		return
+	}
+
+	if viewerIDYT != uuid.Nil && linkedStreamerYT != nil {
 		if linkErr := h.identityRepo.LinkViewerToUser(
 			c.Request.Context(), session.Platform, session.PlatformUserID,
 			linkedStreamerYT.ID, linkedStreamerYT.IsPremium,
 		); linkErr != nil {
 			h.logger.Warn("Failed to link viewer to user account", zap.Error(linkErr))
 		}
-	}
-	if err != nil {
-		h.logger.Error("Failed to get/create viewer identity", zap.Error(err))
-		viewerIDYT = uuid.Nil
 	}
 
 	jwtToken, err := h.generateViewerJWT(session, viewerIDYT, linkedStreamerYT)
@@ -625,6 +648,9 @@ func (h *ViewerAuthHandler) HandleKickLogin(c *gin.Context) {
 	}
 	if redirectTo := sanitizeRedirectPath(c.Query("redirect_to")); redirectTo != "" {
 		stateData["redirect_to"] = redirectTo
+	}
+	if linkViewerID := c.Query("link_viewer_id"); linkViewerID != "" {
+		stateData["link_viewer_id"] = linkViewerID
 	}
 
 	stateJSON, _ := json.Marshal(stateData)
@@ -762,19 +788,21 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		return
 	}
 
-	// Get or create durable viewer identity (ensures viewer_id is in JWT)
-	viewerIDKick, err := h.identityRepo.GetOrCreateViewerByPlatform(c.Request.Context(), session.Platform, session.PlatformUserID)
-	if err == nil && viewerIDKick != uuid.Nil && linkedStreamerKick != nil {
+	// Resolve the durable viewer identity.
+	viewerIDKick, err := h.resolveViewerID(c.Request.Context(), session.Platform, session.PlatformUserID, storedState)
+	if err != nil {
+		h.logger.Error("Failed to resolve viewer identity", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to resolve viewer identity")
+		return
+	}
+
+	if viewerIDKick != uuid.Nil && linkedStreamerKick != nil {
 		if linkErr := h.identityRepo.LinkViewerToUser(
 			c.Request.Context(), session.Platform, session.PlatformUserID,
 			linkedStreamerKick.ID, linkedStreamerKick.IsPremium,
 		); linkErr != nil {
 			h.logger.Warn("Failed to link viewer to user account", zap.Error(linkErr))
 		}
-	}
-	if err != nil {
-		h.logger.Error("Failed to get/create viewer identity", zap.Error(err))
-		viewerIDKick = uuid.Nil
 	}
 
 	// Generate JWT token
@@ -795,6 +823,47 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 	}
 
 	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// resolveViewerID returns the durable viewer UUID for the given platform session.
+//
+// When stateData contains a "link_viewer_id" key the new platform identity is
+// linked to that existing viewer (multi-platform connect flow).  Otherwise the
+// standard GetOrCreateViewerByPlatform path is taken (initial sign-in flow).
+//
+// On error the caller should treat the viewer as anonymous (uuid.Nil) rather
+// than aborting the auth entirely — cosmetics can fail gracefully.
+func (h *ViewerAuthHandler) resolveViewerID(ctx context.Context, platform, platformUserID string, stateData map[string]string) (uuid.UUID, error) {
+	linkViewerIDStr, hasLink := stateData["link_viewer_id"]
+
+	if hasLink && linkViewerIDStr != "" {
+		linkViewerID, err := uuid.Parse(linkViewerIDStr)
+		if err != nil {
+			h.logger.Warn("resolveViewerID: invalid link_viewer_id, falling back to create",
+				zap.String("link_viewer_id", linkViewerIDStr),
+			)
+			// Bad UUID in state — fall through to normal flow rather than error.
+		} else {
+			linkErr := h.identityRepo.LinkPlatformToViewer(ctx, linkViewerID, platform, platformUserID)
+			if linkErr == nil {
+				return linkViewerID, nil
+			}
+			// ErrPlatformAlreadyLinked means the platform belongs to a different viewer.
+			// Log and fall back to the normal GetOrCreate path so the user still gets a valid token.
+			h.logger.Warn("resolveViewerID: LinkPlatformToViewer failed, falling back",
+				zap.String("platform", platform),
+				zap.String("platform_user_id", platformUserID),
+				zap.Error(linkErr),
+			)
+		}
+	}
+
+	viewerID, err := h.identityRepo.GetOrCreateViewerByPlatform(ctx, platform, platformUserID)
+	if err != nil {
+		h.logger.Error("resolveViewerID: GetOrCreateViewerByPlatform failed", zap.Error(err))
+		return uuid.Nil, err
+	}
+	return viewerID, nil
 }
 
 // sanitizeRedirectPath ensures redirect_to is a safe relative path (starts with /, no scheme).

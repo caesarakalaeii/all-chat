@@ -167,6 +167,52 @@ func (r *ViewerIdentityRepository) LinkViewerToUser(ctx context.Context, platfor
 	return nil
 }
 
+// LinkPlatformToViewer adds a new platform identity to an existing viewer record.
+// It is idempotent: if (platform, platformUserID) already maps to viewerID the call
+// succeeds without modifying anything.
+//
+// Returns ErrPlatformAlreadyLinked if (platform, platformUserID) already exists but
+// belongs to a *different* viewer — the caller must handle this case.
+func (r *ViewerIdentityRepository) LinkPlatformToViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) error {
+	// Check whether this platform identity already exists.
+	var existingViewerID uuid.UUID
+	err := r.db.QueryRow(ctx,
+		`SELECT viewer_id FROM viewer_platform_identities WHERE platform = $1 AND platform_user_id = $2`,
+		platform, platformUserID,
+	).Scan(&existingViewerID)
+
+	if err == nil {
+		// Row exists — idempotent if it already points to the right viewer.
+		if existingViewerID == viewerID {
+			return nil
+		}
+		return ErrPlatformAlreadyLinked
+	}
+	if err != pgx.ErrNoRows {
+		return fmt.Errorf("failed to check existing platform identity: %w", err)
+	}
+
+	// Insert the new platform identity for the existing viewer.
+	_, err = r.db.Exec(ctx,
+		`INSERT INTO viewer_platform_identities (viewer_id, platform, platform_user_id) VALUES ($1, $2, $3)`,
+		viewerID, platform, platformUserID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert platform identity: %w", err)
+	}
+
+	// Backfill viewer_id on the viewer_sessions row for this platform user.
+	_, err = r.db.Exec(ctx,
+		`UPDATE viewer_sessions SET viewer_id = $1 WHERE platform = $2 AND platform_user_id = $3`,
+		viewerID, platform, platformUserID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update viewer_sessions viewer_id: %w", err)
+	}
+
+	return nil
+}
+
 // GetViewerIsPremium returns the is_premium flag for a viewer.
 func (r *ViewerIdentityRepository) GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error) {
 	var isPremium bool
