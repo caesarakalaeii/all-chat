@@ -137,6 +137,7 @@ Configure in the dashboard:
 - **Load Balanced**: Multiple listener instances with leader election
 - **Demand-Driven**: Listeners activate only when overlay clients are connected
 - **Message Deletion**: Moderation actions propagated across platforms
+- **Feature Gates**: Capability-level premium toggling via `feature_gates` database table with in-memory cache per service. Admin API at `/admin/feature-gates`. See [ADR-0008](./docs/adr/0008-feature-gate-infrastructure.md).
 - **Open Source**: AGPL 3.0 licensed, self-hostable
 
 ---

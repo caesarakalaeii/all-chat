@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/caesar/all-chat/services/share-service/featuregates"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -153,7 +154,7 @@ func TestUpdateGate_SetIsPremiumFalse(t *testing.T) {
 
 	// Verify Redis invalidation was published
 	require.Len(t, mockRedis.publishedCalls, 1)
-	assert.Equal(t, featureGatesPubSubChannel, mockRedis.publishedCalls[0].channel)
+	assert.Equal(t, featuregates.PubSubChannel, mockRedis.publishedCalls[0].channel)
 	assert.Equal(t, "sharing", mockRedis.publishedCalls[0].payload)
 }
 
@@ -175,7 +176,7 @@ func TestUpdateGate_SetIsPremiumTrue(t *testing.T) {
 	assert.Equal(t, true, resp["is_premium"])
 
 	require.Len(t, mockRedis.publishedCalls, 1)
-	assert.Equal(t, featureGatesPubSubChannel, mockRedis.publishedCalls[0].channel)
+	assert.Equal(t, featuregates.PubSubChannel, mockRedis.publishedCalls[0].channel)
 }
 
 func TestUpdateGate_Returns404ForNonExistentKey(t *testing.T) {

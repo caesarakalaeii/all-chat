@@ -4,16 +4,12 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/caesar/all-chat/services/share-service/featuregates"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
-
-// featureGatesPubSubChannel is the Redis Pub/Sub channel for invalidation events.
-// Defined locally here to avoid compile dependency on the featuregates package (which
-// Plan 01 creates). Plan 03 will unify these to use featuregates.PubSubChannel.
-const featureGatesPubSubChannel = "feature-gates:invalidate"
 
 // FeatureGateResponse is the JSON shape returned by ListGates.
 type FeatureGateResponse struct {
@@ -157,7 +153,7 @@ func (h *AdminFeatureGatesHandler) UpdateGate(c *gin.Context) {
 	// Publish invalidation to Redis (best-effort — DB is already updated).
 	// All services subscribed to feature-gates:invalidate will reload immediately.
 	// If publish fails, the 60s TTL refresh (D-09) ensures eventual consistency.
-	if err := h.redis.Publish(c.Request.Context(), featureGatesPubSubChannel, key); err != nil {
+	if err := h.redis.Publish(c.Request.Context(), featuregates.PubSubChannel, key); err != nil {
 		h.logger.Warn("Failed to publish feature gate invalidation",
 			zap.String("key", key),
 			zap.Error(err))
