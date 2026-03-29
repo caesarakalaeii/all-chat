@@ -32,7 +32,7 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
   } = useThemeMarketplace()
 
   return (
-    <div className="space-y-3">
+    <div className="@container space-y-3">
       {/* Filters */}
       <ThemeFilters
         searchQuery={searchQuery}
@@ -90,7 +90,7 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
               </button>
             )}
           </div>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 @[480px]:grid-cols-2 @[768px]:grid-cols-3">
             {themes.map((theme) => (
               <ThemeCard
                 key={theme.id}
