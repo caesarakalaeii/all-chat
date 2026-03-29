@@ -19,11 +19,9 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Dialog,
+  DialogRoot,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toastManager } from '@/lib/toast';
@@ -177,30 +175,28 @@ export default function AdminFeaturesPage() {
       )}
 
       {/* Confirmation dialog */}
-      <Dialog open={!!confirmGate} onOpenChange={() => setConfirmGate(null)}>
+      <DialogRoot open={!!confirmGate} onOpenChange={() => setConfirmGate(null)}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {confirmGate?.is_premium
-                ? `Make ${confirmGate?.feature_key} free for all users?`
-                : `Restrict ${confirmGate?.feature_key} to premium users?`}
-            </DialogTitle>
-            <DialogDescription>
-              {confirmGate?.is_premium
-                ? 'All authenticated users will gain access immediately. No code deploy required.'
-                : 'Only users with premium access will be able to use this feature.'}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+          <DialogTitle>
+            {confirmGate?.is_premium
+              ? `Make ${confirmGate?.feature_key} free for all users?`
+              : `Restrict ${confirmGate?.feature_key} to premium users?`}
+          </DialogTitle>
+          <DialogDescription>
+            {confirmGate?.is_premium
+              ? 'All authenticated users will gain access immediately. No code deploy required.'
+              : 'Only users with premium access will be able to use this feature.'}
+          </DialogDescription>
+          <div className="mt-4 flex justify-end gap-3">
             <Button variant="outline" onClick={() => setConfirmGate(null)}>
               No, keep as-is
             </Button>
             <Button onClick={handleToggle}>
               {confirmGate?.is_premium ? 'Make Free' : 'Make Premium'}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
-      </Dialog>
+      </DialogRoot>
     </div>
   );
 }
