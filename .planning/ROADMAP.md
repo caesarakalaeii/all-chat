@@ -303,3 +303,17 @@ Plans:
 - [x] 07-02-PLAN.md — Admin feature gates handler (GET list + PATCH toggle), unit tests
 - [x] 07-03-PLAN.md — Rewrite RequirePremium middleware, wire cache + routes into share-service, API gateway proxy routes
 - [x] 07-04-PLAN.md — Admin features page (/admin/features) with toggle switches, AdminNav link, visual checkpoint
+
+### Phase 8: Message Pipeline Resilience — Fix silent failure modes across Twitch message pipeline
+
+**Goal:** Fix all 24 silent failure modes across the complete message pipeline (Listeners -> Redis Streams -> Message Processor -> Redis Pub/Sub -> API Gateway WebSocket). Every fix eliminates a path where messages are silently dropped without logging or alerting. Adds DLQ infrastructure, PEL drain on startup, exponential backoff retry, Pub/Sub reconnect, and ring buffer publish safety net.
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17
+**Depends on:** Phase 7
+**Plans:** 5 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — Message-processor stream consumer hardening: unique consumer names, PEL drain, DLQ routing, retry logic, admin replay endpoint
+- [ ] 08-02-PLAN.md — API Gateway Subscriber Pub/Sub reconnect on channel close, goroutine tracking, ref count guard
+- [ ] 08-03-PLAN.md — API Gateway StatusSubscriber nil-channel guard, reconnect, WaitGroup shutdown
+- [ ] 08-04-PLAN.md — Shared listener SDK ring buffer for XADD failure buffering with retry
+- [ ] 08-05-PLAN.md — Prometheus alert rules and Grafana dashboard panels for all new resilience metrics
