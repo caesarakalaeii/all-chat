@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -103,6 +104,31 @@ func (r *ViewerIdentityRepository) GetViewerCosmetics(ctx context.Context, viewe
 	}
 
 	return nameColor, nil
+}
+
+// ViewerCosmetics holds all cosmetic settings for a viewer.
+type ViewerCosmetics struct {
+	NameColor     *string         `json:"name_color"`
+	NameGradient  json.RawMessage `json:"name_gradient"`
+	AvatarFrameID *uuid.UUID      `json:"avatar_frame_id"`
+	AvatarFlairID *uuid.UUID      `json:"avatar_flair_id"`
+}
+
+// GetFullCosmetics returns all cosmetic settings for a viewer.
+func (r *ViewerIdentityRepository) GetFullCosmetics(ctx context.Context, viewerID uuid.UUID) (*ViewerCosmetics, error) {
+	var c ViewerCosmetics
+	err := r.db.QueryRow(ctx,
+		`SELECT name_color, name_gradient, avatar_frame_id, avatar_flair_id FROM viewer_cosmetics WHERE viewer_id = $1`,
+		viewerID,
+	).Scan(&c.NameColor, &c.NameGradient, &c.AvatarFrameID, &c.AvatarFlairID)
+
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get viewer cosmetics: %w", err)
+	}
+	return &c, nil
 }
 
 // UpsertViewerCosmetics sets name_color, name_gradient, avatar_frame_id, and avatar_flair_id for a viewer.
