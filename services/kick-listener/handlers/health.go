@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/caesar/all-chat/services/kick-listener/channels"
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
@@ -9,8 +10,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// wsConnectionHealth is the subset of websocket.Client used by the health handler.
+// Defined as an interface so that tests can inject a stub without constructing a full
+// Pusher WebSocket client.
+type wsConnectionHealth interface {
+	IsConnected() bool
+	LastActivityAt() time.Time
+	IsStale() bool
+}
+
 // HealthHandler handles health check endpoints
 type HealthHandler struct {
+	wsConn     wsConnectionHealth
 	wsClient   *websocket.Client
 	publisher  *publisher.StreamPublisher
 	channelMgr *channels.Manager
@@ -23,16 +34,32 @@ func NewHealthHandler(
 	channelMgr *channels.Manager,
 ) *HealthHandler {
 	return &HealthHandler{
+		wsConn:     wsClient,
 		wsClient:   wsClient,
 		publisher:  publisher,
 		channelMgr: channelMgr,
 	}
 }
 
-// LivenessProbe checks if the service is alive
+// LivenessProbe checks if the service is alive (HTTP 200 = alive, 503 = restart needed).
+// Returns 503 when the Pusher WebSocket connection has gone silent for longer than the
+// stale liveness threshold. This indicates the connection is zombie (read deadline keeps
+// being extended but no actual messages are flowing). Kubernetes will restart the pod,
+// which cleanly re-establishes the WebSocket connection.
 func (h *HealthHandler) LivenessProbe(c *gin.Context) {
+	if h.wsConn.IsStale() {
+		lastAct := h.wsConn.LastActivityAt()
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "dead",
+			"service": "kick-listener",
+			"reason":  "Pusher WebSocket zombie — no activity for over 5 minutes",
+			"last_activity_seconds_ago": int(time.Since(lastAct).Seconds()),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
+		"status":  "alive",
 		"service": "kick-listener",
 	})
 }
