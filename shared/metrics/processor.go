@@ -28,8 +28,14 @@ type ProcessorMetrics struct {
 	FanoutDuration         *prometheus.HistogramVec
 
 	// Deletion Buffer
-	DeletionsBuffered      prometheus.Counter
+	DeletionsBuffered        prometheus.Counter
 	BufferedDeletionsApplied prometheus.Counter
+
+	// Resilience (DLQ, PEL, publish retry)
+	PELPendingMessages *prometheus.GaugeVec
+	DLQMessagesTotal   *prometheus.CounterVec
+	PublishRetryTotal  *prometheus.CounterVec
+	DLQWriteFailures   prometheus.Counter
 }
 
 // NewProcessorMetrics creates a new set of processor metrics
@@ -133,6 +139,33 @@ func NewProcessorMetrics() *ProcessorMetrics {
 			prometheus.CounterOpts{
 				Name: "processor_buffered_deletions_applied_total",
 				Help: "Number of buffered deletions applied when message arrived",
+			},
+		),
+		PELPendingMessages: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "processor_pel_pending_messages",
+				Help: "Number of pending PEL messages awaiting acknowledgement per consumer",
+			},
+			[]string{"consumer"},
+		),
+		DLQMessagesTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "processor_dlq_messages_total",
+				Help: "Total messages written to the dead-letter queue",
+			},
+			[]string{"source_service", "reason"},
+		),
+		PublishRetryTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "processor_publish_retry_total",
+				Help: "Total Pub/Sub publish retry attempts",
+			},
+			[]string{"attempt"},
+		),
+		DLQWriteFailures: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "processor_dlq_write_failures_total",
+				Help: "Total failures writing to the dead-letter queue",
 			},
 		),
 	}
