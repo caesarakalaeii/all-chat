@@ -181,6 +181,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0008: Feature Gate Infrastructure
+
+**Status**: Accepted
+**Date**: 2026-03-29
+**Problem**: Adding a new premium-gated feature requires code changes and a deploy
+**Decision**: DB + in-memory cache for capability-level premium toggling; Redis Pub/Sub invalidation + 60s TTL fallback
+**Impact**: Zero-downtime feature toggles; unknown gates default to premium (safe); no external dependencies
+**Read**: [0008-feature-gate-infrastructure.md](./0008-feature-gate-infrastructure.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -302,9 +313,9 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 7
+**Total ADRs**: 8
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
