@@ -7,10 +7,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+// newTestRingBuffer creates a RingBufferPublisher with an isolated Prometheus registry
+// to prevent duplicate metric registration panics across tests.
+func newTestRingBuffer(t *testing.T, capacity int, publishFn PublishFunc) *RingBufferPublisher {
+	t.Helper()
+	reg := prometheus.NewRegistry()
+	return NewRingBufferPublisherWithRegisterer(capacity, publishFn, zap.NewNop(), "test-service", reg)
+}
 
 // TestRingBufferPublishSuccess verifies that when publishFn succeeds, messages are
 // not buffered (buffer remains empty).
@@ -21,7 +30,7 @@ func TestRingBufferPublishSuccess(t *testing.T) {
 		return nil
 	}
 
-	rb := NewRingBufferPublisher(100, publishFn, zap.NewNop(), "test-service")
+	rb := newTestRingBuffer(t, 100, publishFn)
 	defer rb.Stop()
 
 	err := rb.Publish(context.Background(), []byte("hello"))
@@ -37,7 +46,7 @@ func TestRingBufferPublishFailureBuffers(t *testing.T) {
 		return errors.New("redis unavailable")
 	}
 
-	rb := NewRingBufferPublisher(100, publishFn, zap.NewNop(), "test-service")
+	rb := newTestRingBuffer(t, 100, publishFn)
 	defer rb.Stop()
 
 	err := rb.Publish(context.Background(), []byte("hello"))
@@ -58,7 +67,7 @@ func TestRingBufferRetryDrains(t *testing.T) {
 		return nil
 	}
 
-	rb := NewRingBufferPublisher(100, publishFn, zap.NewNop(), "test-service")
+	rb := newTestRingBuffer(t, 100, publishFn)
 	defer rb.Stop()
 
 	// Enqueue a message by having publishFn fail
@@ -83,7 +92,7 @@ func TestRingBufferCapacityOverflow(t *testing.T) {
 	}
 
 	capacity := 1000
-	rb := NewRingBufferPublisher(capacity, publishFn, zap.NewNop(), "test-service")
+	rb := newTestRingBuffer(t, capacity, publishFn)
 	defer rb.Stop()
 
 	// Enqueue capacity+1 messages
@@ -103,7 +112,7 @@ func TestRingBufferStopCleansUp(t *testing.T) {
 		return errors.New("redis unavailable")
 	}
 
-	rb := NewRingBufferPublisher(100, publishFn, zap.NewNop(), "test-service")
+	rb := newTestRingBuffer(t, 100, publishFn)
 
 	// Enqueue some items
 	for i := 0; i < 5; i++ {
@@ -141,7 +150,7 @@ func TestRingBufferRetryUsesBackgroundContext(t *testing.T) {
 		return nil
 	}
 
-	rb := NewRingBufferPublisher(100, publishFn, zap.NewNop(), "test-service")
+	rb := newTestRingBuffer(t, 100, publishFn)
 	defer rb.Stop()
 
 	// Use a cancellable context to publish
@@ -175,7 +184,7 @@ func TestRingBufferMultipleMessages(t *testing.T) {
 		return nil
 	}
 
-	rb := NewRingBufferPublisher(100, publishFn, zap.NewNop(), "test-service")
+	rb := newTestRingBuffer(t, 100, publishFn)
 	defer rb.Stop()
 
 	_ = rb.Publish(context.Background(), []byte("first"))
