@@ -1,65 +1,52 @@
 /**
  * Coordination Models
  *
- * TypeScript interfaces matching Go shared/coordination models for TikTok listener
- * coordinator integration (Phase 6).
+ * TypeScript interfaces for leadership-based coordination with source-manager.
+ * Matches Go shared/sourcemanager patterns.
  */
 
 /**
- * Assignment represents a channel assignment from the coordinator.
- * Matches Go shared/coordination/models.go Assignment structure.
+ * LeadershipRequest is the payload for claim/renew/release endpoints.
+ * Matches Go source-manager handler expectations.
  */
-export interface Assignment {
-  source_id: string;
-  pod_id: string;
-  timestamp: string; // ISO 8601 timestamp
-  version: number;
+export interface LeadershipRequest {
+  platform: string;
+  stream_id: string;
+  caller_id: string;
 }
 
 /**
- * AssignmentResponse is the response from GET /assignments endpoint.
- * Matches Go shared/coordination/models.go AssignmentResponse structure.
+ * ClaimResponse from POST /leadership/claim.
  */
-export interface AssignmentResponse {
-  assignments: Assignment[];
-  count: number;
+export interface ClaimResponse {
+  acquired: boolean;
+  platform?: string;
+  stream_id?: string;
+  instance_id?: string;
 }
 
 /**
- * HeartbeatRequest is the payload for heartbeat publishing.
- * Matches Go shared/coordination/client.go HeartbeatRequest structure.
+ * RenewResponse from POST /leadership/renew.
  */
-export interface HeartbeatRequest {
-  pod_id: string;
+export interface RenewResponse {
+  renewed: boolean;
+  platform?: string;
+  stream_id?: string;
 }
 
 /**
- * MigrationEvent represents a channel migration event published to Redis Pub/Sub.
- * Matches Go shared/coordination/models.go MigrationEvent structure.
- *
- * Implements MIGRATE-05: Full context for debugging and metrics.
- * Per CONTEXT.md user decision: Required fields are channel_id, platform,
- * from_pod, to_pod, migration_id, timestamp, reason.
+ * RegisterPeerRequest for POST /leadership/peers/register.
  */
-export interface MigrationEvent {
-  migration_id: string;  // UUID for tracing
-  channel_id: string;    // Source UUID from database
-  platform: string;      // "twitch", "kick", "tiktok"
-  from_pod: string;      // Kubernetes pod name (old pod)
-  to_pod: string;        // Kubernetes pod name (new pod)
-  timestamp: string;     // ISO 8601 timestamp
-  reason: string;        // "scale_up", "rebalancing", "pod_failure"
+export interface RegisterPeerRequest {
+  platform: string;
+  caller_id: string;
 }
 
 /**
- * MigrationConfirmation represents a confirmation message from a listener.
- * Used by listeners to confirm successful connection during overlap protocol.
- * Matches Go shared/coordination/models.go MigrationConfirmation structure.
+ * RegisterPeerResponse from POST /leadership/peers/register.
  */
-export interface MigrationConfirmation {
-  migration_id: string;
-  status: 'connected' | 'failed';
-  pod_id: string;
-  timestamp: string; // ISO 8601 timestamp
-  error?: string;    // Error message if status="failed"
+export interface RegisterPeerResponse {
+  peer_count: number;
+  platform: string;
+  caller_id: string;
 }

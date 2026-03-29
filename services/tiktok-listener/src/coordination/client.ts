@@ -1,78 +1,58 @@
 /**
- * Coordinator Client
+ * Source Manager Client
  *
- * HTTP client for coordinator integration (Phase 6).
- * Mirrors Go shared/coordination/client.go patterns in TypeScript.
+ * HTTP client for leadership-based coordination with source-manager.
+ * Matches Go shared/sourcemanager/client.go patterns.
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { Logger } from '../types/logger.js';
-import { Assignment, AssignmentResponse, HeartbeatRequest } from './models.js';
+import {
+  LeadershipRequest,
+  ClaimResponse,
+  RenewResponse,
+  RegisterPeerResponse,
+} from './models.js';
 import { generateServiceJWT } from '../auth/jwt.js';
 
 const JWT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const JWT_REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // Refresh when < 5 minutes remaining
 
 /**
- * CoordinatorClient is an HTTP client for coordinator integration.
- * Matches Go shared/coordination/client.go CoordinatorClient behavior.
+ * SourceManagerClient is an HTTP client for source-manager leadership API.
+ * Replaces the old CoordinatorClient (assignment-based) with leadership endpoints.
  */
-export class CoordinatorClient {
-  private baseURL: string;
+export class SourceManagerClient {
   private serviceSecret: string;
   private serviceJWT: string;
-  private jwtExpiresAt: number; // unix timestamp in ms
+  private jwtExpiresAt: number;
   private serviceName: string;
   private httpClient: AxiosInstance;
   private logger: Logger;
 
-  /**
-   * Creates a new coordinator client.
-   *
-   * @param baseURL - Coordinator base URL (e.g., "http://source-manager:8088")
-   * @param serviceSecret - Shared secret for generating service JWT tokens
-   * @param logger - Logger instance
-   */
   constructor(baseURL: string, serviceSecret: string, logger: Logger) {
-    this.baseURL = baseURL;
     this.serviceSecret = serviceSecret;
     this.logger = logger;
+    this.serviceName = 'tiktok-listener';
 
-    // Determine service name from hostname (pod name)
-    const hostname = process.env.HOSTNAME || 'tiktok-listener';
-    this.serviceName = 'tiktok-listener'; // Default
-    if (hostname.startsWith('twitch-listener')) {
-      this.serviceName = 'twitch-listener';
-    } else if (hostname.startsWith('twitch-eventsub-listener')) {
-      this.serviceName = 'twitch-eventsub-listener';
-    } else if (hostname.startsWith('kick-listener')) {
-      this.serviceName = 'kick-listener';
-    } else if (hostname.startsWith('tiktok-listener')) {
-      this.serviceName = 'tiktok-listener';
-    }
-
-    // Generate initial service JWT (24 hour expiry, matching Go implementation)
     this.serviceJWT = generateServiceJWT(this.serviceName, this.serviceSecret, JWT_TTL_MS);
     this.jwtExpiresAt = Date.now() + JWT_TTL_MS;
 
-    this.logger.info('Generated service JWT for coordinator authentication', {
+    this.logger.info('Generated service JWT for source-manager authentication', {
       service_name: this.serviceName,
-      hostname: hostname,
     });
 
     this.httpClient = axios.create({
-      baseURL: this.baseURL,
-      timeout: 10000, // 10 seconds
+      baseURL,
+      timeout: 10000,
     });
 
-    // Refresh JWT before expiry on every request (matches Go StartJWTRefresh behavior)
+    // Auto-refresh JWT before expiry
     this.httpClient.interceptors.request.use((config) => {
       if (Date.now() >= this.jwtExpiresAt - JWT_REFRESH_THRESHOLD_MS) {
         this.serviceJWT = generateServiceJWT(this.serviceName, this.serviceSecret, JWT_TTL_MS);
         this.jwtExpiresAt = Date.now() + JWT_TTL_MS;
-        this.logger.info('Refreshed service JWT for coordinator authentication', {
-          service_name: this.serviceName,
-        });
+        this.logger.debug('Refreshed service JWT');
       }
       config.headers['Authorization'] = `Bearer ${this.serviceJWT}`;
       return config;
@@ -80,170 +60,84 @@ export class CoordinatorClient {
   }
 
   /**
-   * QueryAssignments queries the coordinator for channel assignments for a specific pod.
-   *
-   * Implements TIKTOK-01: "TikTok listener queries coordinator on startup and connects ONLY to assigned channels"
-   *
-   * Blocks indefinitely with exponential backoff until coordinator responds
-   * (per CONTEXT.md user decision).
-   *
-   * Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
-   *
-   * @param podID - Kubernetes pod name (from HOSTNAME environment variable)
-   * @returns Promise resolving to array of assignments
-   * @throws Error only if context is canceled (should never happen in normal startup)
+   * ClaimLeadership attempts to become leader for the given stream ID.
+   * Returns true if leadership was acquired.
    */
-  async queryAssignments(podID: string): Promise<Assignment[]> {
-    const url = `/assignments?pod_id=${encodeURIComponent(podID)}`;
-
-    // Exponential backoff configuration: 1s, 2s, 4s, 8s, 16s, 30s (max)
-    let backoff = 1000; // Start at 1 second
-    const maxBackoff = 30000; // Max 30 seconds
-
-    this.logger.info('Querying coordinator for assignments', {
-      pod_id: podID,
-      url: this.baseURL + url,
-    });
-
-    // Infinite retry loop (per CONTEXT.md user decision: blocks indefinitely)
-    while (true) {
-      try {
-        const response = await this.httpClient.get<AssignmentResponse>(url);
-
-        if (response.status === 200) {
-          this.logger.info('Successfully retrieved assignments from coordinator', {
-            pod_id: podID,
-            assignment_count: response.data.count,
-          });
-
-          return response.data.assignments;
-        }
-
-        // Unexpected 2xx response
-        this.logger.error('Coordinator returned unexpected success status code', {
-          pod_id: podID,
-          status_code: response.status,
-        });
-
-        throw new Error(`Unexpected status code ${response.status}`);
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          const axiosError = error as AxiosError;
-
-          // Client error (4xx) - configuration issue, don't retry
-          if (axiosError.response && axiosError.response.status >= 400 && axiosError.response.status < 500) {
-            this.logger.error('Coordinator returned client error', {
-              pod_id: podID,
-              status_code: axiosError.response.status,
-              body: axiosError.response.data,
-            });
-
-            throw new Error(
-              `Coordinator returned ${axiosError.response.status}: ${JSON.stringify(axiosError.response.data)}`
-            );
-          }
-
-          // Server error (5xx) or network error - coordinator might be starting, retry with backoff
-          if (!axiosError.response || (axiosError.response && axiosError.response.status >= 500)) {
-            this.logger.warn('Failed to connect to coordinator, retrying with backoff', {
-              pod_id: podID,
-              backoff_ms: backoff,
-              error: axiosError.message,
-              status_code: axiosError.response?.status,
-            });
-
-            // Sleep with backoff
-            await this.sleep(backoff);
-
-            // Increase backoff exponentially
-            backoff *= 2;
-            if (backoff > maxBackoff) {
-              backoff = maxBackoff;
-            }
-
-            continue;
-          }
-        }
-
-        // Unknown error - log and retry
-        this.logger.warn('Unknown error querying coordinator, retrying with backoff', {
-          pod_id: podID,
-          backoff_ms: backoff,
-          error: String(error),
-        });
-
-        await this.sleep(backoff);
-
-        // Increase backoff exponentially
-        backoff *= 2;
-        if (backoff > maxBackoff) {
-          backoff = maxBackoff;
-        }
-      }
-    }
-  }
-
-  /**
-   * PublishHeartbeat publishes a heartbeat to the coordinator.
-   *
-   * Implements TIKTOK-01: "TikTok listener publishes heartbeat every 10 seconds to coordinator"
-   *
-   * @param podID - Kubernetes pod name
-   * @returns Promise resolving to void on success (200 status)
-   * @throws Error if heartbeat fails
-   */
-  async publishHeartbeat(podID: string): Promise<void> {
-    const url = '/heartbeat';
-
-    const reqBody: HeartbeatRequest = {
-      pod_id: podID,
-    };
+  async claimLeadership(platform: string, streamID: string, callerID: string): Promise<boolean> {
+    const body: LeadershipRequest = { platform, stream_id: streamID, caller_id: callerID };
 
     try {
-      const response = await this.httpClient.post(url, reqBody, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.status !== 200) {
-        this.logger.error('Heartbeat request failed', {
-          pod_id: podID,
-          status_code: response.status,
-          body: response.data,
-        });
-
-        throw new Error(`Heartbeat failed with status ${response.status}: ${JSON.stringify(response.data)}`);
-      }
-
-      this.logger.debug('Successfully published heartbeat', {
-        pod_id: podID,
-      });
+      const resp = await this.httpClient.post<ClaimResponse>('/leadership/claim', body);
+      return resp.data.acquired;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-
-        this.logger.error('Failed to publish heartbeat', {
-          pod_id: podID,
-          error: axiosError.message,
-          status_code: axiosError.response?.status,
-          body: axiosError.response?.data,
-        });
-
-        throw new Error(`Failed to publish heartbeat: ${axiosError.message}`);
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        throw new Error('source-manager authorization failed');
       }
-
-      // Re-throw unknown errors
       throw error;
     }
   }
 
   /**
-   * GetDemand queries the coordinator for the current demanded sources.
+   * RenewLeadership refreshes an existing leadership claim.
+   * Returns true if renewed. Throws 'leadership_lost' if 410 GONE.
+   */
+  async renewLeadership(platform: string, streamID: string, callerID: string): Promise<boolean> {
+    const body: LeadershipRequest = { platform, stream_id: streamID, caller_id: callerID };
+
+    try {
+      const resp = await this.httpClient.post<RenewResponse>('/leadership/renew', body);
+      return resp.data.renewed;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 410) {
+          throw new Error('leadership_lost');
+        }
+        if (error.response?.status === 401) {
+          throw new Error('source-manager authorization failed');
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * ReleaseLeadership releases a leadership claim.
+   */
+  async releaseLeadership(platform: string, streamID: string, callerID: string): Promise<void> {
+    const body: LeadershipRequest = { platform, stream_id: streamID, caller_id: callerID };
+
+    try {
+      await this.httpClient.post('/leadership/release', body);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        throw new Error('source-manager authorization failed');
+      }
+      // Release failures are non-fatal — lease will expire naturally
+      this.logger.warn('Failed to release leadership', {
+        platform, stream_id: streamID, error: String(error),
+      });
+    }
+  }
+
+  /**
+   * RegisterPeer registers this instance as an active peer for rebalancing.
+   */
+  async registerPeer(platform: string, callerID: string): Promise<number> {
+    try {
+      const resp = await this.httpClient.post<RegisterPeerResponse>(
+        '/leadership/peers/register',
+        { platform, caller_id: callerID },
+      );
+      return resp.data.peer_count;
+    } catch (error) {
+      this.logger.warn('Failed to register peer', { platform, error: String(error) });
+      return 1; // Assume single peer on failure
+    }
+  }
+
+  /**
+   * GetDemand queries for the current demanded sources.
    * Used by the 60s safety-net poll to restore state after missed Pub/Sub events.
-   *
-   * @param platform - Optional platform filter (e.g., "tiktok")
-   * @returns Promise resolving to array of DemandSource objects
    */
   async getDemand(platform?: string): Promise<{ source_id: string; channel_id: string; platform: string; overlay_id: string }[]> {
     const url = platform
@@ -251,28 +145,16 @@ export class CoordinatorClient {
       : '/demand';
 
     try {
-      const response = await this.httpClient.get<{ sources: { source_id: string; channel_id: string; platform: string; overlay_id: string }[] }>(url);
-      return response.data.sources;
+      const resp = await this.httpClient.get<{ sources: { source_id: string; channel_id: string; platform: string; overlay_id: string }[] }>(url);
+      return resp.data.sources;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-        this.logger.error('Failed to get demand from coordinator', {
-          platform,
-          error: axiosError.message,
-          status_code: axiosError.response?.status,
+        this.logger.error('Failed to get demand', {
+          platform, error: error.message, status_code: error.response?.status,
         });
-        throw new Error(`Failed to get demand: ${axiosError.message}`);
+        throw new Error(`Failed to get demand: ${error.message}`);
       }
       throw error;
     }
-  }
-
-  /**
-   * Sleep helper for backoff logic.
-   *
-   * @param ms - Milliseconds to sleep
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

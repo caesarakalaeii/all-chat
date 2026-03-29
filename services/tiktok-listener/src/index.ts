@@ -34,10 +34,9 @@ import { PrometheusMetrics } from './metrics/prometheus.js';
 import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
 
-// Import coordinator modules (Phase 6)
-import { CoordinatorClient } from './coordination/client.js';
-import { MigrationSubscriber } from './coordination/subscriber.js';
-import { MigrationEvent, Assignment } from './coordination/models.js';
+// Import coordination modules (leadership-based)
+import { SourceManagerClient } from './coordination/client.js';
+import { LeadershipCoordinator } from './coordination/leadership.js';
 
 // Import demand subscriber (Phase 5)
 import { DemandSubscriber, DemandSource } from './demand/subscriber.js';
@@ -59,7 +58,6 @@ const DEMAND_SAFETY_INTERVAL_MS = parseInt(process.env.DEMAND_SAFETY_INTERVAL_MS
 const COORDINATOR_URL = process.env.COORDINATOR_URL || 'http://source-manager:8088';
 const SERVICE_JWT_SECRET = process.env.SERVICE_JWT_SECRET || '';
 const POD_NAME = process.env.HOSTNAME || 'tiktok-listener-unknown';
-const HEARTBEAT_INTERVAL_MS = parseInt(process.env.HEARTBEAT_INTERVAL_MS || '10000'); // 10 seconds
 
 // New TikTok live detection configuration
 const TIKTOK_STATUS_CHECK_CACHE_TTL_MS = parseInt(process.env.TIKTOK_STATUS_CHECK_CACHE_TTL_MS || '10000');
@@ -185,13 +183,9 @@ class TikTokListenerService {
   // Connection state tracking to prevent concurrent connections
   private connectingStreams: Set<string> = new Set();
 
-  // Coordinator integration (Phase 6)
-  private coordinatorClient?: CoordinatorClient;
-  private migrationSubscriber?: MigrationSubscriber;
-  private assignedSourceIDs: Set<string> = new Set(); // source_id set for demand filtering
-  private filteredAssignmentCount: number = 0; // Number of assigned sources that have database channels
-  private heartbeatTimer?: NodeJS.Timeout;
-  private firstMessageCallbacks: Map<string, () => void> = new Map(); // username -> callback
+  // Leadership coordination
+  private sourceManagerClient?: SourceManagerClient;
+  private leadershipCoordinator?: LeadershipCoordinator;
 
   // Demand subscriber (Phase 5)
   private demandSubscriber: DemandSubscriber | null = null;
@@ -272,50 +266,23 @@ class TikTokListenerService {
       await this.db.query('SELECT NOW()');
       logger.info('Connected to PostgreSQL', { host: DATABASE_HOST, port: DATABASE_PORT });
 
-      // Initialize coordinator integration (TIKTOK-01)
+      // Initialize leadership-based coordination
       if (SERVICE_JWT_SECRET) {
-        logger.info('Coordinator integration enabled', {
-          coordinator_url: COORDINATOR_URL,
+        logger.info('Leadership coordination enabled', {
+          source_manager_url: COORDINATOR_URL,
           pod_name: POD_NAME
         });
 
-        this.coordinatorClient = new CoordinatorClient(COORDINATOR_URL, SERVICE_JWT_SECRET, logger);
+        this.sourceManagerClient = new SourceManagerClient(COORDINATOR_URL, SERVICE_JWT_SECRET, logger);
+        this.leadershipCoordinator = new LeadershipCoordinator('tiktok', this.sourceManagerClient, logger);
 
-        // Start heartbeat publisher FIRST so source-manager includes this pod in its
-        // next assignment cycle before we query for assignments.
-        this.startHeartbeatPublisher();
-        logger.info('Heartbeat publisher started', { interval_ms: HEARTBEAT_INTERVAL_MS });
-
-        // Wait for at least one source-manager assignment cycle (~30s) plus jitter to
-        // prevent thundering herd. This ensures the pod is in the heartbeat registry
-        // when it queries, so the source-manager has already assigned sources to it.
-        const jitterMs = 35000 + Math.floor(Math.random() * 15000); // 35-50 seconds
-        logger.info('Waiting for source-manager assignment cycle before querying', { jitterMs });
-        await new Promise(resolve => setTimeout(resolve, jitterMs));
-
-        // Query assignments from coordinator (blocks indefinitely with backoff)
-        const assignments = await this.coordinatorClient.queryAssignments(POD_NAME);
-
-        logger.info('Received assignments from coordinator', {
-          count: assignments.length,
-          pod_id: POD_NAME
-        });
-
-        // Extract assigned source IDs into set for demand filtering (TIKTOK-02)
-        for (const assignment of assignments) {
-          this.assignedSourceIDs.add(assignment.source_id);
-        }
-
-        // Start migration subscriber (TIKTOK-03, TIKTOK-04)
-        this.migrationSubscriber = new MigrationSubscriber(
-          this.redis,
-          (event) => this.handleMigrationEvent(event),
-          logger
+        // Register as active peer for rebalancing
+        const peerCount = await this.sourceManagerClient.registerPeer(
+          'tiktok', this.leadershipCoordinator.getCallerID()
         );
-        await this.migrationSubscriber.subscribe();
-        logger.info('Migration subscriber started');
+        logger.info('Registered as peer', { peer_count: peerCount });
       } else {
-        logger.warn('Coordinator integration disabled (SERVICE_JWT_SECRET not set)');
+        logger.warn('Leadership coordination disabled (SERVICE_JWT_SECRET not set)');
       }
 
       // Wire Redis client to livePoller for lifecycle event publishing (EXPIRY-06)
@@ -377,30 +344,13 @@ class TikTokListenerService {
         // Per CONTEXT.md: "Ready status: Pod reports ready AFTER successfully connecting to all assigned channels"
         let isReady = this.redis.isReady && !this.isShuttingDown;
 
-        // If coordinator integration is enabled, check assignments
-        if (this.coordinatorClient) {
-          // Pod is ready if Redis is connected and not shutting down.
-          // A pod with 0 assignments is still ready — the coordinator simply
-          // hasn't distributed work to it yet (normal during rolling updates).
-          // Requiring assignments caused rollout deadlocks: the old pod held
-          // all sources, the new pod never got any, and the rollout stalled.
-          res.writeHead(isReady ? 200 : 503, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            status: isReady ? 'ready' : 'not ready',
-            active_streams: this.activeStreams.size,
-            assigned_sources: this.assignedSourceIDs.size,
-            filtered_assignments: this.getFilteredAssignmentCount(),
-            coordinator_enabled: true
-          }));
-        } else {
-          // Coordinator disabled - use simple readiness check
-          res.writeHead(isReady ? 200 : 503, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            status: isReady ? 'ready' : 'not ready',
-            active_streams: this.activeStreams.size,
-            coordinator_enabled: false
-          }));
-        }
+        res.writeHead(isReady ? 200 : 503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: isReady ? 'ready' : 'not ready',
+          active_streams: this.activeStreams.size,
+          leadership_leases: this.leadershipCoordinator?.getLeaseCount() ?? 0,
+          coordination_enabled: !!this.leadershipCoordinator,
+        }));
       } else if (req.url === '/status' && req.method === 'GET') {
         // Status endpoint
         const streams = Array.from(this.activeStreams.entries()).map(([key, stream]) => ({
@@ -530,8 +480,11 @@ class TikTokListenerService {
     logger.info('Demand update received', { demanded_count: demanded.size });
 
     if (demanded.size === 0) {
-      // Full idle: disconnect all streams and stop livePoller
+      // Full idle: release leadership and disconnect all streams
       for (const [username] of this.activeStreams.entries()) {
+        if (this.leadershipCoordinator) {
+          await this.leadershipCoordinator.release(username);
+        }
         await this.disconnectFromStream(username);
       }
       if (this.livePollerRunning) {
@@ -549,22 +502,42 @@ class TikTokListenerService {
       logger.info('LiveStreamPoller started (demand present)');
     }
 
-    // Disconnect streams that lost demand
+    // Disconnect streams that lost demand and release their leadership
     const demandedUsernames = new Set(demanded.keys());
     for (const [username] of this.activeStreams.entries()) {
       if (!demandedUsernames.has(username)) {
+        if (this.leadershipCoordinator) {
+          await this.leadershipCoordinator.release(username);
+        }
         await this.disconnectFromStream(username);
       }
     }
 
-    // Connect new demanded streams
+    // Claim leadership and connect new demanded streams
     for (const [username, source] of demanded.entries()) {
       if (!this.activeStreams.has(username) && !this.connectingStreams.has(username)) {
+        // Try to claim leadership — if another pod holds it, skip
+        if (this.leadershipCoordinator) {
+          const acquired = await this.leadershipCoordinator.ensureLeadership(
+            username,
+            () => {
+              // Leadership lost callback — disconnect this stream
+              logger.warn('Leadership lost, disconnecting stream', { username });
+              this.disconnectFromStream(username).catch(err => {
+                logger.error('Failed to disconnect after leadership loss', {
+                  username, error: String(err),
+                });
+              });
+            },
+          );
+          if (!acquired) {
+            logger.debug('Skipping stream (another pod has leadership)', { username });
+            continue;
+          }
+        }
         await this.connectToStream(username, source.overlay_id);
       }
     }
-
-    this.filteredAssignmentCount = demanded.size;
   }
 
   /**
@@ -574,10 +547,10 @@ class TikTokListenerService {
    */
   private async pollDemandFallback(): Promise<void> {
     if (this.isShuttingDown) return;
-    if (!this.coordinatorClient) return;
+    if (!this.sourceManagerClient) return;
 
     try {
-      const sources = await this.coordinatorClient.getDemand('tiktok');
+      const sources = await this.sourceManagerClient.getDemand('tiktok');
       const demanded = new Map<string, DemandSource>();
       for (const source of sources) {
         demanded.set(source.channel_id, source);
@@ -588,44 +561,6 @@ class TikTokListenerService {
     }
   }
 
-  /**
-   * Start heartbeat publisher to coordinator (Phase 6).
-   * Publishes heartbeat every 10 seconds to coordinator /heartbeat endpoint.
-   * Implements TIKTOK-01: "TikTok listener publishes heartbeat every 10 seconds to coordinator"
-   */
-  private startHeartbeatPublisher(): void {
-    if (!this.coordinatorClient) {
-      logger.warn('Cannot start heartbeat publisher: coordinator client not initialized');
-      return;
-    }
-
-    // Publish immediately
-    this.publishHeartbeat();
-
-    // Then publish on interval
-    this.heartbeatTimer = setInterval(() => {
-      this.publishHeartbeat();
-    }, HEARTBEAT_INTERVAL_MS);
-  }
-
-  /**
-   * Publish heartbeat to coordinator.
-   */
-  private async publishHeartbeat(): Promise<void> {
-    if (!this.coordinatorClient || this.isShuttingDown) {
-      return;
-    }
-
-    try {
-      await this.coordinatorClient.publishHeartbeat(POD_NAME);
-    } catch (error) {
-      logger.error('Failed to publish heartbeat', {
-        pod_id: POD_NAME,
-        error: String(error)
-      });
-      // Don't throw - heartbeat failures shouldn't crash the service
-    }
-  }
 
   /**
    * Handle migration event from coordinator (Phase 6).
@@ -638,146 +573,6 @@ class TikTokListenerService {
    * Per CONTEXT.md: "Minimal state - just channel assignment list - New pod creates fresh connections"
    * Per CONTEXT.md: "TikTok connection state migration for unofficial library - Cannot transfer connection handles, must disconnect/reconnect"
    */
-  private async handleMigrationEvent(event: MigrationEvent): Promise<void> {
-    // Only handle TikTok platform events. Log non-TikTok events at debug to avoid spam —
-    // the migration:events channel carries events for ALL platforms and non-TikTok events
-    // are irrelevant to this service.
-    if (event.platform !== 'tiktok') {
-      logger.debug('Ignoring non-TikTok migration event', {
-        migration_id: event.migration_id,
-        platform: event.platform
-      });
-      return;
-    }
-
-    logger.info('Processing TikTok migration event', {
-      migration_id: event.migration_id,
-      channel_id: event.channel_id,
-      platform: event.platform,
-      from_pod: event.from_pod,
-      to_pod: event.to_pod,
-      reason: event.reason,
-      is_new_pod: event.to_pod === POD_NAME,
-      is_old_pod: event.from_pod === POD_NAME
-    });
-
-    // Get username from source_id via database query
-    // source_id is a UUID, need to get channel_id (username)
-    const result = await this.db.query(
-      `SELECT channel_id FROM overlay_chat_sources WHERE id = $1 AND platform = 'tiktok'`,
-      [event.channel_id]
-    );
-
-    if (result.rows.length === 0) {
-      logger.error('Source ID not found in database', {
-        migration_id: event.migration_id,
-        source_id: event.channel_id
-      });
-      return;
-    }
-
-    const username = result.rows[0].channel_id;
-
-    // New pod: Connect to channel (TIKTOK-03)
-    if (event.to_pod === POD_NAME) {
-      logger.info('New pod: Connecting to channel for migration', {
-        migration_id: event.migration_id,
-        username,
-        timeout_ms: 30000
-      });
-
-      // Set up promise to wait for first message or timeout
-      const firstMessagePromise = new Promise<void>((resolve) => {
-        this.firstMessageCallbacks.set(username, () => {
-          this.firstMessageCallbacks.delete(username);
-          resolve();
-        });
-      });
-
-      // Connect to stream
-      // Use placeholder overlay_id since we're connecting via migration
-      await this.connectToStream(username, 'migration-' + event.migration_id);
-
-      // Wait for first message or timeout (30s per CONTEXT.md)
-      const timeout = setTimeout(() => {
-        const callback = this.firstMessageCallbacks.get(username);
-        if (callback) {
-          this.firstMessageCallbacks.delete(username);
-          logger.error('Migration timeout (new pod)', {
-            migration_id: event.migration_id,
-            username
-          });
-          this.publishMigrationConfirmation(event.migration_id, 'failed', 0);
-        }
-      }, 30000);
-
-      firstMessagePromise.then(() => {
-        clearTimeout(timeout);
-        logger.info('New pod: Successfully connected for migration', {
-          migration_id: event.migration_id,
-          username
-        });
-        this.publishMigrationConfirmation(event.migration_id, 'connected', 0);
-      });
-    }
-
-    // Old pod: Disconnect from channel (TIKTOK-04)
-    if (event.from_pod === POD_NAME) {
-      logger.info('Old pod: Disconnecting from channel for migration', {
-        migration_id: event.migration_id,
-        username
-      });
-
-      // Disconnect from stream
-      await this.disconnectFromStream(username);
-
-      logger.info('Old pod: Successfully disconnected for migration', {
-        migration_id: event.migration_id,
-        username
-      });
-    }
-  }
-
-  /**
-   * Publish migration confirmation to Redis Streams for coordinator to detect.
-   * Called by new pod after first message received or timeout.
-   */
-  private async publishMigrationConfirmation(
-    migrationId: string,
-    status: 'connected' | 'failed',
-    sequenceNum: number
-  ): Promise<void> {
-    try {
-      const event: Record<string, string> = {
-        migration_id: migrationId,
-        status: status,
-        pod_id: POD_NAME,
-        timestamp: Math.floor(Date.now() / 1000).toString(),
-        sequence_number: sequenceNum.toString()
-      };
-
-      await this.redis.xAdd('migration:log', '*', event);
-
-      logger.info('Published migration confirmation', {
-        migration_id: migrationId,
-        status: status
-      });
-    } catch (error) {
-      logger.error('Failed to publish migration confirmation', {
-        migration_id: migrationId,
-        error
-      });
-    }
-  }
-
-  /**
-   * Get filtered assignment count (number of demanded sources).
-   * Used for observability in health check endpoint.
-   */
-  private getFilteredAssignmentCount(): number {
-    return this.filteredAssignmentCount;
-  }
-
   private async connectToStream(username: string, overlayId: string): Promise<void> {
     // Mark as connecting to prevent concurrent attempts
     if (this.connectingStreams.has(username)) {
@@ -1026,12 +821,6 @@ class TikTokListenerService {
     try {
       // Record message for heartbeat monitoring
       this.heartbeatMonitor.recordMessage(username);
-
-      // Signal first message for migration confirmation
-      const callback = this.firstMessageCallbacks.get(username);
-      if (callback) {
-        callback();
-      }
 
       // Extract TikTok's native message ID and timestamp
       const msgId = data.common?.msgId;
@@ -1465,10 +1254,10 @@ class TikTokListenerService {
       logger.info('Demand subscriber stopped');
     }
 
-    // Stop heartbeat publisher (Phase 6)
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      logger.info('Heartbeat publisher stopped');
+    // Release all leadership leases
+    if (this.leadershipCoordinator) {
+      await this.leadershipCoordinator.stop();
+      logger.info('Leadership leases released');
     }
 
     // Stop live stream poller (only if running)

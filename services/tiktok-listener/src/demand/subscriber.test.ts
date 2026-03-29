@@ -1,8 +1,8 @@
 /**
  * DemandSubscriber unit tests
  *
- * Tests that the DemandSubscriber correctly filters by platform, applies
- * assignedSourceIDs filtering, and calls the handler with the correct Map.
+ * Tests that the DemandSubscriber correctly filters by platform
+ * and calls the handler with the correct Map.
  */
 
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
@@ -152,13 +152,11 @@ describe('DemandSubscriber', () => {
     expect(demanded.size).toBe(0);
   });
 
-  it('filters by assignedSourceIDs when provided', async () => {
-    const assignedSourceIDs = new Set(['src-1']);
+  it('accepts all tiktok sources without filtering (leadership handles distribution)', async () => {
     const subscriber = new DemandSubscriber(
       mockRedis as any,
       handler,
       mockLogger,
-      assignedSourceIDs
     );
 
     await subscriber.subscribe();
@@ -176,9 +174,9 @@ describe('DemandSubscriber', () => {
 
     expect(handler).toHaveBeenCalledOnce();
     const demanded: Map<string, DemandSource> = handler.mock.calls[0][0];
-    expect(demanded.size).toBe(1);
+    expect(demanded.size).toBe(2);
     expect(demanded.has('tiktokuser1')).toBe(true);
-    expect(demanded.has('tiktokuser2')).toBe(false);
+    expect(demanded.has('tiktokuser2')).toBe(true);
   });
 
   it('ignores malformed JSON messages and logs a warning', async () => {
