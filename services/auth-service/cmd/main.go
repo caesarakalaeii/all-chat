@@ -378,6 +378,7 @@ func main() {
 		admin.GET("/viewers", adminViewerHandler.HandleListViewers)
 		admin.POST("/viewers/:session_id/ban", adminViewerHandler.HandleBanViewer)
 		admin.POST("/viewers/:session_id/unban", adminViewerHandler.HandleUnbanViewer)
+		admin.POST("/viewers/:session_id/premium", adminViewerHandler.HandleSetViewerPremium)
 
 		// Cosmetic catalog management (frames and flairs)
 		admin.GET("/cosmetics/frames", adminCosmeticsHandler.HandleListFrames)

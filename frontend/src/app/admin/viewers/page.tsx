@@ -35,6 +35,8 @@ interface ViewerSession {
   last_message_at: string | null
   message_count_1min: number
   message_count_1hour: number
+  is_premium: boolean
+  viewer_id: string | null
   is_banned: boolean
   banned_at: string | null
   banned_reason: string | null
@@ -52,6 +54,8 @@ export default function AdminViewersPage() {
   const [showBanModal, setShowBanModal] = useState(false)
   const [selectedViewer, setSelectedViewer] = useState<ViewerSession | null>(null)
   const [unbanDialogViewer, setUnbanDialogViewer] = useState<ViewerSession | null>(null)
+  const [premiumDialogViewer, setPremiumDialogViewer] = useState<ViewerSession | null>(null)
+  const [premiumLoading, setPremiumLoading] = useState(false)
 
   useEffect(() => {
     if (!user?.is_admin) {
@@ -119,8 +123,29 @@ export default function AdminViewersPage() {
     }
   }
 
+  const handleTogglePremium = async (viewer: ViewerSession) => {
+    try {
+      setPremiumLoading(true)
+      await apiClient.post(`/api/v1/admin/viewers/${viewer.id}/premium`, {
+        is_premium: !viewer.is_premium,
+      })
+      toastManager.add({
+        title: `${viewer.username} premium ${viewer.is_premium ? 'revoked' : 'granted'}`,
+        type: 'success',
+      })
+      setPremiumDialogViewer(null)
+      fetchViewers()
+    } catch (error) {
+      console.error('Failed to update viewer premium:', error)
+      toastManager.add({ title: 'Failed to update premium status', type: 'error' })
+    } finally {
+      setPremiumLoading(false)
+    }
+  }
+
   const bannedCount = viewers.filter((v) => v.is_banned).length
   const activeCount = viewers.filter((v) => !v.is_banned).length
+  const premiumCount = viewers.filter((v) => v.is_premium).length
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -133,10 +158,14 @@ export default function AdminViewersPage() {
       </div>
 
       {/* Stats */}
-      <div className="mb-6 grid grid-cols-3 gap-4">
+      <div className="mb-6 grid grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="text-xs text-text-sub">Total Viewers</div>
           <div className="text-2xl font-bold text-text">{viewers.length}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs text-text-sub">Premium</div>
+          <div className="text-2xl font-bold text-amber-400">{premiumCount}</div>
         </Card>
         <Card className="p-4">
           <div className="text-xs text-text-sub">Banned</div>
@@ -167,6 +196,7 @@ export default function AdminViewersPage() {
                   <th className="px-4 py-3 text-left font-medium text-text-sub">
                     Msg Count (1m/1h)
                   </th>
+                  <th className="px-4 py-3 text-left font-medium text-text-sub">Premium</th>
                   <th className="px-4 py-3 text-left font-medium text-text-sub">Status</th>
                   <th className="px-4 py-3 text-left font-medium text-text-sub">Actions</th>
                 </tr>
@@ -174,7 +204,7 @@ export default function AdminViewersPage() {
               <tbody className="divide-y divide-border">
                 {viewers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-text-dim">
+                    <td colSpan={7} className="px-4 py-8 text-center text-text-dim">
                       No viewer sessions found
                     </td>
                   </tr>
@@ -197,6 +227,58 @@ export default function AdminViewersPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-text-sub">
                         {viewer.message_count_1min}/{viewer.message_count_1hour}
+                      </td>
+                      <td className="px-4 py-3">
+                        {viewer.viewer_id ? (
+                          <Dialog.Root
+                            open={premiumDialogViewer?.id === viewer.id}
+                            onOpenChange={(open) => {
+                              if (!open) setPremiumDialogViewer(null)
+                            }}
+                          >
+                            <Dialog.Trigger
+                              render={
+                                <button
+                                  className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+                                    viewer.is_premium
+                                      ? 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+                                      : 'bg-surface-2 text-text-dim hover:bg-surface-2/80'
+                                  }`}
+                                  onClick={() => setPremiumDialogViewer(viewer)}
+                                >
+                                  {viewer.is_premium ? 'Premium' : 'Free'}
+                                </button>
+                              }
+                            />
+                            <Dialog.Content showCloseButton={false}>
+                              <Dialog.Title>
+                                {viewer.is_premium ? 'Revoke' : 'Grant'} premium for &ldquo;
+                                {viewer.username}&rdquo;?
+                              </Dialog.Title>
+                              <Dialog.Description>
+                                {viewer.is_premium
+                                  ? 'They will lose access to gradients, avatar frames, and flairs.'
+                                  : 'They will be able to use gradients, avatar frames, and flairs.'}
+                              </Dialog.Description>
+                              <div className="mt-6 flex justify-end gap-3">
+                                <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                                <Button
+                                  variant="default"
+                                  disabled={premiumLoading}
+                                  onClick={() => handleTogglePremium(viewer)}
+                                >
+                                  {premiumLoading
+                                    ? 'Updating...'
+                                    : viewer.is_premium
+                                      ? 'Revoke Premium'
+                                      : 'Grant Premium'}
+                                </Button>
+                              </div>
+                            </Dialog.Content>
+                          </Dialog.Root>
+                        ) : (
+                          <span className="text-xs text-text-dim">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {viewer.is_banned ? (
