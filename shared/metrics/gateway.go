@@ -25,6 +25,9 @@ type GatewayMetrics struct {
 	// HTTP Endpoints
 	HTTPRequestsTotal          *prometheus.CounterVec
 	HTTPRequestDuration        *prometheus.HistogramVec
+
+	// PubSub Reconnects
+	PubSubReconnectTotal *prometheus.CounterVec // "pubsub_reconnect_total" labels: ["service", "overlay_id"]
 }
 
 // NewGatewayMetrics creates a new set of gateway metrics
@@ -109,6 +112,110 @@ func NewGatewayMetrics() *GatewayMetrics {
 				Buckets: []float64{0.005, 0.01, 0.05, 0.1, 0.5, 1, 5},
 			},
 			[]string{"service", "method", "path"},
+		),
+		PubSubReconnectTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "pubsub_reconnect_total",
+				Help: "Total number of Redis Pub/Sub reconnect attempts",
+			},
+			[]string{"service", "overlay_id"},
+		),
+	}
+}
+
+// NewGatewayMetricsForTest creates a new set of gateway metrics using a fresh
+// Prometheus registry. Use this in tests to avoid duplicate metric registration
+// panics when NewGatewayMetrics() is called more than once per test binary.
+func NewGatewayMetricsForTest() *GatewayMetrics {
+	reg := prometheus.NewRegistry()
+	f := promauto.With(reg)
+	return &GatewayMetrics{
+		WebSocketConnections: f.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "gateway_websocket_connections_active",
+				Help: "Number of active WebSocket connections",
+			},
+			[]string{"service", "connection_type"},
+		),
+		WebSocketConnectionsTotal: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "gateway_websocket_connections_total",
+				Help: "Total WebSocket connection attempts",
+			},
+			[]string{"service", "result"},
+		),
+		WebSocketConnectionDuration: f.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "gateway_websocket_connection_duration_seconds",
+				Help:    "Duration of WebSocket connections",
+				Buckets: []float64{60, 300, 900, 1800, 3600, 7200, 14400, 28800, 43200, 86400},
+			},
+			[]string{"service", "disconnect_reason"},
+		),
+		OverlaySubscriptions: f.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "gateway_overlay_subscriptions_active",
+				Help: "Number of active overlay subscriptions",
+			},
+			[]string{"service", "overlay_id"},
+		),
+		OverlaySubscriptionEvents: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "gateway_overlay_subscription_events_total",
+				Help: "Subscription lifecycle events",
+			},
+			[]string{"service", "event"},
+		),
+		MessagesReceived: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "gateway_messages_received_total",
+				Help: "Messages received from Redis pub/sub",
+			},
+			[]string{"service", "overlay_id", "platform"},
+		),
+		MessagesSent: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "gateway_messages_sent_total",
+				Help: "Messages sent to WebSocket clients",
+			},
+			[]string{"service", "overlay_id", "result"},
+		),
+		MessageDeliveryLatency: f.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "gateway_message_delivery_latency_seconds",
+				Help:    "Time from receiving message from Redis to sending via WebSocket",
+				Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1},
+			},
+			[]string{"service"},
+		),
+		MessagesDropped: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "gateway_messages_dropped_total",
+				Help: "Messages dropped (client disconnected, buffer full, etc.)",
+			},
+			[]string{"service", "reason"},
+		),
+		HTTPRequestsTotal: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "gateway_http_requests_total",
+				Help: "HTTP requests to gateway endpoints",
+			},
+			[]string{"service", "method", "path", "status"},
+		),
+		HTTPRequestDuration: f.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "gateway_http_request_duration_seconds",
+				Help:    "HTTP request duration",
+				Buckets: []float64{0.005, 0.01, 0.05, 0.1, 0.5, 1, 5},
+			},
+			[]string{"service", "method", "path"},
+		),
+		PubSubReconnectTotal: f.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "pubsub_reconnect_total",
+				Help: "Total number of Redis Pub/Sub reconnect attempts",
+			},
+			[]string{"service", "overlay_id"},
 		),
 	}
 }
