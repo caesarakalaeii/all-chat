@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-stopped_at: Phase 8 context gathered
-last_updated: "2026-03-29T20:28:32.507Z"
-last_activity: "2026-03-29 - Completed quick task 260329-u6p: Add Prometheus metric for new user registrations"
+status: Ready to execute
+stopped_at: "Completed 08-02: API Gateway Subscriber Resilience"
+last_updated: "2026-03-29T21:13:25.036Z"
+last_activity: 2026-03-29
 progress:
   total_phases: 14
   completed_phases: 13
-  total_plans: 56
-  completed_plans: 56
+  total_plans: 62
+  completed_plans: 58
 ---
 
 # Project State
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** Phase 07 — feature-gate-infrastructure
+**Current focus:** Phase 08 — message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
+Phase: 08 (message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline) — EXECUTING
+Plan: 2 of 6
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Plan: Not started
 | Phase 07 P01 | 4 | 2 tasks | 7 files |
 | Phase 07 P03 | 267 | 2 tasks | 7 files |
 | Phase 07 P04 | 117 | 2 tasks | 2 files |
+| Phase 08 P02 | 252s | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -206,6 +207,8 @@ Key decisions relevant to v1.6:
 - [Phase 07]: Admin layout provides AdminNav+ToastProvider — page body renders content only, no duplicate components
 - [Phase 07]: toastManager.add({ title, type }) API used (not .success/.error) — matches base-ui/react CreateToastManager API used by all admin pages
 - [Phase 07]: cn() from @/lib/utils required for conditional classNames — no-restricted-syntax ESLint rule forbids template literal concatenation per DESIGN_SYSTEM.md
+- [Phase 08]: resubscribe() uses context.Background() — subscriptions outlive HTTP requests; lifecycle governed by stopChan not context cancellation
+- [Phase 08]: NewGatewayMetricsForTest() uses promauto.With(fresh registry) — prevents duplicate metric registration panics in tests calling metrics constructors multiple times
 
 ### Roadmap Evolution
 
@@ -251,9 +254,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-29T20:28:32.504Z
-Last activity: 2026-03-29 - Completed quick task 260329-u6p: Add Prometheus metric for new user registrations
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline/08-CONTEXT.md
+Last session: 2026-03-29T21:13:25.033Z
+Last activity: 2026-03-29
+Stopped at: Completed 08-02: API Gateway Subscriber Resilience
+Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
