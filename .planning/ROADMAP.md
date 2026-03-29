@@ -312,7 +312,7 @@ Plans:
 **Plans:** 3/6 plans executed
 
 Plans:
-- [ ] 08-01-PLAN.md — Message-processor stream consumer hardening: unique consumer names, PEL drain, DLQ routing, retry logic, admin replay endpoint
+- [x] 08-01-PLAN.md — Message-processor stream consumer hardening: unique consumer names, PEL drain, DLQ routing, retry logic, admin replay endpoint
 - [x] 08-02-PLAN.md — API Gateway Subscriber Pub/Sub reconnect on channel close, goroutine tracking, ref count guard, pubsub_reconnect_total metric
 - [x] 08-03-PLAN.md — API Gateway StatusSubscriber nil-channel guard, reconnect, WaitGroup shutdown, pubsub_reconnect_total metric
 - [x] 08-04-PLAN.md — Shared listener SDK ring buffer for XADD failure buffering with retry, ADR-0009
