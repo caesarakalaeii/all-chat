@@ -231,6 +231,9 @@ func main() {
 
 	log.Info("Shutting down service...")
 
+	// Stop ring buffer publisher — drains retry goroutine before disconnecting WebSocket.
+	streamPublisher.Stop()
+
 	listener.ShutdownCoordinator(ll, channelMgr,
 		func() { _ = wsClient.Disconnect() },
 		srv,

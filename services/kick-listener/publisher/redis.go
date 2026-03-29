@@ -6,13 +6,18 @@ import (
 	"fmt"
 	"time"
 
+	sharedlistener "github.com/caesar/all-chat/shared/listener"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
 const (
-	// Redis Stream key for raw chat messages
+	// chatStreamKey is the Redis Stream key for raw chat messages
 	chatStreamKey = "chat:raw"
+
+	// ringBufferCapacity is the number of messages the ring buffer can hold before dropping.
+	ringBufferCapacity = 1000
 )
 
 // RawMessage represents a raw message to be published to Redis Stream
@@ -30,57 +35,85 @@ type RawMessage struct {
 	Timestamp   time.Time         `json:"timestamp"`
 }
 
-// StreamPublisher publishes messages to Redis Streams
+// StreamPublisher publishes messages to Redis Streams, wrapped with a
+// RingBufferPublisher so transient XADD failures are buffered for retry rather
+// than silently dropped (eliminates LI-01, LI-02, LI-03).
 type StreamPublisher struct {
-	redis  *redis.Client
-	logger *zap.Logger
+	redis      *redis.Client
+	logger     *zap.Logger
+	ringBuffer *sharedlistener.RingBufferPublisher
 }
 
-// NewStreamPublisher creates a new Redis Stream publisher
+// NewStreamPublisher creates a new Redis Stream publisher backed by a RingBufferPublisher.
 func NewStreamPublisher(redisClient *redis.Client, logger *zap.Logger) *StreamPublisher {
+	p := newStreamPublisherWithRingBuffer(
+		buildXAddFunc(redisClient),
+		logger,
+		prometheus.DefaultRegisterer,
+	)
+	p.redis = redisClient
+	return p
+}
+
+// newStreamPublisherWithRingBuffer is the internal constructor used by both
+// production code and tests (tests supply a custom publishFn and isolated registry).
+func newStreamPublisherWithRingBuffer(
+	publishFn sharedlistener.PublishFunc,
+	logger *zap.Logger,
+	reg prometheus.Registerer,
+) *StreamPublisher {
+	rb := sharedlistener.NewRingBufferPublisherWithRegisterer(
+		ringBufferCapacity,
+		publishFn,
+		logger,
+		"kick-listener",
+		reg,
+	)
+
 	return &StreamPublisher{
-		redis:  redisClient,
-		logger: logger,
+		logger:     logger,
+		ringBuffer: rb,
 	}
 }
 
-// Publish publishes a raw message to Redis Stream
+// buildXAddFunc returns a PublishFunc that writes a pre-serialised JSON payload
+// to the chat:raw Redis Stream using the "data" field.
+func buildXAddFunc(redisClient *redis.Client) sharedlistener.PublishFunc {
+	return func(ctx context.Context, payload []byte) error {
+		_, err := redisClient.XAdd(ctx, &redis.XAddArgs{
+			Stream: chatStreamKey,
+			Values: map[string]interface{}{
+				"data": string(payload),
+			},
+		}).Result()
+		return err
+	}
+}
+
+// Publish serialises msg to JSON and delegates to the ring buffer. If the XADD
+// call fails, the payload is buffered for retry and nil is returned to the caller.
 func (p *StreamPublisher) Publish(ctx context.Context, msg *RawMessage) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	// Publish to Redis Stream
-	_, err = p.redis.XAdd(ctx, &redis.XAddArgs{
-		Stream: chatStreamKey,
-		Values: map[string]interface{}{
-			"data": string(data),
-		},
-	}).Result()
-
-	if err != nil {
-		p.logger.Error("Failed to publish message to Redis Stream",
-			zap.Error(err),
-			zap.String("stream", chatStreamKey),
-			zap.String("platform", msg.Platform),
-			zap.String("overlay_id", msg.OverlayID),
-		)
-		return fmt.Errorf("failed to publish to Redis Stream: %w", err)
-	}
-
-	p.logger.Debug("Published message to Redis Stream",
-		zap.String("stream", chatStreamKey),
-		zap.String("platform", msg.Platform),
-		zap.String("overlay_id", msg.OverlayID),
-		zap.String("channel_id", msg.ChannelID),
-	)
-
-	return nil
+	return p.ringBuffer.Publish(ctx, data)
 }
 
-// IsHealthy checks if the Redis connection is healthy
+// Stop signals the ring buffer retry goroutine to exit and waits for it to finish.
+// Call this during graceful shutdown.
+func (p *StreamPublisher) Stop() {
+	if p.ringBuffer != nil {
+		p.ringBuffer.Stop()
+	}
+}
+
+// IsHealthy checks if the Redis connection is healthy.
 func (p *StreamPublisher) IsHealthy(ctx context.Context) bool {
+	if p.redis == nil {
+		return true // test path without real client
+	}
 	_, err := p.redis.Ping(ctx).Result()
 	return err == nil
 }

@@ -235,6 +235,9 @@ func main() {
 
 	log.Info("Shutting down service...")
 
+	// Stop ring buffer publisher — drains retry goroutine before disconnecting IRC.
+	streamPublisher.Stop()
+
 	// Graceful shutdown: stops leadership listener goroutines + channelMgr + IRC + HTTP server
 	listener.ShutdownCoordinator(ll, channelMgr, func() { _ = ircConn.Disconnect() }, srv, log)
 
