@@ -752,7 +752,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   {message.user?.name_gradient ? (
                     <span
                       className="font-semibold text-sm bg-clip-text text-transparent username-gradient"
-                      style={{ backgroundImage: buildGradientCSS(message.user.name_gradient) }}
+                      style={{
+                        backgroundImage: buildGradientCSS(message.user.name_gradient),
+                        textShadow: 'none',
+                        WebkitTextStroke: '0.5px rgba(0,0,0,0.5)',
+                      }}
                     >
                       {message.user?.display_name || message.user?.username}
                     </span>
