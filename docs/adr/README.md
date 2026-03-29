@@ -192,6 +192,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0009: Ring Buffer Publisher for Listener XADD Resilience
+
+**Status**: Accepted
+**Date**: 2026-03-29
+**Problem**: All 6 Go listeners silently drop messages when Redis XADD fails during temporary unavailability
+**Decision**: Opt-in RingBufferPublisher in shared/listener SDK — mutex-protected circular buffer (1000 messages) with 500ms retry goroutine
+**Impact**: No silent message drops during Redis blips; bounded memory; single shared implementation for all listeners
+**Read**: [0009-ring-buffer-publisher.md](./0009-ring-buffer-publisher.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -313,9 +324,9 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 8
+**Total ADRs**: 9
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
