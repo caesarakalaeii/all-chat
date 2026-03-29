@@ -150,10 +150,14 @@ const FEATURE_CARDS = [
 // LandingPage
 // ---------------------------------------------------------------------------
 export default function LandingPage() {
-  const { user, token } = useAuthStore()
+  const { user, token, init } = useAuthStore()
   const [msgCounts, setMsgCounts] = useState<Record<Platform, number> | null>(null)
 
   const { cardRefs, glowRefs } = useMagneticGlow(TOTAL_CARDS)
+
+  useEffect(() => {
+    init()
+  }, [init])
 
   useEffect(() => {
     fetch('/api/v1/stats')
