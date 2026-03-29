@@ -117,6 +117,46 @@ func (h *AdminHandler) ListAllSources(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// GetUserOverlays returns all overlays for a specific user (admin only)
+// GET /admin/users/:id/overlays
+func (h *AdminHandler) GetUserOverlays(c *gin.Context) {
+	userID := c.Param("id")
+
+	overlays, err := h.overlayRepo.ListByUserID(c.Request.Context(), userID)
+	if err != nil {
+		h.logger.Error("Failed to fetch user overlays", zap.String("user_id", userID), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch overlays",
+		})
+		return
+	}
+
+	type OverlayResponse struct {
+		ID           string `json:"id"`
+		Name         string `json:"name"`
+		UserID       string `json:"user_id"`
+		CreatedAt    string `json:"created_at"`
+		UpdatedAt    string `json:"updated_at"`
+		SourcesCount int    `json:"sources_count"`
+	}
+
+	response := make([]OverlayResponse, len(overlays))
+	for i, overlay := range overlays {
+		sources, _ := h.sourceRepo.ListByOverlayID(c.Request.Context(), overlay.ID)
+		response[i] = OverlayResponse{
+			ID:           overlay.ID,
+			Name:         overlay.Name,
+			UserID:       overlay.UserID,
+			CreatedAt:    overlay.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:    overlay.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			SourcesCount: len(sources),
+		}
+	}
+
+	h.logger.Info("Listed user overlays", zap.String("user_id", userID), zap.Int("count", len(overlays)))
+	c.JSON(http.StatusOK, response)
+}
+
 // GetOverlaySources returns all sources for a specific overlay (admin only)
 // GET /api/v1/admin/overlays/:id/sources
 func (h *AdminHandler) GetOverlaySources(c *gin.Context) {

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
+import { useAuthStore } from '@/lib/stores/auth-store'
 
 interface User {
   id: string
@@ -35,6 +36,7 @@ interface UserOverlay {
 
 export default function UsersPage() {
   const router = useRouter()
+  const { token: authToken, startImpersonation, init: initAuth } = useAuthStore()
   const [users, setUsers] = useState<User[]>([])
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [userOverlays, setUserOverlays] = useState<UserOverlay[]>([])
@@ -96,7 +98,7 @@ export default function UsersPage() {
 
       try {
         const token = localStorage.getItem('jwt_token')
-        const response = await fetch('/api/v1/overlays', {
+        const response = await fetch(`/api/v1/admin/users/${selectedUser.id}/overlays`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -134,7 +136,7 @@ export default function UsersPage() {
   const handleImpersonate = async (userId: string) => {
     setImpersonating(true)
     try {
-      const token = localStorage.getItem('jwt_token')
+      const token = authToken || localStorage.getItem('jwt_token')
       const response = await fetch(`/api/v1/admin/users/${userId}/impersonate`, {
         method: 'POST',
         headers: {
@@ -149,13 +151,12 @@ export default function UsersPage() {
 
       const data = await response.json()
 
-      // Save the original admin token before overwriting it
-      localStorage.setItem('admin_token', token || '')
+      // Update the auth store with the impersonation token — this also updates localStorage
+      // atomically and makes the banner visible immediately via reactive store subscription.
+      startImpersonation(data.token, data.username)
 
-      // Store the impersonation token
-      localStorage.setItem('jwt_token', data.token)
-      localStorage.setItem('impersonating', 'true')
-      localStorage.setItem('impersonated_user', data.username)
+      // Re-initialise auth store so user object reflects impersonated user
+      await initAuth()
 
       // Redirect to home page
       router.push('/')
