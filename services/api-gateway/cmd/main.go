@@ -489,7 +489,8 @@ func main() {
 		protectedAPI.GET("/admin/viewers", proxyHandler.ForwardRequest)         // -> auth-service
 		protectedAPI.POST("/admin/viewers/:session_id/ban", proxyHandler.ForwardRequest)   // -> auth-service
 		protectedAPI.POST("/admin/viewers/:session_id/unban", proxyHandler.ForwardRequest) // -> auth-service
-		protectedAPI.GET("/admin/overlays", proxyHandler.ForwardRequest)        // -> overlay-manager
+		protectedAPI.GET("/admin/overlays", proxyHandler.ForwardRequest)                // -> overlay-manager
+		protectedAPI.GET("/admin/overlays/active", statsHandler.GetActiveOverlays)          // local: Redis scan
 		protectedAPI.GET("/admin/overlays/:id/sources", proxyHandler.ForwardRequest) // -> overlay-manager
 		protectedAPI.GET("/admin/sources", proxyHandler.ForwardRequest)         // -> overlay-manager
 		protectedAPI.GET("/admin/users/:id/overlays", proxyHandler.ForwardRequest)   // -> overlay-manager
