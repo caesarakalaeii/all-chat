@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 08-05-PLAN.md
-last_updated: "2026-03-29T21:26:39.095Z"
+stopped_at: Completed 08-06-PLAN.md
+last_updated: "2026-03-29T21:30:59.278Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 14
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 62
-  completed_plans: 61
+  completed_plans: 62
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 08 (message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 
 ## Performance Metrics
 
@@ -93,6 +93,7 @@ Plan: 5 of 6
 | Phase 08 P04 | 268 | 2 tasks | 4 files |
 | Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline P01 | 612 | 2 tasks | 12 files |
 | Phase 08 P05 | 176 | 2 tasks | 2 files |
+| Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline P06 | 442 | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -219,6 +220,9 @@ Key decisions relevant to v1.6:
 - [Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline]: PublishToMultiple uses individual retried calls not pipeline — error returned only if ALL overlays fail
 - [Phase 08]: Grafana ConfigMap format used for alert rules (not PrometheusRule CRD) — matches Phase 4 allchat-alerts.yaml convention
 - [Phase 08]: Pipeline resilience panels added as row in existing message-processing dashboard (not new dashboard) — keeps pipeline observability in one place
+- [Phase 08]: RingBufferPublisher uses data-only XADD in all 5 listeners — message-processor reads only data field; per-field publishing was unnecessary overhead
+- [Phase 08]: newStreamPublisherWithRingBuffer internal constructor with prometheus.Registerer injection — prevents duplicate metric registration panics in tests
+- [Phase 08]: PublishBatch replaced pipeline with individual ring buffer calls — each message independently retried on failure, eliminates LI-02 batch pipeline failure mode
 
 ### Roadmap Evolution
 
@@ -264,9 +268,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-29T21:26:39.092Z
+Last session: 2026-03-29T21:30:59.275Z
 Last activity: 2026-03-29
-Stopped at: Completed 08-05-PLAN.md
+Stopped at: Completed 08-06-PLAN.md
 Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
