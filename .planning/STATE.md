@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: Milestone complete
 stopped_at: "Checkpoint: 07-04 Task 3 human-verify"
-last_updated: "2026-03-29T15:16:49.800Z"
+last_updated: "2026-03-29T17:50:00.000Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 12
@@ -246,6 +246,7 @@ None yet.
 | 260326-r4m | Fix closed dependabot PRs after force push — update all Go and npm deps | 2026-03-26 | 38225be | [260326-r4m-fix-closed-dependabot-prs-after-force-pu](./quick/260326-r4m-fix-closed-dependabot-prs-after-force-pu/) |
 | 260328-tqh | Enable tracing in the tiktok-listener service | 2026-03-28 | 01effa3 | [260328-tqh-enable-tracing-in-the-tiktok-listener-se](./quick/260328-tqh-enable-tracing-in-the-tiktok-listener-se/) |
 | 260328-v03 | Fix Grafana dashboard legends to show meaningful labels | 2026-03-28 | cc3982f (caesar-deployment) | [260328-v03-fix-grafana-dashboard-legends-to-show-me](./quick/260328-v03-fix-grafana-dashboard-legends-to-show-me/) |
+| 260329-u6p | Add Prometheus metric for new user registrations | 2026-03-29 | 7a81716 / f818dd8 (caesar-deployment) | [260329-u6p-add-prometheus-metric-for-new-user-regis](./quick/260329-u6p-add-prometheus-metric-for-new-user-regis/) |
 
 ## Session Continuity
 
