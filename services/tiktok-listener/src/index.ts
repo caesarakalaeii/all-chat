@@ -882,10 +882,10 @@ class TikTokListenerService {
         }
       };
 
-      // Publish to Redis Stream
+      // Publish to Redis Stream (MAXLEN ~100000 keeps stream bounded)
       await this.redis.xAdd('chat:raw', '*', {
         data: JSON.stringify(rawMessage)
-      });
+      }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
 
       logger.debug('Published TikTok chat message', {
         username,
@@ -930,7 +930,7 @@ class TikTokListenerService {
         }
       };
 
-      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) });
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
       logger.debug('Published TikTok gift event', { username, overlay_id: overlayId, gift: data.gift?.name });
     } catch (error) {
       logger.error('Failed to handle gift event', { username, error });
@@ -1005,7 +1005,7 @@ class TikTokListenerService {
         event_data: {}
       };
 
-      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) });
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
       logger.debug('Published TikTok follow event', { username, overlay_id: overlayId });
     } catch (error) {
       logger.error('Failed to handle follow event', { username, error });
@@ -1037,7 +1037,7 @@ class TikTokListenerService {
         event_data: {}
       };
 
-      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) });
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
       logger.debug('Published TikTok share event', { username, overlay_id: overlayId });
     } catch (error) {
       logger.error('Failed to handle share event', { username, error });
@@ -1086,7 +1086,7 @@ class TikTokListenerService {
           };
 
           try {
-            await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) });
+            await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
 
             logger.debug('Published like aggregation', {
               username: agg.username,

@@ -15,6 +15,9 @@ const (
 	// StreamKey is the Redis Streams key to publish to
 	StreamKey = "chat:raw"
 
+	// maxStreamLength is the maximum number of messages to keep in the stream (sliding window)
+	maxStreamLength = 100000
+
 	// ringBufferCapacity is the number of messages the ring buffer can hold before dropping.
 	ringBufferCapacity = 1000
 )
@@ -66,6 +69,8 @@ func buildXAddFunc(client *redis.Client) sharedlistener.PublishFunc {
 	return func(ctx context.Context, payload []byte) error {
 		return client.XAdd(ctx, &redis.XAddArgs{
 			Stream: StreamKey,
+			MaxLen: maxStreamLength,
+			Approx: true,
 			Values: map[string]interface{}{
 				"data": string(payload),
 			},
