@@ -108,7 +108,7 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 			// Phase 31: inject All-Chat badges from cache
 			// Prepend premium first so allchat ends up at index 0 in final slice
 			if identity.IsPremium {
-				msg.User.Badges = append([]models.Badge{{Name: "premium", Version: "1", IconURL: ""}}, msg.User.Badges...)
+				msg.User.Badges = append([]models.Badge{{Name: "allchat-premium", Version: "1", IconURL: ""}}, msg.User.Badges...)
 			}
 			if identity.IsAdmin {
 				msg.User.Badges = append([]models.Badge{{Name: "allchat", Version: "1", IconURL: ""}}, msg.User.Badges...)
@@ -192,7 +192,7 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 	// 7. Phase 31: inject All-Chat badges for resolved viewers
 	// Prepend premium first so allchat ends up at index 0 in final slice
 	if isPremium {
-		msg.User.Badges = append([]models.Badge{{Name: "premium", Version: "1", IconURL: ""}}, msg.User.Badges...)
+		msg.User.Badges = append([]models.Badge{{Name: "allchat-premium", Version: "1", IconURL: ""}}, msg.User.Badges...)
 	}
 	if isAdmin {
 		msg.User.Badges = append([]models.Badge{{Name: "allchat", Version: "1", IconURL: ""}}, msg.User.Badges...)

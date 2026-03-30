@@ -727,7 +727,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       {message.user.badges.map((badge, idx) => (
                         badge.name === 'allchat' ? (
                           <AllChatBadge key={idx} size={18} title={badge.name} />
-                        ) : badge.name === 'premium' ? (
+                        ) : badge.name === 'allchat-premium' ? (
                           <PremiumBadge key={idx} size={18} title={badge.name} />
                         ) : badge.icon_url ? (
                           <Image
@@ -801,7 +801,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       {message.user.badges.map((badge, idx) => (
                         badge.name === 'allchat' ? (
                           <AllChatBadge key={idx} size={18} title={badge.name} />
-                        ) : badge.name === 'premium' ? (
+                        ) : badge.name === 'allchat-premium' ? (
                           <PremiumBadge key={idx} size={18} title={badge.name} />
                         ) : badge.icon_url ? (
                           <Image

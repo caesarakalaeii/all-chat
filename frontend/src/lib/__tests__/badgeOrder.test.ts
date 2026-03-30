@@ -10,13 +10,13 @@ describe('sortBadges', () => {
     expect(result[0].name).toBe('allchat')
   })
 
-  it('premium sorts before moderator', () => {
-    const result = sortBadges([makeBadge('moderator'), makeBadge('premium')])
-    expect(result[0].name).toBe('premium')
+  it('allchat-premium sorts before moderator', () => {
+    const result = sortBadges([makeBadge('moderator'), makeBadge('allchat-premium')])
+    expect(result[0].name).toBe('allchat-premium')
   })
 
-  it('allchat sorts before premium', () => {
-    const result = sortBadges([makeBadge('premium'), makeBadge('allchat')])
+  it('allchat sorts before allchat-premium', () => {
+    const result = sortBadges([makeBadge('allchat-premium'), makeBadge('allchat')])
     expect(result[0].name).toBe('allchat')
   })
 
@@ -25,8 +25,8 @@ describe('sortBadges', () => {
     expect(result[0].name).toBe('allchat')
   })
 
-  it('combined: [allchat, premium, vip] order from arbitrary input', () => {
-    const result = sortBadges([makeBadge('vip'), makeBadge('premium'), makeBadge('allchat')])
-    expect(result.map((b) => b.name)).toEqual(['allchat', 'premium', 'vip'])
+  it('combined: [allchat, allchat-premium, vip] order from arbitrary input', () => {
+    const result = sortBadges([makeBadge('vip'), makeBadge('allchat-premium'), makeBadge('allchat')])
+    expect(result.map((b) => b.name)).toEqual(['allchat', 'allchat-premium', 'vip'])
   })
 })

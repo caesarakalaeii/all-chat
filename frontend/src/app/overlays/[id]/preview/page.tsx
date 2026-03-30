@@ -1114,7 +1114,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                                       {message.user.badges.map((badge, index) =>
                                         badge.name === 'allchat' ? (
                                           <AllChatBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
-                                        ) : badge.name === 'premium' ? (
+                                        ) : badge.name === 'allchat-premium' ? (
                                           <PremiumBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
                                         ) : badge.icon_url ? (
                                           <Image
@@ -1173,7 +1173,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                                       {message.user.badges.map((badge, index) =>
                                         badge.name === 'allchat' ? (
                                           <AllChatBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
-                                        ) : badge.name === 'premium' ? (
+                                        ) : badge.name === 'allchat-premium' ? (
                                           <PremiumBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
                                         ) : badge.icon_url ? (
                                           <Image
