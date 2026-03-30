@@ -16,6 +16,9 @@ const (
 	// chatStreamKey is the Redis Stream key for raw chat messages
 	chatStreamKey = "chat:raw"
 
+	// maxStreamLength is the maximum number of messages to keep in the stream (sliding window)
+	maxStreamLength = 100000
+
 	// ringBufferCapacity is the number of messages the ring buffer can hold before dropping.
 	ringBufferCapacity = 1000
 )
@@ -82,6 +85,8 @@ func buildXAddFunc(redisClient *redis.Client) sharedlistener.PublishFunc {
 	return func(ctx context.Context, payload []byte) error {
 		_, err := redisClient.XAdd(ctx, &redis.XAddArgs{
 			Stream: chatStreamKey,
+			MaxLen: maxStreamLength,
+			Approx: true,
 			Values: map[string]interface{}{
 				"data": string(payload),
 			},

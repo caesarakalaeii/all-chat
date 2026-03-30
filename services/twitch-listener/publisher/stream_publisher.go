@@ -16,7 +16,7 @@ const (
 	StreamKey = "chat:raw"
 
 	// MaxStreamLength is the maximum number of messages to keep in the stream (sliding window)
-	MaxStreamLength = 1000000 // 1 million messages
+	MaxStreamLength = 100000 // 100K messages — consumer is real-time, no need for deep history
 
 	// ringBufferCapacity is the number of messages the ring buffer can hold before dropping.
 	ringBufferCapacity = 1000
