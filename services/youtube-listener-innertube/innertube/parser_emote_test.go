@@ -67,7 +67,8 @@ func TestExtractMessageText_CustomEmoji_Global(t *testing.T) {
 }
 
 // TestExtractMessageText_UnicodeEmoji_NoCustom tests that a non-custom (unicode) emoji
-// does NOT produce an emote entry but still contributes to text.
+// without thumbnails resolves to the actual Unicode character (not the shortcode).
+// YouTube encodes standard emoji as emojiId "emoji_u{hex}", e.g. "emoji_u1f600" → 😀.
 func TestExtractMessageText_UnicodeEmoji_NoCustom(t *testing.T) {
 	message := MessageContent{
 		Runs: []MessageRun{
@@ -83,7 +84,7 @@ func TestExtractMessageText_UnicodeEmoji_NoCustom(t *testing.T) {
 
 	text, emotes := extractMessageText(message)
 
-	assert.Equal(t, ":smile:", text, "unicode emoji text should still be present")
+	assert.Equal(t, "😀", text, "unicode emoji should resolve to actual Unicode character, not shortcode")
 	assert.Empty(t, emotes, "unicode emoji should not produce an emote entry")
 }
 
@@ -246,4 +247,74 @@ func TestParseMessages_EmoteDataTag(t *testing.T) {
 	err = json.Unmarshal([]byte(emoteDataJSON), &emoteData)
 	assert.NoError(t, err, "emote_data should be valid JSON")
 	assert.NotEmpty(t, emoteData, "emote_data JSON array should not be empty")
+}
+
+// TestResolveUnicodeEmojiID tests the emoji_u{hex} → Unicode character conversion.
+func TestResolveUnicodeEmojiID(t *testing.T) {
+	tests := []struct {
+		name    string
+		emojiID string
+		want    string
+	}{
+		{"face with tears of joy", "emoji_u1f602", "😂"},
+		{"grinning face", "emoji_u1f600", "😀"},
+		{"flag: china (multi-codepoint)", "emoji_u1f1e8_1f1f3", "🇨🇳"},
+		{"ZWJ family sequence", "emoji_u1f468_200d_1f469_200d_1f467", "👨‍👩‍👧"},
+		{"non-emoji prefix", "face-fuchsia-tongue-out", ""},
+		{"empty string", "", ""},
+		{"prefix only", "emoji_u", ""},
+		{"invalid hex", "emoji_uzzzz", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveUnicodeEmojiID(tt.emojiID)
+			if got != tt.want {
+				t.Errorf("resolveUnicodeEmojiID(%q) = %q, want %q", tt.emojiID, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestExtractMessageText_UnicodeEmoji_ResolvedToChar tests that a standard Unicode emoji
+// (emoji_u{hex} ID, no thumbnails) is converted to the actual Unicode character in text.
+func TestExtractMessageText_UnicodeEmoji_ResolvedToChar(t *testing.T) {
+	message := MessageContent{
+		Runs: []MessageRun{
+			{Text: "lol "},
+			{
+				Emoji: &EmojiData{
+					EmojiID:      "emoji_u1f602",
+					IsCustomEmoji: false,
+					Shortcuts:    []string{":face_with_tears_of_joy:"},
+					// No thumbnails — standard Unicode emoji
+				},
+			},
+		},
+	}
+
+	text, emotes := extractMessageText(message)
+
+	assert.Equal(t, "lol 😂", text, "should resolve emoji_u1f602 to 😂")
+	assert.Empty(t, emotes, "standard Unicode emoji should produce no emote entry")
+}
+
+// TestExtractMessageText_MultiCodepointEmoji tests that flag and ZWJ sequence emoji are
+// correctly resolved to their Unicode character sequences.
+func TestExtractMessageText_MultiCodepointEmoji(t *testing.T) {
+	message := MessageContent{
+		Runs: []MessageRun{
+			{
+				Emoji: &EmojiData{
+					EmojiID:      "emoji_u1f1e8_1f1f3",
+					IsCustomEmoji: false,
+					Shortcuts:    []string{":flag_cn:"},
+				},
+			},
+		},
+	}
+
+	text, emotes := extractMessageText(message)
+
+	assert.Equal(t, "🇨🇳", text, "should resolve multi-codepoint flag emoji")
+	assert.Empty(t, emotes, "flag emoji should produce no emote entry")
 }

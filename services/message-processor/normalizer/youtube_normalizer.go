@@ -19,6 +19,8 @@ type ytEmoteEntry struct {
 }
 
 // findAllPositions returns all [start, end] byte positions of substr in s.
+// Both start and end are inclusive indices (matching the Twitch IRC position convention
+// and the expectation of the frontend renderMessage renderer).
 func findAllPositions(s, substr string) [][]int {
 	if substr == "" {
 		return nil
@@ -31,9 +33,9 @@ func findAllPositions(s, substr string) [][]int {
 			break
 		}
 		start := offset + idx
-		end := start + len(substr)
+		end := start + len(substr) - 1 // inclusive end
 		positions = append(positions, []int{start, end})
-		offset = end
+		offset = start + len(substr)
 	}
 	return positions
 }

@@ -134,7 +134,9 @@ func TestYouTubeNormalizer_EmoteData_Positions(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// ":custom:" starts at byte index 6 ("hello " = 6 bytes), ends at 13 inclusive (or 14 exclusive)
+	// ":custom:" starts at byte index 6 ("hello " = 6 bytes) and ends at byte index 13 inclusive
+	// (":custom:" is 8 bytes: indices 6,7,8,9,10,11,12,13). Positions use inclusive end to match
+	// the Twitch IRC convention and the frontend renderMessage renderer expectation.
 	raw := makeRawMsgWithText("hello :custom: world", map[string]string{
 		"emote_data": string(emoteDataJSON),
 	})
@@ -144,5 +146,5 @@ func TestYouTubeNormalizer_EmoteData_Positions(t *testing.T) {
 
 	require.Len(t, unified.Message.Emotes, 1)
 	assert.NotEmpty(t, unified.Message.Emotes[0].Positions, "Positions should be non-empty for emote present in text")
-	assert.Equal(t, []int{6, 14}, unified.Message.Emotes[0].Positions[0], "position should be [6, 14] (0-indexed byte range of ':custom:' in text)")
+	assert.Equal(t, []int{6, 13}, unified.Message.Emotes[0].Positions[0], "position should be [6, 13] (inclusive end — ':custom:' occupies bytes 6..13)")
 }

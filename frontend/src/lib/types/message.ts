@@ -102,7 +102,7 @@ export interface MessageInfo {
 
 export interface Emote {
   code: string;
-  provider: 'twitch' | '7tv' | 'bttv' | 'ffz';
+  provider: 'twitch' | '7tv' | 'bttv' | 'ffz' | 'youtube';
   url: string;
   positions: number[][];
 }
