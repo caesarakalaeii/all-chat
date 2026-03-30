@@ -2,8 +2,10 @@ package subscription
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -45,6 +47,9 @@ func (r *Repository) IsOverlayActive(ctx context.Context, overlayID string) (boo
 	var isActive bool
 	err := r.db.QueryRow(ctx, query, overlayID).Scan(&isActive)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
 		return false, fmt.Errorf("failed to check overlay status: %w", err)
 	}
 
