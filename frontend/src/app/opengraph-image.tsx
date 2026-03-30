@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og'
-
-export const runtime = 'edge'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 export const alt = 'All-Chat - Multi-Platform Chat Aggregation for Streamers'
 
@@ -12,9 +12,9 @@ export const size = {
 export const contentType = 'image/png'
 
 export default async function Image() {
-  const barlowFontData = await fetch(
-    'https://fonts.gstatic.com/s/barlow/v12/7cHpv4kjgoGqM7E_DMs5ynghnQci.woff2',
-  ).then((res) => res.arrayBuffer())
+  const barlowFontData = await readFile(
+    join(process.cwd(), 'public', 'fonts', 'Barlow-Bold.ttf'),
+  )
 
   return new ImageResponse(
     (
