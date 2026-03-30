@@ -513,8 +513,14 @@ func (m *Manager) verifyCoverageComplete(ctx context.Context, sourceIDMap map[st
 	return true
 }
 
-// joinChannel joins a channel and tracks it
+// joinChannel joins a channel and tracks it.
+// It departs first to clear any stale state in the go-twitch-irc library's
+// internal channels map. The library skips Join() calls for channels already
+// in its map, but after IRC reconnects or race conditions the map entry can
+// exist while the server-side JOIN was never acknowledged. Departing first
+// removes the map entry so the subsequent Join() always sends a real IRC JOIN.
 func (m *Manager) joinChannel(ctx context.Context, channel string) {
+	m.joinParter.Depart(channel)
 	m.joinParter.Join(channel)
 	m.activeChans[channel] = true
 
@@ -731,6 +737,7 @@ func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels 
 				m.logger.Warn("Rate limiter wait interrupted", zap.Error(err))
 				break
 			}
+			m.joinParter.Depart(ch) // Clear stale library state
 			m.joinParter.Join(ch)
 			m.activeChans[ch] = true
 		}

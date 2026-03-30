@@ -160,9 +160,10 @@ func TestManager_SyncChannels_PartRemovedChannels(t *testing.T) {
 	err = manager.SyncChannels(ctx)
 	require.NoError(t, err)
 
-	// Verify summit1g was parted
+	// Verify summit1g was parted.
+	// Note: departed also includes depart-before-join calls (stale state prevention),
+	// so we check that the explicit PART for "summit1g" is present rather than counting.
 	departed := mockJP.GetDeparted()
-	assert.Len(t, departed, 1)
 	assert.Contains(t, departed, "summit1g")
 
 	// Verify manager only tracks xqc now
