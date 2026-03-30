@@ -100,7 +100,7 @@ func TestUpsertViewerCosmetics(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedColor := "#ff6600"
-	err = repo.UpsertViewerCosmetics(ctx, viewerID, &expectedColor)
+	err = repo.UpsertViewerCosmetics(ctx, viewerID, &expectedColor, nil, nil, nil)
 	require.NoError(t, err)
 
 	color, err := repo.GetViewerCosmetics(ctx, viewerID)

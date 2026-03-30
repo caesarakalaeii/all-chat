@@ -161,6 +161,31 @@ func (r *ViewerIdentityRepository) UpsertViewerCosmetics(
 	return nil
 }
 
+// UpsertAvatarCosmetics updates only the avatar_frame_id and avatar_flair_id columns,
+// leaving name_color and name_gradient untouched. This prevents avatar-only PATCH
+// requests from accidentally NULLing out a previously saved name color/gradient.
+// Pass nil for avatarFrameID or avatarFlairID to clear the respective selection.
+func (r *ViewerIdentityRepository) UpsertAvatarCosmetics(
+	ctx context.Context,
+	viewerID uuid.UUID,
+	avatarFrameID *uuid.UUID, // nil = clear selection
+	avatarFlairID *uuid.UUID, // nil = clear selection
+) error {
+	_, err := r.db.Exec(ctx,
+		`INSERT INTO viewer_cosmetics (viewer_id, avatar_frame_id, avatar_flair_id, updated_at)
+		 VALUES ($1, $2, $3, NOW())
+		 ON CONFLICT (viewer_id) DO UPDATE SET
+		     avatar_frame_id = EXCLUDED.avatar_frame_id,
+		     avatar_flair_id = EXCLUDED.avatar_flair_id,
+		     updated_at = NOW()`,
+		viewerID, avatarFrameID, avatarFlairID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to upsert avatar cosmetics: %w", err)
+	}
+	return nil
+}
+
 // LinkViewerToUser links a viewer session to a user account and propagates
 // premium status. Called after OAuth when a linked streamer account is found.
 func (r *ViewerIdentityRepository) LinkViewerToUser(ctx context.Context, platform, platformUserID string, userID string, isPremium bool) error {
