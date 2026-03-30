@@ -120,9 +120,17 @@ export class TikTokStatusChecker {
 
       return { isLive, roomId };
     } catch (error) {
+      // tiktok-live-connector's FetchIsLiveError calls super() with no message,
+      // so error.message is always "". Extract the sub-errors from error.errors[] for diagnostics.
+      const subErrors = (error as any)?.errors;
+      const errorDetail = Array.isArray(subErrors) && subErrors.length > 0
+        ? subErrors.map((e: unknown) => (e instanceof Error ? e.message : String(e))).filter(Boolean).join(' | ')
+        : (error instanceof Error ? error.message : String(error));
+
       this.logger.error('Failed to check live status', {
         username,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorDetail || 'unknown (FetchIsLiveError with no sub-errors)',
+        error_type: error instanceof Error ? error.constructor.name : typeof error,
         stack: error instanceof Error ? error.stack : undefined
       });
 
