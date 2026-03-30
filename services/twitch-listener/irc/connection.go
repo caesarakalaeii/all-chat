@@ -2,6 +2,7 @@ package irc
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -349,7 +350,7 @@ func (cm *ConnectionManager) handleConnect() {
 			for _, ch := range channels {
 				statusPublisher.Publish(ctx, status.Message{
 					Platform:  "twitch",
-					ChannelID: ch,
+					ChannelID: strings.ToLower(ch),
 					Status:    "connected",
 				})
 			}

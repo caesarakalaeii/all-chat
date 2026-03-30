@@ -526,11 +526,14 @@ func (m *Manager) joinChannel(ctx context.Context, channel string) {
 		)
 	}
 
-	// Publish connected status to overlay status indicators
+	// Publish connected status to overlay status indicators.
+	// Use lowercase channel name because the API gateway looks up status by
+	// overlay_chat_sources.channel_id which is stored in lowercase, while
+	// GetUniqueChannels returns channel_name which may be mixed-case.
 	if m.statusPublisher != nil {
 		m.statusPublisher.Publish(ctx, status.Message{
 			Platform:  "twitch",
-			ChannelID: channel,
+			ChannelID: strings.ToLower(channel),
 			Status:    "connected",
 		})
 	}
@@ -553,11 +556,11 @@ func (m *Manager) partChannelLocked(ctx context.Context, channel string, release
 	// Sources should remain active in DB even if temporarily not connected
 	// This allows multiple overlays to share the same channel
 
-	// Publish offline status to overlay status indicators
+	// Publish offline status to overlay status indicators (lowercase to match channel_id in DB)
 	if m.statusPublisher != nil {
 		m.statusPublisher.Publish(ctx, status.Message{
 			Platform:  "twitch",
-			ChannelID: channel,
+			ChannelID: strings.ToLower(channel),
 			Status:    "offline",
 		})
 	}
