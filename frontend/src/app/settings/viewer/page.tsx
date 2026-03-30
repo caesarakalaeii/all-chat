@@ -483,26 +483,57 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
   const [savedFeedback, setSavedFeedback] = useState(false)
 
   useEffect(() => {
-    const fetchCatalogs = async () => {
+    const fetchCatalogsAndSelection = async () => {
       try {
-        const [framesRes, flairsRes] = await Promise.all([
+        const token = typeof window !== 'undefined' ? localStorage.getItem('viewer_jwt_token') : null
+        const cosmeticsHeaders: Record<string, string> = {}
+        if (token) cosmeticsHeaders['Authorization'] = `Bearer ${token}`
+
+        const [framesRes, flairsRes, cosmeticsRes] = await Promise.all([
           fetch('/api/v1/auth/viewer/catalog/frames'),
           fetch('/api/v1/auth/viewer/catalog/flairs'),
+          token && claims.viewer_id
+            ? fetch('/api/v1/auth/viewer/cosmetics', { headers: cosmeticsHeaders })
+            : Promise.resolve(null),
         ])
+
+        let frameList: CatalogItem[] = [NONE_ITEM]
+        let flairList: CatalogItem[] = [NONE_ITEM]
+
         if (framesRes.ok) {
           const data = await framesRes.json() as { frames: CatalogItem[] }
-          setFrames([NONE_ITEM, ...(data.frames ?? [])])
+          frameList = [NONE_ITEM, ...(data.frames ?? [])]
+          setFrames(frameList)
         }
         if (flairsRes.ok) {
           const data = await flairsRes.json() as { flairs: CatalogItem[] }
-          setFlairs([NONE_ITEM, ...(data.flairs ?? [])])
+          flairList = [NONE_ITEM, ...(data.flairs ?? [])]
+          setFlairs(flairList)
+        }
+
+        // Restore saved selection so the correct item is highlighted after page reload.
+        if (cosmeticsRes?.ok) {
+          const cosmetics = await cosmeticsRes.json() as {
+            avatar_frame_id?: string | null
+            avatar_flair_id?: string | null
+          }
+          if (cosmetics.avatar_frame_id) {
+            setSelectedFrameId(cosmetics.avatar_frame_id)
+            const found = frameList.find(f => f.id === cosmetics.avatar_frame_id)
+            if (found) setPreviewFrameUrl(found.image_url)
+          }
+          if (cosmetics.avatar_flair_id) {
+            setSelectedFlairId(cosmetics.avatar_flair_id)
+            const found = flairList.find(f => f.id === cosmetics.avatar_flair_id)
+            if (found) setPreviewFlairUrl(found.image_url)
+          }
         }
       } catch {
         // Silently fail — cosmetics catalog is best-effort
       }
     }
-    fetchCatalogs()
-  }, [])
+    fetchCatalogsAndSelection()
+  }, [claims.viewer_id])
 
   const handleSelectFrame = (item: CatalogItem) => {
     if (item.is_premium && !isPremium) return

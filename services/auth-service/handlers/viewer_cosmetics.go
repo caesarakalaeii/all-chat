@@ -117,6 +117,9 @@ func (h *ViewerCosmeticsHandler) HandlePatchCosmetics(c *gin.Context) {
 // This enables unit testing with mock implementations.
 type cosmeticsUpsertRepo interface {
 	UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string, nameGradient []byte, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error
+	// UpsertAvatarCosmetics updates only avatar_frame_id and avatar_flair_id, leaving
+	// name_color and name_gradient untouched. Used for avatar-only PATCH requests.
+	UpsertAvatarCosmetics(ctx context.Context, viewerID uuid.UUID, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error
 }
 
 // NameGradientReq is the JSON shape for a gradient in the PATCH request body.
@@ -126,17 +129,30 @@ type NameGradientReq struct {
 	Angle  int      `json:"angle"`
 }
 
+// patchCosmeticsRaw is used as an intermediate type for JSON parsing.
+// Using json.RawMessage for each field lets us distinguish absent (nil RawMessage)
+// from explicitly null (RawMessage("null")) from a real value.
+type patchCosmeticsRaw struct {
+	NameColor     json.RawMessage `json:"name_color"`
+	NameGradient  json.RawMessage `json:"name_gradient"`
+	AvatarFrameID json.RawMessage `json:"avatar_frame_id"`
+	AvatarFlairID json.RawMessage `json:"avatar_flair_id"`
+}
+
 // patchCosmeticsRequest is the expected request body for PATCH /viewer/cosmetics.
-// Using *string allows distinguishing between null and absent name_color.
-// Using *NameGradientReq allows distinguishing between null and absent name_gradient.
-// AvatarFrameID and AvatarFlairID use NO omitempty — JSON null must be distinguishable
-// from absent (absent = field not in body, null = explicit clear, UUID string = set).
-// In v1.4 the UPSERT always overwrites these columns; frontend omits to keep existing.
+// Parsed from patchCosmeticsRaw to separate field-presence from field-value.
 type patchCosmeticsRequest struct {
-	NameColor     *string          `json:"name_color"`
-	NameGradient  *NameGradientReq `json:"name_gradient"`
-	AvatarFrameID *uuid.UUID       `json:"avatar_frame_id"`
-	AvatarFlairID *uuid.UUID       `json:"avatar_flair_id"`
+	NameColor     *string          // nil means "absent or explicit null"
+	NameGradient  *NameGradientReq // nil means "absent or explicit null"
+	AvatarFrameID *uuid.UUID       // nil means "absent or explicit null"
+	AvatarFlairID *uuid.UUID       // nil means "absent or explicit null"
+
+	// Presence flags — true when the field was present in the JSON body
+	// (regardless of whether the value was null or non-null).
+	nameColorPresent     bool
+	nameGradientPresent  bool
+	avatarFrameIDPresent bool
+	avatarFlairIDPresent bool
 }
 
 // handlePatchCosmeticsLogic contains the core business logic for PATCH cosmetics.
@@ -162,11 +178,65 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo) {
 		return
 	}
 
-	// Step 3: Parse request body
-	var req patchCosmeticsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	// Step 3: Parse request body using raw JSON to distinguish absent fields from null.
+	var raw patchCosmeticsRaw
+	if err := c.ShouldBindJSON(&raw); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
+	}
+
+	var req patchCosmeticsRequest
+
+	// name_color: absent raw → nil / not present; "null" raw → nil + present; string → value + present
+	if len(raw.NameColor) > 0 {
+		req.nameColorPresent = true
+		if string(raw.NameColor) != "null" {
+			var nc string
+			if err := json.Unmarshal(raw.NameColor, &nc); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+				return
+			}
+			req.NameColor = &nc
+		}
+	}
+
+	// name_gradient: absent → nil / not present; "null" → nil + present; object → value + present
+	if len(raw.NameGradient) > 0 {
+		req.nameGradientPresent = true
+		if string(raw.NameGradient) != "null" {
+			var ng NameGradientReq
+			if err := json.Unmarshal(raw.NameGradient, &ng); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+				return
+			}
+			req.NameGradient = &ng
+		}
+	}
+
+	// avatar_frame_id: absent → nil / not present; "null" → nil + present; UUID string → value + present
+	if len(raw.AvatarFrameID) > 0 {
+		req.avatarFrameIDPresent = true
+		if string(raw.AvatarFrameID) != "null" {
+			var frameID uuid.UUID
+			if err := json.Unmarshal(raw.AvatarFrameID, &frameID); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid avatar_frame_id"})
+				return
+			}
+			req.AvatarFrameID = &frameID
+		}
+	}
+
+	// avatar_flair_id: absent → nil / not present; "null" → nil + present; UUID string → value + present
+	if len(raw.AvatarFlairID) > 0 {
+		req.avatarFlairIDPresent = true
+		if string(raw.AvatarFlairID) != "null" {
+			var flairID uuid.UUID
+			if err := json.Unmarshal(raw.AvatarFlairID, &flairID); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid avatar_flair_id"})
+				return
+			}
+			req.AvatarFlairID = &flairID
+		}
 	}
 
 	// Step 4: Validate name_color if non-null
@@ -271,10 +341,23 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo) {
 		avatarFlairID = req.AvatarFlairID
 	}
 
-	// Step 6: Upsert cosmetics in DB
-	if err := repo.UpsertViewerCosmetics(c.Request.Context(), viewerID, req.NameColor, nameGradientBytes, avatarFrameID, avatarFlairID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cosmetics"})
-		return
+	// Step 6: Upsert cosmetics in DB.
+	// When the request explicitly includes name_color or name_gradient fields (even as null),
+	// use the full upsert that can overwrite all four columns.
+	// When only avatar fields are present (name_color and name_gradient both absent from the
+	// JSON body), use a targeted UPDATE that leaves name_color and name_gradient untouched.
+	// This prevents avatar-only saves from NULLing out a previously saved name color.
+	nameFieldsProvided := req.nameColorPresent || req.nameGradientPresent
+	if nameFieldsProvided {
+		if err := repo.UpsertViewerCosmetics(c.Request.Context(), viewerID, req.NameColor, nameGradientBytes, avatarFrameID, avatarFlairID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cosmetics"})
+			return
+		}
+	} else {
+		if err := repo.UpsertAvatarCosmetics(c.Request.Context(), viewerID, avatarFrameID, avatarFlairID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cosmetics"})
+			return
+		}
 	}
 
 	// Step 7: Return updated values

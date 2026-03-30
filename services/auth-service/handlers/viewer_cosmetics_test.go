@@ -26,6 +26,11 @@ type mockCosmeticsUpsertRepo struct {
 		avatarFrameID *uuid.UUID
 		avatarFlairID *uuid.UUID
 	}
+	avatarUpsertCalls []struct {
+		viewerID      uuid.UUID
+		avatarFrameID *uuid.UUID
+		avatarFlairID *uuid.UUID
+	}
 	upsertErr error
 }
 
@@ -37,6 +42,15 @@ func (m *mockCosmeticsUpsertRepo) UpsertViewerCosmetics(ctx context.Context, vie
 		avatarFrameID *uuid.UUID
 		avatarFlairID *uuid.UUID
 	}{viewerID, nameColor, nameGradient, avatarFrameID, avatarFlairID})
+	return m.upsertErr
+}
+
+func (m *mockCosmeticsUpsertRepo) UpsertAvatarCosmetics(ctx context.Context, viewerID uuid.UUID, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error {
+	m.avatarUpsertCalls = append(m.avatarUpsertCalls, struct {
+		viewerID      uuid.UUID
+		avatarFrameID *uuid.UUID
+		avatarFlairID *uuid.UUID
+	}{viewerID, avatarFrameID, avatarFlairID})
 	return m.upsertErr
 }
 
@@ -306,6 +320,8 @@ func TestPatchCosmetics_MutualExclusion(t *testing.T) {
 
 func TestPatchCosmetics_AvatarFrameID_PremiumAccepted(t *testing.T) {
 	// Premium viewer with a valid avatar_frame_id should get 200.
+	// Since name_color and name_gradient are absent from the body, the handler
+	// routes to UpsertAvatarCosmetics to avoid NULLing out saved name color.
 	viewerID := uuid.New()
 	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
 
@@ -319,13 +335,17 @@ func TestPatchCosmetics_AvatarFrameID_PremiumAccepted(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 for premium avatar_frame_id, got %d body=%s", w.Code, w.Body.String())
 	}
-	if len(mock.upsertCalls) != 1 {
-		t.Fatalf("expected 1 upsert call, got %d", len(mock.upsertCalls))
+	// Avatar-only PATCH routes to UpsertAvatarCosmetics, not UpsertViewerCosmetics.
+	if len(mock.upsertCalls) != 0 {
+		t.Fatalf("expected 0 full upsert calls for avatar-only PATCH, got %d", len(mock.upsertCalls))
 	}
-	if mock.upsertCalls[0].avatarFrameID == nil {
-		t.Error("expected avatarFrameID to be non-nil in upsert call")
-	} else if *mock.upsertCalls[0].avatarFrameID != frameID {
-		t.Errorf("expected avatarFrameID=%v, got %v", frameID, *mock.upsertCalls[0].avatarFrameID)
+	if len(mock.avatarUpsertCalls) != 1 {
+		t.Fatalf("expected 1 avatar upsert call, got %d", len(mock.avatarUpsertCalls))
+	}
+	if mock.avatarUpsertCalls[0].avatarFrameID == nil {
+		t.Error("expected avatarFrameID to be non-nil in avatar upsert call")
+	} else if *mock.avatarUpsertCalls[0].avatarFrameID != frameID {
+		t.Errorf("expected avatarFrameID=%v, got %v", frameID, *mock.avatarUpsertCalls[0].avatarFrameID)
 	}
 }
 
@@ -391,6 +411,41 @@ func TestPatchCosmetics_NonPremium_DowngradeClears(t *testing.T) {
 		t.Error("expected avatarFlairID=&uuid.Nil for downgrade clear, got nil pointer")
 	} else if *mock.upsertCalls[0].avatarFlairID != uuid.Nil {
 		t.Errorf("expected avatarFlairID=uuid.Nil, got %v", *mock.upsertCalls[0].avatarFlairID)
+	}
+}
+
+func TestPatchCosmetics_AvatarOnly_DoesNotClearNameColor(t *testing.T) {
+	// Regression test: saving avatar cosmetics (no name_color/name_gradient in body)
+	// must NOT call UpsertViewerCosmetics (which would NULL out the stored name color).
+	// It must call UpsertAvatarCosmetics instead, leaving name cosmetics untouched.
+	viewerID := uuid.New()
+	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
+
+	frameID := uuid.New()
+	flairID := uuid.New()
+	body := `{"avatar_frame_id":"` + frameID.String() + `","avatar_flair_id":"` + flairID.String() + `"}`
+	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	// Full upsert must NOT be called — it would clear name_color.
+	if len(mock.upsertCalls) != 0 {
+		t.Fatalf("avatar-only PATCH must not call UpsertViewerCosmetics, got %d call(s)", len(mock.upsertCalls))
+	}
+	// Avatar-targeted upsert must be called.
+	if len(mock.avatarUpsertCalls) != 1 {
+		t.Fatalf("expected 1 UpsertAvatarCosmetics call, got %d", len(mock.avatarUpsertCalls))
+	}
+	c := mock.avatarUpsertCalls[0]
+	if c.avatarFrameID == nil || *c.avatarFrameID != frameID {
+		t.Errorf("expected avatarFrameID=%v, got %v", frameID, c.avatarFrameID)
+	}
+	if c.avatarFlairID == nil || *c.avatarFlairID != flairID {
+		t.Errorf("expected avatarFlairID=%v, got %v", flairID, c.avatarFlairID)
 	}
 }
 
