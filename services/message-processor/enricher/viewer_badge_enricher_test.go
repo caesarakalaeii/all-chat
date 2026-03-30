@@ -473,8 +473,8 @@ func TestEnrich_PremiumBadge(t *testing.T) {
 	if len(msg.User.Badges) < 1 {
 		t.Fatalf("expected at least 1 badge, got 0")
 	}
-	if msg.User.Badges[0].Name != "premium" {
-		t.Errorf("expected badges[0].Name == \"premium\", got %q", msg.User.Badges[0].Name)
+	if msg.User.Badges[0].Name != "allchat-premium" {
+		t.Errorf("expected badges[0].Name == \"allchat-premium\", got %q", msg.User.Badges[0].Name)
 	}
 }
 
@@ -497,8 +497,8 @@ func TestEnrich_AdminAndPremiumBadge(t *testing.T) {
 	if msg.User.Badges[0].Name != "allchat" {
 		t.Errorf("expected badges[0].Name == \"allchat\", got %q", msg.User.Badges[0].Name)
 	}
-	if msg.User.Badges[1].Name != "premium" {
-		t.Errorf("expected badges[1].Name == \"premium\", got %q", msg.User.Badges[1].Name)
+	if msg.User.Badges[1].Name != "allchat-premium" {
+		t.Errorf("expected badges[1].Name == \"allchat-premium\", got %q", msg.User.Badges[1].Name)
 	}
 }
 

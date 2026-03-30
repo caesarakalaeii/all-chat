@@ -70,7 +70,22 @@ describe('resolveTwitchBadgeIcons', () => {
     expect(allchatBadge!.icon_url).toBe('')
   })
 
-  it('does not overwrite AllChat premium badge icon_url with Twitch Prime Gaming crown', async () => {
+  it('does not overwrite AllChat premium badge icon_url with Twitch API data', async () => {
+    const { resolveTwitchBadgeIcons } = await import('../twitchBadges')
+
+    const message = makeTwitchMessage([
+      { name: 'allchat-premium', version: '1', icon_url: '' },
+    ])
+
+    const result = await resolveTwitchBadgeIcons(message)
+
+    const premiumBadge = result.user.badges.find((b) => b.name === 'allchat-premium')
+    expect(premiumBadge).toBeDefined()
+    // icon_url must remain empty — AllChat premium renders via PremiumBadge component
+    expect(premiumBadge!.icon_url).toBe('')
+  })
+
+  it('resolves Twitch Prime Gaming badge (premium) normally', async () => {
     const { resolveTwitchBadgeIcons } = await import('../twitchBadges')
 
     const message = makeTwitchMessage([
@@ -79,12 +94,10 @@ describe('resolveTwitchBadgeIcons', () => {
 
     const result = await resolveTwitchBadgeIcons(message)
 
-    const premiumBadge = result.user.badges.find((b) => b.name === 'premium')
-    expect(premiumBadge).toBeDefined()
-    // icon_url must remain empty — AllChat premium renders via PremiumBadge component
-    expect(premiumBadge!.icon_url).toBe('')
-    // Must not be set to the Twitch prime crown URL
-    expect(premiumBadge!.icon_url).not.toContain('cdn.twitch.tv')
+    const primeBadge = result.user.badges.find((b) => b.name === 'premium')
+    expect(primeBadge).toBeDefined()
+    // Twitch "premium" badge should now resolve to the Prime Gaming crown
+    expect(primeBadge!.icon_url).toContain('cdn.twitch.tv')
   })
 
   it('still resolves regular Twitch badges (e.g. moderator) normally', async () => {
@@ -106,14 +119,14 @@ describe('resolveTwitchBadgeIcons', () => {
 
     const message = makeTwitchMessage([
       { name: 'allchat', version: '1', icon_url: '' },
-      { name: 'premium', version: '1', icon_url: '' },
+      { name: 'allchat-premium', version: '1', icon_url: '' },
       { name: 'moderator', version: '1', icon_url: '' },
     ])
 
     const result = await resolveTwitchBadgeIcons(message)
 
     const allchatBadge = result.user.badges.find((b) => b.name === 'allchat')
-    const premiumBadge = result.user.badges.find((b) => b.name === 'premium')
+    const premiumBadge = result.user.badges.find((b) => b.name === 'allchat-premium')
     const modBadge = result.user.badges.find((b) => b.name === 'moderator')
 
     expect(allchatBadge!.icon_url).toBe('')

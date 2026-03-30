@@ -397,19 +397,28 @@ func searchLiveChatRenderer(data interface{}) string {
 // extractContinuationFromLiveChatRenderer extracts the continuation token
 // from a liveChatRenderer object.
 //
-// The main continuations array contains the full reload token accepted by
-// the get_live_chat endpoint. The subMenuItem tokens ("Live chat" / "Top chat")
-// are shorter view-selector tokens that YouTube's get_live_chat endpoint
-// rejects with HTTP 400 as of March 2026. We therefore prefer the main
-// continuations array and only fall back to subMenuItems if it's absent.
+// YouTube returns both a main continuations array and per-view subMenuItem
+// tokens ("Live chat" / "Top chat"). The main continuations array token
+// corresponds to whichever chat view was last active — which may be "Top chat"
+// after an OBS restart or when the streamer's Studio had top-chat selected.
+// To guarantee we always get "Live chat" (all messages), we prefer the
+// explicit "Live chat" subMenuItem token when available, falling back to the
+// main continuations array only when subMenuItems are absent (e.g. small
+// streams without a view selector).
 func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 	m, ok := renderer.(map[string]interface{})
 	if !ok {
 		return ""
 	}
 
-	// Prefer the main continuations array — these are the full reload tokens
-	// accepted by the get_live_chat endpoint.
+	// Prefer the explicit "Live chat" subMenuItem token — this guarantees we
+	// get all messages, not the filtered "Top chat" view.
+	if token := extractLiveChatSubMenuToken(m); token != "" {
+		return token
+	}
+
+	// Fallback: main continuations array. This may correspond to either chat
+	// view, but is the only option when subMenuItems are absent.
 	continuations, ok := m["continuations"].([]interface{})
 	if ok {
 		for _, cont := range continuations {
@@ -433,11 +442,6 @@ func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 				}
 			}
 		}
-	}
-
-	// Fallback: "Live chat" subMenuItem token (shorter, may not work with all endpoints).
-	if token := extractLiveChatSubMenuToken(m); token != "" {
-		return token
 	}
 
 	return ""

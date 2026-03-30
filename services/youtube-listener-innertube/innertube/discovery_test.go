@@ -86,6 +86,70 @@ func TestExtractLiveChatContinuation(t *testing.T) {
 	}
 }
 
+func TestExtractContinuationFromLiveChatRenderer_PrefersLiveChatSubMenuItem(t *testing.T) {
+	// When both the main continuations array and the "Live chat" subMenuItem
+	// are present, the function must return the subMenuItem token to avoid
+	// accidentally latching onto a "Top chat" continuation.
+	renderer := map[string]interface{}{
+		"continuations": []interface{}{
+			map[string]interface{}{
+				"reloadContinuationData": map[string]interface{}{
+					"continuation": "top_chat_or_unknown_token",
+				},
+			},
+		},
+		"header": map[string]interface{}{
+			"liveChatHeaderRenderer": map[string]interface{}{
+				"viewSelector": map[string]interface{}{
+					"sortFilterSubMenuRenderer": map[string]interface{}{
+						"subMenuItems": []interface{}{
+							map[string]interface{}{
+								"title": "Top chat",
+								"continuation": map[string]interface{}{
+									"reloadContinuationData": map[string]interface{}{
+										"continuation": "top_chat_token",
+									},
+								},
+							},
+							map[string]interface{}{
+								"title": "Live chat",
+								"continuation": map[string]interface{}{
+									"reloadContinuationData": map[string]interface{}{
+										"continuation": "live_chat_token",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := extractContinuationFromLiveChatRenderer(renderer)
+	if result != "live_chat_token" {
+		t.Errorf("expected live_chat_token, got %q — subMenuItem should be preferred over main continuations", result)
+	}
+}
+
+func TestExtractContinuationFromLiveChatRenderer_FallsBackToMainContinuations(t *testing.T) {
+	// When subMenuItems are absent, fall back to the main continuations array.
+	renderer := map[string]interface{}{
+		"continuations": []interface{}{
+			map[string]interface{}{
+				"reloadContinuationData": map[string]interface{}{
+					"continuation": "fallback_token",
+				},
+			},
+		},
+	}
+
+	result := extractContinuationFromLiveChatRenderer(renderer)
+	if result != "fallback_token" {
+		t.Errorf("expected fallback_token, got %q", result)
+	}
+}
+
 func TestGetInitialContinuation_Success(t *testing.T) {
 	// Mock server returning a valid /next API response with live chat continuation
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
