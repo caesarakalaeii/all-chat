@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/deletion"
 	"github.com/google/uuid"
@@ -395,7 +396,7 @@ func parseTickerEvent(ticker *AddLiveChatTickerItem, channelID string) (*RawChat
 }
 
 // extractMessageText concatenates all text runs into a single string and
-// collects EmoteEntry data for custom emoji runs.
+// collects EmoteEntry data for custom and built-in emoji runs.
 func extractMessageText(message MessageContent) (string, []EmoteEntry) {
 	var parts []string
 	var emotes []EmoteEntry
@@ -430,20 +431,20 @@ func extractMessageText(message MessageContent) (string, []EmoteEntry) {
 					})
 				}
 			} else {
-				// Non-custom emoji: could be a YouTube built-in emoji (with thumbnails)
-				// or a real unicode emoji (no thumbnails). Only create an emote entry
-				// when thumbnail images are available.
-				code := ""
-				if len(run.Emoji.Shortcuts) > 0 {
-					code = run.Emoji.Shortcuts[0]
-				} else if run.Emoji.EmojiID != "" {
-					code = ":" + run.Emoji.EmojiID + ":"
-				}
-				if code != "" {
-					parts = append(parts, code)
-				}
+				// Non-custom emoji: could be a YouTube built-in gaming emoji (with thumbnails)
+				// or a standard Unicode emoji (no thumbnails, emojiId like "emoji_u1f602").
 				thumbs := run.Emoji.Image.Thumbnails
 				if len(thumbs) > 0 && run.Emoji.EmojiID != "" {
+					// Built-in YouTube gaming emoji — use shortcode as placeholder and create emote entry.
+					code := ""
+					if len(run.Emoji.Shortcuts) > 0 {
+						code = run.Emoji.Shortcuts[0]
+					} else {
+						code = ":" + run.Emoji.EmojiID + ":"
+					}
+					if code != "" {
+						parts = append(parts, code)
+					}
 					url := ""
 					if len(thumbs) > 1 {
 						url = thumbs[1].URL
@@ -455,11 +456,48 @@ func extractMessageText(message MessageContent) (string, []EmoteEntry) {
 						URL:  url,
 						ID:   run.Emoji.EmojiID,
 					})
+				} else {
+					// Standard Unicode emoji (no thumbnail) — resolve emoji_u{hex} ID to the actual
+					// Unicode character so it renders natively in the browser instead of as a shortcode.
+					if ch := resolveUnicodeEmojiID(run.Emoji.EmojiID); ch != "" {
+						parts = append(parts, ch)
+					} else if len(run.Emoji.Shortcuts) > 0 {
+						// Fallback: keep the shortcode text when we cannot resolve to Unicode.
+						parts = append(parts, run.Emoji.Shortcuts[0])
+					} else if run.Emoji.EmojiID != "" {
+						parts = append(parts, ":"+run.Emoji.EmojiID+":")
+					}
 				}
 			}
 		}
 	}
 	return strings.Join(parts, ""), emotes
+}
+
+// resolveUnicodeEmojiID converts a YouTube emoji ID in the "emoji_u{hex}" format to the
+// corresponding Unicode character. YouTube encodes standard emoji as e.g. "emoji_u1f602"
+// (for 😂, U+1F602) or multi-codepoint sequences like "emoji_u1f1e8_1f1f3" (🇨🇳).
+// Returns an empty string if the ID does not follow this pattern.
+func resolveUnicodeEmojiID(emojiID string) string {
+	const prefix = "emoji_u"
+	if !strings.HasPrefix(emojiID, prefix) {
+		return ""
+	}
+	hexPart := emojiID[len(prefix):]
+	if hexPart == "" {
+		return ""
+	}
+	// Codepoints are separated by underscores for multi-codepoint sequences (ZWJ sequences, flags).
+	parts := strings.Split(hexPart, "_")
+	var runes []rune
+	for _, p := range parts {
+		n, err := strconv.ParseInt(p, 16, 32)
+		if err != nil || !utf8.ValidRune(rune(n)) {
+			return ""
+		}
+		runes = append(runes, rune(n))
+	}
+	return string(runes)
 }
 
 // extractBadges extracts badge types from author badges
