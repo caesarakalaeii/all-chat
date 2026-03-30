@@ -69,6 +69,8 @@ docs/overlay-themes/custom-fonts/
 *.otf
 *.woff
 *.woff2
+# Exception: OG image font (required for build-time rendering)
+!frontend/public/fonts/Barlow-Bold.ttf
 
 # Node modules (for frontend)
 node_modules/
