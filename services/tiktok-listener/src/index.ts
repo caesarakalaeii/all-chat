@@ -515,7 +515,8 @@ class TikTokListenerService {
 
     // Claim leadership and connect new demanded streams
     for (const [username, source] of demanded.entries()) {
-      if (!this.activeStreams.has(username) && !this.connectingStreams.has(username)) {
+      // Skip if already active, connecting, or waiting in the poller for live status
+      if (!this.activeStreams.has(username) && !this.connectingStreams.has(username) && !this.livePoller.isTargetActive(username)) {
         // Try to claim leadership — if another pod holds it, skip
         if (this.leadershipCoordinator) {
           const acquired = await this.leadershipCoordinator.ensureLeadership(
@@ -589,19 +590,26 @@ class TikTokListenerService {
       const statusResult = await this.statusChecker.checkLiveStatus(username);
 
       if (!statusResult.isLive) {
-        logger.info('User not live, adding to poller and skipping connection', {
-          username,
-          overlay_id: overlayId
-        });
+        // Distinguish between "user is offline" and "API/network error"
+        if (statusResult.error) {
+          logger.info('Live status check failed (API error), adding to poller with error backoff', {
+            username,
+            overlay_id: overlayId
+          });
+          // Record as connection error so error backoff is used (faster retry than offline backoff)
+          this.backoffManager.recordConnectionError(username, statusResult.error);
+        } else {
+          logger.info('User not live, adding to poller and skipping connection', {
+            username,
+            overlay_id: overlayId
+          });
+          // Record offline check for backoff
+          this.backoffManager.recordOfflineCheck(username);
+        }
 
-        // Add to polling targets
+        // Add to polling targets for re-check
         this.livePoller.addTarget(username, overlayId);
 
-        // Record offline check for backoff
-        this.backoffManager.recordOfflineCheck(username);
-
-        // Store in activeStreams as "pending" so we don't retry immediately
-        // (but no connection object)
         return;
       }
 
