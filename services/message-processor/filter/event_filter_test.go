@@ -12,7 +12,7 @@ func TestMapEventTypeToColumn_Twitch(t *testing.T) {
 		expected  string
 	}{
 		{"subscription", "enable_twitch_subs"},
-		{"resubscription", "enable_twitch_subs"},
+		{"resubscription", "enable_twitch_resubs"},
 		{"gift_subscription", "enable_twitch_gift_subs"},
 		{"mystery_gift", "enable_twitch_gift_subs"},
 		{"bits", "enable_twitch_bits"},
