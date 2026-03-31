@@ -223,16 +223,19 @@ function SourceCard({
   onRemove,
   onRevoke,
   onConfigureRelay,
+  onConfigureStreamSelect,
 }: {
   source: ChatSource
   onRemove: (id: string) => void
   onRevoke?: (source: ChatSource) => void
   onConfigureRelay?: (source: ChatSource) => void
+  onConfigureStreamSelect?: (source: ChatSource) => void
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const isShared = source.platform === 'shared_overlay'
   const isInactiveShared = isShared && !source.is_active
   const isDiscord = source.platform === 'discord'
+  const isYoutube = source.platform === 'youtube'
 
   const discordConfig = isDiscord ? (source.config as DiscordSourceConfig) : null
   const discordLabel =
@@ -351,6 +354,135 @@ function SourceCard({
           Configure relay
         </button>
       )}
+      {/* Stream selection button — YouTube only */}
+      {isYoutube && onConfigureStreamSelect && (
+        <button
+          className="mt-2 flex items-center gap-1 rounded text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          onClick={() => onConfigureStreamSelect(source)}
+        >
+          <ChevronRight className="size-3" />
+          Stream selection
+        </button>
+      )}
+    </Card>
+  )
+}
+
+// ---- StreamSelectionPanel ---------------------------------------------------
+
+const STREAM_STRATEGIES = [
+  { value: 'first_found', label: 'First found', description: 'Picks the first live stream (default)' },
+  { value: 'most_viewers', label: 'Most viewers', description: 'Picks the stream with the highest viewer count' },
+  { value: 'fewest_viewers', label: 'Fewest viewers', description: 'Picks the stream with the lowest viewer count' },
+  { value: 'title_match', label: 'Title match', description: 'Picks the first stream whose title contains a keyword' },
+] as const
+
+function StreamSelectionPanel({
+  source,
+  overlayId,
+  isPremium,
+  onSaved,
+}: {
+  source: ChatSource
+  overlayId: string
+  isPremium: boolean
+  onSaved: () => void
+}) {
+  const ytConfig = (source.config ?? {}) as import('@/lib/types/overlay').YouTubeSourceConfig
+  const [strategy, setStrategy] = useState(ytConfig.stream_select ?? 'first_found')
+  const [matchTerm, setMatchTerm] = useState(ytConfig.stream_match ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const hasChanges =
+    strategy !== (ytConfig.stream_select ?? 'first_found') ||
+    matchTerm !== (ytConfig.stream_match ?? '')
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const config: Record<string, unknown> = {
+        ...source.config,
+        stream_select: strategy === 'first_found' ? undefined : strategy,
+        stream_match: strategy === 'title_match' ? matchTerm : undefined,
+      }
+      // Clean undefined keys
+      Object.keys(config).forEach((k) => config[k] === undefined && delete config[k])
+      await overlaysApi.updateSourceConfig(overlayId, source.id, config)
+      toastManager.add({ title: 'Stream selection saved', type: 'success' })
+      onSaved()
+    } catch {
+      toastManager.add({ title: 'Failed to save stream selection', type: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const isNonDefault = strategy !== 'first_found'
+  const locked = !isPremium && isNonDefault
+
+  return (
+    <Card className="mt-1 rounded-t-none border-t-0 bg-surface-2/50 p-4">
+      <div className="space-y-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-text-sub">
+            Stream selection strategy
+          </label>
+          <p className="mb-2 text-xs text-text-sub/70">
+            When this channel has multiple concurrent live streams, choose which one to monitor.
+          </p>
+          <select
+            value={strategy}
+            onChange={(e) => setStrategy(e.target.value as typeof strategy)}
+            className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          >
+            {STREAM_STRATEGIES.map((s) => (
+              <option
+                key={s.value}
+                value={s.value}
+                disabled={!isPremium && s.value !== 'first_found'}
+              >
+                {s.label}
+                {!isPremium && s.value !== 'first_found' ? ' (Premium)' : ''}
+              </option>
+            ))}
+          </select>
+          {STREAM_STRATEGIES.find((s) => s.value === strategy) && (
+            <p className="mt-1 text-xs text-text-sub/60">
+              {STREAM_STRATEGIES.find((s) => s.value === strategy)?.description}
+            </p>
+          )}
+        </div>
+
+        {strategy === 'title_match' && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-text-sub">
+              Title keyword
+            </label>
+            <Input
+              value={matchTerm}
+              onChange={(e) => setMatchTerm(e.target.value)}
+              placeholder="e.g. synthwave, lofi, jazz"
+              className="text-xs"
+            />
+          </div>
+        )}
+
+        {locked && (
+          <p className="text-xs text-yellow-400/80">
+            Non-default strategies require a premium subscription.
+          </p>
+        )}
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full"
+          disabled={!hasChanges || saving || locked || (strategy === 'title_match' && !matchTerm.trim())}
+          onClick={handleSave}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+      </div>
     </Card>
   )
 }
@@ -971,6 +1103,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- Discord relay state ---
   const [relayExpandedSourceId, setRelayExpandedSourceId] = useState<string | null>(null)
+  const [streamSelectExpandedSourceId, setStreamSelectExpandedSourceId] = useState<string | null>(null)
 
   // --- Share overlay state ---
   const [showShareModal, setShowShareModal] = useState(false)
@@ -1849,12 +1982,26 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           onConfigureRelay={(s) =>
                             setRelayExpandedSourceId((prev) => (prev === s.id ? null : s.id))
                           }
+                          onConfigureStreamSelect={(s) =>
+                            setStreamSelectExpandedSourceId((prev) => (prev === s.id ? null : s.id))
+                          }
                         />
                         {source.id === relayExpandedSourceId && source.platform === 'discord' && (
                           <RelayPanel
                             source={source}
                             overlayId={id}
                             onSaved={handleRelayConfigSaved}
+                          />
+                        )}
+                        {source.id === streamSelectExpandedSourceId && source.platform === 'youtube' && (
+                          <StreamSelectionPanel
+                            source={source}
+                            overlayId={id}
+                            isPremium={user?.is_premium ?? false}
+                            onSaved={async () => {
+                              const updated = await overlaysApi.getSources(id)
+                              setSources(updated)
+                            }}
                           />
                         )}
                       </div>

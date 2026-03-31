@@ -27,8 +27,10 @@ var errLeadershipHeld = errors.New("leadership held by another instance")
 
 // Source represents a YouTube source configuration from source-manager
 type Source struct {
-	ChannelID string
-	OverlayID string
+	ChannelID    string
+	OverlayID    string
+	StreamSelect string // Stream selection strategy (e.g. "most_viewers")
+	StreamMatch  string // Match term for title_match strategy
 }
 
 // Stream represents an active YouTube stream being polled
@@ -44,6 +46,8 @@ type Stream struct {
 type DiscoveryState struct {
 	ChannelID        string
 	OverlayID        string
+	StreamSelect     string // Stream selection strategy
+	StreamMatch      string // Match term for title_match
 	StartedAt        time.Time
 	Attempts         int
 	CancelFunc       context.CancelFunc
@@ -187,7 +191,15 @@ func (m *Manager) OnOverlayDisconnected(overlayID string) {
 
 // startAsyncDiscovery starts background discovery for a channel
 // Checks Redis cache first, falls back to HTML discovery
-func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
+func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts ...string) {
+	// opts: [0] = streamSelect, [1] = streamMatch
+	var streamSelect, streamMatch string
+	if len(opts) > 0 {
+		streamSelect = opts[0]
+	}
+	if len(opts) > 1 {
+		streamMatch = opts[1]
+	}
 	m.mu.Lock()
 
 	// Check if already discovering
@@ -251,6 +263,8 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
 	state := &DiscoveryState{
 		ChannelID:        channelID,
 		OverlayID:        overlayID,
+		StreamSelect:     streamSelect,
+		StreamMatch:      streamMatch,
 		StartedAt:        time.Now(),
 		Attempts:         0,
 		CancelFunc:       cancel,
@@ -306,7 +320,7 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			zap.Int("attempt", state.Attempts),
 		)
 
-		videoID, err := m.discovery.DiscoverLiveStream(ctx, state.ChannelID)
+		videoID, err := m.discovery.DiscoverLiveStream(ctx, state.ChannelID, state.StreamSelect, state.StreamMatch)
 		if err == nil {
 			m.logger.Info("Discovery successful",
 				zap.String("channel_id", state.ChannelID),
@@ -809,11 +823,27 @@ func (m *Manager) syncSources(ctx context.Context) {
 		zap.Int("source_count", len(sources)),
 	)
 
+	// channelSourceInfo carries per-channel overlay IDs and stream selection config.
+	// When multiple overlays share a channel, the first source's strategy is used.
+	type channelSourceInfo struct {
+		OverlayIDs   []string
+		StreamSelect string
+		StreamMatch  string
+	}
+
 	// Group sources by channel to handle multiple overlays for same channel
-	channelOverlays := make(map[string][]string)
+	channelOverlays := make(map[string]*channelSourceInfo)
 	for _, source := range sources {
 		if source.IsActive {
-			channelOverlays[source.ChannelID] = append(channelOverlays[source.ChannelID], source.OverlayID)
+			info, exists := channelOverlays[source.ChannelID]
+			if !exists {
+				info = &channelSourceInfo{
+					StreamSelect: source.StreamSelect,
+					StreamMatch:  source.StreamMatch,
+				}
+				channelOverlays[source.ChannelID] = info
+			}
+			info.OverlayIDs = append(info.OverlayIDs, source.OverlayID)
 		}
 	}
 
@@ -834,7 +864,7 @@ func (m *Manager) syncSources(ctx context.Context) {
 	}
 
 	// For each channel, ensure we have a poller or discovery in progress
-	for channelID, overlayIDs := range channelOverlays {
+	for channelID, info := range channelOverlays {
 		m.mu.RLock()
 		// Check if we're already discovering or polling this channel
 		_, isDiscovering := m.discovering[channelID]
@@ -858,7 +888,7 @@ func (m *Manager) syncSources(ctx context.Context) {
 						zap.Error(err),
 					)
 				}
-			}(channelID, overlayIDs)
+			}(channelID, info.OverlayIDs)
 			continue
 		}
 
@@ -881,9 +911,10 @@ func (m *Manager) syncSources(ctx context.Context) {
 			if !anotherPodPolling {
 				m.logger.Info("Starting async discovery for new YouTube source",
 					zap.String("channel_id", channelID),
-					zap.Strings("overlay_ids", overlayIDs),
+					zap.Strings("overlay_ids", info.OverlayIDs),
+					zap.String("stream_select", info.StreamSelect),
 				)
-				m.startAsyncDiscovery(channelID, overlayIDs[0])
+				m.startAsyncDiscovery(channelID, info.OverlayIDs[0], info.StreamSelect, info.StreamMatch)
 			}
 		}
 	}

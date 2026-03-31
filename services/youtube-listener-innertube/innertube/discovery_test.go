@@ -17,7 +17,7 @@ func TestDiscoverLiveStream_NetworkError(t *testing.T) {
 	discovery := NewDiscovery(client, logger, ClientConfig{})
 
 	ctx := context.Background()
-	_, err := discovery.DiscoverLiveStream(ctx, "UC_invalid_channel")
+	_, err := discovery.DiscoverLiveStream(ctx, "UC_invalid_channel", "", "")
 
 	if err == nil {
 		t.Error("expected network error, got nil")
@@ -215,7 +215,7 @@ func TestDiscoverLiveStream_NotFound(t *testing.T) {
 	discovery := NewDiscovery(server.Client(), logger, ClientConfig{})
 
 	ctx := context.Background()
-	_, err := discovery.DiscoverLiveStream(ctx, "UCtest")
+	_, err := discovery.DiscoverLiveStream(ctx, "UCtest", "", "")
 
 	if err == nil {
 		t.Error("expected error for 404, got nil")
