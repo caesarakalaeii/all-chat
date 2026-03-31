@@ -1,0 +1,80 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { Wrench, X } from 'lucide-react'
+import { maintenanceApi } from '@/lib/api/maintenance'
+import { cn } from '@/lib/utils'
+import type { MaintenanceWindow } from '@/lib/types/maintenance'
+
+const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+function isActive(mw: MaintenanceWindow): boolean {
+  const now = Date.now()
+  return new Date(mw.starts_at).getTime() <= now && now <= new Date(mw.ends_at).getTime()
+}
+
+export function MaintenanceBanner() {
+  const [windows, setWindows] = useState<MaintenanceWindow[]>([])
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    maintenanceApi
+      .upcoming()
+      .then(setWindows)
+      .catch(() => {
+        // Silently fail — maintenance banner is non-critical
+      })
+  }, [])
+
+  const visible = windows.filter((mw) => !dismissed.has(mw.id))
+
+  if (visible.length === 0) return null
+
+  return (
+    <div className="mb-4 space-y-2">
+      {visible.map((mw) => {
+        const active = isActive(mw)
+        return (
+          <div
+            key={mw.id}
+            className={cn(
+              'flex items-center gap-3 rounded-lg px-4 py-3 text-sm',
+              active
+                ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                : 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+            )}
+          >
+            <Wrench className="size-4 shrink-0" aria-hidden="true" />
+            <span className="flex-1 min-w-0">
+              {active ? (
+                <>
+                  <strong>Maintenance in progress:</strong> {mw.title} — Expected completion:{' '}
+                  {DATE_FORMAT.format(new Date(mw.ends_at))}
+                </>
+              ) : (
+                <>
+                  <strong>Scheduled maintenance:</strong> {mw.title} —{' '}
+                  {DATE_FORMAT.format(new Date(mw.starts_at))} to{' '}
+                  {DATE_FORMAT.format(new Date(mw.ends_at))}
+                </>
+              )}
+              {mw.description && <span className="ml-1 text-xs opacity-75">({mw.description})</span>}
+            </span>
+            <button
+              onClick={() => setDismissed((prev) => new Set(prev).add(mw.id))}
+              aria-label="Dismiss maintenance banner"
+              className="shrink-0 rounded p-0.5 opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}

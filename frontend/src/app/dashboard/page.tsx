@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/ui/dialog'
 import { PlatformBadge } from '@/components/ui/badge'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 import type { ChatSource } from '@/lib/types/overlay'
 
 // Extended overlay type that includes sources when available
@@ -196,6 +197,9 @@ function DashboardContent() {
     <div className="min-h-screen bg-bg">
       <AppNav />
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-4">
+          <MaintenanceBanner />
+        </div>
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text">Overlays</h1>
           <Button variant="gradient" onClick={() => router.push('/overlays/new')}>
