@@ -126,7 +126,7 @@ func TestExtractContinuationFromLiveChatRenderer_PrefersMainContinuations(t *tes
 		},
 	}
 
-	result := extractContinuationFromLiveChatRenderer(renderer, nil)
+	result := extractContinuationFromLiveChatRenderer(renderer)
 	if result != "main_continuation_token" {
 		t.Errorf("expected main_continuation_token, got %q — main continuations must be preferred (subMenuItem tokens get HTTP 400)", result)
 	}
@@ -144,7 +144,7 @@ func TestExtractContinuationFromLiveChatRenderer_FallsBackToMainContinuations(t 
 		},
 	}
 
-	result := extractContinuationFromLiveChatRenderer(renderer, nil)
+	result := extractContinuationFromLiveChatRenderer(renderer)
 	if result != "fallback_token" {
 		t.Errorf("expected fallback_token, got %q", result)
 	}

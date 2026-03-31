@@ -293,8 +293,7 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID, channel
 
 	// Verify the stream is live by checking for liveChatRenderer presence.
 	// We don't use the extracted token — we generate our own.
-	extractedToken := extractContinuationFromNextAPI(nextData, d.logger)
-	if extractedToken == "" {
+	if extractContinuationFromNextAPI(nextData) == "" {
 		return "", "", fmt.Errorf("no live chat continuation found in next API for video %s (stream may have ended)", videoID)
 	}
 
@@ -303,11 +302,9 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID, channel
 	// with HTTP 400 and the main continuations array which defaults to Top Chat.
 	token := GenerateLiveChatContinuation(videoID, channelID, ChatTypeAll)
 
-	d.logger.Info("generated live chat continuation token",
+	d.logger.Info("initial continuation token ready",
 		zap.String("video_id", videoID),
-		zap.String("channel_id", channelID),
-		zap.Int("generated_token_length", len(token)),
-		zap.Int("extracted_token_length", len(extractedToken)),
+		zap.Int("token_length", len(token)),
 		zap.Bool("has_visitor_data", visitorData != ""),
 	)
 
@@ -317,7 +314,7 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID, channel
 // extractContinuationFromNextAPI extracts the live chat continuation token from
 // the InnerTube /next API response. For live streams, it's at:
 // contents.twoColumnWatchNextResults.conversationBar.liveChatRenderer.continuations[].reloadContinuationData.continuation
-func extractContinuationFromNextAPI(data map[string]interface{}, logger *zap.Logger) string {
+func extractContinuationFromNextAPI(data map[string]interface{}) string {
 	// Walk the known path
 	contents, _ := data["contents"].(map[string]interface{})
 	twoCol, _ := contents["twoColumnWatchNextResults"].(map[string]interface{})
@@ -330,7 +327,7 @@ func extractContinuationFromNextAPI(data map[string]interface{}, logger *zap.Log
 	if isReplay, _ := renderer["isReplay"].(bool); isReplay {
 		return ""
 	}
-	return extractContinuationFromLiveChatRenderer(renderer, logger)
+	return extractContinuationFromLiveChatRenderer(renderer)
 }
 
 // extractLiveChatContinuation finds the live chat continuation token inside ytInitialData.
@@ -366,7 +363,7 @@ func walkPath(data map[string]interface{}, keys ...string) string {
 			if isReplay, _ := rendererMap["isReplay"].(bool); isReplay {
 				return ""
 			}
-			return extractContinuationFromLiveChatRenderer(val, nil)
+			return extractContinuationFromLiveChatRenderer(val)
 		}
 		current = val
 	}
@@ -384,7 +381,7 @@ func searchLiveChatRenderer(data interface{}) string {
 			if isReplay, _ := rendererMap["isReplay"].(bool); isReplay {
 				return ""
 			}
-			if token := extractContinuationFromLiveChatRenderer(renderer, nil); token != "" {
+			if token := extractContinuationFromLiveChatRenderer(renderer); token != "" {
 				return token
 			}
 		}
@@ -403,111 +400,40 @@ func searchLiveChatRenderer(data interface{}) string {
 	return ""
 }
 
-// extractContinuationFromLiveChatRenderer extracts the continuation token
-// from a liveChatRenderer object.
-//
-// YouTube returns both a main continuations array (150-200 char tokens) and
-// per-view subMenuItem tokens (~32 chars). As of March 2026, the subMenuItem
-// tokens are rejected by get_live_chat with HTTP 400 "INVALID_ARGUMENT".
-// The main array token works but may default to "Top chat" (filtered).
-// TODO: generate continuation tokens from scratch via protobuf encoding
-// with chattype=1 to guarantee "Live chat" (all messages).
-func extractContinuationFromLiveChatRenderer(renderer interface{}, logger *zap.Logger) string {
+// extractContinuationFromLiveChatRenderer extracts a continuation token from
+// a liveChatRenderer object. Used only for liveness verification — the actual
+// polling token is generated from scratch via GenerateLiveChatContinuation.
+func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 	m, ok := renderer.(map[string]interface{})
 	if !ok {
 		return ""
 	}
 
-	// Collect all available tokens for comparison logging
-	var mainToken string
 	continuations, ok := m["continuations"].([]interface{})
-	if ok {
-		for _, cont := range continuations {
-			contMap, ok := cont.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			if reload, ok := contMap["reloadContinuationData"].(map[string]interface{}); ok {
-				if token, ok := reload["continuation"].(string); ok && token != "" {
-					mainToken = token
-					break
-				}
-			}
-			if timed, ok := contMap["timedContinuationData"].(map[string]interface{}); ok {
-				if token, ok := timed["continuation"].(string); ok && token != "" {
-					mainToken = token
-					break
-				}
-			}
-			if inv, ok := contMap["invalidationContinuationData"].(map[string]interface{}); ok {
-				if token, ok := inv["continuation"].(string); ok && token != "" {
-					mainToken = token
-					break
-				}
-			}
-		}
+	if !ok {
+		return ""
 	}
-
-	subMenuTokens := extractAllSubMenuTokens(m)
-
-	// Debug: log both tokens so we can verify which chat mode we're using
-	if logger != nil {
-		fields := []zap.Field{
-			zap.Int("main_token_length", len(mainToken)),
-			zap.Bool("main_token_present", mainToken != ""),
-			zap.Int("sub_menu_items_count", len(subMenuTokens)),
-		}
-		for title, token := range subMenuTokens {
-			fields = append(fields,
-				zap.Int(fmt.Sprintf("submenu_%s_length", title), len(token)),
-				zap.Bool(fmt.Sprintf("submenu_%s_matches_main", title), token == mainToken),
-			)
-		}
-		logger.Info("continuation token comparison (top chat vs live chat debug)", fields...)
-	}
-
-	// The main continuations array (150-200 chars) contains the full reload
-	// token accepted by get_live_chat. The subMenuItem tokens (~32 chars) are
-	// view-selector tokens that YouTube rejects with HTTP 400 as of March 2026.
-	// Prefer the main token — it may default to "Top chat" but at least works.
-	// TODO: generate tokens from scratch (protobuf) to guarantee "Live chat".
-	if mainToken != "" {
-		return mainToken
-	}
-
-	// Last resort: try subMenuItem token (may fail with 400).
-	if token, ok := subMenuTokens["Live chat"]; ok && token != "" {
-		return token
-	}
-
-	return ""
-}
-
-// extractAllSubMenuTokens extracts continuation tokens for all chat mode items
-// from the viewSelector subMenuItems (e.g. "Top chat", "Live chat").
-func extractAllSubMenuTokens(renderer map[string]interface{}) map[string]string {
-	tokens := make(map[string]string)
-	header, _ := renderer["header"].(map[string]interface{})
-	lch, _ := header["liveChatHeaderRenderer"].(map[string]interface{})
-	vs, _ := lch["viewSelector"].(map[string]interface{})
-	sfr, _ := vs["sortFilterSubMenuRenderer"].(map[string]interface{})
-	items, _ := sfr["subMenuItems"].([]interface{})
-
-	for _, raw := range items {
-		item, ok := raw.(map[string]interface{})
+	for _, cont := range continuations {
+		contMap, ok := cont.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		title, _ := item["title"].(string)
-		if title == "" {
-			continue
+		if reload, ok := contMap["reloadContinuationData"].(map[string]interface{}); ok {
+			if token, ok := reload["continuation"].(string); ok && token != "" {
+				return token
+			}
 		}
-		cont, _ := item["continuation"].(map[string]interface{})
-		reload, _ := cont["reloadContinuationData"].(map[string]interface{})
-		if token, ok := reload["continuation"].(string); ok && token != "" {
-			tokens[title] = token
+		if timed, ok := contMap["timedContinuationData"].(map[string]interface{}); ok {
+			if token, ok := timed["continuation"].(string); ok && token != "" {
+				return token
+			}
+		}
+		if inv, ok := contMap["invalidationContinuationData"].(map[string]interface{}); ok {
+			if token, ok := inv["continuation"].(string); ok && token != "" {
+				return token
+			}
 		}
 	}
-	return tokens
+	return ""
 }
 
