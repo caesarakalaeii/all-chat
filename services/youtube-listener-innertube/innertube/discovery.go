@@ -232,12 +232,13 @@ func collectVideoIDsFromBrowse(data interface{}) []string {
 }
 
 // GetInitialContinuation fetches the initial continuation token for a live stream.
-// Uses the InnerTube /next API (JSON, no HTML scraping, no rate limiting).
-// The token is found at: contents.twoColumnWatchNextResults.conversationBar.liveChatRenderer
-// Only returns a token when the stream is currently live (liveChatRenderer only present for live streams).
-func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) (string, string, error) {
+// Uses the InnerTube /next API to verify the stream is live and obtain visitorData,
+// then generates the continuation token from scratch via protobuf encoding to
+// guarantee "Live chat" (all messages) rather than "Top chat" (filtered).
+func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID, channelID string) (string, string, error) {
 	d.logger.Info("fetching initial continuation token",
 		zap.String("video_id", videoID),
+		zap.String("channel_id", channelID),
 	)
 
 	nextURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/next?key=%s", d.apiKey)
@@ -290,15 +291,23 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 		}
 	}
 
-	// Walk the known path to the liveChatRenderer
-	token := extractContinuationFromNextAPI(nextData, d.logger)
-	if token == "" {
+	// Verify the stream is live by checking for liveChatRenderer presence.
+	// We don't use the extracted token — we generate our own.
+	extractedToken := extractContinuationFromNextAPI(nextData, d.logger)
+	if extractedToken == "" {
 		return "", "", fmt.Errorf("no live chat continuation found in next API for video %s (stream may have ended)", videoID)
 	}
 
-	d.logger.Info("extracted initial continuation token from next API",
+	// Generate continuation token from scratch with chattype=1 (all messages).
+	// This avoids depending on YouTube's subMenuItem tokens which are rejected
+	// with HTTP 400 and the main continuations array which defaults to Top Chat.
+	token := GenerateLiveChatContinuation(videoID, channelID, ChatTypeAll)
+
+	d.logger.Info("generated live chat continuation token",
 		zap.String("video_id", videoID),
-		zap.Int("token_length", len(token)),
+		zap.String("channel_id", channelID),
+		zap.Int("generated_token_length", len(token)),
+		zap.Int("extracted_token_length", len(extractedToken)),
 		zap.Bool("has_visitor_data", visitorData != ""),
 	)
 

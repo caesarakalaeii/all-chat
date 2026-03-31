@@ -22,7 +22,7 @@ type ClientInterface interface {
 // ContinuationRefresher can fetch a fresh continuation token for a video.
 // Used to recover when a continuation goes stale (persistent zero-action responses).
 type ContinuationRefresher interface {
-	GetInitialContinuation(ctx context.Context, videoID string) (string, string, error)
+	GetInitialContinuation(ctx context.Context, videoID, channelID string) (string, string, error)
 }
 
 // MessageCallback is called with parsed messages after each successful poll
@@ -305,7 +305,7 @@ func (p *Poller) poll() {
 				zap.Int("attempt", p.emptyContCount),
 				zap.Int("threshold", p.emptyContThreshold),
 			)
-			if fresh, freshVisitorData, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID); err == nil {
+			if fresh, freshVisitorData, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID, p.channelID); err == nil {
 				// Stream is still live – resume with the fresh token.
 				p.continuation = fresh
 				if freshVisitorData != "" {
@@ -425,7 +425,7 @@ func (p *Poller) poll() {
 				zap.String("video_id", p.videoID),
 				zap.Int("zero_action_polls", p.zeroActionThreshold),
 			)
-			if fresh, freshVisitorData, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID); err != nil {
+			if fresh, freshVisitorData, err := p.refresher.GetInitialContinuation(p.ctx, p.videoID, p.channelID); err != nil {
 				// If the error indicates the stream ended (no liveChatRenderer),
 				// treat it as offline rather than continuing to poll forever.
 				errStr := err.Error()
