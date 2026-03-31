@@ -349,12 +349,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           const isPlatformConfigured = configuredChannels.size === 0 || platformChannels !== undefined;
           const isChannelMatch = !channelId || !platformChannels || platformChannels.has(channelId);
           if (isPlatformConfigured && isChannelMatch) {
-            // Mark platform as active when listener reports connected
+            // Update activePlatforms based on connection state
             if (statusData.status === 'connected') {
               setActivePlatforms((prev) => {
                 if (prev.has(statusData.platform)) return prev;
                 const next = new Set(prev);
                 next.add(statusData.platform);
+                return next;
+              });
+            } else if (statusData.status === 'offline') {
+              setActivePlatforms((prev) => {
+                if (!prev.has(statusData.platform)) return prev;
+                const next = new Set(prev);
+                next.delete(statusData.platform);
                 return next;
               });
             }
@@ -670,7 +677,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
       {/* Platform Status Indicators */}
       {showPlatformIndicators && (
-        <PlatformStatusIndicators activePlatforms={activePlatforms} platformStatuses={platformStatuses} />
+        <PlatformStatusIndicators activePlatforms={activePlatforms} platformStatuses={platformStatuses} configuredPlatforms={configuredChannels} />
       )}
 
       <div className="space-y-3">

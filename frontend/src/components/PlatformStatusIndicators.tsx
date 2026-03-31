@@ -18,6 +18,7 @@ import type { PlatformStatus } from '@/lib/types/message'
 interface PlatformStatusIndicatorsProps {
   activePlatforms: Set<string>
   platformStatuses: Map<string, PlatformStatus>
+  configuredPlatforms: Map<string, Set<string>>
 }
 
 // Platform SVG Icons - Using official brand colors per platform guidelines
@@ -71,6 +72,7 @@ const TikTokIcon = () => (
 export default function PlatformStatusIndicators({
   activePlatforms,
   platformStatuses,
+  configuredPlatforms,
 }: PlatformStatusIndicatorsProps) {
   const [countdowns, setCountdowns] = useState<Map<string, number>>(new Map())
 
@@ -121,9 +123,17 @@ export default function PlatformStatusIndicators({
     return () => clearInterval(interval)
   }, [platformStatuses])
 
+  // Only render platforms that are configured on this overlay.
+  // Show all platforms if config hasn't loaded yet (empty map).
+  const visiblePlatforms = configuredPlatforms.size === 0
+    ? platforms
+    : platforms.filter((p) => configuredPlatforms.has(p.name))
+
+  if (visiblePlatforms.length === 0) return null
+
   return (
     <div className="platform-status-indicators fixed top-4 right-4 z-50 flex gap-2 rounded-lg bg-bg/80 px-3 py-2 shadow-lg backdrop-blur-sm">
-      {platforms.map((platform) => {
+      {visiblePlatforms.map((platform) => {
         const isActive = activePlatforms.has(platform.name)
         const status = platformStatuses.get(platform.name)
         const countdown = countdowns.get(platform.name)
