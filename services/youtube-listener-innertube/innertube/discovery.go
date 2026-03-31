@@ -397,14 +397,12 @@ func searchLiveChatRenderer(data interface{}) string {
 // extractContinuationFromLiveChatRenderer extracts the continuation token
 // from a liveChatRenderer object.
 //
-// YouTube returns both a main continuations array and per-view subMenuItem
-// tokens ("Live chat" / "Top chat"). The main continuations array token
-// corresponds to whichever chat view was last active — which may be "Top chat"
-// after an OBS restart or when the streamer's Studio had top-chat selected.
-// To guarantee we always get "Live chat" (all messages), we prefer the
-// explicit "Live chat" subMenuItem token when available, falling back to the
-// main continuations array only when subMenuItems are absent (e.g. small
-// streams without a view selector).
+// YouTube returns both a main continuations array (150-200 char tokens) and
+// per-view subMenuItem tokens (~32 chars). As of March 2026, the subMenuItem
+// tokens are rejected by get_live_chat with HTTP 400 "INVALID_ARGUMENT".
+// The main array token works but may default to "Top chat" (filtered).
+// TODO: generate continuation tokens from scratch via protobuf encoding
+// with chattype=1 to guarantee "Live chat" (all messages).
 func extractContinuationFromLiveChatRenderer(renderer interface{}, logger *zap.Logger) string {
 	m, ok := renderer.(map[string]interface{})
 	if !ok {
@@ -459,16 +457,18 @@ func extractContinuationFromLiveChatRenderer(renderer interface{}, logger *zap.L
 		logger.Info("continuation token comparison (top chat vs live chat debug)", fields...)
 	}
 
-	// Prefer the explicit "Live chat" subMenuItem token — this guarantees we
-	// get all messages, not the filtered "Top chat" view.
-	if token, ok := subMenuTokens["Live chat"]; ok && token != "" {
-		return token
-	}
-
-	// Fallback: main continuations array. This may correspond to either chat
-	// view, but is the only option when subMenuItems are absent.
+	// The main continuations array (150-200 chars) contains the full reload
+	// token accepted by get_live_chat. The subMenuItem tokens (~32 chars) are
+	// view-selector tokens that YouTube rejects with HTTP 400 as of March 2026.
+	// Prefer the main token — it may default to "Top chat" but at least works.
+	// TODO: generate tokens from scratch (protobuf) to guarantee "Live chat".
 	if mainToken != "" {
 		return mainToken
+	}
+
+	// Last resort: try subMenuItem token (may fail with 400).
+	if token, ok := subMenuTokens["Live chat"]; ok && token != "" {
+		return token
 	}
 
 	return ""
