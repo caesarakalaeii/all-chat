@@ -112,14 +112,15 @@ func (r *Repository) ActivateSourcesForOverlay(ctx context.Context, overlayID st
 
 // OverlaySource represents a single chat source for an overlay
 type OverlaySource struct {
-	Platform  string
-	ChannelID string
+	Platform    string
+	ChannelID   string
+	ChannelName string
 }
 
 // GetOverlaySources returns all platform+channel_id pairs configured for an overlay
 func (r *Repository) GetOverlaySources(ctx context.Context, overlayID string) ([]OverlaySource, error) {
 	query := `
-		SELECT platform, channel_id
+		SELECT platform, channel_id, channel_name
 		FROM overlay_chat_sources
 		WHERE overlay_id = $1
 	`
@@ -133,7 +134,7 @@ func (r *Repository) GetOverlaySources(ctx context.Context, overlayID string) ([
 	sources := make([]OverlaySource, 0)
 	for rows.Next() {
 		var src OverlaySource
-		if err := rows.Scan(&src.Platform, &src.ChannelID); err != nil {
+		if err := rows.Scan(&src.Platform, &src.ChannelID, &src.ChannelName); err != nil {
 			return nil, fmt.Errorf("failed to scan overlay source: %w", err)
 		}
 		sources = append(sources, src)

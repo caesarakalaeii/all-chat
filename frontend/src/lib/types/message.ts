@@ -108,8 +108,9 @@ export interface Emote {
 }
 
 export interface PlatformStatus {
-  platform: 'youtube' | 'twitch' | 'kick' | 'tiktok';
+  platform: 'youtube' | 'twitch' | 'kick' | 'tiktok' | 'discord';
   channel_id: string;
+  channel_name?: string;
   status: 'connected' | 'reconnecting' | 'offline' | 'quota_exceeded';
   next_retry_at?: string; // ISO 8601 timestamp
   error_message?: string;

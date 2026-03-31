@@ -346,6 +346,18 @@ func (m *Manager) BroadcastToAll(message []byte) int {
 	return totalSent
 }
 
+// GetConnectedOverlayIDs returns the IDs of all overlays with active WebSocket connections.
+func (m *Manager) GetConnectedOverlayIDs() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ids := make([]string, 0, len(m.pools))
+	for id := range m.pools {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 // GetPoolSize returns the number of connections for an overlay
 func (m *Manager) GetPoolSize(overlayID string) int {
 	m.mu.RLock()

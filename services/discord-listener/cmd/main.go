@@ -18,6 +18,7 @@ import (
 	"github.com/caesar/all-chat/services/discord-listener/metrics"
 	"github.com/caesar/all-chat/services/discord-listener/publisher"
 	"github.com/caesar/all-chat/services/discord-listener/relay"
+	"github.com/caesar/all-chat/services/discord-listener/status"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -223,12 +224,29 @@ func main() {
 	guildCache := &redisGuildCache{client: rdb}
 	streamPub := publisher.NewStreamPublisher(rdb, log)
 	pubAdapter := &publisherAdapter{pub: streamPub}
+	statusPub := status.NewPublisher(rdb, log)
 
 	gwClient := gateway.NewGatewayClient(botToken, gatewayURL, store, log, registry, pubAdapter, guildCache)
 
 	// Wire demand-driven message filtering
 	ds := &demandSet{}
 	gwClient.SetDemandChecker(ds)
+
+	// publishStatusForAllChannels publishes a status update for every configured Discord channel.
+	publishStatusForAllChannels := func(statusStr string) {
+		channels, err := registry.ListConfiguredChannels(ctx)
+		if err != nil {
+			log.Warn("Failed to list channels for status publish", zap.Error(err))
+			return
+		}
+		for channelID := range channels {
+			statusPub.Publish(ctx, status.Message{
+				Platform:  "discord",
+				ChannelID: channelID,
+				Status:    statusStr,
+			})
+		}
+	}
 
 	// After each READY event, check that configured Discord channels are actually
 	// accessible to the bot. Channels missing VIEW_CHANNEL trigger a system error
@@ -240,6 +258,7 @@ func main() {
 		case <-ctx.Done():
 			return
 		}
+		publishStatusForAllChannels("connected")
 		checkChannelPermissions(ctx, botToken, registry, streamPub, log)
 	}
 
@@ -280,6 +299,7 @@ func main() {
 			log.Info("Starting Gateway connection")
 			if err := gwClient.Connect(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("Gateway disconnected, reconnecting in 5s", zap.Error(err))
+				publishStatusForAllChannels("reconnecting")
 				// Don't clear shard_ownership here — the pod still holds the lease.
 				// The onLoss callback (above) handles actual lease loss.
 				// Clearing here caused false "Listener Disconnected" alerts on
