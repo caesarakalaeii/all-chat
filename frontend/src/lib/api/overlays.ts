@@ -92,6 +92,13 @@ export const overlaysApi = {
   },
 
   /**
+   * Update a chat source's config (generic — works for any platform config)
+   */
+  async updateSourceConfig(overlayId: string, sourceId: string, config: Record<string, unknown>): Promise<void> {
+    await apiClient.patch(`/api/v1/overlays/${overlayId}/sources/${sourceId}`, { config })
+  },
+
+  /**
    * Remove a chat source from an overlay
    */
   async removeSource(overlayId: string, sourceId: string): Promise<void> {

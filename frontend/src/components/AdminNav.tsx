@@ -12,6 +12,7 @@ const ADMIN_LINKS = [
   { href: '/admin/viewers', label: 'Viewers' },
   { href: '/admin/cosmetics', label: 'Cosmetics' },
   { href: '/admin/features', label: 'Features' },
+  { href: '/admin/maintenance', label: 'Maintenance' },
 ]
 
 const activeClass =

@@ -7,9 +7,45 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"go.uber.org/zap"
 )
+
+// Stream selection strategy constants
+const (
+	StrategyFirstFound    = "first_found"
+	StrategyMostViewers   = "most_viewers"
+	StrategyFewestViewers = "fewest_viewers"
+	StrategyTitleMatch    = "title_match"
+	StrategyAll           = "all"
+	StrategyTitleMatchAll = "title_match_all"
+)
+
+// ValidStrategies contains all recognized stream selection strategies.
+var ValidStrategies = map[string]bool{
+	StrategyFirstFound:    true,
+	StrategyMostViewers:   true,
+	StrategyFewestViewers: true,
+	StrategyTitleMatch:    true,
+	StrategyAll:           true,
+	StrategyTitleMatchAll: true,
+}
+
+// IsMultiStreamStrategy returns true for strategies that start pollers for multiple streams.
+func IsMultiStreamStrategy(strategy string) bool {
+	return strategy == StrategyAll || strategy == StrategyTitleMatchAll
+}
+
+// LiveStreamCandidate represents a discovered live stream with metadata
+// used for selection when a channel has multiple concurrent streams.
+type LiveStreamCandidate struct {
+	VideoID     string
+	Title       string
+	ViewerCount int // -1 if unknown
+}
 
 // Discovery handles YouTube live stream discovery from channel pages
 type Discovery struct {
@@ -35,15 +71,9 @@ func NewDiscovery(httpClient *http.Client, logger *zap.Logger, cfg ClientConfig)
 	}
 }
 
-// DiscoverLiveStream discovers the live video ID for a given channel ID.
-// Uses the InnerTube Browse API to list recent streams, then verifies liveness
-// via the player API to avoid returning ended/upcoming streams.
-func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (string, error) {
-	d.logger.Info("discovering live stream",
-		zap.String("channel_id", channelID),
-	)
-
-	// Use InnerTube Browse API to get channel's streams tab
+// browseLiveCandidates calls the InnerTube Browse API for a channel's streams
+// tab and returns all currently-live stream candidates found via the LIVE badge.
+func (d *Discovery) browseLiveCandidates(ctx context.Context, channelID string) ([]LiveStreamCandidate, error) {
 	browseURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", d.apiKey)
 	payload := map[string]interface{}{
 		"context": map[string]interface{}{
@@ -58,52 +88,175 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID string) (s
 
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("marshal request payload: %w", err)
+		return nil, fmt.Errorf("marshal request payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, browseURL, bytes.NewReader(jsonPayload))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("fetch channel browse data: %w", err)
+		return nil, fmt.Errorf("fetch channel browse data: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read response body: %w", err)
+		return nil, fmt.Errorf("read response body: %w", err)
 	}
 
 	var browseResponse map[string]interface{}
 	if err := json.Unmarshal(body, &browseResponse); err != nil {
-		return "", fmt.Errorf("parse browse response: %w", err)
+		return nil, fmt.Errorf("parse browse response: %w", err)
 	}
 
-	// Collect live video IDs directly from the browse response using the LIVE badge.
+	// Collect live stream candidates from the browse response using the LIVE badge.
 	// The player API (/youtubei/v1/player) is blocked by YouTube bot-detection on
 	// datacenter IPs (returns LOGIN_REQUIRED with no videoDetails), so we rely on the
 	// thumbnailOverlayTimeStatusRenderer.style == "LIVE" field present in the browse
 	// response for each currently-live stream.
-	videoIDs := collectLiveVideoIDsFromBrowse(browseResponse)
-	if len(videoIDs) == 0 {
+	return collectLiveCandidatesFromBrowse(browseResponse), nil
+}
+
+// DiscoverLiveStream discovers the live video ID for a given channel ID.
+// Uses the InnerTube Browse API to list recent streams, then applies the
+// given selection strategy to choose among multiple concurrent streams.
+// strategy defaults to "first_found" if empty. matchTerm is only used
+// with "title_match" strategy.
+func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID, strategy, matchTerm string) (string, error) {
+	if strategy == "" {
+		strategy = StrategyFirstFound
+	}
+
+	d.logger.Info("discovering live stream",
+		zap.String("channel_id", channelID),
+		zap.String("strategy", strategy),
+	)
+
+	candidates, err := d.browseLiveCandidates(ctx, channelID)
+	if err != nil {
+		return "", err
+	}
+	if len(candidates) == 0 {
 		return "", fmt.Errorf("no live stream found for channel %s", channelID)
 	}
 
-	videoID := videoIDs[0]
+	selected, err := SelectStream(candidates, strategy, matchTerm)
+	if err != nil {
+		return "", fmt.Errorf("stream selection failed for channel %s: %w", channelID, err)
+	}
+
 	d.logger.Info("discovered live stream",
 		zap.String("channel_id", channelID),
-		zap.String("video_id", videoID),
+		zap.String("video_id", selected.VideoID),
+		zap.String("title", selected.Title),
+		zap.Int("viewer_count", selected.ViewerCount),
+		zap.Int("candidates", len(candidates)),
+		zap.String("strategy", strategy),
 	)
-	return videoID, nil
+	return selected.VideoID, nil
+}
+
+// DiscoverAllLiveStreams discovers all live video IDs for a given channel.
+// Used by multi-stream strategies ("all", "title_match_all").
+// When titleFilter is non-empty, only streams whose title contains the
+// keyword (case-insensitive) are returned.
+func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID, titleFilter string) ([]string, error) {
+	d.logger.Info("discovering all live streams",
+		zap.String("channel_id", channelID),
+		zap.String("title_filter", titleFilter),
+	)
+
+	candidates, err := d.browseLiveCandidates(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no live streams found for channel %s", channelID)
+	}
+
+	// Apply optional title filter
+	if titleFilter != "" {
+		lower := strings.ToLower(titleFilter)
+		filtered := candidates[:0]
+		for _, c := range candidates {
+			if strings.Contains(strings.ToLower(c.Title), lower) {
+				filtered = append(filtered, c)
+			}
+		}
+		if len(filtered) == 0 {
+			return nil, fmt.Errorf("no live streams matching %q found for channel %s", titleFilter, channelID)
+		}
+		candidates = filtered
+	}
+
+	videoIDs := make([]string, len(candidates))
+	for i, c := range candidates {
+		videoIDs[i] = c.VideoID
+	}
+
+	d.logger.Info("discovered all live streams",
+		zap.String("channel_id", channelID),
+		zap.String("title_filter", titleFilter),
+		zap.Int("count", len(videoIDs)),
+		zap.Strings("video_ids", videoIDs),
+	)
+	return videoIDs, nil
+}
+
+// SelectStream applies the given strategy to choose a stream from candidates.
+func SelectStream(candidates []LiveStreamCandidate, strategy, matchTerm string) (LiveStreamCandidate, error) {
+	if len(candidates) == 0 {
+		return LiveStreamCandidate{}, fmt.Errorf("no candidates")
+	}
+
+	switch strategy {
+	case StrategyFirstFound, "":
+		return candidates[0], nil
+
+	case StrategyMostViewers:
+		best := candidates[0]
+		for _, c := range candidates[1:] {
+			if c.ViewerCount > best.ViewerCount {
+				best = c
+			}
+		}
+		return best, nil
+
+	case StrategyFewestViewers:
+		best := candidates[0]
+		for _, c := range candidates[1:] {
+			// Prefer known viewer counts over unknown (-1)
+			if best.ViewerCount < 0 || (c.ViewerCount >= 0 && c.ViewerCount < best.ViewerCount) {
+				best = c
+			}
+		}
+		return best, nil
+
+	case StrategyTitleMatch:
+		if matchTerm == "" {
+			return candidates[0], nil
+		}
+		lower := strings.ToLower(matchTerm)
+		for _, c := range candidates {
+			if strings.Contains(strings.ToLower(c.Title), lower) {
+				return c, nil
+			}
+		}
+		// No title match found — fall back to first
+		return candidates[0], nil
+
+	default:
+		return candidates[0], nil
+	}
 }
 
 // checkIsLiveViaPlayer uses the InnerTube player API to check if a video is currently live.
@@ -152,15 +305,16 @@ func (d *Discovery) checkIsLiveViaPlayer(ctx context.Context, videoID string) (b
 	return isLive, nil
 }
 
-// collectLiveVideoIDsFromBrowse recursively finds video IDs that are currently live
+// collectLiveCandidatesFromBrowse recursively finds live stream candidates
 // by checking for thumbnailOverlayTimeStatusRenderer.style == "LIVE" in the browse response.
-// This avoids calling the player API which is blocked on datacenter IPs by YouTube bot-detection.
-func collectLiveVideoIDsFromBrowse(data interface{}) []string {
-	var ids []string
+// Extracts videoId, title, and viewer count for each live stream to support
+// stream selection strategies (most viewers, title match, etc.).
+func collectLiveCandidatesFromBrowse(data interface{}) []LiveStreamCandidate {
+	var candidates []LiveStreamCandidate
 	seen := map[string]struct{}{}
 	var collect func(interface{})
 	collect = func(data interface{}) {
-		if len(ids) >= 5 {
+		if len(candidates) >= 5 {
 			return
 		}
 		switch v := data.(type) {
@@ -180,7 +334,11 @@ func collectLiveVideoIDsFromBrowse(data interface{}) []string {
 						if style, _ := ts["style"].(string); style == "LIVE" {
 							if _, exists := seen[videoID]; !exists {
 								seen[videoID] = struct{}{}
-								ids = append(ids, videoID)
+								candidates = append(candidates, LiveStreamCandidate{
+									VideoID:     videoID,
+									Title:       extractTitle(v),
+									ViewerCount: extractViewerCount(v),
+								})
 							}
 							break
 						}
@@ -197,7 +355,84 @@ func collectLiveVideoIDsFromBrowse(data interface{}) []string {
 		}
 	}
 	collect(data)
+	return candidates
+}
+
+// collectLiveVideoIDsFromBrowse is a convenience wrapper that returns only video IDs.
+// Kept for backward compatibility with callers that don't need full candidate metadata.
+func collectLiveVideoIDsFromBrowse(data interface{}) []string {
+	candidates := collectLiveCandidatesFromBrowse(data)
+	ids := make([]string, len(candidates))
+	for i, c := range candidates {
+		ids[i] = c.VideoID
+	}
 	return ids
+}
+
+// extractTitle extracts the stream title from a videoRenderer map.
+// YouTube stores titles as runs: {"title": {"runs": [{"text": "..."}]}}.
+func extractTitle(renderer map[string]interface{}) string {
+	title, ok := renderer["title"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	runs, ok := title["runs"].([]interface{})
+	if !ok {
+		return ""
+	}
+	var sb strings.Builder
+	for _, run := range runs {
+		if runMap, ok := run.(map[string]interface{}); ok {
+			if text, ok := runMap["text"].(string); ok {
+				sb.WriteString(text)
+			}
+		}
+	}
+	return sb.String()
+}
+
+// viewerCountRegex matches numbers in "1,234 watching now" or "1.234 watching" style text.
+var viewerCountRegex = regexp.MustCompile(`[\d,.]+`)
+
+// extractViewerCount extracts the viewer count from a videoRenderer map.
+// YouTube provides this as viewCountText: {"simpleText": "1,234 watching now"}
+// or as runs: [{"text": "1,234"}, {"text": " watching now"}].
+// Returns -1 if the count cannot be determined.
+func extractViewerCount(renderer map[string]interface{}) int {
+	vct, ok := renderer["viewCountText"].(map[string]interface{})
+	if !ok {
+		return -1
+	}
+
+	var raw string
+
+	// Try simpleText first
+	if st, ok := vct["simpleText"].(string); ok {
+		raw = st
+	} else if runs, ok := vct["runs"].([]interface{}); ok && len(runs) > 0 {
+		// Take text from first run (the number part)
+		if runMap, ok := runs[0].(map[string]interface{}); ok {
+			if text, ok := runMap["text"].(string); ok {
+				raw = text
+			}
+		}
+	}
+
+	if raw == "" {
+		return -1
+	}
+
+	// Extract numeric portion and strip thousands separators
+	match := viewerCountRegex.FindString(raw)
+	if match == "" {
+		return -1
+	}
+	cleaned := strings.NewReplacer(",", "", ".", "").Replace(match)
+	count, err := strconv.Atoi(cleaned)
+	if err != nil {
+		return -1
+	}
+	return count
 }
 
 // collectVideoIDsFromBrowse recursively collects all unique video IDs from a browse response.

@@ -497,6 +497,14 @@ func main() {
 		protectedAPI.GET("/admin/sources", proxyHandler.ForwardRequest)         // -> overlay-manager
 		protectedAPI.GET("/admin/users/:id/overlays", proxyHandler.ForwardRequest)   // -> overlay-manager
 
+		// Admin maintenance window management (-> overlay-manager)
+		protectedAPI.POST("/admin/maintenance", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/admin/maintenance", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/admin/maintenance/:id", proxyHandler.ForwardRequest)
+
+		// User-facing upcoming maintenance (-> overlay-manager)
+		protectedAPI.GET("/maintenance/upcoming", proxyHandler.ForwardRequest)
+
 		// Admin cosmetics catalog management (protected — JWT auth; admin role enforced at auth-service)
 		protectedAPI.GET("/admin/cosmetics/frames", proxyHandler.ForwardRequest)          // -> auth-service
 		protectedAPI.POST("/admin/cosmetics/frames", proxyHandler.ForwardRequest)         // -> auth-service
