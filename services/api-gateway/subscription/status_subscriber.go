@@ -19,15 +19,21 @@ const (
 	PlatformStatusChannel = "platform:status"
 )
 
+// sourceResolver looks up configured sources for an overlay.
+type sourceResolver interface {
+	GetOverlaySources(ctx context.Context, overlayID string) ([]OverlaySource, error)
+}
+
 // StatusSubscriber subscribes to platform status updates from Redis and broadcasts to WebSocket clients
 type StatusSubscriber struct {
-	redisClient   *redis.Client
-	wsManager     *websocket.Manager
-	logger        *zap.Logger
-	metrics       *metrics.GatewayMetrics
-	platformState sync.Map // platform:channelID -> models.PlatformStatusData
-	stopChan      chan struct{}
-	wg            sync.WaitGroup
+	redisClient    *redis.Client
+	wsManager      *websocket.Manager
+	logger         *zap.Logger
+	metrics        *metrics.GatewayMetrics
+	sourceResolver sourceResolver
+	platformState  sync.Map // platform:channelID -> models.PlatformStatusData
+	stopChan       chan struct{}
+	wg             sync.WaitGroup
 }
 
 // NewStatusSubscriber creates a new status subscriber
@@ -39,6 +45,11 @@ func NewStatusSubscriber(redisClient *redis.Client, wsManager *websocket.Manager
 		metrics:     m,
 		stopChan:    make(chan struct{}),
 	}
+}
+
+// SetSourceResolver sets the source resolver used for per-overlay status filtering.
+func (s *StatusSubscriber) SetSourceResolver(r sourceResolver) {
+	s.sourceResolver = r
 }
 
 // Start begins subscribing to platform status updates.
@@ -178,12 +189,45 @@ func (s *StatusSubscriber) handleStatusMessage(ctx context.Context, payload stri
 		return
 	}
 
-	s.wsManager.BroadcastToAll(msgJSON)
+	totalSent := s.broadcastStatusToRelevantOverlays(ctx, statusData, msgJSON)
 
-	s.logger.Debug("Broadcasted platform status to all clients",
+	s.logger.Debug("Broadcasted platform status",
 		zap.String("platform", statusData.Platform),
 		zap.String("channel_id", statusData.ChannelID),
-		zap.String("status", statusData.Status))
+		zap.String("status", statusData.Status),
+		zap.Int("clients_sent", totalSent))
+}
+
+// broadcastStatusToRelevantOverlays sends a status message only to overlays
+// that have the matching platform+channel configured. Falls back to BroadcastToAll
+// if no source resolver is set.
+func (s *StatusSubscriber) broadcastStatusToRelevantOverlays(ctx context.Context, statusData models.PlatformStatusData, msgJSON []byte) int {
+	if s.sourceResolver == nil {
+		return s.wsManager.BroadcastToAll(msgJSON)
+	}
+
+	overlayIDs := s.wsManager.GetConnectedOverlayIDs()
+	totalSent := 0
+
+	for _, overlayID := range overlayIDs {
+		sources, err := s.sourceResolver.GetOverlaySources(ctx, overlayID)
+		if err != nil {
+			s.logger.Warn("Failed to get overlay sources, sending status anyway",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err))
+			totalSent += s.wsManager.BroadcastToOverlay(overlayID, msgJSON)
+			continue
+		}
+
+		for _, src := range sources {
+			if src.Platform == statusData.Platform {
+				totalSent += s.wsManager.BroadcastToOverlay(overlayID, msgJSON)
+				break
+			}
+		}
+	}
+
+	return totalSent
 }
 
 // GetPlatformStatus retrieves the current status for a platform and channel

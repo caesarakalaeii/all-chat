@@ -16,11 +16,12 @@ const (
 
 // StatusMessage represents a platform connection status message
 type StatusMessage struct {
-	Platform     string     `json:"platform"`                // "youtube", "twitch", "kick", "tiktok"
-	ChannelID    string     `json:"channel_id"`              // Platform-specific channel identifier
-	Status       string     `json:"status"`                  // "connected", "reconnecting", "offline", "quota_exceeded"
-	NextRetryAt  *time.Time `json:"next_retry_at,omitempty"` // Timestamp when next reconnection happens (nil if connected)
-	ErrorMessage string     `json:"error_message,omitempty"` // Human-readable error
+	Platform     string     `json:"platform"`                  // "youtube", "twitch", "kick", "tiktok"
+	ChannelID    string     `json:"channel_id"`                // Platform-specific channel identifier
+	ChannelName  string     `json:"channel_name,omitempty"`    // Human-readable channel name
+	Status       string     `json:"status"`                    // "connected", "reconnecting", "offline", "quota_exceeded"
+	NextRetryAt  *time.Time `json:"next_retry_at,omitempty"`   // Timestamp when next reconnection happens (nil if connected)
+	ErrorMessage string     `json:"error_message,omitempty"`   // Human-readable error
 }
 
 // Publisher publishes platform status updates to Redis

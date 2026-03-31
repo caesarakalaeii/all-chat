@@ -233,15 +233,16 @@ func main() {
 	subscriber := subscription.NewSubscriber(redisClient, log, messageHandler, gatewayMetrics)
 	defer subscriber.Stop()
 
+	// Create repository for overlay verification
+	subRepo := subscription.NewRepository(db)
+
 	// Create status subscriber for platform connection status
 	statusSubscriber := subscription.NewStatusSubscriber(redisClient, wsManager, log, gatewayMetrics)
+	statusSubscriber.SetSourceResolver(subRepo)
 	if err := statusSubscriber.Start(ctx); err != nil {
 		log.Fatal("Failed to start status subscriber", zap.Error(err))
 	}
 	defer statusSubscriber.Stop()
-
-	// Create repository for overlay verification
-	subRepo := subscription.NewRepository(db)
 
 	// Get JWT secret from environment
 	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
