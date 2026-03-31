@@ -86,15 +86,15 @@ func TestExtractLiveChatContinuation(t *testing.T) {
 	}
 }
 
-func TestExtractContinuationFromLiveChatRenderer_PrefersLiveChatSubMenuItem(t *testing.T) {
-	// When both the main continuations array and the "Live chat" subMenuItem
-	// are present, the function must return the subMenuItem token to avoid
-	// accidentally latching onto a "Top chat" continuation.
+func TestExtractContinuationFromLiveChatRenderer_PrefersMainContinuations(t *testing.T) {
+	// The main continuations array token (150-200 chars) is accepted by
+	// get_live_chat, while the shorter subMenuItem tokens (~32 chars) are
+	// rejected with HTTP 400 as of March 2026. Main array must be preferred.
 	renderer := map[string]interface{}{
 		"continuations": []interface{}{
 			map[string]interface{}{
 				"reloadContinuationData": map[string]interface{}{
-					"continuation": "top_chat_or_unknown_token",
+					"continuation": "main_continuation_token",
 				},
 			},
 		},
@@ -127,8 +127,8 @@ func TestExtractContinuationFromLiveChatRenderer_PrefersLiveChatSubMenuItem(t *t
 	}
 
 	result := extractContinuationFromLiveChatRenderer(renderer, nil)
-	if result != "live_chat_token" {
-		t.Errorf("expected live_chat_token, got %q — subMenuItem should be preferred over main continuations", result)
+	if result != "main_continuation_token" {
+		t.Errorf("expected main_continuation_token, got %q — main continuations must be preferred (subMenuItem tokens get HTTP 400)", result)
 	}
 }
 
