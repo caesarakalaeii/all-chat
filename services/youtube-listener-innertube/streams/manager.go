@@ -27,8 +27,10 @@ var errLeadershipHeld = errors.New("leadership held by another instance")
 
 // Source represents a YouTube source configuration from source-manager
 type Source struct {
-	ChannelID string
-	OverlayID string
+	ChannelID    string
+	OverlayID    string
+	StreamSelect string // Stream selection strategy (e.g. "most_viewers")
+	StreamMatch  string // Match term for title_match strategy
 }
 
 // Stream represents an active YouTube stream being polled
@@ -44,6 +46,8 @@ type Stream struct {
 type DiscoveryState struct {
 	ChannelID        string
 	OverlayID        string
+	StreamSelect     string // Stream selection strategy
+	StreamMatch      string // Match term for title_match
 	StartedAt        time.Time
 	Attempts         int
 	CancelFunc       context.CancelFunc
@@ -151,7 +155,7 @@ func (m *Manager) OnOverlayConnected(overlayID string, sources []Source) {
 
 	// Start async discovery for each YouTube source
 	for _, source := range sources {
-		m.startAsyncDiscovery(source.ChannelID, overlayID)
+		m.startAsyncDiscovery(source.ChannelID, overlayID, DiscoveryOpts{})
 	}
 }
 
@@ -185,9 +189,17 @@ func (m *Manager) OnOverlayDisconnected(overlayID string) {
 	}
 }
 
+// DiscoveryOpts holds optional parameters for stream discovery.
+type DiscoveryOpts struct {
+	StreamSelect string // Stream selection strategy (e.g. "most_viewers")
+	StreamMatch  string // Match term for title_match strategy
+}
+
 // startAsyncDiscovery starts background discovery for a channel
 // Checks Redis cache first, falls back to HTML discovery
-func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
+func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts DiscoveryOpts) {
+	streamSelect := opts.StreamSelect
+	streamMatch := opts.StreamMatch
 	m.mu.Lock()
 
 	// Check if already discovering
@@ -251,6 +263,8 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string) {
 	state := &DiscoveryState{
 		ChannelID:        channelID,
 		OverlayID:        overlayID,
+		StreamSelect:     streamSelect,
+		StreamMatch:      streamMatch,
 		StartedAt:        time.Now(),
 		Attempts:         0,
 		CancelFunc:       cancel,
@@ -304,51 +318,85 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 		m.logger.Info("Attempting discovery",
 			zap.String("channel_id", state.ChannelID),
 			zap.Int("attempt", state.Attempts),
+			zap.String("strategy", state.StreamSelect),
 		)
 
-		videoID, err := m.discovery.DiscoverLiveStream(ctx, state.ChannelID)
-		if err == nil {
-			m.logger.Info("Discovery successful",
-				zap.String("channel_id", state.ChannelID),
-				zap.String("video_id", videoID),
-				zap.Int("attempts", state.Attempts),
-				zap.Duration("total_time", time.Since(state.StartedAt)),
-			)
-
-			// Persist to Redis cache
-			if err := m.repository.SetChannelVideoMapping(ctx, state.ChannelID, videoID); err != nil {
-				m.logger.Warn("Failed to cache video ID",
-					zap.String("channel_id", state.ChannelID),
-					zap.String("video_id", videoID),
-					zap.Error(err),
-				)
+		// Multi-stream strategies: discover and poll every matching stream
+		if innertube.IsMultiStreamStrategy(state.StreamSelect) {
+			titleFilter := ""
+			if state.StreamSelect == innertube.StrategyTitleMatchAll {
+				titleFilter = state.StreamMatch
 			}
-
-			// Start poller
-			if err := m.startPoller(ctx, state.ChannelID, videoID, state.OverlayID); err != nil {
-				if errors.Is(err, errLeadershipHeld) {
-					// Another instance claimed this video ID first (e.g. two pods discovered
-					// the same stream simultaneously). This is fine — that pod will poll it.
-					m.logger.Info("Another instance claimed leadership for newly-discovered stream",
-						zap.String("channel_id", state.ChannelID),
-						zap.String("video_id", videoID),
-					)
+			videoIDs, err := m.discovery.DiscoverAllLiveStreams(ctx, state.ChannelID, titleFilter)
+			if err == nil {
+				m.logger.Info("All-streams discovery successful",
+					zap.String("channel_id", state.ChannelID),
+					zap.Int("stream_count", len(videoIDs)),
+					zap.Int("attempts", state.Attempts),
+				)
+				started := 0
+				for _, vid := range videoIDs {
+					if err := m.repository.SetChannelVideoMapping(ctx, state.ChannelID, vid); err != nil {
+						m.logger.Warn("Failed to cache video ID", zap.String("video_id", vid), zap.Error(err))
+					}
+					if err := m.startPoller(ctx, state.ChannelID, vid, state.OverlayID); err != nil {
+						if !errors.Is(err, errLeadershipHeld) {
+							m.logger.Warn("Failed to start poller for stream", zap.String("video_id", vid), zap.Error(err))
+						}
+					} else {
+						started++
+					}
+				}
+				if started > 0 {
 					m.cleanupDiscoveryState(state.ChannelID)
 					return
 				}
-				m.logger.Error("Failed to start poller after discovery, will retry",
+				// All pollers failed (leadership held etc.) — fall through to backoff
+			}
+		} else {
+			// Single-stream strategies
+			videoID, err := m.discovery.DiscoverLiveStream(ctx, state.ChannelID, state.StreamSelect, state.StreamMatch)
+			if err == nil {
+				m.logger.Info("Discovery successful",
 					zap.String("channel_id", state.ChannelID),
 					zap.String("video_id", videoID),
-					zap.Error(err),
+					zap.Int("attempts", state.Attempts),
+					zap.Duration("total_time", time.Since(state.StartedAt)),
 				)
-				// Fall through to backoff and retry the whole discovery+poller process
-			} else {
-				m.cleanupDiscoveryState(state.ChannelID)
-				return
+
+				// Persist to Redis cache
+				if err := m.repository.SetChannelVideoMapping(ctx, state.ChannelID, videoID); err != nil {
+					m.logger.Warn("Failed to cache video ID",
+						zap.String("channel_id", state.ChannelID),
+						zap.String("video_id", videoID),
+						zap.Error(err),
+					)
+				}
+
+				// Start poller
+				if err := m.startPoller(ctx, state.ChannelID, videoID, state.OverlayID); err != nil {
+					if errors.Is(err, errLeadershipHeld) {
+						m.logger.Info("Another instance claimed leadership for newly-discovered stream",
+							zap.String("channel_id", state.ChannelID),
+							zap.String("video_id", videoID),
+						)
+						m.cleanupDiscoveryState(state.ChannelID)
+						return
+					}
+					m.logger.Error("Failed to start poller after discovery, will retry",
+						zap.String("channel_id", state.ChannelID),
+						zap.String("video_id", videoID),
+						zap.Error(err),
+					)
+					// Fall through to backoff and retry the whole discovery+poller process
+				} else {
+					m.cleanupDiscoveryState(state.ChannelID)
+					return
+				}
 			}
 		}
 
-		// Discovery failed, apply backoff
+		// Discovery failed or all pollers failed — apply backoff
 		attemptIndex := state.Attempts - 1
 		if attemptIndex >= len(backoffSequence) {
 			attemptIndex = len(backoffSequence) - 1
@@ -357,7 +405,6 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 
 		m.logger.Warn("Discovery failed, applying backoff",
 			zap.String("channel_id", state.ChannelID),
-			zap.Error(err),
 			zap.Duration("backoff", backoffDuration),
 			zap.Int("attempt", state.Attempts),
 		)
@@ -809,11 +856,27 @@ func (m *Manager) syncSources(ctx context.Context) {
 		zap.Int("source_count", len(sources)),
 	)
 
+	// channelSourceInfo carries per-channel overlay IDs and stream selection config.
+	// When multiple overlays share a channel, the first source's strategy is used.
+	type channelSourceInfo struct {
+		OverlayIDs   []string
+		StreamSelect string
+		StreamMatch  string
+	}
+
 	// Group sources by channel to handle multiple overlays for same channel
-	channelOverlays := make(map[string][]string)
+	channelOverlays := make(map[string]*channelSourceInfo)
 	for _, source := range sources {
 		if source.IsActive {
-			channelOverlays[source.ChannelID] = append(channelOverlays[source.ChannelID], source.OverlayID)
+			info, exists := channelOverlays[source.ChannelID]
+			if !exists {
+				info = &channelSourceInfo{
+					StreamSelect: source.StreamSelect,
+					StreamMatch:  source.StreamMatch,
+				}
+				channelOverlays[source.ChannelID] = info
+			}
+			info.OverlayIDs = append(info.OverlayIDs, source.OverlayID)
 		}
 	}
 
@@ -834,7 +897,7 @@ func (m *Manager) syncSources(ctx context.Context) {
 	}
 
 	// For each channel, ensure we have a poller or discovery in progress
-	for channelID, overlayIDs := range channelOverlays {
+	for channelID, info := range channelOverlays {
 		m.mu.RLock()
 		// Check if we're already discovering or polling this channel
 		_, isDiscovering := m.discovering[channelID]
@@ -858,7 +921,7 @@ func (m *Manager) syncSources(ctx context.Context) {
 						zap.Error(err),
 					)
 				}
-			}(channelID, overlayIDs)
+			}(channelID, info.OverlayIDs)
 			continue
 		}
 
@@ -881,9 +944,13 @@ func (m *Manager) syncSources(ctx context.Context) {
 			if !anotherPodPolling {
 				m.logger.Info("Starting async discovery for new YouTube source",
 					zap.String("channel_id", channelID),
-					zap.Strings("overlay_ids", overlayIDs),
+					zap.Strings("overlay_ids", info.OverlayIDs),
+					zap.String("stream_select", info.StreamSelect),
 				)
-				m.startAsyncDiscovery(channelID, overlayIDs[0])
+				m.startAsyncDiscovery(channelID, info.OverlayIDs[0], DiscoveryOpts{
+					StreamSelect: info.StreamSelect,
+					StreamMatch:  info.StreamMatch,
+				})
 			}
 		}
 	}

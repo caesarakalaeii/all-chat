@@ -27,6 +27,11 @@ const (
 	// GateSharing is the feature key for overlay share requests.
 	// Allows users to create and accept chat overlay shares.
 	GateSharing = "sharing"
+
+	// GateStreamSelection is the feature key for YouTube stream selection strategy.
+	// Allows premium users to choose how the innertube listener picks among
+	// multiple concurrent live streams (most viewers, title match, etc.).
+	GateStreamSelection = "stream_selection"
 )
 
 // FeatureGate represents a single row from the feature_gates table.
