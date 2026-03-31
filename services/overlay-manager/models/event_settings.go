@@ -11,12 +11,13 @@ type EventSettings struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 
 	// Twitch Events
-	EnableTwitchSubs         bool `json:"enable_twitch_subs" db:"enable_twitch_subs"`
-	EnableTwitchResubs       bool `json:"enable_twitch_resubs" db:"enable_twitch_resubs"`
-	EnableTwitchGiftSubs     bool `json:"enable_twitch_gift_subs" db:"enable_twitch_gift_subs"`
-	EnableTwitchBits         bool `json:"enable_twitch_bits" db:"enable_twitch_bits"`
-	EnableTwitchRaids        bool `json:"enable_twitch_raids" db:"enable_twitch_raids"`
+	EnableTwitchSubs          bool `json:"enable_twitch_subs" db:"enable_twitch_subs"`
+	EnableTwitchResubs        bool `json:"enable_twitch_resubs" db:"enable_twitch_resubs"`
+	EnableTwitchGiftSubs      bool `json:"enable_twitch_gift_subs" db:"enable_twitch_gift_subs"`
+	EnableTwitchBits          bool `json:"enable_twitch_bits" db:"enable_twitch_bits"`
+	EnableTwitchRaids         bool `json:"enable_twitch_raids" db:"enable_twitch_raids"`
 	EnableTwitchChannelPoints bool `json:"enable_twitch_channel_points" db:"enable_twitch_channel_points"`
+	EnableTwitchFollows       bool `json:"enable_twitch_follows" db:"enable_twitch_follows"`
 
 	// YouTube Events
 	EnableYouTubeSuperChat        bool `json:"enable_youtube_super_chat" db:"enable_youtube_super_chat"`

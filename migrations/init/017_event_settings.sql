@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS overlay_event_settings (
     enable_twitch_bits BOOLEAN DEFAULT TRUE,
     enable_twitch_raids BOOLEAN DEFAULT TRUE,
     enable_twitch_channel_points BOOLEAN DEFAULT FALSE,  -- Requires EventSub
+    enable_twitch_follows BOOLEAN DEFAULT TRUE,          -- Requires EventSub
 
     -- YouTube Events
     enable_youtube_super_chat BOOLEAN DEFAULT TRUE,
