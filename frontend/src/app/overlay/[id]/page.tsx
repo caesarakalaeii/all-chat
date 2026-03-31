@@ -341,8 +341,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           const statusData = envelope.data as PlatformStatus;
           const channelId = (envelope.data as { channel_id?: string }).channel_id;
           const platformChannels = configuredChannels.get(statusData.platform);
-          // Accept if no channel filter loaded yet, or if this channel is configured here
-          if (!channelId || !platformChannels || platformChannels.has(channelId)) {
+          // Reject status for platforms not configured on this overlay.
+          // configuredChannels is populated from the overlay's sources; a missing entry means
+          // the platform is not used here — not that the filter hasn't loaded yet.
+          // An empty configuredChannels map (size === 0) means config hasn't arrived; in that
+          // transient window we fall through and accept all statuses to avoid a blank display.
+          const isPlatformConfigured = configuredChannels.size === 0 || platformChannels !== undefined;
+          const isChannelMatch = !channelId || !platformChannels || platformChannels.has(channelId);
+          if (isPlatformConfigured && isChannelMatch) {
             // Mark platform as active when listener reports connected
             if (statusData.status === 'connected') {
               setActivePlatforms((prev) => {
