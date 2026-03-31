@@ -19,6 +19,7 @@ func TestMapEventTypeToColumn_Twitch(t *testing.T) {
 		{"raid", "enable_twitch_raids"},
 		{"unraid", "enable_twitch_raids"},
 		{"channel_points", "enable_twitch_channel_points"},
+		{"follow", "enable_twitch_follows"},
 		{"unknown", ""},
 	}
 

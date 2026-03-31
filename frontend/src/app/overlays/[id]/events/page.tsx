@@ -23,6 +23,7 @@ interface EventSettings {
   enable_twitch_bits: boolean
   enable_twitch_raids: boolean
   enable_twitch_channel_points: boolean
+  enable_twitch_follows: boolean
   // YouTube
   enable_youtube_super_chat: boolean
   enable_youtube_super_sticker: boolean
@@ -319,6 +320,11 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                       key: 'enable_twitch_channel_points',
                       label: 'Channel Points',
                       desc: 'Channel point reward redemptions (requires EventSub service)',
+                    },
+                    {
+                      key: 'enable_twitch_follows',
+                      label: 'Follows',
+                      desc: 'New channel followers (requires EventSub service)',
                     },
                   ].map(({ key, label, desc }) => (
                     <EventToggle
