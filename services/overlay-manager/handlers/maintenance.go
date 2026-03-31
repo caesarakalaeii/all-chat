@@ -1,22 +1,33 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"net/http"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
+// MaintenanceRepository defines the interface for maintenance window persistence.
+type MaintenanceRepository interface {
+	Create(ctx context.Context, req models.CreateMaintenanceRequest, createdBy string) (*models.MaintenanceWindow, error)
+	ListAll(ctx context.Context) ([]models.MaintenanceWindow, error)
+	ListUpcoming(ctx context.Context) ([]models.MaintenanceWindow, error)
+	Delete(ctx context.Context, id string) error
+}
+
 // MaintenanceHandler handles maintenance window CRUD endpoints.
 type MaintenanceHandler struct {
-	maintenanceRepo *repository.MaintenanceRepository
+	maintenanceRepo MaintenanceRepository
 	logger          *zap.Logger
 }
 
 // NewMaintenanceHandler creates a new MaintenanceHandler.
-func NewMaintenanceHandler(repo *repository.MaintenanceRepository, logger *zap.Logger) *MaintenanceHandler {
+func NewMaintenanceHandler(repo MaintenanceRepository, logger *zap.Logger) *MaintenanceHandler {
 	return &MaintenanceHandler{
 		maintenanceRepo: repo,
 		logger:          logger,
@@ -86,9 +97,18 @@ func (h *MaintenanceHandler) HandleDeleteMaintenance(c *gin.Context) {
 		return
 	}
 
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid maintenance window ID: must be a valid UUID"})
+		return
+	}
+
 	if err := h.maintenanceRepo.Delete(c.Request.Context(), id); err != nil {
+		if errors.Is(err, repository.ErrMaintenanceNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Maintenance window not found"})
+			return
+		}
 		h.logger.Error("Failed to delete maintenance window", zap.String("id", id), zap.Error(err))
-		c.JSON(http.StatusNotFound, gin.H{"error": "Maintenance window not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete maintenance window"})
 		return
 	}
 

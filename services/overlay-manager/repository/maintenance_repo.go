@@ -2,11 +2,15 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ErrMaintenanceNotFound is returned when a maintenance window is not found.
+var ErrMaintenanceNotFound = errors.New("maintenance window not found")
 
 // MaintenanceRepository handles persistence for maintenance windows.
 type MaintenanceRepository struct {
@@ -132,7 +136,7 @@ func (r *MaintenanceRepository) Delete(ctx context.Context, id string) error {
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("maintenance window not found: %s", id)
+		return ErrMaintenanceNotFound
 	}
 
 	return nil
