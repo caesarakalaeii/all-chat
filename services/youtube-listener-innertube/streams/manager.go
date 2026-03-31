@@ -321,9 +321,13 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			zap.String("strategy", state.StreamSelect),
 		)
 
-		// "all" strategy: discover and poll every concurrent stream
-		if state.StreamSelect == innertube.StrategyAll {
-			videoIDs, err := m.discovery.DiscoverAllLiveStreams(ctx, state.ChannelID)
+		// Multi-stream strategies: discover and poll every matching stream
+		if innertube.IsMultiStreamStrategy(state.StreamSelect) {
+			titleFilter := ""
+			if state.StreamSelect == innertube.StrategyTitleMatchAll {
+				titleFilter = state.StreamMatch
+			}
+			videoIDs, err := m.discovery.DiscoverAllLiveStreams(ctx, state.ChannelID, titleFilter)
 			if err == nil {
 				m.logger.Info("All-streams discovery successful",
 					zap.String("channel_id", state.ChannelID),

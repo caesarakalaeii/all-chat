@@ -68,7 +68,7 @@ export interface ChatSource {
   share_status?: 'accepted' | 'revoked' | 'expired' // Only present for shared_overlay sources
 }
 
-export type StreamSelectionStrategy = 'first_found' | 'most_viewers' | 'fewest_viewers' | 'title_match' | 'all'
+export type StreamSelectionStrategy = 'first_found' | 'most_viewers' | 'fewest_viewers' | 'title_match' | 'title_match_all' | 'all'
 
 export interface YouTubeSourceConfig {
   stream_select?: StreamSelectionStrategy

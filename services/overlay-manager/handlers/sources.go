@@ -573,20 +573,21 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 	// Validate stream_select if present (YouTube stream selection strategy)
 	if strategy, ok := req.Config["stream_select"].(string); ok && strategy != "" {
 		validStrategies := map[string]bool{
-			"first_found":    true,
-			"most_viewers":   true,
-			"fewest_viewers": true,
-			"title_match":    true,
-			"all":            true,
+			"first_found":     true,
+			"most_viewers":    true,
+			"fewest_viewers":  true,
+			"title_match":     true,
+			"title_match_all": true,
+			"all":             true,
 		}
 		if !validStrategies[strategy] {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid stream_select strategy: %s", strategy)})
 			return
 		}
-		if strategy == "title_match" {
+		if strategy == "title_match" || strategy == "title_match_all" {
 			match, _ := req.Config["stream_match"].(string)
 			if strings.TrimSpace(match) == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "stream_match is required when stream_select is title_match"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "stream_match is required when stream_select uses title matching"})
 				return
 			}
 		}

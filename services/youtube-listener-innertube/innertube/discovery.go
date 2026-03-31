@@ -21,6 +21,7 @@ const (
 	StrategyFewestViewers = "fewest_viewers"
 	StrategyTitleMatch    = "title_match"
 	StrategyAll           = "all"
+	StrategyTitleMatchAll = "title_match_all"
 )
 
 // ValidStrategies contains all recognized stream selection strategies.
@@ -30,6 +31,12 @@ var ValidStrategies = map[string]bool{
 	StrategyFewestViewers: true,
 	StrategyTitleMatch:    true,
 	StrategyAll:           true,
+	StrategyTitleMatchAll: true,
+}
+
+// IsMultiStreamStrategy returns true for strategies that start pollers for multiple streams.
+func IsMultiStreamStrategy(strategy string) bool {
+	return strategy == StrategyAll || strategy == StrategyTitleMatchAll
 }
 
 // LiveStreamCandidate represents a discovered live stream with metadata
@@ -151,10 +158,13 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID, strategy,
 }
 
 // DiscoverAllLiveStreams discovers all live video IDs for a given channel.
-// Used by the "all" strategy to start a poller for every concurrent stream.
-func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID string) ([]string, error) {
+// Used by multi-stream strategies ("all", "title_match_all").
+// When titleFilter is non-empty, only streams whose title contains the
+// keyword (case-insensitive) are returned.
+func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID, titleFilter string) ([]string, error) {
 	d.logger.Info("discovering all live streams",
 		zap.String("channel_id", channelID),
+		zap.String("title_filter", titleFilter),
 	)
 
 	browseURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", d.apiKey)
@@ -206,6 +216,21 @@ func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID string
 		return nil, fmt.Errorf("no live streams found for channel %s", channelID)
 	}
 
+	// Apply optional title filter
+	if titleFilter != "" {
+		lower := strings.ToLower(titleFilter)
+		filtered := candidates[:0]
+		for _, c := range candidates {
+			if strings.Contains(strings.ToLower(c.Title), lower) {
+				filtered = append(filtered, c)
+			}
+		}
+		if len(filtered) == 0 {
+			return nil, fmt.Errorf("no live streams matching %q found for channel %s", titleFilter, channelID)
+		}
+		candidates = filtered
+	}
+
 	videoIDs := make([]string, len(candidates))
 	for i, c := range candidates {
 		videoIDs[i] = c.VideoID
@@ -213,6 +238,7 @@ func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID string
 
 	d.logger.Info("discovered all live streams",
 		zap.String("channel_id", channelID),
+		zap.String("title_filter", titleFilter),
 		zap.Int("count", len(videoIDs)),
 		zap.Strings("video_ids", videoIDs),
 	)

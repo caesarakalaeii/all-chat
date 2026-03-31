@@ -375,6 +375,7 @@ const STREAM_STRATEGIES = [
   { value: 'most_viewers', label: 'Most viewers', description: 'Picks the stream with the highest viewer count' },
   { value: 'fewest_viewers', label: 'Fewest viewers', description: 'Picks the stream with the lowest viewer count' },
   { value: 'title_match', label: 'Title match', description: 'Picks the first stream whose title contains a keyword' },
+  { value: 'title_match_all', label: 'Title match (all)', description: 'Monitors all streams whose title contains a keyword' },
   { value: 'all', label: 'All streams', description: 'Monitors all concurrent live streams simultaneously' },
 ] as const
 
@@ -401,10 +402,11 @@ function StreamSelectionPanel({
   async function handleSave() {
     setSaving(true)
     try {
+      const needsMatch = strategy === 'title_match' || strategy === 'title_match_all'
       const config: Record<string, unknown> = {
         ...source.config,
         stream_select: strategy === 'first_found' ? undefined : strategy,
-        stream_match: strategy === 'title_match' ? matchTerm : undefined,
+        stream_match: needsMatch ? matchTerm : undefined,
       }
       // Clean undefined keys
       Object.keys(config).forEach((k) => config[k] === undefined && delete config[k])
@@ -454,7 +456,7 @@ function StreamSelectionPanel({
           )}
         </div>
 
-        {strategy === 'title_match' && (
+        {(strategy === 'title_match' || strategy === 'title_match_all') && (
           <div>
             <label className="mb-1 block text-xs font-medium text-text-sub">
               Title keyword
@@ -478,7 +480,7 @@ function StreamSelectionPanel({
           size="sm"
           variant="outline"
           className="w-full"
-          disabled={!hasChanges || saving || locked || (strategy === 'title_match' && !matchTerm.trim())}
+          disabled={!hasChanges || saving || locked || ((strategy === 'title_match' || strategy === 'title_match_all') && !matchTerm.trim())}
           onClick={handleSave}
         >
           {saving ? 'Saving…' : 'Save'}
