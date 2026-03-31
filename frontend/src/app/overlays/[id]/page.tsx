@@ -375,6 +375,7 @@ const STREAM_STRATEGIES = [
   { value: 'most_viewers', label: 'Most viewers', description: 'Picks the stream with the highest viewer count' },
   { value: 'fewest_viewers', label: 'Fewest viewers', description: 'Picks the stream with the lowest viewer count' },
   { value: 'title_match', label: 'Title match', description: 'Picks the first stream whose title contains a keyword' },
+  { value: 'all', label: 'All streams', description: 'Monitors all concurrent live streams simultaneously' },
 ] as const
 
 function StreamSelectionPanel({

@@ -318,51 +318,81 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 		m.logger.Info("Attempting discovery",
 			zap.String("channel_id", state.ChannelID),
 			zap.Int("attempt", state.Attempts),
+			zap.String("strategy", state.StreamSelect),
 		)
 
-		videoID, err := m.discovery.DiscoverLiveStream(ctx, state.ChannelID, state.StreamSelect, state.StreamMatch)
-		if err == nil {
-			m.logger.Info("Discovery successful",
-				zap.String("channel_id", state.ChannelID),
-				zap.String("video_id", videoID),
-				zap.Int("attempts", state.Attempts),
-				zap.Duration("total_time", time.Since(state.StartedAt)),
-			)
-
-			// Persist to Redis cache
-			if err := m.repository.SetChannelVideoMapping(ctx, state.ChannelID, videoID); err != nil {
-				m.logger.Warn("Failed to cache video ID",
+		// "all" strategy: discover and poll every concurrent stream
+		if state.StreamSelect == innertube.StrategyAll {
+			videoIDs, err := m.discovery.DiscoverAllLiveStreams(ctx, state.ChannelID)
+			if err == nil {
+				m.logger.Info("All-streams discovery successful",
 					zap.String("channel_id", state.ChannelID),
-					zap.String("video_id", videoID),
-					zap.Error(err),
+					zap.Int("stream_count", len(videoIDs)),
+					zap.Int("attempts", state.Attempts),
 				)
-			}
-
-			// Start poller
-			if err := m.startPoller(ctx, state.ChannelID, videoID, state.OverlayID); err != nil {
-				if errors.Is(err, errLeadershipHeld) {
-					// Another instance claimed this video ID first (e.g. two pods discovered
-					// the same stream simultaneously). This is fine — that pod will poll it.
-					m.logger.Info("Another instance claimed leadership for newly-discovered stream",
-						zap.String("channel_id", state.ChannelID),
-						zap.String("video_id", videoID),
-					)
+				started := 0
+				for _, vid := range videoIDs {
+					if err := m.repository.SetChannelVideoMapping(ctx, state.ChannelID, vid); err != nil {
+						m.logger.Warn("Failed to cache video ID", zap.String("video_id", vid), zap.Error(err))
+					}
+					if err := m.startPoller(ctx, state.ChannelID, vid, state.OverlayID); err != nil {
+						if !errors.Is(err, errLeadershipHeld) {
+							m.logger.Warn("Failed to start poller for stream", zap.String("video_id", vid), zap.Error(err))
+						}
+					} else {
+						started++
+					}
+				}
+				if started > 0 {
 					m.cleanupDiscoveryState(state.ChannelID)
 					return
 				}
-				m.logger.Error("Failed to start poller after discovery, will retry",
+				// All pollers failed (leadership held etc.) — fall through to backoff
+			}
+		} else {
+			// Single-stream strategies
+			videoID, err := m.discovery.DiscoverLiveStream(ctx, state.ChannelID, state.StreamSelect, state.StreamMatch)
+			if err == nil {
+				m.logger.Info("Discovery successful",
 					zap.String("channel_id", state.ChannelID),
 					zap.String("video_id", videoID),
-					zap.Error(err),
+					zap.Int("attempts", state.Attempts),
+					zap.Duration("total_time", time.Since(state.StartedAt)),
 				)
-				// Fall through to backoff and retry the whole discovery+poller process
-			} else {
-				m.cleanupDiscoveryState(state.ChannelID)
-				return
+
+				// Persist to Redis cache
+				if err := m.repository.SetChannelVideoMapping(ctx, state.ChannelID, videoID); err != nil {
+					m.logger.Warn("Failed to cache video ID",
+						zap.String("channel_id", state.ChannelID),
+						zap.String("video_id", videoID),
+						zap.Error(err),
+					)
+				}
+
+				// Start poller
+				if err := m.startPoller(ctx, state.ChannelID, videoID, state.OverlayID); err != nil {
+					if errors.Is(err, errLeadershipHeld) {
+						m.logger.Info("Another instance claimed leadership for newly-discovered stream",
+							zap.String("channel_id", state.ChannelID),
+							zap.String("video_id", videoID),
+						)
+						m.cleanupDiscoveryState(state.ChannelID)
+						return
+					}
+					m.logger.Error("Failed to start poller after discovery, will retry",
+						zap.String("channel_id", state.ChannelID),
+						zap.String("video_id", videoID),
+						zap.Error(err),
+					)
+					// Fall through to backoff and retry the whole discovery+poller process
+				} else {
+					m.cleanupDiscoveryState(state.ChannelID)
+					return
+				}
 			}
 		}
 
-		// Discovery failed, apply backoff
+		// Discovery failed or all pollers failed — apply backoff
 		attemptIndex := state.Attempts - 1
 		if attemptIndex >= len(backoffSequence) {
 			attemptIndex = len(backoffSequence) - 1
@@ -371,7 +401,6 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 
 		m.logger.Warn("Discovery failed, applying backoff",
 			zap.String("channel_id", state.ChannelID),
-			zap.Error(err),
 			zap.Duration("backoff", backoffDuration),
 			zap.Int("attempt", state.Attempts),
 		)

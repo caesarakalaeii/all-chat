@@ -16,10 +16,11 @@ import (
 
 // Stream selection strategy constants
 const (
-	StrategyFirstFound   = "first_found"
-	StrategyMostViewers  = "most_viewers"
+	StrategyFirstFound    = "first_found"
+	StrategyMostViewers   = "most_viewers"
 	StrategyFewestViewers = "fewest_viewers"
-	StrategyTitleMatch   = "title_match"
+	StrategyTitleMatch    = "title_match"
+	StrategyAll           = "all"
 )
 
 // ValidStrategies contains all recognized stream selection strategies.
@@ -28,6 +29,7 @@ var ValidStrategies = map[string]bool{
 	StrategyMostViewers:   true,
 	StrategyFewestViewers: true,
 	StrategyTitleMatch:    true,
+	StrategyAll:           true,
 }
 
 // LiveStreamCandidate represents a discovered live stream with metadata
@@ -146,6 +148,75 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID, strategy,
 		zap.String("strategy", strategy),
 	)
 	return selected.VideoID, nil
+}
+
+// DiscoverAllLiveStreams discovers all live video IDs for a given channel.
+// Used by the "all" strategy to start a poller for every concurrent stream.
+func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID string) ([]string, error) {
+	d.logger.Info("discovering all live streams",
+		zap.String("channel_id", channelID),
+	)
+
+	browseURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", d.apiKey)
+	payload := map[string]interface{}{
+		"context": map[string]interface{}{
+			"client": map[string]interface{}{
+				"clientName":    "WEB",
+				"clientVersion": d.clientVersion,
+			},
+		},
+		"browseId": channelID,
+		"params":   "EgdzdHJlYW1z8gYECgJ6AA%3D%3D",
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, browseURL, bytes.NewReader(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch channel browse data: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	var browseResponse map[string]interface{}
+	if err := json.Unmarshal(body, &browseResponse); err != nil {
+		return nil, fmt.Errorf("parse browse response: %w", err)
+	}
+
+	candidates := collectLiveCandidatesFromBrowse(browseResponse)
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no live streams found for channel %s", channelID)
+	}
+
+	videoIDs := make([]string, len(candidates))
+	for i, c := range candidates {
+		videoIDs[i] = c.VideoID
+	}
+
+	d.logger.Info("discovered all live streams",
+		zap.String("channel_id", channelID),
+		zap.Int("count", len(videoIDs)),
+		zap.Strings("video_ids", videoIDs),
+	)
+	return videoIDs, nil
 }
 
 // SelectStream applies the given strategy to choose a stream from candidates.

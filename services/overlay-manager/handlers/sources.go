@@ -577,6 +577,7 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 			"most_viewers":   true,
 			"fewest_viewers": true,
 			"title_match":    true,
+			"all":            true,
 		}
 		if !validStrategies[strategy] {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid stream_select strategy: %s", strategy)})
