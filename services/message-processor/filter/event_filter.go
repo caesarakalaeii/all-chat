@@ -67,8 +67,10 @@ func mapEventTypeToColumn(platform, eventType string) string {
 	switch platform {
 	case "twitch":
 		switch eventType {
-		case "subscription", "resubscription":
+		case "subscription":
 			return "enable_twitch_subs"
+		case "resubscription":
+			return "enable_twitch_resubs"
 		case "gift_subscription", "mystery_gift", "gift_paid_upgrade", "anon_gift_paid_upgrade":
 			return "enable_twitch_gift_subs"
 		case "bits":
