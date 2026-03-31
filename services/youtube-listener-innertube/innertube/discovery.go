@@ -71,22 +71,9 @@ func NewDiscovery(httpClient *http.Client, logger *zap.Logger, cfg ClientConfig)
 	}
 }
 
-// DiscoverLiveStream discovers the live video ID for a given channel ID.
-// Uses the InnerTube Browse API to list recent streams, then applies the
-// given selection strategy to choose among multiple concurrent streams.
-// strategy defaults to "first_found" if empty. matchTerm is only used
-// with "title_match" strategy.
-func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID, strategy, matchTerm string) (string, error) {
-	if strategy == "" {
-		strategy = StrategyFirstFound
-	}
-
-	d.logger.Info("discovering live stream",
-		zap.String("channel_id", channelID),
-		zap.String("strategy", strategy),
-	)
-
-	// Use InnerTube Browse API to get channel's streams tab
+// browseLiveCandidates calls the InnerTube Browse API for a channel's streams
+// tab and returns all currently-live stream candidates found via the LIVE badge.
+func (d *Discovery) browseLiveCandidates(ctx context.Context, channelID string) ([]LiveStreamCandidate, error) {
 	browseURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", d.apiKey)
 	payload := map[string]interface{}{
 		"context": map[string]interface{}{
@@ -97,86 +84,6 @@ func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID, strategy,
 		},
 		"browseId": channelID,
 		"params":   "EgdzdHJlYW1z8gYECgJ6AA%3D%3D", // "streams" tab
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("marshal request payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, browseURL, bytes.NewReader(jsonPayload))
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-
-	resp, err := d.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("fetch channel browse data: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read response body: %w", err)
-	}
-
-	var browseResponse map[string]interface{}
-	if err := json.Unmarshal(body, &browseResponse); err != nil {
-		return "", fmt.Errorf("parse browse response: %w", err)
-	}
-
-	// Collect live stream candidates from the browse response using the LIVE badge.
-	// The player API (/youtubei/v1/player) is blocked by YouTube bot-detection on
-	// datacenter IPs (returns LOGIN_REQUIRED with no videoDetails), so we rely on the
-	// thumbnailOverlayTimeStatusRenderer.style == "LIVE" field present in the browse
-	// response for each currently-live stream.
-	candidates := collectLiveCandidatesFromBrowse(browseResponse)
-	if len(candidates) == 0 {
-		return "", fmt.Errorf("no live stream found for channel %s", channelID)
-	}
-
-	selected, err := SelectStream(candidates, strategy, matchTerm)
-	if err != nil {
-		return "", fmt.Errorf("stream selection failed for channel %s: %w", channelID, err)
-	}
-
-	d.logger.Info("discovered live stream",
-		zap.String("channel_id", channelID),
-		zap.String("video_id", selected.VideoID),
-		zap.String("title", selected.Title),
-		zap.Int("viewer_count", selected.ViewerCount),
-		zap.Int("candidates", len(candidates)),
-		zap.String("strategy", strategy),
-	)
-	return selected.VideoID, nil
-}
-
-// DiscoverAllLiveStreams discovers all live video IDs for a given channel.
-// Used by multi-stream strategies ("all", "title_match_all").
-// When titleFilter is non-empty, only streams whose title contains the
-// keyword (case-insensitive) are returned.
-func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID, titleFilter string) ([]string, error) {
-	d.logger.Info("discovering all live streams",
-		zap.String("channel_id", channelID),
-		zap.String("title_filter", titleFilter),
-	)
-
-	browseURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", d.apiKey)
-	payload := map[string]interface{}{
-		"context": map[string]interface{}{
-			"client": map[string]interface{}{
-				"clientName":    "WEB",
-				"clientVersion": d.clientVersion,
-			},
-		},
-		"browseId": channelID,
-		"params":   "EgdzdHJlYW1z8gYECgJ6AA%3D%3D",
 	}
 
 	jsonPayload, err := json.Marshal(payload)
@@ -211,7 +118,67 @@ func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID, title
 		return nil, fmt.Errorf("parse browse response: %w", err)
 	}
 
-	candidates := collectLiveCandidatesFromBrowse(browseResponse)
+	// Collect live stream candidates from the browse response using the LIVE badge.
+	// The player API (/youtubei/v1/player) is blocked by YouTube bot-detection on
+	// datacenter IPs (returns LOGIN_REQUIRED with no videoDetails), so we rely on the
+	// thumbnailOverlayTimeStatusRenderer.style == "LIVE" field present in the browse
+	// response for each currently-live stream.
+	return collectLiveCandidatesFromBrowse(browseResponse), nil
+}
+
+// DiscoverLiveStream discovers the live video ID for a given channel ID.
+// Uses the InnerTube Browse API to list recent streams, then applies the
+// given selection strategy to choose among multiple concurrent streams.
+// strategy defaults to "first_found" if empty. matchTerm is only used
+// with "title_match" strategy.
+func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID, strategy, matchTerm string) (string, error) {
+	if strategy == "" {
+		strategy = StrategyFirstFound
+	}
+
+	d.logger.Info("discovering live stream",
+		zap.String("channel_id", channelID),
+		zap.String("strategy", strategy),
+	)
+
+	candidates, err := d.browseLiveCandidates(ctx, channelID)
+	if err != nil {
+		return "", err
+	}
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("no live stream found for channel %s", channelID)
+	}
+
+	selected, err := SelectStream(candidates, strategy, matchTerm)
+	if err != nil {
+		return "", fmt.Errorf("stream selection failed for channel %s: %w", channelID, err)
+	}
+
+	d.logger.Info("discovered live stream",
+		zap.String("channel_id", channelID),
+		zap.String("video_id", selected.VideoID),
+		zap.String("title", selected.Title),
+		zap.Int("viewer_count", selected.ViewerCount),
+		zap.Int("candidates", len(candidates)),
+		zap.String("strategy", strategy),
+	)
+	return selected.VideoID, nil
+}
+
+// DiscoverAllLiveStreams discovers all live video IDs for a given channel.
+// Used by multi-stream strategies ("all", "title_match_all").
+// When titleFilter is non-empty, only streams whose title contains the
+// keyword (case-insensitive) are returned.
+func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID, titleFilter string) ([]string, error) {
+	d.logger.Info("discovering all live streams",
+		zap.String("channel_id", channelID),
+		zap.String("title_filter", titleFilter),
+	)
+
+	candidates, err := d.browseLiveCandidates(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no live streams found for channel %s", channelID)
 	}

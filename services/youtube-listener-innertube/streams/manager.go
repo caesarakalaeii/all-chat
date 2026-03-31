@@ -155,7 +155,7 @@ func (m *Manager) OnOverlayConnected(overlayID string, sources []Source) {
 
 	// Start async discovery for each YouTube source
 	for _, source := range sources {
-		m.startAsyncDiscovery(source.ChannelID, overlayID)
+		m.startAsyncDiscovery(source.ChannelID, overlayID, DiscoveryOpts{})
 	}
 }
 
@@ -189,17 +189,17 @@ func (m *Manager) OnOverlayDisconnected(overlayID string) {
 	}
 }
 
+// DiscoveryOpts holds optional parameters for stream discovery.
+type DiscoveryOpts struct {
+	StreamSelect string // Stream selection strategy (e.g. "most_viewers")
+	StreamMatch  string // Match term for title_match strategy
+}
+
 // startAsyncDiscovery starts background discovery for a channel
 // Checks Redis cache first, falls back to HTML discovery
-func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts ...string) {
-	// opts: [0] = streamSelect, [1] = streamMatch
-	var streamSelect, streamMatch string
-	if len(opts) > 0 {
-		streamSelect = opts[0]
-	}
-	if len(opts) > 1 {
-		streamMatch = opts[1]
-	}
+func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts DiscoveryOpts) {
+	streamSelect := opts.StreamSelect
+	streamMatch := opts.StreamMatch
 	m.mu.Lock()
 
 	// Check if already discovering
@@ -947,7 +947,10 @@ func (m *Manager) syncSources(ctx context.Context) {
 					zap.Strings("overlay_ids", info.OverlayIDs),
 					zap.String("stream_select", info.StreamSelect),
 				)
-				m.startAsyncDiscovery(channelID, info.OverlayIDs[0], info.StreamSelect, info.StreamMatch)
+				m.startAsyncDiscovery(channelID, info.OverlayIDs[0], DiscoveryOpts{
+					StreamSelect: info.StreamSelect,
+					StreamMatch:  info.StreamMatch,
+				})
 			}
 		}
 	}
