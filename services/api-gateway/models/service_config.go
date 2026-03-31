@@ -160,6 +160,26 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		StripPrefix: false,
 	}
 
+	// Admin maintenance window routes → overlay-manager
+	registry.Services["admin-maintenance"] = &ServiceConfig{
+		Name:          "admin-maintenance",
+		BaseURL:       overlayURL,
+		HealthPath:    "/health/live",
+		PathPrefix:    "/api/v1/admin/maintenance",
+		StripPrefix:   true,
+		RewritePrefix: "/admin/maintenance",
+	}
+
+	// User-facing upcoming maintenance route → overlay-manager
+	registry.Services["maintenance-upcoming"] = &ServiceConfig{
+		Name:          "maintenance-upcoming",
+		BaseURL:       overlayURL,
+		HealthPath:    "/health/live",
+		PathPrefix:    "/api/v1/maintenance/upcoming",
+		StripPrefix:   true,
+		RewritePrefix: "/maintenance/upcoming",
+	}
+
 	// Validate all service URLs are set
 	for name, service := range registry.Services {
 		if service.BaseURL == "" {

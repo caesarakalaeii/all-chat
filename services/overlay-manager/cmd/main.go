@@ -142,6 +142,7 @@ func main() {
 	}
 
 	creditRollRepo := repository.NewCreditRollRepository(dbPool)
+	maintenanceRepo := repository.NewMaintenanceRepository(dbPool)
 
 	// Initialize Twitch clips client
 	twitchClipsClient := clients.NewTwitchClipsClient(config.TwitchClientID, config.TwitchClientSecret, log)
@@ -156,6 +157,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)
 	eventSettingsHandler := handlers.NewEventSettingsHandler(eventSettingsRepo, overlayRepo)
 	creditRollHandler := creditroll.NewHandler(creditRollRepo, overlayRepo, sourceRepo, redisClient, log, twitchClipsClient)
+	maintenanceHandler := handlers.NewMaintenanceHandler(maintenanceRepo, log)
 
 	// YouTube helper
 	youtubeAPIKey := getEnv("YOUTUBE_API_KEY", "")
@@ -230,6 +232,9 @@ func main() {
 		// YouTube helper routes
 		protected.POST("/youtube/resolve", youtubeHandler.ResolveChannel)
 
+		// Maintenance upcoming (JWT-protected, non-admin users)
+		protected.GET("/maintenance/upcoming", maintenanceHandler.HandleListUpcoming)
+
 		// Internal API routes (called by other services like auth-service)
 		internal := protected.Group("/internal/overlays")
 		{
@@ -246,6 +251,11 @@ func main() {
 		admin.GET("/overlays/:id/sources", adminHandler.GetOverlaySources)
 		admin.GET("/sources", adminHandler.ListAllSources)
 		admin.GET("/users/:id/overlays", adminHandler.GetUserOverlays)
+
+		// Maintenance window management
+		admin.POST("/maintenance", maintenanceHandler.HandleCreateMaintenance)
+		admin.GET("/maintenance", maintenanceHandler.HandleListMaintenance)
+		admin.DELETE("/maintenance/:id", maintenanceHandler.HandleDeleteMaintenance)
 	}
 
 	// Create HTTP server
