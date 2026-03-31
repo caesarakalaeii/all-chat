@@ -8,6 +8,8 @@ on:
       - 'services/**'
       - 'frontend/**'
       - 'shared/**'
+      - 'migrations/**'
+      - 'scripts/run-migrations.sh'
       - '.github/workflows/build-and-push.yml'
   pull_request:
     branches:
@@ -45,6 +47,7 @@ jobs:
       support-bot: ${{ steps.changes.outputs.support-bot }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
+      migrations: ${{ steps.changes.outputs.migrations }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -107,6 +110,9 @@ jobs:
               - 'frontend/**'
             shared:
               - 'shared/**'
+            migrations:
+              - 'migrations/**'
+              - 'scripts/run-migrations.sh'
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -174,6 +180,9 @@ jobs:
           - name: frontend
             changed: ${{ needs.detect-changes.outputs.frontend }}
             path: frontend
+          - name: migrations
+            changed: ${{ needs.detect-changes.outputs.migrations }}
+            path: migrations
 
     steps:
       - name: Checkout repository
