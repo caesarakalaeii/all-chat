@@ -1,10 +1,11 @@
 /**
  * Platform Status Indicators Component
  *
- * Displays small icons for each platform (Twitch, YouTube, Kick, TikTok).
- * Active platforms (recently sent messages) appear in color.
- * Inactive platforms appear in grayscale.
- * Reconnecting platforms show a countdown timer.
+ * Displays small icons for each configured source (Twitch, YouTube, Kick, TikTok, Discord).
+ * Renders one indicator per source (channel), not per platform.
+ * Active sources (connected) appear in color.
+ * Inactive sources appear in grayscale.
+ * Reconnecting sources show a countdown timer.
  *
  * Can be hidden via CSS by targeting `.platform-status-indicators`
  */
@@ -15,10 +16,16 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { PlatformStatus } from '@/lib/types/message'
 
+export interface SourceInfo {
+  platform: string
+  channelId: string
+  channelName: string
+}
+
 interface PlatformStatusIndicatorsProps {
-  activePlatforms: Set<string>
-  platformStatuses: Map<string, PlatformStatus>
-  configuredPlatforms: Map<string, Set<string>>
+  configuredSources: Map<string, SourceInfo>
+  activeChannels: Set<string>
+  channelStatuses: Map<string, PlatformStatus>
 }
 
 // Platform SVG Icons - Using official brand colors per platform guidelines
@@ -69,51 +76,41 @@ const TikTokIcon = () => (
   </svg>
 )
 
+const DiscordIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <path
+      fill="#5865F2"
+      d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"
+    />
+  </svg>
+)
+
+const platformIcons: Record<string, { icon: React.FC; label: string }> = {
+  twitch: { icon: TwitchIcon, label: 'Twitch' },
+  youtube: { icon: YouTubeIcon, label: 'YouTube' },
+  kick: { icon: KickIcon, label: 'Kick' },
+  tiktok: { icon: TikTokIcon, label: 'TikTok' },
+  discord: { icon: DiscordIcon, label: 'Discord' },
+}
+
 export default function PlatformStatusIndicators({
-  activePlatforms,
-  platformStatuses,
-  configuredPlatforms,
+  configuredSources,
+  activeChannels,
+  channelStatuses,
 }: PlatformStatusIndicatorsProps) {
   const [countdowns, setCountdowns] = useState<Map<string, number>>(new Map())
-
-  const platforms = [
-    {
-      name: 'twitch',
-      label: 'Twitch',
-      icon: TwitchIcon,
-      colorClass: '', // Twitch icon color is fixed to #9146FF per branding guidelines
-    },
-    {
-      name: 'youtube',
-      label: 'YouTube',
-      icon: YouTubeIcon,
-      colorClass: '', // YouTube icon color is fixed to #FF0000 per branding guidelines
-    },
-    {
-      name: 'kick',
-      label: 'Kick',
-      icon: KickIcon,
-      colorClass: '', // Kick icon color is fixed to #00E701 per branding guidelines
-    },
-    {
-      name: 'tiktok',
-      label: 'TikTok',
-      icon: TikTokIcon,
-      colorClass: '', // TikTok icon uses #69C9D0 (brand teal) for visibility on dark backgrounds
-    },
-  ]
 
   // Update countdown timers every second
   useEffect(() => {
     const interval = setInterval(() => {
       const newCountdowns = new Map<string, number>()
 
-      platformStatuses.forEach((status, platform) => {
+      channelStatuses.forEach((status, channelId) => {
         if (status.status === 'reconnecting' && status.next_retry_at) {
           const nextRetry = new Date(status.next_retry_at).getTime()
           const now = Date.now()
           const secondsRemaining = Math.max(0, Math.ceil((nextRetry - now) / 1000))
-          newCountdowns.set(platform, secondsRemaining)
+          newCountdowns.set(channelId, secondsRemaining)
         }
       })
 
@@ -121,39 +118,40 @@ export default function PlatformStatusIndicators({
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [platformStatuses])
+  }, [channelStatuses])
 
-  // Only render platforms that are configured on this overlay.
-  // Show all platforms if config hasn't loaded yet (empty map).
-  const visiblePlatforms = configuredPlatforms.size === 0
-    ? platforms
-    : platforms.filter((p) => configuredPlatforms.has(p.name))
+  // Don't render if config hasn't loaded yet
+  if (configuredSources.size === 0) return null
 
-  if (visiblePlatforms.length === 0) return null
+  const entries = Array.from(configuredSources.entries())
 
   return (
     <div className="platform-status-indicators fixed top-4 right-4 z-50 flex gap-2 rounded-lg bg-bg/80 px-3 py-2 shadow-lg backdrop-blur-sm">
-      {visiblePlatforms.map((platform) => {
-        const isActive = activePlatforms.has(platform.name)
-        const status = platformStatuses.get(platform.name)
-        const countdown = countdowns.get(platform.name)
-        const Icon = platform.icon
+      {entries.map(([channelId, source]) => {
+        const platformDef = platformIcons[source.platform]
+        if (!platformDef) return null
+
+        const isActive = activeChannels.has(channelId)
+        const status = channelStatuses.get(channelId)
+        const countdown = countdowns.get(channelId)
+        const Icon = platformDef.icon
+        const platformLabel = platformDef.label
 
         // Determine status class
         let statusClass = isActive ? 'bg-white/10' : 'opacity-40 bg-surface/50'
-        let tooltipText = `${platform.label} ${isActive ? '(Active)' : '(Inactive)'}`
+        let tooltipText = `${platformLabel} - ${source.channelName} ${isActive ? '(Active)' : '(Inactive)'}`
 
         if (status) {
           if (status.status === 'reconnecting' && countdown !== undefined) {
             statusClass = 'bg-yellow-500/20 opacity-100'
             if (status.error_message) {
-              tooltipText = `${platform.label} - ${status.error_message} (retry in ${countdown}s)`
+              tooltipText = `${platformLabel} - ${source.channelName} - ${status.error_message} (retry in ${countdown}s)`
             } else {
-              tooltipText = `${platform.label} - Reconnecting in ${countdown}s`
+              tooltipText = `${platformLabel} - ${source.channelName} - Reconnecting in ${countdown}s`
             }
           } else if (status.status === 'quota_exceeded') {
             statusClass = 'bg-red-500/20 opacity-100'
-            tooltipText = `${platform.label} - Quota exceeded`
+            tooltipText = `${platformLabel} - ${source.channelName} - Quota exceeded`
           } else if (status.status === 'offline') {
             // Check if offline is due to auth error
             const isAuthError =
@@ -162,28 +160,29 @@ export default function PlatformStatusIndicators({
 
             if (isAuthError) {
               statusClass = 'bg-red-500/20 opacity-100 border border-red-500/50'
-              tooltipText = `${platform.label} - Auth Required`
+              tooltipText = `${platformLabel} - ${source.channelName} - Auth Required`
             } else {
               statusClass = 'opacity-20 bg-surface/50'
               tooltipText = status.error_message
-                ? `${platform.label} - ${status.error_message}`
-                : `${platform.label} - Offline`
+                ? `${platformLabel} - ${source.channelName} - ${status.error_message}`
+                : `${platformLabel} - ${source.channelName} - Offline`
             }
           } else if (status.status === 'connected') {
             statusClass = 'bg-green-500/20 opacity-100'
-            tooltipText = `${platform.label} - Connected`
+            tooltipText = `${platformLabel} - ${source.channelName} (Connected)`
           }
         }
 
         return (
           <div
-            key={platform.name}
+            key={channelId}
             className={clsx(
               'platform-indicator',
               'relative flex h-8 w-8 items-center justify-center rounded-md transition-all duration-300',
               statusClass
             )}
-            data-platform={platform.name}
+            data-platform={source.platform}
+            data-channel-id={channelId}
             title={tooltipText}
           >
             <Icon />

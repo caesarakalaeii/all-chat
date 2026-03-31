@@ -61,6 +61,7 @@ function ensureGoogleFontLoaded(fontFamily: string): void {
 import { UserAvatar } from '@/components/UserAvatar';
 import { AllChatBadge } from '@/components/AllChatBadge';
 import { PremiumBadge } from '@/components/PremiumBadge';
+import type { SourceInfo } from '@/components/PlatformStatusIndicators';
 import '@/styles/events.css';
 
 export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
@@ -72,9 +73,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [disableMessageFade, setDisableMessageFade] = useState(false);
   const [customCss, setCustomCss] = useState('');
   const [visualSettingsCss, setVisualSettingsCss] = useState('');
-  const [activePlatforms, setActivePlatforms] = useState<Set<string>>(new Set());
-  const [configuredChannels, setConfiguredChannels] = useState<Map<string, Set<string>>>(new Map()); // platform → Set<channel_id>
-  const [platformStatuses, setPlatformStatuses] = useState<Map<string, PlatformStatus>>(new Map());
+  const [configuredSources, setConfiguredSources] = useState<Map<string, SourceInfo>>(new Map()); // channel_id -> SourceInfo
+  const [activeChannels, setActiveChannels] = useState<Set<string>>(new Set()); // Set of channel_ids
+  const [channelStatuses, setChannelStatuses] = useState<Map<string, PlatformStatus>>(new Map()); // channel_id -> PlatformStatus
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [forceReconnect, setForceReconnect] = useState(0);
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before');
@@ -146,16 +147,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           }
         }
 
-        // Load configured channel IDs from sources
-        // Note: activePlatforms is only set by live platform_status messages (status === 'connected')
+        // Load configured sources (channel_id -> SourceInfo)
+        // Note: activeChannels is only set by live platform_status messages (status === 'connected')
         // so that the indicator reflects actual live connection state, not DB is_active flag.
         if (Array.isArray(data.sources)) {
-          const channels = new Map<string, Set<string>>();
-          data.sources.forEach((source: { platform: string; channel_id: string; is_active: boolean }) => {
-            if (!channels.has(source.platform)) channels.set(source.platform, new Set());
-            channels.get(source.platform)!.add(source.channel_id);
+          const sources = new Map<string, SourceInfo>();
+          data.sources.forEach((source: { platform: string; channel_id: string; channel_name?: string; is_active: boolean }) => {
+            sources.set(source.channel_id, {
+              platform: source.platform,
+              channelId: source.channel_id,
+              channelName: source.channel_name || source.channel_id,
+            });
           });
-          setConfiguredChannels(channels);
+          setConfiguredSources(sources);
         }
       } catch (error) {
         console.warn('[OBS Overlay] Failed to load config', error);
@@ -339,40 +343,38 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         // Handle platform status updates - only for channels configured on this overlay
         if (envelope.type === 'platform_status' && envelope.data) {
           const statusData = envelope.data as PlatformStatus;
-          const channelId = (envelope.data as { channel_id?: string }).channel_id;
-          const platformChannels = configuredChannels.get(statusData.platform);
-          // Reject status for platforms not configured on this overlay.
-          // configuredChannels is populated from the overlay's sources; a missing entry means
-          // the platform is not used here — not that the filter hasn't loaded yet.
-          // An empty configuredChannels map (size === 0) means config hasn't arrived; in that
+          const channelId = statusData.channel_id || statusData.platform;
+          // Reject status for channels not configured on this overlay.
+          // configuredSources is populated from the overlay's sources; a missing entry means
+          // the channel is not used here — not that the filter hasn't loaded yet.
+          // An empty configuredSources map (size === 0) means config hasn't arrived; in that
           // transient window we fall through and accept all statuses to avoid a blank display.
-          const isPlatformConfigured = configuredChannels.size === 0 || platformChannels !== undefined;
-          const isChannelMatch = !channelId || !platformChannels || platformChannels.has(channelId);
-          if (isPlatformConfigured && isChannelMatch) {
-            // Update activePlatforms based on connection state
+          const isConfigured = configuredSources.size === 0 || configuredSources.has(channelId);
+          if (isConfigured) {
+            // Update activeChannels based on connection state
             if (statusData.status === 'connected') {
-              setActivePlatforms((prev) => {
-                if (prev.has(statusData.platform)) return prev;
+              setActiveChannels((prev) => {
+                if (prev.has(channelId)) return prev;
                 const next = new Set(prev);
-                next.add(statusData.platform);
+                next.add(channelId);
                 return next;
               });
             } else if (statusData.status === 'offline') {
-              setActivePlatforms((prev) => {
-                if (!prev.has(statusData.platform)) return prev;
+              setActiveChannels((prev) => {
+                if (!prev.has(channelId)) return prev;
                 const next = new Set(prev);
-                next.delete(statusData.platform);
+                next.delete(channelId);
                 return next;
               });
             }
-            setPlatformStatuses((prev) => {
+            setChannelStatuses((prev) => {
               const next = new Map(prev);
               // Don't overwrite connected with reconnecting from a different channel
-              const existing = prev.get(statusData.platform);
+              const existing = prev.get(channelId);
               if (existing?.status === 'connected' && statusData.status === 'reconnecting') {
                 return prev;
               }
-              next.set(statusData.platform, statusData);
+              next.set(channelId, statusData);
               return next;
             });
           }
@@ -677,7 +679,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
       {/* Platform Status Indicators */}
       {showPlatformIndicators && (
-        <PlatformStatusIndicators activePlatforms={activePlatforms} platformStatuses={platformStatuses} configuredPlatforms={configuredChannels} />
+        <PlatformStatusIndicators configuredSources={configuredSources} activeChannels={activeChannels} channelStatuses={channelStatuses} />
       )}
 
       <div className="space-y-3">
