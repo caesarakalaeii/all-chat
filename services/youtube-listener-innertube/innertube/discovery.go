@@ -291,7 +291,7 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 	}
 
 	// Walk the known path to the liveChatRenderer
-	token := extractContinuationFromNextAPI(nextData)
+	token := extractContinuationFromNextAPI(nextData, d.logger)
 	if token == "" {
 		return "", "", fmt.Errorf("no live chat continuation found in next API for video %s (stream may have ended)", videoID)
 	}
@@ -308,7 +308,7 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID string) 
 // extractContinuationFromNextAPI extracts the live chat continuation token from
 // the InnerTube /next API response. For live streams, it's at:
 // contents.twoColumnWatchNextResults.conversationBar.liveChatRenderer.continuations[].reloadContinuationData.continuation
-func extractContinuationFromNextAPI(data map[string]interface{}) string {
+func extractContinuationFromNextAPI(data map[string]interface{}, logger *zap.Logger) string {
 	// Walk the known path
 	contents, _ := data["contents"].(map[string]interface{})
 	twoCol, _ := contents["twoColumnWatchNextResults"].(map[string]interface{})
@@ -321,7 +321,7 @@ func extractContinuationFromNextAPI(data map[string]interface{}) string {
 	if isReplay, _ := renderer["isReplay"].(bool); isReplay {
 		return ""
 	}
-	return extractContinuationFromLiveChatRenderer(renderer)
+	return extractContinuationFromLiveChatRenderer(renderer, logger)
 }
 
 // extractLiveChatContinuation finds the live chat continuation token inside ytInitialData.
@@ -357,7 +357,7 @@ func walkPath(data map[string]interface{}, keys ...string) string {
 			if isReplay, _ := rendererMap["isReplay"].(bool); isReplay {
 				return ""
 			}
-			return extractContinuationFromLiveChatRenderer(val)
+			return extractContinuationFromLiveChatRenderer(val, nil)
 		}
 		current = val
 	}
@@ -375,7 +375,7 @@ func searchLiveChatRenderer(data interface{}) string {
 			if isReplay, _ := rendererMap["isReplay"].(bool); isReplay {
 				return ""
 			}
-			if token := extractContinuationFromLiveChatRenderer(renderer); token != "" {
+			if token := extractContinuationFromLiveChatRenderer(renderer, nil); token != "" {
 				return token
 			}
 		}
@@ -405,20 +405,14 @@ func searchLiveChatRenderer(data interface{}) string {
 // explicit "Live chat" subMenuItem token when available, falling back to the
 // main continuations array only when subMenuItems are absent (e.g. small
 // streams without a view selector).
-func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
+func extractContinuationFromLiveChatRenderer(renderer interface{}, logger *zap.Logger) string {
 	m, ok := renderer.(map[string]interface{})
 	if !ok {
 		return ""
 	}
 
-	// Prefer the explicit "Live chat" subMenuItem token — this guarantees we
-	// get all messages, not the filtered "Top chat" view.
-	if token := extractLiveChatSubMenuToken(m); token != "" {
-		return token
-	}
-
-	// Fallback: main continuations array. This may correspond to either chat
-	// view, but is the only option when subMenuItems are absent.
+	// Collect all available tokens for comparison logging
+	var mainToken string
 	continuations, ok := m["continuations"].([]interface{})
 	if ok {
 		for _, cont := range continuations {
@@ -428,31 +422,62 @@ func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 			}
 			if reload, ok := contMap["reloadContinuationData"].(map[string]interface{}); ok {
 				if token, ok := reload["continuation"].(string); ok && token != "" {
-					return token
+					mainToken = token
+					break
 				}
 			}
 			if timed, ok := contMap["timedContinuationData"].(map[string]interface{}); ok {
 				if token, ok := timed["continuation"].(string); ok && token != "" {
-					return token
+					mainToken = token
+					break
 				}
 			}
 			if inv, ok := contMap["invalidationContinuationData"].(map[string]interface{}); ok {
 				if token, ok := inv["continuation"].(string); ok && token != "" {
-					return token
+					mainToken = token
+					break
 				}
 			}
 		}
 	}
 
+	subMenuTokens := extractAllSubMenuTokens(m)
+
+	// Debug: log both tokens so we can verify which chat mode we're using
+	if logger != nil {
+		fields := []zap.Field{
+			zap.Int("main_token_length", len(mainToken)),
+			zap.Bool("main_token_present", mainToken != ""),
+			zap.Int("sub_menu_items_count", len(subMenuTokens)),
+		}
+		for title, token := range subMenuTokens {
+			fields = append(fields,
+				zap.Int(fmt.Sprintf("submenu_%s_length", title), len(token)),
+				zap.Bool(fmt.Sprintf("submenu_%s_matches_main", title), token == mainToken),
+			)
+		}
+		logger.Info("continuation token comparison (top chat vs live chat debug)", fields...)
+	}
+
+	// Prefer the explicit "Live chat" subMenuItem token — this guarantees we
+	// get all messages, not the filtered "Top chat" view.
+	if token, ok := subMenuTokens["Live chat"]; ok && token != "" {
+		return token
+	}
+
+	// Fallback: main continuations array. This may correspond to either chat
+	// view, but is the only option when subMenuItems are absent.
+	if mainToken != "" {
+		return mainToken
+	}
+
 	return ""
 }
 
-// extractLiveChatSubMenuToken walks
-// liveChatRenderer.header.liveChatHeaderRenderer.viewSelector
-//   .sortFilterSubMenuRenderer.subMenuItems
-// and returns the continuation token for the "Live chat" item (all messages).
-// Returns "" if the structure is absent or no "Live chat" item is found.
-func extractLiveChatSubMenuToken(renderer map[string]interface{}) string {
+// extractAllSubMenuTokens extracts continuation tokens for all chat mode items
+// from the viewSelector subMenuItems (e.g. "Top chat", "Live chat").
+func extractAllSubMenuTokens(renderer map[string]interface{}) map[string]string {
+	tokens := make(map[string]string)
 	header, _ := renderer["header"].(map[string]interface{})
 	lch, _ := header["liveChatHeaderRenderer"].(map[string]interface{})
 	vs, _ := lch["viewSelector"].(map[string]interface{})
@@ -464,14 +489,16 @@ func extractLiveChatSubMenuToken(renderer map[string]interface{}) string {
 		if !ok {
 			continue
 		}
-		if item["title"] != "Live chat" {
+		title, _ := item["title"].(string)
+		if title == "" {
 			continue
 		}
 		cont, _ := item["continuation"].(map[string]interface{})
 		reload, _ := cont["reloadContinuationData"].(map[string]interface{})
 		if token, ok := reload["continuation"].(string); ok && token != "" {
-			return token
+			tokens[title] = token
 		}
 	}
-	return ""
+	return tokens
 }
+
