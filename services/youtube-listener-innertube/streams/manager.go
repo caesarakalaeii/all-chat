@@ -470,7 +470,7 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 	)
 
 	// Get initial continuation token from watch page
-	initialContinuation, visitorData, err := m.discovery.GetInitialContinuation(ctx, videoID)
+	initialContinuation, visitorData, err := m.discovery.GetInitialContinuation(ctx, videoID, channelID)
 	if err != nil {
 		m.logger.Error("Failed to get initial continuation token",
 			zap.String("video_id", videoID),
