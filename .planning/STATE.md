@@ -5,7 +5,7 @@ milestone_name: milestone
 status: Milestone complete
 stopped_at: Completed 08-06-PLAN.md
 last_updated: "2026-03-29T21:43:12.510Z"
-last_activity: 2026-03-29
+last_activity: 2026-03-31
 progress:
   total_phases: 14
   completed_phases: 14
@@ -265,6 +265,7 @@ None yet.
 | 260328-tqh | Enable tracing in the tiktok-listener service | 2026-03-28 | 01effa3 | [260328-tqh-enable-tracing-in-the-tiktok-listener-se](./quick/260328-tqh-enable-tracing-in-the-tiktok-listener-se/) |
 | 260328-v03 | Fix Grafana dashboard legends to show meaningful labels | 2026-03-28 | cc3982f (caesar-deployment) | [260328-v03-fix-grafana-dashboard-legends-to-show-me](./quick/260328-v03-fix-grafana-dashboard-legends-to-show-me/) |
 | 260329-u6p | Add Prometheus metric for new user registrations | 2026-03-29 | 7a81716 / f818dd8 (caesar-deployment) | [260329-u6p-add-prometheus-metric-for-new-user-regis](./quick/260329-u6p-add-prometheus-metric-for-new-user-regis/) |
+| 260331-gqi | Automate database migrations to prevent downtime from missed migration runs | 2026-03-31 | c143ccbd / bbbf6ef (caesar-deployment) | [260331-gqi-automate-database-migrations-to-prevent-](./quick/260331-gqi-automate-database-migrations-to-prevent-/) |
 
 ## Session Continuity
 
