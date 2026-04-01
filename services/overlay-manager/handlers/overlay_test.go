@@ -17,12 +17,13 @@ import (
 
 // Mock repository for testing
 type mockOverlayRepository struct {
-	createFunc           func(context.Context, *models.Overlay) error
-	getByIDFunc          func(context.Context, string) (*models.Overlay, error)
-	getByIDAndUserIDFunc func(context.Context, string, string) (*models.Overlay, error)
-	listByUserIDFunc     func(context.Context, string) ([]*models.Overlay, error)
-	updateFunc           func(context.Context, *models.Overlay) error
-	deleteFunc           func(context.Context, string) error
+	createFunc                func(context.Context, *models.Overlay) error
+	getByIDFunc               func(context.Context, string) (*models.Overlay, error)
+	getByIDAndUserIDFunc      func(context.Context, string, string) (*models.Overlay, error)
+	listByUserIDFunc          func(context.Context, string) ([]*models.Overlay, error)
+	updateFunc                func(context.Context, *models.Overlay) error
+	deleteFunc                func(context.Context, string) error
+	unsetAllPublicForUserFunc func(context.Context, string, string) error
 }
 
 func (m *mockOverlayRepository) Create(ctx context.Context, overlay *models.Overlay) error {
@@ -68,6 +69,9 @@ func (m *mockOverlayRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (m *mockOverlayRepository) UnsetAllPublicForUser(ctx context.Context, userID, excludeID string) error {
+	if m.unsetAllPublicForUserFunc != nil {
+		return m.unsetAllPublicForUserFunc(ctx, userID, excludeID)
+	}
 	return nil
 }
 
@@ -106,6 +110,29 @@ func TestOverlayHandler_HandleCreateOverlay(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, response["id"])
 				assert.Equal(t, "My Overlay", response["name"])
+			},
+		},
+		{
+			name: "creation unsets other public overlays",
+			requestBody: map[string]interface{}{
+				"name": "New Overlay",
+			},
+			userID: uuid.New().String(),
+			mockRepo: &mockOverlayRepository{
+				createFunc: func(ctx context.Context, overlay *models.Overlay) error {
+					overlay.ID = uuid.New().String()
+					return nil
+				},
+				unsetAllPublicForUserFunc: func(ctx context.Context, userID, excludeID string) error {
+					return nil
+				},
+			},
+			wantStatusCode: http.StatusCreated,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var response map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Equal(t, true, response["is_public_for_viewers"])
 			},
 		},
 		{
@@ -540,6 +567,40 @@ func TestOverlayHandler_HandleDeleteOverlay(t *testing.T) {
 			assert.Equal(t, tt.wantStatusCode, w.Code)
 		})
 	}
+}
+
+func TestOverlayHandler_CreateCallsUnsetPublic(t *testing.T) {
+	userID := uuid.New().String()
+	var unsetCalledWithUserID, unsetCalledWithExcludeID string
+
+	mockRepo := &mockOverlayRepository{
+		createFunc: func(ctx context.Context, overlay *models.Overlay) error {
+			overlay.ID = uuid.New().String()
+			return nil
+		},
+		unsetAllPublicForUserFunc: func(ctx context.Context, uid, excludeID string) error {
+			unsetCalledWithUserID = uid
+			unsetCalledWithExcludeID = excludeID
+			return nil
+		},
+	}
+
+	router := setupTestRouter()
+	handler := NewOverlayHandler(mockRepo, nil, nil)
+	router.POST("/overlays", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		handler.HandleCreateOverlay(c)
+	})
+
+	body, _ := json.Marshal(map[string]interface{}{"name": "Test"})
+	req := httptest.NewRequest(http.MethodPost, "/overlays", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, userID, unsetCalledWithUserID, "UnsetAllPublicForUser should be called with correct user ID")
+	assert.NotEmpty(t, unsetCalledWithExcludeID, "UnsetAllPublicForUser should be called with new overlay ID")
 }
 
 func TestOverlayHandler_RegisterRoutes(t *testing.T) {

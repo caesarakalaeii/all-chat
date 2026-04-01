@@ -77,6 +77,14 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 		return
 	}
 
+	// Only one overlay per user can be public; unset all others
+	if overlay.IsPublicForViewers {
+		if err := h.repo.UnsetAllPublicForUser(c.Request.Context(), userID.(string), overlay.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create overlay"})
+			return
+		}
+	}
+
 	c.JSON(http.StatusCreated, overlay)
 }
 
