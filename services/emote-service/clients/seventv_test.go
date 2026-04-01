@@ -254,6 +254,171 @@ func TestSevenTVClient_Provider(t *testing.T) {
 	assert.Equal(t, "7tv", client.Provider())
 }
 
+func TestSevenTVClient_FetchCombinedEmotes_NonTwitchPlatform(t *testing.T) {
+	globalResponse := `{
+		"id": "global-set",
+		"name": "Global Emotes",
+		"emotes": [
+			{
+				"id": "603cac391cd55c0014d989be",
+				"name": "POGGERS",
+				"data": {
+					"host": {
+						"url": "//cdn.7tv.app/emote/603cac391cd55c0014d989be",
+						"files": [
+							{"name": "1x.webp", "width": 28}
+						]
+					}
+				}
+			}
+		]
+	}`
+
+	tests := []struct {
+		name           string
+		platform       string
+		channel        string
+		userID         string
+		wantGlobalOnly bool
+		twitchCalled   bool
+	}{
+		{
+			name:           "youtube platform — only global emotes, no Twitch lookup",
+			platform:       "youtube",
+			channel:        "UCxxxxxxxxxxxxxx",
+			userID:         "UCyyyyyy",
+			wantGlobalOnly: true,
+			twitchCalled:   false,
+		},
+		{
+			name:           "kick platform — only global emotes, no Twitch lookup",
+			platform:       "kick",
+			channel:        "xqc",
+			userID:         "12345",
+			wantGlobalOnly: true,
+			twitchCalled:   false,
+		},
+		{
+			name:           "tiktok platform — only global emotes, no Twitch lookup",
+			platform:       "tiktok",
+			channel:        "@someuser",
+			userID:         "67890",
+			wantGlobalOnly: true,
+			twitchCalled:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/v3/emote-sets/global") {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(globalResponse))
+					return
+				}
+				// Any channel or user-specific call should not be reached for non-Twitch
+				// Return 404 so test fails clearly if it is called unexpectedly
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+
+			logger := zaptest.NewLogger(t)
+			mockTwitch := &mockTwitchLookup{id: "ignored"}
+
+			client := NewSevenTVClient(logger, mockTwitch)
+			client.baseURL = server.URL
+
+			emotes, err := client.FetchCombinedEmotes(context.Background(), tt.channel, tt.platform, tt.userID, "")
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.twitchCalled, mockTwitch.called, "Twitch lookup should not be called for non-Twitch platforms")
+
+			if tt.wantGlobalOnly {
+				// Should contain global emote
+				found := false
+				for _, e := range emotes {
+					if e.Code == "POGGERS" {
+						found = true
+					}
+				}
+				assert.True(t, found, "Expected global emote 'POGGERS' to be present")
+			}
+		})
+	}
+}
+
+func TestSevenTVClient_FetchCombinedEmotes_TwitchChannelHint(t *testing.T) {
+	channelResponse := `{
+		"emote_set": {
+			"id": "set-123",
+			"name": "Channel Emotes",
+			"emotes": [
+				{
+					"id": "emote-abc",
+					"name": "ariW",
+					"data": {
+						"host": {
+							"url": "//cdn.7tv.app/emote/emote-abc",
+							"files": [{"name": "1x.webp", "width": 28}]
+						}
+					}
+				}
+			]
+		}
+	}`
+
+	globalResponse := `{
+		"id": "global-set",
+		"name": "Global Emotes",
+		"emotes": [
+			{
+				"id": "emote-global",
+				"name": "POGGERS",
+				"data": {
+					"host": {
+						"url": "//cdn.7tv.app/emote/emote-global",
+						"files": [{"name": "1x.webp", "width": 28}]
+					}
+				}
+			}
+		]
+	}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/v3/emote-sets/global") {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(globalResponse))
+			return
+		}
+		if strings.Contains(r.URL.Path, "/v3/users/twitch/") {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(channelResponse))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	logger := zaptest.NewLogger(t)
+	mockTwitch := &mockTwitchLookup{id: "71092938"}
+
+	client := NewSevenTVClient(logger, mockTwitch)
+	client.baseURL = server.URL
+
+	// YouTube message with twitch_channel hint should get channel emotes via the Twitch channel
+	emotes, err := client.FetchCombinedEmotes(context.Background(), "UCxxxxxx", "youtube", "", "xqc")
+
+	require.NoError(t, err)
+	assert.True(t, mockTwitch.called, "Twitch lookup should be called when twitch_channel hint is provided")
+
+	emoteMap := make(map[string]models.Emote)
+	for _, e := range emotes {
+		emoteMap[e.Code] = e
+	}
+	assert.Contains(t, emoteMap, "ariW", "Expected channel emote 'ariW' from Twitch hint")
+	assert.Contains(t, emoteMap, "POGGERS", "Expected global emote 'POGGERS'")
+}
+
 func TestSevenTVClient_Timeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
