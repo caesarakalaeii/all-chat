@@ -11,6 +11,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	sharedAuth "github.com/caesar/all-chat/shared/auth"
+	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -49,6 +50,7 @@ type ViewerAuthHandler struct {
 	logger          *zap.Logger
 	frontendURL     string
 	cipher          StringEncryptor
+	metrics         *metrics.BusinessMetrics
 }
 
 // NewViewerAuthHandler creates a new viewer auth handler
@@ -80,6 +82,12 @@ func NewViewerAuthHandler(
 		cipher:          cipher,
 		logger:          logger,
 	}
+}
+
+// WithMetrics attaches a BusinessMetrics instance for recording viewer registration events.
+func (h *ViewerAuthHandler) WithMetrics(m *metrics.BusinessMetrics) *ViewerAuthHandler {
+	h.metrics = m
+	return h
 }
 
 // findLinkedStreamer returns the streamer (dashboard user) that shares the given platform identity,
@@ -395,6 +403,10 @@ func (h *ViewerAuthHandler) getOrCreateViewerSession(
 		return nil, err
 	}
 
+	if h.metrics != nil {
+		h.metrics.RecordViewerRegistration(platform)
+	}
+
 	return session, nil
 }
 
@@ -567,6 +579,9 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		if err := h.viewerRepo.Create(c.Request.Context(), session); err != nil {
 			h.redirectToFrontendWithError(c, "Failed to create session")
 			return
+		}
+		if h.metrics != nil {
+			h.metrics.RecordViewerRegistration("youtube")
 		}
 	} else {
 		session.Username = userInfo.Name
@@ -763,6 +778,9 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 			h.logger.Error("Failed to create session", zap.Error(err))
 			h.redirectToFrontendWithError(c, "Failed to create session")
 			return
+		}
+		if h.metrics != nil {
+			h.metrics.RecordViewerRegistration("kick")
 		}
 	} else {
 		// Update existing session

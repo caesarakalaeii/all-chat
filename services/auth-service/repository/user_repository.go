@@ -612,6 +612,27 @@ func (r *UserRepository) FindExistingUserBySource(ctx context.Context, platform,
 	return username, nil
 }
 
+// CountByAuthProvider returns the number of users per auth_provider.
+// The result is a map from provider name (e.g. "twitch", "youtube", "kick") to count.
+func (r *UserRepository) CountByAuthProvider(ctx context.Context) (map[string]int64, error) {
+	rows, err := r.db.Query(ctx, `SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count users by auth_provider: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int64)
+	for rows.Next() {
+		var provider string
+		var count int64
+		if err := rows.Scan(&provider, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan user count row: %w", err)
+		}
+		counts[provider] = count
+	}
+	return counts, rows.Err()
+}
+
 // IsPlatformIDBanned checks if a platform ID is banned
 func (r *UserRepository) IsPlatformIDBanned(ctx context.Context, platform, platformID string) (bool, error) {
 	var exists bool

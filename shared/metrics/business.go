@@ -5,10 +5,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// knownPlatforms lists all OAuth provider values that can appear in
+// allchat_user_registrations_total and allchat_viewer_registrations_total.
+// Pre-initialising these label combinations ensures the metrics are visible in
+// /metrics even before the first registration occurs in the current pod's
+// lifetime, which prevents Grafana from showing a flat line simply because no
+// user signed up since the last pod restart.
+var knownPlatforms = []string{"twitch", "youtube", "kick"}
+
 // BusinessMetrics provides business-level metrics for the platform
 type BusinessMetrics struct {
 	// User Growth
-	UserRegistrations *prometheus.CounterVec
+	UserRegistrations   *prometheus.CounterVec
+	ViewerRegistrations *prometheus.CounterVec
+	// TotalUsersByPlatform is a gauge seeded from the database at startup so
+	// that Grafana always has an accurate baseline even across pod restarts.
+	TotalUsersByPlatform *prometheus.GaugeVec
 
 	// User Engagement
 	ActiveOverlays         *prometheus.GaugeVec
@@ -35,14 +47,41 @@ func NewBusinessMetrics() *BusinessMetrics {
 // provided registerer. Used by tests to avoid conflicts with the default registry.
 func newBusinessMetricsWithRegistry(reg prometheus.Registerer) *BusinessMetrics {
 	factory := promauto.With(reg)
+	userRegs := factory.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "allchat_user_registrations_total",
+			Help: "Total new streamer registrations by auth platform",
+		},
+		[]string{"platform"},
+	)
+	viewerRegs := factory.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "allchat_viewer_registrations_total",
+			Help: "Total new viewer registrations by auth platform",
+		},
+		[]string{"platform"},
+	)
+	totalUsers := factory.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "allchat_total_users_by_platform",
+			Help: "Total registered streamers per auth platform, seeded from the database at startup",
+		},
+		[]string{"platform"},
+	)
+
+	// Pre-initialise known label combinations so the metrics are always
+	// present in /metrics, even before any sign-up happens in the current
+	// pod's lifetime.
+	for _, p := range knownPlatforms {
+		userRegs.WithLabelValues(p)
+		viewerRegs.WithLabelValues(p)
+		totalUsers.WithLabelValues(p)
+	}
+
 	return &BusinessMetrics{
-		UserRegistrations: factory.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "allchat_user_registrations_total",
-				Help: "Total new user registrations by auth platform",
-			},
-			[]string{"platform"},
-		),
+		UserRegistrations:    userRegs,
+		ViewerRegistrations:  viewerRegs,
+		TotalUsersByPlatform: totalUsers,
 		ActiveOverlays: factory.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "allchat_active_overlays_total",
@@ -103,9 +142,22 @@ func newBusinessMetricsWithRegistry(reg prometheus.Registerer) *BusinessMetrics 
 	}
 }
 
-// RecordUserRegistration increments the user registration counter for the given platform.
+// RecordUserRegistration increments the streamer registration counter for the given platform.
 func (m *BusinessMetrics) RecordUserRegistration(platform string) {
 	m.UserRegistrations.WithLabelValues(platform).Inc()
+}
+
+// RecordViewerRegistration increments the viewer registration counter for the given platform.
+func (m *BusinessMetrics) RecordViewerRegistration(platform string) {
+	m.ViewerRegistrations.WithLabelValues(platform).Inc()
+}
+
+// InitTotalUsersByPlatform sets the TotalUsersByPlatform gauge from DB-sourced counts.
+// Call this once at startup so Grafana has a persistent baseline across pod restarts.
+func (m *BusinessMetrics) InitTotalUsersByPlatform(counts map[string]int64) {
+	for platform, count := range counts {
+		m.TotalUsersByPlatform.WithLabelValues(platform).Set(float64(count))
+	}
 }
 
 // SetActiveOverlays sets the number of active overlays
