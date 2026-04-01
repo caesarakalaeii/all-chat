@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"os"
@@ -440,13 +439,6 @@ func main() {
 				}
 				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized", "success")
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "normalization").Observe(time.Since(startNormalize).Seconds())
-
-				// Look up client_message_id from Redis (set by auth-service when viewer sent a message)
-				textHash := fmt.Sprintf("%x", sha256.Sum256([]byte(rawMsg.Text)))[:16]
-				clientMsgKey := fmt.Sprintf("client_msg:%s:%s:%s", rawMsg.Platform, rawMsg.UserID, textHash)
-				if clientMsgID, err := redisClient.GetDel(ctx, clientMsgKey).Result(); err == nil && clientMsgID != "" {
-					unified.ClientMessageID = clientMsgID
-				}
 
 				// Enrich with avatars (Twitch only, cached in Redis)
 				startAvatar := time.Now()

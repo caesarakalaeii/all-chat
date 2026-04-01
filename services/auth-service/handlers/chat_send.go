@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
@@ -59,7 +57,6 @@ type ChatSendHandler struct {
 	youtubeProvider OAuthTokenRefresher
 	kickProvider    OAuthTokenRefresher
 	cipher          StringEncryptor
-	redisClient     *redis.Client
 }
 
 // NewChatSendHandler creates a new chat send handler
@@ -73,7 +70,6 @@ func NewChatSendHandler(
 	youtubeProvider OAuthTokenRefresher,
 	kickProvider OAuthTokenRefresher,
 	cipher StringEncryptor,
-	redisClient *redis.Client,
 ) *ChatSendHandler {
 	return &ChatSendHandler{
 		log:             log.Named("chat-send"),
@@ -86,7 +82,6 @@ func NewChatSendHandler(
 		youtubeProvider: youtubeProvider,
 		kickProvider:    kickProvider,
 		cipher:          cipher,
-		redisClient:     redisClient,
 	}
 }
 
@@ -94,8 +89,7 @@ func NewChatSendHandler(
 type SendMessageRequest struct {
 	StreamerUsername string `json:"streamer_username" binding:"required"`
 	Message          string `json:"message" binding:"required"`
-	Platform         string `json:"platform"`          // Optional: if viewer has multiple platforms
-	ClientMessageID  string `json:"client_message_id"` // Optional: client-generated ID for optimistic UI deduplication
+	Platform         string `json:"platform"` // Optional: if viewer has multiple platforms
 }
 
 // SendMessageResponse is the response after sending a message
@@ -259,17 +253,6 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 	if messageErr != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to send message", "details": messageErr.Error()})
 		return
-	}
-
-	// Store client_message_id in Redis so the message processor can attach it
-	// when the message comes back through the platform listener.
-	// Key: client_msg:{platform}:{user_id}:{text_hash} → client_message_id (30s TTL)
-	if req.ClientMessageID != "" && h.redisClient != nil {
-		textHash := fmt.Sprintf("%x", sha256.Sum256([]byte(req.Message)))[:16]
-		redisKey := fmt.Sprintf("client_msg:%s:%s:%s", session.Platform, session.PlatformUserID, textHash)
-		if err := h.redisClient.Set(ctx, redisKey, req.ClientMessageID, 30*time.Second).Err(); err != nil {
-			h.log.Warn("Failed to store client_message_id in Redis", zap.Error(err))
-		}
 	}
 
 	c.JSON(http.StatusOK, SendMessageResponse{
