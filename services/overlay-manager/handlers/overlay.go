@@ -58,10 +58,11 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 	}
 
 	overlay := &models.Overlay{
-		UserID:      userID.(string),
-		Name:        req.Name,
-		Description: req.Description,
-		IsActive:    isActive,
+		UserID:             userID.(string),
+		Name:               req.Name,
+		Description:        req.Description,
+		IsActive:           isActive,
+		IsPublicForViewers: true,
 	}
 
 	// Validate
