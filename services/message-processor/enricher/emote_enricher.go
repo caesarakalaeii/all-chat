@@ -19,7 +19,7 @@ import (
 // EmoteServiceClient is an interface for calling the Emote Service
 type EmoteServiceClient interface {
 	GetEmotesForChannel(ctx context.Context, channel string) ([]EmoteServiceEmote, error)
-	GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID string) ([]EmoteServiceEmote, error)
+	GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel string) ([]EmoteServiceEmote, error)
 }
 
 // EmoteServiceEmote represents an emote from the Emote Service
@@ -84,8 +84,10 @@ func (c *HTTPEmoteClient) GetEmotesForChannel(ctx context.Context, channel strin
 	return emoteResp.Emotes, nil
 }
 
-// GetEmotesForChannelWithUser fetches emotes for a channel including user-specific emotes
-func (c *HTTPEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID string) ([]EmoteServiceEmote, error) {
+// GetEmotesForChannelWithUser fetches emotes for a channel including user-specific emotes.
+// twitchChannel is an optional hint from a sibling Twitch source on the same overlay,
+// enabling 7TV channel emote lookup for non-Twitch platforms.
+func (c *HTTPEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel string) ([]EmoteServiceEmote, error) {
 	escapedChannel := url.PathEscape(channel)
 	endpoint, err := url.JoinPath(c.baseURL, "emotes", "channel", escapedChannel)
 	if err != nil {
@@ -104,6 +106,9 @@ func (c *HTTPEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, chann
 	}
 	if platform != "" {
 		query.Set("platform", platform)
+	}
+	if twitchChannel != "" {
+		query.Set("twitch_channel", twitchChannel)
 	}
 	parsedURL.RawQuery = query.Encode()
 
@@ -178,8 +183,17 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 			channelIdentifier = "global"
 		}
 	}
+	// Extract twitch channel hint from metadata (set by main.go for non-Twitch overlays
+	// that have a sibling Twitch source)
+	var twitchChannel string
+	if hint, ok := msg.Metadata["twitch_channel_hint"]; ok {
+		if s, ok := hint.(string); ok {
+			twitchChannel = s
+		}
+	}
+
 	// Fetch emotes for the channel (with user context if available)
-	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID)
+	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID, twitchChannel)
 	if err != nil {
 		// Don't fail the message if emote enrichment fails
 		e.logger.Warn("Failed to fetch emotes, skipping enrichment",
@@ -226,7 +240,7 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	return nil
 }
 
-func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID string) ([]cache.CachedEmote, error) {
+func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, twitchChannel string) ([]cache.CachedEmote, error) {
 	// If user ID is provided, use user-specific cache
 	if userID != "" && e.cache != nil {
 		if cached, err := e.cache.GetWithUser(ctx, channel, userID); err == nil {
@@ -274,8 +288,8 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID st
 	var thirdPartyEmotes []EmoteServiceEmote
 	var err error
 
-	if userID != "" {
-		thirdPartyEmotes, err = e.client.GetEmotesForChannelWithUser(ctx, channel, platform, userID)
+	if userID != "" || twitchChannel != "" {
+		thirdPartyEmotes, err = e.client.GetEmotesForChannelWithUser(ctx, channel, platform, userID, twitchChannel)
 	} else {
 		thirdPartyEmotes, err = e.client.GetEmotesForChannel(ctx, channel)
 	}

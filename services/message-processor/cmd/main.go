@@ -375,6 +375,16 @@ func main() {
 				// Examples: Super Chat messages, resub messages, channel point redemptions with user input
 				// Skip for system-only events: raids, follows, subscriptions without messages
 				if unified.Message.Text != "" {
+					// For non-Twitch events, look up sibling Twitch source for 7TV channel emotes
+					if unified.Platform != "twitch" {
+						if twitchCh, err := overlayRouter.TwitchChannelForOverlay(ctx, overlay.OverlayID); err == nil && twitchCh != "" {
+							if unified.Metadata == nil {
+								unified.Metadata = make(map[string]interface{})
+							}
+							unified.Metadata["twitch_channel_hint"] = twitchCh
+						}
+					}
+
 					startEmote := time.Now()
 					if err := emoteEnricher.Enrich(ctx, unified); err != nil {
 						log.Warn("Failed to enrich emotes for event",
@@ -451,6 +461,17 @@ func main() {
 					// Continue even if enrichment fails
 				}
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "badge_enrichment").Observe(time.Since(startBadge).Seconds())
+
+				// For non-Twitch messages, look up sibling Twitch source on the same overlay
+				// to enable 7TV channel emote enrichment via Twitch channel hint
+				if unified.Platform != "twitch" {
+					if twitchCh, err := overlayRouter.TwitchChannelForOverlay(ctx, overlay.OverlayID); err == nil && twitchCh != "" {
+						if unified.Metadata == nil {
+							unified.Metadata = make(map[string]interface{})
+						}
+						unified.Metadata["twitch_channel_hint"] = twitchCh
+					}
+				}
 
 				// Enrich with emotes
 				startEmote := time.Now()
