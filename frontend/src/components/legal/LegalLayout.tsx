@@ -35,6 +35,9 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
               <Link href="/legal/terms" className="transition-colors hover:text-text">
                 Terms of Service
               </Link>
+              <Link href="/legal/impressum" className="transition-colors hover:text-text">
+                Impressum
+              </Link>
             </div>
           </div>
         </div>

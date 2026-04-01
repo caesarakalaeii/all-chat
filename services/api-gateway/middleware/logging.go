@@ -3,11 +3,13 @@ package middleware
 import (
 	"time"
 
+	sharedmw "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
-// Logging returns a middleware that logs HTTP requests
+// Logging returns a middleware that logs HTTP requests.
+// Client IPs are anonymised (last octet zeroed) per DSGVO data-minimisation.
 func Logging(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -30,7 +32,7 @@ func Logging(log *zap.Logger) gin.HandlerFunc {
 			zap.String("query", query),
 			zap.Int("status", status),
 			zap.Duration("latency", latency),
-			zap.String("client_ip", c.ClientIP()),
+			zap.String("client_ip", sharedmw.AnonymizeIP(c.ClientIP())),
 			zap.String("user_agent", c.Request.UserAgent()),
 		)
 

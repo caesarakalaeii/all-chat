@@ -20,6 +20,7 @@ require (
 
 require (
 	github.com/bytedance/gopkg v0.1.4 // indirect
+	github.com/gin-contrib/cors v1.7.6 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 )

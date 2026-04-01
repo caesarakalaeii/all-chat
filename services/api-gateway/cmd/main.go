@@ -291,7 +291,8 @@ func main() {
 	router := gin.New()
 
 	// Apply global middleware
-	router.Use(gin.Recovery()) // Panic recovery
+	router.Use(gin.Recovery())                  // Panic recovery
+	router.Use(localmiddleware.SecurityHeaders()) // OWASP security headers
 	router.Use(localmiddleware.Logging(log))
 
 	// Add tracing middleware if enabled
@@ -411,6 +412,7 @@ func main() {
 	{
 		// Auth service - protected routes
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest) // DSGVO Art. 20 data portability
 		protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", proxyHandler.ForwardRequest)
 

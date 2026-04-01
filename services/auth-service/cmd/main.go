@@ -317,6 +317,7 @@ func main() {
 	protected.Use(middleware.JWTAuth(jwtSecret))
 	{
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
+		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
 		protected.POST("/logout", legacyAuthHandler.HandleLogout)
 		protected.DELETE("/me", legacyAuthHandler.HandleDeleteAccount)
 

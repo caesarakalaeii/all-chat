@@ -107,6 +107,24 @@ export default function CookieBanner() {
                       serve ads or share data with advertisers
                     </div>
                   </div>
+                  <div className="mt-3 border-t border-border pt-2">
+                    <p className="text-xs text-text-dim">
+                      <strong className="text-text">Third-party resources:</strong> Overlay pages
+                      may load fonts from <strong>Google Fonts</strong>, fallback avatars from{' '}
+                      <strong>UI Avatars</strong>, and themes from the{' '}
+                      <strong>GitHub API</strong>. These requests transmit your IP address to the
+                      respective providers. See our{' '}
+                      <a
+                        href="/legal/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-twitch underline underline-offset-2"
+                      >
+                        Privacy Policy
+                      </a>{' '}
+                      for details.
+                    </p>
+                  </div>
                 </div>
               </details>
 

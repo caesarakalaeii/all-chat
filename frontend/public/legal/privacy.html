@@ -6,9 +6,8 @@
     <title>Privacy Policy - All-Chat</title>
     <style>
       body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
-          sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+          Cantarell, sans-serif;
         line-height: 1.6;
         color: #333;
         max-width: 800px;
@@ -22,27 +21,12 @@
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
-      h1 {
-        color: #2c3e50;
-        border-bottom: 3px solid #3498db;
-        padding-bottom: 10px;
-      }
-      h2 {
-        color: #34495e;
-        margin-top: 30px;
-      }
-      .last-updated {
-        color: #7f8c8d;
-        font-style: italic;
-        margin-bottom: 30px;
-      }
-      a {
-        color: #3498db;
-        text-decoration: none;
-      }
-      a:hover {
-        text-decoration: underline;
-      }
+      h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+      h2 { color: #34495e; margin-top: 30px; }
+      h3 { color: #34495e; margin-top: 20px; }
+      .last-updated { color: #7f8c8d; font-style: italic; margin-bottom: 30px; }
+      a { color: #3498db; text-decoration: none; }
+      a:hover { text-decoration: underline; }
       .footer {
         margin-top: 40px;
         padding-top: 20px;
@@ -56,322 +40,162 @@
         border-left: 4px solid #ffc107;
         margin: 20px 0;
       }
+      .legal-basis { font-size: 0.9em; color: #7f8c8d; margin-top: 5px; }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>Privacy Policy</h1>
-      <p class="last-updated">Last Updated: November 15, 2025</p>
+      <h1>Privacy Policy (Datenschutzerkl&auml;rung)</h1>
+      <p class="last-updated">Last Updated: April 1, 2026</p>
 
       <div class="highlight">
         <strong>Summary:</strong> All-Chat collects only the information necessary to provide
-        streaming overlay services. We connect to your streaming platform accounts (Twitch, YouTube,
-        TikTok, Kick) to display chat messages. We do not sell your data to third parties.
+        streaming overlay services. Tokens are encrypted, chat messages sent through All-Chat are
+        automatically deleted after one hour, and we never sell your data.
       </div>
 
       <div class="highlight" style="background-color: #d1ecf1; border-left-color: #0c5460">
-        <strong>Open Source & Transparency:</strong> All-Chat is Free and Open Source Software
-        (FOSS) licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). You can review
-        the complete source code, including how we handle your data, at:
-        <a
-          href="https://github.com/caesarakalaeii/all-chat"
-          target="_blank"
-          rel="noopener noreferrer"
-          style="color: #0c5460; font-weight: bold"
+        <strong>Open Source &amp; Transparency:</strong> All-Chat is FOSS licensed under AGPL-3.0.
+        Review the source code at
+        <a href="https://github.com/caesarakalaeii/all-chat" target="_blank" rel="noopener noreferrer"
           >https://github.com/caesarakalaeii/all-chat</a
-        >
+        >.
       </div>
 
-      <h2>1. Information We Collect</h2>
-
-      <h3>1.1 Authentication Information</h3>
-      <p>When you connect streaming platform accounts, we collect:</p>
-      <ul>
-        <li>Platform user ID and username</li>
-        <li>Display name and avatar URL</li>
-        <li>OAuth access tokens (encrypted and stored securely)</li>
-        <li>OAuth refresh tokens (encrypted and stored securely)</li>
-        <li>Token expiration dates</li>
-      </ul>
-
-      <h3>1.2 Chat Data</h3>
-      <p>To provide overlay services, we process:</p>
-      <ul>
-        <li>Chat messages from connected channels/streams</li>
-        <li>Message metadata (timestamps, user badges, emotes)</li>
-        <li>User information from chat messages (usernames, display names, avatars)</li>
-      </ul>
+      <h2>1. Controller (Verantwortlicher, Art.&nbsp;4 Nr.&nbsp;7 DSGVO)</h2>
       <p>
-        <strong>Important:</strong> Chat messages are processed in real-time and are not permanently
-        stored. Messages are temporarily cached in memory for active overlay sessions only.
+        The person responsible for data processing is listed in the
+        <a href="/legal/impressum">Impressum</a>. For privacy inquiries contact
+        <a href="mailto:all.chat.support@gmail.com">all.chat.support@gmail.com</a>.
       </p>
 
-      <h3>1.3 Overlay Configuration</h3>
-      <p>We store your overlay settings, including:</p>
-      <ul>
-        <li>Overlay names and IDs</li>
-        <li>Connected chat sources (platform and channel mappings)</li>
-        <li>Display preferences (CSS styles, filters)</li>
-      </ul>
+      <h2>2. Information We Collect</h2>
 
-      <h3>1.4 Usage Data</h3>
-      <p>We automatically collect:</p>
+      <h3>2.1 Authentication Information</h3>
+      <p>When you connect streaming platform accounts, we store:</p>
       <ul>
-        <li>Log data (IP addresses, browser type, timestamps)</li>
-        <li>Service usage metrics (API calls, connection status)</li>
-        <li>Error logs and diagnostic information</li>
+        <li>Platform identifiers (user ID, username, display name)</li>
+        <li>Profile images provided by the platform</li>
+        <li>Encrypted OAuth access and refresh tokens</li>
+        <li>Token scopes and expiration dates</li>
       </ul>
+      <p class="legal-basis">Legal basis: Art.&nbsp;6(1)(b) DSGVO &ndash; contract performance.</p>
 
-      <h2>2. How We Use Your Information</h2>
-      <p>We use collected information to:</p>
-      <ul>
-        <li>Provide and maintain the All-Chat service</li>
-        <li>Authenticate you with streaming platforms</li>
-        <li>Fetch and display chat messages from connected sources</li>
-        <li>Process and enrich messages with emotes</li>
-        <li>Monitor service performance and troubleshoot issues</li>
-        <li>Improve and optimize the service</li>
-        <li>Communicate with you about service updates</li>
-      </ul>
-
-      <h2>3. Data Storage and Security</h2>
-
-      <h3>3.1 Storage Location</h3>
-      <p>Your data is stored in:</p>
-      <ul>
-        <li>PostgreSQL database (account information, overlay configurations)</li>
-        <li>Redis cache (temporary session data, active connections)</li>
-      </ul>
-
-      <h3>3.2 Security Measures</h3>
-      <p>We implement security measures including:</p>
-      <ul>
-        <li>Encryption of OAuth tokens at rest</li>
-        <li>HTTPS/TLS encryption for data in transit</li>
-        <li>Access controls and authentication</li>
-        <li>Regular security updates and patches</li>
-        <li>Monitoring and logging of access attempts</li>
-      </ul>
+      <h3>2.2 Chat Data</h3>
+      <p>For active overlays we temporarily process chat messages, metadata, and author details.</p>
       <p>
-        However, no method of transmission or storage is 100% secure. We cannot guarantee absolute
-        security.
+        <strong>Chat messages sent through All-Chat are automatically deleted after one hour.</strong>
+        Messages displayed in overlays are streamed through memory and not persisted.
+      </p>
+      <p class="legal-basis">
+        Legal basis: Art.&nbsp;6(1)(b) DSGVO (service delivery) and Art.&nbsp;6(1)(f) DSGVO
+        (legitimate interest in abuse prevention).
       </p>
 
-      <h2>4. Data Sharing and Third Parties</h2>
+      <h3>2.3 Overlay Configuration</h3>
+      <p>Overlay names, connected sources, themes, and filter settings.</p>
+      <p class="legal-basis">Legal basis: Art.&nbsp;6(1)(b) DSGVO.</p>
 
-      <h3>4.1 Third-Party Platform APIs</h3>
-      <p>We interact with third-party APIs:</p>
+      <h3>2.4 Cross-Platform Viewer Identity</h3>
+      <p>
+        If you choose to link multiple platform accounts as a viewer, we create a unified viewer
+        profile. This is <strong>opt-in only</strong>.
+      </p>
+      <p class="legal-basis">Legal basis: Art.&nbsp;6(1)(a) DSGVO &ndash; consent.</p>
+
+      <h3>2.5 Usage &amp; Log Data</h3>
       <ul>
-        <li><strong>Twitch:</strong> IRC connection, user authentication</li>
-        <li><strong>YouTube:</strong> Live Chat API, OAuth authentication</li>
-        <li><strong>TikTok:</strong> Live API, OAuth authentication (planned)</li>
-        <li><strong>Kick:</strong> API integration (planned)</li>
-        <li><strong>7TV, BTTV, FFZ:</strong> Emote data enrichment</li>
+        <li>Anonymised IP address (last octet zeroed), browser user agent, basic request info</li>
+        <li>API usage metrics and error traces (retained up to 90 days)</li>
       </ul>
-      <p>
-        Your use of these integrations is subject to the respective platform's privacy policies.
+      <p class="legal-basis">
+        Legal basis: Art.&nbsp;6(1)(f) DSGVO &ndash; legitimate interest in security.
       </p>
 
-      <h3>4.2 No Data Sales</h3>
-      <p>
-        We do not sell, rent, or trade your personal information to third parties for marketing
-        purposes.
-      </p>
-
-      <h3>4.3 Legal Requirements</h3>
-      <p>We may disclose your information if required by law, such as:</p>
+      <h2>3. How We Use Your Information</h2>
       <ul>
-        <li>Compliance with legal obligations</li>
-        <li>Protection of our rights and property</li>
-        <li>Prevention of fraud or security issues</li>
-        <li>Response to lawful requests from authorities</li>
+        <li>Authenticate against platforms you authorize</li>
+        <li>Fetch and normalize live chat into a single feed</li>
+        <li>Render overlays, emote lookups, and filters</li>
+        <li>Monitor reliability and detect abuse</li>
       </ul>
 
-      <h2>5. Data Retention</h2>
-      <p>We retain your information as follows:</p>
+      <h2>4. Data Storage &amp; Security</h2>
       <ul>
-        <li><strong>Account data:</strong> Until you delete your account</li>
-        <li><strong>OAuth tokens:</strong> Until you disconnect the platform or tokens expire</li>
-        <li><strong>Chat messages:</strong> Not stored permanently; only processed in real-time</li>
-        <li><strong>Usage logs:</strong> Retained for up to 90 days for debugging and analytics</li>
+        <li>PostgreSQL (account data, encrypted OAuth tokens)</li>
+        <li>Redis (ephemeral sessions, message fan-out)</li>
+        <li>AES-GCM encryption for tokens at rest</li>
+        <li>HTTPS everywhere, security headers, signed service tokens</li>
       </ul>
 
-      <h2>6. Your Rights and Choices</h2>
-      <p>You have the right to:</p>
+      <h2>5. Data Sharing &amp; Third Parties</h2>
+
+      <h3>5.1 Streaming Platform APIs</h3>
+      <p>Twitch, YouTube, TikTok, Kick, Discord, 7TV, BTTV, FFZ &ndash; as needed for the service.</p>
+
+      <h3>5.2 Third-Party Frontend Resources</h3>
+      <p>Overlay pages may load resources that transmit your IP address to:</p>
       <ul>
-        <li><strong>Access:</strong> Request a copy of your personal data</li>
-        <li><strong>Correction:</strong> Update or correct inaccurate information</li>
-        <li>
-          <strong>Deletion:</strong> Request deletion of your account and data by contacting us at
-          allchat@caes.ar or by using the account deletion option in Settings
-        </li>
-        <li>
-          <strong>Disconnect:</strong> Revoke platform authorizations at any time from the Settings
-          page
-        </li>
-        <li><strong>Export:</strong> Download your overlay configurations</li>
+        <li><strong>Google Fonts</strong> (fonts.googleapis.com) &ndash; custom overlay fonts</li>
+        <li><strong>UI Avatars</strong> (ui-avatars.com) &ndash; fallback avatar images</li>
+        <li><strong>GitHub API</strong> (api.github.com) &ndash; theme marketplace</li>
       </ul>
-      <p>
-        To exercise these rights, contact us at allchat@caes.ar or use the Settings page in the
-        application.
-      </p>
-      <p>
-        <strong>For YouTube Data:</strong> You can also revoke All-Chat's access to your YouTube
-        data via the
-        <a
-          href="https://myaccount.google.com/connections?filters=3,4&hl=en"
-          target="_blank"
-          rel="noopener noreferrer"
-          >Google security settings page</a
-        >.
-      </p>
+      <p class="legal-basis">Legal basis: Art.&nbsp;6(1)(f) DSGVO.</p>
 
-      <h2>7. Cookies and Tracking</h2>
-      <p>We use minimal cookies and tracking:</p>
+      <h3>5.3 No Data Sales</h3>
+      <p>We never sell or rent your data.</p>
+
+      <h2>6. Data Retention</h2>
       <ul>
-        <li><strong>Session cookies:</strong> For authentication and session management</li>
-        <li><strong>WebSocket connections:</strong> For real-time message delivery</li>
-      </ul>
-      <p>We do not use third-party advertising cookies or trackers.</p>
-
-      <h2>8. Children's Privacy</h2>
-      <p>
-        All-Chat is not intended for users under the age of 13. We do not knowingly collect
-        information from children under 13. If we discover we have collected such information, we
-        will delete it immediately.
-      </p>
-
-      <h2>9. International Data Transfers</h2>
-      <p>
-        Your information may be transferred to and processed in countries other than your country of
-        residence. By using the Service, you consent to such transfers.
-      </p>
-
-      <h2>10. Changes to This Privacy Policy</h2>
-      <p>
-        We may update this Privacy Policy from time to time. We will notify you of any material
-        changes by:
-      </p>
-      <ul>
-        <li>Posting the new Privacy Policy on this page</li>
-        <li>Updating the "Last Updated" date</li>
-        <li>Sending an email notification (for significant changes)</li>
+        <li><strong>Account data:</strong> until you delete your account</li>
+        <li><strong>OAuth tokens:</strong> deleted on disconnect, expiry (+7 days), or account deletion</li>
+        <li><strong>Chat messages (sent through All-Chat):</strong> automatically deleted after 1 hour</li>
+        <li><strong>Chat messages (overlay display):</strong> memory only, not persisted</li>
+        <li><strong>Usage logs:</strong> up to 90 days</li>
+        <li><strong>YouTube quota audit:</strong> 30 days</li>
       </ul>
 
-      <h2>11. Transparency and Open Source</h2>
-      <p>
-        All-Chat is committed to full transparency about how we handle your data. As a Free and Open
-        Source Software (FOSS) project:
-      </p>
+      <h2>7. Your Rights (Art.&nbsp;15&ndash;21 DSGVO)</h2>
       <ul>
-        <li>
-          <strong>Auditable Code:</strong> All source code is publicly available for review and
-          audit
-        </li>
-        <li>
-          <strong>No Hidden Tracking:</strong> You can verify we don't include tracking or analytics
-          code
-        </li>
-        <li>
-          <strong>Community Driven:</strong> Privacy practices are open to community scrutiny and
-          improvement
-        </li>
-        <li>
-          <strong>AGPL-3.0 License:</strong> Ensures any network service using this code must also
-          share its source
-        </li>
+        <li><strong>Access (Art.&nbsp;15)</strong></li>
+        <li><strong>Rectification (Art.&nbsp;16)</strong></li>
+        <li><strong>Erasure (Art.&nbsp;17)</strong> &ndash; delete account via Settings or contact us</li>
+        <li><strong>Restriction (Art.&nbsp;18)</strong></li>
+        <li><strong>Data portability (Art.&nbsp;20)</strong> &ndash; export via Settings</li>
+        <li><strong>Objection (Art.&nbsp;21)</strong></li>
+        <li><strong>Withdraw consent</strong> &ndash; disconnect platforms at any time</li>
       </ul>
       <p>
-        Source code:
-        <a
-          href="https://github.com/caesarakalaeii/all-chat"
-          target="_blank"
-          rel="noopener noreferrer"
-          >https://github.com/caesarakalaeii/all-chat</a
-        >
+        Contact: <a href="mailto:all.chat.support@gmail.com">all.chat.support@gmail.com</a>.
+        You also have the right to lodge a complaint with your supervisory authority.
       </p>
+
+      <h2>8. Cookies &amp; Browser Storage</h2>
+      <p>We use browser localStorage (not cookies) for authentication tokens and preferences. No
+        advertising cookies, tracking pixels, or analytics.</p>
+
+      <h2>9. Children&apos;s Privacy</h2>
+      <p>Not intended for users under 16. Data of minors will be deleted immediately.</p>
+
+      <h2>10. International Transfers</h2>
       <p>
-        License:
-        <a
-          href="https://www.gnu.org/licenses/agpl-3.0.html"
-          target="_blank"
-          rel="noopener noreferrer"
-          >GNU AGPL v3.0</a
-        >
+        Platform integrations involve transfers to Twitch (US), Google (US), TikTok (various),
+        Kick (AU). Legal basis: Art.&nbsp;49(1)(b) DSGVO.
       </p>
 
-      <h2>12. Contact Us</h2>
-      <p>If you have questions or concerns about this Privacy Policy, please contact us at:</p>
-      <p>Email: support@allch.at</p>
-      <p>
-        <strong>Important:</strong> This contact email is only for users of the official hosted
-        service at <strong>allch.at</strong>. If you are using a community-hosted or self-hosted
-        version of All-Chat, please contact the administrator of that instance for privacy-related
-        questions. As an open source project under AGPL-3.0, we provide the software as-is and do
-        not provide support for third-party installations beyond what is reasonably documented in
-        the repository.
-      </p>
+      <h2>11. Updates</h2>
+      <p>Changes posted here with updated date. Significant changes announced in the dashboard.</p>
 
-      <h2>13. Platform-Specific Privacy Notes</h2>
-
-      <h3>TikTok Integration</h3>
-      <p>When you connect your TikTok account:</p>
-      <ul>
-        <li>We request permissions to access your live stream chat data</li>
-        <li>We receive real-time chat messages during your live streams</li>
-        <li>
-          We do not access your TikTok videos, followers, or other personal content beyond live chat
-        </li>
-        <li>
-          You can revoke access at any time through TikTok's app settings or All-Chat settings
-        </li>
-      </ul>
-
-      <h3>Twitch Integration</h3>
-      <p>When you connect your Twitch account:</p>
-      <ul>
-        <li>We connect to Twitch IRC to receive chat messages</li>
-        <li>We do not access your channel analytics, subscriber information, or payment data</li>
-      </ul>
-
-      <h3>YouTube Integration</h3>
-      <p>When you connect your YouTube account:</p>
-      <ul>
-        <li>We use YouTube Live Chat API to fetch chat messages</li>
-        <li>We do not access your video content, channel analytics, or subscriber data</li>
-        <li>API usage is subject to YouTube's quota limits</li>
-        <li>
-          Your use of All-Chat's YouTube integration is also governed by the
-          <a href="http://www.google.com/policies/privacy" target="_blank" rel="noopener noreferrer"
-            >Google Privacy Policy</a
-          >
-        </li>
-      </ul>
-      <p>
-        <strong>Revoking YouTube Access:</strong> You can revoke All-Chat's access to your YouTube
-        data at any time by:
-      </p>
-      <ul>
-        <li>
-          Visiting the
-          <a
-            href="https://myaccount.google.com/connections?filters=3,4&hl=en"
-            target="_blank"
-            rel="noopener noreferrer"
-            >Google security settings page</a
-          >
-          and removing All-Chat from your connected applications
-        </li>
-        <li>Or by disconnecting YouTube from the All-Chat Settings page</li>
-      </ul>
-      <p>
-        <strong>Deleting YouTube Data:</strong> To delete your YouTube-related data from All-Chat,
-        you can disconnect your YouTube account from the Settings page. This will delete your stored
-        OAuth tokens. Chat messages are not permanently stored and are only processed in real-time.
-      </p>
+      <h2>12. Contact</h2>
+      <p>Email: <a href="mailto:all.chat.support@gmail.com">all.chat.support@gmail.com</a></p>
+      <p><em>This contact is for the official hosted service at allch.at only.</em></p>
 
       <div class="footer">
-        <p><a href="/legal/terms">Terms of Service</a> | <a href="/">Back to All-Chat</a></p>
+        <p>
+          <a href="/legal/terms">Terms of Service</a> |
+          <a href="/legal/impressum">Impressum</a> |
+          <a href="/">Back to All-Chat</a>
+        </p>
       </div>
     </div>
   </body>
