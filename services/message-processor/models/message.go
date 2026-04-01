@@ -26,19 +26,18 @@ type RawChatMessage struct {
 
 // UnifiedChatMessage represents the normalized, enriched message published to Pub/Sub
 type UnifiedChatMessage struct {
-	ID              string                 `json:"id"`
-	OverlayID       string                 `json:"overlay_id"`
-	Platform        string                 `json:"platform"`
-	ChannelID       string                 `json:"channel_id"`
-	ChannelName     string                 `json:"channel_name"`
-	User            UserInfo               `json:"user"`
-	Message         MessageInfo            `json:"message"`
-	Timestamp       time.Time              `json:"timestamp"`
-	Metadata        map[string]interface{} `json:"metadata"`
-	ClientMessageID string                 `json:"client_message_id,omitempty"` // Client-generated ID for optimistic UI deduplication
+	ID          string                 `json:"id"`
+	OverlayID   string                 `json:"overlay_id"`
+	Platform    string                 `json:"platform"`
+	ChannelID   string                 `json:"channel_id"`
+	ChannelName string                 `json:"channel_name"`
+	User        UserInfo               `json:"user"`
+	Message     MessageInfo            `json:"message"`
+	Timestamp   time.Time              `json:"timestamp"`
+	Metadata    map[string]interface{} `json:"metadata"`
 
 	// Event support (nil for chat messages)
-	Event           *EventInfo             `json:"event,omitempty"`
+	Event       *EventInfo             `json:"event,omitempty"`
 }
 
 // UserInfo contains information about the message author
