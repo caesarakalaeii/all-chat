@@ -403,18 +403,43 @@ export default function LandingPage() {
           <div className="flex-1">
             <h2 className="mb-1 text-xl font-bold text-text">Browser Extension</h2>
             <p className="mb-3 text-sm text-text-sub">
-              Add all-chat overlays directly to any streaming site without OBS. Works in Chrome and
-              Firefox.
+              Add all-chat overlays directly to any streaming site without OBS. Available for
+              Chrome and Firefox.
             </p>
-            <a
-              href="https://github.com/caesarakalaeii/all-chat-extension/releases"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub underline-offset-4 hover:text-text hover:underline"
-            >
-              Install beta extension
-            </a>
-            <p className="mt-2 text-xs text-text-sub">Currently in beta — expect ongoing updates.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="https://addons.mozilla.org/en-US/firefox/addon/all-chat-extension/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub underline-offset-4 hover:text-text hover:underline"
+              >
+                <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path fill="currentColor" d="M12.006 0a12 12 0 0 0-4.282.8c2.073.345 3.244 1.57 3.756 2.586a7.6 7.6 0 0 0-1.876-.232C7.467 3.154 5.8 5.16 5.549 7.2A5.2 5.2 0 0 1 8.39 6.16a5.7 5.7 0 0 1 3.083.417 3.7 3.7 0 0 0-.413.157 5.5 5.5 0 0 0-3.062 3.16c-.116.3-.18.495-.255.737a8 8 0 0 1-.306.88 3.8 3.8 0 0 1-2.237 2.053c-.085.03-.172.058-.261.08a4.5 4.5 0 0 0 .36 1.7 4.6 4.6 0 0 0 2.147 2.2 3.8 3.8 0 0 1-.357-1.591 3.8 3.8 0 0 1 1.775-3.2 3.24 3.24 0 0 1 3.3-.187 2.86 2.86 0 0 1 1.394 2.608 2.86 2.86 0 0 1-.58 1.727 4.7 4.7 0 0 0 1.1-.58c1.387-.945 2.22-2.46 2.352-4.006a3.5 3.5 0 0 1 .874 2.353 4.7 4.7 0 0 1-.636 2.404A12 12 0 1 0 12.006 0z"/>
+                </svg>
+                Firefox
+              </a>
+              <a
+                href="https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub underline-offset-4 hover:text-text hover:underline"
+              >
+                <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path fill="currentColor" d="M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0zM1.931 5.47A11.94 11.94 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29zm13.342 2.166a5.446 5.446 0 0 1 1.45 8.764l-3.952 6.849c.74.1 1.49.151 2.229.151 6.627 0 12-5.373 12-12 0-1.34-.22-2.63-.625-3.834zM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z"/>
+                </svg>
+                Chrome
+              </a>
+              <a
+                href="https://github.com/caesarakalaeii/all-chat-extension/releases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub underline-offset-4 hover:text-text hover:underline"
+              >
+                <Github className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                GitHub Releases
+              </a>
+            </div>
+            <p className="mt-2 text-xs text-text-sub">GitHub Releases get updates first — store versions follow shortly after.</p>
           </div>
         </div>
       </section>
