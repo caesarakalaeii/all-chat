@@ -1,0 +1,2 @@
+-- Down migration: No safe rollback — we cannot know which overlays were previously public.
+-- This is a data-fix migration; rolling back would re-introduce the bug.
