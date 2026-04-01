@@ -210,7 +210,16 @@ func main() {
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)
 	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log).WithMetrics(businessMetrics)
-	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
+	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log).WithMetrics(businessMetrics)
+
+	// Seed the persistent total-users gauge from the database so Grafana retains
+	// an accurate baseline even after pod restarts (Prometheus counters are ephemeral).
+	if counts, err := userRepo.CountByAuthProvider(ctx); err != nil {
+		log.Warn("Failed to seed total-users metric from database (non-fatal)", zap.Error(err))
+	} else {
+		businessMetrics.InitTotalUsersByPlatform(counts)
+		log.Info("Seeded allchat_total_users_by_platform from database", zap.Any("counts", counts))
+	}
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, jwtSecret)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
