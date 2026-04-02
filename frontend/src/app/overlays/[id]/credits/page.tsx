@@ -47,7 +47,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
 
   const [overlay, setOverlay] = useState<Overlay | null>(null)
   const [config, setConfig] = useState<Partial<CreditRollConfig>>({
-    enabled: false,
+    enabled: true,
     include_subs: true,
     include_resubs: true,
     include_gift_subs: true,
@@ -77,6 +77,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
   const [customCss, setCustomCss] = useState('')
   const [useCustomCss, setUseCustomCss] = useState(false)
   const [showThemeMarketplace, setShowThemeMarketplace] = useState(false)
+  const [copiedCreditsUrl, setCopiedCreditsUrl] = useState(false)
 
   useEffect(() => {
     if (!token) {
@@ -250,6 +251,32 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
             Configure end-of-stream credits to showcase viewers who supported your stream with subs,
             donations, raids, and more.
           </p>
+          <div className="mt-4">
+            <Button
+              variant="outline"
+              className="inline-flex items-center gap-2"
+              onClick={() => {
+                const url = `${window.location.origin}/overlay/${id}/credits`
+                navigator.clipboard.writeText(url).then(() => {
+                  setCopiedCreditsUrl(true)
+                  setTimeout(() => setCopiedCreditsUrl(false), 2000)
+                })
+              }}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                />
+              </svg>
+              {copiedCreditsUrl ? 'Copied!' : 'Copy Credits OBS URL'}
+            </Button>
+            <p className="mt-1 text-xs text-text-dim">
+              Add this URL as a Browser Source in OBS to display credits at end of stream
+            </p>
+          </div>
         </div>
 
         {/* Main Toggle */}
