@@ -462,6 +462,7 @@ func (h *Handler) aggregateLeaderboards(ctx context.Context, sessionID string, c
 // getLeaderboardEntries retrieves entries for a specific category
 func (h *Handler) getLeaderboardEntries(ctx context.Context, sessionID string, category string, topN int) ([]models.LeaderboardEntry, error) {
 	key := fmt.Sprintf("session:leaderboard:%s:%s", sessionID, category)
+	metaKey := fmt.Sprintf("session:leaderboard:meta:%s:%s", sessionID, category)
 
 	// Get top N entries from sorted set (highest score first)
 	results, err := h.redis.ZRevRangeWithScores(ctx, key, 0, int64(topN-1)).Result()
@@ -469,17 +470,47 @@ func (h *Handler) getLeaderboardEntries(ctx context.Context, sessionID string, c
 		return nil, fmt.Errorf("failed to get leaderboard: %w", err)
 	}
 
+	// Batch-fetch metadata for all members
+	memberKeys := make([]string, 0, len(results))
+	for _, result := range results {
+		memberKeys = append(memberKeys, result.Member.(string))
+	}
+
+	metaValues := make([]interface{}, len(memberKeys))
+	if len(memberKeys) > 0 {
+		metaValues, _ = h.redis.HMGet(ctx, metaKey, memberKeys...).Result()
+	}
+
 	entries := make([]models.LeaderboardEntry, 0, len(results))
 
 	for rank, result := range results {
-		// Parse member JSON
+		memberStr := result.Member.(string)
+
+		// Try metadata hash first (new format: stable key with companion hash)
 		var member map[string]interface{}
-		if err := json.Unmarshal([]byte(result.Member.(string)), &member); err != nil {
-			h.logger.Warn("Failed to parse leaderboard member",
-				zap.String("category", category),
-				zap.Error(err),
-			)
-			continue
+		if rank < len(metaValues) && metaValues[rank] != nil {
+			if metaStr, ok := metaValues[rank].(string); ok {
+				if err := json.Unmarshal([]byte(metaStr), &member); err != nil {
+					h.logger.Warn("Failed to parse leaderboard metadata",
+						zap.String("category", category),
+						zap.String("member_key", memberStr),
+						zap.Error(err),
+					)
+					continue
+				}
+			}
+		}
+
+		// Fallback: try parsing member itself as JSON (legacy format)
+		if member == nil {
+			if err := json.Unmarshal([]byte(memberStr), &member); err != nil {
+				// Member is a stable key (platform:user_id) with no metadata — skip
+				h.logger.Warn("Leaderboard entry missing metadata",
+					zap.String("category", category),
+					zap.String("member_key", memberStr),
+				)
+				continue
+			}
 		}
 
 		entry := models.LeaderboardEntry{
