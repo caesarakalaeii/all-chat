@@ -327,6 +327,6 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — PronounEnricher (Alejo API + Redis cache), UserInfo model extension, ViewerBadgeEnricher TwitchUsername resolution, pipeline wiring
+- [x] 09-01-PLAN.md — PronounEnricher (Alejo API + Redis cache), UserInfo model extension, ViewerBadgeEnricher TwitchUsername resolution, pipeline wiring
 - [ ] 09-02-PLAN.md — Frontend TypeScript types + overlay page pronoun pill rendering with config loading
 - [ ] 09-03-PLAN.md — VisibilityGroup pronoun controls (toggle, position radio, color picker) + visual checkpoint
