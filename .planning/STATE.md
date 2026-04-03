@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-04-03T23:08:43.256Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-04-03T23:13:38.292Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 16
   completed_phases: 15
   total_plans: 69
-  completed_plans: 67
+  completed_plans: 68
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 09 (add-optional-support-for-alejo-pronouns) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -95,6 +95,7 @@ Plan: 2 of 3
 | Phase 08 P05 | 176 | 2 tasks | 2 files |
 | Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline P06 | 442 | 2 tasks | 10 files |
 | Phase 09 P01 | 451s | 2 tasks | 8 files |
+| Phase 09 P02 | 3min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -225,6 +226,8 @@ Key decisions relevant to v1.6:
 - [Phase 08]: newStreamPublisherWithRingBuffer internal constructor with prometheus.Registerer injection — prevents duplicate metric registration panics in tests
 - [Phase 08]: PublishBatch replaced pipeline with individual ring buffer calls — each message independently retried on failure, eliminates LI-02 batch pipeline failure mode
 - [Phase 09]: PronounEnricher uses newPronounEnricherWithURL internal constructor for test injection; test server registers paths without /v1 prefix since baseURL replaces full constant; empty string used as 404 sentinel (distinguishable from redis.Nil cache miss)
+- [Phase 09]: pronounPill.ts extracted as pure helper for testability — follows usernameSpan.ts pattern
+- [Phase 09]: Config cascade for pronouns: display_settings loaded first, visual_settings overrides second — matches platformBadge pattern
 
 ### Roadmap Evolution
 
@@ -272,9 +275,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T23:08:43.253Z
+Last session: 2026-04-03T23:13:38.289Z
 Last activity: 2026-04-03
-Stopped at: Completed 09-01-PLAN.md
+Stopped at: Completed 09-02-PLAN.md
 Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
