@@ -55,6 +55,11 @@ export interface VisualSettings {
   platformBadgePosition?: 'before' | 'after'
   platformBadgeStyle?: 'text' | 'icon'
 
+  // Phase 9: Pronoun display
+  showPronouns?: 'inline' | 'none'      // --chat-show-pronouns
+  pronounPosition?: 'before' | 'after'  // not CSS-driven, stored for persistence
+  pronounColor?: string                 // not CSS-driven, stored for persistence
+
   // Sizing
   avatarSize?: string   // --chat-avatar-size
   badgeSize?: string    // --chat-badge-size
