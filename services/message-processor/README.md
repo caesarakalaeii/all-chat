@@ -253,6 +253,22 @@ default:
    - Support 7TV, BTTV, FFZ providers
    - Cache emote data (1-hour TTL, 95%+ hit rate)
 
+4. **Viewer Identity Enrichment** (`enricher/viewer_badge_enricher.go`):
+   - Resolve All-Chat platform identity (name_color, avatar frame/flair, admin/premium badges)
+   - Cross-platform Twitch username resolution via `LEFT JOIN viewer_platform_identities`
+   - Sets `msg.User.TwitchUsername` (internal pipeline field, never serialized)
+   - Cache: `viewer:identity:{platform}:{user_id}`, 5 min TTL
+
+5. **Pronoun Enrichment** (`enricher/pronoun_enricher.go`):
+   - Fetches pronouns from Alejo API (api.pronouns.alejo.io/v1/)
+   - Runs **after** ViewerBadgeEnricher so `TwitchUsername` is available for cross-platform lookup
+   - **CHAT PATH only** — not applied to events (subscriptions, raids, etc.)
+   - Cache key: `pronoun:{twitch_login}`, 24h TTL
+   - 404 response cached as empty sentinel to avoid re-fetching
+   - Silent skip on API errors (D-05) — message renders without pronouns
+   - Cross-platform: non-Twitch users with a linked Twitch account get pronouns via `TwitchUsername`
+   - See: [ADR-0010](../../docs/adr/0010-pronoun-enricher-alejo-api.md)
+
 **7TV Real-Time Updates** (`seventv/eventapi.go`):
 - WebSocket connection to 7TV EventAPI (`wss://events.7tv.io/v3`)
 - Subscribe to emote set updates (emote.create, emote.update, emote.delete)

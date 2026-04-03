@@ -174,6 +174,9 @@ func main() {
 	viewerBadgeEnricher := enricher.NewViewerBadgeEnricher(redisClient, db, log)
 	log.Info("Initialized ViewerBadge enricher")
 
+	pronounEnricher := enricher.NewPronounEnricher(redisClient, log)
+	log.Info("Initialized Pronoun enricher")
+
 	overlayRepo := router.NewRepository(db)
 	overlayRouter := router.NewRouter(overlayRepo, log)
 
@@ -510,6 +513,17 @@ func main() {
 					// Continue even if enrichment fails
 				}
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "viewer_identity_enrichment").Observe(time.Since(startViewer).Seconds())
+
+				// Phase 9: Enrich with pronouns (after viewer identity for TwitchUsername availability)
+				startPronoun := time.Now()
+				if err := pronounEnricher.Enrich(ctx, unified); err != nil {
+					log.Warn("Failed to enrich pronouns",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.Error(err),
+					)
+					// Continue even if enrichment fails — D-05
+				}
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "pronoun_enrichment").Observe(time.Since(startPronoun).Seconds())
 			}
 
 		publish:

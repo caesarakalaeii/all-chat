@@ -203,6 +203,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0010: Pronoun Enricher via Alejo API
+
+**Status**: Accepted
+**Date**: 2026-04-04
+**Problem**: Pronoun display for chat users requires an external API dependency on api.pronouns.alejo.io — the only publicly available opt-in pronoun data source for Twitch users
+**Decision**: Integrate Alejo API as a new enricher in the message-processor pipeline with 24h Redis cache and silent-fail on API errors; cross-platform lookup via linked Twitch accounts resolved in ViewerBadgeEnricher query
+**Impact**: Pronouns for opted-in users with no user action required; 24h cache reduces API load; graceful degradation preserves message delivery on API failure
+**Read**: [0010-pronoun-enricher-alejo-api.md](./0010-pronoun-enricher-alejo-api.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -324,13 +335,13 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 9
+**Total ADRs**: 10
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-04-04
