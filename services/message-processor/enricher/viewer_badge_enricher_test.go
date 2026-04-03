@@ -14,16 +14,17 @@ import (
 )
 
 // fakeViewerDB is a test double for the DB pool, executing a callback per query.
-// Phase 31: callback now also returns isAdmin and isPremium bools.
+// Phase 31: callback returns isAdmin and isPremium bools.
+// Phase 9: callback also returns twitchUsername string.
 type fakeViewerDB struct {
-	queryFn func(platform, userID string) (viewerID string, nameColor *string, nameGradient []byte, avatarFrameURL string, avatarFlairURL string, isAdmin bool, isPremium bool, err error)
+	queryFn func(platform, userID string) (viewerID string, nameColor *string, nameGradient []byte, avatarFrameURL string, avatarFlairURL string, isAdmin bool, isPremium bool, twitchUsername string, err error)
 }
 
 func (f *fakeViewerDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgxRowScanner {
 	platform := fmt.Sprint(args[0])
 	userID := fmt.Sprint(args[1])
-	vid, nc, ng, frameURL, flairURL, isAdm, isPrem, err := f.queryFn(platform, userID)
-	return &fakeRow{queryResult{viewerID: vid, nameColor: nc, nameGradient: ng, avatarFrameURL: frameURL, avatarFlairURL: flairURL, isAdmin: isAdm, isPremium: isPrem, err: err}}
+	vid, nc, ng, frameURL, flairURL, isAdm, isPrem, twitchUser, err := f.queryFn(platform, userID)
+	return &fakeRow{queryResult{viewerID: vid, nameColor: nc, nameGradient: ng, avatarFrameURL: frameURL, avatarFlairURL: flairURL, isAdmin: isAdm, isPremium: isPrem, twitchUsername: twitchUser, err: err}}
 }
 
 type queryResult struct {
@@ -34,6 +35,7 @@ type queryResult struct {
 	avatarFlairURL string
 	isAdmin        bool
 	isPremium      bool
+	twitchUsername string
 	err            error
 }
 
@@ -85,6 +87,12 @@ func (r *fakeRow) Scan(dest ...interface{}) error {
 			*bp = r.result.isPremium
 		}
 	}
+	// Phase 9: eighth dest arg is *string for twitch_username
+	if len(dest) >= 8 {
+		if sp, ok := dest[7].(*string); ok {
+			*sp = r.result.twitchUsername
+		}
+	}
 	return nil
 }
 
@@ -111,12 +119,12 @@ func makeMsg(platform, userID, color string) *models.UnifiedChatMessage {
 	}
 }
 
-// noGradientDB is a convenience wrapper to build fakeViewerDB without gradient, frame/flair, or badges.
+// noGradientDB is a convenience wrapper to build fakeViewerDB without gradient, frame/flair, badges, or twitchUsername.
 func noGradientDB(queryFn func(platform, userID string) (string, *string, error)) *fakeViewerDB {
 	return &fakeViewerDB{
-		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, error) {
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
 			vid, nc, err := queryFn(platform, userID)
-			return vid, nc, nil, "", "", false, false, err
+			return vid, nc, nil, "", "", false, false, "", err
 		},
 	}
 }
@@ -301,8 +309,8 @@ func TestEnrich_PropagatesNameGradient(t *testing.T) {
 	mr := miniredis.RunT(t)
 	gradientJSON := []byte(`{"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}`)
 	db := &fakeViewerDB{
-		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, error) {
-			return "viewer-uuid-grad", nil, gradientJSON, "", "", false, false, nil
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
+			return "viewer-uuid-grad", nil, gradientJSON, "", "", false, false, "", nil
 		},
 	}
 	e := newTestEnricher(t, mr, db)
@@ -368,8 +376,8 @@ func TestEnrich_PropagatesNameGradient_FromCache(t *testing.T) {
 func TestEnrichWithAvatarFrameURL(t *testing.T) {
 	mr := miniredis.RunT(t)
 	db := &fakeViewerDB{
-		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, error) {
-			return "viewer-uuid-frame", nil, nil, "https://cdn.example.com/frame.png", "", false, false, nil
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
+			return "viewer-uuid-frame", nil, nil, "https://cdn.example.com/frame.png", "", false, false, "", nil
 		},
 	}
 	e := newTestEnricher(t, mr, db)
@@ -389,9 +397,9 @@ func TestEnrichWithAvatarFrameURL(t *testing.T) {
 func TestEnrichWithNoFrameOrFlair(t *testing.T) {
 	mr := miniredis.RunT(t)
 	db := &fakeViewerDB{
-		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, error) {
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
 			// COALESCE returns empty strings when no frame/flair selected
-			return "viewer-uuid-no-cosm", ptr("#336699"), nil, "", "", false, false, nil
+			return "viewer-uuid-no-cosm", ptr("#336699"), nil, "", "", false, false, "", nil
 		},
 	}
 	e := newTestEnricher(t, mr, db)
@@ -439,8 +447,8 @@ func TestEnrichCacheHitWithFrameURL(t *testing.T) {
 func TestEnrich_AdminBadge(t *testing.T) {
 	mr := miniredis.RunT(t)
 	db := &fakeViewerDB{
-		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, error) {
-			return "v1", nil, nil, "", "", true, false, nil
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
+			return "v1", nil, nil, "", "", true, false, "", nil
 		},
 	}
 	e := newTestEnricher(t, mr, db)
@@ -460,8 +468,8 @@ func TestEnrich_AdminBadge(t *testing.T) {
 func TestEnrich_PremiumBadge(t *testing.T) {
 	mr := miniredis.RunT(t)
 	db := &fakeViewerDB{
-		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, error) {
-			return "v2", nil, nil, "", "", false, true, nil
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
+			return "v2", nil, nil, "", "", false, true, "", nil
 		},
 	}
 	e := newTestEnricher(t, mr, db)
@@ -481,8 +489,8 @@ func TestEnrich_PremiumBadge(t *testing.T) {
 func TestEnrich_AdminAndPremiumBadge(t *testing.T) {
 	mr := miniredis.RunT(t)
 	db := &fakeViewerDB{
-		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, error) {
-			return "v3", nil, nil, "", "", true, true, nil
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
+			return "v3", nil, nil, "", "", true, true, "", nil
 		},
 	}
 	e := newTestEnricher(t, mr, db)
@@ -515,5 +523,70 @@ func TestEnrich_NoBadgesForNonRegisteredViewer(t *testing.T) {
 	}
 	if len(msg.User.Badges) != 0 {
 		t.Errorf("expected no badges for non-registered viewer, got %d", len(msg.User.Badges))
+	}
+}
+
+// Phase 9: TwitchUsername resolution tests
+
+func TestViewerBadgeEnricher_TwitchUsername(t *testing.T) {
+	mr := miniredis.RunT(t)
+	db := &fakeViewerDB{
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
+			return "viewer-uuid", nil, nil, "", "", false, false, "pajlada", nil
+		},
+	}
+	e := newTestEnricher(t, mr, db)
+
+	msg := makeMsg("kick", "kick-user-123", "")
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.User.TwitchUsername != "pajlada" {
+		t.Errorf("expected TwitchUsername %q, got %q", "pajlada", msg.User.TwitchUsername)
+	}
+}
+
+func TestViewerBadgeEnricher_TwitchUsernameEmpty(t *testing.T) {
+	mr := miniredis.RunT(t)
+	db := &fakeViewerDB{
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
+			return "viewer-uuid", nil, nil, "", "", false, false, "", nil
+		},
+	}
+	e := newTestEnricher(t, mr, db)
+
+	msg := makeMsg("youtube", "yt-user-456", "")
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.User.TwitchUsername != "" {
+		t.Errorf("expected empty TwitchUsername, got %q", msg.User.TwitchUsername)
+	}
+}
+
+func TestViewerBadgeEnricher_TwitchUsernameCacheHit(t *testing.T) {
+	mr := miniredis.RunT(t)
+	db := &fakeViewerDB{
+		queryFn: func(platform, userID string) (string, *string, []byte, string, string, bool, bool, string, error) {
+			t.Error("DB should not be called on cache hit")
+			return "", nil, nil, "", "", false, false, "", nil
+		},
+	}
+	e := newTestEnricher(t, mr, db)
+
+	// Pre-populate cache with TwitchUsername
+	cacheKey := "viewer:identity:kick:cached-twitch-user"
+	val, _ := json.Marshal(viewerIdentityCache{
+		ViewerID:      "uuid-cached",
+		TwitchUsername: "cached_user",
+	})
+	mr.Set(cacheKey, string(val))
+
+	msg := makeMsg("kick", "cached-twitch-user", "")
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.User.TwitchUsername != "cached_user" {
+		t.Errorf("expected TwitchUsername %q from cache, got %q", "cached_user", msg.User.TwitchUsername)
 	}
 }

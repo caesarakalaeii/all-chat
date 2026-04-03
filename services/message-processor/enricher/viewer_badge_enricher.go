@@ -53,6 +53,7 @@ type viewerIdentityCache struct {
 	AvatarFlairURL string  `json:"avatar_flair_url,omitempty"` // Phase 30: empty string when not set
 	IsAdmin        bool    `json:"is_admin,omitempty"`         // Phase 31: All-Chat admin badge
 	IsPremium      bool    `json:"is_premium,omitempty"`       // Phase 31: All-Chat premium badge
+	TwitchUsername string  `json:"twitch_username,omitempty"`  // Phase 9: linked Twitch username for pronoun lookup
 }
 
 // ViewerBadgeEnricher injects viewer name_color and name_gradient into messages for registered viewers.
@@ -113,6 +114,10 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 			if identity.IsAdmin {
 				msg.User.Badges = append([]models.Badge{{Name: "allchat", Version: "1", IconURL: ""}}, msg.User.Badges...)
 			}
+			// Phase 9: propagate TwitchUsername from cache for pronoun enricher
+			if identity.TwitchUsername != "" {
+				msg.User.TwitchUsername = identity.TwitchUsername
+			}
 			return nil
 		}
 		// Malformed cache entry — fall through to DB
@@ -126,12 +131,14 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 	var avatarFlairURL string
 	var isAdmin bool
 	var isPremium bool
+	var twitchUsername string
 	row := e.db.QueryRow(ctx, `
 		SELECT vpi.viewer_id::text, vc.name_color, vc.name_gradient,
 		       COALESCE(cf.image_url, '') AS avatar_frame_url,
 		       COALESCE(cfl.image_url, '') AS avatar_flair_url,
 		       COALESCE(u.is_admin, false) AS is_admin,
-		       COALESCE(v.is_premium, false) AS is_premium
+		       COALESCE(v.is_premium, false) AS is_premium,
+		       COALESCE(twitch_vs.username, '') AS twitch_username
 		FROM viewer_platform_identities vpi
 		LEFT JOIN viewer_cosmetics vc ON vc.viewer_id = vpi.viewer_id
 		LEFT JOIN cosmetic_frames cf ON cf.id = vc.avatar_frame_id
@@ -140,10 +147,16 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		LEFT JOIN users u ON u.id = vs.user_id
 		-- Phase 32: viewers.is_premium is the viewer cosmetic flag (migration 036); users.is_premium is streamer-only
 		LEFT JOIN viewers v ON v.id = vpi.viewer_id
+		-- Phase 9: resolve linked Twitch username for cross-platform pronoun lookup
+		LEFT JOIN viewer_platform_identities twitch_vpi
+		    ON twitch_vpi.viewer_id = vpi.viewer_id AND twitch_vpi.platform = 'twitch'
+		LEFT JOIN viewer_sessions twitch_vs
+		    ON twitch_vs.platform = 'twitch'
+		    AND twitch_vs.platform_user_id = twitch_vpi.platform_user_id
 		WHERE vpi.platform = $1 AND vpi.platform_user_id = $2
 	`, msg.Platform, msg.User.ID)
 
-	if scanErr := row.Scan(&viewerID, &nameColor, &nameGradientBytes, &avatarFrameURL, &avatarFlairURL, &isAdmin, &isPremium); scanErr != nil {
+	if scanErr := row.Scan(&viewerID, &nameColor, &nameGradientBytes, &avatarFrameURL, &avatarFlairURL, &isAdmin, &isPremium, &twitchUsername); scanErr != nil {
 		if scanErr == pgx.ErrNoRows {
 			// Viewer not in All-Chat — cache null sentinel
 			e.redis.Set(ctx, cacheKey, viewerNullSentinel, ViewerIdentityCacheTTL)
@@ -164,8 +177,9 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		NameGradient:   nameGradientBytes, // nil guard: json omitempty handles nil slice
 		AvatarFrameURL: avatarFrameURL,   // Phase 30: COALESCE guarantees non-nil string
 		AvatarFlairURL: avatarFlairURL,
-		IsAdmin:        isAdmin,   // Phase 31
-		IsPremium:      isPremium, // Phase 31
+		IsAdmin:        isAdmin,        // Phase 31
+		IsPremium:      isPremium,      // Phase 31
+		TwitchUsername: twitchUsername, // Phase 9: for cross-platform pronoun lookup
 	}
 	if jsonBytes, jsonErr := json.Marshal(identity); jsonErr == nil {
 		e.redis.Set(ctx, cacheKey, string(jsonBytes), ViewerIdentityCacheTTL)
@@ -196,6 +210,11 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 	}
 	if isAdmin {
 		msg.User.Badges = append([]models.Badge{{Name: "allchat", Version: "1", IconURL: ""}}, msg.User.Badges...)
+	}
+
+	// 8. Phase 9: inject TwitchUsername for pronoun enricher (pipeline-internal, never serialized)
+	if twitchUsername != "" {
+		msg.User.TwitchUsername = twitchUsername
 	}
 
 	return nil
