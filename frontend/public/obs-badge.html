@@ -14,19 +14,16 @@ body {
   background: transparent;
   font-family: 'Barlow', sans-serif;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  width: 100vw;
+  margin: 0;
+  padding: 32px;
 }
 
 .badge {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 14px 8px 10px;
-  border-radius: 8px;
+  gap: 20px;
+  padding: 16px 28px 16px 20px;
+  border-radius: 16px;
   background: rgba(7, 7, 10, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(20px);
@@ -41,7 +38,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 8px;
+  border-radius: 16px;
   padding: 1px;
   background: linear-gradient(135deg,
     rgba(145, 70, 255, 0.3),
@@ -63,14 +60,14 @@ body {
 
 @keyframes breathe {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50%      { box-shadow: 0 0 20px -4px rgba(145, 70, 255, 0.08); }
+  50%      { box-shadow: 0 0 40px -8px rgba(145, 70, 255, 0.08); }
 }
 
 /* ── Logo ── */
 .logo-mark {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: 56px;
+  height: 56px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -80,19 +77,19 @@ body {
 .logo-mark .inf-svg {
   position: absolute;
   transform: translateY(-10%);
-  filter: drop-shadow(0 0 3px rgba(0,0,0,0.6));
+  filter: drop-shadow(0 0 4px rgba(0,0,0,0.6));
 }
 
 /* ── Text block ── */
 .text-block {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  width: 100px;
+  gap: 2px;
+  width: 200px;
 }
 
 .brand-name {
-  font-size: 14px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: -0.03em;
   color: #e8e8f0;
@@ -100,20 +97,20 @@ body {
 }
 
 .tagline {
-  font-size: 8px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.4);
   line-height: 1.4;
   white-space: pre-line;
-  height: 22px;
+  height: 44px;
 }
 
 /* ── Separator ── */
 .separator {
   width: 1px;
-  height: 22px;
+  height: 44px;
   background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.1), transparent);
   flex-shrink: 0;
 }
@@ -121,13 +118,13 @@ body {
 /* ── Platform dots ── */
 .platform-dots {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .dot {
-  width: 4px;
-  height: 4px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   animation: dotPulse 3s ease-in-out infinite;
 }
@@ -147,12 +144,12 @@ body {
 
 <div class="badge">
   <div class="logo-mark">
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
       <path fill-rule="evenodd" clip-rule="evenodd"
         d="M4.84836 2.771C7.18302 2.42773 9.57113 2.25 12.0003 2.25C14.4292 2.25 16.8171 2.4277 19.1516 2.77091C21.1299 3.06177 22.5 4.79445 22.5 6.74056V12.7595C22.5 14.7056 21.1299 16.4382 19.1516 16.7291C17.2123 17.0142 15.2361 17.1851 13.2302 17.2348C13.1266 17.2374 13.0318 17.2788 12.9638 17.3468L8.78033 21.5303C8.56583 21.7448 8.24324 21.809 7.96299 21.6929C7.68273 21.5768 7.5 21.3033 7.5 21V17.045C6.60901 16.9634 5.72491 16.8579 4.84836 16.729C2.87004 16.4381 1.5 14.7054 1.5 12.7593V6.74064C1.5 4.79455 2.87004 3.06188 4.84836 2.771Z"
         fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
     </svg>
-    <svg class="inf-svg" width="18" height="10" viewBox="0 0 24 14" id="logo-main">
+    <svg class="inf-svg" width="36" height="20" viewBox="0 0 24 14" id="logo-main">
       <path class="trail" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"
         fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2.5" stroke-linecap="round"/>
       <path class="seg tw" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2.5" stroke-linecap="round"/>
