@@ -3,6 +3,7 @@
 import React from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ToggleSwitch } from './ToggleSwitch'
+import { ColorPickerControl } from './ColorPickerControl'
 
 export interface VisibilityGroupProps {
   visualSettings: Partial<VisualSettings>
@@ -79,6 +80,11 @@ const STYLE_OPTIONS: ReadonlyArray<RadioOption<'text' | 'icon'>> = [
   { value: 'icon', label: 'Icon' },
 ]
 
+const PRONOUN_POSITION_OPTIONS: ReadonlyArray<RadioOption<'before' | 'after'>> = [
+  { value: 'before', label: 'Before username' },
+  { value: 'after', label: 'After username' },
+]
+
 export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults = {} }: VisibilityGroupProps): React.ReactElement {
   const platformBadgeVisible = isVisible(
     (visualSettings as Record<string, DisplayValue | undefined>)['showPlatformBadge'],
@@ -92,6 +98,13 @@ export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults =
 
   const badgePosition = visualSettings.platformBadgePosition ?? 'before'
   const badgeStyle = visualSettings.platformBadgeStyle ?? 'text'
+
+  const pronounsVisible = isVisible(
+    (visualSettings as Record<string, DisplayValue | undefined>)['showPronouns'],
+    isVisible((visibilityDefaults as Record<string, DisplayValue | undefined>)['showPronouns'], true),
+  )
+  const pronounPosition = visualSettings.pronounPosition ?? 'after'
+  const pronounColor = visualSettings.pronounColor ?? '#7B68EE'
 
   return (
     <div className="space-y-3">
@@ -148,6 +161,34 @@ export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults =
           checked={platformIndicatorsVisible}
           onChange={(next) => onChange({ showPlatformIndicators: next ? 'block' : 'none' })}
         />
+      </div>
+
+      {/* Pronouns — Phase 9 */}
+      <div className="border-t border-border pt-3">
+        <ToggleSwitch
+          label="Show pronouns"
+          checked={pronounsVisible}
+          onChange={(next) => onChange({ showPronouns: next ? 'inline' : 'none' })}
+        />
+        <div className={`mt-2 space-y-2 pl-2 ${!pronounsVisible ? 'pointer-events-none opacity-40' : ''}`}>
+          <div>
+            <p className="mb-1 text-xs text-text-sub">Position</p>
+            <RadioGroup
+              name="pronounPosition"
+              options={PRONOUN_POSITION_OPTIONS}
+              value={pronounPosition}
+              onChange={(val) => onChange({ pronounPosition: val })}
+              disabled={!pronounsVisible}
+            />
+          </div>
+          <div>
+            <ColorPickerControl
+              label="Pill color"
+              value={pronounColor}
+              onChange={(hex) => onChange({ pronounColor: hex })}
+            />
+          </div>
+        </div>
       </div>
     </div>
   )
