@@ -44,8 +44,9 @@ Declared values (must be multiples of 4):
 Source: `globals.css` `--spacing-*` tokens. Matches existing `--spacing-1` through `--spacing-16` scale.
 
 Exceptions:
-- Pronoun pill vertical padding: 2px (half-step, required to maintain pill inline height matching badge height of 18px)
 - Touch targets for toggle controls: 44px minimum height (existing ToggleSwitch height already satisfies this)
+
+Note: Pronoun pill vertical padding uses `py-1` (4px) and horizontal padding uses `px-2` (8px) — both multiples of 4. The inline height sits fractionally above the 18px badge height but aligns correctly via `items-center` flex alignment.
 
 ---
 
@@ -53,17 +54,20 @@ Exceptions:
 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
-| Body | 14px (`--text-base`) | 400 | 1.5 |
-| Label / sub-text | 13px (`--text-sm`) | 400 | 1.4 |
+| Pronoun pill | 11px (`--text-xs`) | 600 | leading-none |
+| Body / sub-text | 14px (`--text-base`) | 400 | 1.5 |
 | Heading | 16px (`--text-lg`) | 600 | 1.2 |
 | Display | 20px (`--text-xl`) | 600 | 1.2 |
 
-Source: `globals.css` typography tokens. Matches existing overlay page and appearance panel typography.
+Total: 4 sizes (11px, 14px, 16px, 20px). Two weights (400, 600).
 
-Pronoun pill specific:
-- Font size: 11px (`--text-xs`)
-- Font weight: 600 (semibold — matches existing platform badge text style `text-xs font-semibold uppercase`)
+Sub-text labels (e.g. "Position" sub-label in VisibilityGroup) use 14px body size at weight 400 with `text-text-sub` color token for hierarchy — color differentiates sub-text from body, not a distinct size.
+
+Pronoun pill notes:
+- Font weight 600 (semibold — matches existing platform badge text style `text-xs font-semibold uppercase`)
 - Letter-spacing: normal (no uppercase transform — pronouns are mixed case e.g. "she/her")
+
+Source: `globals.css` typography tokens. Matches existing overlay page and appearance panel typography. Sub-text size unified to 14px per checker fix (Option A: drop 13px, use color for hierarchy).
 
 ---
 
@@ -97,7 +101,7 @@ Rendered inline in `frontend/src/app/overlay/[id]/page.tsx` next to the username
 
 ```
 <span
-  className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white"
+  className="inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold leading-none text-white"
   style={{ backgroundColor: pronounColor }}
 >
   {pronouns}
@@ -105,9 +109,9 @@ Rendered inline in `frontend/src/app/overlay/[id]/page.tsx` next to the username
 ```
 
 - `rounded-full` maps to `--radius-full: 9999px` — pill shape matching badge appearance
-- `px-1.5` = 6px horizontal padding (1.5 × 4px = 6px — nearest token to 4px that avoids text clipping)
-- `py-0.5` = 2px vertical padding
-- Inline-flex with `items-center` — aligns with badge height of 18px
+- `px-2` = 8px horizontal padding (multiple of 4)
+- `py-1` = 4px vertical padding (multiple of 4)
+- Inline-flex with `items-center` — aligns with badge height via flex row alignment
 - Gap from username: `gap-1` (4px) — consistent with badge gap in the existing badge row
 
 ### Modified: VisibilityGroup (appearance panel)
@@ -124,7 +128,7 @@ Add a new collapsible sub-section following the "Show platform indicators" block
   />
   <div className={`mt-2 space-y-2 pl-2 ${!pronounsVisible ? 'pointer-events-none opacity-40' : ''}`}>
     <div>
-      <p className="mb-1 text-xs text-text-sub">Position</p>
+      <p className="mb-1 text-sm text-text-sub">Position</p>
       <RadioGroup name="pronounPosition" options={PRONOUN_POSITION_OPTIONS} ... />
     </div>
     <div>
@@ -135,6 +139,7 @@ Add a new collapsible sub-section following the "Show platform indicators" block
 ```
 
 - `pointer-events-none opacity-40` disabled state matches existing platform badge sub-section pattern exactly (from `VisibilityGroup.tsx` line 120)
+- `text-sm` here is Tailwind's `text-sm` = 14px, using `text-text-sub` color to signal sub-label hierarchy
 - `RadioGroup` is the existing internal `RadioGroup<T>` component already defined in `VisibilityGroup.tsx` — no new import needed
 - `ColorPickerControl` is imported from `./ColorPickerControl` — already used in `ColorsGroup.tsx`
 
@@ -277,9 +282,10 @@ Source: `frontend/components.json` — `"registries": {}` (empty).
 |--------|---------------|
 | CONTEXT.md | 12 (D-01 through D-12: pill style, position config, color config, default on, toggle location, field names, platform scope) |
 | globals.css tokens | Typography scale, spacing scale, color tokens, border-radius tokens |
-| VisibilityGroup.tsx | Toggle/radio/disabled-state pattern, divider pattern, text-xs text-text-sub sub-label pattern |
+| VisibilityGroup.tsx | Toggle/radio/disabled-state pattern, divider pattern, text-sm text-text-sub sub-label pattern |
 | ColorPickerControl.tsx | Color picker interaction pattern, aria-label format |
 | visual-settings.ts | VisualSettings field naming convention (camelCase, inline/none toggles) |
 | overlay.ts | DisplaySettings field naming convention (snake_case, boolean toggles) |
 | components.json | shadcn preset (base-nova), icon library (lucide), no third-party registries |
 | User input | Default pill color (#7B68EE), "after" default for pronoun position |
+| Checker revision | Typography: dropped 13px, unified sub-text to 14px with color hierarchy; Spacing: py-0.5→py-1 (4px), px-1.5→px-2 (8px) |
