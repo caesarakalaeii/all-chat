@@ -83,6 +83,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [showPlatformBadge, setShowPlatformBadge] = useState(true);
   const [showPlatformIndicators, setShowPlatformIndicators] = useState(true);
   const [invertMessageOrder, setInvertMessageOrder] = useState(false);
+  const [showPronouns, setShowPronouns] = useState(true);          // D-07: default on
+  const [pronounPosition, setPronounPosition] = useState<'before' | 'after'>('after');  // default after
+  const [pronounColor, setPronounColor] = useState('#7B68EE');     // default medium slate blue
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -124,6 +127,17 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         }
         setInvertMessageOrder(display.invert_message_order === true);
 
+        // Phase 9: Pronoun settings from display_settings
+        if (typeof display.show_pronouns === 'boolean') {
+          setShowPronouns(display.show_pronouns);
+        }
+        if (display.pronoun_position === 'before' || display.pronoun_position === 'after') {
+          setPronounPosition(display.pronoun_position);
+        }
+        if (typeof display.pronoun_color === 'string' && display.pronoun_color) {
+          setPronounColor(display.pronoun_color);
+        }
+
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
 
         if (data.visual_settings && typeof data.visual_settings === 'object') {
@@ -144,6 +158,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           }
           if (vs.showPlatformIndicators !== undefined) {
             setShowPlatformIndicators(vs.showPlatformIndicators !== 'none');
+          }
+          // Phase 9: Pronoun visual_settings overrides
+          if (vs.showPronouns !== undefined) {
+            setShowPronouns(vs.showPronouns !== 'none');
+          }
+          if (vs.pronounPosition !== undefined) {
+            setPronounPosition(vs.pronounPosition);
+          }
+          if (vs.pronounColor !== undefined) {
+            setPronounColor(vs.pronounColor);
           }
         }
 
@@ -763,6 +787,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
+                  {/* Phase 9: Pronoun pill - before username */}
+                  {showPronouns && message.user?.pronouns && pronounPosition === 'before' && (
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold leading-none text-white"
+                      style={{ backgroundColor: pronounColor }}
+                    >
+                      {message.user.pronouns}
+                    </span>
+                  )}
+
                   {/* Username */}
                   {message.user?.name_gradient ? (
                     <span
@@ -787,6 +821,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       style={{ color: message.user?.color || 'var(--chat-username-color, #FFFFFF)' }}
                     >
                       {message.user?.display_name || message.user?.username}
+                    </span>
+                  )}
+
+                  {/* Phase 9: Pronoun pill - after username */}
+                  {showPronouns && message.user?.pronouns && pronounPosition === 'after' && (
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold leading-none text-white"
+                      style={{ backgroundColor: pronounColor }}
+                    >
+                      {message.user.pronouns}
                     </span>
                   )}
 
