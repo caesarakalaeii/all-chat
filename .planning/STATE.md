@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-stopped_at: Phase 9 context gathered
-last_updated: "2026-04-03T17:07:23.015Z"
-last_activity: 2026-03-31
+status: Ready to execute
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-04-03T23:08:43.256Z"
+last_activity: 2026-04-03
 progress:
   total_phases: 16
   completed_phases: 15
-  total_plans: 66
-  completed_plans: 66
+  total_plans: 69
+  completed_plans: 67
 ---
 
 # Project State
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** Phase 08 — message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline
+**Current focus:** Phase 09 — add-optional-support-for-alejo-pronouns
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
+Phase: 09 (add-optional-support-for-alejo-pronouns) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Plan: Not started
 | Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline P01 | 612 | 2 tasks | 12 files |
 | Phase 08 P05 | 176 | 2 tasks | 2 files |
 | Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline P06 | 442 | 2 tasks | 10 files |
+| Phase 09 P01 | 451s | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,7 @@ Key decisions relevant to v1.6:
 - [Phase 08]: RingBufferPublisher uses data-only XADD in all 5 listeners — message-processor reads only data field; per-field publishing was unnecessary overhead
 - [Phase 08]: newStreamPublisherWithRingBuffer internal constructor with prometheus.Registerer injection — prevents duplicate metric registration panics in tests
 - [Phase 08]: PublishBatch replaced pipeline with individual ring buffer calls — each message independently retried on failure, eliminates LI-02 batch pipeline failure mode
+- [Phase 09]: PronounEnricher uses newPronounEnricherWithURL internal constructor for test injection; test server registers paths without /v1 prefix since baseURL replaces full constant; empty string used as 404 sentinel (distinguishable from redis.Nil cache miss)
 
 ### Roadmap Evolution
 
@@ -270,9 +272,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T17:07:23.012Z
-Last activity: 2026-03-31
-Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-add-optional-support-for-alejo-pronouns-pr-alejo-io-integrate-the-pronouns-api-add-per-overlay-toggle-to-enable-disable-pronoun-display-cache-pronoun-lookups-and-render-pronouns-next-to-usernames-in-the-chat-overlay/09-CONTEXT.md
+Last session: 2026-04-03T23:08:43.253Z
+Last activity: 2026-04-03
+Stopped at: Completed 09-01-PLAN.md
+Resume file: None
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
