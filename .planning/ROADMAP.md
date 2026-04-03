@@ -318,3 +318,15 @@ Plans:
 - [x] 08-04-PLAN.md — Shared listener SDK ring buffer for XADD failure buffering with retry, ADR-0009
 - [x] 08-05-PLAN.md — Prometheus alert rules (including pubsub_reconnect_total) and Grafana dashboard panels for all new resilience metrics
 - [x] 08-06-PLAN.md — Wire RingBufferPublisher into all 5 Go listeners (twitch, kick, youtube-innertube, discord, twitch-eventsub)
+
+### Phase 9: Add optional support for Alejo pronouns (pr.alejo.io) — integrate the pronouns API, add per-overlay toggle to enable/disable pronoun display, cache pronoun lookups, and render pronouns next to usernames in the chat overlay
+
+**Goal:** Integrate Alejo pronouns API into the message-processor enrichment pipeline, add per-overlay pronoun display toggle with configurable position and color, cache lookups in Redis with 24h TTL, resolve cross-platform pronouns via linked Twitch accounts, and render pronoun pills next to usernames in the chat overlay.
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12
+**Depends on:** Phase 8
+**Plans:** 3 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — PronounEnricher (Alejo API + Redis cache), UserInfo model extension, ViewerBadgeEnricher TwitchUsername resolution, pipeline wiring
+- [ ] 09-02-PLAN.md — Frontend TypeScript types + overlay page pronoun pill rendering with config loading
+- [ ] 09-03-PLAN.md — VisibilityGroup pronoun controls (toggle, position radio, color picker) + visual checkpoint
