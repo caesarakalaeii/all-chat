@@ -19,9 +19,10 @@ var hexColorRegex = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 // ViewerCosmeticsHandler handles viewer cosmetics updates.
 type ViewerCosmeticsHandler struct {
-	identityRepo *repository.ViewerIdentityRepository
-	redis        *redis.Client
-	logger       *zap.Logger
+	identityRepo    *repository.ViewerIdentityRepository
+	linkedPlatforms linkedPlatformsGetter // always identityRepo in production; overridable in tests
+	redis           *redis.Client
+	logger          *zap.Logger
 }
 
 // NewViewerCosmeticsHandler creates a new ViewerCosmeticsHandler.
@@ -31,9 +32,10 @@ func NewViewerCosmeticsHandler(
 	logger *zap.Logger,
 ) *ViewerCosmeticsHandler {
 	return &ViewerCosmeticsHandler{
-		identityRepo: identityRepo,
-		redis:        redisClient,
-		logger:       logger,
+		identityRepo:    identityRepo,
+		linkedPlatforms: identityRepo, // satisfies linkedPlatformsGetter
+		redis:           redisClient,
+		logger:          logger,
 	}
 }
 
@@ -97,17 +99,34 @@ func (h *ViewerCosmeticsHandler) HandleGetCosmetics(c *gin.Context) {
 func (h *ViewerCosmeticsHandler) HandlePatchCosmetics(c *gin.Context) {
 	handlePatchCosmeticsLogic(c, h.identityRepo)
 
-	// Invalidate Redis identity cache on success
+	// Invalidate Redis identity cache on success.
+	// The cache is keyed per platform (viewer:identity:{platform}:{platform_user_id}), so
+	// we must delete cache entries for ALL linked platforms — not just the current session's
+	// platform — to ensure cosmetic changes (name_color, name_gradient, avatar) are reflected
+	// immediately across every platform the viewer is connected to.
 	if c.Writer.Status() == http.StatusOK {
-		platform, _ := c.Get("platform")
-		platformUserID, _ := c.Get("platform_user_id")
-		if platform != nil && platformUserID != nil {
-			cacheKey := fmt.Sprintf("viewer:identity:%s:%s", platform, platformUserID)
-			if err := h.redis.Del(context.Background(), cacheKey).Err(); err != nil {
-				h.logger.Warn("Failed to invalidate viewer identity cache",
-					zap.String("key", cacheKey),
-					zap.Error(err),
-				)
+		viewerIDVal, _ := c.Get("viewer_id")
+		viewerIDStr, ok := viewerIDVal.(string)
+		if ok && viewerIDStr != "" {
+			if viewerID, parseErr := uuid.Parse(viewerIDStr); parseErr == nil {
+				linked, listErr := h.linkedPlatforms.GetLinkedPlatforms(context.Background(), viewerID)
+				if listErr != nil {
+					h.logger.Warn("Failed to list linked platforms for cache invalidation",
+						zap.String("viewer_id", viewerIDStr),
+						zap.Error(listErr),
+					)
+				} else {
+					// Delete cache key for every linked platform identity.
+					for _, lp := range linked {
+						cacheKey := fmt.Sprintf("viewer:identity:%s:%s", lp.Platform, lp.PlatformUserID)
+						if err := h.redis.Del(context.Background(), cacheKey).Err(); err != nil {
+							h.logger.Warn("Failed to invalidate viewer identity cache",
+								zap.String("key", cacheKey),
+								zap.Error(err),
+							)
+						}
+					}
+				}
 			}
 		}
 	}
@@ -120,6 +139,11 @@ type cosmeticsUpsertRepo interface {
 	// UpsertAvatarCosmetics updates only avatar_frame_id and avatar_flair_id, leaving
 	// name_color and name_gradient untouched. Used for avatar-only PATCH requests.
 	UpsertAvatarCosmetics(ctx context.Context, viewerID uuid.UUID, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error
+}
+
+// linkedPlatformsGetter abstracts the GetLinkedPlatforms DB call for testability.
+type linkedPlatformsGetter interface {
+	GetLinkedPlatforms(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
 }
 
 // NameGradientReq is the JSON shape for a gradient in the PATCH request body.
