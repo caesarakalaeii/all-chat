@@ -46,6 +46,9 @@ export interface DisplaySettings {
   show_platform_badge?: boolean
   platform_badge_position?: 'before' | 'after'
   platform_badge_style?: 'text' | 'icon'
+  show_pronouns?: boolean
+  pronoun_position?: 'before' | 'after'
+  pronoun_color?: string
 }
 
 export interface FilterSettings {
