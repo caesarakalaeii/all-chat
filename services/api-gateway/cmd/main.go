@@ -316,10 +316,11 @@ func main() {
 		// - Health checks (monitoring)
 		// - Metrics (monitoring)
 		// - WebSocket connections (different connection model)
-		// - Static files (legal pages)
+		// - Static files (legal pages, OBS overlays)
 		if path == "/health" || path == "/metrics" ||
 			strings.HasPrefix(path, "/ws/") ||
-			strings.HasPrefix(path, "/legal/") {
+			strings.HasPrefix(path, "/legal/") ||
+			path == "/obs-badge" {
 			c.Next()
 			return
 		}
@@ -332,9 +333,10 @@ func main() {
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Static legal pages (no auth required)
+	// Static pages (no auth required)
 	router.StaticFile("/legal/terms", "./static/legal/terms.html")
 	router.StaticFile("/legal/privacy", "./static/legal/privacy.html")
+	router.StaticFile("/obs-badge", "./static/obs-badge.html")
 
 	// WebSocket endpoint for overlay owners/OBS (triggers YouTube polling)
 	router.GET("/ws/overlay/:overlay_id", wsHandler.HandleOverlayConnection)
