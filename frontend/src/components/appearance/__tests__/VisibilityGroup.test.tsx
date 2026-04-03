@@ -7,6 +7,82 @@ import { VisibilityGroup } from '../VisibilityGroup'
 
 afterEach(() => { cleanup() })
 
+describe('VisibilityGroup - Pronoun Controls', () => {
+  it('renders "Show pronouns" toggle', () => {
+    const onChange = vi.fn()
+    render(<VisibilityGroup visualSettings={{}} onChange={onChange} />)
+    expect(screen.getByText('Show pronouns')).toBeDefined()
+  })
+
+  it('when showPronouns is "inline", toggle is checked', () => {
+    const onChange = vi.fn()
+    render(<VisibilityGroup visualSettings={{ showPronouns: 'inline' }} onChange={onChange} />)
+    const switches = screen.getAllByRole('switch')
+    const pronounSwitch = switches[switches.length - 1]
+    expect(pronounSwitch.getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('when showPronouns is "none", toggle is unchecked', () => {
+    const onChange = vi.fn()
+    render(<VisibilityGroup visualSettings={{ showPronouns: 'none' }} onChange={onChange} />)
+    const switches = screen.getAllByRole('switch')
+    const pronounSwitch = switches[switches.length - 1]
+    expect(pronounSwitch.getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('toggling pronouns OFF calls onChange with { showPronouns: "none" }', () => {
+    const onChange = vi.fn()
+    render(<VisibilityGroup visualSettings={{ showPronouns: 'inline' }} onChange={onChange} />)
+    const switches = screen.getAllByRole('switch')
+    fireEvent.click(switches[switches.length - 1])
+    expect(onChange).toHaveBeenCalledWith({ showPronouns: 'none' })
+  })
+
+  it('toggling pronouns ON calls onChange with { showPronouns: "inline" }', () => {
+    const onChange = vi.fn()
+    render(<VisibilityGroup visualSettings={{ showPronouns: 'none' }} onChange={onChange} />)
+    const switches = screen.getAllByRole('switch')
+    fireEvent.click(switches[switches.length - 1])
+    expect(onChange).toHaveBeenCalledWith({ showPronouns: 'inline' })
+  })
+
+  it('position radio renders with "Before username" and "After username" options', () => {
+    const onChange = vi.fn()
+    render(<VisibilityGroup visualSettings={{}} onChange={onChange} />)
+    // Both platform badge and pronouns share the same position labels; getAllByText is correct
+    const beforeLabels = screen.getAllByText('Before username')
+    const afterLabels = screen.getAllByText('After username')
+    expect(beforeLabels.length).toBeGreaterThanOrEqual(1)
+    expect(afterLabels.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('changing position to "before" calls onChange with { pronounPosition: "before" }', () => {
+    const onChange = vi.fn()
+    render(<VisibilityGroup visualSettings={{}} onChange={onChange} />)
+    // There are two radio groups with 'before' value (platform badge + pronouns)
+    // Use the pronounPosition named radio group
+    const beforeRadios = screen.getAllByDisplayValue('before')
+    // The last one belongs to the pronounPosition group
+    fireEvent.click(beforeRadios[beforeRadios.length - 1])
+    expect(onChange).toHaveBeenCalledWith({ pronounPosition: 'before' })
+  })
+
+  it('renders "Pill color" label for the color picker', () => {
+    const onChange = vi.fn()
+    render(<VisibilityGroup visualSettings={{}} onChange={onChange} />)
+    expect(screen.getByText('Pill color')).toBeDefined()
+  })
+
+  it('when showPronouns is "none", pronoun sub-controls have opacity-40 class', () => {
+    const onChange = vi.fn()
+    const { container } = render(
+      <VisibilityGroup visualSettings={{ showPronouns: 'none' }} onChange={onChange} />
+    )
+    const dimmedDiv = container.querySelector('.opacity-40')
+    expect(dimmedDiv).toBeTruthy()
+  })
+})
+
 describe('VisibilityGroup', () => {
   it('renders 6 labels', () => {
     const onChange = vi.fn()
@@ -19,11 +95,11 @@ describe('VisibilityGroup', () => {
     expect(screen.getByText('Show username')).toBeDefined()
   })
 
-  it('each row has a button with role="switch"', () => {
+  it('each row has a button with role="switch" (5 ROWS + platform badge + platform indicators + pronouns = 8)', () => {
     const onChange = vi.fn()
     render(<VisibilityGroup visualSettings={{}} onChange={onChange} />)
     const switches = screen.getAllByRole('switch')
-    expect(switches).toHaveLength(6)
+    expect(switches).toHaveLength(8)
   })
 
   it('clicking an ON switch calls onChange with none (showAvatars ON→OFF)', () => {
