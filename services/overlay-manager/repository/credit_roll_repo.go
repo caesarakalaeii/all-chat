@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -118,7 +119,7 @@ func (r *CreditRollRepository) GetMostRecentCompletedSession(ctx context.Context
 	`
 
 	var session models.SessionInfo
-	var endedAt *string
+	var endedAt *time.Time
 	var totalEvents *int
 
 	err := r.db.QueryRow(ctx, query, overlayID).Scan(
