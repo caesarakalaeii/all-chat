@@ -28,6 +28,14 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Files changed:** services/twitch-listener/irc/connection.go, services/twitch-listener/handlers/health.go, services/twitch-listener/irc/connection_stale_test.go, services/twitch-listener/handlers/health_test.go
 ---
 
+## credits-feature-never-worked — clips_muted column missing from credit_roll_configs; migration 027 failed silently due to table ownership mismatch
+- **Date:** 2026-04-06
+- **Error patterns:** config not found, failed to get credit roll config, credit roll, creditroll, credits, 500, clips_muted, column does not exist
+- **Root cause:** Migration 027 (ADD COLUMN clips_muted) failed silently because credit_roll_configs was owned by the postgres superuser, but the migration runner connects as allchat_user. PostgreSQL requires ownership to ALTER TABLE. ON_ERROR_STOP=0 masked the failure. GetByOverlayID explicitly selects clips_muted, so every SELECT failed with "column clips_muted does not exist", returning HTTP 500 on both public credit roll endpoints.
+- **Fix:** (1) Added GetOrCreate to replace GetByOverlayID on public endpoints (deployed first). (2) Added clips_muted column manually via postgres superuser in production pod. (3) Transferred ownership of all postgres-owned tables to allchat_user via REASSIGN OWNED (run as postgres superuser). (4) Added error logging to handler 500 paths.
+- **Files changed:** services/overlay-manager/creditroll/handler.go, services/overlay-manager/repository/credit_roll_repo.go
+---
+
 ## twitch-messages-not-reaching-overlay-hesplayingroblox — Twitch pipeline working; stale Redis PEL entries from past pod crashes cleaned up operationally
 - **Date:** 2026-03-29
 - **Error patterns:** messages not appearing, overlay, twitch-listener, chat:raw, stale PEL, pending messages, XPENDING, XAUTOCLAIM, consumer group, hesplayingroblox
