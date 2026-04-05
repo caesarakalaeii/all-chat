@@ -86,6 +86,7 @@ type OverlayRepository interface {
 // ConfigRepository defines credit roll config operations
 type ConfigRepository interface {
 	GetByOverlayID(ctx context.Context, overlayID string) (*models.CreditRollConfig, error)
+	GetOrCreate(ctx context.Context, overlayID string) (*models.CreditRollConfig, error)
 	Update(ctx context.Context, config *models.CreditRollConfig) error
 	GetMostRecentCompletedSession(ctx context.Context, overlayID string) (*models.SessionInfo, error)
 }
@@ -215,10 +216,10 @@ func (h *Handler) HandleGetPublicConfig(c *gin.Context) {
 		return
 	}
 
-	// Get credit roll config
-	config, err := h.configRepo.GetByOverlayID(c.Request.Context(), overlayID)
+	// Get or create credit roll config (auto-creates default if missing)
+	config, err := h.configRepo.GetOrCreate(c.Request.Context(), overlayID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "credit roll config not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get credit roll config"})
 		return
 	}
 
@@ -242,10 +243,10 @@ func (h *Handler) HandleGetCreditRoll(c *gin.Context) {
 		return
 	}
 
-	// Get credit roll config
-	config, err := h.configRepo.GetByOverlayID(ctx, overlayID)
+	// Get or create credit roll config (auto-creates default if missing)
+	config, err := h.configRepo.GetOrCreate(ctx, overlayID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "config not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get credit roll config"})
 		return
 	}
 

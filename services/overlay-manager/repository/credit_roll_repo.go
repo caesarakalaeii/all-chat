@@ -89,6 +89,22 @@ func (r *CreditRollRepository) Update(ctx context.Context, config *models.Credit
 	return nil
 }
 
+// GetOrCreate retrieves credit roll config by overlay ID, creating a default one if it doesn't exist.
+// This is the preferred method for public/display endpoints to handle overlays that never had a config row.
+func (r *CreditRollRepository) GetOrCreate(ctx context.Context, overlayID string) (*models.CreditRollConfig, error) {
+	upsertQuery := `
+		INSERT INTO credit_roll_configs (overlay_id)
+		VALUES ($1)
+		ON CONFLICT (overlay_id) DO NOTHING
+	`
+	_, err := r.db.Exec(ctx, upsertQuery, overlayID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure credit roll config exists: %w", err)
+	}
+
+	return r.GetByOverlayID(ctx, overlayID)
+}
+
 // GetMostRecentCompletedSession retrieves the most recent completed session for an overlay
 func (r *CreditRollRepository) GetMostRecentCompletedSession(ctx context.Context, overlayID string) (*models.SessionInfo, error) {
 	query := `

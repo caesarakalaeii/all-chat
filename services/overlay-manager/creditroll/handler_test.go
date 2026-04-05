@@ -1,9 +1,189 @@
 package creditroll
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/caesar/all-chat/services/overlay-manager/models"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
+
+// mockConfigRepo is a test double for ConfigRepository
+type mockConfigRepo struct {
+	config    *models.CreditRollConfig
+	getErr    error
+	createErr error
+}
+
+func (m *mockConfigRepo) GetByOverlayID(_ context.Context, _ string) (*models.CreditRollConfig, error) {
+	return m.config, m.getErr
+}
+
+func (m *mockConfigRepo) GetOrCreate(_ context.Context, _ string) (*models.CreditRollConfig, error) {
+	if m.createErr != nil {
+		return nil, m.createErr
+	}
+	if m.config != nil {
+		return m.config, nil
+	}
+	// Simulate auto-create: return a default config
+	return &models.CreditRollConfig{
+		ID:        "default-id",
+		OverlayID: "test-overlay-id",
+		Enabled:   true,
+	}, nil
+}
+
+func (m *mockConfigRepo) Update(_ context.Context, _ *models.CreditRollConfig) error {
+	return nil
+}
+
+func (m *mockConfigRepo) GetMostRecentCompletedSession(_ context.Context, _ string) (*models.SessionInfo, error) {
+	return nil, errors.New("no session")
+}
+
+// mockOverlayRepo is a test double for OverlayRepository
+type mockOverlayRepo struct {
+	overlay *models.Overlay
+	err     error
+}
+
+func (m *mockOverlayRepo) GetByID(_ context.Context, _ string) (*models.Overlay, error) {
+	return m.overlay, m.err
+}
+
+func (m *mockOverlayRepo) GetByIDAndUserID(_ context.Context, _, _ string) (*models.Overlay, error) {
+	return m.overlay, m.err
+}
+
+// mockSourceRepo is a test double for SourceRepository
+type mockSourceRepo struct{}
+
+func (m *mockSourceRepo) ListByOverlayID(_ context.Context, _ string) ([]*models.ChatSource, error) {
+	return []*models.ChatSource{}, nil
+}
+
+func newTestHandler(configRepo ConfigRepository, overlayRepo OverlayRepository) *Handler {
+	return &Handler{
+		configRepo:  configRepo,
+		overlayRepo: overlayRepo,
+		sourceRepo:  &mockSourceRepo{},
+		logger:      zap.NewNop(),
+	}
+}
+
+func TestHandleGetPublicConfig_MissingConfigRow_AutoCreates(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	overlay := &models.Overlay{ID: "test-overlay-id"}
+	configRepo := &mockConfigRepo{config: nil} // no config row exists
+	overlayRepo := &mockOverlayRepo{overlay: overlay}
+
+	h := newTestHandler(configRepo, overlayRepo)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest(http.MethodGet, "/public/test-overlay-id/creditroll", nil)
+	c.Params = gin.Params{{Key: "id", Value: "test-overlay-id"}}
+
+	h.HandleGetPublicConfig(c)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("HandleGetPublicConfig() with missing config row: got status %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp models.CreditRollConfig
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("HandleGetPublicConfig() response not valid JSON: %v", err)
+	}
+
+	if resp.OverlayID != "test-overlay-id" {
+		t.Errorf("HandleGetPublicConfig() auto-created config has overlay_id=%q, want %q", resp.OverlayID, "test-overlay-id")
+	}
+}
+
+func TestHandleGetPublicConfig_ExistingConfig_ReturnsIt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	overlay := &models.Overlay{ID: "test-overlay-id"}
+	existing := &models.CreditRollConfig{
+		ID:        "existing-config-id",
+		OverlayID: "test-overlay-id",
+		Enabled:   true,
+		Theme:     "cinematic",
+	}
+	configRepo := &mockConfigRepo{config: existing}
+	overlayRepo := &mockOverlayRepo{overlay: overlay}
+
+	h := newTestHandler(configRepo, overlayRepo)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest(http.MethodGet, "/public/test-overlay-id/creditroll", nil)
+	c.Params = gin.Params{{Key: "id", Value: "test-overlay-id"}}
+
+	h.HandleGetPublicConfig(c)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("HandleGetPublicConfig() with existing config: got status %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp models.CreditRollConfig
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("HandleGetPublicConfig() response not valid JSON: %v", err)
+	}
+
+	if resp.ID != "existing-config-id" {
+		t.Errorf("HandleGetPublicConfig() got config ID %q, want %q", resp.ID, "existing-config-id")
+	}
+}
+
+func TestHandleGetPublicConfig_OverlayNotFound_Returns404(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	configRepo := &mockConfigRepo{}
+	overlayRepo := &mockOverlayRepo{err: errors.New("not found")}
+
+	h := newTestHandler(configRepo, overlayRepo)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest(http.MethodGet, "/public/nonexistent/creditroll", nil)
+	c.Params = gin.Params{{Key: "id", Value: "nonexistent"}}
+
+	h.HandleGetPublicConfig(c)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("HandleGetPublicConfig() with missing overlay: got status %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleGetPublicConfig_GetOrCreateFails_Returns500(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	overlay := &models.Overlay{ID: "test-overlay-id"}
+	configRepo := &mockConfigRepo{createErr: errors.New("db connection refused")}
+	overlayRepo := &mockOverlayRepo{overlay: overlay}
+
+	h := newTestHandler(configRepo, overlayRepo)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest(http.MethodGet, "/public/test-overlay-id/creditroll", nil)
+	c.Params = gin.Params{{Key: "id", Value: "test-overlay-id"}}
+
+	h.HandleGetPublicConfig(c)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("HandleGetPublicConfig() with DB error: got status %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
 
 func TestParseSessionTime(t *testing.T) {
 	tests := []struct {
