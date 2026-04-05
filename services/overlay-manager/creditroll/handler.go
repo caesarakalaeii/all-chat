@@ -219,6 +219,10 @@ func (h *Handler) HandleGetPublicConfig(c *gin.Context) {
 	// Get or create credit roll config (auto-creates default if missing)
 	config, err := h.configRepo.GetOrCreate(c.Request.Context(), overlayID)
 	if err != nil {
+		h.logger.Error("Failed to get or create credit roll config",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get credit roll config"})
 		return
 	}
@@ -246,6 +250,10 @@ func (h *Handler) HandleGetCreditRoll(c *gin.Context) {
 	// Get or create credit roll config (auto-creates default if missing)
 	config, err := h.configRepo.GetOrCreate(ctx, overlayID)
 	if err != nil {
+		h.logger.Error("Failed to get or create credit roll config",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get credit roll config"})
 		return
 	}
