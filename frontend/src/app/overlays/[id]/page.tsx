@@ -1228,29 +1228,38 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   }, [sendCssToIframe])
 
   // Load overlay, sources, accepted shares and config
+  // Note: `router` is intentionally excluded from deps — it is only used for the
+  // `!token` redirect guard which ProtectedRoute already handles. Including router
+  // causes loadData to re-run whenever the Next.js router object reference changes
+  // (e.g. during API proxy processing), which would overwrite user-set extension
+  // overlay state with stale DB data.
   useEffect(() => {
     if (!token) {
       router.push('/')
       return
     }
 
+    let cancelled = false
+
     const loadData = async () => {
       try {
         const overlayData = await overlaysApi.get(id)
+        if (cancelled) return
         setOverlay(overlayData)
         setIsPublicForViewers(overlayData.is_public_for_viewers)
 
         try {
           const sourcesData = await overlaysApi.getSources(id)
+          if (cancelled) return
           setSources(sourcesData)
         } catch {
-          setSources([])
+          if (!cancelled) setSources([])
         }
 
         // Load accepted shares — non-critical
         try {
           const sharesData = await sharesApi.getAcceptedShares()
-          setAcceptedShares(sharesData)
+          if (!cancelled) setAcceptedShares(sharesData)
         } catch {
           // Non-critical
         }
@@ -1258,6 +1267,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         // Load overlay config for customization defaults
         try {
           const config = await overlaysApi.getConfig(id)
+          if (cancelled) return
           const display = config.display_settings || {}
 
           if (typeof display.max_messages === 'number') setMaxMessages(display.max_messages)
@@ -1311,17 +1321,21 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         } catch (err) {
           console.warn('[OverlayEditor] Failed to load config', err)
         } finally {
-          setConfigLoaded(true)
+          if (!cancelled) setConfigLoaded(true)
         }
       } catch {
-        setOverlay(null)
+        if (!cancelled) setOverlay(null)
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
 
     loadData()
-  }, [id, token, router])
+
+    return () => {
+      cancelled = true
+    }
+  }, [id, token]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // WebSocket listener for share_revoked notifications (real-time update)
   useEffect(() => {
@@ -1659,9 +1673,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   }
 
   async function handleSetAsExtensionOverlay() {
+    // Optimistic update — show Active state immediately
+    setIsPublicForViewers(true)
     try {
       const updated = await overlaysApi.update(id, { is_public_for_viewers: true })
-      setIsPublicForViewers(true)
       setOverlay(updated)
       toastManager.add({
         title: 'Extension overlay set',
@@ -1669,17 +1684,22 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         type: 'success',
       })
     } catch {
+      // Roll back optimistic update on failure
+      setIsPublicForViewers(false)
       toastManager.add({ title: 'Failed to update overlay', type: 'error' })
     }
   }
 
   async function handleUnsetExtensionOverlay() {
+    // Optimistic update — show inactive state immediately
+    setIsPublicForViewers(false)
     try {
       const updated = await overlaysApi.update(id, { is_public_for_viewers: false })
-      setIsPublicForViewers(false)
       setOverlay(updated)
       toastManager.add({ title: 'Extension overlay deactivated', type: 'success' })
     } catch {
+      // Roll back optimistic update on failure
+      setIsPublicForViewers(true)
       toastManager.add({ title: 'Failed to update overlay', type: 'error' })
     }
   }
