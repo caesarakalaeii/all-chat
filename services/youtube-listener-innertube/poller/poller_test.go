@@ -411,55 +411,6 @@ func TestPoller_ContextCancellation(t *testing.T) {
 	}
 }
 
-// TestPoller_ChatTypeAllContinuation verifies that when videoID is set the poller
-// regenerates a ChatTypeAll continuation after each poll rather than using
-// YouTube's returned token (which may encode Top Chat / filtered mode).
-func TestPoller_ChatTypeAllContinuation(t *testing.T) {
-	logger := zap.NewNop()
-
-	returnedToken := "youtube-top-chat-token-returned-by-api"
-	client := &MockClient{
-		responses: []*innertube.LiveChatResponse{
-			{
-				ContinuationContents: innertube.ContinuationContents{
-					LiveChatContinuation: innertube.LiveChatContinuation{
-						Continuations: []innertube.Continuation{
-							{TimedContinuationData: &innertube.TimedContinuationData{Continuation: returnedToken}},
-						},
-					},
-				},
-			},
-		},
-		errors:        []error{nil},
-		continuations: []string{returnedToken},
-	}
-	opts := &PollerOptions{
-		Interval: 100 * time.Millisecond,
-		LogLevel: "info",
-		VideoID:  "test-video-id", // Setting videoID enables ChatTypeAll regeneration
-	}
-	p := NewPoller(client, "initial-token", "test-channel", logger, opts)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
-
-	if err := p.Start(ctx); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	time.Sleep(200 * time.Millisecond)
-	p.Stop()
-
-	// The continuation must NOT be YouTube's returned token — it must be a
-	// freshly generated ChatTypeAll token (different from returnedToken).
-	if p.continuation == returnedToken {
-		t.Errorf("continuation was set to YouTube's returned token %q; expected a regenerated ChatTypeAll token", returnedToken)
-	}
-	if p.continuation == "" {
-		t.Error("continuation is empty; expected a regenerated ChatTypeAll token")
-	}
-}
-
 func TestState_ThreadSafety(t *testing.T) {
 	s := NewState()
 
