@@ -40,13 +40,13 @@ func NewViewerYouTubeOAuth(clientID, clientSecret, redirectURL string) *ViewerYo
 }
 
 // GetAuthURL generates the OAuth authorization URL
-// Uses "select_account" prompt to support incremental authorization.
-// This allows users to choose their account without forcing re-consent on every login,
-// which is required for Google OAuth verification.
+// Uses "consent" prompt (ApprovalForce) to ensure Google always returns a refresh token.
+// Without a refresh token the viewer's access token cannot be renewed after it expires (~1hr),
+// which causes all subsequent chat sends to fail with a 502 error.
 func (y *ViewerYouTubeOAuth) GetAuthURL(state string) string {
 	return y.config.AuthCodeURL(state,
 		oauth2.AccessTypeOffline,
-		oauth2.SetAuthURLParam("prompt", "select_account"),
+		oauth2.ApprovalForce,
 	)
 }
 

@@ -71,6 +71,7 @@ func main() {
 
 	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
+	youtubeAPIKey := os.Getenv("YOUTUBE_API_KEY")
 	youtubeRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/youtube/callback")
 
 	kickClientID := os.Getenv("KICK_CLIENT_ID")
@@ -92,6 +93,10 @@ func main() {
 
 	if youtubeClientID == "" || youtubeClientSecret == "" {
 		log.Warn("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET not set, YouTube OAuth will not be available")
+	}
+
+	if youtubeAPIKey == "" {
+		log.Warn("YOUTUBE_API_KEY not set — YouTube live chat ID lookup will fail; set YOUTUBE_API_KEY to a server-side Data API key")
 	}
 
 	if kickClientID == "" || kickClientSecret == "" {
@@ -223,7 +228,7 @@ func main() {
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, jwtSecret)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
-	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher)
+	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)
