@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
@@ -58,6 +59,7 @@ type ChatSendHandler struct {
 	kickProvider    OAuthTokenRefresher
 	cipher          StringEncryptor
 	youtubeAPIKey   string
+	redisClient     *redis.Client
 }
 
 // NewChatSendHandler creates a new chat send handler
@@ -72,6 +74,7 @@ func NewChatSendHandler(
 	kickProvider OAuthTokenRefresher,
 	cipher StringEncryptor,
 	youtubeAPIKey string,
+	redisClient *redis.Client,
 ) *ChatSendHandler {
 	return &ChatSendHandler{
 		log:             log.Named("chat-send"),
@@ -85,6 +88,7 @@ func NewChatSendHandler(
 		kickProvider:    kickProvider,
 		cipher:          cipher,
 		youtubeAPIKey:   youtubeAPIKey,
+		redisClient:     redisClient,
 	}
 }
 
@@ -868,10 +872,69 @@ func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *model
 }
 
 // getYouTubeLiveChatID gets the live chat ID for a streamer's active broadcast.
-// It uses a server-side API key (YOUTUBE_API_KEY) so that the viewer's OAuth token
-// and quota are not consumed during the lookup — only the final message insert
-// uses the viewer's token.
+//
+// Strategy (in order):
+//  1. Check Redis for stream state cached by the youtube-listener service.
+//     This is fast, free (no API quota), and the most reliable source because
+//     the youtube-listener already monitors liveness continuously.
+//  2. Fall back to the YouTube Data API search.list + videos.list with a
+//     server-side API key. This path is unreliable (YouTube's search index
+//     lags behind reality) but serves as a safety net when the youtube-listener
+//     hasn't cached the stream yet.
 func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, channelID string) (string, error) {
+	// --- Strategy 1: Redis lookup (youtube-listener cached state) ---
+	if h.redisClient != nil {
+		liveChatID, err := h.getYouTubeLiveChatIDFromRedis(ctx, channelID)
+		if err != nil {
+			h.log.Warn("Redis stream state lookup failed, falling back to API",
+				zap.String("channel_id", channelID),
+				zap.Error(err))
+		} else if liveChatID != "" {
+			h.log.Info("Got live chat ID from Redis (youtube-listener cache)",
+				zap.String("channel_id", channelID),
+				zap.String("live_chat_id", liveChatID))
+			return liveChatID, nil
+		} else {
+			h.log.Info("No stream state in Redis for channel, falling back to API",
+				zap.String("channel_id", channelID))
+		}
+	}
+
+	// --- Strategy 2: YouTube Data API fallback ---
+	return h.getYouTubeLiveChatIDFromAPI(ctx, channelID)
+}
+
+// getYouTubeLiveChatIDFromRedis reads the live chat ID from the youtube-listener's
+// stream state cache in Redis. Returns ("", nil) if no state exists.
+func (h *ChatSendHandler) getYouTubeLiveChatIDFromRedis(ctx context.Context, channelID string) (string, error) {
+	key := fmt.Sprintf("youtube:stream:state:%s", channelID)
+	data, err := h.redisClient.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil // No state — channel may not be live or youtube-listener hasn't cached it
+	}
+	if err != nil {
+		return "", fmt.Errorf("redis GET failed: %w", err)
+	}
+
+	var state struct {
+		LiveChatID string `json:"live_chat_id"`
+		IsLive     bool   `json:"is_live"`
+	}
+	if err := json.Unmarshal([]byte(data), &state); err != nil {
+		return "", fmt.Errorf("failed to unmarshal stream state: %w", err)
+	}
+
+	if !state.IsLive || state.LiveChatID == "" {
+		return "", nil
+	}
+
+	return state.LiveChatID, nil
+}
+
+// getYouTubeLiveChatIDFromAPI uses the YouTube Data API (search.list + videos.list)
+// with a server-side API key to discover the live chat ID. This is the fallback path;
+// the search.list endpoint is unreliable due to YouTube's search index lag.
+func (h *ChatSendHandler) getYouTubeLiveChatIDFromAPI(ctx context.Context, channelID string) (string, error) {
 	// Build authentication parameter: prefer API key, fall back to nothing (will likely 401)
 	authParam := ""
 	if h.youtubeAPIKey != "" {

@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
@@ -341,6 +343,73 @@ func TestCheckRateLimit_1HourExceeded(t *testing.T) {
 
 	assert.False(t, allowed)
 	assert.False(t, resetTime.IsZero())
+}
+
+func TestGetYouTubeLiveChatIDFromRedis_Success(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rc.Close()
+
+	handler := &ChatSendHandler{
+		log:         zap.NewNop(),
+		redisClient: rc,
+	}
+
+	// Simulate youtube-listener writing stream state
+	state := `{"channel_id":"UC123","stream_id":"vid1","live_chat_id":"LC_abc","is_live":true}`
+	mr.Set("youtube:stream:state:UC123", state)
+
+	chatID, err := handler.getYouTubeLiveChatIDFromRedis(context.Background(), "UC123")
+	assert.NoError(t, err)
+	assert.Equal(t, "LC_abc", chatID)
+}
+
+func TestGetYouTubeLiveChatIDFromRedis_NoState(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rc.Close()
+
+	handler := &ChatSendHandler{
+		log:         zap.NewNop(),
+		redisClient: rc,
+	}
+
+	chatID, err := handler.getYouTubeLiveChatIDFromRedis(context.Background(), "UC_missing")
+	assert.NoError(t, err)
+	assert.Empty(t, chatID)
+}
+
+func TestGetYouTubeLiveChatIDFromRedis_NotLive(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rc.Close()
+
+	handler := &ChatSendHandler{
+		log:         zap.NewNop(),
+		redisClient: rc,
+	}
+
+	state := `{"channel_id":"UC123","stream_id":"vid1","live_chat_id":"LC_abc","is_live":false}`
+	mr.Set("youtube:stream:state:UC123", state)
+
+	chatID, err := handler.getYouTubeLiveChatIDFromRedis(context.Background(), "UC123")
+	assert.NoError(t, err)
+	assert.Empty(t, chatID)
+}
+
+func TestGetYouTubeLiveChatID_NilRedis_FallsBackToAPI(t *testing.T) {
+	// When redisClient is nil, getYouTubeLiveChatID should skip Redis and go to API
+	handler := &ChatSendHandler{
+		log:           zap.NewNop(),
+		redisClient:   nil,
+		youtubeAPIKey: "fake-key",
+		httpClient:    &http.Client{Timeout: 1 * time.Second},
+	}
+
+	// The API call will fail because fake-key is not valid, but we just verify
+	// it doesn't panic on nil redis and does attempt the API path
+	_, err := handler.getYouTubeLiveChatID(context.Background(), "UC123")
+	assert.Error(t, err) // Expected: API call fails
 }
 
 // Helper functions
