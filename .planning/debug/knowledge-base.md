@@ -36,6 +36,14 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Files changed:** services/overlay-manager/creditroll/handler.go, services/overlay-manager/repository/credit_roll_repo.go
 ---
 
+## twitch-messages-not-reaching-overlay — SyncChannels write-lock held during 40s rate-limited IRC join loop blocked readiness probe, causing Kubernetes pod cycling
+- **Date:** 2026-04-07
+- **Error patterns:** context deadline exceeded, readiness probe, TCP timeout, no messages, twitch-listener, caesarlp, SyncChannels, mutex, IRC join rate limit, pods cycling, channel membership lost
+- **Root cause:** SyncChannels in channels/manager.go held m.mu (write-lock) via defer m.mu.Unlock() for the entire function body, including the rate-limited IRC join loop (~40s for 80 channels at 20 joins/10s). Readiness probe handlers (GetActiveChannelCount, IsInitialSyncComplete) called m.mu.RLock() which blocked for 40s. Kubernetes readiness probe timeoutSeconds=3 caused TCP timeout (not 503), cycling pods continuously and preventing any IRC session from stabilizing. caesarlp channel memberships were lost on every restart.
+- **Fix:** Restructured SyncChannels into brief lock acquisitions only for shared-state reads/writes (m.activeChans, filteredAssignmentCount, initialSyncDone). All IRC operations (Depart, Join, rate-limiter waits, leadership election) now happen outside the mutex. joinChannel and joinChannelsMultipleConnectionsUnlocked each acquire lock only for the single map write. Added TestManager_SyncChannels_DoesNotBlockHealthProbe regression test.
+- **Files changed:** services/twitch-listener/channels/manager.go, services/twitch-listener/channels/manager_test.go
+---
+
 ## twitch-messages-not-reaching-overlay-hesplayingroblox — Twitch pipeline working; stale Redis PEL entries from past pod crashes cleaned up operationally
 - **Date:** 2026-03-29
 - **Error patterns:** messages not appearing, overlay, twitch-listener, chat:raw, stale PEL, pending messages, XPENDING, XAUTOCLAIM, consumer group, hesplayingroblox
