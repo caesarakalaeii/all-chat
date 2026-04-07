@@ -253,7 +253,12 @@ func (m *Manager) listenAndWait(ctx context.Context, poolInterface interface{}) 
 	}
 }
 
-// SyncChannels queries the database and updates joined channels
+// SyncChannels queries the database and updates joined channels.
+//
+// The mutex (m.mu) is held ONLY for brief, non-blocking snapshots of shared state.
+// All time-consuming operations — IRC rate-limited joins, leadership election, PART
+// notifications — happen WITHOUT the lock so that concurrent readiness-probe HTTP
+// handlers are never blocked waiting for a slow write-lock acquisition.
 func (m *Manager) SyncChannels(ctx context.Context) error {
 	// Get unique channels from database
 	desiredChannels, err := m.repo.GetUniqueChannels(ctx)
@@ -331,46 +336,52 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		}
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// --- Phase 1: Brief lock to snapshot shared state ---
+	// Compute toJoin/toPart from activeChans and update filteredAssignmentCount.
+	// The lock is released before any slow IRC or leadership-election operations.
+	var toJoin, toPart []string
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
 
-	// Store filtered count for readiness probe
-	m.filteredAssignmentCount = filteredCount
+		// Store filtered count for readiness probe
+		m.filteredAssignmentCount = filteredCount
 
-	// Convert to map for easier lookup, excluding channels shed by rebalancing
-	desiredMap := make(map[string]bool)
-	for _, ch := range desiredChannels {
-		if rebalancedOut != nil && rebalancedOut[ch] {
-			continue // Leadership was released during rebalance; let another pod take it
+		// Convert to map for easier lookup, excluding channels shed by rebalancing
+		desiredMap := make(map[string]bool)
+		for _, ch := range desiredChannels {
+			if rebalancedOut != nil && rebalancedOut[ch] {
+				continue // Leadership was released during rebalance; let another pod take it
+			}
+			desiredMap[ch] = true
 		}
-		desiredMap[ch] = true
-	}
 
-	// Find channels to JOIN (in desired but not active)
-	toJoin := make([]string, 0)
-	for ch := range desiredMap {
-		if !m.activeChans[ch] {
-			toJoin = append(toJoin, ch)
+		// Find channels to JOIN (in desired but not active)
+		for ch := range desiredMap {
+			if !m.activeChans[ch] {
+				toJoin = append(toJoin, ch)
+			}
 		}
-	}
 
-	// Find channels to PART (in active but not desired)
-	toPart := make([]string, 0)
-	for ch := range m.activeChans {
-		if !desiredMap[ch] {
-			toPart = append(toPart, ch)
+		// Find channels to PART (in active but not desired)
+		for ch := range m.activeChans {
+			if !desiredMap[ch] {
+				toPart = append(toPart, ch)
+			}
 		}
-	}
+	}()
 
-	// PART channels first (no rate limit)
+	// --- Phase 2: IRC operations — no lock held ---
+	// PART channels first (no rate limit); each call acquires a brief lock internally.
 	for _, ch := range toPart {
-		m.partChannelLocked(ctx, ch, true)
+		m.partChannel(ctx, ch, true)
 	}
 
-	// JOIN new channels with rate limiting
-	// Use multiple IRC connections if >=100 channels (TWITCH-03)
+	// JOIN new channels with rate limiting.
+	// Use multiple IRC connections if >=100 channels (TWITCH-03).
+	var joined []string
 	if len(toJoin) >= 100 {
-		m.joinChannelsMultipleConnections(ctx, toJoin)
+		joined = m.joinChannelsMultipleConnectionsUnlocked(ctx, toJoin)
 	} else {
 		// Single connection JOIN with rate limiting (existing logic)
 		for _, ch := range toJoin {
@@ -403,13 +414,28 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 				break
 			}
 			m.joinChannel(ctx, ch)
+			joined = append(joined, ch)
 		}
 	}
 
+	// --- Phase 3: Brief lock to snapshot active channels for DB updates ---
+	var activeSnapshot []string
+	var activeCount int
+	func() {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+		activeCount = len(m.activeChans)
+		activeSnapshot = make([]string, 0, activeCount)
+		for ch := range m.activeChans {
+			activeSnapshot = append(activeSnapshot, ch)
+		}
+	}()
+
+	// --- Phase 4: DB status updates and metrics — no lock needed ---
 	// Update database status for all active channels (including already-connected ones)
 	// This ensures the database reflects actual IRC connection state
 	statusUpdates := 0
-	for ch := range m.activeChans {
+	for _, ch := range activeSnapshot {
 		if err := m.repo.SetSourceActive(ctx, ch, true); err != nil {
 			m.logger.Error("Failed to update source status during sync",
 				zap.String("channel", ch),
@@ -422,8 +448,8 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 
 	// Record active sources and source events
 	if m.metrics != nil {
-		m.metrics.SetActiveSources("twitch", "twitch-listener", len(m.activeChans))
-		for range toJoin {
+		m.metrics.SetActiveSources("twitch", "twitch-listener", activeCount)
+		for range joined {
 			m.metrics.RecordSourceEvent("twitch", "twitch-listener", "added")
 		}
 		for range toPart {
@@ -432,8 +458,8 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	}
 
 	m.logger.Info("Channel sync completed",
-		zap.Int("total_active", len(m.activeChans)),
-		zap.Int("joined", len(toJoin)),
+		zap.Int("total_active", activeCount),
+		zap.Int("joined", len(joined)),
 		zap.Int("parted", len(toPart)),
 		zap.Int("status_updates", statusUpdates),
 	)
@@ -441,7 +467,9 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	// Mark initial sync as done after first successful completion.
 	// When leadership is enabled the pod may own 0 channels (all locks held by peer),
 	// so the readiness probe uses this flag instead of requiring activeChannelCount > 0.
+	m.mu.Lock()
 	m.initialSyncDone = true
+	m.mu.Unlock()
 
 	return nil
 }
@@ -519,10 +547,16 @@ func (m *Manager) verifyCoverageComplete(ctx context.Context, sourceIDMap map[st
 // in its map, but after IRC reconnects or race conditions the map entry can
 // exist while the server-side JOIN was never acknowledged. Departing first
 // removes the map entry so the subsequent Join() always sends a real IRC JOIN.
+//
+// This method acquires m.mu briefly to update activeChans, so it must NOT be
+// called while m.mu is already held.
 func (m *Manager) joinChannel(ctx context.Context, channel string) {
 	m.joinParter.Depart(channel)
 	m.joinParter.Join(channel)
+
+	m.mu.Lock()
 	m.activeChans[channel] = true
+	m.mu.Unlock()
 
 	// Update database status
 	if err := m.repo.SetSourceActive(ctx, channel, true); err != nil {
@@ -549,18 +583,22 @@ func (m *Manager) joinChannel(ctx context.Context, channel string) {
 	)
 }
 
-// partChannelLocked parts a channel and removes from tracking. Caller must hold m.mu.
-func (m *Manager) partChannelLocked(ctx context.Context, channel string, releaseLeadership bool) {
+// partChannel parts a channel and removes it from tracking. It acquires m.mu
+// internally so callers must NOT hold m.mu when calling this method.
+func (m *Manager) partChannel(ctx context.Context, channel string, releaseLeadership bool) {
 	m.joinParter.Depart(channel)
+
+	m.mu.Lock()
 	delete(m.activeChans, channel)
+	m.mu.Unlock()
 
 	if releaseLeadership && m.leader != nil {
 		m.leader.Release(channel)
 	}
 
-	// Don't deactivate database sources when parting
-	// Sources should remain active in DB even if temporarily not connected
-	// This allows multiple overlays to share the same channel
+	// Don't deactivate database sources when parting.
+	// Sources should remain active in DB even if temporarily not connected —
+	// this allows multiple overlays to share the same channel.
 
 	// Publish offline status to overlay status indicators (lowercase to match channel_id in DB)
 	if m.statusPublisher != nil {
@@ -678,12 +716,16 @@ func (m *Manager) UpdateDemandedSourceIDs(_ map[string]listener.DemandedSource) 
 	// No-op: Twitch IRC always connected to all assigned channels.
 }
 
-// joinChannelsMultipleConnections creates multiple IRC connections for >100 channels (TWITCH-03)
-// Per RESEARCH.md: Distribute channels evenly across connections (90 channels per connection, safe margin below 100)
-// Leadership election is performed per channel first so that IRC connections are only
-// created for the channels this pod actually owns — preventing OOM on startup when the
-// full channel list is large but this pod only handles a fraction.
-func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels []string) {
+// joinChannelsMultipleConnectionsUnlocked joins >100 channels without holding m.mu.
+// Per RESEARCH.md: Distribute channels evenly across connections (90 channels per
+// connection, safe margin below 100). Leadership election is performed per channel
+// first so that IRC connections are only created for the channels this pod actually
+// owns — preventing OOM on startup when the full channel list is large but this pod
+// only handles a fraction.
+//
+// Returns the list of channels successfully joined so that the caller can update
+// activeChans under its own lock.
+func (m *Manager) joinChannelsMultipleConnectionsUnlocked(ctx context.Context, channels []string) []string {
 	// Filter channels through leadership first to determine how many this pod owns.
 	var wonChannels []string
 	for _, ch := range channels {
@@ -713,7 +755,7 @@ func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels 
 
 	if len(wonChannels) == 0 {
 		m.logger.Info("No channels won via leadership, skipping IRC connections")
-		return
+		return nil
 	}
 
 	// Create IRC connections sized to the channels this pod actually owns.
@@ -725,6 +767,7 @@ func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels 
 		zap.Int("client_count", clientCount),
 	)
 
+	var joined []string
 	for i := 0; i < clientCount; i++ {
 		start := i * 90
 		end := start + 90
@@ -739,8 +782,15 @@ func (m *Manager) joinChannelsMultipleConnections(ctx context.Context, channels 
 			}
 			m.joinParter.Depart(ch) // Clear stale library state
 			m.joinParter.Join(ch)
+
+			m.mu.Lock()
 			m.activeChans[ch] = true
+			m.mu.Unlock()
+
+			joined = append(joined, ch)
 		}
 	}
+
+	return joined
 }
 

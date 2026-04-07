@@ -529,3 +529,78 @@ func TestManager_IsLeadershipEnabled(t *testing.T) {
 	withLeader := NewManager(repo, mockJP, nil, lc, nil, nil, "", logger, nil)
 	assert.True(t, withLeader.IsLeadershipEnabled())
 }
+
+// TestManager_SyncChannels_DoesNotBlockHealthProbe verifies that the readiness
+// probe methods (GetActiveChannelCount, IsInitialSyncComplete) are never blocked
+// while SyncChannels is executing.  Before the fix, SyncChannels held m.mu for
+// the entire rate-limited JOIN loop, causing the probe to time out and Kubernetes
+// to cycle the pod.
+func TestManager_SyncChannels_DoesNotBlockHealthProbe(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	// Use a blocking JoinParter to simulate the slow IRC join rate limiter.
+	blockCh := make(chan struct{})
+	slowJP := newSlowJoinParter(blockCh)
+
+	repo := &MockRepository{channels: []string{"xqc", "summit1g", "shroud"}}
+	manager := NewManager(repo, slowJP, nil, nil, nil, nil, "", logger, nil)
+
+	syncDone := make(chan struct{})
+	go func() {
+		defer close(syncDone)
+		_ = manager.SyncChannels(ctx)
+	}()
+
+	// Wait until the slow JoinParter is blocked mid-join.
+	select {
+	case <-slowJP.blocking:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SyncChannels did not start joining within 2s")
+	}
+
+	// The readiness probe must respond immediately (< 100ms) while SyncChannels
+	// is blocked in the slow join, because m.mu must NOT be held during joins.
+	probeDone := make(chan struct{})
+	go func() {
+		defer close(probeDone)
+		_ = manager.GetActiveChannelCount()
+		_ = manager.IsInitialSyncComplete()
+	}()
+
+	select {
+	case <-probeDone:
+		// Good: probe returned without waiting for SyncChannels to finish.
+	case <-time.After(100 * time.Millisecond):
+		t.Error("health probe methods blocked during SyncChannels — mutex held across slow join")
+	}
+
+	// Unblock the join so the goroutine can finish cleanly.
+	close(blockCh)
+	<-syncDone
+}
+
+// slowJoinParter blocks on Join() until blockCh is closed, simulating the slow
+// IRC rate-limited join loop.
+type slowJoinParter struct {
+	blockCh  chan struct{}
+	blocking chan struct{}
+	once     sync.Once
+}
+
+func (s *slowJoinParter) Join(_ string) {
+	s.once.Do(func() {
+		// Signal that we have reached the blocking point.
+		close(s.blocking)
+	})
+	<-s.blockCh // block until test unblocks us
+}
+
+func (s *slowJoinParter) Depart(_ string) {}
+
+func newSlowJoinParter(blockCh chan struct{}) *slowJoinParter {
+	return &slowJoinParter{
+		blockCh:  blockCh,
+		blocking: make(chan struct{}),
+	}
+}
