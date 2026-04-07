@@ -57,6 +57,7 @@ type ChatSendHandler struct {
 	youtubeProvider OAuthTokenRefresher
 	kickProvider    OAuthTokenRefresher
 	cipher          StringEncryptor
+	youtubeAPIKey   string
 }
 
 // NewChatSendHandler creates a new chat send handler
@@ -70,6 +71,7 @@ func NewChatSendHandler(
 	youtubeProvider OAuthTokenRefresher,
 	kickProvider OAuthTokenRefresher,
 	cipher StringEncryptor,
+	youtubeAPIKey string,
 ) *ChatSendHandler {
 	return &ChatSendHandler{
 		log:             log.Named("chat-send"),
@@ -82,6 +84,7 @@ func NewChatSendHandler(
 		youtubeProvider: youtubeProvider,
 		kickProvider:    kickProvider,
 		cipher:          cipher,
+		youtubeAPIKey:   youtubeAPIKey,
 	}
 }
 
@@ -446,7 +449,7 @@ func (h *ChatSendHandler) sendStreamerYouTubeMessage(ctx context.Context, user *
 		return fmt.Errorf("failed to get YouTube channel ID: %w", err)
 	}
 
-	liveChatID, err := h.getYouTubeLiveChatID(ctx, user.AccessToken, channelID)
+	liveChatID, err := h.getYouTubeLiveChatID(ctx, channelID)
 	if err != nil {
 		return fmt.Errorf("failed to get live chat ID: %w", err)
 	}
@@ -814,9 +817,10 @@ func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *model
 		return fmt.Errorf("failed to get YouTube channel ID: %w", err)
 	}
 
-	// First, get the streamer's active livestream to find the liveChatId
-	// This requires querying the YouTube API for active broadcasts
-	liveChatID, err := h.getYouTubeLiveChatID(ctx, accessToken, channelID)
+	// First, get the streamer's active livestream to find the liveChatId.
+	// This uses a server-side API key so the viewer's OAuth quota is not consumed
+	// and the lookup does not depend on the validity of the viewer's access token.
+	liveChatID, err := h.getYouTubeLiveChatID(ctx, channelID)
 	if err != nil {
 		return fmt.Errorf("failed to get live chat ID: %w", err)
 	}
@@ -863,16 +867,23 @@ func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *model
 	return nil
 }
 
-// getYouTubeLiveChatID gets the live chat ID for a streamer's active broadcast
-func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, accessToken, channelID string) (string, error) {
-	// Step 1: Search for live videos on the channel
-	searchURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=%s&type=video&eventType=live&maxResults=1", channelID)
+// getYouTubeLiveChatID gets the live chat ID for a streamer's active broadcast.
+// It uses a server-side API key (YOUTUBE_API_KEY) so that the viewer's OAuth token
+// and quota are not consumed during the lookup — only the final message insert
+// uses the viewer's token.
+func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, channelID string) (string, error) {
+	// Build authentication parameter: prefer API key, fall back to nothing (will likely 401)
+	authParam := ""
+	if h.youtubeAPIKey != "" {
+		authParam = "&key=" + h.youtubeAPIKey
+	}
+
+	// Step 1: Search for live videos on the channel using the server-side API key
+	searchURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=%s&type=video&eventType=live&maxResults=1%s", channelID, authParam)
 	searchReq, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create search request: %w", err)
 	}
-
-	searchReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	searchResp, err := h.httpClient.Do(searchReq)
 	if err != nil {
@@ -909,14 +920,12 @@ func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, accessToken,
 
 	h.log.Info("Found live video", zap.String("video_id", videoID))
 
-	// Step 2: Get video details to extract liveChatId
-	videoURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s", videoID)
+	// Step 2: Get video details to extract liveChatId using the server-side API key
+	videoURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s%s", videoID, authParam)
 	videoReq, err := http.NewRequestWithContext(ctx, http.MethodGet, videoURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create video request: %w", err)
 	}
-
-	videoReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	videoResp, err := h.httpClient.Do(videoReq)
 	if err != nil {
