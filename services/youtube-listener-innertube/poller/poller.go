@@ -409,17 +409,7 @@ func (p *Poller) poll() {
 	}
 
 	// Update state
-	// Always regenerate a ChatTypeAll continuation token rather than using YouTube's
-	// returned token. YouTube's returned continuation may encode "Top Chat" (filtered)
-	// mode instead of "Live Chat" (all messages), which causes viewer messages to be
-	// silently dropped while the channel owner's messages still appear. Regenerating
-	// with ChatTypeAll and the current time as the timestamp anchor ensures we always
-	// receive all live chat messages regardless of what YouTube returns.
-	if p.videoID != "" {
-		p.continuation = innertube.GenerateLiveChatContinuation(p.videoID, p.channelID, innertube.ChatTypeAll)
-	} else {
-		p.continuation = nextContinuation
-	}
+	p.continuation = nextContinuation
 	p.state.SetState(StateActive)
 	p.state.SetError(nil)
 	p.state.UpdatePollTime()
