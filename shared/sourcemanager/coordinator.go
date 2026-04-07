@@ -10,6 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefaultRebalanceStabilizationPeriod is how long the peer count must be stable
+// before leases are released during rebalancing. This prevents oscillation when
+// pods scale up/down rapidly: without a stabilization window, a new pod appearing
+// causes incumbents to shed leases, which the newcomer immediately acquires,
+// then the newcomer also rebalances and releases some back — creating churn.
+const DefaultRebalanceStabilizationPeriod = 30 * time.Second
+
 // LeadershipCoordinator maintains leadership leases per stream ID.
 type LeadershipCoordinator struct {
 	platform string
@@ -20,6 +27,15 @@ type LeadershipCoordinator struct {
 	mu       sync.Mutex
 	leases   map[string]*leaseEntry
 	interval time.Duration
+
+	// stabilizationPeriod is how long the peer count must be stable before
+	// leases are released. Configurable so tests can set it to 0.
+	stabilizationPeriod time.Duration
+
+	// Rebalance stabilization: track the last observed peer count and when it
+	// was first seen so we only shed leases after the count has been stable.
+	lastPeerCount     int
+	peerCountStableAt time.Time
 }
 
 type leaseEntry struct {
@@ -36,12 +52,13 @@ func NewLeadershipCoordinator(platform string, client LeadershipClient, interval
 		interval = 5 * time.Second
 	}
 	coord := &LeadershipCoordinator{
-		platform: platform,
-		callerID: uuid.New().String(),
-		client:   client,
-		logger:   logger,
-		interval: interval,
-		leases:   make(map[string]*leaseEntry),
+		platform:            platform,
+		callerID:            uuid.New().String(),
+		client:              client,
+		logger:              logger,
+		interval:            interval,
+		leases:              make(map[string]*leaseEntry),
+		stabilizationPeriod: DefaultRebalanceStabilizationPeriod,
 	}
 	setLeadershipActive(platform, 0)
 	return coord
@@ -188,6 +205,11 @@ func (c *LeadershipCoordinator) HeldStreamIDs() []string {
 // Rebalance checks the number of active peers for this platform and releases
 // excess leases so that each pod holds at most ceil(totalStreams/peerCount).
 // It returns the stream IDs that were released so the caller can disconnect them.
+//
+// To prevent oscillation during pod scaling events, leases are only released
+// after the peer count has been stable for rebalanceStabilizationPeriod. If the
+// peer count just changed this call registers the new count and returns without
+// releasing anything; the next call (after the stabilization window) will act.
 func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int) ([]string, error) {
 	if c == nil || c.client == nil {
 		return nil, nil
@@ -210,10 +232,37 @@ func (c *LeadershipCoordinator) Rebalance(ctx context.Context, totalStreams int)
 	leadershipPeerCount.WithLabelValues(sanitizeLabel(c.platform)).Set(float64(peerCount))
 	leadershipDesired.WithLabelValues(sanitizeLabel(c.platform)).Set(float64(totalStreams))
 
+	// Stabilization gate: only shed leases once the peer count has been stable
+	// for stabilizationPeriod. This prevents the release→re-acquire oscillation
+	// that occurs when pods scale up/down. When stabilizationPeriod == 0 (tests)
+	// the gate is bypassed entirely.
+	c.mu.Lock()
+	now := time.Now()
+	if c.stabilizationPeriod > 0 {
+		if c.lastPeerCount != peerCount {
+			// Peer count just changed — start (or restart) the stabilization timer.
+			c.lastPeerCount = peerCount
+			c.peerCountStableAt = now.Add(c.stabilizationPeriod)
+			c.mu.Unlock()
+			if c.logger != nil {
+				c.logger.Info("Peer count changed, waiting for stabilization before rebalancing",
+					zap.String("platform", c.platform),
+					zap.Int("peer_count", peerCount),
+					zap.Duration("stabilization_period", c.stabilizationPeriod),
+				)
+			}
+			return nil, nil
+		}
+		if now.Before(c.peerCountStableAt) {
+			// Still within the stabilization window.
+			c.mu.Unlock()
+			return nil, nil
+		}
+	}
+
 	// ceil(totalStreams / peerCount)
 	maxPerPod := (totalStreams + peerCount - 1) / peerCount
 
-	c.mu.Lock()
 	currentCount := len(c.leases)
 	excess := currentCount - maxPerPod
 	if excess <= 0 {
