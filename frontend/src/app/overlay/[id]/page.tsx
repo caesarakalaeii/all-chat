@@ -91,6 +91,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSeenTimestampRef = useRef<number>(0);
+  // Keep a ref so the WebSocket onmessage closure always sees the latest value
+  // without maxMessages needing to be in the WebSocket effect dependency array.
+  const maxMessagesRef = useRef<number>(50);
 
   // Load overlay display configuration (public endpoint)
   useEffect(() => {
@@ -106,6 +109,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
         if (typeof display.max_messages === 'number') {
           setMaxMessages(display.max_messages);
+          maxMessagesRef.current = display.max_messages;
         }
         if (typeof display.font_size === 'number') {
           setFontSize(display.font_size);
@@ -325,7 +329,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
           setMessages((prev) => {
             const newMessages = [...prev, message];
-            return newMessages.slice(-maxMessages);
+            return newMessages.slice(-maxMessagesRef.current);
           });
         }
 
@@ -344,7 +348,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             if (!aggregationId) {
               // No aggregation ID, treat as new message
               const newMessages = [...prev, updatedMessage];
-              return newMessages.slice(-maxMessages);
+              return newMessages.slice(-maxMessagesRef.current);
             }
 
             const index = prev.findIndex(
@@ -354,7 +358,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             if (index === -1) {
               // Original message already faded away, treat as new
               const newMessages = [...prev, updatedMessage];
-              return newMessages.slice(-maxMessages);
+              return newMessages.slice(-maxMessagesRef.current);
             }
 
             // Update existing message in place
@@ -440,7 +444,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         ws.close();
       }
     };
-  }, [id, maxMessages, forceReconnect]);
+  }, [id, forceReconnect]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
