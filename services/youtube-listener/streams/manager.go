@@ -446,9 +446,14 @@ func (m *Manager) listenAndWait(ctx context.Context, poolInterface interface{}) 
 			return nil
 		default:
 			// Wait for notification with timeout
-			_, err := conn.Conn().WaitForNotification(ctx)
+			notification, err := conn.Conn().WaitForNotification(ctx)
 			if err != nil {
 				return fmt.Errorf("notification wait failed: %w", err)
+			}
+
+			// Only react to youtube source changes; skip notifications for other platforms.
+			if !isYoutubeNotification(notification.Payload) {
+				continue
 			}
 
 			// Debounce rapid notifications to prevent log spam and reduce unnecessary syncs
@@ -497,6 +502,21 @@ func (m *Manager) listenAndWait(ctx context.Context, poolInterface interface{}) 
 			m.notificationMu.Unlock()
 		}
 	}
+}
+
+// sourceChangePayload is used to parse the platform field from PostgreSQL NOTIFY payloads.
+type sourceChangePayload struct {
+	Platform string `json:"platform"`
+}
+
+// isYoutubeNotification returns true when the notification payload either cannot be
+// parsed (fail-open: sync anyway) or explicitly belongs to the "youtube" platform.
+func isYoutubeNotification(payload string) bool {
+	var p sourceChangePayload
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		return true
+	}
+	return p.Platform == "" || p.Platform == "youtube"
 }
 
 // syncStreams fetches active sources and starts/stops pollers as needed

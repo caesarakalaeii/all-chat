@@ -264,6 +264,38 @@ func (m *Manager) listenAndWait(poolInterface interface{}) error {
 		zap.String("channel", notificationChannel),
 	)
 
+	// Debounce: coalesce rapid notifications into a single sync after 2s of quiet.
+	const debounceWindow = 2 * time.Second
+	notifyCh := make(chan struct{}, 1) // buffered-1 so sends never block
+
+	go func() {
+		var timer *time.Timer
+		for {
+			select {
+			case <-m.ctx.Done():
+				if timer != nil {
+					timer.Stop()
+				}
+				return
+			case <-notifyCh:
+				if timer != nil {
+					timer.Stop()
+				}
+				timer = time.NewTimer(debounceWindow)
+			case <-func() <-chan time.Time {
+				if timer != nil {
+					return timer.C
+				}
+				return nil
+			}():
+				timer = nil
+				if err := m.syncChannels(); err != nil {
+					m.logger.Error("Failed to sync after notification", zap.Error(err))
+				}
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-m.ctx.Done():
@@ -279,13 +311,7 @@ func (m *Manager) listenAndWait(poolInterface interface{}) error {
 			return fmt.Errorf("notification wait failed: %w", err)
 		}
 
-		m.logger.Info("Source change notification received",
-			zap.String("payload", notification.Payload),
-		)
-
 		// Only sync when the notification concerns a Kick source.
-		// The chat_source_changes channel fires for all platforms; skip others to
-		// avoid unnecessary work.
 		if !isKickNotification(notification.Payload) {
 			m.logger.Debug("Ignoring source change notification for other platform",
 				zap.String("payload", notification.Payload),
@@ -293,8 +319,14 @@ func (m *Manager) listenAndWait(poolInterface interface{}) error {
 			continue
 		}
 
-		if err := m.syncChannels(); err != nil {
-			m.logger.Error("Failed to sync after notification", zap.Error(err))
+		m.logger.Info("Source change notification received",
+			zap.String("payload", notification.Payload),
+		)
+
+		// Signal the debounce goroutine (non-blocking).
+		select {
+		case notifyCh <- struct{}{}:
+		default:
 		}
 	}
 }
