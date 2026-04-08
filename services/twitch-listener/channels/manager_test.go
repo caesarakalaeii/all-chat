@@ -604,3 +604,26 @@ func newSlowJoinParter(blockCh chan struct{}) *slowJoinParter {
 		blocking: make(chan struct{}),
 	}
 }
+
+func TestIsTwitchNotification(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+		want    bool
+	}{
+		{"twitch platform", `{"platform":"twitch","channel_id":"w10u"}`, true},
+		{"kick platform", `{"platform":"kick","channel_id":"foo"}`, false},
+		{"tiktok platform", `{"platform":"tiktok","channel_id":"bar"}`, false},
+		{"youtube platform", `{"platform":"youtube","channel_id":"baz"}`, false},
+		{"empty platform", `{"platform":"","channel_id":"x"}`, true},
+		{"no platform field", `{"channel_id":"x"}`, true},
+		{"invalid json", `not json`, true},
+		{"empty payload", ``, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isTwitchNotification(tt.payload)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -204,7 +205,26 @@ func (m *Manager) listenForChanges(ctx context.Context) {
 	}
 }
 
-// listenAndWait establishes LISTEN connection and waits for notifications
+// sourceChangePayload is used to parse the platform field from PostgreSQL NOTIFY payloads.
+type sourceChangePayload struct {
+	Platform string `json:"platform"`
+}
+
+// isTwitchNotification returns true when the notification payload either cannot be
+// parsed (fail-open: sync anyway) or explicitly belongs to the "twitch" platform.
+func isTwitchNotification(payload string) bool {
+	var p sourceChangePayload
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		// Unparseable payload — sync to be safe.
+		return true
+	}
+	return p.Platform == "" || p.Platform == "twitch"
+}
+
+// listenAndWait establishes LISTEN connection and waits for notifications.
+// Notifications are debounced: rapid successive events are coalesced into a
+// single SyncChannels call after a 2-second quiet period. Only notifications
+// for the "twitch" platform trigger a sync.
 func (m *Manager) listenAndWait(ctx context.Context, poolInterface interface{}) error {
 	pool, ok := poolInterface.(*pgxpool.Pool)
 	if !ok {
@@ -227,6 +247,46 @@ func (m *Manager) listenAndWait(ctx context.Context, poolInterface interface{}) 
 		zap.String("channel", "chat_source_changes"),
 	)
 
+	// Debounce: feed relevant notifications into a channel; a goroutine
+	// coalesces them into a single SyncChannels call after 2 seconds of quiet.
+	const debounceWindow = 2 * time.Second
+	notifyCh := make(chan struct{}, 1) // buffered-1 so sends never block
+
+	go func() {
+		var timer *time.Timer
+		for {
+			select {
+			case <-m.stopChan:
+				if timer != nil {
+					timer.Stop()
+				}
+				return
+			case <-ctx.Done():
+				if timer != nil {
+					timer.Stop()
+				}
+				return
+			case <-notifyCh:
+				// Reset (or start) the debounce timer.
+				if timer != nil {
+					timer.Stop()
+				}
+				timer = time.NewTimer(debounceWindow)
+			case <-func() <-chan time.Time {
+				if timer != nil {
+					return timer.C
+				}
+				return nil
+			}():
+				// Debounce window elapsed — run sync.
+				timer = nil
+				if err := m.SyncChannels(ctx); err != nil {
+					m.logger.Error("Failed to sync after notification", zap.Error(err))
+				}
+			}
+		}
+	}()
+
 	// Wait for notifications
 	for {
 		select {
@@ -235,19 +295,28 @@ func (m *Manager) listenAndWait(ctx context.Context, poolInterface interface{}) 
 		case <-ctx.Done():
 			return nil
 		default:
-			// Wait for notification with timeout
 			notification, err := conn.Conn().WaitForNotification(ctx)
 			if err != nil {
 				return fmt.Errorf("notification wait failed: %w", err)
+			}
+
+			// Only react to twitch source changes.
+			if !isTwitchNotification(notification.Payload) {
+				m.logger.Debug("Ignoring source change notification for other platform",
+					zap.String("payload", notification.Payload),
+				)
+				continue
 			}
 
 			m.logger.Info("Source change notification received",
 				zap.String("payload", notification.Payload),
 			)
 
-			// Trigger immediate sync
-			if err := m.SyncChannels(ctx); err != nil {
-				m.logger.Error("Failed to sync after notification", zap.Error(err))
+			// Signal the debounce goroutine (non-blocking).
+			select {
+			case notifyCh <- struct{}{}:
+			default:
+				// Already pending — skip.
 			}
 		}
 	}
