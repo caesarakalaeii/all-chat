@@ -150,8 +150,8 @@ func TestStatusSubscriberReconnect(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Simulate a reconnect by calling reconnect directly.
-	// In production this is triggered by a closed channel.
-	// Verify it does not panic and completes.
+	// reconnect now uses defer wg.Done(), so we need wg.Add(1) before calling it.
+	ss.wg.Add(1)
 	assert.NotPanics(t, func() {
 		ss.reconnect()
 	})
@@ -170,5 +170,111 @@ func TestStatusSubscriberReconnect(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Stop() timed out after reconnect test")
+	}
+}
+
+// TestStatusSubscriberReconnectRetriesOnFailure verifies that reconnect retries
+// indefinitely when Redis is down, exiting only on stopChan.
+func TestStatusSubscriberReconnectRetriesOnFailure(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+
+	client := newTestRedisClient(t, mr)
+	logger := zaptest.NewLogger(t)
+	ss := NewStatusSubscriber(client, nil, logger, nil)
+
+	// Close miniredis to force failures
+	mr.Close()
+
+	done := make(chan struct{})
+	ss.wg.Add(1)
+	go func() {
+		defer close(done)
+		ss.reconnect()
+	}()
+
+	// Let it retry for a bit
+	time.Sleep(3 * time.Second)
+
+	// Stop should cause reconnect to exit
+	close(ss.stopChan)
+
+	select {
+	case <-done:
+		// reconnect exited cleanly
+	case <-time.After(5 * time.Second):
+		t.Fatal("reconnect did not exit after stopChan closed")
+	}
+}
+
+// TestStatusSubscriberReconnectExitsOnStopChan verifies reconnect returns
+// immediately when stopChan is already closed.
+func TestStatusSubscriberReconnectExitsOnStopChan(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	client := newTestRedisClient(t, mr)
+	logger := zaptest.NewLogger(t)
+	ss := NewStatusSubscriber(client, nil, logger, nil)
+
+	close(ss.stopChan)
+
+	done := make(chan struct{})
+	ss.wg.Add(1)
+	go func() {
+		defer close(done)
+		ss.reconnect()
+	}()
+
+	select {
+	case <-done:
+		// exited immediately
+	case <-time.After(2 * time.Second):
+		t.Fatal("reconnect should exit immediately when stopChan is closed")
+	}
+}
+
+// TestStatusSubscriberReconnectSucceedsAfterTransientFailure verifies recovery.
+func TestStatusSubscriberReconnectSucceedsAfterTransientFailure(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+
+	client := newTestRedisClient(t, mr)
+	logger := zaptest.NewLogger(t)
+	ss := NewStatusSubscriber(client, nil, logger, nil)
+
+	// Close miniredis, then restart after a short delay
+	mr.Close()
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		mr.Restart()
+	}()
+
+	done := make(chan struct{})
+	ss.wg.Add(1)
+	go func() {
+		defer close(done)
+		ss.reconnect()
+	}()
+
+	select {
+	case <-done:
+		// reconnect succeeded after retry
+	case <-time.After(10 * time.Second):
+		t.Fatal("reconnect did not succeed within timeout")
+	}
+
+	// Clean shutdown
+	ss2done := make(chan struct{})
+	go func() {
+		ss.Stop()
+		close(ss2done)
+	}()
+
+	select {
+	case <-ss2done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop() timed out")
 	}
 }
