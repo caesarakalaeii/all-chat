@@ -165,12 +165,31 @@ func (m *Manager) Stop() {
 	m.logger.Info("Channel manager stopped")
 }
 
-// syncLoop periodically syncs channels from database
+// syncLoop periodically syncs channels from database.
+// During the first 90 seconds after startup, syncs run every 5 seconds to quickly
+// claim orphaned channels (e.g., after a rolling restart where old pods' leadership
+// keys have expired). After the burst window, the normal SyncInterval (30s) is used.
 func (m *Manager) syncLoop(ctx context.Context) {
 	defer m.wg.Done()
 
+	const startupBurstDuration = 90 * time.Second
+	const startupBurstInterval = 5 * time.Second
+
+	startupDeadline := time.Now().Add(startupBurstDuration)
+	burstTicker := time.NewTicker(startupBurstInterval)
+	defer burstTicker.Stop()
+
 	for {
 		select {
+		case <-burstTicker.C:
+			if time.Now().After(startupDeadline) {
+				burstTicker.Stop()
+				// Fall through to normal sync ticker from here on.
+				continue
+			}
+			if err := m.SyncChannels(ctx); err != nil {
+				m.logger.Error("Failed to sync channels (startup burst)", zap.Error(err))
+			}
 		case <-m.syncTicker.C:
 			if err := m.SyncChannels(ctx); err != nil {
 				m.logger.Error("Failed to sync channels", zap.Error(err))
@@ -411,6 +430,43 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			)
 			desiredChannels = filteredChannels
 			filteredCount = len(filteredChannels)
+		}
+	}
+
+	// --- Phase 0.5: Leadership health audit ---
+	// Detect channels that are in activeChans but no longer have a valid lease in
+	// the coordinator. This can happen during rolling restarts when an IRC
+	// connection is re-established but the leadership heartbeat stopped or the
+	// lease was lost without the lostCallback firing cleanly.
+	// Evicting them from activeChans forces re-acquisition on the next toJoin pass.
+	if m.leader != nil {
+		heldSet := make(map[string]bool)
+		for _, id := range m.leader.HeldStreamIDs() {
+			heldSet[id] = true
+		}
+
+		m.mu.Lock()
+		var evicted []string
+		for ch := range m.activeChans {
+			if !heldSet[ch] {
+				evicted = append(evicted, ch)
+				delete(m.activeChans, ch)
+			}
+		}
+		if len(evicted) > 0 {
+			m.activeChannelCountAtomic.Store(int64(len(m.activeChans)))
+		}
+		m.mu.Unlock()
+
+		if len(evicted) > 0 {
+			m.logger.Warn("Leadership audit: evicted channels without valid leases",
+				zap.Int("evicted", len(evicted)),
+				zap.Strings("channels", evicted),
+			)
+			// Depart evicted channels from IRC so re-join gets a clean connection.
+			for _, ch := range evicted {
+				m.joinParter.Depart(ch)
+			}
 		}
 	}
 

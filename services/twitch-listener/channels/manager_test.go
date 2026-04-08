@@ -60,6 +60,15 @@ func (m *MockJoinParter) GetDeparted() []string {
 	return result
 }
 
+func (m *MockJoinParter) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.joined = make([]string, 0)
+	m.departed = make([]string, 0)
+	m.joinCalls = 0
+	m.departCalls = 0
+}
+
 func (m *MockJoinParter) GetJoinCallCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -714,6 +723,48 @@ func TestManager_AtomicProbe_FilteredAssignmentCount(t *testing.T) {
 	}
 
 	close(released)
+}
+
+// TestManager_LeadershipAudit_EvictsOrphanedChannels verifies that channels
+// in activeChans without a corresponding coordinator lease are evicted and
+// then re-joined on the next sync cycle.
+func TestManager_LeadershipAudit_EvictsOrphanedChannels(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	sharedClient := newMockLeadershipClient()
+	repo := &MockRepository{channels: []string{"xqc", "summit1g", "shroud"}}
+	mockJP := NewMockJoinParter()
+	coord := sourcemanager.NewLeadershipCoordinator("twitch", sharedClient, 5*time.Second, logger)
+	manager := NewManager(repo, mockJP, nil, coord, nil, nil, "", logger, nil)
+
+	// Initial sync: all three channels joined and leadership acquired.
+	require.NoError(t, manager.SyncChannels(ctx))
+	assert.Equal(t, 3, manager.GetActiveChannelCount())
+	assert.ElementsMatch(t, []string{"xqc", "summit1g", "shroud"}, mockJP.GetJoined())
+
+	// Simulate leadership loss for "summit1g" by releasing it from the coordinator
+	// AND clearing the mock client's record (mimics the Redis key expiring after
+	// the old pod died, without the lostCallback firing cleanly).
+	coord.Release("summit1g")
+	// Wait briefly for the async release goroutine, then clear the claim so the
+	// channel is claimable again (simulates Redis TTL expiry).
+	time.Sleep(10 * time.Millisecond)
+	sharedClient.mu.Lock()
+	delete(sharedClient.claimed, "summit1g")
+	sharedClient.mu.Unlock()
+
+	// Next sync: the leadership audit should detect summit1g has no lease,
+	// evict it from activeChans, and re-join it.
+	mockJP.Reset()
+	require.NoError(t, manager.SyncChannels(ctx))
+
+	// summit1g should have been departed (eviction) and then re-joined.
+	departed := mockJP.GetDeparted()
+	joined := mockJP.GetJoined()
+	assert.Contains(t, departed, "summit1g", "summit1g should be departed during eviction")
+	assert.Contains(t, joined, "summit1g", "summit1g should be re-joined after eviction")
+	assert.Equal(t, 3, manager.GetActiveChannelCount(), "all 3 channels should be active again")
 }
 
 func TestIsTwitchNotification(t *testing.T) {
