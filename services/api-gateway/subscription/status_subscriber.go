@@ -9,6 +9,7 @@ import (
 
 	"github.com/caesar/all-chat/services/api-gateway/models"
 	"github.com/caesar/all-chat/services/api-gateway/websocket"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -91,6 +92,12 @@ func (s *StatusSubscriber) listen(pubsub *redis.PubSub) {
 		case msg, ok := <-ch:
 			if !ok {
 				s.logger.Warn("Status subscriber channel closed — re-subscribing")
+				select {
+				case <-s.stopChan:
+					return
+				default:
+				}
+				s.wg.Add(1)
 				go s.reconnect()
 				return
 			}
@@ -103,19 +110,21 @@ func (s *StatusSubscriber) listen(pubsub *redis.PubSub) {
 }
 
 // reconnect attempts to re-subscribe to the platform status channel after a
-// connection drop. It retries up to 3 times with exponential backoff and
-// increments the pubsub_reconnect_total metric on each attempt per D-14.
+// connection drop. It retries indefinitely with jittered exponential backoff
+// until stopChan is closed. Increments pubsub_reconnect_total metric on each
+// attempt per D-14.
 func (s *StatusSubscriber) reconnect() {
-	// If Stop has already been called, do not attempt to reconnect.
-	select {
-	case <-s.stopChan:
-		return
-	default:
-	}
+	defer s.wg.Done()
 
-	for attempt := 1; attempt <= 3; attempt++ {
+	for attempt := 0; ; attempt++ {
+		select {
+		case <-s.stopChan:
+			return
+		default:
+		}
+
 		s.logger.Info("Status subscriber reconnecting",
-			zap.Int("attempt", attempt))
+			zap.Int("attempt", attempt+1))
 
 		// Increment reconnect metric per D-14
 		if s.metrics != nil {
@@ -126,8 +135,14 @@ func (s *StatusSubscriber) reconnect() {
 		if _, err := pubsub.Receive(context.Background()); err != nil {
 			pubsub.Close()
 			s.logger.Warn("Status subscriber reconnect failed",
-				zap.Int("attempt", attempt), zap.Error(err))
-			time.Sleep(time.Duration(attempt) * time.Second)
+				zap.Int("attempt", attempt+1), zap.Error(err))
+
+			sleep := listener.JitteredBackoff(attempt)
+			select {
+			case <-s.stopChan:
+				return
+			case <-time.After(sleep):
+			}
 			continue
 		}
 
@@ -135,18 +150,31 @@ func (s *StatusSubscriber) reconnect() {
 		if ch == nil {
 			pubsub.Close()
 			s.logger.Warn("Status subscriber reconnect: nil channel",
-				zap.Int("attempt", attempt))
-			time.Sleep(time.Duration(attempt) * time.Second)
+				zap.Int("attempt", attempt+1))
+
+			sleep := listener.JitteredBackoff(attempt)
+			select {
+			case <-s.stopChan:
+				return
+			case <-time.After(sleep):
+			}
 			continue
 		}
 
-		s.logger.Info("Status subscriber reconnected")
+		s.logger.Info("Status subscriber reconnected",
+			zap.Int("attempt", attempt+1))
+
+		select {
+		case <-s.stopChan:
+			pubsub.Close()
+			return
+		default:
+		}
+
 		s.wg.Add(1)
 		go s.listen(pubsub)
 		return
 	}
-
-	s.logger.Error("Status subscriber failed to reconnect after 3 attempts")
 }
 
 // Stop stops the status subscriber and waits for the goroutine to exit.
