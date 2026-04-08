@@ -280,7 +280,18 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
             </p>
             <div className="mt-4 text-slate-400">
               <p>Session: {new Date(creditData.session_started_at).toLocaleDateString()}</p>
-              <p>Duration: {Math.floor(creditData.session_duration_seconds / 60)} minutes</p>
+              <p>
+                Duration:{' '}
+                {(() => {
+                  const totalSeconds = creditData.session_duration_seconds
+                  const hours = Math.floor(totalSeconds / 3600)
+                  const minutes = Math.floor((totalSeconds % 3600) / 60)
+                  if (hours > 0 && minutes > 0) return `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`
+                  if (hours > 0) return `${hours} hour${hours !== 1 ? 's' : ''}`
+                  if (minutes > 0) return `${minutes} minute${minutes !== 1 ? 's' : ''}`
+                  return 'just started'
+                })()}
+              </p>
             </div>
           </div>
 

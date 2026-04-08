@@ -317,8 +317,17 @@ func (h *Handler) getActiveSession(ctx context.Context, overlayID string) (*mode
 		return nil, fmt.Errorf("no active session")
 	}
 
+	// A hash with no session_id is a zombie left by a background analytics write
+	// (incrementCreditRollDisplay) that fired after EndSession deleted the key.
+	// Treat it the same as an absent key so the DB-fallback path is taken, not the
+	// corruption-repair path (which would reset startedAt to time.Now() → duration 0).
+	sessionID, hasSessionID := result["session_id"]
+	if !hasSessionID || sessionID == "" {
+		return nil, fmt.Errorf("no active session")
+	}
+
 	session := &models.SessionInfo{
-		SessionID: result["session_id"],
+		SessionID: sessionID,
 		State:     result["state"],
 	}
 
@@ -555,11 +564,22 @@ func (h *Handler) getLeaderboardEntries(ctx context.Context, sessionID string, c
 	return entries, nil
 }
 
-// incrementCreditRollDisplay increments the display counter
+// incrementCreditRollDisplay increments the display counter only when the session
+// key already exists.  Using a plain HIncrBy on an absent key would create a zombie
+// hash containing only "credit_roll_displayed_count", which caused getActiveSession
+// to trigger the corruption-repair path and reset startedAt to time.Now() (→ duration 0).
 func (h *Handler) incrementCreditRollDisplay(ctx context.Context, overlayID string, sessionID string) {
-	// This is fire-and-forget, we don't care if it fails
-	// (it's just for analytics)
-	_ = h.redis.HIncrBy(ctx, "session:active:"+overlayID, "credit_roll_displayed_count", 1)
+	key := "session:active:" + overlayID
+	// Lua script: increment only if the key exists (KEYS[1] present in Redis).
+	// This is atomic and avoids creating a zombie hash when the session has already
+	// been deleted by EndSession.
+	script := redis.NewScript(`
+		if redis.call("EXISTS", KEYS[1]) == 1 then
+			return redis.call("HINCRBY", KEYS[1], "credit_roll_displayed_count", 1)
+		end
+		return 0
+	`)
+	_ = script.Run(ctx, h.redis, []string{key}).Err()
 }
 
 // getString safely gets a string value from a map
