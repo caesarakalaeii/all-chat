@@ -9,10 +9,18 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
 	"github.com/caesar/all-chat/services/twitch-listener/status"
+	"github.com/caesar/all-chat/services/twitch-listener/zombie"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gempir/go-twitch-irc/v4"
 	"go.uber.org/zap"
 )
+
+// zombieTracker is the subset of zombie.Detector used by ConnectionManager.
+// Defined as an interface so tests can inject a no-op without importing the zombie package.
+type zombieTracker interface {
+	RecordReceived()
+	RecordPublished()
+}
 
 // ConnectionManager manages the Twitch IRC connection
 type ConnectionManager struct {
@@ -34,6 +42,7 @@ type ConnectionManager struct {
 	statusPublisher  *status.Publisher        // Publishes platform status on IRC reconnect
 	onDisconnect     func()                   // Called when IRC connection is lost (for channel manager reset)
 	onConnect        func()                   // Called when a new IRC connection is established (for channel re-join)
+	zombieDetector   zombieTracker            // Tracks received-vs-published drift for zombie detection
 }
 
 // Config holds the configuration for IRC connection
@@ -410,10 +419,28 @@ func (cm *ConnectionManager) SetOnConnect(fn func()) {
 	cm.onConnect = fn
 }
 
+// SetZombieDetector wires a zombie.Detector into the connection manager.
+// RecordReceived() is called on each incoming PRIVMSG; RecordPublished() is called
+// after each successful publish to the ring buffer. This powers the liveness probe's
+// received-vs-published drift check (Z-01).
+func (cm *ConnectionManager) SetZombieDetector(d *zombie.Detector) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.zombieDetector = d
+}
+
 // handlePrivateMessage processes incoming PRIVMSG from Twitch
 func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage) {
 	cm.recordActivity()
 	start := time.Now()
+
+	// Record message received for zombie drift detection (Z-01).
+	cm.mu.RLock()
+	zd := cm.zombieDetector
+	cm.mu.RUnlock()
+	if zd != nil {
+		zd.RecordReceived()
+	}
 
 	// Record message received
 	cm.metrics.RecordMessage("twitch", "twitch-listener", message.Channel, "chat")
@@ -467,6 +494,13 @@ func (cm *ConnectionManager) handlePrivateMessage(message twitch.PrivateMessage)
 	// Record successful publish and latency
 	cm.metrics.RecordPublish("twitch", "twitch-listener", "success")
 	cm.metrics.MessageLatency.WithLabelValues("twitch", "twitch-listener").Observe(time.Since(start).Seconds())
+
+	// Record publish for zombie drift detection (Z-01).
+	// Called after ring buffer accept — the ring buffer absorbs transient XADD failures
+	// so this counter reflects messages accepted by the delivery pipeline, not XADD success.
+	if zd != nil {
+		zd.RecordPublished()
+	}
 
 	cm.logger.Debug("Published message",
 		zap.String("message_id", rawMsg.MessageID),

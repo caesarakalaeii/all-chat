@@ -8,6 +8,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-listener/channels"
 	"github.com/caesar/all-chat/services/twitch-listener/irc"
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
+	"github.com/caesar/all-chat/services/twitch-listener/zombie"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,9 +22,10 @@ type ircConnectionHealth interface {
 
 // HealthHandler handles health check endpoints
 type HealthHandler struct {
-	ircConn   ircConnectionHealth
-	publisher *publisher.StreamPublisher
-	chanMgr   *channels.Manager
+	ircConn        ircConnectionHealth
+	publisher      *publisher.StreamPublisher
+	chanMgr        *channels.Manager
+	zombieDetector *zombie.Detector // nil-safe: zombie check skipped when nil
 }
 
 // NewHealthHandler creates a new health handler from concrete types.
@@ -37,6 +39,12 @@ func NewHealthHandler(
 		publisher: pub,
 		chanMgr:   chanMgr,
 	}
+}
+
+// SetZombieDetector wires a zombie detector into the health handler.
+// When set, the liveness probe returns 503 if the detector reports a zombie state.
+func (h *HealthHandler) SetZombieDetector(d *zombie.Detector) {
+	h.zombieDetector = d
 }
 
 // LivenessProbe checks if the service is alive (HTTP 200 = alive, 503 = restart needed).
@@ -53,6 +61,16 @@ func (h *HealthHandler) LivenessProbe(c *gin.Context) {
 			"service": "twitch-listener",
 			"reason":  "IRC connection zombie — no activity for over 10 minutes despite watchdog attempts",
 			"last_activity_seconds_ago": int(time.Since(lastAct).Seconds()),
+		})
+		return
+	}
+
+	// Zombie publish-stall detection (Z-01): messages received from IRC but publishing stalled.
+	if h.zombieDetector != nil && h.zombieDetector.IsZombie() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "dead",
+			"service": "twitch-listener",
+			"reason":  "zombie: messages received but publish stalled",
 		})
 		return
 	}
