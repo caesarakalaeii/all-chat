@@ -128,6 +128,11 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 		return
 	}
 
+	h.log.Info("Request parsed",
+		zap.String("streamer_username", req.StreamerUsername),
+		zap.String("platform", req.Platform),
+		zap.String("video_id", req.VideoID))
+
 	// Validate message length
 	if len(req.Message) == 0 || len(req.Message) > maxMessageLength {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("message must be between 1 and %d characters", maxMessageLength)})
