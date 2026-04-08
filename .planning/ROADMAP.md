@@ -336,10 +336,10 @@ Plans:
 **Goal:** Fix all 12 identified silent failure modes (F-01 through F-12) across twitch-listener, message-processor, api-gateway, and source-manager plus add zombie listener detection (Z-01). Atomic health probe flags, exponential backoff reconnection, structured drop logging, Lua-based leadership renewal, and received-vs-published drift detection.
 **Requirements**: F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11, F-12, Z-01
 **Depends on:** Phase 9
-**Plans:** 4 plans
+**Plans:** 4/4 plans complete
 
 Plans:
-- [ ] 10-01-PLAN.md — Twitch-listener atomic probe flags, shared backoff utility, ring buffer drop logging, status publisher retry, zombie detection
-- [ ] 10-02-PLAN.md — API gateway infinite retry resubscribe/reconnect, shared Redis client standardization
-- [ ] 10-03-PLAN.md — Message-processor XReadGroup backoff, DLQ structured logging, consumer group offset fix
-- [ ] 10-04-PLAN.md — Source-manager atomic leadership renewal (Lua), peer registration sorted set optimization
+- [x] 10-01-PLAN.md — Twitch-listener atomic probe flags, shared backoff utility, ring buffer drop logging, status publisher retry, zombie detection
+- [x] 10-02-PLAN.md — API gateway infinite retry resubscribe/reconnect, shared Redis client standardization
+- [x] 10-03-PLAN.md — Message-processor XReadGroup backoff, DLQ structured logging, consumer group offset fix
+- [x] 10-04-PLAN.md — Source-manager atomic leadership renewal (Lua), peer registration sorted set optimization
