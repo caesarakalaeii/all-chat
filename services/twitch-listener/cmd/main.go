@@ -21,11 +21,11 @@ import (
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	sharedredis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -89,14 +89,13 @@ func main() {
 	// Connect to Redis
 	redisHost := listener.Env("REDIS_HOST", "localhost")
 	redisPort := listener.Env("REDIS_PORT", "6379")
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
-	})
-	defer redisClient.Close()
-
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		log.Fatal("Failed to connect to Redis", zap.Error(err))
+	redisPassword := listener.Env("REDIS_PASSWORD", "")
+	redisClient, err := sharedredis.NewClientWithTracing(
+		fmt.Sprintf("%s:%s", redisHost, redisPort), redisPassword, tracingEnabled)
+	if err != nil {
+		log.Fatal("Failed to create Redis client", zap.Error(err))
 	}
+	defer redisClient.Close()
 
 	log.Info("Connected to Redis")
 

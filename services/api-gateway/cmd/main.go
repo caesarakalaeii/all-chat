@@ -25,6 +25,7 @@ import (
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/ratelimit"
+	sharedredis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -85,14 +86,13 @@ func main() {
 	// Connect to Redis (for WebSocket Pub/Sub)
 	redisHost := getEnvOrDefault("REDIS_HOST", "localhost")
 	redisPort := getEnvOrDefault("REDIS_PORT", "6379")
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
-	})
-	defer redisClient.Close()
-
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		log.Fatal("Failed to connect to Redis", zap.Error(err))
+	redisPassword := getEnvOrDefault("REDIS_PASSWORD", "")
+	redisClient, err := sharedredis.NewClientWithTracing(
+		fmt.Sprintf("%s:%s", redisHost, redisPort), redisPassword, tracingEnabled)
+	if err != nil {
+		log.Fatal("Failed to create Redis client", zap.Error(err))
 	}
+	defer redisClient.Close()
 
 	log.Info("Connected to Redis")
 
