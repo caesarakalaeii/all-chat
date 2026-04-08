@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
@@ -23,6 +24,46 @@ const (
 	rateLimit1Min    = 20
 	rateLimit1Hour   = 100
 )
+
+// classifySendError returns the appropriate HTTP status code and a user-friendly
+// description based on the error message. Prevents returning 502 for errors that
+// are not actual gateway failures.
+func classifySendError(errMsg string) (int, string) {
+	// Stream offline / not live — normal condition, not a server error
+	for _, s := range []string{
+		"not currently live",
+		"no live videos found",
+		"no active live chat",
+		"no live stream found",
+	} {
+		if strings.Contains(errMsg, s) {
+			return http.StatusUnprocessableEntity, "The streamer is not currently live. Messages can only be sent during an active live stream."
+		}
+	}
+	// Missing account/config — user needs to link their account
+	for _, s := range []string{
+		"no account linked",
+		"no Twitch account",
+		"no Kick account",
+		"no active YouTube source",
+	} {
+		if strings.Contains(errMsg, s) {
+			return http.StatusUnprocessableEntity, "The streamer has not configured this platform in All-Chat."
+		}
+	}
+	// Auth issues
+	for _, s := range []string{
+		"no refresh token",
+		"failed to decrypt",
+		"failed to refresh token",
+	} {
+		if strings.Contains(errMsg, s) {
+			return http.StatusUnauthorized, "Your session has expired. Please log in again."
+		}
+	}
+	// Everything else is an actual upstream failure
+	return http.StatusBadGateway, "Failed to deliver your message. Please try again."
+}
 
 // ViewerRepositoryInterface defines the interface for viewer repository operations
 type ViewerRepositoryInterface interface {
@@ -262,9 +303,11 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 		// Continue anyway
 	}
 
-	// Return response
+	// Return response with appropriate status code based on error type
 	if messageErr != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to send message", "details": messageErr.Error()})
+		errMsg := messageErr.Error()
+		status, description := classifySendError(errMsg)
+		c.JSON(status, gin.H{"error": "failed to send message", "details": errMsg, "description": description})
 		return
 	}
 
