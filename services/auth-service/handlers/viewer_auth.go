@@ -34,6 +34,7 @@ type ViewerIdentityRepo interface {
 	GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error)
 	GetLinkedPlatforms(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
 	UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error
+	MigratePlatformUserID(ctx context.Context, platform, oldPlatformUserID, newPlatformUserID string) error
 }
 
 // ViewerAuthHandler handles authentication for viewers who want to send messages
@@ -548,10 +549,55 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	session, err := h.viewerRepo.GetByPlatformUserID(c.Request.Context(), "youtube", userInfo.ID)
+	// Resolve the viewer's YouTube channel ID (UC... format).
+	// This is the ID that InnerTube embeds as AuthorExternalChannelID on every chat message,
+	// so it must be used as platform_user_id — not the Google account ID from /oauth2/v2/userinfo.
+	channelID, channelErr := h.youtubeProvider.GetChannelID(c.Request.Context(), token.AccessToken)
+	if channelErr != nil {
+		h.logger.Warn("Failed to resolve YouTube channel ID; falling back to Google account ID",
+			zap.String("google_id", userInfo.ID),
+			zap.Error(channelErr),
+		)
+		// Fallback: use the Google account ID so auth still completes.
+		// Viewer matching in the enricher will not work until a channel ID is obtained.
+		channelID = userInfo.ID
+	}
+
+	// Try to find an existing session by the canonical channel ID first.
+	// If none found, also check the legacy Google account ID (backwards-compat migration).
+	session, err := h.viewerRepo.GetByPlatformUserID(c.Request.Context(), "youtube", channelID)
 	if err != nil {
 		h.redirectToFrontendWithError(c, "Failed to get session")
 		return
+	}
+	if session == nil && channelID != userInfo.ID {
+		// No session with channel ID — check for a legacy session stored under the Google account ID.
+		legacySession, legacyErr := h.viewerRepo.GetByPlatformUserID(c.Request.Context(), "youtube", userInfo.ID)
+		if legacyErr != nil {
+			h.redirectToFrontendWithError(c, "Failed to get session")
+			return
+		}
+		if legacySession != nil {
+			// Migrate the legacy session: update platform_user_id from Google ID to channel ID
+			// in both viewer_sessions and viewer_platform_identities.
+			if migErr := h.viewerRepo.MigratePlatformUserID(c.Request.Context(), "youtube", userInfo.ID, channelID); migErr != nil {
+				h.logger.Error("Failed to migrate viewer_sessions to YouTube channel ID",
+					zap.String("google_id", userInfo.ID),
+					zap.String("channel_id", channelID),
+					zap.Error(migErr),
+				)
+			} else {
+				if migErr := h.identityRepo.MigratePlatformUserID(c.Request.Context(), "youtube", userInfo.ID, channelID); migErr != nil {
+					h.logger.Error("Failed to migrate viewer_platform_identities to YouTube channel ID",
+						zap.String("google_id", userInfo.ID),
+						zap.String("channel_id", channelID),
+						zap.Error(migErr),
+					)
+				}
+				legacySession.PlatformUserID = channelID
+			}
+			session = legacySession
+		}
 	}
 
 	encryptedAccess, _ := h.cipher.Encrypt(token.AccessToken)
@@ -564,7 +610,7 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	if session == nil {
 		session = &models.ViewerSession{
 			Platform:       "youtube",
-			PlatformUserID: userInfo.ID,
+			PlatformUserID: channelID,
 			Username:       userInfo.Name,
 			DisplayName:    userInfo.Name,
 			AccessToken:    encryptedAccess,

@@ -87,6 +87,50 @@ func (y *ViewerYouTubeOAuth) GetUserInfo(ctx context.Context, accessToken string
 	return &userInfo, nil
 }
 
+// GetChannelID returns the authenticated viewer's primary YouTube channel ID (UC... format).
+// This is the ID used by InnerTube as AuthorExternalChannelID on chat messages.
+// We must use this — not the Google account ID from /oauth2/v2/userinfo — as the
+// platform_user_id for viewer identity matching.
+func (y *ViewerYouTubeOAuth) GetChannelID(ctx context.Context, accessToken string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create channel request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := y.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to query youtube channels: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return "", fmt.Errorf("youtube channels API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode channels response: %w", err)
+	}
+
+	if len(result.Items) == 0 {
+		return "", fmt.Errorf("no youtube channel found for viewer account")
+	}
+
+	channelID := result.Items[0].ID
+	if channelID == "" {
+		return "", fmt.Errorf("youtube channel response missing id")
+	}
+
+	return channelID, nil
+}
+
 // GetPlatform returns the platform identifier
 func (y *ViewerYouTubeOAuth) GetPlatform() Platform {
 	return PlatformYouTube
