@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // newTestRingBuffer creates a RingBufferPublisher with an isolated Prometheus registry
@@ -166,6 +168,45 @@ func TestRingBufferRetryUsesBackgroundContext(t *testing.T) {
 
 	require.NotNil(t, capturedCtx, "retry goroutine should have called publishFn")
 	assert.Equal(t, context.Background(), capturedCtx, "retry should use context.Background(), not the original cancelled context")
+}
+
+// TestRingBuffer_OverflowLog verifies that enqueue at capacity emits an Error-level
+// log with sentinel message "ring_buffer_overflow_drop" and required zap fields.
+func TestRingBuffer_OverflowLog(t *testing.T) {
+	publishFn := func(ctx context.Context, payload []byte) error {
+		return errors.New("redis unavailable")
+	}
+
+	// Build an observed zap logger so we can inspect emitted log entries.
+	core, logs := observer.New(zapcore.ErrorLevel)
+	logger := zap.New(core)
+
+	reg := prometheus.NewRegistry()
+	rb := NewRingBufferPublisherWithRegisterer(1, publishFn, logger, "test-service", reg)
+	defer rb.Stop()
+
+	// Fill the buffer (capacity=1, first message enqueues OK).
+	_ = rb.Publish(context.Background(), []byte("first"))
+	// Second publish triggers overflow drop.
+	_ = rb.Publish(context.Background(), []byte("second"))
+
+	entries := logs.All()
+	require.Len(t, entries, 1, "expected exactly one Error log on overflow")
+
+	entry := entries[0]
+	assert.Equal(t, zapcore.ErrorLevel, entry.Level, "overflow log must be Error level")
+	assert.Equal(t, "ring_buffer_overflow_drop", entry.Message, "overflow log must use sentinel message")
+
+	fieldMap := make(map[string]interface{})
+	for _, f := range entry.Context {
+		fieldMap[f.Key] = f.Integer
+		if f.Type == zapcore.StringType {
+			fieldMap[f.Key] = f.String
+		}
+	}
+	assert.Contains(t, fieldMap, "service", "overflow log must include 'service' field")
+	assert.Contains(t, fieldMap, "capacity", "overflow log must include 'capacity' field")
+	assert.Contains(t, fieldMap, "current_depth", "overflow log must include 'current_depth' field")
 }
 
 // TestRingBufferMultipleMessages verifies correct FIFO ordering within the ring buffer.
