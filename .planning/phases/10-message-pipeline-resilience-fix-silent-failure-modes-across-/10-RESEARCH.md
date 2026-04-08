@@ -512,22 +512,13 @@ func (m *Manager) RenewLeadership(ctx context.Context, platform, streamID, calle
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Zombie detection threshold configuration**
-   - What we know: IRC pings fire approximately every 5 minutes; ring buffer retries every 500ms
-   - What's unclear: Should the stall window be hardcoded or env-var configurable? Is 5 minutes appropriate for all deployment scenarios?
-   - Recommendation: Default 5 minutes, `ZOMBIE_STALL_WINDOW_MINUTES` env var override. Document in twitch-listener README.
+1. **Zombie detection threshold configuration** — RESOLVED: Default 5 minutes, configurable via `ZOMBIE_STALL_WINDOW_MINUTES` env var. Documented in Plan 10-01 Task 2.
 
-2. **Backoff utility placement: shared or per-service?**
-   - What we know: Three services need the same algorithm (api-gateway subscriber, api-gateway status-subscriber, message-processor consume loop)
-   - What's unclear: Whether shared/listener SDK should grow a `Backoff` utility
-   - Recommendation: Add `shared/listener/backoff.go` — three callers justifies extraction; keeps each service's reconnect loop clean.
+2. **Backoff utility placement: shared or per-service?** — RESOLVED: `shared/listener/backoff.go` with `JitteredBackoff` function. Three callers (api-gateway subscriber, api-gateway status-subscriber, message-processor consume loop) justify shared extraction. Implemented in Plan 10-01 Task 1b.
 
-3. **F-02 structured log format**
-   - What we know: Ring buffer currently calls `rb.logger.Warn("ring buffer full — dropping oldest message", ...)` and increments metric
-   - What's unclear: Does the current Warn-level log already trigger Grafana Loki alerts? If so, F-02 may only need a log level upgrade to Error.
-   - Recommendation: Upgrade to Error level with a stable sentinel message string: `"ring_buffer_overflow_drop"`. Grafana Loki can alert on this exact string.
+3. **F-02 structured log format** — RESOLVED: Upgrade to Error level with stable sentinel `"ring_buffer_overflow_drop"`. Grafana Loki alerts on this exact string. Implemented in Plan 10-01 Task 1b.
 
 ---
 
