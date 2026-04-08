@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -178,65 +180,90 @@ func (s *Subscriber) listen(ctx context.Context, overlayID string, pubsub *redis
 }
 
 // resubscribe creates a new Pub/Sub subscription for the given overlay after
-// the previous one was closed (e.g., on Redis reconnect). It increments the
-// pubsub_reconnect_total metric (D-14), stores the new subscription, and starts
-// a new listen goroutine tracked in s.wg.
+// the previous one was closed (e.g., on Redis reconnect). It retries
+// indefinitely with jittered exponential backoff until stopChan is closed.
+// Increments pubsub_reconnect_total metric on each attempt (D-14).
 //
 // AG-05: The new listen goroutine is added to wg before resubscribe returns,
 // ensuring Stop() waits for it.
 func (s *Subscriber) resubscribe(overlayID string) {
-	// AG-01: Do not re-subscribe if Stop has already been signalled
-	select {
-	case <-s.stopChan:
-		return
-	default:
-	}
+	for attempt := 0; ; attempt++ {
+		// AG-01: Do not re-subscribe if Stop has already been signalled
+		select {
+		case <-s.stopChan:
+			s.logger.Info("resubscribe cancelled — stop signal received",
+				zap.String("overlay_id", overlayID))
+			return
+		default:
+		}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+		s.mu.Lock()
 
-	// D-14: Increment reconnect metric
-	if s.metrics != nil {
-		s.metrics.PubSubReconnectTotal.WithLabelValues("api-gateway", overlayID).Inc()
-	}
+		// D-14: Increment reconnect metric
+		if s.metrics != nil {
+			s.metrics.PubSubReconnectTotal.WithLabelValues("api-gateway", overlayID).Inc()
+		}
 
-	// Close the stale subscription if it still exists
-	if oldPubsub, exists := s.subscriptions[overlayID]; exists {
-		oldPubsub.Close()
-	}
+		// Close the stale subscription on first attempt
+		if attempt == 0 {
+			if oldPubsub, exists := s.subscriptions[overlayID]; exists {
+				oldPubsub.Close()
+			}
+		}
 
-	// Determine whether this was a viewer-only subscription (main channel only)
-	// or a full subscription (main + updates channels).
-	isViewerOnly := s.viewerOnly[overlayID]
+		// Determine whether this was a viewer-only subscription (main channel only)
+		// or a full subscription (main + updates channels).
+		isViewerOnly := s.viewerOnly[overlayID]
 
-	var pubsub *redis.PubSub
-	if isViewerOnly {
-		channel := fmt.Sprintf("overlay:%s", overlayID)
-		pubsub = s.client.Subscribe(context.Background(), channel)
-	} else {
-		mainChannel := fmt.Sprintf("overlay:%s", overlayID)
-		updateChannel := fmt.Sprintf("overlay:%s:updates", overlayID)
-		pubsub = s.client.Subscribe(context.Background(), mainChannel, updateChannel)
-	}
+		var pubsub *redis.PubSub
+		if isViewerOnly {
+			channel := fmt.Sprintf("overlay:%s", overlayID)
+			pubsub = s.client.Subscribe(context.Background(), channel)
+		} else {
+			mainChannel := fmt.Sprintf("overlay:%s", overlayID)
+			updateChannel := fmt.Sprintf("overlay:%s:updates", overlayID)
+			pubsub = s.client.Subscribe(context.Background(), mainChannel, updateChannel)
+		}
 
-	if _, err := pubsub.Receive(context.Background()); err != nil {
-		s.logger.Error("Failed to re-subscribe after channel close",
+		if _, err := pubsub.Receive(context.Background()); err != nil {
+			pubsub.Close()
+			s.mu.Unlock()
+
+			s.logger.Warn("resubscribe attempt failed",
+				zap.String("overlay_id", overlayID),
+				zap.Int("attempt", attempt+1),
+				zap.Error(err))
+
+			sleep := listener.JitteredBackoff(attempt)
+			select {
+			case <-s.stopChan:
+				return
+			case <-time.After(sleep):
+			}
+			continue
+		}
+
+		s.subscriptions[overlayID] = pubsub
+		s.logger.Info("Re-subscribed to overlay channel after close",
 			zap.String("overlay_id", overlayID),
-			zap.Error(err),
+			zap.Int("attempt", attempt+1),
 		)
-		delete(s.subscriptions, overlayID)
-		delete(s.viewerOnly, overlayID)
+
+		// Check stopChan BEFORE wg.Add to prevent WaitGroup leak (Pitfall 3)
+		select {
+		case <-s.stopChan:
+			pubsub.Close()
+			s.mu.Unlock()
+			return
+		default:
+		}
+
+		// AG-05: Track the new goroutine in WaitGroup before spawning it
+		s.wg.Add(1)
+		go s.listen(context.Background(), overlayID, pubsub)
+		s.mu.Unlock()
 		return
 	}
-
-	s.subscriptions[overlayID] = pubsub
-	s.logger.Info("Re-subscribed to overlay channel after close",
-		zap.String("overlay_id", overlayID),
-	)
-
-	// AG-05: Track the new goroutine in WaitGroup before spawning it
-	s.wg.Add(1)
-	go s.listen(context.Background(), overlayID, pubsub)
 }
 
 // Stop stops all subscriptions and waits for all goroutines to finish.

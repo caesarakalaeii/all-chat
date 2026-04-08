@@ -205,3 +205,88 @@ func TestSubscriberStopChanRespectedInResubscribe(t *testing.T) {
 	sub.mu.RUnlock()
 	assert.False(t, exists, "should not have created a subscription after stop")
 }
+
+// TestSubscriberResubscribeRetriesOnFailure verifies that resubscribe retries
+// when Redis is unavailable and stops when stopChan is closed.
+func TestSubscriberResubscribeRetriesOnFailure(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+
+	sub, _ := newTestSubscriber(t, mr.Addr())
+
+	overlayID := "overlay-retry"
+
+	// Set up internal state so resubscribe has something to work with
+	sub.mu.Lock()
+	sub.subscriptions[overlayID] = sub.client.Subscribe(context.Background(), "overlay:"+overlayID)
+	sub.refCounts[overlayID] = 1
+	sub.mu.Unlock()
+
+	// Close miniredis to force failures
+	mr.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sub.resubscribe(overlayID)
+	}()
+
+	// Wait for at least a few retry attempts
+	time.Sleep(3 * time.Second)
+
+	// Stop should cause resubscribe to exit
+	close(sub.stopChan)
+
+	select {
+	case <-done:
+		// resubscribe exited cleanly
+	case <-time.After(5 * time.Second):
+		t.Fatal("resubscribe did not exit after stopChan closed")
+	}
+}
+
+// TestSubscriberResubscribeSucceedsOnSecondAttempt verifies recovery after transient failure.
+func TestSubscriberResubscribeSucceedsOnSecondAttempt(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+
+	sub, _ := newTestSubscriber(t, mr.Addr())
+
+	overlayID := "overlay-retry-success"
+
+	// Set up initial subscription state
+	sub.mu.Lock()
+	initialPubsub := sub.client.Subscribe(context.Background(), "overlay:"+overlayID)
+	sub.subscriptions[overlayID] = initialPubsub
+	sub.refCounts[overlayID] = 1
+	sub.mu.Unlock()
+
+	// Close miniredis, then restart after a short delay to simulate transient failure
+	mr.Close()
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		mr.Restart()
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sub.resubscribe(overlayID)
+	}()
+
+	select {
+	case <-done:
+		// resubscribe completed (succeeded after retry)
+	case <-time.After(10 * time.Second):
+		t.Fatal("resubscribe did not complete within timeout")
+	}
+
+	// Verify subscription exists after successful retry
+	sub.mu.RLock()
+	_, exists := sub.subscriptions[overlayID]
+	sub.mu.RUnlock()
+	assert.True(t, exists, "should have a subscription after successful retry")
+
+	sub.Stop()
+}
