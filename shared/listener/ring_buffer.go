@@ -30,8 +30,9 @@ type bufferedMsg struct {
 //
 // Call Stop() during service shutdown to cleanly drain the retry goroutine.
 type RingBufferPublisher struct {
-	publishFn PublishFunc
-	logger    *zap.Logger
+	publishFn   PublishFunc
+	logger      *zap.Logger
+	serviceName string // used in overflow log and Prometheus labels
 
 	mu       sync.Mutex
 	buf      []bufferedMsg
@@ -89,13 +90,14 @@ func NewRingBufferPublisherWithRegisterer(capacity int, publishFn PublishFunc, l
 	_ = reg.Register(dropsTotal)
 
 	rb := &RingBufferPublisher{
-		publishFn:  publishFn,
-		logger:     logger,
-		buf:        make([]bufferedMsg, capacity),
-		capacity:   capacity,
-		stopCh:     make(chan struct{}),
-		depth:      depth,
-		dropsTotal: dropsTotal,
+		publishFn:   publishFn,
+		logger:      logger,
+		serviceName: serviceName,
+		buf:         make([]bufferedMsg, capacity),
+		capacity:    capacity,
+		stopCh:      make(chan struct{}),
+		depth:       depth,
+		dropsTotal:  dropsTotal,
 	}
 
 	rb.wg.Add(1)
@@ -156,8 +158,11 @@ func (rb *RingBufferPublisher) enqueue(payload []byte) {
 		rb.size--
 		rb.dropsTotal.Inc()
 		rb.dropsCount++
-		rb.logger.Warn("ring buffer full — dropping oldest message",
+		// Error-level sentinel log matched by Grafana Loki alert rule.
+		rb.logger.Error("ring_buffer_overflow_drop",
+			zap.String("service", rb.serviceName),
 			zap.Int("capacity", rb.capacity),
+			zap.Int("current_depth", rb.size),
 		)
 	}
 
