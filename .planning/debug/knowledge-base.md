@@ -52,3 +52,11 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Files changed:** none
 ---
 
+## viewer-matching-youtube-gradient — Viewer YouTube OAuth stored Google account ID instead of YouTube channel ID; enricher lookup never matched
+- **Date:** 2026-04-08
+- **Error patterns:** white messages, no gradient, no styling, youtube, viewer, platform_user_id, enricher, cosmetics, channel ID, google account ID, UCRs6QcV9kwHu7V0LLlIvwxQ, 101802728631468199113
+- **Root cause:** The viewer YouTube OAuth callback called /oauth2/v2/userinfo which returns a numeric Google account ID. This was stored as platform_user_id in viewer_sessions and viewer_platform_identities. The InnerTube parser sets msg.User.ID = AuthorExternalChannelID (UC... format YouTube channel ID). The enricher lookup WHERE vpi.platform='youtube' AND vpi.platform_user_id=$2 never matched because the two ID systems are incompatible — Google account IDs are numeric strings, YouTube channel IDs start with UC.
+- **Fix:** Added GetChannelID() to ViewerYouTubeOAuth calling youtube/v3/channels?part=id&mine=true to fetch the UC... channel ID. Updated HandleYouTubeCallback to store channel ID as platform_user_id for new sessions. Added legacy migration path: on login with unknown channel ID, look up by Google account ID and migrate both tables. Manually migrated existing CaesarLP record in DB. Cleared stale Redis cache keys.
+- **Files changed:** services/auth-service/oauth/viewer_youtube.go, services/auth-service/handlers/viewer_auth.go, services/auth-service/repository/viewer_identity_repository.go, services/auth-service/repository/viewer_repository.go, services/auth-service/handlers/viewer_resolve_test.go
+---
+
