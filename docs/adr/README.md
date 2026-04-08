@@ -214,6 +214,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0011: Zombie Listener Detection via Received-vs-Published Drift
+
+**Status**: Accepted
+**Date**: 2026-04-08
+**Problem**: Twitch-listener pods appeared alive (IRC connected, liveness probe passing) but were not delivering messages — outages lasted 30–85 minutes requiring manual restart
+**Decision**: Add two atomic counters (messagesReceived, messagesPublished) to the liveness probe; if received advances but published stalls for 5 minutes, return HTTP 503 so Kubernetes restarts the pod automatically
+**Impact**: Zombie outages auto-recover in ~5.5 minutes; false positives on offline channels prevented via both-zero check; configurable stall window via ZOMBIE_STALL_WINDOW_MINUTES
+**Read**: [0011-zombie-listener-detection.md](./0011-zombie-listener-detection.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -335,13 +346,13 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 10
+**Total ADRs**: 11
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-04-04
+**Last Updated**: 2026-04-08
