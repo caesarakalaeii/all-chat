@@ -29,6 +29,17 @@ const (
 	PeerTTL = 30 * time.Second
 )
 
+// renewScript atomically checks whether the caller owns the lock and renews its TTL.
+// Returns 1 if renewed, 0 if the caller does not own the lock or the key has expired.
+// This eliminates the TOCTOU window between GET and EXPIRE in the previous implementation.
+var renewScript = redis.NewScript(`
+	if redis.call("get", KEYS[1]) == ARGV[1] then
+		return redis.call("expire", KEYS[1], ARGV[2])
+	else
+		return 0
+	end
+`)
+
 // Manager handles leader election using Redis distributed locks
 type Manager struct {
 	client     *redis.Client
@@ -84,42 +95,18 @@ func (m *Manager) TryAcquireLeadership(ctx context.Context, platform, streamID, 
 	return success, nil
 }
 
-// RenewLeadership renews the leadership lock (heartbeat)
-// Returns true if renewal was successful, false if lost leadership
+// RenewLeadership renews the leadership lock (heartbeat).
+// Returns true if renewal was successful, false if lost leadership.
+// Uses a Lua script for atomic ownership check + TTL renewal, eliminating the
+// TOCTOU race window that existed between the previous GET and EXPIRE calls.
 func (m *Manager) RenewLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error) {
 	key := m.leaderKey(platform, streamID)
 	if callerID == "" {
 		callerID = m.instanceID
 	}
 
-	// Check if we are still the leader
-	currentLeader, err := m.client.Get(ctx, key).Result()
-	if err == redis.Nil {
-		// Lock expired
-		return false, nil
-	}
-	if err != nil {
-		m.logger.Error("Failed to check leadership",
-			zap.String("platform", platform),
-			zap.String("stream_id", streamID),
-			zap.Error(err),
-		)
-		return false, fmt.Errorf("failed to check leadership: %w", err)
-	}
-
-	if currentLeader != callerID {
-		// Someone else is leader
-		m.logger.Warn("Lost leadership",
-			zap.String("platform", platform),
-			zap.String("stream_id", streamID),
-			zap.String("current_leader", currentLeader),
-			zap.String("caller_id", callerID),
-		)
-		return false, nil
-	}
-
-	// Renew the lock
-	err = m.client.Expire(ctx, key, m.lockTTL).Err()
+	result, err := renewScript.Run(ctx, m.client, []string{key},
+		callerID, int(m.lockTTL.Seconds())).Int()
 	if err != nil {
 		m.logger.Error("Failed to renew leadership",
 			zap.String("platform", platform),
@@ -129,12 +116,20 @@ func (m *Manager) RenewLeadership(ctx context.Context, platform, streamID, calle
 		return false, fmt.Errorf("failed to renew leadership: %w", err)
 	}
 
-	m.logger.Debug("Renewed leadership",
-		zap.String("platform", platform),
-		zap.String("stream_id", streamID),
-	)
+	if result == 1 {
+		m.logger.Debug("Renewed leadership",
+			zap.String("platform", platform),
+			zap.String("stream_id", streamID),
+		)
+	} else {
+		m.logger.Warn("Lost leadership",
+			zap.String("platform", platform),
+			zap.String("stream_id", streamID),
+			zap.String("caller_id", callerID),
+		)
+	}
 
-	return true, nil
+	return result == 1, nil
 }
 
 // ReleaseLeadership releases leadership for a stream

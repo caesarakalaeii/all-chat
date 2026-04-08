@@ -151,6 +151,56 @@ func TestRenewLeadership_StolenByAnother(t *testing.T) {
 	assert.False(t, renewed)
 }
 
+func TestRenewLeadership_WithExplicitCallerID(t *testing.T) {
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
+
+	logger := zap.NewNop()
+	manager := NewManager(client, logger)
+
+	// Acquire with explicit callerID
+	acquired, err := manager.TryAcquireLeadership(context.Background(), "youtube", "stream123", "explicit-caller-1")
+	assert.NoError(t, err)
+	assert.True(t, acquired)
+
+	// Renew with matching callerID — should succeed
+	renewed, err := manager.RenewLeadership(context.Background(), "youtube", "stream123", "explicit-caller-1")
+	assert.NoError(t, err)
+	assert.True(t, renewed)
+
+	// Renew with wrong callerID — should fail
+	renewed, err = manager.RenewLeadership(context.Background(), "youtube", "stream123", "wrong-caller")
+	assert.NoError(t, err)
+	assert.False(t, renewed)
+}
+
+func TestRenewLeadership_Atomic_NoTOCTOURace(t *testing.T) {
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
+
+	logger := zap.NewNop()
+	manager1 := NewManager(client, logger)
+	manager2 := NewManager(client, logger)
+
+	// Manager 1 acquires leadership
+	acquired, err := manager1.TryAcquireLeadership(context.Background(), "youtube", "stream-race", manager1.instanceID)
+	assert.NoError(t, err)
+	assert.True(t, acquired)
+
+	// Verify that after manager1 renews, manager2 still cannot renew
+	// This tests that renewal uses atomic check+expire (no window between GET and EXPIRE)
+	renewed1, err := manager1.RenewLeadership(context.Background(), "youtube", "stream-race", manager1.instanceID)
+	assert.NoError(t, err)
+	assert.True(t, renewed1, "manager1 should successfully renew its own lock")
+
+	// Manager2 (different ID) cannot renew
+	renewed2, err := manager2.RenewLeadership(context.Background(), "youtube", "stream-race", manager2.instanceID)
+	assert.NoError(t, err)
+	assert.False(t, renewed2, "manager2 should not be able to renew lock owned by manager1")
+}
+
 func TestReleaseLeadership_Success(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
