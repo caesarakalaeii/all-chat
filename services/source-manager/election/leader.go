@@ -249,31 +249,35 @@ func (m *Manager) GetAllLeadership(ctx context.Context) ([]*models.LeadershipSta
 }
 
 // RegisterPeer registers a caller as an active peer for the given platform and returns
-// the total number of active peers. Peers expire after PeerTTL if not re-registered.
+// the total number of active peers. Uses a Redis sorted set where each member is a
+// callerID and its score is the Unix expiry timestamp. This gives O(log N) registration
+// and O(1) count via ZCARD, replacing the previous O(N) SCAN approach.
 func (m *Manager) RegisterPeer(ctx context.Context, platform, callerID string) (int, error) {
-	key := m.peerKey(platform, callerID)
+	key := fmt.Sprintf("peers:%s", platform)
+	expiry := float64(time.Now().Add(PeerTTL).Unix())
 
-	if err := m.client.Set(ctx, key, "1", PeerTTL).Err(); err != nil {
+	// ZADD: add or update the member's expiry score (overwrites existing member on re-registration)
+	if err := m.client.ZAdd(ctx, key, redis.Z{
+		Score:  expiry,
+		Member: callerID,
+	}).Err(); err != nil {
 		return 0, fmt.Errorf("failed to register peer: %w", err)
 	}
 
-	// Count all peers for this platform
-	pattern := fmt.Sprintf("%s:%s:*", PeerKeyPrefix, platform)
-	var count int
-	iter := m.client.Scan(ctx, 0, pattern, 0).Iterator()
-	for iter.Next(ctx) {
-		count++
-	}
-	if err := iter.Err(); err != nil {
+	// Remove expired members (score < current Unix time)
+	now := fmt.Sprintf("%d", time.Now().Unix())
+	m.client.ZRemRangeByScore(ctx, key, "-inf", now)
+
+	// Count remaining active members (O(1))
+	count, err := m.client.ZCard(ctx, key).Result()
+	if err != nil {
 		return 0, fmt.Errorf("failed to count peers: %w", err)
 	}
 
-	return count, nil
-}
+	// Set key TTL to prevent orphaned sorted sets (2x PeerTTL)
+	m.client.Expire(ctx, key, PeerTTL*2)
 
-// peerKey generates the Redis key for a peer registration
-func (m *Manager) peerKey(platform, callerID string) string {
-	return fmt.Sprintf("%s:%s:%s", PeerKeyPrefix, platform, callerID)
+	return int(count), nil
 }
 
 // leaderKey generates the Redis key for a leader lock

@@ -345,6 +345,10 @@ func TestRegisterPeer_PlatformIsolation(t *testing.T) {
 }
 
 func TestRegisterPeer_Expiry(t *testing.T) {
+	// The sorted-set implementation uses ZRemRangeByScore to remove members whose
+	// score (Unix expiry timestamp) is in the past. We simulate expiry by directly
+	// removing stale members via the sorted set rather than relying on miniredis
+	// key-level FastForward (which only affects key TTLs, not scores).
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
 	defer client.Close()
@@ -352,19 +356,82 @@ func TestRegisterPeer_Expiry(t *testing.T) {
 	logger := zap.NewNop()
 	manager := NewManager(client, logger)
 
-	// Register two peers
-	_, err := manager.RegisterPeer(context.Background(), "twitch", "caller-a")
+	// Register two peers with a very short effective TTL by using a manager with a
+	// tiny peerTTL so that the registered scores are already in the past when the
+	// next call removes them.
+	shortManager := &Manager{
+		client:     client,
+		instanceID: manager.instanceID,
+		lockTTL:    manager.lockTTL,
+		logger:     manager.logger,
+	}
+
+	_, err := shortManager.RegisterPeer(context.Background(), "twitch", "caller-a")
 	assert.NoError(t, err)
-	_, err = manager.RegisterPeer(context.Background(), "twitch", "caller-b")
+	_, err = shortManager.RegisterPeer(context.Background(), "twitch", "caller-b")
 	assert.NoError(t, err)
 
-	// Fast-forward past TTL
-	mr.FastForward(PeerTTL + time.Second)
+	// Manually expire both members by setting their scores to the past
+	key := "peers:twitch"
+	pastScore := float64(time.Now().Add(-2 * time.Second).Unix())
+	client.ZAdd(context.Background(), key, redis.Z{Score: pastScore, Member: "caller-a"})
+	client.ZAdd(context.Background(), key, redis.Z{Score: pastScore, Member: "caller-b"})
 
-	// Register new peer — old ones should have expired
+	// Register new peer — expired ones should be removed by ZRemRangeByScore
 	count, err := manager.RegisterPeer(context.Background(), "twitch", "caller-c")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
+}
+
+func TestRegisterPeer_UsesSortedSet(t *testing.T) {
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
+
+	logger := zap.NewNop()
+	manager := NewManager(client, logger)
+
+	count, err := manager.RegisterPeer(context.Background(), "twitch", "caller-a")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Verify sorted set key exists (not individual peer keys)
+	keys, err := client.Keys(context.Background(), "peers:twitch").Result()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(keys), "should have exactly one sorted set key")
+
+	// Verify the member is in the sorted set
+	members, err := client.ZRange(context.Background(), "peers:twitch", 0, -1).Result()
+	assert.NoError(t, err)
+	assert.Contains(t, members, "caller-a")
+}
+
+func TestRegisterPeer_UpdatesExistingPeerExpiry(t *testing.T) {
+	client, mr := setupTestRedis(t)
+	defer mr.Close()
+	defer client.Close()
+
+	logger := zap.NewNop()
+	manager := NewManager(client, logger)
+
+	// Register peer once
+	count, err := manager.RegisterPeer(context.Background(), "twitch", "caller-a")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Get initial score
+	initialScore, err := client.ZScore(context.Background(), "peers:twitch", "caller-a").Result()
+	assert.NoError(t, err)
+
+	// Wait a tiny bit and re-register — score should be updated (same or higher)
+	time.Sleep(1 * time.Millisecond)
+	count, err = manager.RegisterPeer(context.Background(), "twitch", "caller-a")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count, "re-registration should not increase count")
+
+	updatedScore, err := client.ZScore(context.Background(), "peers:twitch", "caller-a").Result()
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, updatedScore, initialScore, "re-registration should update expiry score")
 }
 
 func TestParseLeaderKey(t *testing.T) {
