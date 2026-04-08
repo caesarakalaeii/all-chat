@@ -605,6 +605,117 @@ func newSlowJoinParter(blockCh chan struct{}) *slowJoinParter {
 	}
 }
 
+// TestManager_AtomicProbe_InitialSyncComplete verifies that IsInitialSyncComplete
+// reads from an atomic field — it returns the correct value without acquiring the mutex.
+// The test holds the write lock from a goroutine while checking the probe method
+// to confirm there is no deadlock.
+func TestManager_AtomicProbe_InitialSyncComplete(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{channels: []string{"xqc"}}
+	mockJP := NewMockJoinParter()
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	require.NoError(t, manager.SyncChannels(ctx))
+
+	// Hold the write lock from another goroutine.
+	released := make(chan struct{})
+	manager.mu.Lock()
+	go func() {
+		defer manager.mu.Unlock()
+		<-released
+	}()
+
+	// IsInitialSyncComplete must return immediately despite the write lock.
+	done := make(chan bool, 1)
+	go func() {
+		done <- manager.IsInitialSyncComplete()
+	}()
+
+	select {
+	case result := <-done:
+		assert.True(t, result)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("IsInitialSyncComplete blocked — it must use atomic.Bool, not mutex")
+	}
+
+	close(released) // let the write-lock goroutine exit
+}
+
+// TestManager_AtomicProbe_ActiveChannelCount verifies GetActiveChannelCount reads
+// from an atomic field without blocking on the mutex.
+func TestManager_AtomicProbe_ActiveChannelCount(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{channels: []string{"xqc", "summit1g", "shroud"}}
+	mockJP := NewMockJoinParter()
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	require.NoError(t, manager.SyncChannels(ctx))
+	assert.Equal(t, 3, manager.GetActiveChannelCount())
+
+	// Hold the write lock from another goroutine.
+	released := make(chan struct{})
+	manager.mu.Lock()
+	go func() {
+		defer manager.mu.Unlock()
+		<-released
+	}()
+
+	done := make(chan int, 1)
+	go func() {
+		done <- manager.GetActiveChannelCount()
+	}()
+
+	select {
+	case count := <-done:
+		assert.Equal(t, 3, count)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("GetActiveChannelCount blocked — it must use atomic.Int64, not mutex")
+	}
+
+	close(released)
+}
+
+// TestManager_AtomicProbe_FilteredAssignmentCount verifies GetFilteredAssignmentCount
+// reads from an atomic field without blocking on the mutex.
+func TestManager_AtomicProbe_FilteredAssignmentCount(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{channels: []string{"xqc", "summit1g"}}
+	mockJP := NewMockJoinParter()
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	require.NoError(t, manager.SyncChannels(ctx))
+	// filteredAssignmentCount equals len(desiredChannels) when assignedSourceIDs is nil
+	assert.Equal(t, 2, manager.GetFilteredAssignmentCount())
+
+	// Hold the write lock from another goroutine.
+	released := make(chan struct{})
+	manager.mu.Lock()
+	go func() {
+		defer manager.mu.Unlock()
+		<-released
+	}()
+
+	done := make(chan int, 1)
+	go func() {
+		done <- manager.GetFilteredAssignmentCount()
+	}()
+
+	select {
+	case count := <-done:
+		assert.Equal(t, 2, count)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("GetFilteredAssignmentCount blocked — it must use atomic.Int64, not mutex")
+	}
+
+	close(released)
+}
+
 func TestIsTwitchNotification(t *testing.T) {
 	tests := []struct {
 		name    string
