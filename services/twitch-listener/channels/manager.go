@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/caesar/all-chat/services/twitch-listener/status"
@@ -60,7 +61,14 @@ type Manager struct {
 	redisClient      *redis.Client                // Redis client for migration confirmations
 	podID            string                       // Pod ID for migration confirmations
 	statusPublisher  *status.Publisher            // Publishes platform status to Redis Pub/Sub
-	initialSyncDone  bool                         // Set to true after the first SyncChannels completes
+	initialSyncDone  bool                         // Set to true after the first SyncChannels completes (legacy, kept for vet)
+
+	// Atomic fields for lock-free health probe reads (F-01).
+	// These shadow the mutex-protected values so that liveness/readiness probe
+	// HTTP handlers can read them without competing for m.mu.
+	initialSyncDoneAtomic          atomic.Bool
+	activeChannelCountAtomic       atomic.Int64
+	filteredAssignmentCountAtomic  atomic.Int64
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -137,6 +145,7 @@ func (m *Manager) ClearActiveChannels() {
 	m.mu.Lock()
 	count := len(m.activeChans)
 	m.activeChans = make(map[string]bool)
+	m.activeChannelCountAtomic.Store(0)
 	m.mu.Unlock()
 	m.logger.Warn("Cleared active channels due to IRC disconnect",
 		zap.Int("cleared_count", count),
@@ -413,8 +422,9 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 
-		// Store filtered count for readiness probe
+		// Store filtered count for readiness probe (atomic + legacy field)
 		m.filteredAssignmentCount = filteredCount
+		m.filteredAssignmentCountAtomic.Store(int64(filteredCount))
 
 		// Convert to map for easier lookup, excluding channels shed by rebalancing
 		desiredMap := make(map[string]bool)
@@ -536,20 +546,18 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	// Mark initial sync as done after first successful completion.
 	// When leadership is enabled the pod may own 0 channels (all locks held by peer),
 	// so the readiness probe uses this flag instead of requiring activeChannelCount > 0.
-	m.mu.Lock()
-	m.initialSyncDone = true
-	m.mu.Unlock()
+	// Store atomically so that health probe readers never need to acquire m.mu.
+	m.initialSyncDoneAtomic.Store(true)
 
 	return nil
 }
 
-// verifyCoverageComplete checks if all database sources have coordinator assignments
-// Returns false if any source lacks assignment (prevents message loss)
-// Queries Redis for global assignment coverage across all pods
+// verifyCoverageComplete checks if all database sources have coordinator assignments.
+// Returns false if any source lacks assignment (prevents message loss).
+// Queries Redis for global assignment coverage across all pods.
+// Does NOT hold m.mu — all data comes from the sourceIDMap parameter and Redis,
+// so this method can run concurrently with health probe readers.
 func (m *Manager) verifyCoverageComplete(ctx context.Context, sourceIDMap map[string]string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	// Query all assignments from Redis for global coverage check
 	globalAssignedIDs := make(map[string]bool)
 	iter := m.redisClient.Scan(ctx, 0, "shard:assignment:*", 0).Iterator()
@@ -567,8 +575,12 @@ func (m *Manager) verifyCoverageComplete(ctx context.Context, sourceIDMap map[st
 		m.logger.Warn("Failed to scan Redis assignments for coverage check, using local assignments",
 			zap.Error(err),
 		)
-		// Fallback to local assignments on error
-		globalAssignedIDs = m.assignedSourceIDs
+		// Fallback to local assignments on error — brief read lock for assignedSourceIDs.
+		m.mu.RLock()
+		for id := range m.assignedSourceIDs {
+			globalAssignedIDs[id] = true
+		}
+		m.mu.RUnlock()
 	}
 
 	unassignedSources := make([]string, 0)
@@ -625,6 +637,7 @@ func (m *Manager) joinChannel(ctx context.Context, channel string) {
 
 	m.mu.Lock()
 	m.activeChans[channel] = true
+	m.activeChannelCountAtomic.Store(int64(len(m.activeChans)))
 	m.mu.Unlock()
 
 	// Update database status
@@ -659,6 +672,7 @@ func (m *Manager) partChannel(ctx context.Context, channel string, releaseLeader
 
 	m.mu.Lock()
 	delete(m.activeChans, channel)
+	m.activeChannelCountAtomic.Store(int64(len(m.activeChans)))
 	m.mu.Unlock()
 
 	if releaseLeadership && m.leader != nil {
@@ -693,6 +707,7 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, channel string) {
 
 	m.joinParter.Depart(channel)
 	delete(m.activeChans, channel)
+	m.activeChannelCountAtomic.Store(int64(len(m.activeChans)))
 
 	// Don't deactivate database sources when losing leadership
 	// Another instance will take over polling
@@ -715,11 +730,11 @@ func (m *Manager) GetActiveChannels() []string {
 	return channels
 }
 
-// GetActiveChannelCount returns the number of currently joined channels
+// GetActiveChannelCount returns the number of currently joined channels.
+// Reads from an atomic counter — safe to call from health probe handlers
+// without competing with SyncChannels for m.mu.
 func (m *Manager) GetActiveChannelCount() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.activeChans)
+	return int(m.activeChannelCountAtomic.Load())
 }
 
 // IsChannelActive checks if a channel is currently joined
@@ -743,21 +758,19 @@ func (m *Manager) GetAssignmentCount() int {
 	return len(m.assignedSourceIDs)
 }
 
-// GetFilteredAssignmentCount returns the number of assigned sources that have database channels
-// Used by readiness probe to check if all filtered assigned channels are active
+// GetFilteredAssignmentCount returns the number of assigned sources that have database channels.
+// Used by readiness probe to check if all filtered assigned channels are active.
+// Reads from an atomic counter — safe to call from health probe handlers without competing for m.mu.
 func (m *Manager) GetFilteredAssignmentCount() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.filteredAssignmentCount
+	return int(m.filteredAssignmentCountAtomic.Load())
 }
 
 // IsInitialSyncComplete returns true after the first SyncChannels has completed successfully.
 // When leadership is enabled a pod may legitimately own 0 channels (all Redis locks held by
 // peer), so the readiness probe uses this flag rather than requiring activeChannelCount > 0.
+// Reads from an atomic flag — safe to call from health probe handlers without competing for m.mu.
 func (m *Manager) IsInitialSyncComplete() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.initialSyncDone
+	return m.initialSyncDoneAtomic.Load()
 }
 
 // IsLeadershipEnabled returns true when the manager is configured with a
@@ -854,6 +867,7 @@ func (m *Manager) joinChannelsMultipleConnectionsUnlocked(ctx context.Context, c
 
 			m.mu.Lock()
 			m.activeChans[ch] = true
+			m.activeChannelCountAtomic.Store(int64(len(m.activeChans)))
 			m.mu.Unlock()
 
 			joined = append(joined, ch)
