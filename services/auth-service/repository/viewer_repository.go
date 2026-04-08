@@ -184,6 +184,22 @@ func (r *ViewerRepository) Update(ctx context.Context, session *models.ViewerSes
 	return nil
 }
 
+// MigratePlatformUserID updates the platform_user_id for an existing session identified by
+// (platform, oldPlatformUserID) to newPlatformUserID.  This is used when a viewer previously
+// authenticated with a Google account ID but we now have their proper YouTube channel ID.
+// The update is applied to viewer_sessions only; caller must separately update
+// viewer_platform_identities via ViewerIdentityRepository.MigratePlatformUserID.
+func (r *ViewerRepository) MigratePlatformUserID(ctx context.Context, platform, oldPlatformUserID, newPlatformUserID string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE viewer_sessions SET platform_user_id = $3, updated_at = NOW() WHERE platform = $1 AND platform_user_id = $2`,
+		platform, oldPlatformUserID, newPlatformUserID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to migrate viewer_sessions platform_user_id: %w", err)
+	}
+	return nil
+}
+
 // UpdateRateLimits updates the rate limiting counters
 func (r *ViewerRepository) UpdateRateLimits(ctx context.Context, sessionID uuid.UUID, count1Min, count1Hour int, reset1Min, reset1Hour time.Time) error {
 	query := `

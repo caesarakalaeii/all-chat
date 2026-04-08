@@ -16,12 +16,13 @@ import (
 
 // mockViewerIdentityRepo is a test double for ViewerIdentityRepo.
 type mockViewerIdentityRepo struct {
-	getOrCreate      func(ctx context.Context, platform, platformUserID string) (uuid.UUID, error)
-	linkPlatform     func(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) error
-	linkViewerToUser func(ctx context.Context, platform, platformUserID, userID string, isPremium bool) error
-	getIsPremium     func(ctx context.Context, viewerID uuid.UUID) (bool, error)
-	getLinked        func(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
-	unlinkPlatform   func(ctx context.Context, viewerID uuid.UUID, platform string) error
+	getOrCreate           func(ctx context.Context, platform, platformUserID string) (uuid.UUID, error)
+	linkPlatform          func(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) error
+	linkViewerToUser      func(ctx context.Context, platform, platformUserID, userID string, isPremium bool) error
+	getIsPremium          func(ctx context.Context, viewerID uuid.UUID) (bool, error)
+	getLinked             func(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
+	unlinkPlatform        func(ctx context.Context, viewerID uuid.UUID, platform string) error
+	migratePlatformUserID func(ctx context.Context, platform, oldID, newID string) error
 }
 
 func (m *mockViewerIdentityRepo) GetOrCreateViewerByPlatform(ctx context.Context, platform, platformUserID string) (uuid.UUID, error) {
@@ -62,6 +63,13 @@ func (m *mockViewerIdentityRepo) GetLinkedPlatforms(ctx context.Context, viewerI
 func (m *mockViewerIdentityRepo) UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error {
 	if m.unlinkPlatform != nil {
 		return m.unlinkPlatform(ctx, viewerID, platform)
+	}
+	return nil
+}
+
+func (m *mockViewerIdentityRepo) MigratePlatformUserID(ctx context.Context, platform, oldID, newID string) error {
+	if m.migratePlatformUserID != nil {
+		return m.migratePlatformUserID(ctx, platform, oldID, newID)
 	}
 	return nil
 }
@@ -394,5 +402,48 @@ func TestHandleUnlinkPlatform_NotLinked_Returns404(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Tests for MigratePlatformUserID (interface contract)
+// ---------------------------------------------------------------------------
+
+// TestMockViewerIdentityRepo_MigratePlatformUserID verifies that the mock correctly
+// calls the provided migratePlatformUserID function and returns nil by default.
+// This also exercises the ViewerIdentityRepo interface constraint — if
+// ViewerIdentityRepository does not implement MigratePlatformUserID, the
+// compile-time interface check below will fail.
+func TestMockViewerIdentityRepo_MigratePlatformUserID_CallsFunc(t *testing.T) {
+	called := false
+	gotPlatform, gotOld, gotNew := "", "", ""
+
+	mock := &mockViewerIdentityRepo{
+		migratePlatformUserID: func(_ context.Context, platform, oldID, newID string) error {
+			called = true
+			gotPlatform = platform
+			gotOld = oldID
+			gotNew = newID
+			return nil
+		},
+	}
+
+	err := mock.MigratePlatformUserID(context.Background(), "youtube", "101802728631468199113", "UCxxxxxx")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("migratePlatformUserID func was not called")
+	}
+	if gotPlatform != "youtube" || gotOld != "101802728631468199113" || gotNew != "UCxxxxxx" {
+		t.Errorf("unexpected args: platform=%q old=%q new=%q", gotPlatform, gotOld, gotNew)
+	}
+}
+
+func TestMockViewerIdentityRepo_MigratePlatformUserID_DefaultNil(t *testing.T) {
+	mock := &mockViewerIdentityRepo{}
+	err := mock.MigratePlatformUserID(context.Background(), "youtube", "old", "new")
+	if err != nil {
+		t.Errorf("expected nil error by default, got %v", err)
 	}
 }

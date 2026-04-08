@@ -354,6 +354,20 @@ func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID 
 	return nil
 }
 
+// MigratePlatformUserID updates the platform_user_id in viewer_platform_identities for a viewer
+// previously identified by (platform, oldPlatformUserID) to newPlatformUserID.  This is used to
+// migrate existing YouTube viewers from the Google account ID to the YouTube channel ID.
+func (r *ViewerIdentityRepository) MigratePlatformUserID(ctx context.Context, platform, oldPlatformUserID, newPlatformUserID string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE viewer_platform_identities SET platform_user_id = $3 WHERE platform = $1 AND platform_user_id = $2`,
+		platform, oldPlatformUserID, newPlatformUserID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to migrate viewer_platform_identities platform_user_id: %w", err)
+	}
+	return nil
+}
+
 // GetViewerIsPremium returns the is_premium flag for a viewer.
 func (r *ViewerIdentityRepository) GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error) {
 	var isPremium bool
