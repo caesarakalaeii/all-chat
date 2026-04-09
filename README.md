@@ -96,14 +96,14 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 | Platform | How it works | What you get |
 |----------|-------------|--------------|
 | **Twitch** | IRC + EventSub webhooks | Chat, emotes (native + 7TV/BTTV/FFZ), badges, colors, channel points, raids, follows |
-| **YouTube** | HTTP polling + InnerTube API | Chat, Super Chat, member badges, multi-stream selection (public streams only — unlisted/private not supported) |
+| **YouTube** | HTTP polling + InnerTube API | Chat, Super Chat, member badges, multi-stream selection (public, currently live streams only) |
 | **Kick** | Pusher WebSocket | Chat, emotes, badges, message deletion |
 | **TikTok** | Unofficial live connector library | Chat messages, username-based display |
 | **Discord** | Bot gateway + webhook relay | Channel chat relay to overlay |
 
 > YouTube has two listener modes: the official **YouTube Data API** (quota-tracked with reserve-confirm-rollback) and an **InnerTube poller** that costs zero quota. Both are production-ready.
 >
-> **Note:** YouTube unlisted and private streams are not supported. Stream discovery relies on YouTube's public search API (`search.list` with `eventType=live`), which only returns publicly listed streams.
+> **Note:** Only public, currently live YouTube streams are supported. Unlisted streams, private streams, and scheduled (upcoming) streams do not work. Stream discovery relies on YouTube's public search API (`search.list` with `eventType=live`), which only returns streams that are both public and actively broadcasting.
 
 ---
 
