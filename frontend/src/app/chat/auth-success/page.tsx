@@ -31,11 +31,11 @@ function AuthSuccessContent() {
 
   useEffect(() => {
     const handleSuccess = async () => {
-      const token = searchParams.get('token')
+      const code = searchParams.get('code')
       const streamer = searchParams.get('streamer')
 
-      if (!token) {
-        setError('No authentication token received')
+      if (!code) {
+        setError('No authentication code received')
         setLoading(false)
 
         // Notify opener (extension) about error
@@ -43,11 +43,31 @@ function AuthSuccessContent() {
           window.opener.postMessage(
             {
               type: 'ALLCHAT_AUTH_ERROR',
-              error: 'No authentication token received',
+              error: 'No authentication code received',
             },
             '*'
           )
         }
+        return
+      }
+
+      // Exchange short-lived code for JWT token
+      let token: string
+      try {
+        const resp = await fetch('/api/v1/auth/viewer/token/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        })
+        if (!resp.ok) {
+          throw new Error(`Exchange failed: ${resp.status}`)
+        }
+        const data = await resp.json()
+        token = data.token
+      } catch (err) {
+        console.error('Token exchange failed:', err)
+        setError('Authentication failed. The code may have expired — please try again.')
+        setLoading(false)
         return
       }
 
