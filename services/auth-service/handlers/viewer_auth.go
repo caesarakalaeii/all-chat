@@ -91,6 +91,44 @@ func (h *ViewerAuthHandler) WithMetrics(m *metrics.BusinessMetrics) *ViewerAuthH
 	return h
 }
 
+const authCodeTTL = 60 * time.Second
+
+// storeAuthCode saves a JWT under a random code in Redis and returns the code.
+func (h *ViewerAuthHandler) storeAuthCode(ctx context.Context, jwtToken string) (string, error) {
+	code := uuid.New().String()
+	key := "auth_code:" + code
+	if err := h.redis.Set(ctx, key, jwtToken, authCodeTTL).Err(); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
+// HandleTokenExchange swaps a short-lived auth code for the JWT token.
+// POST /viewer/token/exchange { "code": "..." }
+func (h *ViewerAuthHandler) HandleTokenExchange(c *gin.Context) {
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "code is required"})
+		return
+	}
+
+	key := "auth_code:" + req.Code
+	token, err := h.redis.GetDel(c.Request.Context(), key).Result()
+	if err == redis.Nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired code"})
+		return
+	}
+	if err != nil {
+		h.logger.Error("Failed to retrieve auth code", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
 // findLinkedStreamer returns the streamer (dashboard user) that shares the given platform identity,
 // or nil if no such account exists or the lookup fails.
 func (h *ViewerAuthHandler) findLinkedStreamer(ctx context.Context, platform, platformUserID string) *models.User {
@@ -280,8 +318,16 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		return
 	}
 
-	// Redirect to frontend with JWT token and optional context
-	redirectURL := fmt.Sprintf("%s/chat/auth-success?token=%s", h.frontendURL, jwtToken)
+	// Store JWT under a short-lived auth code and redirect with the code
+	
+	authCode, err := h.storeAuthCode(c.Request.Context(), jwtToken)
+	if err != nil {
+		h.logger.Error("Failed to store auth code", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to generate auth code")
+		return
+	}
+
+	redirectURL := fmt.Sprintf("%s/chat/auth-success?code=%s", h.frontendURL, authCode)
 	if streamer, ok := stateData["streamer"]; ok && streamer != "" {
 		redirectURL += fmt.Sprintf("&streamer=%s", streamer)
 	}
@@ -676,7 +722,15 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	redirectURL := fmt.Sprintf("%s/chat/auth-success?token=%s", h.frontendURL, jwtToken)
+	
+	authCode, err := h.storeAuthCode(c.Request.Context(), jwtToken)
+	if err != nil {
+		h.logger.Error("Failed to store auth code", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to generate auth code")
+		return
+	}
+
+	redirectURL := fmt.Sprintf("%s/chat/auth-success?code=%s", h.frontendURL, authCode)
 	if streamer, ok := storedState["streamer"]; ok {
 		redirectURL += fmt.Sprintf("&streamer=%s", streamer)
 	}
@@ -879,8 +933,16 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		return
 	}
 
-	// Redirect to frontend
-	redirectURL := fmt.Sprintf("%s/chat/auth-success?token=%s", h.frontendURL, jwtToken)
+	// Store JWT under short-lived code and redirect
+	
+	authCode, err := h.storeAuthCode(c.Request.Context(), jwtToken)
+	if err != nil {
+		h.logger.Error("Failed to store auth code", zap.Error(err))
+		h.redirectToFrontendWithError(c, "Failed to generate auth code")
+		return
+	}
+
+	redirectURL := fmt.Sprintf("%s/chat/auth-success?code=%s", h.frontendURL, authCode)
 	if streamer, ok := storedState["streamer"]; ok {
 		redirectURL += fmt.Sprintf("&streamer=%s", streamer)
 	}

@@ -319,6 +319,9 @@ func main() {
 	router.GET("/viewer/kick/callback", viewerAuthHandler.HandleKickCallback)
 	router.POST("/viewer/kick/exchange", viewerAuthHandler.HandleKickExchange)
 
+	// Auth code exchange (viewer trades short-lived code for JWT)
+	router.POST("/viewer/token/exchange", viewerAuthHandler.HandleTokenExchange)
+
 	// Public streamer info routes
 	router.GET("/streamers/:username", streamerInfoHandler.HandleGetStreamerInfo)
 
