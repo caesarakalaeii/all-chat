@@ -9,6 +9,7 @@ import (
 
 	"github.com/caesar/all-chat/services/share-service/models"
 	"github.com/caesar/all-chat/services/share-service/repository"
+	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,6 +28,7 @@ type ShareHandler struct {
 	db            *pgxpool.Pool
 	logger        *zap.Logger
 	cycleDetector CycleDetector
+	jwtSecret     string
 }
 
 // NewShareHandler creates a new share handler
@@ -36,6 +38,7 @@ func NewShareHandler(
 	db *pgxpool.Pool,
 	logger *zap.Logger,
 	cycleDetector CycleDetector,
+	jwtSecret string,
 ) *ShareHandler {
 	return &ShareHandler{
 		shareRepo:     shareRepo,
@@ -43,6 +46,7 @@ func NewShareHandler(
 		db:            db,
 		logger:        logger,
 		cycleDetector: cycleDetector,
+		jwtSecret:     jwtSecret,
 	}
 }
 
@@ -372,6 +376,13 @@ func (h *ShareHandler) notifyShareAccepted(ctx context.Context, senderUserID, sh
 	req, _ := http.NewRequestWithContext(ctx, "POST", "http://api-gateway:8080/internal/ws/notify", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
+	serviceToken, err := auth.GenerateServiceJWT("share-service", h.jwtSecret, 30*time.Second)
+	if err != nil {
+		h.logger.Error("Failed to generate service JWT for notification", zap.Error(err))
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+serviceToken)
+
 	resp, err := client.Do(req)
 	if err != nil {
 		h.logger.Error("Failed to send WebSocket notification", zap.Error(err))
@@ -620,6 +631,13 @@ func (h *ShareHandler) notifyShareRevoked(ctx context.Context, targetUserID, sha
 	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequestWithContext(ctx, "POST", "http://api-gateway:8080/internal/ws/notify", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
+
+	serviceToken, err := auth.GenerateServiceJWT("share-service", h.jwtSecret, 30*time.Second)
+	if err != nil {
+		h.logger.Error("Failed to generate service JWT for revocation notification", zap.Error(err))
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+serviceToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
