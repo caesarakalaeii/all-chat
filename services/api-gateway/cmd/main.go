@@ -293,6 +293,7 @@ func main() {
 	// Apply global middleware
 	router.Use(gin.Recovery()) // Panic recovery
 	router.Use(sharedmiddleware.SecurityHeaders())
+	router.Use(sharedmiddleware.BodyLimit(2 << 20)) // 2 MB max request body
 	router.Use(localmiddleware.Logging(log))
 
 	// Add tracing middleware if enabled
