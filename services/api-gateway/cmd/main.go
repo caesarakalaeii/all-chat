@@ -386,6 +386,9 @@ func main() {
 		publicAPI.GET("/auth/viewer/kick/callback", proxyHandler.ForwardRequest)
 		publicAPI.POST("/auth/viewer/kick/exchange", proxyHandler.ForwardRequest)
 
+		// Auth code exchange (viewer trades code for JWT)
+		publicAPI.POST("/auth/viewer/token/exchange", proxyHandler.ForwardRequest)
+
 		// Streamer info (public)
 		publicAPI.GET("/auth/streamers/:username", proxyHandler.ForwardRequest)
 
