@@ -25,18 +25,19 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o emote-service ./cmd
 
 # Final stage
-FROM alpine:latest
+FROM alpine:3.21
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates && \
+    addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
 
 WORKDIR /app
 
-# Copy binary from builder
 COPY --from=builder /build/services/emote-service/emote-service .
 
-# Expose port
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
 EXPOSE 8083
 
-# Run the binary
 CMD ["./emote-service"]
