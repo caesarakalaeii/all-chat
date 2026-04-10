@@ -30,6 +30,7 @@ type WebSocketHandler struct {
 	upgrader         websocket.Upgrader
 	allowAllOrigins  bool
 	allowedOrigins   map[string]struct{}
+	allowedPrefixes  []string
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
@@ -42,7 +43,7 @@ func NewWebSocketHandler(
 	replayBuffer replay.DeletionReplayBuffer,
 	logger *zap.Logger,
 ) *WebSocketHandler {
-	allowedOrigins, allowAll := loadAllowedOrigins()
+	allowedOrigins, allowedPrefixes, allowAll := loadAllowedOrigins()
 	h := &WebSocketHandler{
 		wsManager:        wsManager,
 		subscriber:       subscriber,
@@ -52,6 +53,7 @@ func NewWebSocketHandler(
 		replayBuffer:     replayBuffer,
 		logger:           logger,
 		allowedOrigins:   allowedOrigins,
+		allowedPrefixes:  allowedPrefixes,
 		allowAllOrigins:  allowAll,
 	}
 
@@ -257,14 +259,15 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// The WebSocket connection will continue in the background
 }
 
-func loadAllowedOrigins() (map[string]struct{}, bool) {
+func loadAllowedOrigins() (map[string]struct{}, []string, bool) {
 	value := strings.TrimSpace(os.Getenv("WEBSOCKET_ALLOWED_ORIGINS"))
 	if value == "" {
 		// Deny all when not configured — set WEBSOCKET_ALLOWED_ORIGINS explicitly or use "*" to allow all
-		return make(map[string]struct{}), false
+		return make(map[string]struct{}), nil, false
 	}
 
 	allowed := make(map[string]struct{})
+	var prefixes []string
 	allowAll := false
 	for _, origin := range strings.Split(value, ",") {
 		origin = strings.TrimSpace(origin)
@@ -275,14 +278,20 @@ func loadAllowedOrigins() (map[string]struct{}, bool) {
 			allowAll = true
 			continue
 		}
+		// Entries ending with "/*" are treated as prefix matches
+		// e.g. "chrome-extension://*" matches any chrome extension origin
+		if strings.HasSuffix(origin, "*") {
+			prefixes = append(prefixes, strings.TrimSuffix(origin, "*"))
+			continue
+		}
 		allowed[origin] = struct{}{}
 	}
 
 	if allowAll {
-		return nil, true
+		return nil, nil, true
 	}
 
-	return allowed, false
+	return allowed, prefixes, false
 }
 
 func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
@@ -297,6 +306,12 @@ func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
 
 	if _, ok := h.allowedOrigins[origin]; ok {
 		return true
+	}
+
+	for _, prefix := range h.allowedPrefixes {
+		if strings.HasPrefix(origin, prefix) {
+			return true
+		}
 	}
 
 	h.logger.Warn("Blocked WebSocket connection from disallowed origin",
