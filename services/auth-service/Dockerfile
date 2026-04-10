@@ -17,13 +17,18 @@ RUN go work vendor || go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/auth-service ./cmd
 
 # Runtime stage
-FROM alpine:latest
+FROM alpine:3.21
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates && \
+    addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
 
-WORKDIR /root/
+WORKDIR /app
 
 COPY --from=builder /app/auth-service .
+
+RUN chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8081
 

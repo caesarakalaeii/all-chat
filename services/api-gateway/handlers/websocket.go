@@ -260,7 +260,8 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 func loadAllowedOrigins() (map[string]struct{}, bool) {
 	value := strings.TrimSpace(os.Getenv("WEBSOCKET_ALLOWED_ORIGINS"))
 	if value == "" {
-		return nil, true
+		// Deny all when not configured — set WEBSOCKET_ALLOWED_ORIGINS explicitly or use "*" to allow all
+		return make(map[string]struct{}), false
 	}
 
 	allowed := make(map[string]struct{})
