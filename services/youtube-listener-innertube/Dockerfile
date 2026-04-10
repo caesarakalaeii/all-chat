@@ -18,22 +18,22 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o youtube-listener-innertube ./cmd
 
 # Final stage
-FROM alpine:latest
+FROM alpine:3.21
 
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates && \
+    addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
 
 WORKDIR /app
 
-# Copy binary from builder
 COPY --from=builder /build/services/youtube-listener-innertube/youtube-listener-innertube .
 
-# Expose port for health checks
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
 EXPOSE 8080
 
-# Set default environment variables
 ENV PORT=8080
 ENV LOG_LEVEL=info
 
-# Run the application
 CMD ["./youtube-listener-innertube"]
