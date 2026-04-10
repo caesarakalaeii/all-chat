@@ -232,7 +232,6 @@ func main() {
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)
-	debugHandler := handlers.NewDebugHandler(log, jwtSecret)
 	riscHandler := handlers.NewRISCHandler(log, db)
 
 	// Set Gin mode
@@ -322,9 +321,6 @@ func main() {
 
 	// Public streamer info routes
 	router.GET("/streamers/:username", streamerInfoHandler.HandleGetStreamerInfo)
-
-	// Debug routes (TODO: remove in production)
-	router.GET("/debug/test-jwt", debugHandler.HandleTestViewerJWT)
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")

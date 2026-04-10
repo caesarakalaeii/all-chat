@@ -292,6 +292,7 @@ func main() {
 
 	// Apply global middleware
 	router.Use(gin.Recovery()) // Panic recovery
+	router.Use(sharedmiddleware.SecurityHeaders())
 	router.Use(localmiddleware.Logging(log))
 
 	// Add tracing middleware if enabled
@@ -469,56 +470,62 @@ func main() {
 		protectedAPI.POST("/shares/:id/reject", proxyHandler.ForwardRequest)              // -> share-service
 		protectedAPI.POST("/shares/:id/revoke", proxyHandler.ForwardRequest)              // -> share-service
 		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)           // -> share-service
-		protectedAPI.POST("/admin/premium/users/:id", proxyHandler.ForwardRequest)         // -> share-service
-
-		// Admin feature gate management (protected — JWT auth; admin role enforced at share-service)
-		protectedAPI.GET("/admin/feature-gates", proxyHandler.ForwardRequest)        // -> share-service
-		protectedAPI.PATCH("/admin/feature-gates/:key", proxyHandler.ForwardRequest) // -> share-service
-
-		// Admin routes (protected - TODO: add admin role check)
-		protectedAPI.GET("/admin/users", proxyHandler.ForwardRequest)           // -> auth-service
-		protectedAPI.GET("/admin/users/:id", proxyHandler.ForwardRequest)       // -> auth-service
-		protectedAPI.POST("/admin/users/:id/impersonate", proxyHandler.ForwardRequest) // -> auth-service
-
-		// Admin user ban management
-		protectedAPI.POST("/admin/users/:id/ban", proxyHandler.ForwardRequest)   // -> auth-service
-		protectedAPI.POST("/admin/users/:id/unban", proxyHandler.ForwardRequest) // -> auth-service
-		protectedAPI.GET("/admin/users/banned", proxyHandler.ForwardRequest)     // -> auth-service
-
-		// Admin stats
-		protectedAPI.GET("/admin/stats", proxyHandler.ForwardRequest)           // -> auth-service
-
-		// Admin viewer management routes
-		protectedAPI.GET("/admin/viewers", proxyHandler.ForwardRequest)         // -> auth-service
-		protectedAPI.POST("/admin/viewers/:session_id/ban", proxyHandler.ForwardRequest)   // -> auth-service
-		protectedAPI.POST("/admin/viewers/:session_id/unban", proxyHandler.ForwardRequest)    // -> auth-service
-		protectedAPI.POST("/admin/viewers/:session_id/premium", proxyHandler.ForwardRequest) // -> auth-service
-		protectedAPI.GET("/admin/overlays", proxyHandler.ForwardRequest)                // -> overlay-manager
-		protectedAPI.GET("/admin/overlays/active", statsHandler.GetActiveOverlays)          // local: Redis scan
-		protectedAPI.GET("/admin/overlays/:id/sources", proxyHandler.ForwardRequest) // -> overlay-manager
-		protectedAPI.GET("/admin/sources", proxyHandler.ForwardRequest)         // -> overlay-manager
-		protectedAPI.GET("/admin/users/:id/overlays", proxyHandler.ForwardRequest)   // -> overlay-manager
-
-		// Admin maintenance window management (-> overlay-manager)
-		protectedAPI.POST("/admin/maintenance", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/admin/maintenance", proxyHandler.ForwardRequest)
-		protectedAPI.DELETE("/admin/maintenance/:id", proxyHandler.ForwardRequest)
-
 		// User-facing upcoming maintenance (-> overlay-manager)
 		protectedAPI.GET("/maintenance/upcoming", proxyHandler.ForwardRequest)
-
-		// Admin cosmetics catalog management (protected — JWT auth; admin role enforced at auth-service)
-		protectedAPI.GET("/admin/cosmetics/frames", proxyHandler.ForwardRequest)          // -> auth-service
-		protectedAPI.POST("/admin/cosmetics/frames", proxyHandler.ForwardRequest)         // -> auth-service
-		protectedAPI.DELETE("/admin/cosmetics/frames/:id", proxyHandler.ForwardRequest)   // -> auth-service
-		protectedAPI.GET("/admin/cosmetics/flairs", proxyHandler.ForwardRequest)          // -> auth-service
-		protectedAPI.POST("/admin/cosmetics/flairs", proxyHandler.ForwardRequest)         // -> auth-service
-		protectedAPI.DELETE("/admin/cosmetics/flairs/:id", proxyHandler.ForwardRequest)   // -> auth-service
 	}
 
-	// Internal routes (service-to-service, no auth for MVP - rely on network isolation)
-	// TODO: Add service-to-service auth for production
+	// Admin routes (require JWT + admin role — defense-in-depth at gateway level)
+	adminAPI := router.Group("/api/v1/admin")
+	adminAPI.Use(sharedmiddleware.JWTAuth(jwtSecret))
+	adminAPI.Use(sharedmiddleware.AdminOnly())
+	{
+		adminAPI.POST("/premium/users/:id", proxyHandler.ForwardRequest) // -> share-service
+
+		// Feature gate management (-> share-service)
+		adminAPI.GET("/feature-gates", proxyHandler.ForwardRequest)
+		adminAPI.PATCH("/feature-gates/:key", proxyHandler.ForwardRequest)
+
+		// User management (-> auth-service)
+		adminAPI.GET("/users", proxyHandler.ForwardRequest)
+		adminAPI.GET("/users/:id", proxyHandler.ForwardRequest)
+		adminAPI.POST("/users/:id/impersonate", proxyHandler.ForwardRequest)
+		adminAPI.POST("/users/:id/ban", proxyHandler.ForwardRequest)
+		adminAPI.POST("/users/:id/unban", proxyHandler.ForwardRequest)
+		adminAPI.GET("/users/banned", proxyHandler.ForwardRequest)
+		adminAPI.GET("/users/:id/overlays", proxyHandler.ForwardRequest) // -> overlay-manager
+
+		// Stats (-> auth-service)
+		adminAPI.GET("/stats", proxyHandler.ForwardRequest)
+
+		// Viewer management (-> auth-service)
+		adminAPI.GET("/viewers", proxyHandler.ForwardRequest)
+		adminAPI.POST("/viewers/:session_id/ban", proxyHandler.ForwardRequest)
+		adminAPI.POST("/viewers/:session_id/unban", proxyHandler.ForwardRequest)
+		adminAPI.POST("/viewers/:session_id/premium", proxyHandler.ForwardRequest)
+
+		// Overlay management (-> overlay-manager)
+		adminAPI.GET("/overlays", proxyHandler.ForwardRequest)
+		adminAPI.GET("/overlays/active", statsHandler.GetActiveOverlays) // local: Redis scan
+		adminAPI.GET("/overlays/:id/sources", proxyHandler.ForwardRequest)
+		adminAPI.GET("/sources", proxyHandler.ForwardRequest)
+
+		// Maintenance windows (-> overlay-manager)
+		adminAPI.POST("/maintenance", proxyHandler.ForwardRequest)
+		adminAPI.GET("/maintenance", proxyHandler.ForwardRequest)
+		adminAPI.DELETE("/maintenance/:id", proxyHandler.ForwardRequest)
+
+		// Cosmetics catalog (-> auth-service)
+		adminAPI.GET("/cosmetics/frames", proxyHandler.ForwardRequest)
+		adminAPI.POST("/cosmetics/frames", proxyHandler.ForwardRequest)
+		adminAPI.DELETE("/cosmetics/frames/:id", proxyHandler.ForwardRequest)
+		adminAPI.GET("/cosmetics/flairs", proxyHandler.ForwardRequest)
+		adminAPI.POST("/cosmetics/flairs", proxyHandler.ForwardRequest)
+		adminAPI.DELETE("/cosmetics/flairs/:id", proxyHandler.ForwardRequest)
+	}
+
+	// Internal routes (service-to-service, requires service JWT)
 	internal := router.Group("/internal")
+	internal.Use(sharedmiddleware.ServiceJWTAuth(jwtSecret, "share-service", "overlay-manager", "auth-service"))
 	{
 		internal.POST("/ws/notify", wsHandler.NotifyUser)
 	}

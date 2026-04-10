@@ -108,7 +108,7 @@ func main() {
 	// Initialize handlers
 	adminHandler := handlers.NewAdminHandler(premiumRepo, log)
 	searchHandler := handlers.NewSearchHandler(userSearchRepo, log)
-	shareHandler := handlers.NewShareHandler(shareRepo, userSearchRepo, dbPool, log, cycleDetector)
+	shareHandler := handlers.NewShareHandler(shareRepo, userSearchRepo, dbPool, log, cycleDetector, jwtSecret)
 	adminFGHandler := handlers.NewAdminFeatureGatesHandler(dbPool, redisClientForJobs, log)
 
 	// Setup Gin router
