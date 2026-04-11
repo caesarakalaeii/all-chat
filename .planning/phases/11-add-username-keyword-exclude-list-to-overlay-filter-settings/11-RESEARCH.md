@@ -24,7 +24,7 @@
 
 - Exact UI layout and spacing of the Filters section within AppearancePanel
 - Tag/chip input component implementation details
-- Order of filter checks (username → keyword → commands → length, or any order)
+- Order of filter checks (username -> keyword -> commands -> length, or any order)
 - Error handling for invalid regex patterns (inline validation or silent skip)
 - The specific bot names included in the preset list
 
@@ -82,11 +82,11 @@ Every AppearancePanel section is a standalone `*Group.tsx` file. [VERIFIED: code
 
 ```
 frontend/src/components/appearance/
-├── FilterGroup.tsx          ← NEW: implements Filters section
-├── AppearancePanel.tsx      ← EDIT: import + render FilterGroup
-├── CollapsibleSection.tsx   ← reuse (no changes)
-├── ToggleSwitch.tsx         ← reuse (no changes)
-└── SliderControl.tsx        ← reuse (no changes)
+├── FilterGroup.tsx          <- NEW: implements Filters section
+├── AppearancePanel.tsx      <- EDIT: import + render FilterGroup
+├── CollapsibleSection.tsx   <- reuse (no changes)
+├── ToggleSwitch.tsx         <- reuse (no changes)
+└── SliderControl.tsx        <- reuse (no changes)
 ```
 
 ### Pattern 1: FilterGroup Component Signature
@@ -203,9 +203,35 @@ await overlaysApi.updateConfig(id, {
 })
 ```
 
-### Pattern 6: Preview Filtering in Editor
+### Pattern 6: Real-Time Preview Filtering in Editor (D-07)
 
-The editor page sends preview messages to the iframe preview, and also renders a local message list for the live preview. The same `shouldFilterMessage` utility must be applied to the local preview channel. The editor's WebSocket (`ws.onmessage` at line 1348) handles `share_revoked` only — the real preview is an embedded iframe showing `overlay/[id]`. The iframe receives filter settings via the public endpoint on its own `loadConfig`. Since the preview iframe is a live embed of the actual overlay page, **it will apply filters automatically once filter_settings is returned by the public endpoint.** No additional preview-specific wiring is needed.
+The editor page embeds a preview iframe at `overlays/[id]/preview/embed/page.tsx`. This embed page already listens for `postMessage` events from the editor for real-time visual updates (`VISUAL_CSS_UPDATE`, `VISUAL_SETTINGS_UPDATE`, `CUSTOM_CSS_UPDATE`). [VERIFIED: embed/page.tsx lines 194-235]
+
+For D-07 real-time WYSIWYG filtering, the same postMessage pattern must be used:
+
+1. **Editor sends** a `FILTER_SETTINGS_UPDATE` postMessage whenever `filterSettings` state changes
+2. **Embed page listens** for `FILTER_SETTINGS_UPDATE` and updates its local filter settings state/ref
+3. **Embed page applies** `shouldFilterMessage` to incoming WebSocket messages using the ref
+
+This mirrors the existing `sendCssToIframe` / `VISUAL_CSS_UPDATE` pattern exactly. The embed page has its own WebSocket connection and message pipeline — filtering must happen there, not in the editor page.
+
+```typescript
+// Editor page — send filter settings to iframe on change
+const sendFilterSettingsToIframe = useCallback((settings: FilterSettings) => {
+  iframeRef.current?.contentWindow?.postMessage(
+    { type: 'FILTER_SETTINGS_UPDATE', filterSettings: settings },
+    '*'
+  )
+}, [])
+
+// Embed page — listen for FILTER_SETTINGS_UPDATE
+if (event.data?.type === 'FILTER_SETTINGS_UPDATE') {
+  const settings = event.data.filterSettings as FilterSettings
+  setFilterSettings(settings)
+  filterSettingsRef.current = settings
+  return
+}
+```
 
 ### Pattern 7: `shouldFilterMessage` Pure Utility
 
@@ -261,6 +287,7 @@ export function shouldFilterMessage(
 - **Re-creating RegExp objects on every message:** Compile patterns once per settings change, not per message. Cache compiled regexes in a ref alongside the settings ref.
 - **Skipping the public config endpoint fix:** Without adding `filter_settings` to `HandleGetPublicConfig`, the live overlay will never receive filter settings (it uses the unauthenticated endpoint).
 - **Hardcoding filter logic in the overlay page:** Extract to `shouldFilterMessage` utility so it can be unit tested and reused.
+- **Relying on post-save iframe reload for preview filtering:** The preview iframe must receive filter settings in real-time via postMessage, not only on config fetch after Save. Otherwise D-07 WYSIWYG is not met.
 
 ---
 
@@ -309,6 +336,12 @@ export function shouldFilterMessage(
 **What goes wrong:** A user enters a pathological regex like `(a+)+` that causes exponential backtracking on long messages, freezing the tab.
 **Why it happens:** JavaScript's `RegExp` engine is vulnerable to ReDoS on malformed patterns.
 **How to avoid:** Client-side only + power-user feature (D-03 explicitly accepts this). Mitigate by adding a message-level timeout or note in UI that complex regex is at user's own risk. For MVP, silent catch is sufficient.
+
+### Pitfall 7: Preview filtering only works after Save (D-07 violation)
+**What goes wrong:** The preview iframe loads filter_settings from the public config endpoint on initial page load. If filter settings are only sent to the iframe via config save, the streamer cannot test filters in real-time — they must Save first, then wait for the iframe to re-fetch config.
+**Why it happens:** The editor already uses postMessage for visual CSS updates but filter_settings was not given the same treatment.
+**How to avoid:** Send `FILTER_SETTINGS_UPDATE` postMessage to the iframe whenever `filterSettings` state changes in the editor, matching the existing `VISUAL_CSS_UPDATE` pattern. The embed page listens and updates its local filter ref immediately.
+**Warning signs:** Filters only apply in preview after clicking Save.
 
 ---
 
@@ -406,16 +439,18 @@ const COMMON_BOTS = [
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Where does FilterGroup live in the editor — inside AppearancePanel or as a sibling section?**
    - What we know: AppearancePanel takes `visualSettings/onChange` only. FilterSettings is a separate type.
    - What's unclear: Whether to extend AppearancePanelProps or render FilterGroup as a peer CollapsibleSection directly in the editor page.
    - Recommendation: Extend AppearancePanelProps with optional filter props. Keeps the panel self-contained and matches existing pattern. Either approach is valid — planner decides.
+   - **RESOLVED:** Plan 11-02 extends AppearancePanelProps with optional `filterSettings` + `onFilterChange` props and renders FilterGroup inside a CollapsibleSection within AppearancePanel.
 
 2. **Should the filter check order be documented/enforced?**
-   - What we know: D-03–D-06 define four independent checks; order is Claude's discretion.
-   - Recommendation: username → keyword → commands → length. Most specific first (username) to most general (length). Document in code comment.
+   - What we know: D-03-D-06 define four independent checks; order is Claude's discretion.
+   - Recommendation: username -> keyword -> commands -> length. Most specific first (username) to most general (length). Document in code comment.
+   - **RESOLVED:** Plan 11-01 implements the order as username -> keyword -> commands -> length, documented in code comments.
 
 ---
 
@@ -435,23 +470,23 @@ Step 2.6: SKIPPED (no external dependencies — purely frontend code + one backe
 | Quick run command | `cd frontend && npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx src/lib/utils/__tests__/filterMessage.test.ts` |
 | Full suite command | `cd frontend && npx vitest run` |
 
-### Phase Requirements → Test Map
+### Phase Requirements -> Test Map
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| F-01 | `shouldFilterMessage` blocks banned usernames (case-insensitive exact match) | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | ❌ Wave 0 |
-| F-02 | `shouldFilterMessage` blocks banned keywords via regex | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | ❌ Wave 0 |
-| F-03 | `shouldFilterMessage` suppresses `!`-prefixed messages when hide_commands=true | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | ❌ Wave 0 |
-| F-04 | `shouldFilterMessage` suppresses messages shorter than min_message_length | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | ❌ Wave 0 |
-| F-05 | `shouldFilterMessage` returns false when settings are null/empty | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | ❌ Wave 0 |
-| F-06 | `shouldFilterMessage` handles invalid regex without throwing | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | ❌ Wave 0 |
-| F-07 | FilterGroup renders banned_users tags and add-input | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | ❌ Wave 0 |
-| F-08 | FilterGroup renders banned_words tags and add-input | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | ❌ Wave 0 |
-| F-09 | FilterGroup hide_commands toggle calls onChange | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | ❌ Wave 0 |
-| F-10 | FilterGroup min_message_length slider calls onChange | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | ❌ Wave 0 |
-| F-11 | FilterGroup "Add common bots" button populates banned_users | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | ❌ Wave 0 |
-| F-12 | Public config endpoint returns filter_settings field | manual | Deploy + `curl /api/v1/overlays/public/{id}/config \| jq .filter_settings` | — |
-| F-13 | Editor saves filter_settings on Save click and reloads correctly | manual | Open editor, add filter, save, reload, verify persisted | — |
+| F-01 | `shouldFilterMessage` blocks banned usernames (case-insensitive exact match) | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | No Wave 0 |
+| F-02 | `shouldFilterMessage` blocks banned keywords via regex | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | No Wave 0 |
+| F-03 | `shouldFilterMessage` suppresses `!`-prefixed messages when hide_commands=true | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | No Wave 0 |
+| F-04 | `shouldFilterMessage` suppresses messages shorter than min_message_length | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | No Wave 0 |
+| F-05 | `shouldFilterMessage` returns false when settings are null/empty | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | No Wave 0 |
+| F-06 | `shouldFilterMessage` handles invalid regex without throwing | unit | `npx vitest run src/lib/utils/__tests__/filterMessage.test.ts` | No Wave 0 |
+| F-07 | FilterGroup renders banned_users tags and add-input | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | No Wave 0 |
+| F-08 | FilterGroup renders banned_words tags and add-input | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | No Wave 0 |
+| F-09 | FilterGroup hide_commands toggle calls onChange | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | No Wave 0 |
+| F-10 | FilterGroup min_message_length slider calls onChange | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | No Wave 0 |
+| F-11 | FilterGroup "Add common bots" button populates banned_users | unit | `npx vitest run src/components/appearance/__tests__/FilterGroup.test.tsx` | No Wave 0 |
+| F-12 | Public config endpoint returns filter_settings field | manual | Deploy + `curl /api/v1/overlays/public/{id}/config \| jq .filter_settings` | -- |
+| F-13 | Editor saves filter_settings on Save click and reloads correctly | manual | Open editor, add filter, save, reload, verify persisted | -- |
 
 ### Sampling Rate
 - **Per task commit:** `cd frontend && npx vitest run src/lib/utils/__tests__/filterMessage.test.ts src/components/appearance/__tests__/FilterGroup.test.tsx`
@@ -471,11 +506,11 @@ Step 2.6: SKIPPED (no external dependencies — purely frontend code + one backe
 
 | ASVS Category | Applies | Standard Control |
 |---------------|---------|-----------------|
-| V2 Authentication | no | — |
-| V3 Session Management | no | — |
+| V2 Authentication | no | -- |
+| V3 Session Management | no | -- |
 | V4 Access Control | no | Filter config is owned-resource, protected by existing `GetByIDAndUserID` check in config handler |
 | V5 Input Validation | yes (limited) | Regex patterns are user-supplied but evaluated only in the user's own browser — no server-side exec risk |
-| V6 Cryptography | no | — |
+| V6 Cryptography | no | -- |
 
 ### Known Threat Patterns
 
@@ -500,6 +535,7 @@ Step 2.6: SKIPPED (no external dependencies — purely frontend code + one backe
 - `frontend/src/lib/api/overlays.ts` — updateConfig(id, Partial<OverlayConfig>) — already handles filter_settings
 - `frontend/src/app/overlay/[id]/page.tsx` — ws.onmessage pipeline, public config loading, maxMessagesRef pattern
 - `frontend/src/app/overlays/[id]/page.tsx` — handleSaveConfiguration, config loading, AppearancePanel integration
+- `frontend/src/app/overlays/[id]/preview/embed/page.tsx` — embed preview with postMessage listener for VISUAL_CSS_UPDATE, VISUAL_SETTINGS_UPDATE, CUSTOM_CSS_UPDATE
 - `migrations/001_initial_schema.sql` — filter_settings JSONB column exists (line 42)
 - `frontend/vitest.config.ts` — unit test project config, include pattern
 - `frontend/src/components/appearance/__tests__/VisibilityGroup.test.tsx` — test pattern to follow
