@@ -60,3 +60,11 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Files changed:** services/auth-service/oauth/viewer_youtube.go, services/auth-service/handlers/viewer_auth.go, services/auth-service/repository/viewer_identity_repository.go, services/auth-service/repository/viewer_repository.go, services/auth-service/handlers/viewer_resolve_test.go
 ---
 
+## grafana-metrics-missing — NetworkPolicies blocked all Prometheus scraping after security hardening
+- **Date:** 2026-04-11
+- **Error patterns:** Grafana no data, Prometheus targets DOWN, connection refused, NetworkPolicy, monitoring namespace, metrics missing, scrape failure, allchat
+- **Root cause:** Security hardening commit 5fae08d introduced NetworkPolicies with default-deny-ingress and per-service allow-lists. None included ingress rules for the monitoring namespace where Prometheus runs, blocking all /metrics scraping. Additionally source-controller had no NetworkPolicy at all, and the listeners policy used a wrong label value ("youtube-listener-innertube" instead of "youtube-listener").
+- **Fix:** Added monitoring namespace ingress rules to all 15 existing NetworkPolicies. Added new source-controller NetworkPolicy. Fixed listeners podSelector label from "youtube-listener-innertube" to "youtube-listener".
+- **Files changed:** caesar-deployment/apps/workloads/all-chat/network-policies.yaml
+---
+
