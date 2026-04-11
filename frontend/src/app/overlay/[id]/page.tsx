@@ -30,6 +30,8 @@ import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
 import { buildGradientCSS } from '@/lib/utils/gradient';
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css';
 import type { VisualSettings } from '@/lib/types/visual-settings';
+import { shouldFilterMessage } from '@/lib/utils/filterMessage';
+import type { FilterSettings } from '@/lib/types/overlay';
 
 // ---- Google Font loader ---------------------------------------------------
 
@@ -87,6 +89,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [pronounPosition, setPronounPosition] = useState<'before' | 'after'>('after');  // default after
   const [pronounColor, setPronounColor] = useState('#7B68EE');     // default medium slate blue
 
+  const [filterSettings, setFilterSettings] = useState<FilterSettings>({});
+  const filterSettingsRef = useRef<FilterSettings>({});
+
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -94,6 +99,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // Keep a ref so the WebSocket onmessage closure always sees the latest value
   // without maxMessages needing to be in the WebSocket effect dependency array.
   const maxMessagesRef = useRef<number>(50);
+
+  // Keep filterSettingsRef in sync so the ws.onmessage closure always reads the latest value
+  useEffect(() => {
+    filterSettingsRef.current = filterSettings;
+  }, [filterSettings]);
 
   // Load overlay display configuration (public endpoint)
   useEffect(() => {
@@ -173,6 +183,12 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           if (vs.pronounColor !== undefined) {
             setPronounColor(vs.pronounColor);
           }
+        }
+
+        // Phase 11: Load filter settings
+        if (data.filter_settings) {
+          setFilterSettings(data.filter_settings);
+          filterSettingsRef.current = data.filter_settings;
         }
 
         // Load configured sources (channel_id -> SourceInfo)
@@ -326,6 +342,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           if (message.user?.name_gradient && typeof message.user.name_gradient === 'string') {
             message.user.name_gradient = JSON.parse(message.user.name_gradient as unknown as string) as NameGradient;
           }
+
+          // Phase 11: apply filter settings before adding to render queue (D-01, D-02)
+          if (shouldFilterMessage(message, filterSettingsRef.current)) return;
 
           setMessages((prev) => {
             const newMessages = [...prev, message];
