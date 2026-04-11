@@ -1,9 +1,13 @@
 <p align="center">
+  <img src="landing-full.png" alt="All-Chat — One overlay, every platform" width="600" />
+</p>
+
+<p align="center">
   <strong>One overlay. Every platform.</strong>
 </p>
 
 <p align="center">
-  Combine chat from <b>Twitch</b>, <b>YouTube</b>, <b>Kick</b>, <b>TikTok</b>, and <b>Discord</b> into a single, beautiful streaming overlay — with full support for <b>7TV</b>, <b>BTTV</b>, and <b>FFZ</b> emotes.
+  Merge chat from <b>Twitch</b>, <b>YouTube</b>, <b>Kick</b>, <b>TikTok</b>, and <b>Discord</b> into a single feed for OBS — with full <b>7TV</b>, <b>BTTV</b>, and <b>FFZ</b> emote support.
 </p>
 
 <p align="center">
@@ -14,18 +18,19 @@
 
 ## What is All-Chat?
 
-All-Chat is a **free, open-source overlay** for streamers who broadcast to more than one platform — or just want a cleaner chat experience. Add it as a browser source in OBS, Streamlabs, or any streaming software and see every message from every platform in one place.
+All-Chat is a **free, open-source chat overlay** that merges Twitch, YouTube, Kick, TikTok, and Discord into a single feed for OBS. Sign in, drop a URL into a Browser Source, go live.
 
-No bots. No IRC tokens. No complicated setup. Just sign in, create an overlay, and go live.
+No bots. No IRC tokens. No complicated setup.
 
 ### Highlights
 
-- **Multi-Platform** — Twitch, YouTube, Kick, TikTok, and Discord in a single feed
-- **Full Emote Support** — 7TV, BTTV, FFZ, plus native Twitch and YouTube emotes render correctly
-- **Real-Time** — Messages arrive via WebSocket in under 500 ms
-- **Customizable** — 12 built-in themes, full CSS editor, Google Fonts, show/hide badges, avatars, timestamps
-- **Shareable** — Give viewers a link so they can follow chat outside of OBS
-- **Smart Polling** — Listeners only run when your overlay is actually visible (see [How it works](#-demand-driven-listeners))
+- **5 Platforms, One Feed** — Twitch, YouTube, Kick, TikTok, and Discord messages in a single overlay
+- **No Setup Required** — Sign in, create an overlay, paste the URL into OBS. That's it.
+- **Every Emote Works** — 7TV, BTTV, FFZ, plus native Twitch and YouTube emotes all render correctly
+- **12 Themes + Full CSS** — Built-in themes from Win98 retro to cyberpunk neon, or write your own CSS
+- **Real-Time Delivery** — Messages arrive via WebSocket — no 5-second delay
+- **Smart Polling** — Listeners only run when your overlay is actually visible (see [How it works](#demand-driven-listeners))
+- **Browser Extension** — Replace native site chat with All-Chat on Twitch, YouTube, and Kick
 - **Open Source** — AGPL 3.0 licensed, fully self-hostable
 
 ---
@@ -74,20 +79,20 @@ Want to build your own? See the **[CSS Customization Guide](./docs/CSS_CUSTOMIZA
 
 ## Browser Extension
 
-Don't just watch chat in OBS — **use it from your browser.**
+Don't just watch chat in OBS — **give your viewers unified chat too.**
 
-The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-extension) replaces the native site chat on Twitch, YouTube, Kick, and TikTok with a unified All-Chat panel. Read and send messages across platforms without leaving the page.
+The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-extension) replaces native site chat on Twitch, YouTube, and Kick with your All-Chat feed. Your community can read and send messages across platforms without leaving the page they're watching.
 
 **Install:**
-- [Chrome / Edge](https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm)
+- [Chrome / Edge / Brave](https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm)
 - [Firefox](https://addons.mozilla.org/en-US/firefox/addon/all-chat-extension/)
 - [GitHub Releases](https://github.com/caesarakalaeii/all-chat-extension/releases) (gets updates first)
 
-**What it does:**
-- Swaps the site's native chat with All-Chat automatically
-- Uses browser-native OAuth — no tokens leave your machine
-- Connects to shared chat sources the streamer configured
-- Zero extra setup — works out of the box
+**Why it's great:**
+- Replaces native chat automatically — no configuration needed
+- Send messages with your existing platform account
+- Full emote autocomplete (7TV, BTTV, FFZ) with `:` prefix
+- Auto-reconnects if your connection drops — never miss a message
 
 ---
 
@@ -282,4 +287,4 @@ Built on the shoulders of:
 
 ---
 
-<p align="center"><b>Made with love for the streaming community</b></p>
+<p align="center"><b>Free. Open source. Built for streamers who refuse to pick just one platform.</b></p>

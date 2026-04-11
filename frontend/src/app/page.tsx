@@ -16,7 +16,7 @@ import { InfinityLogo } from '@/components/InfinityLogo'
 import { PlatformBadge } from '@/components/ui/badge'
 import { PLATFORM_COLORS } from '@/lib/platform-colors'
 import { toastManager } from '@/lib/toast'
-import { LayoutGrid, Zap, Palette, Puzzle, Github } from 'lucide-react'
+import { LayoutGrid, Zap, Palette, Puzzle, Github, LogIn, Plus, MonitorPlay } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -130,19 +130,22 @@ const TOTAL_CARDS = PLATFORMS.length + 3 // 4 stat cards + 3 feature cards
 // ---------------------------------------------------------------------------
 const FEATURE_CARDS = [
   {
-    icon: LayoutGrid,
-    title: 'Unified Chat',
-    description: 'Combine Twitch, YouTube, Kick, and TikTok messages in one beautiful overlay.',
+    icon: Palette,
+    title: '12 Themes, Full CSS Control',
+    description:
+      'From Win98 retro to cyberpunk neon. Pick a built-in theme or write your own CSS — your overlay, your brand.',
   },
   {
     icon: Zap,
-    title: 'Real-time Sync',
-    description: 'Low-latency delivery under 500ms for a seamless multi-platform experience.',
+    title: 'Every Emote, Everywhere',
+    description:
+      '7TV, BTTV, FFZ, plus native Twitch and YouTube emotes — they all render correctly in your overlay.',
   },
   {
-    icon: Palette,
-    title: 'Marketplace Themes',
-    description: 'Full control over appearance with 7TV, BTTV, FFZ emotes and custom themes.',
+    icon: LayoutGrid,
+    title: 'Smart Resource Usage',
+    description:
+      'Only polls platforms when your overlay is visible in OBS. Switch scenes and All-Chat stands down automatically.',
   },
 ]
 
@@ -252,7 +255,8 @@ export default function LandingPage() {
           One overlay. Every platform.
         </h1>
         <p className="mb-10 max-w-xl text-lg text-text-sub">
-          Aggregate chat from Twitch, YouTube, Kick, and TikTok into a single stream overlay.
+          See every message from Twitch, YouTube, Kick, TikTok, and Discord in one place
+          — no bots, no setup, just a URL in OBS.
         </p>
 
         {/* Platform stat cards — magnetic glow hero */}
@@ -274,7 +278,7 @@ export default function LandingPage() {
                 <div className={cn('mb-1 text-2xl font-bold', PLATFORM_COLORS[platform].text)}>
                   {count != null ? formatCount(count) : '—'}
                 </div>
-                <div className="text-xs text-text-sub">messages / 7d</div>
+                <div className="text-xs text-text-sub">messages delivered this week</div>
               </MagGlowCard>
             )
           })}
@@ -363,6 +367,49 @@ export default function LandingPage() {
       </section>
 
       {/* ------------------------------------------------------------------ */}
+      {/* How it works — 3-step walkthrough                                  */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="mx-auto max-w-3xl px-4 pb-20">
+        <h2 className="mb-10 text-center text-2xl font-bold text-text">Live in 3 steps</h2>
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+          {[
+            {
+              icon: LogIn,
+              step: '1',
+              title: 'Sign in & create an overlay',
+              description: 'Log in with Twitch, YouTube, or Kick. Create an overlay and add your chat sources.',
+            },
+            {
+              icon: Plus,
+              step: '2',
+              title: 'Add your channels',
+              description: 'Connect Twitch channels, YouTube streams, Kick channels — mix and match across platforms.',
+            },
+            {
+              icon: MonitorPlay,
+              step: '3',
+              title: 'Paste the URL in OBS',
+              description: 'Add a Browser Source, paste your overlay URL. Every platform\'s chat in one feed.',
+            },
+          ].map((item) => {
+            const Icon = item.icon
+            return (
+              <div key={item.step} className="flex flex-col items-center text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface">
+                  <Icon className="h-6 w-6 text-text-sub" aria-hidden="true" />
+                </div>
+                <div className="mb-1 text-xs font-bold uppercase tracking-widest text-text-sub">
+                  Step {item.step}
+                </div>
+                <h3 className="mb-1 text-base font-semibold text-text">{item.title}</h3>
+                <p className="text-sm text-text-sub">{item.description}</p>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
       {/* Feature grid — same magnetic glow cards                            */}
       {/* ------------------------------------------------------------------ */}
       <section className="mx-auto max-w-5xl px-4 pb-16">
@@ -403,8 +450,9 @@ export default function LandingPage() {
           <div className="flex-1">
             <h2 className="mb-1 text-xl font-bold text-text">Browser Extension</h2>
             <p className="mb-3 text-sm text-text-sub">
-              Add all-chat overlays directly to any streaming site without OBS. Available for
-              Chrome and Firefox.
+              Your viewers get unified chat too. The extension replaces native Twitch, YouTube, and
+              Kick chat with All-Chat — so your community can chat across platforms from their
+              browser.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <a
@@ -448,7 +496,7 @@ export default function LandingPage() {
       {/* Footer                                                              */}
       {/* ------------------------------------------------------------------ */}
       <footer className="space-y-2 pb-12 text-center text-sm text-text-sub">
-        <p>Open Source &bull; Built with Go + React &bull; Multi-Platform Chat Aggregation</p>
+        <p>Free. Open source. Built for streamers who refuse to pick just one platform.</p>
         <p className="flex flex-wrap items-center justify-center gap-3 text-xs">
           <a
             href="https://github.com/caesarakalaeii/all-chat"
