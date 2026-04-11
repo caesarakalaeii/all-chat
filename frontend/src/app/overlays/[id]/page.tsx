@@ -30,7 +30,7 @@ import { overlaysApi } from '@/lib/api/overlays'
 import { sharesApi } from '@/lib/api/shares'
 import { getGuilds, getGuildChannels, updateSourceConfig } from '@/lib/api/discord'
 import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
-import type { Overlay, ChatSource, DiscordSourceConfig } from '@/lib/types/overlay'
+import type { Overlay, ChatSource, DiscordSourceConfig, FilterSettings } from '@/lib/types/overlay'
 import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
 import type { VisualSettings } from '@/lib/types/visual-settings'
@@ -1101,6 +1101,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const visualSettingsRef = useRef<Partial<VisualSettings>>({})
   visualSettingsRef.current = visualSettings
 
+  // --- Filter settings state (Phase 11) ---
+  const [filterSettings, setFilterSettings] = useState<FilterSettings>({})
+  const filterSettingsRef = useRef<FilterSettings>({})
+  filterSettingsRef.current = filterSettings
+
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
 
@@ -1119,6 +1124,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [isCloning, setIsCloning] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
+
+  // --- sendFilterSettingsToIframe: post filter settings to the embed iframe (Phase 11) ---
+  const sendFilterSettingsToIframe = useCallback((settings: FilterSettings) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'FILTER_SETTINGS_UPDATE', filterSettings: settings },
+      '*'
+    )
+  }, [])
 
   // --- sendCssToIframe: post CSS generated from visualSettings to the iframe ---
   const sendCssToIframe = useCallback((settings: Partial<VisualSettings>) => {
@@ -1150,6 +1163,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       return next
     })
   }, [sendCssToIframe])
+
+  // --- handleFilterSettingsChange: merge patch, update state, send to iframe immediately (D-07 WYSIWYG) ---
+  const handleFilterSettingsChange = useCallback((patch: Partial<FilterSettings>) => {
+    setFilterSettings((prev) => {
+      const next = { ...prev, ...patch }
+      sendFilterSettingsToIframe(next)
+      return next
+    })
+  }, [sendFilterSettingsToIframe])
 
   // --- sendCustomCssToIframe: post the full theme CSS to the embed preview ---
   const sendCustomCssToIframe = useCallback((css: string) => {
@@ -1191,15 +1213,17 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  // --- EMBED_READY: re-send CSS when embed page signals its listener is registered ---
+  // --- EMBED_READY: re-send CSS and filter settings when embed page signals its listener is registered ---
   useEffect(() => {
     const handleEmbedReady = (event: MessageEvent) => {
       if (event.data?.type !== 'EMBED_READY') return
       sendCssToIframe(visualSettingsRef.current)
+      // Also send current filter settings to the embed on ready
+      sendFilterSettingsToIframe(filterSettingsRef.current)
     }
     window.addEventListener('message', handleEmbedReady)
     return () => window.removeEventListener('message', handleEmbedReady)
-  }, [sendCssToIframe])
+  }, [sendCssToIframe, sendFilterSettingsToIframe])
 
   // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
   const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
@@ -1318,6 +1342,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           }
           setVisualSettings(merged)
           sendCssToIframe(merged)
+
+          // Phase 11: Load filter settings
+          if (config.filter_settings) {
+            setFilterSettings(config.filter_settings)
+          }
         } catch (err) {
           console.warn('[OverlayEditor] Failed to load config', err)
         } finally {
@@ -1661,6 +1690,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         enable_ffz: enableFfz,
         custom_css: useCustomCss ? customCss : '',
         visual_settings: visualSettings,
+        filter_settings: filterSettings,
       })
       setConfigAlert({ type: 'success', message: 'Configuration saved!' })
     } catch (error) {
@@ -1982,6 +2012,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   visualSettings={visualSettings}
                   onChange={handleVisualSettingsChange}
                   visibilityDefaults={iframeVisibilityDefaults}
+                  filterSettings={filterSettings}
+                  onFilterChange={handleFilterSettingsChange}
                 />
               </CollapsibleSection>
 

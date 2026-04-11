@@ -27,6 +27,8 @@ import { sortMessageBadges } from '@/lib/badgeOrder'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
+import { shouldFilterMessage } from '@/lib/utils/filterMessage'
+import type { FilterSettings } from '@/lib/types/overlay'
 import '@/styles/events.css'
 
 // ---- Utilities (identical to preview/page.tsx) ----------------------------
@@ -176,6 +178,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
 
+  // Phase 11: Filter settings state
+  const [filterSettings, setFilterSettings] = useState<FilterSettings>({})
+  const filterSettingsRef = useRef<FilterSettings>({})
+
   const wsClientRef = useRef<WebSocketClient | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -222,6 +228,13 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         const css = event.data.css as string
         setCustomCss(css)
         setUseCustomCss(Boolean(css.trim().length))
+        return
+      }
+      // Phase 11: Real-time filter settings from editor (D-07 WYSIWYG)
+      if (event.data?.type === 'FILTER_SETTINGS_UPDATE') {
+        const settings = event.data.filterSettings as FilterSettings
+        setFilterSettings(settings)
+        filterSettingsRef.current = settings
         return
       }
     }
@@ -276,6 +289,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         if (vs.platformBadgeStyle === 'text' || vs.platformBadgeStyle === 'icon') {
           setPlatformBadgeStyle(vs.platformBadgeStyle)
         }
+        // Phase 11: Load filter settings from config
+        if (config.filter_settings) {
+          setFilterSettings(config.filter_settings)
+          filterSettingsRef.current = config.filter_settings
+        }
       } catch (error) {
         console.warn('[Embed] Failed to load overlay config', error)
       }
@@ -300,6 +318,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         incoming.user.name_gradient = JSON.parse(incoming.user.name_gradient as unknown as string) as NameGradient
       }
       const message = sortMessageBadges(await resolveTwitchBadgeIcons(incoming))
+
+      // Phase 11: apply filter settings before adding to render queue (D-07 WYSIWYG)
+      if (shouldFilterMessage(message, filterSettingsRef.current)) return
+
       setMessages((prev) => [...prev, message].slice(-maxMessages))
     })
 

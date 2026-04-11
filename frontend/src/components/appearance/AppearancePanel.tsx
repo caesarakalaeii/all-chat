@@ -2,6 +2,7 @@
 
 import React from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import type { FilterSettings } from '@/lib/types/overlay'
 import { CollapsibleSection } from './CollapsibleSection'
 import { TypographyGroup } from './TypographyGroup'
 import { ColorsGroup } from './ColorsGroup'
@@ -10,14 +11,23 @@ import { VisibilityGroup } from './VisibilityGroup'
 import { SizingGroup } from './SizingGroup'
 import { PlatformColorsGroup } from './PlatformColorsGroup'
 import { EventsGroup } from './EventsGroup'
+import { FilterGroup } from './FilterGroup'
 
 export interface AppearancePanelProps {
   visualSettings: Partial<VisualSettings>
   onChange: (patch: Partial<VisualSettings>) => void
   visibilityDefaults?: Partial<VisualSettings>
+  filterSettings?: FilterSettings
+  onFilterChange?: (patch: Partial<FilterSettings>) => void
 }
 
-export function AppearancePanel({ visualSettings, onChange, visibilityDefaults = {} }: AppearancePanelProps): React.ReactElement {
+export function AppearancePanel({
+  visualSettings,
+  onChange,
+  visibilityDefaults = {},
+  filterSettings,
+  onFilterChange,
+}: AppearancePanelProps): React.ReactElement {
   return (
     <div className="flex flex-col gap-0">
       <CollapsibleSection id="typography" title="Typography">
@@ -45,6 +55,11 @@ export function AppearancePanel({ visualSettings, onChange, visibilityDefaults =
       <CollapsibleSection id="events" title="Events">
         <EventsGroup visualSettings={visualSettings} onChange={onChange} />
       </CollapsibleSection>
+      {filterSettings && onFilterChange && (
+        <CollapsibleSection id="filters" title="Filters">
+          <FilterGroup filterSettings={filterSettings} onChange={onFilterChange} />
+        </CollapsibleSection>
+      )}
     </div>
   )
 }
