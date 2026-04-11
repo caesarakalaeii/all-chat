@@ -343,3 +343,24 @@ Plans:
 - [x] 10-02-PLAN.md — API gateway infinite retry resubscribe/reconnect, shared Redis client standardization
 - [x] 10-03-PLAN.md — Message-processor XReadGroup backoff, DLQ structured logging, consumer group offset fix
 - [x] 10-04-PLAN.md — Source-manager atomic leadership renewal (Lua), peer registration sorted set optimization
+
+### Phase 11: Add username/keyword exclude list to overlay filter settings
+
+**Goal:** Enable streamers to configure message filtering for their overlays -- block specific usernames, keywords/phrases (with regex support), bot commands, and short messages. Adds a Filters section to the overlay editor with tag-style inputs, "Add common bots" preset, and client-side filtering in the live overlay page.
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08
+**Depends on:** Phase 10
+**Plans:** 2 plans
+
+Plans:
+- [ ] 11-01-PLAN.md — shouldFilterMessage TDD utility, public config endpoint fix, overlay page filtering integration
+- [ ] 11-02-PLAN.md — FilterGroup UI component with tag inputs/toggle/slider/preset, AppearancePanel + editor page wiring
+
+### Phase 12: Notification sound on incoming messages with premium custom sound support
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 11
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 12 to break down)
