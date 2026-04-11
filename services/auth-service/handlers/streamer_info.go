@@ -131,6 +131,14 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 		platforms = append(platforms, p)
 	}
 
+	// If no public overlay sources found, return 404 so the extension
+	// knows not to inject UI. A user with no public overlay is effectively
+	// "not found" from the viewer's perspective.
+	if len(platforms) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "streamer not found"})
+		return
+	}
+
 	// Return response (overlay_id intentionally excluded for security)
 	response := StreamerInfoResponse{
 		Username:    user.Username,
