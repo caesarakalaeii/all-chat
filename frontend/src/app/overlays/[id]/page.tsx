@@ -30,7 +30,7 @@ import { overlaysApi } from '@/lib/api/overlays'
 import { sharesApi } from '@/lib/api/shares'
 import { getGuilds, getGuildChannels, updateSourceConfig } from '@/lib/api/discord'
 import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
-import type { Overlay, ChatSource, DiscordSourceConfig, FilterSettings } from '@/lib/types/overlay'
+import type { Overlay, ChatSource, DiscordSourceConfig, FilterSettings, DisplaySettings } from '@/lib/types/overlay'
 import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
 import type { VisualSettings } from '@/lib/types/visual-settings'
@@ -1106,6 +1106,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const filterSettingsRef = useRef<FilterSettings>({})
   filterSettingsRef.current = filterSettings
 
+  // --- Sound settings state (Phase 12) ---
+  const [soundSettings, setSoundSettings] = useState<Partial<DisplaySettings>>({})
+  const soundSettingsRef = useRef<Partial<DisplaySettings>>({})
+  soundSettingsRef.current = soundSettings
+
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
 
@@ -1129,6 +1134,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const sendFilterSettingsToIframe = useCallback((settings: FilterSettings) => {
     iframeRef.current?.contentWindow?.postMessage(
       { type: 'FILTER_SETTINGS_UPDATE', filterSettings: settings },
+      '*'
+    )
+  }, [])
+
+  // --- sendSoundSettingsToIframe: post sound settings to the embed iframe (Phase 12) ---
+  const sendSoundSettingsToIframe = useCallback((settings: Partial<DisplaySettings>) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'SOUND_SETTINGS_UPDATE', soundSettings: settings },
       '*'
     )
   }, [])
@@ -1173,6 +1186,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     })
   }, [sendFilterSettingsToIframe])
 
+  // --- handleSoundSettingsChange: merge patch, update state, send to iframe (Phase 12) ---
+  const handleSoundSettingsChange = useCallback((patch: Partial<DisplaySettings>) => {
+    setSoundSettings((prev) => {
+      const next = { ...prev, ...patch }
+      sendSoundSettingsToIframe(next)
+      return next
+    })
+  }, [sendSoundSettingsToIframe])
+
   // --- sendCustomCssToIframe: post the full theme CSS to the embed preview ---
   const sendCustomCssToIframe = useCallback((css: string) => {
     iframeRef.current?.contentWindow?.postMessage(
@@ -1213,17 +1235,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  // --- EMBED_READY: re-send CSS and filter settings when embed page signals its listener is registered ---
+  // --- EMBED_READY: re-send CSS, filter settings, and sound settings when embed page signals its listener is registered ---
   useEffect(() => {
     const handleEmbedReady = (event: MessageEvent) => {
       if (event.data?.type !== 'EMBED_READY') return
       sendCssToIframe(visualSettingsRef.current)
       // Also send current filter settings to the embed on ready
       sendFilterSettingsToIframe(filterSettingsRef.current)
+      // Also send current sound settings to the embed on ready
+      sendSoundSettingsToIframe(soundSettingsRef.current)
     }
     window.addEventListener('message', handleEmbedReady)
     return () => window.removeEventListener('message', handleEmbedReady)
-  }, [sendCssToIframe, sendFilterSettingsToIframe])
+  }, [sendCssToIframe, sendFilterSettingsToIframe, sendSoundSettingsToIframe])
 
   // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
   const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
@@ -1346,6 +1370,18 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           // Phase 11: Load filter settings
           if (config.filter_settings) {
             setFilterSettings(config.filter_settings)
+          }
+
+          // Phase 12: Load sound settings from display_settings
+          if (config.display_settings) {
+            const d = config.display_settings
+            const loaded: Partial<DisplaySettings> = {}
+            if (typeof d.notification_sound_enabled === 'boolean') loaded.notification_sound_enabled = d.notification_sound_enabled
+            if (typeof d.notification_sound_preset === 'string') loaded.notification_sound_preset = d.notification_sound_preset
+            if (typeof d.notification_sound_volume === 'number') loaded.notification_sound_volume = d.notification_sound_volume
+            if (typeof d.notification_sound_cooldown === 'number') loaded.notification_sound_cooldown = d.notification_sound_cooldown
+            if (typeof d.notification_sound_url === 'string') loaded.notification_sound_url = d.notification_sound_url
+            setSoundSettings(loaded)
           }
         } catch (err) {
           console.warn('[OverlayEditor] Failed to load config', err)
@@ -1684,6 +1720,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           platform_badge_position: visualSettings.platformBadgePosition ?? 'before',
           platform_badge_style: visualSettings.platformBadgeStyle ?? 'text',
           show_platform_badge: visualSettings.showPlatformBadge !== 'none',
+          notification_sound_enabled: soundSettings.notification_sound_enabled ?? false,
+          notification_sound_preset: soundSettings.notification_sound_preset ?? 'chime',
+          notification_sound_volume: soundSettings.notification_sound_volume ?? 0.5,
+          notification_sound_cooldown: soundSettings.notification_sound_cooldown ?? 500,
+          ...(soundSettings.notification_sound_url ? { notification_sound_url: soundSettings.notification_sound_url } : {}),
         },
         enable_7tv: enable7tv,
         enable_bttv: enableBttv,
@@ -2014,6 +2055,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   visibilityDefaults={iframeVisibilityDefaults}
                   filterSettings={filterSettings}
                   onFilterChange={handleFilterSettingsChange}
+                  displaySettings={soundSettings}
+                  onSoundChange={handleSoundSettingsChange}
+                  isPremium={user?.is_premium ?? false}
                 />
               </CollapsibleSection>
 
