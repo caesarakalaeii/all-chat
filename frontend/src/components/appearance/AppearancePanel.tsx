@@ -2,7 +2,7 @@
 
 import React from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
-import type { FilterSettings } from '@/lib/types/overlay'
+import type { FilterSettings, DisplaySettings } from '@/lib/types/overlay'
 import { CollapsibleSection } from './CollapsibleSection'
 import { TypographyGroup } from './TypographyGroup'
 import { ColorsGroup } from './ColorsGroup'
@@ -12,6 +12,7 @@ import { SizingGroup } from './SizingGroup'
 import { PlatformColorsGroup } from './PlatformColorsGroup'
 import { EventsGroup } from './EventsGroup'
 import { FilterGroup } from './FilterGroup'
+import { SoundGroup } from './SoundGroup'
 
 export interface AppearancePanelProps {
   visualSettings: Partial<VisualSettings>
@@ -19,6 +20,9 @@ export interface AppearancePanelProps {
   visibilityDefaults?: Partial<VisualSettings>
   filterSettings?: FilterSettings
   onFilterChange?: (patch: Partial<FilterSettings>) => void
+  displaySettings?: Partial<DisplaySettings>
+  onSoundChange?: (patch: Partial<DisplaySettings>) => void
+  isPremium?: boolean
 }
 
 export function AppearancePanel({
@@ -27,6 +31,9 @@ export function AppearancePanel({
   visibilityDefaults = {},
   filterSettings,
   onFilterChange,
+  displaySettings,
+  onSoundChange,
+  isPremium,
 }: AppearancePanelProps): React.ReactElement {
   return (
     <div className="flex flex-col gap-0">
@@ -58,6 +65,15 @@ export function AppearancePanel({
       {filterSettings && onFilterChange && (
         <CollapsibleSection id="filters" title="Filters">
           <FilterGroup filterSettings={filterSettings} onChange={onFilterChange} />
+        </CollapsibleSection>
+      )}
+      {displaySettings && onSoundChange && (
+        <CollapsibleSection id="sounds" title="Notification Sounds">
+          <SoundGroup
+            displaySettings={displaySettings}
+            onChange={onSoundChange}
+            isPremium={isPremium ?? false}
+          />
         </CollapsibleSection>
       )}
     </div>
