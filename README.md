@@ -283,7 +283,7 @@ Built on the shoulders of:
 - [Discord community](https://discord.gg/xCGBSuz39P)
 - [GitHub Issues](https://github.com/caesarakalaeii/all-chat/issues)
 - [GitHub Discussions](https://github.com/caesarakalaeii/all-chat/discussions)
-- Email: support@allch.at
+- Email: all.chat.support@gmail.com
 
 ---
 

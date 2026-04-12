@@ -10,7 +10,7 @@ const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalLayout title="Privacy Policy" lastUpdated="November 15, 2025">
+    <LegalLayout title="Privacy Policy" lastUpdated="April 12, 2026">
       <div className="space-y-4">
         <div className="rounded-xl border border-twitch/20 bg-twitch/5 p-5 text-text-sub">
           <strong className="text-text">TL;DR:</strong> All-Chat only collects the information we
@@ -39,8 +39,8 @@ export default function PrivacyPolicyPage() {
         <div>
           <h3 className="text-lg font-semibold text-text">1.1 Authentication Information</h3>
           <p>
-            When you connect Twitch, YouTube, TikTok, or Kick we store the minimum data required to
-            create overlays and reconnect later:
+            When you connect Twitch, YouTube, TikTok, Kick, or Discord we store the minimum data
+            required to create overlays and reconnect later:
           </p>
           <ul className={listClasses}>
             <li>Platform identifiers (user ID, username, display name)</li>
@@ -121,8 +121,10 @@ export default function PrivacyPolicyPage() {
         <p>We only talk to the services that power your overlays:</p>
         <ul className={listClasses}>
           <li>Twitch IRC and Helix APIs</li>
-          <li>YouTube Live Chat and OAuth APIs</li>
-          <li>TikTok Live APIs (beta) and Kick APIs</li>
+          <li>YouTube internal APIs and OAuth APIs</li>
+          <li>TikTok Live via unofficial reverse-engineered WebSocket library (beta)</li>
+          <li>Kick Pusher WebSocket APIs</li>
+          <li>Discord Gateway APIs</li>
           <li>7TV, BTTV, FFZ for emote metadata</li>
         </ul>
         <p>
@@ -130,8 +132,8 @@ export default function PrivacyPolicyPage() {
           approve.
         </p>
         <p className="font-semibold text-text">
-          YouTube Integration: Your use of All-Chat&apos;s YouTube integration is also governed by
-          the{' '}
+          YouTube Integration: YouTube chat is fetched using YouTube&apos;s internal APIs (InnerTube).
+          Your use of All-Chat&apos;s YouTube integration is also governed by the{' '}
           <a
             href="http://www.google.com/policies/privacy"
             target="_blank"
@@ -180,10 +182,10 @@ export default function PrivacyPolicyPage() {
           <li>
             Contact us at{' '}
             <a
-              href="mailto:allchat@caes.ar"
+              href="mailto:all.chat.support@gmail.com"
               className="text-twitch underline decoration-twitch/30 underline-offset-4"
             >
-              allchat@caes.ar
+              all.chat.support@gmail.com
             </a>
           </li>
         </ul>
@@ -246,10 +248,10 @@ export default function PrivacyPolicyPage() {
           </Link>{' '}
           or reach out to{' '}
           <a
-            href="mailto:allchat@caes.ar"
+            href="mailto:all.chat.support@gmail.com"
             className="text-twitch underline decoration-twitch/30 underline-offset-4"
           >
-            allchat@caes.ar
+            all.chat.support@gmail.com
           </a>
           .
         </p>
