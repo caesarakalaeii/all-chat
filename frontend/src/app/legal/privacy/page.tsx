@@ -106,7 +106,8 @@ export default function PrivacyPolicyPage() {
         <h3 className="text-lg font-semibold text-text">3.2 Safeguards</h3>
         <ul className={listClasses}>
           <li>OAuth tokens encrypted with AES-GCM before touching the database</li>
-          <li>Strict HTTPS everywhere and signed internal service tokens</li>
+          <li>HTTPS for all external traffic via TLS termination at the ingress layer</li>
+          <li>Kubernetes network policies restricting internal service-to-service communication</li>
           <li>Role-scoped infrastructure access and audit logging</li>
           <li>Regular dependency upgrades and security patching</li>
         </ul>
