@@ -49,6 +49,11 @@ export interface DisplaySettings {
   show_pronouns?: boolean
   pronoun_position?: 'before' | 'after'
   pronoun_color?: string
+  notification_sound_enabled?: boolean
+  notification_sound_preset?: string
+  notification_sound_url?: string
+  notification_sound_volume?: number
+  notification_sound_cooldown?: number
 }
 
 export interface FilterSettings {
