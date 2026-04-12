@@ -677,7 +677,7 @@ Note: E2E tests for audio playback are not feasible in a headless browser enviro
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Sound preview in the editor**
    - What we know: Claude's discretion (CONTEXT.md)
