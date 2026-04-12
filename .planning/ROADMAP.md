@@ -357,10 +357,11 @@ Plans:
 
 ### Phase 12: Notification sound on incoming messages with premium custom sound support
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Add configurable notification sounds that play when new chat messages arrive in the overlay. All users get preset sounds (chime, pop, ping) with volume and cooldown control. Premium users can supply a custom sound URL. Settings persist via display_settings JSONB. Sound playback happens client-side in the overlay page and editor preview. No backend changes required.
+**Requirements**: SND-01, SND-02, SND-03, SND-04, SND-05, SND-06, SND-07, SND-08, SND-09
 **Depends on:** Phase 11
-**Plans:** 0 plans
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 12 to break down)
+- [ ] 12-01-PLAN.md — soundPlayer.ts TDD utility, DisplaySettings extension, preset audio files, overlay + embed page playback wiring
+- [ ] 12-02-PLAN.md — SoundGroup UI component with tests, AppearancePanel integration, editor page state/save/postMessage
