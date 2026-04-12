@@ -189,18 +189,8 @@ export default function PrivacyPolicyPage() {
             </a>
           </li>
         </ul>
-        <p className="font-semibold text-text">
-          For YouTube Data: You can revoke All-Chat&apos;s access to your YouTube data via the{' '}
-          <a
-            href="https://myaccount.google.com/connections?filters=3,4&hl=en"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            Google security settings page
-          </a>
-          . Disconnecting YouTube from Settings will delete your OAuth tokens. Chat messages are
-          processed in real-time and not stored permanently.
+        <p className="text-sm text-text-dim">
+          For platform-specific details on revoking access, see Section 10 below.
         </p>
       </section>
 
@@ -230,8 +220,115 @@ export default function PrivacyPolicyPage() {
         </p>
       </section>
 
+      <section className="space-y-6">
+        <h2 className="text-2xl font-semibold text-text">10. Platform-Specific Privacy Notes</h2>
+
+        <div>
+          <h3 className="text-lg font-semibold text-text">TikTok Integration</h3>
+          <p>When you add a TikTok source to your overlay:</p>
+          <ul className={listClasses}>
+            <li>
+              We connect to TikTok Live streams using an unofficial, reverse-engineered WebSocket
+              library (beta)
+            </li>
+            <li>No OAuth authentication or TikTok account connection is required</li>
+            <li>We receive real-time chat messages during live streams</li>
+            <li>
+              We do not access TikTok videos, followers, or other personal content beyond live chat
+            </li>
+            <li>
+              You can stop data collection by removing the TikTok source from your overlay in
+              All-Chat settings
+            </li>
+            <li>
+              This integration may break without notice if TikTok changes its internal APIs
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 className="text-lg font-semibold text-text">Twitch Integration</h3>
+          <p>When you connect your Twitch account:</p>
+          <ul className={listClasses}>
+            <li>We connect to Twitch IRC to receive chat messages</li>
+            <li>We use the Twitch Helix API for user authentication and EventSub webhooks</li>
+            <li>
+              We do not access your channel analytics, subscriber information, or payment data
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 className="text-lg font-semibold text-text">YouTube Integration</h3>
+          <p>When you connect your YouTube account:</p>
+          <ul className={listClasses}>
+            <li>We use YouTube&apos;s internal APIs (InnerTube) to fetch live chat messages</li>
+            <li>We use YouTube OAuth for account authentication</li>
+            <li>We do not access your video content, channel analytics, or subscriber data</li>
+            <li>
+              Your use of All-Chat&apos;s YouTube integration is also governed by the{' '}
+              <a
+                href="http://www.google.com/policies/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-twitch underline decoration-twitch/30 underline-offset-4"
+              >
+                Google Privacy Policy
+              </a>
+            </li>
+          </ul>
+          <p>
+            <strong className="text-text">Revoking YouTube Access:</strong> You can revoke
+            All-Chat&apos;s access to your YouTube data at any time by visiting the{' '}
+            <a
+              href="https://myaccount.google.com/connections?filters=3,4&hl=en"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-twitch underline decoration-twitch/30 underline-offset-4"
+            >
+              Google security settings page
+            </a>{' '}
+            or by disconnecting YouTube from the All-Chat Settings page.
+          </p>
+          <p className="text-sm text-text-dim">
+            Disconnecting YouTube deletes your stored OAuth tokens. Chat messages are processed in
+            real-time and not stored permanently.
+          </p>
+        </div>
+
+        <div>
+          <h3 className="text-lg font-semibold text-text">Kick Integration</h3>
+          <p>When you add a Kick source to your overlay:</p>
+          <ul className={listClasses}>
+            <li>We connect to Kick chat channels via the Pusher WebSocket API</li>
+            <li>We receive real-time chat messages from the specified channels</li>
+            <li>
+              We do not access your Kick account data, channel analytics, or subscriber information
+            </li>
+            <li>You can stop data collection by removing the Kick source from your overlay</li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 className="text-lg font-semibold text-text">Discord Integration</h3>
+          <p>When you add a Discord source to your overlay:</p>
+          <ul className={listClasses}>
+            <li>We connect to Discord channels via the Discord Gateway API using a bot</li>
+            <li>We receive real-time messages from configured Discord channels</li>
+            <li>
+              We do not access your direct messages, server settings, or member lists beyond what is
+              needed for chat relay
+            </li>
+            <li>
+              You can stop data collection by removing the Discord source from your overlay or
+              removing the bot from your server
+            </li>
+          </ul>
+        </div>
+      </section>
+
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">10. Updates</h2>
+        <h2 className="text-2xl font-semibold text-text">11. Updates</h2>
         <p>
           We&apos;ll post updates to this page when the policy changes and include a new{' '}
           <em>Last Updated</em> date. Significant changes will be announced inside the dashboard.
