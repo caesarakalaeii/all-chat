@@ -10,7 +10,7 @@ const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
 
 export default function TermsOfServicePage() {
   return (
-    <LegalLayout title="Terms of Service" lastUpdated="November 15, 2025">
+    <LegalLayout title="Terms of Service" lastUpdated="April 12, 2026">
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">1. Acceptance of Terms</h2>
         <p>
@@ -22,9 +22,9 @@ export default function TermsOfServicePage() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">2. Description of Service</h2>
         <p>
-          All-Chat aggregates real-time chat from Twitch, YouTube, Kick, and TikTok into a single
-          overlay so you can display cross-platform conversation on your stream. You can customize
-          overlays, connect sources, and broadcast them via OBS or browser sources.
+          All-Chat aggregates real-time chat from Twitch, YouTube, Kick, TikTok, and Discord into a
+          single overlay so you can display cross-platform conversation on your stream. You can
+          customize overlays, connect sources, and broadcast them via OBS or browser sources.
         </p>
       </section>
 
@@ -37,15 +37,16 @@ export default function TermsOfServicePage() {
           <li>
             Notify us at{' '}
             <a
-              href="mailto:allchat@caes.ar"
+              href="mailto:all.chat.support@gmail.com"
               className="text-twitch underline decoration-twitch/30 underline-offset-4"
             >
-              allchat@caes.ar
+              all.chat.support@gmail.com
             </a>{' '}
             if you suspect compromise
           </li>
           <li>
-            Comply with the terms of Twitch, YouTube, TikTok, Kick, and any other connected platform
+            Comply with the terms of Twitch, YouTube, TikTok, Kick, Discord, and any other connected
+            platform
           </li>
         </ul>
       </section>
@@ -193,10 +194,10 @@ export default function TermsOfServicePage() {
         <p>
           Questions? Reach us at{' '}
           <a
-            href="mailto:allchat@caes.ar"
+            href="mailto:all.chat.support@gmail.com"
             className="text-twitch underline decoration-twitch/30 underline-offset-4"
           >
-            allchat@caes.ar
+            all.chat.support@gmail.com
           </a>
           . Hosted community forks should contact their own administrators.
         </p>
