@@ -29,6 +29,8 @@ import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { shouldFilterMessage } from '@/lib/utils/filterMessage'
 import type { FilterSettings } from '@/lib/types/overlay'
+import { createSoundPlayer } from '@/lib/utils/soundPlayer'
+import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
 import '@/styles/events.css'
 
 // ---- Utilities (identical to preview/page.tsx) ----------------------------
@@ -182,6 +184,15 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [filterSettings, setFilterSettings] = useState<FilterSettings>({})
   const filterSettingsRef = useRef<FilterSettings>({})
 
+  // Phase 12: Sound player state
+  const soundPlayerRef = useRef<SoundPlayer | null>(null)
+  const soundSettingsRef = useRef<SoundSettings>({
+    enabled: false,
+    preset: 'chime',
+    volume: 0.5,
+    cooldownMs: 500,
+  })
+
   const wsClientRef = useRef<WebSocketClient | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -235,6 +246,24 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         const settings = event.data.filterSettings as FilterSettings
         setFilterSettings(settings)
         filterSettingsRef.current = settings
+        return
+      }
+      // Phase 12: Real-time sound settings from editor
+      if (event.data?.type === 'SOUND_SETTINGS_UPDATE') {
+        const s = event.data.soundSettings as Partial<import('@/lib/types/overlay').DisplaySettings>
+        const newSettings: SoundSettings = {
+          enabled: s.notification_sound_enabled ?? soundSettingsRef.current.enabled,
+          preset: s.notification_sound_preset ?? soundSettingsRef.current.preset,
+          volume: s.notification_sound_volume ?? soundSettingsRef.current.volume,
+          cooldownMs: s.notification_sound_cooldown ?? soundSettingsRef.current.cooldownMs,
+          customUrl: s.notification_sound_url ?? soundSettingsRef.current.customUrl,
+        }
+        soundSettingsRef.current = newSettings
+        if (soundPlayerRef.current) {
+          soundPlayerRef.current.updateSettings(newSettings)
+        } else {
+          soundPlayerRef.current = createSoundPlayer(newSettings)
+        }
         return
       }
     }
@@ -294,6 +323,31 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           setFilterSettings(config.filter_settings)
           filterSettingsRef.current = config.filter_settings
         }
+
+        // Phase 12: Load sound settings from display_settings
+        const soundEnabled = display.notification_sound_enabled === true
+        const soundPreset = typeof display.notification_sound_preset === 'string'
+          ? display.notification_sound_preset : 'chime'
+        const soundVolume = typeof display.notification_sound_volume === 'number'
+          ? display.notification_sound_volume : 0.5
+        const soundCooldown = typeof display.notification_sound_cooldown === 'number'
+          ? display.notification_sound_cooldown : 500
+        const soundCustomUrl = typeof display.notification_sound_url === 'string'
+          ? display.notification_sound_url || undefined : undefined
+
+        const newSoundSettings: SoundSettings = {
+          enabled: soundEnabled,
+          preset: soundPreset,
+          volume: soundVolume,
+          cooldownMs: soundCooldown,
+          customUrl: soundCustomUrl,
+        }
+        soundSettingsRef.current = newSoundSettings
+        if (soundPlayerRef.current) {
+          soundPlayerRef.current.updateSettings(newSoundSettings)
+        } else {
+          soundPlayerRef.current = createSoundPlayer(newSoundSettings)
+        }
       } catch (error) {
         console.warn('[Embed] Failed to load overlay config', error)
       }
@@ -322,6 +376,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       // Phase 11: apply filter settings before adding to render queue (D-07 WYSIWYG)
       if (shouldFilterMessage(message, filterSettingsRef.current)) return
 
+      // Phase 12: play notification sound for messages that pass the filter
+      soundPlayerRef.current?.play()
+
       setMessages((prev) => [...prev, message].slice(-maxMessages))
     })
 
@@ -341,6 +398,14 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev))
   }, [maxMessages])
+
+  // Phase 12: Destroy sound player on unmount
+  useEffect(() => {
+    return () => {
+      soundPlayerRef.current?.destroy()
+      soundPlayerRef.current = null
+    }
+  }, [])
 
   // Helper: render event-specific content (identical to preview/page.tsx)
   const renderEventContent = (message: ChatMessage): React.ReactNode => {

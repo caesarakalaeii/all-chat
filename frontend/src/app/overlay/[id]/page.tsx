@@ -32,6 +32,8 @@ import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css';
 import type { VisualSettings } from '@/lib/types/visual-settings';
 import { shouldFilterMessage } from '@/lib/utils/filterMessage';
 import type { FilterSettings } from '@/lib/types/overlay';
+import { createSoundPlayer } from '@/lib/utils/soundPlayer';
+import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer';
 
 // ---- Google Font loader ---------------------------------------------------
 
@@ -92,6 +94,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [filterSettings, setFilterSettings] = useState<FilterSettings>({});
   const filterSettingsRef = useRef<FilterSettings>({});
 
+  const soundPlayerRef = useRef<SoundPlayer | null>(null);
+  const soundSettingsRef = useRef<SoundSettings>({
+    enabled: false,
+    preset: 'chime',
+    volume: 0.5,
+    cooldownMs: 500,
+  });
+
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -104,6 +114,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     filterSettingsRef.current = filterSettings;
   }, [filterSettings]);
+
+  // Phase 12: Destroy sound player on unmount
+  useEffect(() => {
+    return () => {
+      soundPlayerRef.current?.destroy()
+      soundPlayerRef.current = null
+    }
+  }, []);
 
   // Load overlay display configuration (public endpoint)
   useEffect(() => {
@@ -189,6 +207,32 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         if (data.filter_settings) {
           setFilterSettings(data.filter_settings);
           filterSettingsRef.current = data.filter_settings;
+        }
+
+        // Phase 12: Load sound settings from display_settings
+        const soundEnabled = display.notification_sound_enabled === true
+        const soundPreset = typeof display.notification_sound_preset === 'string'
+          ? display.notification_sound_preset : 'chime'
+        const soundVolume = typeof display.notification_sound_volume === 'number'
+          ? display.notification_sound_volume : 0.5
+        const soundCooldown = typeof display.notification_sound_cooldown === 'number'
+          ? display.notification_sound_cooldown : 500
+        const soundCustomUrl = typeof display.notification_sound_url === 'string'
+          ? display.notification_sound_url || undefined : undefined
+
+        const newSoundSettings: SoundSettings = {
+          enabled: soundEnabled,
+          preset: soundPreset,
+          volume: soundVolume,
+          cooldownMs: soundCooldown,
+          customUrl: soundCustomUrl,
+        }
+        soundSettingsRef.current = newSoundSettings
+
+        if (soundPlayerRef.current) {
+          soundPlayerRef.current.updateSettings(newSoundSettings)
+        } else {
+          soundPlayerRef.current = createSoundPlayer(newSoundSettings)
         }
 
         // Load configured sources (channel_id -> SourceInfo)
@@ -345,6 +389,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
           // Phase 11: apply filter settings before adding to render queue (D-01, D-02)
           if (shouldFilterMessage(message, filterSettingsRef.current)) return;
+
+          // Phase 12: play notification sound for messages that pass the filter (D-05)
+          soundPlayerRef.current?.play()
 
           setMessages((prev) => {
             const newMessages = [...prev, message];
