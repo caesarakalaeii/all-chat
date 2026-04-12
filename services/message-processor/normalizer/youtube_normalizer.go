@@ -101,12 +101,12 @@ func (n *YouTubeNormalizer) extractUserInfo(raw *models.RawChatMessage) models.U
 func (n *YouTubeNormalizer) extractBadges(tags map[string]string) []models.Badge {
 	badges := make([]models.Badge, 0)
 
-	// Owner (channel owner/broadcaster) - Crown icon
+	// Owner (channel owner/broadcaster) - YouTube uses Material Icons "stars" (star in circle), gold
 	if tags["is_owner"] == "true" {
 		badges = append(badges, models.Badge{
 			Name:    "owner",
 			Version: "1",
-			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23FFD700'%3E%3Cpath d='M8 2l1.5 3h3.5l-2.8 2 1 3.2-3.2-2.2-3.2 2.2 1-3.2-2.8-2h3.5z'/%3E%3Cpath d='M2 13h12v2H2z' fill='%23FFA500'/%3E%3C/svg%3E",
+			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FFD600'%3E%3Cpath d='M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 16L12 15.45 7.77 18l1.12-4.81-3.73-3.23 4.92-.42L12 5l1.92 4.53 4.92.42-3.73 3.23L16.23 18z'/%3E%3C/svg%3E",
 		})
 	}
 
@@ -126,25 +126,25 @@ func (n *YouTubeNormalizer) extractBadges(tags map[string]string) []models.Badge
 		badges = append(badges, models.Badge{
 			Name:    "member",
 			Version: "Member",
-			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2300FF00'%3E%3Cpath d='M8 1l2 5h5l-4 3.5 1.5 5.5-4.5-3.5-4.5 3.5 1.5-5.5-4-3.5h5z'/%3E%3C/svg%3E",
+			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%230F9D58'%3E%3Cpath d='M8 1l2 5h5l-4 3.5 1.5 5.5-4.5-3.5-4.5 3.5 1.5-5.5-4-3.5h5z'/%3E%3C/svg%3E",
 		})
 	}
 
-	// Moderator - Shield with wrench icon
+	// Moderator - YouTube uses Material Icons "build" (wrench), blue
 	if tags["is_moderator"] == "true" {
 		badges = append(badges, models.Badge{
 			Name:    "moderator",
 			Version: "1",
-			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%235E84F1'%3E%3Cpath d='M8 1L3 3v4c0 3.5 2 6 5 8 3-2 5-4.5 5-8V3z'/%3E%3Cpath d='M6 6h1v4H6zm3 0h1v4H9z' fill='white'/%3E%3C/svg%3E",
+			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%235E84F1'%3E%3Cpath d='M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z'/%3E%3C/svg%3E",
 		})
 	}
 
-	// Verified - Checkmark icon
+	// Verified - YouTube uses Material Icons "check_circle", gray
 	if tags["is_verified"] == "true" {
 		badges = append(badges, models.Badge{
 			Name:    "verified",
 			Version: "1",
-			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2300A6ED'%3E%3Ccircle cx='8' cy='8' r='7'/%3E%3Cpath d='M6 8l2 2 4-4' stroke='white' stroke-width='2' fill='none'/%3E%3C/svg%3E",
+			IconURL: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23909090'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z'/%3E%3C/svg%3E",
 		})
 	}
 
