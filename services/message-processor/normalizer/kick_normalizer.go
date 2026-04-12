@@ -118,6 +118,38 @@ func (n *KickNormalizer) resolveTimestamp(ts time.Time, kickMsg *kickChatMessage
 	return time.Now()
 }
 
+// kickBadgeIcons maps Kick badge type names to SVG data URIs sourced from Kick's actual badge assets.
+var kickBadgeIcons = map[string]string{
+	// Broadcaster/Host - pixel-art microphone, pink-to-purple gradient
+	"broadcaster": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' gradientUnits='userSpaceOnUse' x1='8' y1='0' x2='8' y2='16'%3E%3Cstop offset='0' stop-color='%23FF1CD2'/%3E%3Cstop offset='.99' stop-color='%23B20DFF'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='3.2' y='9.6' width='1.6' height='1.6' fill='url(%23g)'/%3E%3Cpolygon points='6.4,9.6 9.6,9.6 9.6,8 11.2,8 11.2,1.6 9.6,1.6 9.6,0 6.4,0 6.4,1.6 4.8,1.6 4.8,8 6.4,8' fill='url(%23g)'/%3E%3Crect x='1.6' y='6.4' width='1.6' height='3.2' fill='url(%23g)'/%3E%3Crect x='11.2' y='9.6' width='1.6' height='1.6' fill='url(%23g)'/%3E%3Cpolygon points='4.8,12.8 6.4,12.8 6.4,14.4 4.8,14.4 4.8,16 11.2,16 11.2,14.4 9.6,14.4 9.6,12.8 11.2,12.8 11.2,11.2 4.8,11.2' fill='url(%23g)'/%3E%3Crect x='12.8' y='6.4' width='1.6' height='3.2' fill='url(%23g)'/%3E%3C/svg%3E",
+	// Moderator - pixel-art sword, flat cyan
+	"moderator": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M11.7,1.3v1.5h-1.5v1.5H8.7v1.5H7.3v1.5H5.8V5.8h-3v3h1.5v1.5H2.8v1.5H1.3v3h3v-1.5h1.5v-1.5h1.5v1.5h3v-3H8.7V8.7h1.5V7.3h1.5V5.8h1.5V4.3h1.5v-3h-3z' fill='%2300C7FF'/%3E%3C/svg%3E",
+	// VIP - pixel-art crown, gold-to-orange gradient
+	"vip": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' gradientUnits='userSpaceOnUse' x1='8' y1='0' x2='8' y2='16'%3E%3Cstop offset='0' stop-color='%23FFC900'/%3E%3Cstop offset='.99' stop-color='%23FF9500'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M13.9,2.4v1.1h-1.2v2.3h-1.1v1.1h-1.1V4.6H9.3V1.3H6.7v3.3H5.6v2.3H4.4V5.8H3.3V3.5H2.1V2.4H0v12.3h16V2.4H13.9z' fill='url(%23g)'/%3E%3C/svg%3E",
+	// Subscriber - pixel-art 4-pointed star, lime-to-green gradient
+	"subscriber": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23E1FF00'/%3E%3Cstop offset='.99' stop-color='%232AA300'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M14.8,7.3V6.1h-2.4V4.9H11V3.7H9.9V1.2H8.7V0H7.3v1.2H6.1v2.5H5v1.2H3.7v1.3H1.2v1.2H0v1.4h1.2V10h2.4v1.3H5v1.2h1.2V15h1.2v1h1.3v-1.2h1.2v-2.5H11v-1.2h1.3V9.9h2.4V8.7H16V7.3H14.8z' fill='url(%23g)'/%3E%3C/svg%3E",
+	// Founder - pixel-art shield with "1", gold-to-orange gradient
+	"founder": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' gradientUnits='userSpaceOnUse' x1='8' y1='0' x2='8' y2='16'%3E%3Cstop offset='0' stop-color='%23FFC900'/%3E%3Cstop offset='.99' stop-color='%23FF9500'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M14.6,4V2.7h-1.3V1.4H12V0H4v1.4H2.7v1.3H1.3V4H0v8h1.3v1.3h1.4v1.3H4V16h8v-1.4h1.3v-1.3h1.3V12H16V4H14.6z M9.9,12.9H6.7V6.4H4.5V5.2h1V4.1h1v-1h3.4V12.9z' fill-rule='evenodd' clip-rule='evenodd' fill='url(%23g)'/%3E%3C/svg%3E",
+	// Verified - starburst seal with checkmark, green gradient
+	"verified": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='.34' y1='.97' x2='.66' y2='.05'%3E%3Cstop stop-color='%231EFF00'/%3E%3Cstop offset='.99' stop-color='%2300FF8C'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M16 6.835l-2.265-1.9-.515-2.91h-2.955L8 .12 5.735 2.02H2.78l-.515 2.91L0 6.835l1.48 2.56-.515 2.91 2.78 1.01 1.48 2.56L8 14.865l2.78 1.01 1.48-2.56 2.78-1.01-.515-2.91L16 6.835zM6.495 12.405l-3.705-3.71 1.415-1.415 2.29 2.295 4.795-4.795 1.415 1.415-6.205 6.205z' fill='url(%23g)'/%3E%3C/svg%3E",
+}
+
+// kickBadgeIconURL returns the SVG data URI for a known Kick badge type, or empty string.
+func kickBadgeIconURL(badgeType string) string {
+	normalized := strings.ToLower(badgeType)
+	if url, ok := kickBadgeIcons[normalized]; ok {
+		return url
+	}
+	// Handle common aliases
+	switch normalized {
+	case "host", "streamer":
+		return kickBadgeIcons["broadcaster"]
+	case "sub":
+		return kickBadgeIcons["subscriber"]
+	}
+	return ""
+}
+
 func (n *KickNormalizer) extractBadges(raw *models.RawChatMessage, kickMsg *kickChatMessage) []models.Badge {
 	badges := make([]models.Badge, 0)
 	seen := map[string]struct{}{}
@@ -128,11 +160,10 @@ func (n *KickNormalizer) extractBadges(raw *models.RawChatMessage, kickMsg *kick
 			return
 		}
 		seen[key] = struct{}{}
-		// Kick doesn't expose public badge image URLs; icon_url stays empty
-		// and the frontend renders a text chip fallback.
 		badges = append(badges, models.Badge{
 			Name:    name,
 			Version: version,
+			IconURL: kickBadgeIconURL(name),
 		})
 	}
 
