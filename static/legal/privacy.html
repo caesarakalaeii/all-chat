@@ -131,7 +131,8 @@
         <p>We implement security measures including:</p>
         <ul>
             <li>AES-GCM encryption of OAuth tokens at rest</li>
-            <li>HTTPS/TLS encryption for data in transit</li>
+            <li>HTTPS for all external traffic via TLS termination at the ingress layer</li>
+            <li>Kubernetes network policies restricting internal service-to-service communication</li>
             <li>Access controls and authentication</li>
             <li>Regular security updates and patches</li>
             <li>Monitoring and logging of access attempts</li>
