@@ -27,7 +27,7 @@ func Logging(logger *zap.Logger) gin.HandlerFunc {
 			zap.String("query", query),
 			zap.Int("status", status),
 			zap.Duration("latency", latency),
-			zap.String("client_ip", c.ClientIP()),
+			zap.String("client_ip", AnonymizeIP(c.ClientIP())),
 			zap.String("user_agent", c.Request.UserAgent()),
 		}
 

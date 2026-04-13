@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	sharedmw "github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -142,7 +143,7 @@ func (h *QuotaHandler) GetQuotaStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 
 	h.logger.Debug("Quota status retrieved",
-		zap.String("request_from", c.ClientIP()),
+		zap.String("request_from", sharedmw.AnonymizeIP(c.ClientIP())),
 	)
 }
 
@@ -187,7 +188,7 @@ func (h *QuotaHandler) GetChannelQuota(c *gin.Context) {
 
 	h.logger.Debug("Channel quota retrieved",
 		zap.String("channel_id", channelID),
-		zap.String("request_from", c.ClientIP()),
+		zap.String("request_from", sharedmw.AnonymizeIP(c.ClientIP())),
 	)
 }
 
@@ -240,7 +241,7 @@ func (h *QuotaHandler) GetQuotaHistory(c *gin.Context) {
 
 	h.logger.Debug("Quota history retrieved",
 		zap.Int("days", days),
-		zap.String("request_from", c.ClientIP()),
+		zap.String("request_from", sharedmw.AnonymizeIP(c.ClientIP())),
 	)
 }
 
@@ -298,7 +299,7 @@ func (h *QuotaHandler) GetQuotaPrediction(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 
 	h.logger.Debug("Quota prediction retrieved",
-		zap.String("request_from", c.ClientIP()),
+		zap.String("request_from", sharedmw.AnonymizeIP(c.ClientIP())),
 	)
 }
 
@@ -324,7 +325,7 @@ func (h *QuotaHandler) RecordQuota(c *gin.Context) {
 	if err := h.globalTracker.RecordUsage(ctx, req.Units); err != nil {
 		h.logger.Error("Failed to record quota usage from external service",
 			zap.Int("units", req.Units),
-			zap.String("client_ip", c.ClientIP()),
+			zap.String("client_ip", sharedmw.AnonymizeIP(c.ClientIP())),
 			zap.Error(err),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -335,7 +336,7 @@ func (h *QuotaHandler) RecordQuota(c *gin.Context) {
 
 	h.logger.Info("Recorded quota usage from external service",
 		zap.Int("units", req.Units),
-		zap.String("client_ip", c.ClientIP()),
+		zap.String("client_ip", sharedmw.AnonymizeIP(c.ClientIP())),
 		zap.String("user_agent", c.Request.UserAgent()),
 	)
 
@@ -382,7 +383,7 @@ func (h *QuotaHandler) GetCircuitBreakers(c *gin.Context) {
 	})
 
 	h.logger.Debug("Circuit breakers status retrieved",
-		zap.String("request_from", c.ClientIP()),
+		zap.String("request_from", sharedmw.AnonymizeIP(c.ClientIP())),
 		zap.Int("breaker_count", len(breakers)),
 	)
 }
@@ -431,7 +432,7 @@ func (h *QuotaHandler) ResetCircuitBreaker(c *gin.Context) {
 
 	h.logger.Warn("Manually reset circuit breaker",
 		zap.String("channel_id", channelID),
-		zap.String("admin_ip", c.ClientIP()),
+		zap.String("admin_ip", sharedmw.AnonymizeIP(c.ClientIP())),
 	)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -454,7 +455,7 @@ func (h *QuotaHandler) ResetAllCircuitBreakers(c *gin.Context) {
 	h.circuitBreakerResetter.ResetAllCircuitBreakers()
 
 	h.logger.Warn("Manually reset all circuit breakers",
-		zap.String("admin_ip", c.ClientIP()),
+		zap.String("admin_ip", sharedmw.AnonymizeIP(c.ClientIP())),
 	)
 
 	c.JSON(http.StatusOK, gin.H{

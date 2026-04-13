@@ -30,6 +30,12 @@ func NewUserRepository(db *pgxpool.Pool, cipher StringCipher) *UserRepository {
 	return &UserRepository{db: db, cipher: cipher}
 }
 
+// DB returns the underlying connection pool for cross-table queries
+// (e.g. DSGVO data export).
+func (r *UserRepository) DB() *pgxpool.Pool {
+	return r.db
+}
+
 // Create inserts a new user
 func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
 	user.ID = uuid.New().String()

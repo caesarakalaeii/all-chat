@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	"net"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -93,7 +95,7 @@ func (s *Signer) VerifyMiddleware() gin.HandlerFunc {
 		if signature == "" {
 			s.logger.Warn("Request missing signature header",
 				zap.String("path", c.Request.URL.Path),
-				zap.String("remote", c.ClientIP()))
+				zap.String("remote", anonymizeIP(c.ClientIP())))
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing signature"})
 			c.Abort()
 			return
@@ -244,4 +246,22 @@ func NewSigningClient(serviceName, secret string, logger *zap.Logger) *http.Clie
 		Transport: NewSigningTransport(nil, signer),
 		Timeout:   30 * time.Second,
 	}
+}
+
+// anonymizeIP truncates the last octet (IPv4) or last 80 bits (IPv6) for
+// DSGVO-compliant log output.
+func anonymizeIP(raw string) string {
+	ip := net.ParseIP(raw)
+	if ip == nil {
+		return raw
+	}
+	if v4 := ip.To4(); v4 != nil {
+		v4[3] = 0
+		return v4.String()
+	}
+	v6 := ip.To16()
+	for i := 6; i < 16; i++ {
+		v6[i] = 0
+	}
+	return v6.String()
 }

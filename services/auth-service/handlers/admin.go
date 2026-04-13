@@ -181,6 +181,18 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 		zap.String("target_id", targetUserID),
 		zap.String("target_username", targetUser.Username))
 
+	// DSGVO Art. 5(2) accountability: persist audit record
+	_, auditErr := h.db.Exec(c.Request.Context(),
+		`INSERT INTO impersonation_audit_log (admin_user_id, admin_username, target_user_id, target_username)
+		 VALUES ($1, $2, $3, $4)`,
+		adminUserID.(string), adminUsername.(string), targetUserID, targetUser.Username)
+	if auditErr != nil {
+		h.logger.Error("Failed to write impersonation audit log",
+			zap.String("admin_id", adminUserID.(string)),
+			zap.String("target_id", targetUserID),
+			zap.Error(auditErr))
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"token":         token,
 		"user_id":       targetUser.ID,

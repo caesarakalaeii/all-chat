@@ -17,6 +17,7 @@ import (
 	"github.com/caesar/all-chat/services/emote-service/handlers"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	sharedmw "github.com/caesar/all-chat/shared/middleware"
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
@@ -223,7 +224,7 @@ func ginLogger(log *zap.Logger) gin.HandlerFunc {
 			zap.String("query", query),
 			zap.Int("status", c.Writer.Status()),
 			zap.Duration("latency", latency),
-			zap.String("ip", c.ClientIP()),
+			zap.String("ip", sharedmw.AnonymizeIP(c.ClientIP())),
 		)
 	}
 }
@@ -254,7 +255,7 @@ func apiKeyMiddleware(expectedKey string, log *zap.Logger) gin.HandlerFunc {
 		}
 
 		if subtle.ConstantTimeCompare([]byte(provided), []byte(expectedKey)) != 1 {
-			log.Warn("Invalid API key provided", zap.String("ip", c.ClientIP()))
+			log.Warn("Invalid API key provided", zap.String("ip", sharedmw.AnonymizeIP(c.ClientIP())))
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
 			return
 		}

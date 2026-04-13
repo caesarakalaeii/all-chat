@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"net"
+
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -65,7 +67,7 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 		if !allowed {
 			rl.cfg.Logger.Warn("Rate limit exceeded",
 				zap.String("key", key),
-				zap.String("ip", c.ClientIP()),
+				zap.String("ip", anonymizeIP(c.ClientIP())),
 				zap.String("path", c.Request.URL.Path))
 
 			c.Header("Retry-After", strconv.FormatInt(int64(time.Until(resetTime).Seconds()), 10))
@@ -136,4 +138,23 @@ func (rl *RateLimiter) CheckLimitForKey(ctx context.Context, key string) (bool, 
 // ResetLimit resets the rate limit for a specific client (admin function)
 func (rl *RateLimiter) ResetLimit(ctx context.Context, key string) error {
 	return rl.cfg.RedisClient.Del(ctx, key).Err()
+}
+
+// anonymizeIP truncates the last octet (IPv4) or last 80 bits (IPv6) for
+// DSGVO-compliant log output. Kept local to avoid a circular dependency
+// on the shared/middleware package.
+func anonymizeIP(raw string) string {
+	ip := net.ParseIP(raw)
+	if ip == nil {
+		return raw
+	}
+	if v4 := ip.To4(); v4 != nil {
+		v4[3] = 0
+		return v4.String()
+	}
+	v6 := ip.To16()
+	for i := 6; i < 16; i++ {
+		v6[i] = 0
+	}
+	return v6.String()
 }

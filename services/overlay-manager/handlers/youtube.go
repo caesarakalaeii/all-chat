@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	sharedmw "github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/services/overlay-manager/youtube"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -55,7 +56,7 @@ func (h *YouTubeHandler) ResolveChannel(c *gin.Context) {
 		if errors.Is(err, youtube.ErrQuotaExhausted) {
 			h.logger.Warn("YouTube API quota exhausted",
 				zap.String("input", req.Input),
-				zap.String("user_ip", c.ClientIP()),
+				zap.String("user_ip", sharedmw.AnonymizeIP(c.ClientIP())),
 			)
 			c.JSON(http.StatusTooManyRequests, gin.H{
 				"error": "YouTube API quota exhausted",

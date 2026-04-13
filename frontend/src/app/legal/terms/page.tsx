@@ -10,12 +10,18 @@ const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
 
 export default function TermsOfServicePage() {
   return (
-    <LegalLayout title="Terms of Service" lastUpdated="April 12, 2026">
+    <LegalLayout title="Terms of Service (Nutzungsbedingungen)" lastUpdated="April 1, 2026">
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">1. Acceptance of Terms</h2>
         <p>
-          By accessing or using All-Chat you agree to these Terms of Service. If you disagree with
-          any part, you should discontinue use immediately.
+          By accessing or using All-Chat you agree to these Terms of Service and our{' '}
+          <Link
+            href="/legal/privacy"
+            className="text-twitch underline decoration-twitch/30 underline-offset-4"
+          >
+            Privacy Policy
+          </Link>
+          . If you disagree with any part, you should discontinue use immediately.
         </p>
       </section>
 
@@ -45,8 +51,8 @@ export default function TermsOfServicePage() {
             if you suspect compromise
           </li>
           <li>
-            Comply with the terms of Twitch, YouTube, TikTok, Kick, Discord, and any other connected
-            platform
+            Comply with the terms of Twitch, YouTube, TikTok, Kick, Discord, and any other
+            connected platform
           </li>
         </ul>
       </section>
@@ -99,7 +105,7 @@ export default function TermsOfServicePage() {
           >
             Privacy Policy
           </Link>
-          , which explains what we collect and how it is used.
+          , which explains what we collect, how it is used, and your rights under the DSGVO.
         </p>
       </section>
 
@@ -166,7 +172,16 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">11. Changes to Terms</h2>
+        <h2 className="text-2xl font-semibold text-text">11. Right of Withdrawal (Widerrufsrecht)</h2>
+        <p>
+          As All-Chat is a free service, there is no contract requiring a formal withdrawal period.
+          You may stop using the service and delete your account at any time via the Settings page.
+          Upon deletion, all your personal data is removed as described in our Privacy Policy.
+        </p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-text">12. Changes to Terms</h2>
         <p>
           We may update these Terms over time. Material changes will be announced in the dashboard,
           and the new version will be posted here with an updated effective date.
@@ -174,7 +189,7 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">12. Termination</h2>
+        <h2 className="text-2xl font-semibold text-text">13. Termination</h2>
         <p>
           We reserve the right to suspend or terminate your access for any breach of these Terms or
           abusive behavior. You may stop using the Service at any time by deleting your account in
@@ -183,14 +198,30 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">13. Governing Law</h2>
+        <h2 className="text-2xl font-semibold text-text">14. Governing Law &amp; Jurisdiction</h2>
         <p>
-          These Terms are governed by applicable laws without regard to conflict-of-law provisions.
+          These Terms are governed by the laws of the Federal Republic of Germany. The courts at the
+          domicile of the operator shall have jurisdiction, unless mandatory consumer protection
+          rules provide otherwise.
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">14. Contact</h2>
+        <h2 className="text-2xl font-semibold text-text">15. Legal Notice</h2>
+        <p>
+          The operator&apos;s identity and contact details are available in the{' '}
+          <Link
+            href="/legal/impressum"
+            className="text-twitch underline decoration-twitch/30 underline-offset-4"
+          >
+            Impressum
+          </Link>
+          .
+        </p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-text">16. Contact</h2>
         <p>
           Questions? Reach us at{' '}
           <a
