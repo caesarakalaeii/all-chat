@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
@@ -22,6 +24,46 @@ const (
 	rateLimit1Min    = 20
 	rateLimit1Hour   = 100
 )
+
+// classifySendError returns the appropriate HTTP status code and a user-friendly
+// description based on the error message. Prevents returning 502 for errors that
+// are not actual gateway failures.
+func classifySendError(errMsg string) (int, string) {
+	// Stream offline / not live — normal condition, not a server error
+	for _, s := range []string{
+		"not currently live",
+		"no live videos found",
+		"no active live chat",
+		"no live stream found",
+	} {
+		if strings.Contains(errMsg, s) {
+			return http.StatusUnprocessableEntity, "The streamer is not currently live. Messages can only be sent during an active live stream."
+		}
+	}
+	// Missing account/config — user needs to link their account
+	for _, s := range []string{
+		"no account linked",
+		"no Twitch account",
+		"no Kick account",
+		"no active YouTube source",
+	} {
+		if strings.Contains(errMsg, s) {
+			return http.StatusUnprocessableEntity, "The streamer has not configured this platform in All-Chat."
+		}
+	}
+	// Auth issues
+	for _, s := range []string{
+		"no refresh token",
+		"failed to decrypt",
+		"failed to refresh token",
+	} {
+		if strings.Contains(errMsg, s) {
+			return http.StatusUnauthorized, "Your session has expired. Please log in again."
+		}
+	}
+	// Everything else is an actual upstream failure
+	return http.StatusBadGateway, "Failed to deliver your message. Please try again."
+}
 
 // ViewerRepositoryInterface defines the interface for viewer repository operations
 type ViewerRepositoryInterface interface {
@@ -57,6 +99,8 @@ type ChatSendHandler struct {
 	youtubeProvider OAuthTokenRefresher
 	kickProvider    OAuthTokenRefresher
 	cipher          StringEncryptor
+	youtubeAPIKey   string
+	redisClient     *redis.Client
 }
 
 // NewChatSendHandler creates a new chat send handler
@@ -70,6 +114,8 @@ func NewChatSendHandler(
 	youtubeProvider OAuthTokenRefresher,
 	kickProvider OAuthTokenRefresher,
 	cipher StringEncryptor,
+	youtubeAPIKey string,
+	redisClient *redis.Client,
 ) *ChatSendHandler {
 	return &ChatSendHandler{
 		log:             log.Named("chat-send"),
@@ -82,6 +128,8 @@ func NewChatSendHandler(
 		youtubeProvider: youtubeProvider,
 		kickProvider:    kickProvider,
 		cipher:          cipher,
+		youtubeAPIKey:   youtubeAPIKey,
+		redisClient:     redisClient,
 	}
 }
 
@@ -89,7 +137,8 @@ func NewChatSendHandler(
 type SendMessageRequest struct {
 	StreamerUsername string `json:"streamer_username" binding:"required"`
 	Message          string `json:"message" binding:"required"`
-	Platform         string `json:"platform"` // Optional: if viewer has multiple platforms
+	Platform         string `json:"platform"`  // Optional: if viewer has multiple platforms
+	VideoID          string `json:"video_id"`  // Optional: YouTube video ID from extension (bypasses unreliable search.list discovery)
 }
 
 // SendMessageResponse is the response after sending a message
@@ -119,6 +168,11 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
+
+	h.log.Info("Request parsed",
+		zap.String("streamer_username", req.StreamerUsername),
+		zap.String("platform", req.Platform),
+		zap.String("video_id", req.VideoID))
 
 	// Validate message length
 	if len(req.Message) == 0 || len(req.Message) > maxMessageLength {
@@ -195,7 +249,7 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 	case "twitch":
 		messageErr = h.sendTwitchMessage(ctx, session, streamerUser, req.Message)
 	case "youtube":
-		messageErr = h.sendYouTubeMessage(ctx, session, streamerUser, req.Message)
+		messageErr = h.sendYouTubeMessage(ctx, session, streamerUser, req.Message, req.VideoID)
 		if messageErr != nil {
 			h.log.Error("Failed to send YouTube message", zap.Error(messageErr))
 		}
@@ -249,9 +303,11 @@ func (h *ChatSendHandler) HandleSendMessage(c *gin.Context) {
 		// Continue anyway
 	}
 
-	// Return response
+	// Return response with appropriate status code based on error type
 	if messageErr != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to send message", "details": messageErr.Error()})
+		errMsg := messageErr.Error()
+		status, description := classifySendError(errMsg)
+		c.JSON(status, gin.H{"error": "failed to send message", "details": errMsg, "description": description})
 		return
 	}
 
@@ -446,7 +502,7 @@ func (h *ChatSendHandler) sendStreamerYouTubeMessage(ctx context.Context, user *
 		return fmt.Errorf("failed to get YouTube channel ID: %w", err)
 	}
 
-	liveChatID, err := h.getYouTubeLiveChatID(ctx, user.AccessToken, channelID)
+	liveChatID, err := h.getYouTubeLiveChatID(ctx, channelID)
 	if err != nil {
 		return fmt.Errorf("failed to get live chat ID: %w", err)
 	}
@@ -798,8 +854,11 @@ func (h *ChatSendHandler) sendTwitchMessage(ctx context.Context, session *models
 	return nil
 }
 
-// sendYouTubeMessage sends a message to YouTube live chat using the Live Chat API
-func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *models.ViewerSession, streamer *models.User, message string) error {
+// sendYouTubeMessage sends a message to YouTube live chat using the Live Chat API.
+// videoID is an optional YouTube video ID provided by the extension (extracted from the page URL).
+// When provided, the backend can look up the liveChatId via a single videos.list call (1 quota unit)
+// instead of relying on the unreliable search.list API (100 quota units).
+func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *models.ViewerSession, streamer *models.User, message string, videoID string) error {
 	// Decrypt access token
 	accessToken, err := h.viewerRepo.DecryptAccessToken(session.AccessToken)
 	if err != nil {
@@ -814,9 +873,12 @@ func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *model
 		return fmt.Errorf("failed to get YouTube channel ID: %w", err)
 	}
 
-	// First, get the streamer's active livestream to find the liveChatId
-	// This requires querying the YouTube API for active broadcasts
-	liveChatID, err := h.getYouTubeLiveChatID(ctx, accessToken, channelID)
+	// Get the streamer's active livestream liveChatId.
+	// Strategy order:
+	//   1. Redis cache from youtube-listener (free, fast, reliable)
+	//   2. videos.list with video_id from extension (1 quota unit, reliable)
+	//   3. search.list + videos.list fallback (100+ quota units, unreliable)
+	liveChatID, err := h.getYouTubeLiveChatIDWithVideoID(ctx, channelID, videoID)
 	if err != nil {
 		return fmt.Errorf("failed to get live chat ID: %w", err)
 	}
@@ -863,16 +925,152 @@ func (h *ChatSendHandler) sendYouTubeMessage(ctx context.Context, session *model
 	return nil
 }
 
-// getYouTubeLiveChatID gets the live chat ID for a streamer's active broadcast
-func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, accessToken, channelID string) (string, error) {
-	// Step 1: Search for live videos on the channel
-	searchURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=%s&type=video&eventType=live&maxResults=1", channelID)
+// getYouTubeLiveChatIDWithVideoID gets the live chat ID for a streamer's active broadcast.
+//
+// Strategy (in order):
+//  1. Check Redis for stream state cached by the youtube-listener service.
+//     This is fast, free (no API quota), and the most reliable source because
+//     the youtube-listener already monitors liveness continuously.
+//  2. If the extension provided a video ID, use videos.list to look up the
+//     liveChatId directly (1 quota unit, 100% reliable for active streams).
+//  3. Fall back to the YouTube Data API search.list + videos.list with a
+//     server-side API key. This path is unreliable (YouTube's search index
+//     lags behind reality) but serves as a safety net.
+func (h *ChatSendHandler) getYouTubeLiveChatIDWithVideoID(ctx context.Context, channelID string, videoID string) (string, error) {
+	// --- Strategy 1: Redis lookup (youtube-listener cached state) ---
+	if h.redisClient != nil {
+		liveChatID, err := h.getYouTubeLiveChatIDFromRedis(ctx, channelID)
+		if err != nil {
+			h.log.Warn("Redis stream state lookup failed",
+				zap.String("channel_id", channelID),
+				zap.Error(err))
+		} else if liveChatID != "" {
+			h.log.Info("Got live chat ID from Redis (youtube-listener cache)",
+				zap.String("channel_id", channelID),
+				zap.String("live_chat_id", liveChatID))
+			return liveChatID, nil
+		} else {
+			h.log.Info("No stream state in Redis for channel",
+				zap.String("channel_id", channelID))
+		}
+	}
+
+	// --- Strategy 2: Extension-provided video ID (cheap videos.list call) ---
+	if videoID != "" {
+		h.log.Info("Trying extension-provided video ID for liveChatId lookup",
+			zap.String("video_id", videoID))
+		liveChatID, err := h.getYouTubeLiveChatIDFromVideoID(ctx, videoID)
+		if err != nil {
+			h.log.Warn("Video ID lookup failed, falling back to search.list",
+				zap.String("video_id", videoID),
+				zap.Error(err))
+		} else {
+			return liveChatID, nil
+		}
+	}
+
+	// --- Strategy 3: YouTube Data API search.list fallback (unreliable) ---
+	return h.getYouTubeLiveChatIDFromAPI(ctx, channelID)
+}
+
+// getYouTubeLiveChatID is the legacy entry point without video ID support.
+// Kept for backwards compatibility with callers that don't have a video ID.
+func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, channelID string) (string, error) {
+	return h.getYouTubeLiveChatIDWithVideoID(ctx, channelID, "")
+}
+
+// getYouTubeLiveChatIDFromVideoID looks up the liveChatId for a specific video
+// using the YouTube Data API videos.list endpoint. This costs only 1 quota unit
+// (vs 100 for search.list) and is 100% reliable for active live streams.
+func (h *ChatSendHandler) getYouTubeLiveChatIDFromVideoID(ctx context.Context, videoID string) (string, error) {
+	authParam := ""
+	if h.youtubeAPIKey != "" {
+		authParam = "&key=" + h.youtubeAPIKey
+	}
+
+	videoURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s%s", videoID, authParam)
+	videoReq, err := http.NewRequestWithContext(ctx, http.MethodGet, videoURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create video request: %w", err)
+	}
+
+	videoResp, err := h.httpClient.Do(videoReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch video details: %w", err)
+	}
+	defer videoResp.Body.Close()
+
+	if videoResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(videoResp.Body, 1024))
+		return "", fmt.Errorf("youtube videos API error: status=%d body=%s", videoResp.StatusCode, string(body))
+	}
+
+	var videoResult struct {
+		Items []struct {
+			LiveStreamingDetails struct {
+				ActiveLiveChatID string `json:"activeLiveChatId"`
+			} `json:"liveStreamingDetails"`
+		} `json:"items"`
+	}
+
+	if err := json.NewDecoder(videoResp.Body).Decode(&videoResult); err != nil {
+		return "", fmt.Errorf("failed to decode video response: %w", err)
+	}
+
+	if len(videoResult.Items) == 0 || videoResult.Items[0].LiveStreamingDetails.ActiveLiveChatID == "" {
+		return "", fmt.Errorf("no active live chat found for video %s", videoID)
+	}
+
+	h.log.Info("Got live chat ID from video ID lookup",
+		zap.String("video_id", videoID),
+		zap.String("live_chat_id", videoResult.Items[0].LiveStreamingDetails.ActiveLiveChatID))
+
+	return videoResult.Items[0].LiveStreamingDetails.ActiveLiveChatID, nil
+}
+
+// getYouTubeLiveChatIDFromRedis reads the live chat ID from the youtube-listener's
+// stream state cache in Redis. Returns ("", nil) if no state exists.
+func (h *ChatSendHandler) getYouTubeLiveChatIDFromRedis(ctx context.Context, channelID string) (string, error) {
+	key := fmt.Sprintf("youtube:stream:state:%s", channelID)
+	data, err := h.redisClient.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil // No state — channel may not be live or youtube-listener hasn't cached it
+	}
+	if err != nil {
+		return "", fmt.Errorf("redis GET failed: %w", err)
+	}
+
+	var state struct {
+		LiveChatID string `json:"live_chat_id"`
+		IsLive     bool   `json:"is_live"`
+	}
+	if err := json.Unmarshal([]byte(data), &state); err != nil {
+		return "", fmt.Errorf("failed to unmarshal stream state: %w", err)
+	}
+
+	if !state.IsLive || state.LiveChatID == "" {
+		return "", nil
+	}
+
+	return state.LiveChatID, nil
+}
+
+// getYouTubeLiveChatIDFromAPI uses the YouTube Data API (search.list + videos.list)
+// with a server-side API key to discover the live chat ID. This is the fallback path;
+// the search.list endpoint is unreliable due to YouTube's search index lag.
+func (h *ChatSendHandler) getYouTubeLiveChatIDFromAPI(ctx context.Context, channelID string) (string, error) {
+	// Build authentication parameter: prefer API key, fall back to nothing (will likely 401)
+	authParam := ""
+	if h.youtubeAPIKey != "" {
+		authParam = "&key=" + h.youtubeAPIKey
+	}
+
+	// Step 1: Search for live videos on the channel using the server-side API key
+	searchURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=%s&type=video&eventType=live&maxResults=1%s", channelID, authParam)
 	searchReq, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create search request: %w", err)
 	}
-
-	searchReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	searchResp, err := h.httpClient.Do(searchReq)
 	if err != nil {
@@ -909,14 +1107,12 @@ func (h *ChatSendHandler) getYouTubeLiveChatID(ctx context.Context, accessToken,
 
 	h.log.Info("Found live video", zap.String("video_id", videoID))
 
-	// Step 2: Get video details to extract liveChatId
-	videoURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s", videoID)
+	// Step 2: Get video details to extract liveChatId using the server-side API key
+	videoURL := fmt.Sprintf("https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=%s%s", videoID, authParam)
 	videoReq, err := http.NewRequestWithContext(ctx, http.MethodGet, videoURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create video request: %w", err)
 	}
-
-	videoReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	videoResp, err := h.httpClient.Do(videoReq)
 	if err != nil {

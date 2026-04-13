@@ -60,6 +60,15 @@ func (m *MockJoinParter) GetDeparted() []string {
 	return result
 }
 
+func (m *MockJoinParter) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.joined = make([]string, 0)
+	m.departed = make([]string, 0)
+	m.joinCalls = 0
+	m.departCalls = 0
+}
+
 func (m *MockJoinParter) GetJoinCallCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -528,4 +537,255 @@ func TestManager_IsLeadershipEnabled(t *testing.T) {
 	lc := sourcemanager.NewLeadershipCoordinator("twitch", nil, 0, logger)
 	withLeader := NewManager(repo, mockJP, nil, lc, nil, nil, "", logger, nil)
 	assert.True(t, withLeader.IsLeadershipEnabled())
+}
+
+// TestManager_SyncChannels_DoesNotBlockHealthProbe verifies that the readiness
+// probe methods (GetActiveChannelCount, IsInitialSyncComplete) are never blocked
+// while SyncChannels is executing.  Before the fix, SyncChannels held m.mu for
+// the entire rate-limited JOIN loop, causing the probe to time out and Kubernetes
+// to cycle the pod.
+func TestManager_SyncChannels_DoesNotBlockHealthProbe(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	// Use a blocking JoinParter to simulate the slow IRC join rate limiter.
+	blockCh := make(chan struct{})
+	slowJP := newSlowJoinParter(blockCh)
+
+	repo := &MockRepository{channels: []string{"xqc", "summit1g", "shroud"}}
+	manager := NewManager(repo, slowJP, nil, nil, nil, nil, "", logger, nil)
+
+	syncDone := make(chan struct{})
+	go func() {
+		defer close(syncDone)
+		_ = manager.SyncChannels(ctx)
+	}()
+
+	// Wait until the slow JoinParter is blocked mid-join.
+	select {
+	case <-slowJP.blocking:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SyncChannels did not start joining within 2s")
+	}
+
+	// The readiness probe must respond immediately (< 100ms) while SyncChannels
+	// is blocked in the slow join, because m.mu must NOT be held during joins.
+	probeDone := make(chan struct{})
+	go func() {
+		defer close(probeDone)
+		_ = manager.GetActiveChannelCount()
+		_ = manager.IsInitialSyncComplete()
+	}()
+
+	select {
+	case <-probeDone:
+		// Good: probe returned without waiting for SyncChannels to finish.
+	case <-time.After(100 * time.Millisecond):
+		t.Error("health probe methods blocked during SyncChannels — mutex held across slow join")
+	}
+
+	// Unblock the join so the goroutine can finish cleanly.
+	close(blockCh)
+	<-syncDone
+}
+
+// slowJoinParter blocks on Join() until blockCh is closed, simulating the slow
+// IRC rate-limited join loop.
+type slowJoinParter struct {
+	blockCh  chan struct{}
+	blocking chan struct{}
+	once     sync.Once
+}
+
+func (s *slowJoinParter) Join(_ string) {
+	s.once.Do(func() {
+		// Signal that we have reached the blocking point.
+		close(s.blocking)
+	})
+	<-s.blockCh // block until test unblocks us
+}
+
+func (s *slowJoinParter) Depart(_ string) {}
+
+func newSlowJoinParter(blockCh chan struct{}) *slowJoinParter {
+	return &slowJoinParter{
+		blockCh:  blockCh,
+		blocking: make(chan struct{}),
+	}
+}
+
+// TestManager_AtomicProbe_InitialSyncComplete verifies that IsInitialSyncComplete
+// reads from an atomic field — it returns the correct value without acquiring the mutex.
+// The test holds the write lock from a goroutine while checking the probe method
+// to confirm there is no deadlock.
+func TestManager_AtomicProbe_InitialSyncComplete(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{channels: []string{"xqc"}}
+	mockJP := NewMockJoinParter()
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	require.NoError(t, manager.SyncChannels(ctx))
+
+	// Hold the write lock from another goroutine.
+	released := make(chan struct{})
+	manager.mu.Lock()
+	go func() {
+		defer manager.mu.Unlock()
+		<-released
+	}()
+
+	// IsInitialSyncComplete must return immediately despite the write lock.
+	done := make(chan bool, 1)
+	go func() {
+		done <- manager.IsInitialSyncComplete()
+	}()
+
+	select {
+	case result := <-done:
+		assert.True(t, result)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("IsInitialSyncComplete blocked — it must use atomic.Bool, not mutex")
+	}
+
+	close(released) // let the write-lock goroutine exit
+}
+
+// TestManager_AtomicProbe_ActiveChannelCount verifies GetActiveChannelCount reads
+// from an atomic field without blocking on the mutex.
+func TestManager_AtomicProbe_ActiveChannelCount(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{channels: []string{"xqc", "summit1g", "shroud"}}
+	mockJP := NewMockJoinParter()
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	require.NoError(t, manager.SyncChannels(ctx))
+	assert.Equal(t, 3, manager.GetActiveChannelCount())
+
+	// Hold the write lock from another goroutine.
+	released := make(chan struct{})
+	manager.mu.Lock()
+	go func() {
+		defer manager.mu.Unlock()
+		<-released
+	}()
+
+	done := make(chan int, 1)
+	go func() {
+		done <- manager.GetActiveChannelCount()
+	}()
+
+	select {
+	case count := <-done:
+		assert.Equal(t, 3, count)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("GetActiveChannelCount blocked — it must use atomic.Int64, not mutex")
+	}
+
+	close(released)
+}
+
+// TestManager_AtomicProbe_FilteredAssignmentCount verifies GetFilteredAssignmentCount
+// reads from an atomic field without blocking on the mutex.
+func TestManager_AtomicProbe_FilteredAssignmentCount(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{channels: []string{"xqc", "summit1g"}}
+	mockJP := NewMockJoinParter()
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	require.NoError(t, manager.SyncChannels(ctx))
+	// filteredAssignmentCount equals len(desiredChannels) when assignedSourceIDs is nil
+	assert.Equal(t, 2, manager.GetFilteredAssignmentCount())
+
+	// Hold the write lock from another goroutine.
+	released := make(chan struct{})
+	manager.mu.Lock()
+	go func() {
+		defer manager.mu.Unlock()
+		<-released
+	}()
+
+	done := make(chan int, 1)
+	go func() {
+		done <- manager.GetFilteredAssignmentCount()
+	}()
+
+	select {
+	case count := <-done:
+		assert.Equal(t, 2, count)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("GetFilteredAssignmentCount blocked — it must use atomic.Int64, not mutex")
+	}
+
+	close(released)
+}
+
+// TestManager_LeadershipAudit_EvictsOrphanedChannels verifies that channels
+// in activeChans without a corresponding coordinator lease are evicted and
+// then re-joined on the next sync cycle.
+func TestManager_LeadershipAudit_EvictsOrphanedChannels(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	sharedClient := newMockLeadershipClient()
+	repo := &MockRepository{channels: []string{"xqc", "summit1g", "shroud"}}
+	mockJP := NewMockJoinParter()
+	coord := sourcemanager.NewLeadershipCoordinator("twitch", sharedClient, 5*time.Second, logger)
+	manager := NewManager(repo, mockJP, nil, coord, nil, nil, "", logger, nil)
+
+	// Initial sync: all three channels joined and leadership acquired.
+	require.NoError(t, manager.SyncChannels(ctx))
+	assert.Equal(t, 3, manager.GetActiveChannelCount())
+	assert.ElementsMatch(t, []string{"xqc", "summit1g", "shroud"}, mockJP.GetJoined())
+
+	// Simulate leadership loss for "summit1g" by releasing it from the coordinator
+	// AND clearing the mock client's record (mimics the Redis key expiring after
+	// the old pod died, without the lostCallback firing cleanly).
+	coord.Release("summit1g")
+	// Wait briefly for the async release goroutine, then clear the claim so the
+	// channel is claimable again (simulates Redis TTL expiry).
+	time.Sleep(10 * time.Millisecond)
+	sharedClient.mu.Lock()
+	delete(sharedClient.claimed, "summit1g")
+	sharedClient.mu.Unlock()
+
+	// Next sync: the leadership audit should detect summit1g has no lease,
+	// evict it from activeChans, and re-join it.
+	mockJP.Reset()
+	require.NoError(t, manager.SyncChannels(ctx))
+
+	// summit1g should have been departed (eviction) and then re-joined.
+	departed := mockJP.GetDeparted()
+	joined := mockJP.GetJoined()
+	assert.Contains(t, departed, "summit1g", "summit1g should be departed during eviction")
+	assert.Contains(t, joined, "summit1g", "summit1g should be re-joined after eviction")
+	assert.Equal(t, 3, manager.GetActiveChannelCount(), "all 3 channels should be active again")
+}
+
+func TestIsTwitchNotification(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+		want    bool
+	}{
+		{"twitch platform", `{"platform":"twitch","channel_id":"w10u"}`, true},
+		{"kick platform", `{"platform":"kick","channel_id":"foo"}`, false},
+		{"tiktok platform", `{"platform":"tiktok","channel_id":"bar"}`, false},
+		{"youtube platform", `{"platform":"youtube","channel_id":"baz"}`, false},
+		{"empty platform", `{"platform":"","channel_id":"x"}`, true},
+		{"no platform field", `{"channel_id":"x"}`, true},
+		{"invalid json", `not json`, true},
+		{"empty payload", ``, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isTwitchNotification(tt.payload)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

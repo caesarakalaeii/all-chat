@@ -87,6 +87,7 @@ export interface UserInfo {
   source_user_id?: string;  // User ID in source channel (shared chat)
   avatar_frame_url?: string;  // Phase 30: URL of selected avatar frame
   avatar_flair_url?: string;  // Phase 30: URL of selected avatar flair
+  pronouns?: string;  // Phase 9: e.g. "she/her", "they/them" — absent if no pronouns set
 }
 
 export interface Badge {

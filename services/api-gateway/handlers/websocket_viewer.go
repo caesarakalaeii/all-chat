@@ -135,6 +135,20 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 	// Viewer connections will have overlay_id stripped from all messages
 	wsConn := wsconn.NewViewerConnection(conn, overlayID, viewerID, h.replayBuffer, h.logger)
 
+	// Allow viewers to authenticate via WebSocket message (preferred over URL token)
+	wsConn.SetOnAuth(func(token string) (string, string, bool) {
+		claims, err := auth.ValidateViewerJWT(token, h.jwtSecret)
+		if err != nil || !claims.IsViewer {
+			return "", "", false
+		}
+		return claims.SessionID, claims.Username, true
+	})
+
+	// If already authenticated via URL param, mark connection as authenticated
+	if isAuthenticated {
+		// Backwards compatibility: URL token still works
+	}
+
 	// Subscribe to overlay's Redis Pub/Sub channel WITHOUT publishing connection event
 	// This is critical: viewers should NOT trigger YouTube polling
 	if err := h.subscriber.SubscribeViewerOnly(context.Background(), overlayID); err != nil {

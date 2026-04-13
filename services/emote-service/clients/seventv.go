@@ -223,15 +223,38 @@ func (c *SevenTVClient) FetchUserEmotes(ctx context.Context, platform, userID st
 	return c.parseEmoteSet(apiResp.EmoteSet, fmt.Sprintf("user:%s:%s", platform, userID)), nil
 }
 
-// FetchCombinedEmotes fetches channel + user emotes and merges them
-// User emotes take precedence over channel/global emotes with the same code
-func (c *SevenTVClient) FetchCombinedEmotes(ctx context.Context, channel, platform, userID string) ([]models.Emote, error) {
+// fetchEmotesForPlatform fetches 7TV emotes with platform awareness.
+// For Twitch, it fetches both channel-specific and global emotes.
+// For non-Twitch platforms, if a twitchChannel hint is provided (from a sibling Twitch
+// source on the same overlay), channel emotes are fetched using that Twitch channel.
+// Otherwise only global emotes are returned.
+func (c *SevenTVClient) fetchEmotesForPlatform(ctx context.Context, channel, platform, twitchChannel string) ([]models.Emote, error) {
+	if platform != "twitch" {
+		if twitchChannel != "" {
+			// Use the sibling Twitch channel for 7TV channel emote lookup
+			return c.FetchEmotes(ctx, twitchChannel)
+		}
+		// Non-Twitch platform without Twitch hint: only global 7TV emotes
+		return c.fetchEmoteSet(ctx, "global", channel)
+	}
+	// Twitch: fetch both channel-specific and global emotes
+	return c.FetchEmotes(ctx, channel)
+}
+
+// FetchCombinedEmotes fetches channel + user emotes and merges them.
+// User emotes take precedence over channel/global emotes with the same code.
+// For non-Twitch platforms, if twitchChannel is provided (from a sibling Twitch source
+// on the same overlay), 7TV channel emotes are fetched using that Twitch channel.
+// Otherwise only global emotes are returned for non-Twitch platforms.
+func (c *SevenTVClient) FetchCombinedEmotes(ctx context.Context, channel, platform, userID, twitchChannel string) ([]models.Emote, error) {
 	if strings.TrimSpace(channel) == "" {
 		return nil, fmt.Errorf("channel cannot be empty")
 	}
 
-	// Fetch channel emotes (includes global + channel)
-	channelEmotes, err := c.FetchEmotes(ctx, channel)
+	// Fetch channel emotes (includes global + channel).
+	// For non-Twitch platforms, use the twitchChannel hint if available to look up
+	// 7TV channel emotes via the sibling Twitch source. Otherwise only global emotes.
+	channelEmotes, err := c.fetchEmotesForPlatform(ctx, channel, platform, twitchChannel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch channel emotes: %w", err)
 	}

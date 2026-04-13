@@ -8,9 +8,9 @@ All-Chat is a cloud-native platform that aggregates live chat messages from mult
 
 Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
 
-## Current State (v2.0 — Phase 08 complete 2026-03-29)
+## Current State (v2.0 — Phase 10 complete 2026-04-08)
 
-Phase 08 complete: Message pipeline resilience — fixed 24 silent failure modes across the full message pipeline. DLQ infrastructure, PEL drain, exponential backoff retry, Pub/Sub reconnect with WaitGroup lifecycle, and RingBufferPublisher safety net for all 5 Go listeners. 5 new Prometheus alert rules and 6 Grafana dashboard panels for pipeline health monitoring.
+Phase 10 complete: Message pipeline resilience hardening — fixed 12 remaining silent failure modes plus zombie listener detection. Twitch listener: atomic health probes, shared JitteredBackoff utility, ring buffer overflow logging, status publisher retry, zombie detection (ADR-0011). Source-manager: Lua-based atomic leadership renewal (TOCTOU fix), sorted set peer registry. API gateway: infinite retry with jittered backoff for Subscriber and StatusSubscriber reconnection. Shared Redis client standardization across api-gateway and twitch-listener (pool tuning, optional OTel tracing). Message processor: consumer group zero-offset, structured DLQ write failure logging.
 
 ## Requirements
 
@@ -201,4 +201,4 @@ Phase 08 complete: Message pipeline resilience — fixed 24 silent failure modes
 | **discord-listener: LeadershipListener as container only** | Start/Stop not called on ListenerBase; custom shutdown sequence unchanged; Gateway RESUME unaffected | ✓ Good — No regression in Discord shard ownership or relay |
 
 ---
-*Last updated: 2026-03-29 after v2.0 Phase 08 (message pipeline resilience)*
+*Last updated: 2026-04-08 after v2.0 Phase 10 (message pipeline resilience hardening)*

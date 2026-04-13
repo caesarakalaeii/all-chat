@@ -142,6 +142,9 @@ func (ec *EventCapture) calculateScore(event *models.EventInfo) float64 {
 	return event.Value.Amount
 }
 
+// MetadataKeyPrefix is the Redis key prefix for leaderboard member metadata
+const MetadataKeyPrefix = "session:leaderboard:meta:"
+
 // storeEvent stores event in appropriate Redis leaderboard
 func (ec *EventCapture) storeEvent(ctx context.Context, sessionID string, msg *models.UnifiedChatMessage) error {
 	pipe := ec.redis.Pipeline()
@@ -150,8 +153,14 @@ func (ec *EventCapture) storeEvent(ctx context.Context, sessionID string, msg *m
 	category := ec.getEventCategory(msg.Event.Type)
 	leaderboardKey := fmt.Sprintf("%s%s:%s", LeaderboardKeyPrefix, sessionID, category)
 
-	// Create member data
-	member := map[string]interface{}{
+	// Use stable key for sorted set member (platform:user_id) so ZINCRBY
+	// correctly aggregates multiple events from the same user
+	memberKey := fmt.Sprintf("%s:%s", msg.Platform, msg.User.ID)
+
+	// Store volatile metadata (display name, avatar, etc.) in companion hash
+	// so it stays up-to-date without creating duplicate sorted set entries
+	metadataKey := fmt.Sprintf("%s%s:%s", MetadataKeyPrefix, sessionID, category)
+	meta := map[string]interface{}{
 		"user_id":      msg.User.ID,
 		"display_name": msg.User.DisplayName,
 		"avatar_url":   msg.User.AvatarURL,
@@ -159,35 +168,36 @@ func (ec *EventCapture) storeEvent(ctx context.Context, sessionID string, msg *m
 		"event_type":   msg.Event.Type,
 	}
 
-	// Add event-specific fields
 	if msg.Event.Value != nil {
-		member["amount"] = msg.Event.Value.Amount
-		member["currency"] = msg.Event.Value.Currency
-		member["display_text"] = msg.Event.Value.DisplayText
+		meta["currency"] = msg.Event.Value.Currency
+		meta["display_text"] = msg.Event.Value.DisplayText
 	}
 
-	// Add metadata (for tier, month count, etc.)
 	if msg.Event.Metadata != nil {
 		if tier, ok := msg.Event.Metadata["tier"].(string); ok {
-			member["tier"] = tier
+			meta["tier"] = tier
 		}
 		if months, ok := msg.Event.Metadata["months"].(int); ok {
-			member["months"] = months
+			meta["months"] = months
 		}
 		if viewerCount, ok := msg.Event.Metadata["viewer_count"].(int); ok {
-			member["viewer_count"] = viewerCount
+			meta["viewer_count"] = viewerCount
 		}
 	}
 
-	memberJSON, err := json.Marshal(member)
+	metaJSON, err := json.Marshal(meta)
 	if err != nil {
-		return fmt.Errorf("failed to marshal member data: %w", err)
+		return fmt.Errorf("failed to marshal member metadata: %w", err)
 	}
 
-	// Use ZINCRBY to increment score (aggregates multiple events per user)
+	// ZINCRBY with stable key — aggregates score across multiple events per user
 	score := ec.calculateScore(msg.Event)
-	pipe.ZIncrBy(ctx, leaderboardKey, score, string(memberJSON))
+	pipe.ZIncrBy(ctx, leaderboardKey, score, memberKey)
 	pipe.Expire(ctx, leaderboardKey, LeaderboardTTL)
+
+	// Update metadata hash with latest info for this user
+	pipe.HSet(ctx, metadataKey, memberKey, string(metaJSON))
+	pipe.Expire(ctx, metadataKey, LeaderboardTTL)
 
 	// Increment session counters
 	sessionKey := SessionKeyPrefix + msg.OverlayID

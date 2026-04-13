@@ -174,6 +174,9 @@ func main() {
 	viewerBadgeEnricher := enricher.NewViewerBadgeEnricher(redisClient, db, log)
 	log.Info("Initialized ViewerBadge enricher")
 
+	pronounEnricher := enricher.NewPronounEnricher(redisClient, log)
+	log.Info("Initialized Pronoun enricher")
+
 	overlayRepo := router.NewRepository(db)
 	overlayRouter := router.NewRouter(overlayRepo, log)
 
@@ -375,6 +378,16 @@ func main() {
 				// Examples: Super Chat messages, resub messages, channel point redemptions with user input
 				// Skip for system-only events: raids, follows, subscriptions without messages
 				if unified.Message.Text != "" {
+					// For non-Twitch events, look up sibling Twitch source for 7TV channel emotes
+					if unified.Platform != "twitch" {
+						if twitchCh, err := overlayRouter.TwitchChannelForOverlay(ctx, overlay.OverlayID); err == nil && twitchCh != "" {
+							if unified.Metadata == nil {
+								unified.Metadata = make(map[string]interface{})
+							}
+							unified.Metadata["twitch_channel_hint"] = twitchCh
+						}
+					}
+
 					startEmote := time.Now()
 					if err := emoteEnricher.Enrich(ctx, unified); err != nil {
 						log.Warn("Failed to enrich emotes for event",
@@ -452,6 +465,17 @@ func main() {
 				}
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "badge_enrichment").Observe(time.Since(startBadge).Seconds())
 
+				// For non-Twitch messages, look up sibling Twitch source on the same overlay
+				// to enable 7TV channel emote enrichment via Twitch channel hint
+				if unified.Platform != "twitch" {
+					if twitchCh, err := overlayRouter.TwitchChannelForOverlay(ctx, overlay.OverlayID); err == nil && twitchCh != "" {
+						if unified.Metadata == nil {
+							unified.Metadata = make(map[string]interface{})
+						}
+						unified.Metadata["twitch_channel_hint"] = twitchCh
+					}
+				}
+
 				// Enrich with emotes
 				startEmote := time.Now()
 				if err := emoteEnricher.Enrich(ctx, unified); err != nil {
@@ -489,6 +513,17 @@ func main() {
 					// Continue even if enrichment fails
 				}
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "viewer_identity_enrichment").Observe(time.Since(startViewer).Seconds())
+
+				// Phase 9: Enrich with pronouns (after viewer identity for TwitchUsername availability)
+				startPronoun := time.Now()
+				if err := pronounEnricher.Enrich(ctx, unified); err != nil {
+					log.Warn("Failed to enrich pronouns",
+						zap.String("message_id", rawMsg.MessageID),
+						zap.Error(err),
+					)
+					// Continue even if enrichment fails — D-05
+				}
+				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "pronoun_enrichment").Observe(time.Since(startPronoun).Seconds())
 			}
 
 		publish:

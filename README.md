@@ -1,306 +1,290 @@
-# All-Chat - Multi-Platform Chat Overlays
+<p align="center">
+  <img src="landing-full.png" alt="All-Chat — One overlay, every platform" width="600" />
+</p>
 
-**GitHub**: [caesarakalaeii/all-chat](https://github.com/caesarakalaeii/all-chat)
+<p align="center">
+  <strong>One overlay. Every platform.</strong>
+</p>
 
-**Aggregate chat from Twitch, YouTube, Kick, TikTok, and Discord into a single streaming overlay.**
+<p align="center">
+  Merge chat from <b>Twitch</b>, <b>YouTube</b>, <b>Kick</b>, <b>TikTok</b>, and <b>Discord</b> into a single feed for OBS — with full <b>7TV</b>, <b>BTTV</b>, and <b>FFZ</b> emote support.
+</p>
 
-Perfect for streamers who multistream or want unified chat displays across platforms. Supports 7TV, BTTV, and FFZ emotes with full customization.
+<p align="center">
+  <a href="https://allch.at"><strong>Try it free at allch.at</strong></a> · <a href="https://discord.gg/xCGBSuz39P">Discord</a> · <a href="https://github.com/caesarakalaeii/all-chat/issues/new/choose">Report a Bug</a>
+</p>
 
 ---
 
-## ✨ Try It Now
+## What is All-Chat?
 
-**Live Instance**: [allch.at](https://allch.at)
+All-Chat is a **free, open-source chat overlay** that merges Twitch, YouTube, Kick, TikTok, and Discord into a single feed for OBS. Sign in, drop a URL into a Browser Source, go live.
 
-Create your multi-platform chat overlay in minutes - no installation required!
+No bots. No IRC tokens. No complicated setup.
 
-### 🧭 Prefer working from your browser?
+### Highlights
 
-Check out the **[All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-extension)**. It replaces the native site chat (Twitch/YouTube/Kick/TikTok) with an All-Chat panel so you can talk with everyone else across platforms right from your browser, without running a local server.
+- **5 Platforms, One Feed** — Twitch, YouTube, Kick, TikTok, and Discord messages in a single overlay
+- **No Setup Required** — Sign in, create an overlay, paste the URL into OBS. That's it.
+- **Every Emote Works** — 7TV, BTTV, FFZ, plus native Twitch and YouTube emotes all render correctly
+- **12 Themes + Full CSS** — Built-in themes from Win98 retro to cyberpunk neon, or write your own CSS
+- **Real-Time Delivery** — Messages arrive via WebSocket — no 5-second delay
+- **Smart Polling** — Listeners only run when your overlay is actually visible (see [How it works](#demand-driven-listeners))
+- **Browser Extension** — Replace native site chat with All-Chat on Twitch, YouTube, and Kick
+- **Open Source** — AGPL 3.0 licensed, fully self-hostable
 
-**What it solves**
-- Native chat swap: automatically swaps the site's chat UI with All-Chat so you can read and send messages across platforms from one place
-- Built-in auth: uses browser-native OAuth to sign you into supported platforms without sharing tokens elsewhere
-- Automatic source bridging: connects to the public chat sources the streamer has shared through All-Chat—no need to keep platform tabs open
-- Zero extra setup: the extension connects to All-Chat out of the box—no local services needed
+---
 
-**Install / setup** (follows the extension README)
-1. Download the latest packaged zip from the **Releases** section of the browser extension repo and unzip it.
-2. Chrome/Edge: open `chrome://extensions` or `edge://extensions`, enable **Developer mode**, and click **Load unpacked** on the unzipped folder.
-3. Firefox: open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on**, and choose `manifest.json` inside the unzipped folder.
-4. Open a supported site; the native chat will be replaced with All-Chat. Use the extension popup to sign in with Twitch and start chatting across platforms.
+## Quick Start
 
-## 🎯 What is All-Chat?
+### 1. Create your overlay
 
-All-Chat lets you create beautiful chat overlays for OBS that combine messages from multiple streaming platforms in real-time:
-
-- **🎮 Multi-Platform**: Twitch, YouTube, Kick, TikTok, and Discord
-- **🎨 Customizable Themes**: Use CSS to create custom themes (Win98, cyberpunk, minimalist, etc.)
-- **💬 Emote Support**: Full support for 7TV, BTTV, and FFZ emotes
-- **⚡ Real-Time**: WebSocket-based for instant message delivery
-- **🎭 Multi-Source**: One overlay can show chat from multiple platforms simultaneously
-- **🖼️ Flexible Display**: Show/hide avatars, badges, platform labels, timestamps
-
-## 🚀 Quick Start (Using the Live Instance)
-
-### 1. Create an Overlay
-
-Visit **[allch.at](https://allch.at)** and:
-1. Sign in with Twitch
+1. Visit **[allch.at](https://allch.at)** and sign in with Twitch
 2. Create a new overlay
-3. Add your chat sources (Twitch channels, YouTube streams, etc.)
-4. Customize settings (font size, message duration, etc.)
+3. Add chat sources — Twitch channels, YouTube streams, Kick channels, etc.
+4. Tweak display settings (font, message duration, animations)
 
-### 2. Add to OBS
+### 2. Add it to OBS
 
 1. In OBS, add a **Browser Source**
-2. Set the URL to: `https://allch.at/overlay/YOUR_OVERLAY_ID`
-3. Set width/height (e.g., 1920x1080)
-4. Check "Shutdown source when not visible" for best performance
-5. Click OK!
+2. Set the URL to `https://allch.at/overlay/YOUR_OVERLAY_ID`
+3. Set dimensions to something sensible for a chat panel — e.g. **400 × 800** (adjust to taste)
+4. **Optional:** Check *"Shutdown source when not visible"* — this tells All-Chat nobody is watching, so the backend stops polling platforms until you make the source visible again. Great for saving resources when you switch scenes.
+5. Done!
 
-### 3. Customize the Look (Optional)
+> **Tip:** The overlay has a transparent background by default, so it layers cleanly over your stream.
 
-Want a custom theme? We have comprehensive documentation for CSS customization:
+### 3. Customize the look
 
-1. Browse available themes (Win98, Cyberpunk, Minimalist, etc.)
-2. Copy the CSS from the theme file
-3. In OBS Browser Source properties, paste into "Custom CSS"
-4. Adjust toggle options to show/hide elements
+All-Chat ships with **12 ready-made themes** you can paste into your OBS Browser Source custom CSS:
 
-**Example themes:**
-- 🪟 [Windows 98](./docs/overlay-themes/win98-theme.css) - Nostalgic retro style
-- 🌈 More themes coming soon!
+| Theme | Vibe |
+|-------|------|
+| [Win98](./docs/overlay-themes/win98-theme.css) | Nostalgic retro windows |
+| [Cyberpunk](./docs/overlay-themes/cyberpunk-theme.css) | Neon-soaked sci-fi |
+| [Minecraft](./docs/overlay-themes/minecraft-theme.css) | Blocky pixel style |
+| [Neon Glass](./docs/overlay-themes/neon-glass-theme.css) | Frosted glass with glow |
+| [Vaporwave](./docs/overlay-themes/vaporwave-theme.css) | A E S T H E T I C |
+| [Terminal Hacker](./docs/overlay-themes/terminal-hacker-theme.css) | Green-on-black terminal |
+| [Pastel Cute](./docs/overlay-themes/pastel-cute-theme.css) | Soft & friendly |
+| [High Contrast](./docs/overlay-themes/high-contrast-theme.css) | Accessibility-first |
+| [Modern Dark](./docs/overlay-themes/modern-dark-theme.css) | Clean dark mode |
+| [Minimal](./docs/overlay-themes/minimal-theme.css) | Just the text |
+| [Minimal Icon](./docs/overlay-themes/minimal-icon-theme.css) | Text + platform icons |
+| [Noita Minimal](./docs/overlay-themes/noita-minimal-theme.css) | Inspired by Noita |
 
-**📚 Customization Documentation:**
-- [**CSS Customization Guide**](./docs/CSS_CUSTOMIZATION.md) - Complete CSS reference and guide
-- [Theme Gallery & Creation Guide](./docs/overlay-themes/README.md) - Create your own themes
-- [Quick Start Guide](./docs/overlay-themes/QUICK-START.md) - Apply themes quickly
-
-## 📱 Platform Support
-
-| Platform | Status | Features |
-|----------|--------|----------|
-| **Twitch** | ✅ Working | Chat, emotes (Twitch/7TV/BTTV/FFZ), badges, colors, channel points via EventSub |
-| **YouTube** | ✅ Working | Chat, Super Chat, member badges |
-| **Kick** | ✅ Working | Chat, emotes, badges via Pusher WebSocket |
-| **TikTok** | ✅ Working | Chat via unofficial library, username-based |
-| **Discord** | ✅ Working | Chat relay from Discord channels |
-
-## 🎨 Customization Features
-
-### Theme Options
-
-Every theme can be customized with CSS. Toggle visibility of:
-- ✅ User avatars
-- ✅ Platform badges (TWITCH, YOUTUBE, etc.)
-- ✅ User badges (subscriber, moderator, etc.)
-- ✅ Timestamps
-- ✅ Message size and colors
-
-**📚 Customization Documentation:**
-- [**CSS Customization Guide**](./docs/CSS_CUSTOMIZATION.md) - Complete CSS reference for developers
-- [Theme Gallery & Examples](./docs/overlay-themes/README.md) - Browse and create themes
-
-### Overlay Settings
-
-Configure in the dashboard:
-- **Max Messages**: How many messages to keep on screen
-- **Message Duration**: How long each message stays visible (seconds)
-- **Font Size**: Text size for messages
-- **Chat Sources**: Which channels/streams to aggregate
-
-## 🌟 Features
-
-### For Streamers
-
-- **Multi-Stream Ready**: Show chat from all your streaming platforms at once
-- **Zero Setup**: No bots to configure, no IRC tokens to manage
-- **Real-Time Updates**: Messages appear instantly with WebSocket technology
-- **OBS Integration**: Simple browser source, works with all streaming software
-- **Customizable**: Complete control over appearance with CSS
-- **Shareable Overlays**: Share overlay links so viewers can follow along
-
-### For Viewers
-
-- **Platform Identification**: See which platform each message is from
-- **Rich Emotes**: Full support for Twitch, 7TV, BTTV, and FFZ emotes
-- **User Badges**: Subscriber, moderator, and other badges display correctly
-- **Smooth Animations**: Messages slide in smoothly with configurable durations
-
-### Technical Features
-
-- **Cloud-Native**: Scalable microservices architecture
-- **High Performance**: Built with Go for speed and efficiency
-- **Real-Time**: Redis Streams + Pub/Sub for low-latency messaging
-- **Reliable**: Health checks, auto-reconnection, graceful degradation
-- **Load Balanced**: Multiple listener instances with leader election
-- **Demand-Driven**: Listeners activate only when overlay clients are connected
-- **Message Deletion**: Moderation actions propagated across platforms
-- **Feature Gates**: Capability-level premium toggling via `feature_gates` database table with in-memory cache per service. Admin API at `/admin/feature-gates`. See [ADR-0008](./docs/adr/0008-feature-gate-infrastructure.md).
-- **Open Source**: AGPL 3.0 licensed, self-hostable
+Want to build your own? See the **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** or the **[Theme Gallery & Creation Guide](./docs/overlay-themes/README.md)**.
 
 ---
 
-## 🏗️ Architecture
+## Browser Extension
 
-All-Chat uses a modern microservices architecture:
+Don't just watch chat in OBS — **give your viewers unified chat too.**
+
+The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-extension) replaces native site chat on Twitch, YouTube, and Kick with your All-Chat feed. Your community can read and send messages across platforms without leaving the page they're watching.
+
+**Install:**
+- [Chrome / Edge / Brave](https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm)
+- [Firefox](https://addons.mozilla.org/en-US/firefox/addon/all-chat-extension/)
+- [GitHub Releases](https://github.com/caesarakalaeii/all-chat-extension/releases) (gets updates first)
+
+**Why it's great:**
+- Replaces native chat automatically — no configuration needed
+- Send messages with your existing platform account
+- Full emote autocomplete (7TV, BTTV, FFZ) with `:` prefix
+- Auto-reconnects if your connection drops — never miss a message
+
+---
+
+## Platform Support
+
+| Platform | How it works | What you get |
+|----------|-------------|--------------|
+| **Twitch** | IRC + EventSub webhooks | Chat, emotes (native + 7TV/BTTV/FFZ), badges, colors, channel points, raids, follows |
+| **YouTube** | HTTP polling + InnerTube API | Chat, Super Chat, member badges, multi-stream selection (public, currently live streams only) |
+| **Kick** | Pusher WebSocket | Chat, emotes, badges, message deletion |
+| **TikTok** | Unofficial live connector library | Chat messages, username-based display |
+| **Discord** | Bot gateway + webhook relay | Channel chat relay to overlay |
+
+> YouTube has two listener modes: the official **YouTube Data API** (quota-tracked with reserve-confirm-rollback) and an **InnerTube poller** that costs zero quota. Both are production-ready.
+>
+> **Note:** Only public, currently live YouTube streams are supported. Unlisted streams, private streams, and scheduled (upcoming) streams do not work. Stream discovery relies on YouTube's public search API (`search.list` with `eventType=live`), which only returns streams that are both public and actively broadcasting.
+
+---
+
+## Demand-Driven Listeners
+
+All-Chat doesn't poll platforms 24/7. The system tracks WebSocket connections from your overlay:
+
+1. **Overlay visible in OBS** → WebSocket connects → backend starts listening to your configured platforms
+2. **Overlay hidden / OBS closed** → WebSocket disconnects → after a 60-second grace period, listeners stop polling
+3. **Overlay visible again** → listeners spin back up instantly
+
+This means zero wasted API calls when nobody is watching. It's also why *"Shutdown source when not visible"* in OBS works so well — it's not just an OBS optimization, it tells All-Chat to stand down.
+
+---
+
+## For Developers
+
+Everything below is for contributors and self-hosters. If you're a streamer, you don't need any of this — just use [allch.at](https://allch.at).
+
+---
+
+### Architecture
+
+All-Chat is a **Go microservices platform** with a React/Next.js frontend. Services communicate through Redis Streams (raw messages) and Redis Pub/Sub (overlay-specific delivery).
 
 ```
-┌─────────────────┐
-│   Your Stream   │
-│  (OBS Browser)  │
-└────────┬────────┘
-         │ WebSocket overlays
-┌────────▼────────┐        ┌────────────────────┐
-│  api-gateway    │◄──────►│   auth-service     │
-└────────┬────────┘        └────────────────────┘
-         │ Redis Pub/Sub
-         │
-┌────────▼──────────┐        ┌──────────────────┐
-│ message-processor │◄──────►│  emote-service   │
-└────────┬──────────┘        └──────────────────┘
-         │ Redis Streams
-┌────────▼──────────────────────────────────────┐
-│              chat listeners                   │
-│  twitch-listener, twitch-eventsub-listener,   │
-│  youtube-listener, youtube-listener-innertube,│
-│  kick-listener, tiktok-listener,              │
-│  discord-listener                             │
-└────────┬──────────────────────────────────────┘
-         │
-┌────────▼──────────┐
-│  source-manager   │ ← Active source tracking
-└────────┬──────────┘
-         │
-┌────────▼──────────┐     ┌──────────────────┐
-│ overlay-manager   │     │  share-service   │
-└───────────────────┘     └──────────────────┘
+Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot)
+       │
+       ▼ publish raw messages
+  Redis Streams (chat:raw)
+       │
+       ▼ consume via XREADGROUP
+  Message Processor
+       ├── Normalize to unified format
+       ├── Enrich with emotes (7TV, BTTV, FFZ)
+       └── Route to overlay channels
+       │
+       ▼ Redis Pub/Sub (overlay:{id})
+  API Gateway (WebSocket server)
+       │
+       ▼ broadcast
+  Frontend Overlay (React)
 ```
 
-**Key Services (mirrors `services/`):**
-- **api-gateway**: WebSocket server for overlays, HTTP routing, OAuth callbacks
-- **auth-service**: Manages authentication, sessions, and OAuth flows
-- **emote-service**: Fetches platform emotes and enriches chat payloads
-- **twitch-listener**: Handles IRC ingestion and normalization for Twitch chat
-- **twitch-eventsub-listener**: Receives Twitch EventSub webhooks (channel points, moderation)
-- **youtube-listener**: Polls YouTube Live API, normalizes chat (leader election)
-- **youtube-listener-innertube**: Polls YouTube via InnerTube API (no quota cost)
-- **kick-listener**: Connects to Kick (Pusher) WebSocket and normalizes chat
-- **tiktok-listener**: Polls TikTok live WebSocket feed and normalizes chat
-- **discord-listener**: Relays messages from configured Discord channels
-- **message-processor**: Routes messages via Redis and orchestrates enrichment
-- **overlay-manager**: Maintains overlay state and renders scenes for OBS clients
-- **source-manager**: Tracks active sources and coordinates Redis leader election
-- **share-service**: Generates shareable overlay links for viewers
-- **token-refresh-service**: Refreshes OAuth tokens on a schedule
+**Services** (all in `services/`):
 
-## 🛠️ Tech Stack
+| Service | Role |
+|---------|------|
+| `api-gateway` | WebSocket server for overlays, HTTP routing, OAuth callbacks |
+| `auth-service` | Authentication, sessions, OAuth flows (Twitch, YouTube, Kick, Discord) |
+| `emote-service` | 7TV, BTTV, FFZ, and native emote resolution |
+| `twitch-listener` | Twitch IRC chat ingestion |
+| `twitch-eventsub-listener` | Twitch EventSub webhooks (channel points, moderation, raids) |
+| `youtube-listener` | YouTube Data API polling with quota tracking |
+| `youtube-listener-innertube` | YouTube InnerTube API polling (zero quota cost) |
+| `kick-listener` | Kick chat via Pusher WebSocket |
+| `tiktok-listener` | TikTok live chat via unofficial connector |
+| `discord-listener` | Discord channel chat relay |
+| `message-processor` | Message normalization, emote enrichment, overlay routing |
+| `overlay-manager` | Overlay CRUD, source configuration, settings |
+| `source-manager` | Leader election, active source tracking, demand coordination |
+| `share-service` | Shareable overlay link generation |
+| `token-refresh-service` | OAuth token refresh on schedule |
 
-- **Backend**: Go 1.25+ (Gin framework)
-- **Frontend**: React 19 + Next.js 16 (App Router), TypeScript, Tailwind CSS, Zustand
+### Tech Stack
+
+- **Backend**: Go 1.25+, Gin framework, pgx/v5 (PostgreSQL), go-redis/v9, Zap logging
+- **Frontend**: React 19, Next.js 16 (App Router), TypeScript, Tailwind CSS, Zustand
 - **Database**: PostgreSQL 16
-- **Cache/Messaging**: Redis 7
-- **Deployment**: Docker + Kubernetes
-- **Real-Time**: WebSockets + Redis Pub/Sub
+- **Messaging**: Redis 7 (Streams + Pub/Sub)
+- **Infrastructure**: Docker Compose (local dev), Kubernetes + CloudNativePG (production)
 
-## 📖 Documentation
-
-### For Users & Streamers
-- **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** - Complete CSS reference for customizing overlays
-- **[Theme Gallery](./docs/overlay-themes/README.md)** - Browse and create custom overlay themes
-- **[Win98 Theme Quick Start](./docs/overlay-themes/QUICK-START.md)** - Apply the Win98 theme in minutes
-
-### For Developers & Self-Hosting
-- **[Deployment Guide](./docs/DEPLOYMENT.md)** - Self-host your own instance
-- **[Developer Guide](./CLAUDE.md)** - Architecture and development
-- **[Getting Started Guide](./GETTING_STARTED.md)** - Navigate the codebase
-
-## 🔧 Self-Hosting
-
-Want to run your own instance? See the **[Deployment Guide](./docs/DEPLOYMENT.md)** for:
-
-- Docker Compose setup (easiest)
-- Kubernetes deployment (production)
-- Environment configuration
-- API credentials setup
-- Monitoring and scaling
-
-**Prerequisites:**
-- Docker & Docker Compose
-- Twitch Developer account (for OAuth)
-- Optional: YouTube API credentials
-- Optional: Kubernetes cluster
+### Local Development
 
 ```bash
-# Quick start with Docker Compose
-git clone https://github.com/caesar/all-chat.git
+# Full environment
+make docker-up         # Start PostgreSQL, Redis, and all services
+make test              # Run tests
+make migrate-up        # Apply database migrations
+
+# Frontend-only (minimal backend)
+make frontend-dev      # Start only what the frontend needs
+make frontend-seed     # Create test overlay with mock sources
+make frontend-messages # Generate fake chat messages
+cd frontend && npm run dev
+```
+
+**First time?** See [GETTING_STARTED.md](./GETTING_STARTED.md) for the full onboarding guide, or [FRONTEND_QUICK_START.md](./FRONTEND_QUICK_START.md) if you're only touching the frontend.
+
+### Self-Hosting
+
+Want to run your own instance?
+
+```bash
+git clone https://github.com/caesarakalaeii/all-chat.git
 cd all-chat
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env with your Twitch/YouTube/etc. credentials
 make docker-up
 ```
 
-Visit http://localhost:8080
+Visit `http://localhost:8080` — you're live.
 
-[📖 Full deployment guide](./docs/DEPLOYMENT.md)
+**Prerequisites:**
+- Docker & Docker Compose
+- Twitch Developer application (for OAuth)
+- Optional: YouTube API credentials, Kick OAuth, Discord bot token
 
-## 🤝 Contributing
+For production Kubernetes deployment, see the **[Deployment Guide](./docs/DEPLOYMENT.md)**.
 
-We welcome contributions! Here's how you can help:
+### Key Design Decisions
 
-### For Non-Developers
+Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README.md):
 
-- 🎨 **Create themes** - Share your custom CSS themes
-- 📝 **Report bugs** - Use our [bug report template](https://github.com/caesarakalaeii/all-chat/issues/new/choose) to report issues
-- 💡 **Suggest features** - Use our [feature request template](https://github.com/caesarakalaeii/all-chat/issues/new/choose) to propose ideas
-- 📖 **Improve docs** - Use our [documentation template](https://github.com/caesarakalaeii/all-chat/issues/new/choose) to suggest improvements
+- **ADR-0001**: Standard Go Layout (not hexagonal/ports-adapters)
+- **ADR-0002**: Redis Streams + Pub/Sub hybrid messaging
+- **ADR-0003**: CloudNativePG for PostgreSQL in Kubernetes
+- **ADR-0006**: YouTube quota reserve-confirm-rollback pattern
+- **ADR-0007**: Leadership rebalancing for auto-scaling listeners
+- **ADR-0008**: Feature gate infrastructure for premium capabilities
 
-### For Developers
+### Documentation
 
-- 🔧 **Fix bugs** - Check our [issues](https://github.com/caesar/all-chat/issues)
-- ✨ **Add features** - Check open issues for feature requests
-- 🧪 **Write tests** - Improve test coverage
-
-**Process:**
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Write/update tests
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to your branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
-
-[📖 Developer documentation](./CLAUDE.md)
-
-## 🙏 Acknowledgments
-
-Built with amazing open-source projects:
-
-- [gempir/go-twitch-irc](https://github.com/gempir/go-twitch-irc) - Twitch IRC client
-- [Gin Framework](https://gin-gonic.com/) - HTTP web framework
-- [Next.js](https://nextjs.org/) - React framework
-- [Redis](https://redis.io/) - In-memory data store
-- [PostgreSQL](https://www.postgresql.org/) - Database
-
-Special thanks to the Twitch, 7TV, BTTV, and FFZ communities!
-
-## 📝 License
-
-This project is licensed under the AGPL 3.0 - see the [LICENSE](LICENSE) file for details.
-
-## 📮 Support & Contact
-
-- **💬 Discord**: [Join our Discord server](https://discord.gg/xCGBSuz39P) - Get help and chat with the community
-- **🐛 Bug Reports**: [GitHub Issues](https://github.com/caesar/all-chat/issues)
-- **💬 Questions**: [GitHub Discussions](https://github.com/caesar/all-chat/discussions)
-- **📧 Email**: all.chat.support@gmail.com
-- **🌐 Website**: [allch.at](https://allch.at)
-
-## ⭐ Star History
-
-If you find this project useful, please consider giving it a star! It helps others discover All-Chat.
+| Topic | Link |
+|-------|------|
+| Onboarding | [GETTING_STARTED.md](./GETTING_STARTED.md) |
+| Frontend dev | [FRONTEND_QUICK_START.md](./FRONTEND_QUICK_START.md) |
+| CSS customization | [CSS_CUSTOMIZATION.md](./docs/CSS_CUSTOMIZATION.md) |
+| Deployment | [DEPLOYMENT.md](./docs/DEPLOYMENT.md) |
+| Architecture overview | [docs/architecture/](./docs/architecture/00-OVERVIEW.md) |
+| Data flow | [01-DATA-FLOW.md](./docs/architecture/01-DATA-FLOW.md) |
+| Troubleshooting | [Decision Tree](./docs/troubleshooting/decision-tree.md) |
+| LLM quick-ref guides | [docs/llm-guides/](./docs/llm-guides/) |
 
 ---
 
-**Made with ❤️ for the streaming community**
+## Contributing
+
+We welcome contributions from everyone!
+
+**Non-developers:**
+- Create and share themes (CSS)
+- [Report bugs](https://github.com/caesarakalaeii/all-chat/issues/new/choose)
+- [Suggest features](https://github.com/caesarakalaeii/all-chat/issues/new/choose)
+
+**Developers:**
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes and write tests
+4. Open a Pull Request
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full process.
+
+---
+
+## Acknowledgments
+
+Built on the shoulders of:
+- [gempir/go-twitch-irc](https://github.com/gempir/go-twitch-irc) — Twitch IRC client
+- [Gin](https://gin-gonic.com/) — Go HTTP framework
+- [Next.js](https://nextjs.org/) — React framework
+- [7TV](https://7tv.io/), [BTTV](https://betterttv.com/), [FFZ](https://www.frankerfacez.com/) — Emote providers
+
+---
+
+## License
+
+[AGPL 3.0](./LICENSE)
+
+## Support
+
+- [Discord community](https://discord.gg/xCGBSuz39P)
+- [GitHub Issues](https://github.com/caesarakalaeii/all-chat/issues)
+- [GitHub Discussions](https://github.com/caesarakalaeii/all-chat/discussions)
+- Email: all.chat.support@gmail.com
+
+---
+
+<p align="center"><b>Free. Open source. Built for streamers who refuse to pick just one platform.</b></p>

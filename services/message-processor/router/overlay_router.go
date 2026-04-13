@@ -79,6 +79,27 @@ func (r *Repository) FindOverlaysForMessage(ctx context.Context, platform, chann
 	return overlays, nil
 }
 
+// FindTwitchChannelForOverlay returns the channel_name of the first active Twitch source
+// on the given overlay. Returns empty string if no Twitch source exists.
+func (r *Repository) FindTwitchChannelForOverlay(ctx context.Context, overlayID string) (string, error) {
+	query := `
+		SELECT ocs.channel_name
+		FROM overlay_chat_sources ocs
+		WHERE ocs.overlay_id = $1
+		  AND ocs.platform = 'twitch'
+		  AND ocs.is_active = true
+		LIMIT 1
+	`
+
+	var channelName string
+	err := r.db.QueryRow(ctx, query, overlayID).Scan(&channelName)
+	if err != nil {
+		// No Twitch source found — not an error, just return empty
+		return "", nil
+	}
+	return channelName, nil
+}
+
 // Router routes messages to the appropriate overlays
 type Router struct {
 	repo   *Repository
@@ -91,6 +112,12 @@ func NewRouter(repo *Repository, logger *zap.Logger) *Router {
 		repo:   repo,
 		logger: logger,
 	}
+}
+
+// TwitchChannelForOverlay returns the Twitch channel name for a sibling Twitch source
+// on the same overlay. Used for cross-platform 7TV emote enrichment.
+func (r *Router) TwitchChannelForOverlay(ctx context.Context, overlayID string) (string, error) {
+	return r.repo.FindTwitchChannelForOverlay(ctx, overlayID)
 }
 
 // Route finds all overlays that should receive this message

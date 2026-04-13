@@ -71,6 +71,7 @@ func main() {
 
 	youtubeClientID := os.Getenv("YOUTUBE_CLIENT_ID")
 	youtubeClientSecret := os.Getenv("YOUTUBE_CLIENT_SECRET")
+	youtubeAPIKey := os.Getenv("YOUTUBE_API_KEY")
 	youtubeRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/youtube/callback")
 
 	kickClientID := os.Getenv("KICK_CLIENT_ID")
@@ -92,6 +93,10 @@ func main() {
 
 	if youtubeClientID == "" || youtubeClientSecret == "" {
 		log.Warn("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET not set, YouTube OAuth will not be available")
+	}
+
+	if youtubeAPIKey == "" {
+		log.Warn("YOUTUBE_API_KEY not set — YouTube live chat ID lookup will fail; set YOUTUBE_API_KEY to a server-side Data API key")
 	}
 
 	if kickClientID == "" || kickClientSecret == "" {
@@ -210,15 +215,23 @@ func main() {
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)
 	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log).WithMetrics(businessMetrics)
-	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log)
+	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log).WithMetrics(businessMetrics)
+
+	// Seed the persistent total-users gauge from the database so Grafana retains
+	// an accurate baseline even after pod restarts (Prometheus counters are ephemeral).
+	if counts, err := userRepo.CountByAuthProvider(ctx); err != nil {
+		log.Warn("Failed to seed total-users metric from database (non-fatal)", zap.Error(err))
+	} else {
+		businessMetrics.InitTotalUsersByPlatform(counts)
+		log.Info("Seeded allchat_total_users_by_platform from database", zap.Any("counts", counts))
+	}
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, jwtSecret)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
-	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher)
+	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)
-	debugHandler := handlers.NewDebugHandler(log, jwtSecret)
 	riscHandler := handlers.NewRISCHandler(log, db)
 
 	// Set Gin mode
@@ -306,11 +319,11 @@ func main() {
 	router.GET("/viewer/kick/callback", viewerAuthHandler.HandleKickCallback)
 	router.POST("/viewer/kick/exchange", viewerAuthHandler.HandleKickExchange)
 
+	// Auth code exchange (viewer trades short-lived code for JWT)
+	router.POST("/viewer/token/exchange", viewerAuthHandler.HandleTokenExchange)
+
 	// Public streamer info routes
 	router.GET("/streamers/:username", streamerInfoHandler.HandleGetStreamerInfo)
-
-	// Debug routes (TODO: remove in production)
-	router.GET("/debug/test-jwt", debugHandler.HandleTestViewerJWT)
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")

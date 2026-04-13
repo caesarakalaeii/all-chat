@@ -53,6 +53,8 @@ type UserInfo struct {
 	SourceUserID   string  `json:"source_user_id,omitempty"`  // User ID in source channel (shared chat)
 	AvatarFrameURL string  `json:"avatar_frame_url,omitempty"` // Phase 30: URL of selected avatar frame
 	AvatarFlairURL string  `json:"avatar_flair_url,omitempty"` // Phase 30: URL of selected avatar flair
+	Pronouns       string  `json:"pronouns,omitempty"`          // Phase 9: display text e.g. "she/her"
+	TwitchUsername string  `json:"-"`                           // Phase 9: INTERNAL for cross-platform pronoun lookup; never serialized
 }
 
 // Badge represents a user badge (subscriber, moderator, etc.)

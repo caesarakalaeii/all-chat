@@ -25,7 +25,7 @@ func (m *mockEmoteServiceClient) GetEmotesForChannel(ctx context.Context, channe
 	return m.emotes, nil
 }
 
-func (m *mockEmoteServiceClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID string) ([]EmoteServiceEmote, error) {
+func (m *mockEmoteServiceClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel string) ([]EmoteServiceEmote, error) {
 	m.lastChannel = channel
 	m.calls++
 	if m.err != nil {
@@ -142,7 +142,7 @@ func TestFetchEmotesUsesCache(t *testing.T) {
 	}
 
 	enricher := NewEnricher(client, store, zap.NewNop())
-	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "")
+	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "")
 	if err != nil {
 		t.Fatalf("fetchEmotes returned error: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestFetchEmotesCachesAfterMiss(t *testing.T) {
 	}
 
 	enricher := NewEnricher(client, store, zap.NewNop())
-	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "")
+	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "")
 	if err != nil {
 		t.Fatalf("fetchEmotes returned error: %v", err)
 	}

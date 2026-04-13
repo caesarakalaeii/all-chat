@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>all-chat — Powered By Badge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: transparent;
+  font-family: 'Barlow', sans-serif;
+  overflow: hidden;
+  margin: 0;
+  padding: 32px;
+}
+
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 28px 16px 20px;
+  border-radius: 16px;
+  background: rgba(7, 7, 10, 0.80);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  position: relative;
+  animation:
+    badgeEnter 0.8s cubic-bezier(0.16, 1, 0.3, 1) both,
+    breathe 4s ease-in-out 1s infinite;
+}
+
+.badge::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(135deg,
+    rgba(145, 70, 255, 0.3),
+    rgba(255, 68, 68, 0.2),
+    rgba(83, 252, 24, 0.2),
+    rgba(105, 201, 208, 0.3)
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+@keyframes badgeEnter {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50%      { box-shadow: 0 0 40px -8px rgba(145, 70, 255, 0.08); }
+}
+
+/* ── Logo ── */
+.logo-mark {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-mark .inf-svg {
+  position: absolute;
+  transform: translateY(-10%);
+  filter: drop-shadow(0 0 4px rgba(0,0,0,0.6));
+}
+
+/* ── Text block ── */
+.text-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 200px;
+}
+
+.brand-name {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #e8e8f0;
+  line-height: 1.1;
+}
+
+.tagline {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  line-height: 1.4;
+  white-space: pre-line;
+  height: 44px;
+}
+
+/* ── Separator ── */
+.separator {
+  width: 1px;
+  height: 44px;
+  background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.1), transparent);
+  flex-shrink: 0;
+}
+
+/* ── Platform dots ── */
+.platform-dots {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: dotPulse 3s ease-in-out infinite;
+}
+
+.dot.tw { background: #9146FF; animation-delay: 0s; }
+.dot.yt { background: #FF4444; animation-delay: 0.4s; }
+.dot.ki { background: #53FC18; animation-delay: 0.8s; }
+.dot.tt { background: #69C9D0; animation-delay: 1.2s; }
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.4); }
+}
+</style>
+</head>
+<body>
+
+<div class="badge">
+  <div class="logo-mark">
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
+      <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M4.84836 2.771C7.18302 2.42773 9.57113 2.25 12.0003 2.25C14.4292 2.25 16.8171 2.4277 19.1516 2.77091C21.1299 3.06177 22.5 4.79445 22.5 6.74056V12.7595C22.5 14.7056 21.1299 16.4382 19.1516 16.7291C17.2123 17.0142 15.2361 17.1851 13.2302 17.2348C13.1266 17.2374 13.0318 17.2788 12.9638 17.3468L8.78033 21.5303C8.56583 21.7448 8.24324 21.809 7.96299 21.6929C7.68273 21.5768 7.5 21.3033 7.5 21V17.045C6.60901 16.9634 5.72491 16.8579 4.84836 16.729C2.87004 16.4381 1.5 14.7054 1.5 12.7593V6.74064C1.5 4.79455 2.87004 3.06188 4.84836 2.771Z"
+        fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
+    </svg>
+    <svg class="inf-svg" width="36" height="20" viewBox="0 0 24 14" id="logo-main">
+      <path class="trail" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"
+        fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2.5" stroke-linecap="round"/>
+      <path class="seg tw" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2.5" stroke-linecap="round"/>
+      <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#9146FF" stroke-width="2.5" stroke-linecap="round"/>
+      <path class="seg yt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2.5" stroke-linecap="round"/>
+      <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#FF4444" stroke-width="2.5" stroke-linecap="round"/>
+      <path class="seg ki" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2.5" stroke-linecap="round"/>
+      <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#53FC18" stroke-width="2.5" stroke-linecap="round"/>
+      <path class="seg tt" d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2.5" stroke-linecap="round"/>
+      <path class="seg-b"  d="M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" fill="none" stroke="#69C9D0" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+
+  <div class="text-block">
+    <span class="brand-name">all-chat</span>
+    <span class="tagline" id="tagline"></span>
+  </div>
+
+  <div class="separator"></div>
+
+  <div class="platform-dots">
+    <div class="dot tw"></div>
+    <div class="dot yt"></div>
+    <div class="dot ki"></div>
+    <div class="dot tt"></div>
+  </div>
+</div>
+
+<script>
+// ── Animated infinity logo ──
+const SEG_FRAC = 0.55;
+const LOOP_MS  = 6000;
+
+const svg = document.getElementById('logo-main');
+const firstSeg = svg.querySelector('.seg');
+const total = firstSeg ? firstSeg.getTotalLength() : 60;
+const seg   = total * SEG_FRAC;
+const piece = seg / 4;
+
+svg.querySelectorAll('.seg').forEach(path => {
+  path.style.strokeDasharray = `${piece} ${total * 10}`;
+});
+
+function tick(now) {
+  const head = (now / LOOP_MS * total) % total;
+
+  svg.querySelectorAll('.seg').forEach((path, ci) => {
+    const colourOffset = ci * piece;
+    const t = ((head - colourOffset) % total + total) % total;
+
+    path.style.strokeDasharray  = `${piece} ${total * 2}`;
+    path.style.strokeDashoffset = `${-t}`;
+
+    const bPath = path.nextElementSibling;
+    if (bPath && bPath.classList.contains('seg-b')) {
+      bPath.style.strokeDasharray  = `${piece} ${total * 2}`;
+      bPath.style.strokeDashoffset = `${-(t - total)}`;
+    }
+  });
+
+  requestAnimationFrame(tick);
+}
+
+requestAnimationFrame(tick);
+
+// ── Tagline rotation ──
+const lines = [
+  'Every platform.\nOne overlay.',
+  'Twitch \u00b7 YouTube\nKick \u00b7 TikTok',
+  'Free & open source',
+  'allch.at',
+];
+const el = document.getElementById('tagline');
+let active = 0;
+
+el.textContent = lines[0];
+
+setInterval(() => {
+  el.style.transition = 'opacity 0.4s ease';
+  el.style.opacity = '0';
+
+  setTimeout(() => {
+    active = (active + 1) % lines.length;
+    el.textContent = lines[active];
+    el.style.transition = 'none';
+    requestAnimationFrame(() => {
+      el.style.transition = 'opacity 0.4s ease';
+      el.style.opacity = '1';
+    });
+  }, 350);
+}, 3000);
+</script>
+</body>
+</html>

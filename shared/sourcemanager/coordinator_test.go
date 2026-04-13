@@ -74,6 +74,7 @@ func TestRebalance_ShedsExcess(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	client := newFakeClient(2)
 	coord := NewLeadershipCoordinator("twitch", client, 5*time.Second, logger)
+	coord.stabilizationPeriod = 0 // disable stabilization window in tests
 
 	ctx := context.Background()
 
@@ -117,6 +118,7 @@ func TestRebalance_ThreePods(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	client := newFakeClient(3)
 	coord := NewLeadershipCoordinator("twitch", client, 5*time.Second, logger)
+	coord.stabilizationPeriod = 0
 
 	ctx := context.Background()
 
@@ -138,6 +140,7 @@ func TestRebalance_SinglePod(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	client := newFakeClient(1)
 	coord := NewLeadershipCoordinator("twitch", client, 5*time.Second, logger)
+	coord.stabilizationPeriod = 0
 
 	ctx := context.Background()
 
@@ -159,6 +162,7 @@ func TestRebalance_ScaleDown(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	client := newFakeClient(3)
 	coord := NewLeadershipCoordinator("twitch", client, 5*time.Second, logger)
+	coord.stabilizationPeriod = 0
 
 	ctx := context.Background()
 
@@ -181,6 +185,7 @@ func TestRebalance_ReleasesAlphabetically(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	client := newFakeClient(2)
 	coord := NewLeadershipCoordinator("twitch", client, 5*time.Second, logger)
+	coord.stabilizationPeriod = 0
 
 	ctx := context.Background()
 
@@ -218,6 +223,7 @@ func TestRebalance_CeilDivision(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	client := newFakeClient(3)
 	coord := NewLeadershipCoordinator("twitch", client, 5*time.Second, logger)
+	coord.stabilizationPeriod = 0
 
 	ctx := context.Background()
 
@@ -233,6 +239,52 @@ func TestRebalance_CeilDivision(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, released, 6)
 	assert.Equal(t, 4, coord.LeaseCount())
+}
+
+// TestRebalance_StabilizationWindow verifies that Rebalance withholds lease
+// release until the peer count has been stable for the configured period,
+// preventing the release→re-acquire oscillation that occurs when pods scale.
+func TestRebalance_StabilizationWindow(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	client := newFakeClient(1) // start with 1 peer
+	coord := NewLeadershipCoordinator("twitch", client, 5*time.Second, logger)
+	coord.stabilizationPeriod = 100 * time.Millisecond
+
+	ctx := context.Background()
+
+	// Claim 10 streams on the single pod.
+	for i := 0; i < 10; i++ {
+		ok, err := coord.EnsureLeadership(ctx, streamName(i), nil)
+		require.NoError(t, err)
+		require.True(t, ok)
+	}
+
+	// First call: peer count changes 0→1, stabilization window starts.
+	released, err := coord.Rebalance(ctx, 10)
+	require.NoError(t, err)
+	assert.Nil(t, released, "should not release before stabilization window expires")
+	assert.Equal(t, 10, coord.LeaseCount())
+
+	// Second call within window: still no release.
+	released, err = coord.Rebalance(ctx, 10)
+	require.NoError(t, err)
+	assert.Nil(t, released)
+	assert.Equal(t, 10, coord.LeaseCount())
+
+	// Now simulate a second pod appearing; window resets.
+	client.setPeerCount(2)
+	released, err = coord.Rebalance(ctx, 10)
+	require.NoError(t, err)
+	assert.Nil(t, released, "should not release immediately when peer count changes")
+
+	// Wait for the stabilization window to expire.
+	time.Sleep(150 * time.Millisecond)
+
+	// Call again after window: should release excess leases (max 5 with 2 peers).
+	released, err = coord.Rebalance(ctx, 10)
+	require.NoError(t, err)
+	assert.Len(t, released, 5)
+	assert.Equal(t, 5, coord.LeaseCount())
 }
 
 func streamName(i int) string {

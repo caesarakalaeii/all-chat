@@ -57,6 +57,8 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 		isActive = *req.IsActive
 	}
 
+	// Build overlay struct and validate before any DB calls.
+	// is_public_for_viewers is resolved below once we know whether this is the user's first overlay.
 	overlay := &models.Overlay{
 		UserID:      userID.(string),
 		Name:        req.Name,
@@ -64,11 +66,20 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 		IsActive:    isActive,
 	}
 
-	// Validate
+	// Validate early — catches input errors cheaply before hitting the DB.
 	if err := overlay.Validate(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Only set is_public_for_viewers=true automatically if the user has no existing overlays.
+	// This preserves the designated extension overlay when a user creates additional overlays.
+	existingOverlays, err := h.repo.ListByUserID(c.Request.Context(), userID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create overlay"})
+		return
+	}
+	overlay.IsPublicForViewers = len(existingOverlays) == 0
 
 	// Create in database
 	if err := h.repo.Create(c.Request.Context(), overlay); err != nil {
@@ -203,16 +214,40 @@ func (h *OverlayHandler) HandleDeleteOverlay(c *gin.Context) {
 	overlayID := c.Param("id")
 
 	// First check if overlay exists and belongs to user
-	_, err := h.repo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	target, err := h.repo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
 		return
 	}
 
+	wasPublic := target.IsPublicForViewers
+
 	// Delete from database
 	if err := h.repo.Delete(c.Request.Context(), overlayID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete overlay"})
 		return
+	}
+
+	// If the deleted overlay was the public extension overlay, promote the oldest
+	// remaining active overlay so viewers always have a valid target.
+	if wasPublic {
+		remaining, err := h.repo.ListByUserID(c.Request.Context(), userID.(string))
+		if err == nil {
+			// ListByUserID orders by created_at DESC; iterate to find the oldest active one.
+			var oldest *models.Overlay
+			for i := len(remaining) - 1; i >= 0; i-- {
+				if remaining[i].IsActive {
+					oldest = remaining[i]
+					break
+				}
+			}
+			if oldest != nil {
+				oldest.IsPublicForViewers = true
+				// Ignore promotion error — the delete already succeeded; a best-effort
+				// promotion failure should not roll back or change the response code.
+				_ = h.repo.Update(c.Request.Context(), oldest)
+			}
+		}
 	}
 
 	c.Status(http.StatusNoContent)

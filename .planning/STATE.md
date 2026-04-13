@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-stopped_at: Completed 08-06-PLAN.md
-last_updated: "2026-03-29T21:43:12.510Z"
-last_activity: 2026-03-31
+status: Ready to execute
+stopped_at: Phase 12 context gathered
+last_updated: "2026-04-12T00:35:44.302Z"
+last_activity: 2026-04-12
 progress:
-  total_phases: 14
-  completed_phases: 14
-  total_plans: 62
-  completed_plans: 62
+  total_phases: 19
+  completed_phases: 18
+  total_plans: 77
+  completed_plans: 75
+  percent: 97
 ---
 
 # Project State
@@ -20,11 +21,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Streamers can aggregate chat from all platforms they stream to, with reliable message delivery even during high-traffic events through intelligent load balancing, auto-scaling, and unlimited YouTube chat access.
-**Current focus:** Phase 08 — message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline
+**Current focus:** Phase 10 — message-pipeline-resilience-fix-silent-failure-modes-across-
 
 ## Current Position
 
-Phase: 08
+Phase: 12
 Plan: Not started
 
 ## Performance Metrics
@@ -94,6 +95,9 @@ Plan: Not started
 | Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline P01 | 612 | 2 tasks | 12 files |
 | Phase 08 P05 | 176 | 2 tasks | 2 files |
 | Phase 08-message-pipeline-resilience-fix-silent-failure-modes-across-twitch-message-pipeline P06 | 442 | 2 tasks | 10 files |
+| Phase 09 P01 | 451s | 2 tasks | 8 files |
+| Phase 09 P02 | 3min | 2 tasks | 6 files |
+| Phase 09 P03 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -223,6 +227,9 @@ Key decisions relevant to v1.6:
 - [Phase 08]: RingBufferPublisher uses data-only XADD in all 5 listeners — message-processor reads only data field; per-field publishing was unnecessary overhead
 - [Phase 08]: newStreamPublisherWithRingBuffer internal constructor with prometheus.Registerer injection — prevents duplicate metric registration panics in tests
 - [Phase 08]: PublishBatch replaced pipeline with individual ring buffer calls — each message independently retried on failure, eliminates LI-02 batch pipeline failure mode
+- [Phase 09]: PronounEnricher uses newPronounEnricherWithURL internal constructor for test injection; test server registers paths without /v1 prefix since baseURL replaces full constant; empty string used as 404 sentinel (distinguishable from redis.Nil cache miss)
+- [Phase 09]: pronounPill.ts extracted as pure helper for testability — follows usernameSpan.ts pattern
+- [Phase 09]: Config cascade for pronouns: display_settings loaded first, visual_settings overrides second — matches platformBadge pattern
 
 ### Roadmap Evolution
 
@@ -234,6 +241,10 @@ Key decisions relevant to v1.6:
 - Phase 6 added: Unify all listeners to leadership-based coordination — remove assignment-based pattern, single resilient architecture
 - Phase 7 added: Feature Gate Infrastructure — capability-level premium toggling with DB + Redis cache, admin UI
 - Phase 8 added: Message Pipeline Resilience — Fix all 24 silent failure modes found in robustness audit (API gateway PubSub reconnect, StatusSubscriber panic, PEL drain, Pub/Sub ACK ordering, unique consumer names, Redis publish retry buffer, and 18 more)
+- Phase 9 added: Add optional support for Alejo pronouns (pr.alejo.io) — integrate the pronouns API, add per-overlay toggle to enable/disable pronoun display, cache pronoun lookups, and render pronouns next to usernames in the chat overlay
+- Phase 10 added: Message pipeline resilience — fix silent failure modes across Twitch message pipeline
+- Phase 11 added: Add username/keyword exclude list to overlay filter settings (issue #240)
+- Phase 12 added: Notification sound on incoming messages with premium custom sound support (issue #241)
 
 ### Pending Todos
 
@@ -269,9 +280,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31T13:16:03Z
-Last activity: 2026-03-31
-Stopped at: Completed quick-260331-l43-PLAN.md
-Resume file: None
+Last session: 2026-04-12T00:18:53.256Z
+Last activity: 2026-04-12
+Stopped at: Phase 12 context gathered
+Resume file: .planning/phases/12-notification-sound-on-incoming-messages-with-premium-custom-/12-CONTEXT.md
 
 **Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.

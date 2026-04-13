@@ -79,6 +79,10 @@ describe('visualSettingsToCss', () => {
       membershipGiftSizeModifier: '1.2',
       platformBadgePosition: 'before',
       platformBadgeStyle: 'text',
+      // Phase 9: Pronoun display (not CSS-driven, not emitted as CSS properties)
+      showPronouns: 'inline',
+      pronounPosition: 'after',
+      pronounColor: '#7B68EE',
     }
 
     const result = visualSettingsToCss(full)

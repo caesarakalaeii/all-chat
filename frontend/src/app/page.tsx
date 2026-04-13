@@ -16,7 +16,7 @@ import { InfinityLogo } from '@/components/InfinityLogo'
 import { PlatformBadge } from '@/components/ui/badge'
 import { PLATFORM_COLORS } from '@/lib/platform-colors'
 import { toastManager } from '@/lib/toast'
-import { LayoutGrid, Zap, Palette, Puzzle, Github } from 'lucide-react'
+import { LayoutGrid, Zap, Palette, Puzzle, Github, LogIn, Plus, MonitorPlay } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -130,19 +130,22 @@ const TOTAL_CARDS = PLATFORMS.length + 3 // 4 stat cards + 3 feature cards
 // ---------------------------------------------------------------------------
 const FEATURE_CARDS = [
   {
-    icon: LayoutGrid,
-    title: 'Unified Chat',
-    description: 'Combine Twitch, YouTube, Kick, and TikTok messages in one beautiful overlay.',
+    icon: Palette,
+    title: '12 Themes, Full CSS Control',
+    description:
+      'From Win98 retro to cyberpunk neon. Pick a built-in theme or write your own CSS — your overlay, your brand.',
   },
   {
     icon: Zap,
-    title: 'Real-time Sync',
-    description: 'Low-latency delivery under 500ms for a seamless multi-platform experience.',
+    title: 'Every Emote, Everywhere',
+    description:
+      '7TV, BTTV, FFZ, plus native Twitch and YouTube emotes — they all render correctly in your overlay.',
   },
   {
-    icon: Palette,
-    title: 'Marketplace Themes',
-    description: 'Full control over appearance with 7TV, BTTV, FFZ emotes and custom themes.',
+    icon: LayoutGrid,
+    title: 'Smart Resource Usage',
+    description:
+      'Only polls platforms when your overlay is visible in OBS. Switch scenes and All-Chat stands down automatically.',
   },
 ]
 
@@ -252,7 +255,8 @@ export default function LandingPage() {
           One overlay. Every platform.
         </h1>
         <p className="mb-10 max-w-xl text-lg text-text-sub">
-          Aggregate chat from Twitch, YouTube, Kick, and TikTok into a single stream overlay.
+          See every message from Twitch, YouTube, Kick, TikTok, and Discord in one place
+          — no bots, no setup, just a URL in OBS.
         </p>
 
         {/* Platform stat cards — magnetic glow hero */}
@@ -274,7 +278,7 @@ export default function LandingPage() {
                 <div className={cn('mb-1 text-2xl font-bold', PLATFORM_COLORS[platform].text)}>
                   {count != null ? formatCount(count) : '—'}
                 </div>
-                <div className="text-xs text-text-sub">messages / 7d</div>
+                <div className="text-xs text-text-sub">messages delivered this week</div>
               </MagGlowCard>
             )
           })}
@@ -363,6 +367,49 @@ export default function LandingPage() {
       </section>
 
       {/* ------------------------------------------------------------------ */}
+      {/* How it works — 3-step walkthrough                                  */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="mx-auto max-w-3xl px-4 pb-20">
+        <h2 className="mb-10 text-center text-2xl font-bold text-text">Live in 3 steps</h2>
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+          {[
+            {
+              icon: LogIn,
+              step: '1',
+              title: 'Sign in & create an overlay',
+              description: 'Log in with Twitch, YouTube, or Kick. Create an overlay and add your chat sources.',
+            },
+            {
+              icon: Plus,
+              step: '2',
+              title: 'Add your channels',
+              description: 'Connect Twitch channels, YouTube streams, Kick channels — mix and match across platforms.',
+            },
+            {
+              icon: MonitorPlay,
+              step: '3',
+              title: 'Paste the URL in OBS',
+              description: 'Add a Browser Source, paste your overlay URL. Every platform\'s chat in one feed.',
+            },
+          ].map((item) => {
+            const Icon = item.icon
+            return (
+              <div key={item.step} className="flex flex-col items-center text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface">
+                  <Icon className="h-6 w-6 text-text-sub" aria-hidden="true" />
+                </div>
+                <div className="mb-1 text-xs font-bold uppercase tracking-widest text-text-sub">
+                  Step {item.step}
+                </div>
+                <h3 className="mb-1 text-base font-semibold text-text">{item.title}</h3>
+                <p className="text-sm text-text-sub">{item.description}</p>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
       {/* Feature grid — same magnetic glow cards                            */}
       {/* ------------------------------------------------------------------ */}
       <section className="mx-auto max-w-5xl px-4 pb-16">
@@ -403,18 +450,44 @@ export default function LandingPage() {
           <div className="flex-1">
             <h2 className="mb-1 text-xl font-bold text-text">Browser Extension</h2>
             <p className="mb-3 text-sm text-text-sub">
-              Add all-chat overlays directly to any streaming site without OBS. Works in Chrome and
-              Firefox.
+              Your viewers get unified chat too. The extension replaces native Twitch, YouTube, and
+              Kick chat with All-Chat — so your community can chat across platforms from their
+              browser.
             </p>
-            <a
-              href="https://github.com/caesarakalaeii/all-chat-extension/releases"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub underline-offset-4 hover:text-text hover:underline"
-            >
-              Install beta extension
-            </a>
-            <p className="mt-2 text-xs text-text-sub">Currently in beta — expect ongoing updates.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="https://addons.mozilla.org/en-US/firefox/addon/all-chat-extension/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub underline-offset-4 hover:text-text hover:underline"
+              >
+                <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path fill="currentColor" d="M8.824 7.287c.008 0 .004 0 0 0zm-2.8-1.4c.006 0 .003 0 0 0zm16.754 2.161c-.505-1.215-1.53-2.528-2.333-2.943.654 1.283 1.033 2.57 1.177 3.53l.002.02c-1.314-3.278-3.544-4.6-5.366-7.477-.091-.147-.184-.292-.273-.446a3.545 3.545 0 01-.13-.24 2.118 2.118 0 01-.172-.46.03.03 0 00-.027-.03.038.038 0 00-.021 0l-.006.001a.037.037 0 00-.01.005L15.624 0c-2.585 1.515-3.657 4.168-3.932 5.856a6.197 6.197 0 00-2.305.587.297.297 0 00-.147.37c.057.162.24.24.396.17a5.622 5.622 0 012.008-.523l.067-.005a5.847 5.847 0 011.957.222l.095.03a5.816 5.816 0 01.616.228c.08.036.16.073.238.112l.107.055a5.835 5.835 0 01.368.211 5.953 5.953 0 012.034 2.104c-.62-.437-1.733-.868-2.803-.681 4.183 2.09 3.06 9.292-2.737 9.02a5.164 5.164 0 01-1.513-.292 4.42 4.42 0 01-.538-.232c-1.42-.735-2.593-2.121-2.74-3.806 0 0 .537-2 3.845-2 .357 0 1.38-.998 1.398-1.287-.005-.095-2.029-.9-2.817-1.677-.422-.416-.622-.616-.8-.767a3.47 3.47 0 00-.301-.227 5.388 5.388 0 01-.032-2.842c-1.195.544-2.124 1.403-2.8 2.163h-.006c-.46-.584-.428-2.51-.402-2.913-.006-.025-.343.176-.389.206-.406.29-.787.616-1.136.974-.397.403-.76.839-1.085 1.303a9.816 9.816 0 00-1.562 3.52c-.003.013-.11.487-.19 1.073-.013.09-.026.181-.037.272a7.8 7.8 0 00-.069.667l-.002.034-.023.387-.001.06C.386 18.795 5.593 24 12.016 24c5.752 0 10.527-4.176 11.463-9.661.02-.149.035-.298.052-.448.232-1.994-.025-4.09-.753-5.844z"/>
+                </svg>
+                Firefox
+              </a>
+              <a
+                href="https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub underline-offset-4 hover:text-text hover:underline"
+              >
+                <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path fill="currentColor" d="M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0zM1.931 5.47A11.943 11.943 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29zm13.342 2.166a5.446 5.446 0 0 1 1.45 7.09l.002.001h-.002l-5.344 9.257c.206.01.413.016.621.016 6.627 0 12-5.373 12-12 0-1.54-.29-3.011-.818-4.364zM12 16.364a4.364 4.364 0 1 1 0-8.728 4.364 4.364 0 0 1 0 8.728Z"/>
+                </svg>
+                Chrome
+              </a>
+              <a
+                href="https://github.com/caesarakalaeii/all-chat-extension/releases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub underline-offset-4 hover:text-text hover:underline"
+              >
+                <Github className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                GitHub Releases
+              </a>
+            </div>
+            <p className="mt-2 text-xs text-text-sub">GitHub Releases get updates first — store versions follow shortly after.</p>
           </div>
         </div>
       </section>
@@ -423,7 +496,7 @@ export default function LandingPage() {
       {/* Footer                                                              */}
       {/* ------------------------------------------------------------------ */}
       <footer className="space-y-2 pb-12 text-center text-sm text-text-sub">
-        <p>Open Source &bull; Built with Go + React &bull; Multi-Platform Chat Aggregation</p>
+        <p>Free. Open source. Built for streamers who refuse to pick just one platform.</p>
         <p className="flex flex-wrap items-center justify-center gap-3 text-xs">
           <a
             href="https://github.com/caesarakalaeii/all-chat"

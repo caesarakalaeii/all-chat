@@ -86,6 +86,7 @@ type OverlayRepository interface {
 // ConfigRepository defines credit roll config operations
 type ConfigRepository interface {
 	GetByOverlayID(ctx context.Context, overlayID string) (*models.CreditRollConfig, error)
+	GetOrCreate(ctx context.Context, overlayID string) (*models.CreditRollConfig, error)
 	Update(ctx context.Context, config *models.CreditRollConfig) error
 	GetMostRecentCompletedSession(ctx context.Context, overlayID string) (*models.SessionInfo, error)
 }
@@ -215,10 +216,14 @@ func (h *Handler) HandleGetPublicConfig(c *gin.Context) {
 		return
 	}
 
-	// Get credit roll config
-	config, err := h.configRepo.GetByOverlayID(c.Request.Context(), overlayID)
+	// Get or create credit roll config (auto-creates default if missing)
+	config, err := h.configRepo.GetOrCreate(c.Request.Context(), overlayID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "credit roll config not found"})
+		h.logger.Error("Failed to get or create credit roll config",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get credit roll config"})
 		return
 	}
 
@@ -242,10 +247,14 @@ func (h *Handler) HandleGetCreditRoll(c *gin.Context) {
 		return
 	}
 
-	// Get credit roll config
-	config, err := h.configRepo.GetByOverlayID(ctx, overlayID)
+	// Get or create credit roll config (auto-creates default if missing)
+	config, err := h.configRepo.GetOrCreate(ctx, overlayID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "config not found"})
+		h.logger.Error("Failed to get or create credit roll config",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get credit roll config"})
 		return
 	}
 
@@ -308,8 +317,17 @@ func (h *Handler) getActiveSession(ctx context.Context, overlayID string) (*mode
 		return nil, fmt.Errorf("no active session")
 	}
 
+	// A hash with no session_id is a zombie left by a background analytics write
+	// (incrementCreditRollDisplay) that fired after EndSession deleted the key.
+	// Treat it the same as an absent key so the DB-fallback path is taken, not the
+	// corruption-repair path (which would reset startedAt to time.Now() → duration 0).
+	sessionID, hasSessionID := result["session_id"]
+	if !hasSessionID || sessionID == "" {
+		return nil, fmt.Errorf("no active session")
+	}
+
 	session := &models.SessionInfo{
-		SessionID: result["session_id"],
+		SessionID: sessionID,
 		State:     result["state"],
 	}
 
@@ -462,6 +480,7 @@ func (h *Handler) aggregateLeaderboards(ctx context.Context, sessionID string, c
 // getLeaderboardEntries retrieves entries for a specific category
 func (h *Handler) getLeaderboardEntries(ctx context.Context, sessionID string, category string, topN int) ([]models.LeaderboardEntry, error) {
 	key := fmt.Sprintf("session:leaderboard:%s:%s", sessionID, category)
+	metaKey := fmt.Sprintf("session:leaderboard:meta:%s:%s", sessionID, category)
 
 	// Get top N entries from sorted set (highest score first)
 	results, err := h.redis.ZRevRangeWithScores(ctx, key, 0, int64(topN-1)).Result()
@@ -469,17 +488,47 @@ func (h *Handler) getLeaderboardEntries(ctx context.Context, sessionID string, c
 		return nil, fmt.Errorf("failed to get leaderboard: %w", err)
 	}
 
+	// Batch-fetch metadata for all members
+	memberKeys := make([]string, 0, len(results))
+	for _, result := range results {
+		memberKeys = append(memberKeys, result.Member.(string))
+	}
+
+	metaValues := make([]interface{}, len(memberKeys))
+	if len(memberKeys) > 0 {
+		metaValues, _ = h.redis.HMGet(ctx, metaKey, memberKeys...).Result()
+	}
+
 	entries := make([]models.LeaderboardEntry, 0, len(results))
 
 	for rank, result := range results {
-		// Parse member JSON
+		memberStr := result.Member.(string)
+
+		// Try metadata hash first (new format: stable key with companion hash)
 		var member map[string]interface{}
-		if err := json.Unmarshal([]byte(result.Member.(string)), &member); err != nil {
-			h.logger.Warn("Failed to parse leaderboard member",
-				zap.String("category", category),
-				zap.Error(err),
-			)
-			continue
+		if rank < len(metaValues) && metaValues[rank] != nil {
+			if metaStr, ok := metaValues[rank].(string); ok {
+				if err := json.Unmarshal([]byte(metaStr), &member); err != nil {
+					h.logger.Warn("Failed to parse leaderboard metadata",
+						zap.String("category", category),
+						zap.String("member_key", memberStr),
+						zap.Error(err),
+					)
+					continue
+				}
+			}
+		}
+
+		// Fallback: try parsing member itself as JSON (legacy format)
+		if member == nil {
+			if err := json.Unmarshal([]byte(memberStr), &member); err != nil {
+				// Member is a stable key (platform:user_id) with no metadata — skip
+				h.logger.Warn("Leaderboard entry missing metadata",
+					zap.String("category", category),
+					zap.String("member_key", memberStr),
+				)
+				continue
+			}
 		}
 
 		entry := models.LeaderboardEntry{
@@ -515,11 +564,22 @@ func (h *Handler) getLeaderboardEntries(ctx context.Context, sessionID string, c
 	return entries, nil
 }
 
-// incrementCreditRollDisplay increments the display counter
+// incrementCreditRollDisplay increments the display counter only when the session
+// key already exists.  Using a plain HIncrBy on an absent key would create a zombie
+// hash containing only "credit_roll_displayed_count", which caused getActiveSession
+// to trigger the corruption-repair path and reset startedAt to time.Now() (→ duration 0).
 func (h *Handler) incrementCreditRollDisplay(ctx context.Context, overlayID string, sessionID string) {
-	// This is fire-and-forget, we don't care if it fails
-	// (it's just for analytics)
-	_ = h.redis.HIncrBy(ctx, "session:active:"+overlayID, "credit_roll_displayed_count", 1)
+	key := "session:active:" + overlayID
+	// Lua script: increment only if the key exists (KEYS[1] present in Redis).
+	// This is atomic and avoids creating a zombie hash when the session has already
+	// been deleted by EndSession.
+	script := redis.NewScript(`
+		if redis.call("EXISTS", KEYS[1]) == 1 then
+			return redis.call("HINCRBY", KEYS[1], "credit_roll_displayed_count", 1)
+		end
+		return 0
+	`)
+	_ = script.Run(ctx, h.redis, []string{key}).Err()
 }
 
 // getString safely gets a string value from a map

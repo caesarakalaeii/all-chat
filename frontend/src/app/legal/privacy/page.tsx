@@ -169,7 +169,7 @@ export default function PrivacyPolicyPage() {
         <h3 className="text-lg font-semibold text-text">4.2 Safeguards</h3>
         <ul className={listClasses}>
           <li>OAuth tokens encrypted with AES-GCM before touching the database</li>
-          <li>HTTPS everywhere and signed internal service tokens</li>
+          <li>HTTPS at the ingress layer for all external traffic; internal services isolated via Kubernetes network policies</li>
           <li>Role-scoped infrastructure access and audit logging</li>
           <li>Regular dependency upgrades and security patching</li>
           <li>Security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)</li>

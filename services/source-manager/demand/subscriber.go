@@ -3,6 +3,7 @@ package demand
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -48,8 +49,9 @@ type OverlayDemandSubscriber struct {
 	repo        sourceRepository
 	logger      *zap.Logger
 
-	mu     sync.RWMutex
-	demand map[string][]DemandSource // overlay_id -> []DemandSource
+	mu           sync.RWMutex
+	demand       map[string][]DemandSource // overlay_id -> []DemandSource
+	lastSnapshot string                    // fingerprint of last published snapshot; prevents redundant publishes
 }
 
 // NewOverlayDemandSubscriber creates a new OverlayDemandSubscriber.
@@ -235,13 +237,28 @@ func (s *OverlayDemandSubscriber) handleConnectionEvent(ctx context.Context, pay
 }
 
 // publishDemandUpdate flattens the demand map and publishes a DemandUpdate to source:demand.
+// It skips the publish if the set of demanded source IDs has not changed since the last
+// publish, preventing redundant snapshots when WebSocket clients reconnect rapidly but
+// the underlying source configuration is unchanged.
 func (s *OverlayDemandSubscriber) publishDemandUpdate(ctx context.Context) {
-	s.mu.RLock()
+	s.mu.Lock()
 	flatSources := make([]DemandSource, 0)
 	for _, sources := range s.demand {
 		flatSources = append(flatSources, sources...)
 	}
-	s.mu.RUnlock()
+
+	// Build a stable fingerprint from sorted source IDs so the comparison is
+	// order-independent (map iteration order is random).
+	fingerprint := demandFingerprint(flatSources)
+	if fingerprint == s.lastSnapshot {
+		s.mu.Unlock()
+		s.logger.Debug("Demand unchanged, skipping publish",
+			zap.Int("source_count", len(flatSources)),
+		)
+		return
+	}
+	s.lastSnapshot = fingerprint
+	s.mu.Unlock()
 
 	update := DemandUpdate{
 		Type:      "demand_update",
@@ -260,9 +277,25 @@ func (s *OverlayDemandSubscriber) publishDemandUpdate(ctx context.Context) {
 		return
 	}
 
-	s.logger.Debug("Published DemandUpdate",
+	s.logger.Info("Published DemandUpdate",
 		zap.Int("source_count", len(flatSources)),
 	)
+}
+
+// demandFingerprint builds a stable string key from a set of DemandSource entries.
+// The key is the sorted concatenation of "overlayID:sourceID" pairs so that order
+// of iteration does not affect the result.
+func demandFingerprint(sources []DemandSource) string {
+	if len(sources) == 0 {
+		return ""
+	}
+	keys := make([]string, len(sources))
+	for i, s := range sources {
+		keys[i] = s.OverlayID + ":" + s.SourceID
+	}
+	sort.Strings(keys)
+	result := strings.Join(keys, ",")
+	return result
 }
 
 // GetDemandedSources returns a snapshot of all currently demanded sources.

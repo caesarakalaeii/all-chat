@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -15,15 +16,16 @@ import (
 	"github.com/caesar/all-chat/services/twitch-listener/irc"
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
 	"github.com/caesar/all-chat/services/twitch-listener/status"
+	"github.com/caesar/all-chat/services/twitch-listener/zombie"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	sharedredis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -87,14 +89,13 @@ func main() {
 	// Connect to Redis
 	redisHost := listener.Env("REDIS_HOST", "localhost")
 	redisPort := listener.Env("REDIS_PORT", "6379")
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
-	})
-	defer redisClient.Close()
-
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		log.Fatal("Failed to connect to Redis", zap.Error(err))
+	redisPassword := listener.Env("REDIS_PASSWORD", "")
+	redisClient, err := sharedredis.NewClientWithTracing(
+		fmt.Sprintf("%s:%s", redisHost, redisPort), redisPassword, tracingEnabled)
+	if err != nil {
+		log.Fatal("Failed to create Redis client", zap.Error(err))
 	}
+	defer redisClient.Close()
 
 	log.Info("Connected to Redis")
 
@@ -135,6 +136,16 @@ func main() {
 	statusPublisher := status.NewPublisher(redisClient, log)
 	log.Info("Initialized platform status publisher")
 
+	// Initialize zombie detector — 5-minute stall window, configurable via env var.
+	zombieStallMinutes := 5
+	if v := listener.Env("ZOMBIE_STALL_WINDOW_MINUTES", "5"); v != "5" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			zombieStallMinutes = n
+		}
+	}
+	zombieDetector := zombie.NewDetector(time.Duration(zombieStallMinutes) * time.Minute)
+	log.Info("Initialized zombie detector", zap.Int("stall_window_minutes", zombieStallMinutes))
+
 	// Initialize channel manager — pass nil for assignedSourceIDs; SDK calls UpdateAssignedSourceIDs inside ll.Start
 	channelRepo := channels.NewRepository(db)
 	dbConnWrapper := &dbConnWrapper{pool: db}
@@ -148,6 +159,9 @@ func main() {
 
 	// Wire status publisher and active channels callback to IRC connection for reconnect
 	ircConn.SetActiveChannelsFn(channelMgr.GetActiveChannels, statusPublisher)
+
+	// Wire zombie detector into IRC connection for received-vs-published drift tracking (Z-01)
+	ircConn.SetZombieDetector(zombieDetector)
 
 	// Wire disconnect callback — clears stale activeChans so next sync re-joins all channels
 	ircConn.SetOnDisconnect(channelMgr.ClearActiveChannels)
@@ -176,6 +190,7 @@ func main() {
 
 	// Health check handlers
 	healthHandler := handlers.NewHealthHandler(ircConn, streamPublisher, channelMgr)
+	healthHandler.SetZombieDetector(zombieDetector)
 	router.GET("/health/live", healthHandler.LivenessProbe)
 	router.GET("/health/ready", healthHandler.ReadinessProbe)
 	router.GET("/status", healthHandler.Status)

@@ -22,10 +22,12 @@ type EmoteClient interface {
 	Provider() string
 }
 
-// CombinedEmoteClient is an optional interface for clients that support user emotes
+// CombinedEmoteClient is an optional interface for clients that support user emotes.
+// twitchChannel is an optional hint from a sibling Twitch source on the same overlay,
+// allowing 7TV channel emote lookup for non-Twitch platforms.
 type CombinedEmoteClient interface {
 	EmoteClient
-	FetchCombinedEmotes(ctx context.Context, channel, platform, userID string) ([]models.Emote, error)
+	FetchCombinedEmotes(ctx context.Context, channel, platform, userID, twitchChannel string) ([]models.Emote, error)
 }
 
 // EmoteCache interface for caching emotes
@@ -75,11 +77,13 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 
 	userID := c.Query("user_id")
 	platform := c.Query("platform")
+	twitchChannel := c.Query("twitch_channel")
 
 	h.logger.Info("Fetching emotes for channel",
 		zap.String("channel", channel),
 		zap.String("user_id", userID),
-		zap.String("platform", platform))
+		zap.String("platform", platform),
+		zap.String("twitch_channel", twitchChannel))
 
 	ctx := c.Request.Context()
 	type providerResult struct {
@@ -102,7 +106,7 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 			}
 			defer cancel()
 
-			emotes, err := h.fetchWithCacheAndUser(providerCtx, client, provider, channel, platform, userID)
+			emotes, err := h.fetchWithCacheAndUser(providerCtx, client, provider, channel, platform, userID, twitchChannel)
 			select {
 			case results <- providerResult{emotes: emotes, err: err, provider: provider}:
 			case <-ctx.Done():
@@ -258,19 +262,30 @@ func (h *EmoteHandler) fetchWithCache(ctx context.Context, client EmoteClient, p
 	return emotes, nil
 }
 
-// fetchWithCacheAndUser fetches emotes with optional user context
-// For providers that support user emotes (7TV), fetches combined channel + user emotes
-func (h *EmoteHandler) fetchWithCacheAndUser(ctx context.Context, client EmoteClient, provider, channel, platform, userID string) ([]models.Emote, error) {
+// fetchWithCacheAndUser fetches emotes with optional user context.
+// For providers that support user emotes (7TV), fetches combined channel + user emotes.
+// For non-Twitch platforms, routes through the combined path even without a user ID so
+// that providers like 7TV can apply platform-aware logic. When twitchChannel is provided
+// (from a sibling Twitch source on the same overlay), it's used for 7TV channel emote lookup.
+func (h *EmoteHandler) fetchWithCacheAndUser(ctx context.Context, client EmoteClient, provider, channel, platform, userID, twitchChannel string) ([]models.Emote, error) {
 	// Check if this client supports combined emotes
 	combinedClient, supportsCombined := client.(CombinedEmoteClient)
 
-	// If no user ID provided or client doesn't support combined emotes, use regular fetch
-	if userID == "" || !supportsCombined {
+	// Route through the combined path when the client supports it and either:
+	//  - a user ID is present, or
+	//  - the platform is a known non-Twitch platform (so the combined client can apply
+	//    platform-aware logic, e.g. skipping the Twitch channel ID lookup for 7TV)
+	// For Twitch without a user ID, fall back to the simple channel fetch so the existing
+	// cache keys remain valid.
+	isNonTwitchPlatform := platform != "" && platform != "twitch"
+	useCombinedPath := supportsCombined && (userID != "" || isNonTwitchPlatform)
+
+	if !useCombinedPath {
 		return h.fetchWithCache(ctx, client, provider, channel)
 	}
 
-	// Build cache key that includes user ID for combined emotes
-	cacheKey := fmt.Sprintf("%s:%s", channel, userID)
+	// Build cache key that includes user ID and twitch channel hint for combined emotes
+	cacheKey := fmt.Sprintf("%s:%s:%s", channel, userID, twitchChannel)
 
 	// Try cache first
 	emotes, err := h.cache.Get(ctx, provider, cacheKey)
@@ -297,7 +312,7 @@ func (h *EmoteHandler) fetchWithCacheAndUser(ctx context.Context, client EmoteCl
 		zap.String("channel", channel),
 		zap.String("user_id", userID))
 
-	emotes, err = combinedClient.FetchCombinedEmotes(ctx, channel, platform, userID)
+	emotes, err = combinedClient.FetchCombinedEmotes(ctx, channel, platform, userID, twitchChannel)
 	if err != nil {
 		if h.apiCalls != nil {
 			h.apiCalls.WithLabelValues("emote-service", provider, "error").Inc()

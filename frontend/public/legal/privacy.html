@@ -125,7 +125,7 @@
         <li>PostgreSQL (account data, encrypted OAuth tokens)</li>
         <li>Redis (ephemeral sessions, message fan-out)</li>
         <li>AES-GCM encryption for tokens at rest</li>
-        <li>HTTPS everywhere, security headers, signed service tokens</li>
+        <li>HTTPS at ingress for external traffic; internal services isolated via Kubernetes network policies</li>
       </ul>
 
       <h2>5. Data Sharing &amp; Third Parties</h2>

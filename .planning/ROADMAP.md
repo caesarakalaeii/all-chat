@@ -318,3 +318,50 @@ Plans:
 - [x] 08-04-PLAN.md — Shared listener SDK ring buffer for XADD failure buffering with retry, ADR-0009
 - [x] 08-05-PLAN.md — Prometheus alert rules (including pubsub_reconnect_total) and Grafana dashboard panels for all new resilience metrics
 - [x] 08-06-PLAN.md — Wire RingBufferPublisher into all 5 Go listeners (twitch, kick, youtube-innertube, discord, twitch-eventsub)
+
+### Phase 9: Add optional support for Alejo pronouns (pr.alejo.io) — integrate the pronouns API, add per-overlay toggle to enable/disable pronoun display, cache pronoun lookups, and render pronouns next to usernames in the chat overlay
+
+**Goal:** Integrate Alejo pronouns API into the message-processor enrichment pipeline, add per-overlay pronoun display toggle with configurable position and color, cache lookups in Redis with 24h TTL, resolve cross-platform pronouns via linked Twitch accounts, and render pronoun pills next to usernames in the chat overlay.
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12
+**Depends on:** Phase 8
+**Plans:** 3 plans
+
+Plans:
+- [x] 09-01-PLAN.md — PronounEnricher (Alejo API + Redis cache), UserInfo model extension, ViewerBadgeEnricher TwitchUsername resolution, pipeline wiring
+- [x] 09-02-PLAN.md — Frontend TypeScript types + overlay page pronoun pill rendering with config loading
+- [x] 09-03-PLAN.md — VisibilityGroup pronoun controls (toggle, position radio, color picker) + visual checkpoint
+
+### Phase 10: Message pipeline resilience — fix silent failure modes across Twitch message pipeline
+
+**Goal:** Fix all 12 identified silent failure modes (F-01 through F-12) across twitch-listener, message-processor, api-gateway, and source-manager plus add zombie listener detection (Z-01). Atomic health probe flags, exponential backoff reconnection, structured drop logging, Lua-based leadership renewal, and received-vs-published drift detection.
+**Requirements**: F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11, F-12, Z-01
+**Depends on:** Phase 9
+**Plans:** 4/4 plans complete
+
+Plans:
+- [x] 10-01-PLAN.md — Twitch-listener atomic probe flags, shared backoff utility, ring buffer drop logging, status publisher retry, zombie detection
+- [x] 10-02-PLAN.md — API gateway infinite retry resubscribe/reconnect, shared Redis client standardization
+- [x] 10-03-PLAN.md — Message-processor XReadGroup backoff, DLQ structured logging, consumer group offset fix
+- [x] 10-04-PLAN.md — Source-manager atomic leadership renewal (Lua), peer registration sorted set optimization
+
+### Phase 11: Add username/keyword exclude list to overlay filter settings
+
+**Goal:** Enable streamers to configure message filtering for their overlays -- block specific usernames, keywords/phrases (with regex support), bot commands, and short messages. Adds a Filters section to the overlay editor with tag-style inputs, "Add common bots" preset, and client-side filtering in the live overlay page.
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08
+**Depends on:** Phase 10
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 11-01-PLAN.md — shouldFilterMessage TDD utility, public config endpoint fix, overlay page filtering integration
+- [x] 11-02-PLAN.md — FilterGroup UI component with tag inputs/toggle/slider/preset, AppearancePanel + editor page wiring
+
+### Phase 12: Notification sound on incoming messages with premium custom sound support
+
+**Goal:** Add configurable notification sounds that play when new chat messages arrive in the overlay. All users get preset sounds (chime, pop, ping) with volume and cooldown control. Premium users can supply a custom sound URL. Settings persist via display_settings JSONB. Sound playback happens client-side in the overlay page and editor preview. No backend changes required.
+**Requirements**: SND-01, SND-02, SND-03, SND-04, SND-05, SND-06, SND-07, SND-08, SND-09
+**Depends on:** Phase 11
+**Plans:** 2 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — soundPlayer.ts TDD utility, DisplaySettings extension, preset audio files, overlay + embed page playback wiring
+- [ ] 12-02-PLAN.md — SoundGroup UI component with tests, AppearancePanel integration, editor page state/save/postMessage

@@ -29,6 +29,17 @@ const (
 	PeerTTL = 30 * time.Second
 )
 
+// renewScript atomically checks whether the caller owns the lock and renews its TTL.
+// Returns 1 if renewed, 0 if the caller does not own the lock or the key has expired.
+// This eliminates the TOCTOU window between GET and EXPIRE in the previous implementation.
+var renewScript = redis.NewScript(`
+	if redis.call("get", KEYS[1]) == ARGV[1] then
+		return redis.call("expire", KEYS[1], ARGV[2])
+	else
+		return 0
+	end
+`)
+
 // Manager handles leader election using Redis distributed locks
 type Manager struct {
 	client     *redis.Client
@@ -84,42 +95,18 @@ func (m *Manager) TryAcquireLeadership(ctx context.Context, platform, streamID, 
 	return success, nil
 }
 
-// RenewLeadership renews the leadership lock (heartbeat)
-// Returns true if renewal was successful, false if lost leadership
+// RenewLeadership renews the leadership lock (heartbeat).
+// Returns true if renewal was successful, false if lost leadership.
+// Uses a Lua script for atomic ownership check + TTL renewal, eliminating the
+// TOCTOU race window that existed between the previous GET and EXPIRE calls.
 func (m *Manager) RenewLeadership(ctx context.Context, platform, streamID, callerID string) (bool, error) {
 	key := m.leaderKey(platform, streamID)
 	if callerID == "" {
 		callerID = m.instanceID
 	}
 
-	// Check if we are still the leader
-	currentLeader, err := m.client.Get(ctx, key).Result()
-	if err == redis.Nil {
-		// Lock expired
-		return false, nil
-	}
-	if err != nil {
-		m.logger.Error("Failed to check leadership",
-			zap.String("platform", platform),
-			zap.String("stream_id", streamID),
-			zap.Error(err),
-		)
-		return false, fmt.Errorf("failed to check leadership: %w", err)
-	}
-
-	if currentLeader != callerID {
-		// Someone else is leader
-		m.logger.Warn("Lost leadership",
-			zap.String("platform", platform),
-			zap.String("stream_id", streamID),
-			zap.String("current_leader", currentLeader),
-			zap.String("caller_id", callerID),
-		)
-		return false, nil
-	}
-
-	// Renew the lock
-	err = m.client.Expire(ctx, key, m.lockTTL).Err()
+	result, err := renewScript.Run(ctx, m.client, []string{key},
+		callerID, int(m.lockTTL.Seconds())).Int()
 	if err != nil {
 		m.logger.Error("Failed to renew leadership",
 			zap.String("platform", platform),
@@ -129,12 +116,20 @@ func (m *Manager) RenewLeadership(ctx context.Context, platform, streamID, calle
 		return false, fmt.Errorf("failed to renew leadership: %w", err)
 	}
 
-	m.logger.Debug("Renewed leadership",
-		zap.String("platform", platform),
-		zap.String("stream_id", streamID),
-	)
+	if result == 1 {
+		m.logger.Debug("Renewed leadership",
+			zap.String("platform", platform),
+			zap.String("stream_id", streamID),
+		)
+	} else {
+		m.logger.Warn("Lost leadership",
+			zap.String("platform", platform),
+			zap.String("stream_id", streamID),
+			zap.String("caller_id", callerID),
+		)
+	}
 
-	return true, nil
+	return result == 1, nil
 }
 
 // ReleaseLeadership releases leadership for a stream
@@ -254,31 +249,35 @@ func (m *Manager) GetAllLeadership(ctx context.Context) ([]*models.LeadershipSta
 }
 
 // RegisterPeer registers a caller as an active peer for the given platform and returns
-// the total number of active peers. Peers expire after PeerTTL if not re-registered.
+// the total number of active peers. Uses a Redis sorted set where each member is a
+// callerID and its score is the Unix expiry timestamp. This gives O(log N) registration
+// and O(1) count via ZCARD, replacing the previous O(N) SCAN approach.
 func (m *Manager) RegisterPeer(ctx context.Context, platform, callerID string) (int, error) {
-	key := m.peerKey(platform, callerID)
+	key := fmt.Sprintf("peers:%s", platform)
+	expiry := float64(time.Now().Add(PeerTTL).Unix())
 
-	if err := m.client.Set(ctx, key, "1", PeerTTL).Err(); err != nil {
+	// ZADD: add or update the member's expiry score (overwrites existing member on re-registration)
+	if err := m.client.ZAdd(ctx, key, redis.Z{
+		Score:  expiry,
+		Member: callerID,
+	}).Err(); err != nil {
 		return 0, fmt.Errorf("failed to register peer: %w", err)
 	}
 
-	// Count all peers for this platform
-	pattern := fmt.Sprintf("%s:%s:*", PeerKeyPrefix, platform)
-	var count int
-	iter := m.client.Scan(ctx, 0, pattern, 0).Iterator()
-	for iter.Next(ctx) {
-		count++
-	}
-	if err := iter.Err(); err != nil {
+	// Remove expired members (score < current Unix time)
+	now := fmt.Sprintf("%d", time.Now().Unix())
+	m.client.ZRemRangeByScore(ctx, key, "-inf", now)
+
+	// Count remaining active members (O(1))
+	count, err := m.client.ZCard(ctx, key).Result()
+	if err != nil {
 		return 0, fmt.Errorf("failed to count peers: %w", err)
 	}
 
-	return count, nil
-}
+	// Set key TTL to prevent orphaned sorted sets (2x PeerTTL)
+	m.client.Expire(ctx, key, PeerTTL*2)
 
-// peerKey generates the Redis key for a peer registration
-func (m *Manager) peerKey(platform, callerID string) string {
-	return fmt.Sprintf("%s:%s:%s", PeerKeyPrefix, platform, callerID)
+	return int(count), nil
 }
 
 // leaderKey generates the Redis key for a leader lock

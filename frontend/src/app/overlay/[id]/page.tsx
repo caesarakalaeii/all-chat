@@ -30,6 +30,10 @@ import PlatformStatusIndicators from '@/components/PlatformStatusIndicators';
 import { buildGradientCSS } from '@/lib/utils/gradient';
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css';
 import type { VisualSettings } from '@/lib/types/visual-settings';
+import { shouldFilterMessage } from '@/lib/utils/filterMessage';
+import type { FilterSettings } from '@/lib/types/overlay';
+import { createSoundPlayer } from '@/lib/utils/soundPlayer';
+import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer';
 
 // ---- Google Font loader ---------------------------------------------------
 
@@ -83,11 +87,41 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [showPlatformBadge, setShowPlatformBadge] = useState(true);
   const [showPlatformIndicators, setShowPlatformIndicators] = useState(true);
   const [invertMessageOrder, setInvertMessageOrder] = useState(false);
+  const [showPronouns, setShowPronouns] = useState(true);          // D-07: default on
+  const [pronounPosition, setPronounPosition] = useState<'before' | 'after'>('after');  // default after
+  const [pronounColor, setPronounColor] = useState('#7B68EE');     // default medium slate blue
+
+  const [filterSettings, setFilterSettings] = useState<FilterSettings>({});
+  const filterSettingsRef = useRef<FilterSettings>({});
+
+  const soundPlayerRef = useRef<SoundPlayer | null>(null);
+  const soundSettingsRef = useRef<SoundSettings>({
+    enabled: false,
+    preset: 'chime',
+    volume: 0.5,
+    cooldownMs: 500,
+  });
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSeenTimestampRef = useRef<number>(0);
+  // Keep a ref so the WebSocket onmessage closure always sees the latest value
+  // without maxMessages needing to be in the WebSocket effect dependency array.
+  const maxMessagesRef = useRef<number>(50);
+
+  // Keep filterSettingsRef in sync so the ws.onmessage closure always reads the latest value
+  useEffect(() => {
+    filterSettingsRef.current = filterSettings;
+  }, [filterSettings]);
+
+  // Phase 12: Destroy sound player on unmount
+  useEffect(() => {
+    return () => {
+      soundPlayerRef.current?.destroy()
+      soundPlayerRef.current = null
+    }
+  }, []);
 
   // Load overlay display configuration (public endpoint)
   useEffect(() => {
@@ -103,6 +137,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
         if (typeof display.max_messages === 'number') {
           setMaxMessages(display.max_messages);
+          maxMessagesRef.current = display.max_messages;
         }
         if (typeof display.font_size === 'number') {
           setFontSize(display.font_size);
@@ -123,6 +158,17 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           setShowPlatformBadge(display.show_platform_badge);
         }
         setInvertMessageOrder(display.invert_message_order === true);
+
+        // Phase 9: Pronoun settings from display_settings
+        if (typeof display.show_pronouns === 'boolean') {
+          setShowPronouns(display.show_pronouns);
+        }
+        if (display.pronoun_position === 'before' || display.pronoun_position === 'after') {
+          setPronounPosition(display.pronoun_position);
+        }
+        if (typeof display.pronoun_color === 'string' && display.pronoun_color) {
+          setPronounColor(display.pronoun_color);
+        }
 
         setCustomCss(typeof data.custom_css === 'string' ? data.custom_css : '');
 
@@ -145,6 +191,48 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           if (vs.showPlatformIndicators !== undefined) {
             setShowPlatformIndicators(vs.showPlatformIndicators !== 'none');
           }
+          // Phase 9: Pronoun visual_settings overrides
+          if (vs.showPronouns !== undefined) {
+            setShowPronouns(vs.showPronouns !== 'none');
+          }
+          if (vs.pronounPosition !== undefined) {
+            setPronounPosition(vs.pronounPosition);
+          }
+          if (vs.pronounColor !== undefined) {
+            setPronounColor(vs.pronounColor);
+          }
+        }
+
+        // Phase 11: Load filter settings
+        if (data.filter_settings) {
+          setFilterSettings(data.filter_settings);
+          filterSettingsRef.current = data.filter_settings;
+        }
+
+        // Phase 12: Load sound settings from display_settings
+        const soundEnabled = display.notification_sound_enabled === true
+        const soundPreset = typeof display.notification_sound_preset === 'string'
+          ? display.notification_sound_preset : 'chime'
+        const soundVolume = typeof display.notification_sound_volume === 'number'
+          ? display.notification_sound_volume : 0.5
+        const soundCooldown = typeof display.notification_sound_cooldown === 'number'
+          ? display.notification_sound_cooldown : 500
+        const soundCustomUrl = typeof display.notification_sound_url === 'string'
+          ? display.notification_sound_url || undefined : undefined
+
+        const newSoundSettings: SoundSettings = {
+          enabled: soundEnabled,
+          preset: soundPreset,
+          volume: soundVolume,
+          cooldownMs: soundCooldown,
+          customUrl: soundCustomUrl,
+        }
+        soundSettingsRef.current = newSoundSettings
+
+        if (soundPlayerRef.current) {
+          soundPlayerRef.current.updateSettings(newSoundSettings)
+        } else {
+          soundPlayerRef.current = createSoundPlayer(newSoundSettings)
         }
 
         // Load configured sources (channel_id -> SourceInfo)
@@ -299,9 +387,15 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             message.user.name_gradient = JSON.parse(message.user.name_gradient as unknown as string) as NameGradient;
           }
 
+          // Phase 11: apply filter settings before adding to render queue (D-01, D-02)
+          if (shouldFilterMessage(message, filterSettingsRef.current)) return;
+
+          // Phase 12: play notification sound for messages that pass the filter (D-05)
+          soundPlayerRef.current?.play()
+
           setMessages((prev) => {
             const newMessages = [...prev, message];
-            return newMessages.slice(-maxMessages);
+            return newMessages.slice(-maxMessagesRef.current);
           });
         }
 
@@ -320,7 +414,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             if (!aggregationId) {
               // No aggregation ID, treat as new message
               const newMessages = [...prev, updatedMessage];
-              return newMessages.slice(-maxMessages);
+              return newMessages.slice(-maxMessagesRef.current);
             }
 
             const index = prev.findIndex(
@@ -330,7 +424,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             if (index === -1) {
               // Original message already faded away, treat as new
               const newMessages = [...prev, updatedMessage];
-              return newMessages.slice(-maxMessages);
+              return newMessages.slice(-maxMessagesRef.current);
             }
 
             // Update existing message in place
@@ -416,7 +510,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         ws.close();
       }
     };
-  }, [id, maxMessages, forceReconnect]);
+  }, [id, forceReconnect]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -763,6 +857,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
+                  {/* Phase 9: Pronoun pill - before username */}
+                  {showPronouns && message.user?.pronouns && pronounPosition === 'before' && (
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold leading-none text-white"
+                      style={{ backgroundColor: pronounColor }}
+                    >
+                      {message.user.pronouns}
+                    </span>
+                  )}
+
                   {/* Username */}
                   {message.user?.name_gradient ? (
                     <span
@@ -787,6 +891,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       style={{ color: message.user?.color || 'var(--chat-username-color, #FFFFFF)' }}
                     >
                       {message.user?.display_name || message.user?.username}
+                    </span>
+                  )}
+
+                  {/* Phase 9: Pronoun pill - after username */}
+                  {showPronouns && message.user?.pronouns && pronounPosition === 'after' && (
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold leading-none text-white"
+                      style={{ backgroundColor: pronounColor }}
+                    >
+                      {message.user.pronouns}
                     </span>
                   )}
 

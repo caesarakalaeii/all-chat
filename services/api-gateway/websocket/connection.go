@@ -26,17 +26,23 @@ const (
 	MaxMessageSize = 512 * 1024 // 512 KB
 )
 
+// AuthCallback is called when a viewer authenticates via WebSocket message.
+// Returns true if the token is valid.
+type AuthCallback func(token string) (viewerID, username string, ok bool)
+
 // Connection wraps a WebSocket connection for an overlay
 type Connection struct {
-	conn         *websocket.Conn
-	overlayID    string
-	userID       string
-	send         chan []byte
-	replayBuffer replay.DeletionReplayBuffer
-	logger       *zap.Logger
-	mu           sync.Mutex
-	closed       bool
-	isViewer     bool // True for viewer connections (extension, public viewers)
+	conn            *websocket.Conn
+	overlayID       string
+	userID          string
+	send            chan []byte
+	replayBuffer    replay.DeletionReplayBuffer
+	logger          *zap.Logger
+	mu              sync.Mutex
+	closed          bool
+	isViewer        bool // True for viewer connections (extension, public viewers)
+	authenticated   bool
+	onAuth          AuthCallback
 }
 
 // NewConnection creates a new WebSocket connection for overlay owners
@@ -224,6 +230,9 @@ func (c *Connection) handleMessage(data []byte) {
 	case "replay_request":
 		c.handleReplayRequest(msg.Data)
 
+	case "auth":
+		c.handleAuth(msg.Data)
+
 	default:
 		c.logger.Debug("Unhandled message type",
 			zap.String("overlay_id", c.overlayID),
@@ -289,6 +298,64 @@ func (c *Connection) handleReplayRequest(data interface{}) {
 		zap.Int("count", len(deletions)),
 		zap.Int64("since", request.Since),
 	)
+}
+
+// SetOnAuth sets the callback invoked when a viewer sends an auth message.
+func (c *Connection) SetOnAuth(cb AuthCallback) {
+	c.onAuth = cb
+}
+
+// handleAuth processes an incoming auth message from the client.
+func (c *Connection) handleAuth(data interface{}) {
+	if c.authenticated {
+		c.logger.Debug("Already authenticated, ignoring auth message",
+			zap.String("overlay_id", c.overlayID))
+		return
+	}
+
+	if c.onAuth == nil {
+		c.logger.Warn("Auth message received but no auth callback configured")
+		return
+	}
+
+	var req struct {
+		Token string `json:"token"`
+	}
+	raw, _ := json.Marshal(data)
+	if err := json.Unmarshal(raw, &req); err != nil || req.Token == "" {
+		resp := models.WSMessage{Type: "auth_error", Data: map[string]string{"error": "invalid auth payload"}, Timestamp: time.Now().UTC()}
+		b, _ := json.Marshal(resp)
+		c.Send(b)
+		return
+	}
+
+	viewerID, username, ok := c.onAuth(req.Token)
+	if !ok {
+		resp := models.WSMessage{Type: "auth_error", Data: map[string]string{"error": "invalid or expired token"}, Timestamp: time.Now().UTC()}
+		b, _ := json.Marshal(resp)
+		c.Send(b)
+		return
+	}
+
+	c.mu.Lock()
+	c.authenticated = true
+	c.userID = viewerID
+	c.mu.Unlock()
+
+	resp := models.WSMessage{Type: "auth_success", Data: map[string]string{"viewer_id": viewerID, "username": username}, Timestamp: time.Now().UTC()}
+	b, _ := json.Marshal(resp)
+	c.Send(b)
+
+	c.logger.Info("Viewer authenticated via WebSocket message",
+		zap.String("overlay_id", c.overlayID),
+		zap.String("viewer", username))
+}
+
+// IsAuthenticated returns whether this connection has been authenticated.
+func (c *Connection) IsAuthenticated() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.authenticated
 }
 
 // OverlayID returns the overlay ID for this connection

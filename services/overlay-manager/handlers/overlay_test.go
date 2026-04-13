@@ -17,12 +17,13 @@ import (
 
 // Mock repository for testing
 type mockOverlayRepository struct {
-	createFunc           func(context.Context, *models.Overlay) error
-	getByIDFunc          func(context.Context, string) (*models.Overlay, error)
-	getByIDAndUserIDFunc func(context.Context, string, string) (*models.Overlay, error)
-	listByUserIDFunc     func(context.Context, string) ([]*models.Overlay, error)
-	updateFunc           func(context.Context, *models.Overlay) error
-	deleteFunc           func(context.Context, string) error
+	createFunc                func(context.Context, *models.Overlay) error
+	getByIDFunc               func(context.Context, string) (*models.Overlay, error)
+	getByIDAndUserIDFunc      func(context.Context, string, string) (*models.Overlay, error)
+	listByUserIDFunc          func(context.Context, string) ([]*models.Overlay, error)
+	updateFunc                func(context.Context, *models.Overlay) error
+	deleteFunc                func(context.Context, string) error
+	unsetAllPublicForUserFunc func(context.Context, string, string) error
 }
 
 func (m *mockOverlayRepository) Create(ctx context.Context, overlay *models.Overlay) error {
@@ -68,6 +69,9 @@ func (m *mockOverlayRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (m *mockOverlayRepository) UnsetAllPublicForUser(ctx context.Context, userID, excludeID string) error {
+	if m.unsetAllPublicForUserFunc != nil {
+		return m.unsetAllPublicForUserFunc(ctx, userID, excludeID)
+	}
 	return nil
 }
 
@@ -87,13 +91,16 @@ func TestOverlayHandler_HandleCreateOverlay(t *testing.T) {
 		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
 	}{
 		{
-			name: "successful creation",
+			name: "successful creation — first overlay gets public flag",
 			requestBody: map[string]interface{}{
 				"name":        "My Overlay",
 				"description": "Test overlay",
 			},
 			userID: uuid.New().String(),
 			mockRepo: &mockOverlayRepository{
+				listByUserIDFunc: func(ctx context.Context, uid string) ([]*models.Overlay, error) {
+					return []*models.Overlay{}, nil // no existing overlays
+				},
 				createFunc: func(ctx context.Context, overlay *models.Overlay) error {
 					overlay.ID = uuid.New().String()
 					return nil
@@ -106,6 +113,32 @@ func TestOverlayHandler_HandleCreateOverlay(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, response["id"])
 				assert.Equal(t, "My Overlay", response["name"])
+				assert.Equal(t, true, response["is_public_for_viewers"], "first overlay should be public for viewers")
+			},
+		},
+		{
+			name: "second overlay creation does NOT steal public flag",
+			requestBody: map[string]interface{}{
+				"name": "Second Overlay",
+			},
+			userID: uuid.New().String(),
+			mockRepo: &mockOverlayRepository{
+				listByUserIDFunc: func(ctx context.Context, uid string) ([]*models.Overlay, error) {
+					return []*models.Overlay{
+						{ID: uuid.New().String(), UserID: uid, Name: "First Overlay", IsPublicForViewers: true},
+					}, nil // user already has an overlay
+				},
+				createFunc: func(ctx context.Context, overlay *models.Overlay) error {
+					overlay.ID = uuid.New().String()
+					return nil
+				},
+			},
+			wantStatusCode: http.StatusCreated,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var response map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Equal(t, false, response["is_public_for_viewers"], "second overlay must not steal the public flag")
 			},
 		},
 		{
@@ -127,14 +160,30 @@ func TestOverlayHandler_HandleCreateOverlay(t *testing.T) {
 			wantStatusCode: http.StatusBadRequest,
 		},
 		{
-			name: "database error",
+			name: "database error on create",
 			requestBody: map[string]interface{}{
 				"name": "My Overlay",
 			},
 			userID: uuid.New().String(),
 			mockRepo: &mockOverlayRepository{
+				listByUserIDFunc: func(ctx context.Context, uid string) ([]*models.Overlay, error) {
+					return []*models.Overlay{}, nil
+				},
 				createFunc: func(ctx context.Context, overlay *models.Overlay) error {
 					return errors.New("database error")
+				},
+			},
+			wantStatusCode: http.StatusInternalServerError,
+		},
+		{
+			name: "database error on list (checking existing overlays)",
+			requestBody: map[string]interface{}{
+				"name": "My Overlay",
+			},
+			userID: uuid.New().String(),
+			mockRepo: &mockOverlayRepository{
+				listByUserIDFunc: func(ctx context.Context, uid string) ([]*models.Overlay, error) {
+					return nil, errors.New("database error")
 				},
 			},
 			wantStatusCode: http.StatusInternalServerError,
@@ -479,15 +528,16 @@ func TestOverlayHandler_HandleDeleteOverlay(t *testing.T) {
 		wantStatusCode int
 	}{
 		{
-			name:      "successful deletion",
+			name:      "successful deletion of non-public overlay",
 			overlayID: overlayID,
 			userID:    userID,
 			mockRepo: &mockOverlayRepository{
 				getByIDAndUserIDFunc: func(ctx context.Context, id, uid string) (*models.Overlay, error) {
 					return &models.Overlay{
-						ID:     id,
-						UserID: uid,
-						Name:   "To Delete",
+						ID:                 id,
+						UserID:             uid,
+						Name:               "To Delete",
+						IsPublicForViewers: false,
 					}, nil
 				},
 				deleteFunc: func(ctx context.Context, id string) error {
@@ -540,6 +590,177 @@ func TestOverlayHandler_HandleDeleteOverlay(t *testing.T) {
 			assert.Equal(t, tt.wantStatusCode, w.Code)
 		})
 	}
+}
+
+func TestOverlayHandler_DeletePublicOverlay_PromotesOldestActiveReplacement(t *testing.T) {
+	userID := uuid.New().String()
+	publicID := uuid.New().String()
+	oldestID := uuid.New().String()
+	newerID := uuid.New().String()
+
+	var promotedID string
+
+	mockRepo := &mockOverlayRepository{
+		getByIDAndUserIDFunc: func(ctx context.Context, id, uid string) (*models.Overlay, error) {
+			return &models.Overlay{
+				ID:                 id,
+				UserID:             uid,
+				Name:               "Public Overlay",
+				IsActive:           true,
+				IsPublicForViewers: true,
+			}, nil
+		},
+		deleteFunc: func(ctx context.Context, id string) error {
+			return nil
+		},
+		listByUserIDFunc: func(ctx context.Context, uid string) ([]*models.Overlay, error) {
+			// Simulate remaining overlays after deletion, newest first (as ListByUserID orders).
+			return []*models.Overlay{
+				{ID: newerID, UserID: uid, Name: "Newer Overlay", IsActive: true, IsPublicForViewers: false},
+				{ID: oldestID, UserID: uid, Name: "Oldest Overlay", IsActive: true, IsPublicForViewers: false},
+			}, nil
+		},
+		updateFunc: func(ctx context.Context, overlay *models.Overlay) error {
+			if overlay.IsPublicForViewers {
+				promotedID = overlay.ID
+			}
+			return nil
+		},
+	}
+
+	router := setupTestRouter()
+	handler := NewOverlayHandler(mockRepo, nil, nil)
+	router.DELETE("/overlays/:id", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		handler.HandleDeleteOverlay(c)
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/overlays/"+publicID, nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, oldestID, promotedID, "the oldest active overlay must be promoted to public when the public overlay is deleted")
+}
+
+func TestOverlayHandler_DeletePublicOverlay_NoRemainingOverlays_DoesNotError(t *testing.T) {
+	userID := uuid.New().String()
+	publicID := uuid.New().String()
+
+	mockRepo := &mockOverlayRepository{
+		getByIDAndUserIDFunc: func(ctx context.Context, id, uid string) (*models.Overlay, error) {
+			return &models.Overlay{
+				ID:                 id,
+				UserID:             uid,
+				Name:               "Last Overlay",
+				IsActive:           true,
+				IsPublicForViewers: true,
+			}, nil
+		},
+		deleteFunc: func(ctx context.Context, id string) error {
+			return nil
+		},
+		listByUserIDFunc: func(ctx context.Context, uid string) ([]*models.Overlay, error) {
+			return []*models.Overlay{}, nil // no overlays left
+		},
+	}
+
+	router := setupTestRouter()
+	handler := NewOverlayHandler(mockRepo, nil, nil)
+	router.DELETE("/overlays/:id", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		handler.HandleDeleteOverlay(c)
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/overlays/"+publicID, nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Delete must still succeed — no overlay to promote is not an error.
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+func TestOverlayHandler_DeleteNonPublicOverlay_DoesNotTriggerPromotion(t *testing.T) {
+	userID := uuid.New().String()
+	nonPublicID := uuid.New().String()
+	promotionCalled := false
+
+	mockRepo := &mockOverlayRepository{
+		getByIDAndUserIDFunc: func(ctx context.Context, id, uid string) (*models.Overlay, error) {
+			return &models.Overlay{
+				ID:                 id,
+				UserID:             uid,
+				Name:               "Non-public Overlay",
+				IsActive:           true,
+				IsPublicForViewers: false,
+			}, nil
+		},
+		deleteFunc: func(ctx context.Context, id string) error {
+			return nil
+		},
+		listByUserIDFunc: func(ctx context.Context, uid string) ([]*models.Overlay, error) {
+			// Should never be called for a non-public deletion.
+			promotionCalled = true
+			return []*models.Overlay{}, nil
+		},
+	}
+
+	router := setupTestRouter()
+	handler := NewOverlayHandler(mockRepo, nil, nil)
+	router.DELETE("/overlays/:id", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		handler.HandleDeleteOverlay(c)
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/overlays/"+nonPublicID, nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.False(t, promotionCalled, "ListByUserID must not be called when deleting a non-public overlay")
+}
+
+func TestOverlayHandler_CreateDoesNotStealPublicFlagOnSubsequentCreation(t *testing.T) {
+	userID := uuid.New().String()
+	unsetCalled := false
+
+	mockRepo := &mockOverlayRepository{
+		listByUserIDFunc: func(ctx context.Context, uid string) ([]*models.Overlay, error) {
+			// Simulate user already having one public overlay
+			return []*models.Overlay{
+				{ID: uuid.New().String(), UserID: uid, Name: "Existing", IsPublicForViewers: true},
+			}, nil
+		},
+		createFunc: func(ctx context.Context, overlay *models.Overlay) error {
+			overlay.ID = uuid.New().String()
+			return nil
+		},
+		unsetAllPublicForUserFunc: func(ctx context.Context, uid, excludeID string) error {
+			unsetCalled = true
+			return nil
+		},
+	}
+
+	router := setupTestRouter()
+	handler := NewOverlayHandler(mockRepo, nil, nil)
+	router.POST("/overlays", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		handler.HandleCreateOverlay(c)
+	})
+
+	body, _ := json.Marshal(map[string]interface{}{"name": "Second Overlay"})
+	req := httptest.NewRequest(http.MethodPost, "/overlays", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, false, response["is_public_for_viewers"], "creating a second overlay must not steal the public extension flag")
+	assert.False(t, unsetCalled, "UnsetAllPublicForUser must not be called when new overlay is not public")
 }
 
 func TestOverlayHandler_RegisterRoutes(t *testing.T) {
