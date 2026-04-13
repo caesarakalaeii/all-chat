@@ -2,10 +2,8 @@ package ratelimit
 
 import (
 	"context"
-	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
