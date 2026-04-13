@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs'
 import LegalLayout from '@/components/legal/LegalLayout'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata = {
   title: 'Impressum | All-Chat',
   description: 'Legal notice (Impressum) as required by TMG 5.',
