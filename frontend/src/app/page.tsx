@@ -527,6 +527,10 @@ export default function LandingPage() {
           <Link href="/legal/terms" className="underline-offset-4 hover:text-text hover:underline">
             Terms of Service
           </Link>
+          <span aria-hidden="true">&bull;</span>
+          <Link href="/legal/impressum" className="underline-offset-4 hover:text-text hover:underline">
+            Impressum
+          </Link>
         </p>
       </footer>
     </main>
