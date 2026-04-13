@@ -288,12 +288,15 @@ func (cm *ConnectionManager) Join(channel string) {
 	cm.logger.Debug("IRC JOIN", zap.String("channel", channel))
 }
 
-// Depart leaves a Twitch channel
+// Depart leaves a Twitch channel.
+// The channel name is lowercased to match the go-twitch-irc library's internal
+// tracking (Join lowercases but Depart does not), preventing ghost entries that
+// cause subsequent Join calls to be silently skipped.
 func (cm *ConnectionManager) Depart(channel string) {
 	cm.mu.RLock()
 	client := cm.client
 	cm.mu.RUnlock()
-	client.Depart(channel)
+	client.Depart(strings.ToLower(channel))
 	cm.logger.Debug("IRC PART", zap.String("channel", channel))
 }
 
