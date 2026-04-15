@@ -10,6 +10,7 @@ RUN npm ci --production
 
 # Copy source code
 COPY services/discord-bot/src/ ./src/
+COPY LICENSE ./LICENSE
 
 # Run as non-root user
 USER node

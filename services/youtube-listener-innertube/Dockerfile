@@ -26,6 +26,7 @@ RUN apk --no-cache add ca-certificates && \
 WORKDIR /app
 
 COPY --from=builder /build/services/youtube-listener-innertube/youtube-listener-innertube .
+COPY LICENSE ./LICENSE
 
 RUN chown -R appuser:appuser /app
 

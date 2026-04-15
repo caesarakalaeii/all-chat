@@ -32,6 +32,7 @@ RUN apk --no-cache add ca-certificates tzdata && \
 WORKDIR /app
 
 COPY --from=builder /build/services/youtube-listener/youtube-listener .
+COPY LICENSE ./LICENSE
 
 RUN chown -R appuser:appuser /app
 

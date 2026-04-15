@@ -52,6 +52,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Copy public directory for static assets (fonts, images, etc.)
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY LICENSE ./LICENSE
 
 USER nextjs
 

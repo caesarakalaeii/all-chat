@@ -25,6 +25,7 @@ RUN apk --no-cache add ca-certificates && \
 WORKDIR /app
 
 COPY --from=builder /app/api-gateway .
+COPY LICENSE ./LICENSE
 COPY static/ ./static/
 
 RUN chown -R appuser:appuser /app
