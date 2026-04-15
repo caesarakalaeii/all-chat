@@ -86,7 +86,7 @@ function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
       <MonitorPlay className="size-16 text-text-dim" strokeWidth={1} aria-hidden="true" />
       <h2 className="text-xl font-semibold text-text">No overlays yet</h2>
       <p className="max-w-sm text-sm text-text-sub">
-        Create your first overlay to start aggregating chat across platforms.
+        Create your first overlay to see chat from all your platforms in one place.
       </p>
       <div className="mt-2 flex gap-1.5" aria-hidden="true">
         {(['twitch', 'youtube', 'kick', 'tiktok'] as const).map((p) => (
