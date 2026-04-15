@@ -208,6 +208,9 @@ func parseTextMessage(renderer *LiveChatTextMessageRenderer, channelID string) (
 		}
 	}
 
+	// Context menu params for per-message moderation actions (Report, Block, etc.)
+	addContextMenuTags(msg.Tags, renderer.ID, renderer.ContextMenuEndpoint)
+
 	return msg, nil
 }
 
@@ -262,6 +265,8 @@ func parsePaidMessage(renderer *LiveChatPaidMessageRenderer, channelID string) (
 	if avatarURL := bestThumbnailURL(renderer.AuthorPhoto); avatarURL != "" {
 		msg.Tags["profile_image"] = avatarURL
 	}
+
+	addContextMenuTags(msg.Tags, renderer.ID, renderer.ContextMenuEndpoint)
 
 	return msg, nil
 }
@@ -325,6 +330,8 @@ func parseMembershipMessage(renderer *LiveChatMembershipItemRenderer, channelID 
 		msg.Tags["profile_image"] = avatarURL
 	}
 
+	addContextMenuTags(msg.Tags, renderer.ID, renderer.ContextMenuEndpoint)
+
 	return msg, nil
 }
 
@@ -373,6 +380,8 @@ func parsePaidSticker(renderer *LiveChatPaidStickerRenderer, channelID string) (
 	if avatarURL := bestThumbnailURL(renderer.AuthorPhoto); avatarURL != "" {
 		msg.Tags["profile_image"] = avatarURL
 	}
+
+	addContextMenuTags(msg.Tags, renderer.ID, renderer.ContextMenuEndpoint)
 
 	return msg, nil
 }
@@ -514,6 +523,17 @@ func resolveUnicodeEmojiID(emojiID string) string {
 		runes = append(runes, rune(n))
 	}
 	return string(runes)
+}
+
+// addContextMenuTags writes youtube_message_id and youtube_context_params to
+// the message tags when the renderer provides them. Skips gracefully if empty.
+func addContextMenuTags(tags map[string]string, rendererID string, endpoint *ContextMenuEndpoint) {
+	if rendererID != "" {
+		tags["youtube_message_id"] = rendererID
+	}
+	if endpoint != nil && endpoint.LiveChatItemContextMenuEndpoint.Params != "" {
+		tags["youtube_context_params"] = endpoint.LiveChatItemContextMenuEndpoint.Params
+	}
 }
 
 // extractBadges extracts badge types from author badges
