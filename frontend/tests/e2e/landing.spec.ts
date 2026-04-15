@@ -18,7 +18,7 @@ test.describe('Landing Page', () => {
     await expect(page.locator('h1')).toHaveText('All-Chat')
 
     // Check hero description
-    await expect(page.locator('text=Aggregate chat from Twitch, YouTube')).toBeVisible()
+    await expect(page.locator('text=See every message from Twitch, YouTube')).toBeVisible()
   })
 
   test('should display login button', async ({ page }) => {

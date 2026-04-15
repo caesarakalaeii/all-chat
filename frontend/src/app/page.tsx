@@ -223,8 +223,33 @@ export default function LandingPage() {
     }
   }
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'All-Chat',
+    url: 'https://allch.at',
+    applicationCategory: 'MultimediaApplication',
+    operatingSystem: 'Web',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+    description:
+      'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in.',
+    featureList: [
+      'Twitch IRC chat',
+      'YouTube Live chat',
+      'Kick chat',
+      'TikTok Live chat',
+      'Discord chat relay',
+      '7TV, BTTV, FFZ emote support',
+      'OBS Browser Source overlay',
+    ],
+  }
+
   return (
     <main className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* ------------------------------------------------------------------ */}
       {/* Hero section                                                        */}
       {/* ------------------------------------------------------------------ */}

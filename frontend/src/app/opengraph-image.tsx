@@ -2,7 +2,7 @@ import { ImageResponse } from 'next/og'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-export const alt = 'All-Chat - Multi-Platform Chat Aggregation for Streamers'
+export const alt = 'All-Chat — Every chat. One overlay.'
 
 export const size = {
   width: 1200,
@@ -55,7 +55,7 @@ export default async function Image() {
             letterSpacing: '0.5px',
           }}
         >
-          Multi-Platform Chat Aggregation for Streamers
+          Every chat. One overlay.
         </div>
 
         {/* Platform badges */}
