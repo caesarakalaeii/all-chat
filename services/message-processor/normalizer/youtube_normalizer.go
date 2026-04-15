@@ -222,6 +222,14 @@ func (n *YouTubeNormalizer) extractMetadata(raw *models.RawChatMessage) map[stri
 		metadata["super_sticker_tier"] = tags["super_sticker_tier"]
 	}
 
+	// Context menu params for per-message moderation (Report, Block, etc.)
+	if v := tags["youtube_message_id"]; v != "" {
+		metadata["youtube_message_id"] = v
+	}
+	if v := tags["youtube_context_params"]; v != "" {
+		metadata["youtube_context_params"] = v
+	}
+
 	// Not applicable for YouTube
 	metadata["bits"] = 0
 	metadata["is_subscriber"] = false // YouTube uses "is_sponsor" instead

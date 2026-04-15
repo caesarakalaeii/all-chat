@@ -95,47 +95,64 @@ type ChatItem struct {
 	LiveChatPaidStickerRenderer           *LiveChatPaidStickerRenderer           `json:"liveChatPaidStickerRenderer,omitempty"`
 }
 
+// ContextMenuEndpoint contains the opaque params token used to fetch
+// per-message context menu actions (Report, Block, mod actions) via
+// the live_chat/get_item_context_menu InnerTube endpoint.
+type ContextMenuEndpoint struct {
+	LiveChatItemContextMenuEndpoint struct {
+		Params string `json:"params"`
+	} `json:"liveChatItemContextMenuEndpoint"`
+}
+
 // LiveChatTextMessageRenderer represents a standard text chat message
 type LiveChatTextMessageRenderer struct {
-	Message              MessageContent `json:"message"`
-	AuthorName           SimpleText     `json:"authorName"`
-	AuthorExternalChannelID string      `json:"authorExternalChannelId"`
-	TimestampUsec        string         `json:"timestampUsec"` // Microseconds as string
-	AuthorPhoto          Thumbnails     `json:"authorPhoto,omitempty"`
-	AuthorBadges         []AuthorBadge  `json:"authorBadges,omitempty"`
+	ID                   string              `json:"id,omitempty"`
+	Message              MessageContent      `json:"message"`
+	AuthorName           SimpleText          `json:"authorName"`
+	AuthorExternalChannelID string           `json:"authorExternalChannelId"`
+	TimestampUsec        string              `json:"timestampUsec"` // Microseconds as string
+	AuthorPhoto          Thumbnails          `json:"authorPhoto,omitempty"`
+	AuthorBadges         []AuthorBadge       `json:"authorBadges,omitempty"`
+	ContextMenuEndpoint  *ContextMenuEndpoint `json:"contextMenuEndpoint,omitempty"`
 }
 
 // LiveChatPaidMessageRenderer represents a Super Chat message
 type LiveChatPaidMessageRenderer struct {
-	Message              MessageContent `json:"message,omitempty"`
-	AuthorName           SimpleText     `json:"authorName"`
-	AuthorExternalChannelID string      `json:"authorExternalChannelId"`
-	TimestampUsec        string         `json:"timestampUsec"`
-	AuthorPhoto          Thumbnails     `json:"authorPhoto,omitempty"`
-	PurchaseAmountText   SimpleText     `json:"purchaseAmountText"`
-	AmountMicros         int64          `json:"purchaseAmountMicros,omitempty"` // For sorting by amount
-	HeaderBackgroundColor int           `json:"headerBackgroundColor,omitempty"` // Color tier indicator
+	ID                   string              `json:"id,omitempty"`
+	Message              MessageContent      `json:"message,omitempty"`
+	AuthorName           SimpleText          `json:"authorName"`
+	AuthorExternalChannelID string           `json:"authorExternalChannelId"`
+	TimestampUsec        string              `json:"timestampUsec"`
+	AuthorPhoto          Thumbnails          `json:"authorPhoto,omitempty"`
+	PurchaseAmountText   SimpleText          `json:"purchaseAmountText"`
+	AmountMicros         int64               `json:"purchaseAmountMicros,omitempty"` // For sorting by amount
+	HeaderBackgroundColor int                `json:"headerBackgroundColor,omitempty"` // Color tier indicator
+	ContextMenuEndpoint  *ContextMenuEndpoint `json:"contextMenuEndpoint,omitempty"`
 }
 
 // LiveChatMembershipItemRenderer represents a membership/join message
 type LiveChatMembershipItemRenderer struct {
-	HeaderSubtext        MessageContent `json:"headerSubtext,omitempty"`
-	AuthorName           SimpleText     `json:"authorName"`
-	AuthorExternalChannelID string      `json:"authorExternalChannelId"`
-	TimestampUsec        string         `json:"timestampUsec"`
-	AuthorPhoto          Thumbnails     `json:"authorPhoto,omitempty"`
-	AuthorBadges         []AuthorBadge  `json:"authorBadges,omitempty"`
+	ID                   string              `json:"id,omitempty"`
+	HeaderSubtext        MessageContent      `json:"headerSubtext,omitempty"`
+	AuthorName           SimpleText          `json:"authorName"`
+	AuthorExternalChannelID string           `json:"authorExternalChannelId"`
+	TimestampUsec        string              `json:"timestampUsec"`
+	AuthorPhoto          Thumbnails          `json:"authorPhoto,omitempty"`
+	AuthorBadges         []AuthorBadge       `json:"authorBadges,omitempty"`
+	ContextMenuEndpoint  *ContextMenuEndpoint `json:"contextMenuEndpoint,omitempty"`
 }
 
 // LiveChatPaidStickerRenderer represents a Super Sticker
 type LiveChatPaidStickerRenderer struct {
-	AuthorName           SimpleText     `json:"authorName"`
-	AuthorExternalChannelID string      `json:"authorExternalChannelId"`
-	TimestampUsec        string         `json:"timestampUsec"`
-	AuthorPhoto          Thumbnails     `json:"authorPhoto,omitempty"`
-	PurchaseAmountText   SimpleText     `json:"purchaseAmountText"`
-	Sticker              StickerContent `json:"sticker,omitempty"`
-	AmountMicros         int64          `json:"purchaseAmountMicros,omitempty"` // For sorting by amount
+	ID                   string              `json:"id,omitempty"`
+	AuthorName           SimpleText          `json:"authorName"`
+	AuthorExternalChannelID string           `json:"authorExternalChannelId"`
+	TimestampUsec        string              `json:"timestampUsec"`
+	AuthorPhoto          Thumbnails          `json:"authorPhoto,omitempty"`
+	PurchaseAmountText   SimpleText          `json:"purchaseAmountText"`
+	Sticker              StickerContent      `json:"sticker,omitempty"`
+	AmountMicros         int64               `json:"purchaseAmountMicros,omitempty"` // For sorting by amount
+	ContextMenuEndpoint  *ContextMenuEndpoint `json:"contextMenuEndpoint,omitempty"`
 }
 
 // MessageContent represents the message text with runs (segments)
