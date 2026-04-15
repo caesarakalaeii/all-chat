@@ -30,6 +30,7 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/overlay-manager .
+COPY LICENSE ./LICENSE
 
 # Change ownership
 RUN chown -R appuser:appuser /app

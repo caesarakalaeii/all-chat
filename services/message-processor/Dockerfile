@@ -29,6 +29,7 @@ RUN apk --no-cache add ca-certificates && \
 WORKDIR /app
 
 COPY --from=builder /build/services/message-processor/message-processor .
+COPY LICENSE ./LICENSE
 
 RUN chown -R appuser:appuser /app
 

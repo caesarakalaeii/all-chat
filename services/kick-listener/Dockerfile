@@ -26,6 +26,7 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/kick-listener .
+COPY LICENSE ./LICENSE
 
 # Create non-root user
 RUN addgroup -g 1000 appuser && \

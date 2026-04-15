@@ -33,6 +33,7 @@ RUN apk --no-cache add ca-certificates && \
 WORKDIR /app
 
 COPY --from=builder /build/services/emote-service/emote-service .
+COPY LICENSE ./LICENSE
 
 RUN chown -R appuser:appuser /app
 

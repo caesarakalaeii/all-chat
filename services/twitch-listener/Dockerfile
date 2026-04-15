@@ -32,6 +32,7 @@ RUN apk --no-cache add ca-certificates && \
 WORKDIR /app
 
 COPY --from=builder /build/services/twitch-listener/twitch-listener .
+COPY LICENSE ./LICENSE
 
 RUN chown -R appuser:appuser /app
 

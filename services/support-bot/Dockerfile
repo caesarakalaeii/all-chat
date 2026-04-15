@@ -27,6 +27,7 @@ RUN npm ci
 # Copy source code
 COPY services/support-bot/src/ ./src/
 COPY services/support-bot/tsconfig.json ./
+COPY LICENSE ./LICENSE
 
 # Run as non-root user
 USER node

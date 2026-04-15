@@ -22,6 +22,7 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /app/discord-listener .
+COPY LICENSE ./LICENSE
 
 RUN addgroup -g 1000 appuser && \
     adduser -D -u 1000 -G appuser appuser && \
