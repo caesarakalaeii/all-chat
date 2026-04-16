@@ -56,8 +56,10 @@ func NewRepository(db *pgxpool.Pool, logger *zap.Logger) *Repository {
 	}
 }
 
-// GetActiveChannels retrieves all active Kick channels from the database
-// Filters by overlay.is_active (not source.is_active) to allow connecting to inactive sources
+// GetActiveChannels retrieves all Kick channels eligible for subscription.
+// Filters by overlay.is_active only — source.is_active is a status flag set
+// by the listener when it subscribes, not an eligibility filter. The demand
+// system handles which channels to actually subscribe to.
 func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, error) {
 	query := `
 		SELECT
@@ -70,7 +72,6 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, e
 		JOIN overlays o ON ocs.overlay_id = o.id
 		WHERE ocs.platform = 'kick'
 		  AND o.is_active = true
-		  AND ocs.is_active = true
 	`
 
 	rows, err := r.db.Query(ctx, query)
