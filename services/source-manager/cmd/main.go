@@ -114,6 +114,7 @@ func main() {
 
 	// Initialize demand subscriber (Phase 5)
 	demandSubscriber := demand.NewOverlayDemandSubscriber(redisClient, repo, log)
+	demandSubscriber.SetDB(db)
 	log.Info("Initialized demand subscriber")
 
 	// Start registry
