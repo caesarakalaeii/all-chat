@@ -274,3 +274,145 @@ func TestEmptyDemand(t *testing.T) {
 	assert.NotNil(t, sources)
 	assert.Empty(t, sources)
 }
+
+// TestSourceChangeRefreshesDemandForConnectedOverlay tests that when a source is
+// added to an already-connected overlay, demand is refreshed to include the new source.
+func TestSourceChangeRefreshesDemandForConnectedOverlay(t *testing.T) {
+	_, client := newTestRedis(t)
+
+	// Start with only a YouTube source on the overlay.
+	repo := &mockRepository{
+		sources: map[string][]*models.ActiveSource{
+			"overlay-abc": {
+				{
+					ID:        "source-yt",
+					OverlayID: "overlay-abc",
+					Platform:  "youtube",
+					ChannelID: "UCxxx",
+				},
+			},
+		},
+	}
+
+	sub := demand.NewOverlayDemandSubscriber(client, repo, zap.NewNop())
+
+	// Connect the overlay — demand should have 1 source.
+	connectEvent := map[string]interface{}{
+		"type":       "connected",
+		"overlay_id": "overlay-abc",
+		"timestamp":  time.Now(),
+	}
+	connectPayload, err := json.Marshal(connectEvent)
+	require.NoError(t, err)
+	err = sub.HandleConnectionEventForTest(context.Background(), string(connectPayload))
+	require.NoError(t, err)
+
+	sources := sub.GetDemandedSources()
+	require.Len(t, sources, 1)
+	assert.Equal(t, "source-yt", sources[0].SourceID)
+
+	// Simulate adding a kick source to the overlay in the database.
+	repo.sources["overlay-abc"] = append(repo.sources["overlay-abc"], &models.ActiveSource{
+		ID:        "source-kick",
+		OverlayID: "overlay-abc",
+		Platform:  "kick",
+		ChannelID: "eray",
+	})
+
+	// Simulate the PG notification arriving via HandleSourceChangeForTest.
+	sourceChangePayload := `{"action":"INSERT","overlay_id":"overlay-abc","platform":"kick","channel_id":"eray","is_active":false}`
+	err = sub.HandleSourceChangeForTest(context.Background(), sourceChangePayload)
+	require.NoError(t, err)
+
+	// Demand should now include both sources.
+	sources = sub.GetDemandedSources()
+	require.Len(t, sources, 2)
+
+	ids := make([]string, 0, 2)
+	for _, s := range sources {
+		ids = append(ids, s.SourceID)
+	}
+	assert.ElementsMatch(t, []string{"source-yt", "source-kick"}, ids)
+}
+
+// TestSourceChangeIgnoredForDisconnectedOverlay tests that source changes for
+// overlays not currently connected do not affect demand.
+func TestSourceChangeIgnoredForDisconnectedOverlay(t *testing.T) {
+	_, client := newTestRedis(t)
+
+	repo := &mockRepository{
+		sources: map[string][]*models.ActiveSource{
+			"overlay-other": {
+				{
+					ID:        "source-other",
+					OverlayID: "overlay-other",
+					Platform:  "kick",
+					ChannelID: "someone",
+				},
+			},
+		},
+	}
+
+	sub := demand.NewOverlayDemandSubscriber(client, repo, zap.NewNop())
+
+	// No overlays are connected. Simulate a source change for overlay-other.
+	sourceChangePayload := `{"action":"INSERT","overlay_id":"overlay-other","platform":"kick","channel_id":"someone","is_active":false}`
+	err := sub.HandleSourceChangeForTest(context.Background(), sourceChangePayload)
+	require.NoError(t, err)
+
+	// Demand should remain empty — overlay is not connected.
+	sources := sub.GetDemandedSources()
+	assert.Empty(t, sources)
+}
+
+// TestSourceDeleteRefreshesDemand tests that when a source is removed from a
+// connected overlay, demand is refreshed to exclude the deleted source.
+func TestSourceDeleteRefreshesDemand(t *testing.T) {
+	_, client := newTestRedis(t)
+
+	repo := &mockRepository{
+		sources: map[string][]*models.ActiveSource{
+			"overlay-abc": {
+				{
+					ID:        "source-yt",
+					OverlayID: "overlay-abc",
+					Platform:  "youtube",
+					ChannelID: "UCxxx",
+				},
+				{
+					ID:        "source-kick",
+					OverlayID: "overlay-abc",
+					Platform:  "kick",
+					ChannelID: "eray",
+				},
+			},
+		},
+	}
+
+	sub := demand.NewOverlayDemandSubscriber(client, repo, zap.NewNop())
+
+	// Connect the overlay — demand should have 2 sources.
+	connectEvent := map[string]interface{}{
+		"type":       "connected",
+		"overlay_id": "overlay-abc",
+		"timestamp":  time.Now(),
+	}
+	connectPayload, err := json.Marshal(connectEvent)
+	require.NoError(t, err)
+	err = sub.HandleConnectionEventForTest(context.Background(), string(connectPayload))
+	require.NoError(t, err)
+	require.Len(t, sub.GetDemandedSources(), 2)
+
+	// Simulate deleting the kick source from the database.
+	repo.sources["overlay-abc"] = repo.sources["overlay-abc"][:1] // keep only youtube
+
+	// Simulate the PG DELETE notification.
+	deletePayload := `{"action":"DELETE","overlay_id":"overlay-abc","platform":"kick","channel_id":"eray","is_active":false}`
+	err = sub.HandleSourceChangeForTest(context.Background(), deletePayload)
+	require.NoError(t, err)
+
+	// Demand should now have only 1 source.
+	sources := sub.GetDemandedSources()
+	require.Len(t, sources, 1)
+	assert.Equal(t, "source-yt", sources[0].SourceID)
+}

@@ -19,12 +19,15 @@ package demand
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/source-manager/models"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -57,11 +60,20 @@ type sourceRepository interface {
 	GetSourcesForOverlays(ctx context.Context, overlayIDs []string) ([]*models.ActiveSource, error)
 }
 
+// sourceChangeEvent mirrors the PostgreSQL NOTIFY payload from chat_source_change_trigger.
+type sourceChangeEvent struct {
+	Action    string `json:"action"`     // INSERT, UPDATE, DELETE
+	OverlayID string `json:"overlay_id"`
+	Platform  string `json:"platform"`
+	ChannelID string `json:"channel_id"`
+}
+
 // OverlayDemandSubscriber subscribes to overlay:connections Pub/Sub, resolves
 // sources from the database, maintains an in-memory demand set, and publishes
 // full-replacement DemandUpdate snapshots to the source:demand channel.
 type OverlayDemandSubscriber struct {
 	redisClient *redis.Client
+	db          *pgxpool.Pool // optional; nil disables PG LISTEN/NOTIFY
 	repo        sourceRepository
 	logger      *zap.Logger
 
@@ -80,6 +92,13 @@ func NewOverlayDemandSubscriber(redisClient *redis.Client, repo sourceRepository
 	}
 }
 
+// SetDB sets the PostgreSQL pool for LISTEN/NOTIFY source change watching.
+// When set, the subscriber will automatically refresh demand when sources are
+// added to or removed from connected overlays.
+func (s *OverlayDemandSubscriber) SetDB(db *pgxpool.Pool) {
+	s.db = db
+}
+
 // Start hydrates demand from existing overlay:connected:* keys, publishes the
 // initial DemandUpdate, then subscribes to overlay:connections for live events.
 // Must be called AFTER hydration so the initial snapshot is not empty on restart.
@@ -92,7 +111,12 @@ func (s *OverlayDemandSubscriber) Start(ctx context.Context) error {
 	// Step 2: publish initial snapshot.
 	s.publishDemandUpdate(ctx)
 
-	// Step 3: subscribe to live events with retry loop.
+	// Step 3: start PostgreSQL LISTEN/NOTIFY watcher for source changes.
+	if s.db != nil {
+		go s.listenForSourceChanges(ctx)
+	}
+
+	// Step 4: subscribe to live events with retry loop.
 	return s.subscribeLoop(ctx)
 }
 
@@ -342,9 +366,142 @@ func (s *OverlayDemandSubscriber) GetDemandedSourcesByPlatform(platform string) 
 	return result
 }
 
+// handleSourceChange processes a PostgreSQL chat_source_changes notification.
+// If the affected overlay is currently connected (present in the demand map),
+// it re-fetches sources from the database and updates demand. Source changes
+// for disconnected overlays are ignored.
+func (s *OverlayDemandSubscriber) handleSourceChange(ctx context.Context, payload string) error {
+	var event sourceChangeEvent
+	if err := json.Unmarshal([]byte(payload), &event); err != nil {
+		return fmt.Errorf("failed to parse source change payload: %w", err)
+	}
+
+	// Only refresh demand for overlays that are currently connected.
+	s.mu.RLock()
+	_, connected := s.demand[event.OverlayID]
+	s.mu.RUnlock()
+
+	if !connected {
+		s.logger.Debug("Source change for disconnected overlay, ignoring",
+			zap.String("overlay_id", event.OverlayID),
+			zap.String("action", event.Action),
+			zap.String("platform", event.Platform),
+		)
+		return nil
+	}
+
+	// Re-fetch sources for this overlay from the database.
+	sources, err := s.repo.GetSourcesForOverlays(ctx, []string{event.OverlayID})
+	if err != nil {
+		return fmt.Errorf("failed to refresh sources for overlay %s: %w", event.OverlayID, err)
+	}
+
+	demandSources := make([]DemandSource, 0, len(sources))
+	for _, src := range sources {
+		demandSources = append(demandSources, DemandSource{
+			SourceID:  src.ID,
+			ChannelID: src.ChannelID,
+			Platform:  src.Platform,
+			OverlayID: src.OverlayID,
+		})
+	}
+
+	s.mu.Lock()
+	s.demand[event.OverlayID] = demandSources
+	s.mu.Unlock()
+
+	s.logger.Info("Source change detected, demand refreshed",
+		zap.String("overlay_id", event.OverlayID),
+		zap.String("action", event.Action),
+		zap.String("platform", event.Platform),
+		zap.String("channel_id", event.ChannelID),
+		zap.Int("source_count", len(demandSources)),
+	)
+
+	s.publishDemandUpdate(ctx)
+	return nil
+}
+
+// listenForSourceChanges runs a PostgreSQL LISTEN/NOTIFY loop on the
+// chat_source_changes channel with exponential backoff retry.
+func (s *OverlayDemandSubscriber) listenForSourceChanges(ctx context.Context) {
+	const channel = "chat_source_changes"
+	backoff := time.Second
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		if err := s.listenPG(ctx, channel); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			s.logger.Error("PG LISTEN failed, retrying",
+				zap.String("channel", channel),
+				zap.Duration("backoff", backoff),
+				zap.Error(err),
+			)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			backoff *= 2
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
+			continue
+		}
+		// listenPG returned nil — context cancelled.
+		return
+	}
+}
+
+// listenPG acquires a connection, issues LISTEN, and processes notifications.
+func (s *OverlayDemandSubscriber) listenPG(ctx context.Context, channel string) error {
+	conn, err := s.db.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to acquire connection: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, fmt.Sprintf("LISTEN %s", channel)); err != nil {
+		return fmt.Errorf("failed to LISTEN on %s: %w", channel, err)
+	}
+
+	s.logger.Info("PostgreSQL LISTEN active for source changes",
+		zap.String("channel", channel),
+	)
+
+	for {
+		notification, err := conn.Conn().WaitForNotification(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil
+			}
+			return fmt.Errorf("notification wait failed: %w", err)
+		}
+
+		if err := s.handleSourceChange(ctx, notification.Payload); err != nil {
+			s.logger.Error("Failed to handle source change notification",
+				zap.String("payload", notification.Payload),
+				zap.Error(err),
+			)
+		}
+	}
+}
+
 // HandleConnectionEventForTest exposes handleConnectionEvent for unit testing.
 func (s *OverlayDemandSubscriber) HandleConnectionEventForTest(ctx context.Context, payload string) error {
 	return s.handleConnectionEvent(ctx, payload)
+}
+
+// HandleSourceChangeForTest exposes handleSourceChange for unit testing.
+func (s *OverlayDemandSubscriber) HandleSourceChangeForTest(ctx context.Context, payload string) error {
+	return s.handleSourceChange(ctx, payload)
 }
 
 // HydrateForTest exposes hydrate for unit testing.
