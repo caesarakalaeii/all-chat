@@ -29,8 +29,8 @@ import (
 
 func TestRepository_GetActiveChannelsHandlesStringChatroomIDs(t *testing.T) {
 	rows := newFakeRows([][]any{
-		{"overlay-1", "channel-one", "123", true},
-		{"overlay-2", "channel-two", "invalid", true},
+		{"source-1", "overlay-1", "channel-one", "123", true},
+		{"source-2", "overlay-2", "channel-two", "invalid", true},
 	})
 
 	mockDB := &mockQueryExecutor{rows: rows}
@@ -59,6 +59,37 @@ func TestRepository_GetActiveChannelsHandlesStringChatroomIDs(t *testing.T) {
 
 	if mockDB.lastQuery == "" {
 		t.Fatalf("expected query to be executed")
+	}
+}
+
+// TestRepository_GetActiveChannelsIncludesInactiveSources verifies that newly
+// added sources with is_active=false are returned (demand filtering handles eligibility).
+func TestRepository_GetActiveChannelsIncludesInactiveSources(t *testing.T) {
+	rows := newFakeRows([][]any{
+		{"source-1", "overlay-1", "channel-active", "100", true},
+		{"source-2", "overlay-1", "channel-new", "", false},
+	})
+
+	mockDB := &mockQueryExecutor{rows: rows}
+	repo := &Repository{db: mockDB, logger: zap.NewNop()}
+
+	channels, err := repo.GetActiveChannels(context.Background())
+	if err != nil {
+		t.Fatalf("GetActiveChannels returned error: %v", err)
+	}
+
+	if len(channels) != 2 {
+		t.Fatalf("expected 2 channels (including inactive source), got %d", len(channels))
+	}
+
+	if channels[0].IsActive != true {
+		t.Fatalf("expected first channel to be active")
+	}
+	if channels[1].IsActive != false {
+		t.Fatalf("expected second channel (newly added) to be inactive")
+	}
+	if channels[1].ChannelSlug != "channel-new" {
+		t.Fatalf("expected second channel slug to be 'channel-new', got %s", channels[1].ChannelSlug)
 	}
 }
 
