@@ -128,11 +128,15 @@ export default function CookieBanner() {
                   </div>
                   <div className="mt-3 border-t border-border pt-2">
                     <p className="text-xs text-text-dim">
-                      <strong className="text-text">Third-party resources:</strong> Overlay pages
-                      may load fonts from <strong>Google Fonts</strong>, fallback avatars from{' '}
-                      <strong>UI Avatars</strong>, and themes from the{' '}
-                      <strong>GitHub API</strong>. These requests transmit your IP address to the
-                      respective providers. See our{' '}
+                      <strong className="text-text">Fonts:</strong> All fonts (including ones
+                      originally distributed by Google Fonts) are self-hosted on our
+                      infrastructure &ndash; your IP address is never sent to Google.
+                    </p>
+                    <p className="mt-2 text-xs text-text-dim">
+                      <strong className="text-text">Third-party resources:</strong> Dashboard
+                      pages may load fallback avatars from <strong>UI Avatars</strong> and themes
+                      from the <strong>GitHub API</strong>. These requests transmit your IP
+                      address to the respective providers. See our{' '}
                       <a
                         href="/legal/privacy"
                         target="_blank"

@@ -155,7 +155,9 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
   }
 }
 
-// ---- Google Font loader ---------------------------------------------------
+// ---- Font loader ----------------------------------------------------------
+// Fonts are proxied through /api/fonts/css so end-user IPs never reach Google
+// (DSGVO / "Google Fonts Urteil" LG München 2022-01-20, Az. 3 O 17493/20).
 
 const GOOGLE_FONT_NAMES = new Set([
   'Bebas Neue',
@@ -177,8 +179,8 @@ function ensureGoogleFontLoaded(fontFamily: string): void {
   const link = document.createElement('link')
   link.id = 'gfont-' + slug
   link.rel = 'stylesheet'
-  const encodedName = encodeURIComponent(fontFamily)
-  link.href = `https://fonts.googleapis.com/css2?family=${encodedName}:wght@400;600;700&display=swap`
+  const family = encodeURIComponent(`${fontFamily}:wght@400;600;700`)
+  link.href = `/api/fonts/css?family=${family}`
   document.head.appendChild(link)
 }
 

@@ -46,7 +46,7 @@
   <body>
     <div class="container">
       <h1>Privacy Policy (Datenschutzerkl&auml;rung)</h1>
-      <p class="last-updated">Last Updated: April 1, 2026</p>
+      <p class="last-updated">Last Updated: April 22, 2026</p>
 
       <div class="highlight">
         <strong>Summary:</strong> All-Chat collects only the information necessary to provide
@@ -133,16 +133,29 @@
       <h3>5.1 Streaming Platform APIs</h3>
       <p>Twitch, YouTube, TikTok, Kick, Discord, 7TV, BTTV, FFZ &ndash; as needed for the service.</p>
 
-      <h3>5.2 Third-Party Frontend Resources</h3>
-      <p>Overlay pages may load resources that transmit your IP address to:</p>
+      <h3>5.2 Fonts (Self-Hosted)</h3>
+      <p>
+        Typography assets originally distributed by Google Fonts are <strong>self-hosted on our
+        infrastructure</strong>. Interface fonts are bundled at build time; overlay-selectable
+        fonts are served through a server-side proxy at <code>/api/fonts/*</code>. Your browser
+        only connects to the All-Chat origin; <strong>no IP address, user agent, or request
+        metadata is transmitted to Google</strong> when fonts are loaded (LG M&uuml;nchen I,
+        20 January 2022, Az. 3 O 17493/20).
+      </p>
+      <p class="legal-basis">
+        Legal basis: Art.&nbsp;6(1)(f) DSGVO. Font files are licensed under the SIL Open Font
+        License 1.1 or Apache 2.0.
+      </p>
+
+      <h3>5.3 Third-Party Frontend Resources</h3>
+      <p>Overlay and dashboard pages may load resources that transmit your IP address to:</p>
       <ul>
-        <li><strong>Google Fonts</strong> (fonts.googleapis.com) &ndash; custom overlay fonts</li>
         <li><strong>UI Avatars</strong> (ui-avatars.com) &ndash; fallback avatar images</li>
         <li><strong>GitHub API</strong> (api.github.com) &ndash; theme marketplace</li>
       </ul>
       <p class="legal-basis">Legal basis: Art.&nbsp;6(1)(f) DSGVO.</p>
 
-      <h3>5.3 No Data Sales</h3>
+      <h3>5.4 No Data Sales</h3>
       <p>We never sell or rent your data.</p>
 
       <h2>6. Data Retention</h2>
@@ -172,7 +185,9 @@
 
       <h2>8. Cookies &amp; Browser Storage</h2>
       <p>We use browser localStorage (not cookies) for authentication tokens and preferences. No
-        advertising cookies, tracking pixels, or analytics.</p>
+        advertising cookies, tracking pixels, or analytics. Fonts are self-hosted (Section&nbsp;5.2)
+        and do not set cookies; the third-party resources listed in Section&nbsp;5.3 may set their
+        own cookies when loaded.</p>
 
       <h2>9. Children&apos;s Privacy</h2>
       <p>Not intended for users under 16. Data of minors will be deleted immediately.</p>
@@ -180,7 +195,9 @@
       <h2>10. International Transfers</h2>
       <p>
         Platform integrations involve transfers to Twitch (US), Google (US), TikTok (various),
-        Kick (AU). Legal basis: Art.&nbsp;49(1)(b) DSGVO.
+        Kick (AU). The GitHub API (theme marketplace) may also involve transfers to the US. Fonts
+        are self-hosted and do not involve any third-country transfer when loaded.
+        Legal basis: Art.&nbsp;49(1)(b) DSGVO.
       </p>
 
       <h2>11. Updates</h2>
