@@ -28,7 +28,7 @@ const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalLayout title="Privacy Policy (Datenschutzerkl&auml;rung)" lastUpdated="April 1, 2026">
+    <LegalLayout title="Privacy Policy (Datenschutzerkl&auml;rung)" lastUpdated="April 22, 2026">
       <div className="space-y-4">
         <div className="rounded-xl border border-twitch/20 bg-twitch/5 p-5 text-text-sub">
           <strong className="text-text">TL;DR:</strong> All-Chat only collects the information we
@@ -218,17 +218,31 @@ export default function PrivacyPolicyPage() {
           approve.
         </p>
 
-        <h3 className="text-lg font-semibold text-text">5.2 Third-Party Frontend Resources</h3>
+        <h3 className="text-lg font-semibold text-text">5.2 Fonts (Self-Hosted)</h3>
         <p>
-          Overlay pages may load resources from external providers. Each request transmits your{' '}
-          <strong className="text-text">IP address</strong> and browser user agent to the respective
-          provider:
+          Typography assets originally distributed by Google Fonts are{' '}
+          <strong className="text-text">self-hosted on our infrastructure</strong>. The fonts used
+          by the All-Chat interface are bundled at build time via Next.js, and fonts selectable for
+          overlay customization are served through a server-side proxy at{' '}
+          <code className="rounded bg-surface-2 px-1 py-0.5 text-xs">/api/fonts/*</code>. Your
+          browser only connects to the All-Chat origin; <strong className="text-text">no IP
+          address, user agent, or request metadata is transmitted to Google</strong> when fonts
+          are loaded. This aligns with the Landgericht M&uuml;nchen I ruling on Google Fonts (20
+          January 2022, Az. 3 O 17493/20).
+        </p>
+        <p className="text-sm text-text-dim">
+          Legal basis: Art.&nbsp;6(1)(f) DSGVO &ndash; legitimate interest in delivering the
+          visual appearance of the overlay. The font files themselves are licensed under the SIL
+          Open Font License 1.1 or Apache 2.0.
+        </p>
+
+        <h3 className="text-lg font-semibold text-text">5.3 Third-Party Frontend Resources</h3>
+        <p>
+          Overlay and dashboard pages may load the following external resources. Each request
+          transmits your <strong className="text-text">IP address</strong> and browser user agent
+          to the respective provider:
         </p>
         <ul className={listClasses}>
-          <li>
-            <strong className="text-text">Google Fonts</strong> (fonts.googleapis.com) &ndash;
-            loaded when a custom font is configured for an overlay
-          </li>
           <li>
             <strong className="text-text">UI Avatars</strong> (ui-avatars.com) &ndash; generates
             fallback avatar images from display names when a platform avatar is unavailable
@@ -240,19 +254,11 @@ export default function PrivacyPolicyPage() {
         </ul>
         <p className="text-sm text-text-dim">
           Legal basis: Art.&nbsp;6(1)(f) DSGVO &ndash; legitimate interest in providing a
-          functional and visually complete overlay experience. Google Fonts is subject to the{' '}
-          <a
-            href="https://policies.google.com/privacy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            Google Privacy Policy
-          </a>
-          .
+          functional and visually complete overlay experience. You can avoid loading these by not
+          opening the theme marketplace and by providing a custom avatar URL.
         </p>
 
-        <h3 className="text-lg font-semibold text-text">5.3 YouTube-Specific Notice</h3>
+        <h3 className="text-lg font-semibold text-text">5.4 YouTube-Specific Notice</h3>
         <p className="font-semibold text-text">
           Your use of All-Chat&apos;s YouTube integration is also governed by the{' '}
           <a
@@ -263,10 +269,12 @@ export default function PrivacyPolicyPage() {
           >
             Google Privacy Policy
           </a>
-          .
+          . This applies only to the YouTube API integration (data flows described in Section 5.1);
+          it does <strong className="text-text">not</strong> apply to fonts, which are self-hosted
+          as described in Section 5.2.
         </p>
 
-        <h3 className="text-lg font-semibold text-text">5.4 No Data Sales</h3>
+        <h3 className="text-lg font-semibold text-text">5.5 No Data Sales</h3>
         <p className="text-sm text-text-dim">
           We never sell or rent your data. We may disclose information when required by law or to
           respond to legitimate security incidents.
@@ -375,9 +383,10 @@ export default function PrivacyPolicyPage() {
           <li>User preferences and last-visited state</li>
         </ul>
         <p>
-          We do not use advertising cookies, cross-site tracking, or analytics pixels. Third-party
-          resources (Google Fonts, UI Avatars, GitHub API) are loaded as described in Section 5.2
-          and may cause the respective providers to set their own cookies.
+          We do not use advertising cookies, cross-site tracking, or analytics pixels. Fonts are
+          self-hosted (Section&nbsp;5.2) and do not set cookies. The third-party resources listed
+          in Section&nbsp;5.3 (UI Avatars, GitHub API) may cause the respective providers to set
+          their own cookies when loaded.
         </p>
       </section>
 
@@ -398,8 +407,9 @@ export default function PrivacyPolicyPage() {
           When you use streaming platform integrations, data is transferred to servers operated by
           Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). These
           transfers are necessary to perform the service you requested (Art.&nbsp;49(1)(b) DSGVO).
-          Third-party frontend resources (Google Fonts, GitHub API) may also involve transfers to
-          the US.
+          The GitHub API (theme marketplace) may also involve transfers to the US. Fonts are
+          self-hosted on our infrastructure and therefore do not involve any third-country
+          transfer when loaded.
         </p>
       </section>
 
