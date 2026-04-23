@@ -370,7 +370,9 @@ Plans:
 
 **Goal:** Add TTS support to the overlay so streamers can have chat messages read aloud (issue #270). Two tiers: free Web Speech API (default) and premium ElevenLabs (user-supplied API key, streamed from browser). Includes a TTSQueue with sampling, per-user cooldown, token-bucket rate limiter, staleness discard, and priority bypass for subs/raids/bits/superchats. Adds tts_* fields to overlay DisplaySettings JSONB, a ttsPlayer.ts client utility, integration in overlay/[id]/page.tsx after the filter check, and a TTS settings section in the dashboard. Fallback to Web Speech on ElevenLabs 401/403.
 **Depends on:** Phase 12
-**Plans:** Not yet planned
+**Plans:** 3 plans
 
 Plans:
-- Not yet planned
+- [ ] 13-01-PLAN.md — Web Speech tier: ttsPlayer TDD utility + TTSGroup UI + AppearancePanel mount + overlay/embed page wiring (Wave 1)
+- [ ] 13-02-PLAN.md — Backend: migration 049 + shared/featuregates+middleware move + AES-GCM key storage + JWT + 7 TTS endpoints in overlay-manager (Wave 1)
+- [ ] 13-03-PLAN.md — ElevenLabs UX: API-key flow, Copy/Regenerate OBS URL, test-key + quota display, runtime wiring in overlay + embed (Wave 2, depends on 13-01 + 13-02)
