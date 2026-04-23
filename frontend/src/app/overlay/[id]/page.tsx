@@ -39,7 +39,8 @@
 'use client';
 
 import Image from 'next/image';
-import { use, useEffect, useState, useRef } from 'react';
+import { use, useEffect, useState, useRef, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import type { ChatMessage, EventTier, NameGradient, PlatformStatus, DeletionMetadata } from '@/lib/types/message';
 import { renderMessageContent } from '@/lib/renderMessage';
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges';
@@ -52,6 +53,8 @@ import { shouldFilterMessage } from '@/lib/utils/filterMessage';
 import type { FilterSettings } from '@/lib/types/overlay';
 import { createSoundPlayer } from '@/lib/utils/soundPlayer';
 import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer';
+import { createTTSPlayer } from '@/lib/utils/ttsPlayer';
+import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer';
 
 // ---- Font loader ----------------------------------------------------------
 // Fonts are proxied through /api/fonts/css so end-user IPs never reach Google
@@ -122,6 +125,31 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     cooldownMs: 500,
   });
 
+  // Phase 13: TTS player state (D-41, D-42)
+  const ttsPlayerRef = useRef<TTSPlayer | null>(null);
+  const ttsSettingsRef = useRef<TTSSettings>({
+    enabled: false,
+    provider: 'browser',
+    volume: 0.8,
+    rate: 1.0,
+    pitch: 1.0,
+    filter_mode: 'sample',
+    sample_rate: 0.25,
+    max_queue: 5,
+    messages_per_minute: 8,
+    user_cooldown_seconds: 30,
+    staleness_seconds: 15,
+    priority_events: true,
+    priority_bits_min: 0,
+    read_username: true,
+    read_platform: false,
+    max_message_chars: 200,
+    skip_emote_only: true,
+    skip_links: true,
+    enabled_platforms: ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
+  });
+  const ttsFallbackToastShownRef = useRef(false);
+
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -140,6 +168,21 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     return () => {
       soundPlayerRef.current?.destroy()
       soundPlayerRef.current = null
+    }
+  }, []);
+
+  // Phase 13: ElevenLabs session fallback callback (D-38)
+  const handleTTSFallback = useCallback(() => {
+    if (ttsFallbackToastShownRef.current) return;
+    ttsFallbackToastShownRef.current = true;
+    toast('ElevenLabs unavailable — using browser voice.');
+  }, []);
+
+  // Phase 13: Destroy TTS player on unmount
+  useEffect(() => {
+    return () => {
+      ttsPlayerRef.current?.destroy()
+      ttsPlayerRef.current = null
     }
   }, []);
 
@@ -253,6 +296,58 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           soundPlayerRef.current.updateSettings(newSoundSettings)
         } else {
           soundPlayerRef.current = createSoundPlayer(newSoundSettings)
+        }
+
+        // Phase 13: Load TTS settings from display_settings (D-24)
+        const ttsLoaded: TTSSettings = {
+          enabled: display.tts_enabled === true,
+          provider: display.tts_provider === 'elevenlabs' ? 'elevenlabs' : 'browser',
+          volume: typeof display.tts_volume === 'number' ? display.tts_volume : 0.8,
+          voice_uri: typeof display.tts_voice_uri === 'string' ? display.tts_voice_uri : undefined,
+          rate: typeof display.tts_rate === 'number' ? display.tts_rate : 1.0,
+          pitch: typeof display.tts_pitch === 'number' ? display.tts_pitch : 1.0,
+          filter_mode:
+            display.tts_filter_mode === 'all' || display.tts_filter_mode === 'priority_only'
+              ? display.tts_filter_mode
+              : 'sample',
+          sample_rate:
+            typeof display.tts_sample_rate === 'number' ? display.tts_sample_rate : 0.25,
+          max_queue: typeof display.tts_max_queue === 'number' ? display.tts_max_queue : 5,
+          messages_per_minute:
+            typeof display.tts_messages_per_minute === 'number'
+              ? display.tts_messages_per_minute
+              : 8,
+          user_cooldown_seconds:
+            typeof display.tts_user_cooldown_seconds === 'number'
+              ? display.tts_user_cooldown_seconds
+              : 30,
+          staleness_seconds:
+            typeof display.tts_staleness_seconds === 'number'
+              ? display.tts_staleness_seconds
+              : 15,
+          priority_events: display.tts_priority_events !== false,
+          priority_bits_min:
+            typeof display.tts_priority_bits_min === 'number'
+              ? display.tts_priority_bits_min
+              : 0,
+          read_username: display.tts_read_username !== false,
+          read_platform: display.tts_read_platform === true,
+          max_message_chars:
+            typeof display.tts_max_message_chars === 'number'
+              ? display.tts_max_message_chars
+              : 200,
+          skip_emote_only: display.tts_skip_emote_only !== false,
+          skip_links: display.tts_skip_links !== false,
+          enabled_platforms: Array.isArray(display.tts_enabled_platforms)
+            ? display.tts_enabled_platforms.filter((p: unknown): p is string => typeof p === 'string')
+            : ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
+          // ElevenLabs runtime: wired in Plan 03 when hasElevenLabsConfig is true
+        }
+        ttsSettingsRef.current = ttsLoaded
+        if (ttsPlayerRef.current) {
+          ttsPlayerRef.current.updateSettings(ttsLoaded)
+        } else {
+          ttsPlayerRef.current = createTTSPlayer(ttsLoaded, handleTTSFallback)
         }
 
         // Load configured sources (channel_id -> SourceInfo)
@@ -412,6 +507,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
           // Phase 12: play notification sound for messages that pass the filter (D-05)
           soundPlayerRef.current?.play()
+          // Phase 13: speak the message via TTS (D-41, D-42 — independent of sound; both fire on non-filtered)
+          ttsPlayerRef.current?.speak(message)
 
           setMessages((prev) => {
             const newMessages = [...prev, message];
