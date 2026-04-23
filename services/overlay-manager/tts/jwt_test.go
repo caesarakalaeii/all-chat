@@ -105,14 +105,13 @@ func TestVerifyRejectsTamperedSignature(t *testing.T) {
 	token, err := SignOverlayToken("overlay-tamper", secret)
 	require.NoError(t, err)
 
-	// Flip the last character of the signature.
-	tampered := token[:len(token)-1]
-	last := token[len(token)-1]
-	if last == 'A' {
-		tampered += "B"
-	} else {
-		tampered += "A"
-	}
+	// Replace the entire signature segment with garbage. A single-char flip
+	// can occasionally decode to the same raw bytes (base64 aliasing), so
+	// we substitute the whole segment to guarantee an HMAC mismatch.
+	parts := strings.Split(token, ".")
+	require.Len(t, parts, 3)
+	parts[2] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	tampered := strings.Join(parts, ".")
 
 	err = VerifyOverlayToken(tampered, "overlay-tamper", secret)
 	assert.Error(t, err)
