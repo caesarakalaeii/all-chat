@@ -373,6 +373,6 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 13-01-PLAN.md — Web Speech tier: ttsPlayer TDD utility + TTSGroup UI + AppearancePanel mount + overlay/embed page wiring (Wave 1)
-- [ ] 13-02-PLAN.md — Backend: migration 049 + shared/featuregates+middleware move + AES-GCM key storage + JWT + 7 TTS endpoints in overlay-manager (Wave 1)
+- [x] 13-01-PLAN.md — Web Speech tier: ttsPlayer TDD utility + TTSGroup UI + AppearancePanel mount + overlay/embed page wiring (Wave 1)
+- [x] 13-02-PLAN.md — Backend: migration 049 + shared/featuregates+middleware move + AES-GCM key storage + JWT + 7 TTS endpoints in overlay-manager (Wave 1)
 - [ ] 13-03-PLAN.md — ElevenLabs UX: API-key flow, Copy/Regenerate OBS URL, test-key + quota display, runtime wiring in overlay + embed (Wave 2, depends on 13-01 + 13-02)
