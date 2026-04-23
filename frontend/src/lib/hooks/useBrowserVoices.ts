@@ -32,14 +32,22 @@ export function useBrowserVoices(): SpeechSynthesisVoice[] {
   useEffect(() => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return
 
+    const synth = window.speechSynthesis
+
     const update = (): void => {
-      setVoices(window.speechSynthesis.getVoices())
+      // `synth` captured at effect-start; guard against teardown-time nulling.
+      setVoices(synth.getVoices())
     }
 
     update() // synchronous first call — works in Firefox/Safari
-    window.speechSynthesis.addEventListener('voiceschanged', update)
+    synth.addEventListener('voiceschanged', update)
     return () => {
-      window.speechSynthesis.removeEventListener('voiceschanged', update)
+      // Guard defensively — the global may be removed before unmount (tests).
+      try {
+        synth.removeEventListener('voiceschanged', update)
+      } catch {
+        /* swallow */
+      }
     }
   }, [])
 
