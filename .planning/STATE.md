@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Phase 12 context gathered
-last_updated: "2026-04-12T00:35:44.302Z"
-last_activity: 2026-04-12
+stopped_at: Phase 13 added
+last_updated: "2026-04-23T12:20:00.000Z"
+last_activity: 2026-04-23
 progress:
-  total_phases: 19
+  total_phases: 20
   completed_phases: 18
   total_plans: 77
   completed_plans: 75
@@ -245,6 +245,7 @@ Key decisions relevant to v1.6:
 - Phase 10 added: Message pipeline resilience — fix silent failure modes across Twitch message pipeline
 - Phase 11 added: Add username/keyword exclude list to overlay filter settings (issue #240)
 - Phase 12 added: Notification sound on incoming messages with premium custom sound support (issue #241)
+- Phase 13 added: Text-to-Speech (TTS) for chat messages — Web Speech API free tier and premium ElevenLabs streaming, with priority queue/sampling/cooldown (issue #270)
 
 ### Pending Todos
 

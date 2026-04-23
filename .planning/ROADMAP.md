@@ -365,3 +365,12 @@ Plans:
 Plans:
 - [ ] 12-01-PLAN.md — soundPlayer.ts TDD utility, DisplaySettings extension, preset audio files, overlay + embed page playback wiring
 - [ ] 12-02-PLAN.md — SoundGroup UI component with tests, AppearancePanel integration, editor page state/save/postMessage
+
+### Phase 13: Text-to-Speech (TTS) for chat messages
+
+**Goal:** Add TTS support to the overlay so streamers can have chat messages read aloud (issue #270). Two tiers: free Web Speech API (default) and premium ElevenLabs (user-supplied API key, streamed from browser). Includes a TTSQueue with sampling, per-user cooldown, token-bucket rate limiter, staleness discard, and priority bypass for subs/raids/bits/superchats. Adds tts_* fields to overlay DisplaySettings JSONB, a ttsPlayer.ts client utility, integration in overlay/[id]/page.tsx after the filter check, and a TTS settings section in the dashboard. Fallback to Web Speech on ElevenLabs 401/403.
+**Depends on:** Phase 12
+**Plans:** Not yet planned
+
+Plans:
+- Not yet planned
