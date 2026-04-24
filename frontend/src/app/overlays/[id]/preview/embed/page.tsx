@@ -241,6 +241,16 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   })
   const ttsFallbackToastShownRef = useRef(false)
 
+  // Phase 13 Plan 03: cache ElevenLabs runtime params (endpoint / token / voice_id)
+  // loaded once from GET /tts-config. The TTS_SETTINGS_UPDATE postMessage from the
+  // editor only carries display_settings; these runtime fields must survive those
+  // updates so the fetch path continues to work after the editor tweaks settings.
+  const elevenLabsRuntimeRef = useRef<{
+    ttsEndpoint?: string
+    ttsToken?: string
+    voiceId?: string
+  }>({})
+
   // Phase 13: ElevenLabs session fallback callback (D-38)
   const handleTTSFallback = useCallback(() => {
     if (ttsFallbackToastShownRef.current) return
@@ -351,9 +361,12 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           enabled_platforms: Array.isArray(s.tts_enabled_platforms)
             ? s.tts_enabled_platforms
             : prev.enabled_platforms,
-          ttsEndpoint: prev.ttsEndpoint,
-          ttsToken: prev.ttsToken,
-          voiceId: prev.voiceId,
+          // Phase 13 Plan 03: preserve ElevenLabs runtime params across settings
+          // updates. The editor only sends display_settings; the endpoint/token
+          // comes from the one-shot /tts-config GET on mount.
+          ttsEndpoint: elevenLabsRuntimeRef.current.ttsEndpoint ?? prev.ttsEndpoint,
+          ttsToken: elevenLabsRuntimeRef.current.ttsToken ?? prev.ttsToken,
+          voiceId: elevenLabsRuntimeRef.current.voiceId ?? prev.voiceId,
         }
         ttsSettingsRef.current = newSettings
         if (ttsPlayerRef.current) {
@@ -488,6 +501,38 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
             ? display.tts_enabled_platforms.filter((p: unknown): p is string => typeof p === 'string')
             : ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
         }
+
+        // Phase 13 Plan 03: For the ElevenLabs branch, hydrate the runtime fetch
+        // endpoint + tts_token JWT. The editor preview is authed (user JWT in
+        // localStorage), so we can call GET /tts-config to recover the obs_url
+        // and extract the token query param — mirroring the live overlay's
+        // URLSearchParams read.
+        if (ttsLoaded.provider === 'elevenlabs') {
+          try {
+            const meta = await overlaysApi.getTTSConfig(id)
+            if (meta.has_elevenlabs_config && meta.obs_url) {
+              try {
+                const u = new URL(meta.obs_url, window.location.origin)
+                const t = u.searchParams.get('tts_token') ?? undefined
+                elevenLabsRuntimeRef.current = {
+                  ttsEndpoint: `/api/v1/overlays/${id}/tts`,
+                  ttsToken: t,
+                  voiceId: meta.voice_id ?? '',
+                }
+                ttsLoaded.ttsEndpoint = elevenLabsRuntimeRef.current.ttsEndpoint
+                ttsLoaded.ttsToken = elevenLabsRuntimeRef.current.ttsToken
+                ttsLoaded.voiceId = elevenLabsRuntimeRef.current.voiceId
+              } catch {
+                // Bad URL — silently skip; editor preview won't play ElevenLabs,
+                // but browser voice still works.
+              }
+            }
+          } catch {
+            // Non-fatal — if the overlay has no key saved yet, the proxy isn't
+            // reachable anyway and the player will fall back to browser voice.
+          }
+        }
+
         ttsSettingsRef.current = ttsLoaded
         if (ttsPlayerRef.current) {
           ttsPlayerRef.current.updateSettings(ttsLoaded)

@@ -341,8 +341,21 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           enabled_platforms: Array.isArray(display.tts_enabled_platforms)
             ? display.tts_enabled_platforms.filter((p: unknown): p is string => typeof p === 'string')
             : ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
-          // ElevenLabs runtime: wired in Plan 03 when hasElevenLabsConfig is true
         }
+
+        // Phase 13 Plan 03: For the ElevenLabs branch, hydrate the runtime fetch
+        // endpoint + tts_token JWT (read from the URL query string produced by
+        // Plan 02's rotate-token / GET /tts-config). Voice-fallback contract:
+        // when `voiceId` is empty, Plan 02's HandleTTS substitutes cfg.VoiceID
+        // from the saved overlay_tts_configs row (no DB round-trip here).
+        if (ttsLoaded.provider === 'elevenlabs') {
+          const urlParams = new URLSearchParams(window.location.search)
+          const tokenFromUrl = urlParams.get('tts_token') ?? undefined
+          ttsLoaded.ttsEndpoint = `/api/v1/overlays/${id}/tts`
+          ttsLoaded.ttsToken = tokenFromUrl
+          ttsLoaded.voiceId = ''
+        }
+
         ttsSettingsRef.current = ttsLoaded
         if (ttsPlayerRef.current) {
           ttsPlayerRef.current.updateSettings(ttsLoaded)
