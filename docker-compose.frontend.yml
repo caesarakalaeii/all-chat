@@ -71,6 +71,8 @@ services:
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
       MESSAGE_PROCESSOR_URL: http://message-processor:8087
       MESSAGE_PROCESSOR_API_KEY: dev-frontend-key
+      TOKEN_ENCRYPTION_KEY: "F/WhOySOiY3x9gbWSuXW2lWYsdI3VTEuMHl33skt6SI="
+      OVERLAY_PUBLIC_BASE_URL: "http://localhost:3000"
     ports:
       - "8082:8082"
     depends_on:
