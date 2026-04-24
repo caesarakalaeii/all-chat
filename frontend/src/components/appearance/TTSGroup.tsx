@@ -18,7 +18,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
 import { PremiumBadge } from '@/components/PremiumBadge'
@@ -28,10 +29,14 @@ import type { DisplaySettings } from '@/lib/types/overlay'
 /**
  * TTSGroup — the Text-to-Speech settings group under the AppearancePanel.
  * Mirrors SoundGroup/FilterGroup in shape. Sub-sections: Voice, Throttling,
- * Content, Priority, plus an Advanced (ElevenLabs) block that is a stub in
- * Plan 01 — Plan 03 will replace it with the full ElevenLabs UX.
+ * Content, Priority, and Advanced (ElevenLabs premium).
  *
- * See 13-UI-SPEC.md "Component tree" for the authoritative structure.
+ * Plan 03 replaced Plan 01's Advanced stub with the full ElevenLabs UX:
+ * API-key input (Save / Remove), Test-key button + character-quota display,
+ * ElevenLabs voice picker (lazy-loaded on focus), read-only OBS URL input
+ * with Copy / Regenerate buttons + confirmation modal.
+ *
+ * See 13-UI-SPEC.md for the authoritative copy and interaction contract.
  */
 
 export interface ElevenLabsVoice {
@@ -56,7 +61,7 @@ export interface TTSGroupProps {
   obsUrl?: string
   onPreview?: () => void
   onPreviewStop?: () => void
-  // ElevenLabs async callbacks populated in Plan 03 — optional in Plan 01
+  // ElevenLabs async callbacks — Plan 03 wires these in the editor page.
   onSaveKey?: (key: string, voiceId: string) => Promise<void>
   onTestKey?: () => Promise<TestKeyResult>
   onRotateToken?: () => Promise<{ obsUrl: string }>
@@ -157,6 +162,377 @@ function PlatformChipRow({ platforms, onToggle }: PlatformChipRowProps): React.R
   )
 }
 
+// ==========================================================================
+// Advanced (ElevenLabs) sub-components — Plan 03
+// ==========================================================================
+
+interface ApiKeyInputProps {
+  hasSavedKey: boolean
+  onSave: (key: string, voiceId: string) => Promise<void>
+  onRemove: () => Promise<void>
+  onTest: () => Promise<TestKeyResult>
+  disabled: boolean
+  isPremium: boolean
+  voiceId: string
+}
+
+function ApiKeyInput({
+  hasSavedKey,
+  onSave,
+  onRemove,
+  onTest,
+  disabled,
+  isPremium,
+  voiceId,
+}: ApiKeyInputProps): React.ReactElement {
+  const [apiKey, setApiKey] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [quota, setQuota] = useState<{ remaining: number; limit: number } | null>(null)
+  const [removeArmed, setRemoveArmed] = useState(false)
+  const removeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [removing, setRemoving] = useState(false)
+
+  useEffect(
+    () => () => {
+      if (removeTimerRef.current) {
+        clearTimeout(removeTimerRef.current)
+        removeTimerRef.current = null
+      }
+    },
+    [],
+  )
+
+  async function handleSave(): Promise<void> {
+    if (apiKey.trim() === '') {
+      setError('API key cannot be empty.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(apiKey, voiceId)
+      // T-13-07 mitigation: clear key from state immediately after POST resolves.
+      setApiKey('')
+      toast.success('API key saved.')
+    } catch (e) {
+      setError('Could not save. Try again.')
+      toast.error(
+        `Could not save key: ${e instanceof Error ? e.message : 'network error'}`,
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleTest(): Promise<void> {
+    setTesting(true)
+    try {
+      const r = await onTest()
+      if (r.ok) {
+        if (
+          typeof r.charactersRemaining === 'number' &&
+          typeof r.charactersLimit === 'number'
+        ) {
+          setQuota({ remaining: r.charactersRemaining, limit: r.charactersLimit })
+        }
+      } else {
+        switch (r.errorCode) {
+          case 401:
+            toast.error('Invalid API key')
+            break
+          case 429:
+            toast.error('Rate-limited — try again in a minute')
+            break
+          case 0:
+            toast.error('Could not reach ElevenLabs. Check your connection.')
+            break
+          default:
+            toast.error('ElevenLabs service unavailable')
+        }
+      }
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  async function handleRemoveClick(): Promise<void> {
+    if (!removeArmed) {
+      setRemoveArmed(true)
+      if (removeTimerRef.current) clearTimeout(removeTimerRef.current)
+      removeTimerRef.current = setTimeout(() => {
+        setRemoveArmed(false)
+        removeTimerRef.current = null
+      }, 3000)
+      return
+    }
+    if (removeTimerRef.current) {
+      clearTimeout(removeTimerRef.current)
+      removeTimerRef.current = null
+    }
+    setRemoving(true)
+    try {
+      await onRemove()
+      toast.success('API key removed.')
+      setQuota(null)
+    } catch {
+      toast.error('Could not remove key. Try again.')
+    } finally {
+      setRemoving(false)
+      setRemoveArmed(false)
+    }
+  }
+
+  const quotaPct = quota ? Math.round((quota.remaining / quota.limit) * 100) : null
+
+  return (
+    <div className="space-y-3">
+      {!hasSavedKey && (
+        <div>
+          <p className="mb-1 text-xs text-text-dim">
+            {isPremium
+              ? 'Your key is encrypted server-side and never returned.'
+              : 'Upgrade to Premium to use ElevenLabs voices.'}
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk-..."
+              autoComplete="off"
+              spellCheck={false}
+              aria-label="ElevenLabs API key"
+              disabled={disabled || saving}
+              className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text font-mono placeholder:text-text-dim disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                void handleSave()
+              }}
+              disabled={disabled || saving}
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save key'}
+            </button>
+          </div>
+          {error && (
+            <p role="alert" className="mt-1 text-xs font-medium text-red-400">
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+
+      {hasSavedKey && (
+        <>
+          <p className="text-xs text-text-dim">
+            Key saved and encrypted. Click Test key to verify.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void handleTest()
+            }}
+            disabled={disabled || testing}
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {testing ? 'Testing…' : 'Test key'}
+          </button>
+
+          {quota ? (
+            <p className="text-xs text-text-dim">
+              {quota.remaining.toLocaleString()} / {quota.limit.toLocaleString()}
+              {' '}characters this month ({quotaPct}%)
+            </p>
+          ) : (
+            <p className="text-xs text-text-dim">Click Test key to see your remaining quota.</p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              void handleRemoveClick()
+            }}
+            disabled={disabled || removing}
+            className={`rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50 ${
+              removeArmed
+                ? 'border-red-500 bg-red-500/10 text-red-400'
+                : 'border-border bg-surface text-text-sub'
+            }`}
+          >
+            {removing ? 'Removing…' : removeArmed ? 'Confirm remove' : 'Remove key'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+interface ObsUrlPanelProps {
+  obsUrl: string
+  onCopy: () => Promise<void>
+  onRegenerate: () => Promise<void>
+}
+
+function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.ReactElement {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [rotating, setRotating] = useState(false)
+
+  async function handleConfirm(): Promise<void> {
+    setRotating(true)
+    try {
+      await onRegenerate()
+    } finally {
+      setRotating(false)
+      setConfirmOpen(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-text-dim">
+        Paste this URL into OBS as your browser source to enable ElevenLabs TTS.
+      </p>
+      <input
+        type="text"
+        readOnly
+        value={obsUrl}
+        onFocus={(e) => e.target.select()}
+        aria-label="OBS URL — copy and paste into OBS browser source"
+        className="w-full select-all rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+      />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            void onCopy()
+          }}
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt"
+        >
+          Copy OBS URL
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt"
+        >
+          Regenerate URL
+        </button>
+      </div>
+      {confirmOpen && (
+        <div
+          role="alertdialog"
+          aria-labelledby="tts-regen-title"
+          aria-describedby="tts-regen-body"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+        >
+          <div className="max-w-md rounded-lg border border-border bg-surface p-6">
+            <h3 id="tts-regen-title" className="mb-2 text-sm font-medium text-text">
+              Regenerate OBS URL?
+            </h3>
+            <p id="tts-regen-body" className="mb-4 text-xs text-text-sub">
+              This invalidates the current OBS URL. You&apos;ll need to paste the new URL into OBS.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-sub hover:bg-surface-alt"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleConfirm()
+                }}
+                disabled={rotating}
+                className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {rotating ? 'Regenerating…' : 'Regenerate URL'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ElevenLabsVoicePickerProps {
+  selected: string
+  onChange: (voiceId: string) => void
+  onFetchVoices?: () => Promise<ElevenLabsVoice[]>
+  disabled: boolean
+}
+
+function ElevenLabsVoicePicker({
+  selected,
+  onChange,
+  onFetchVoices,
+  disabled,
+}: ElevenLabsVoicePickerProps): React.ReactElement {
+  const [voices, setVoices] = useState<ElevenLabsVoice[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(false)
+  const triedRef = useRef(false)
+
+  async function loadVoices(): Promise<void> {
+    if (triedRef.current || !onFetchVoices) return
+    triedRef.current = true
+    setLoading(true)
+    try {
+      const list = await onFetchVoices()
+      setVoices(list)
+    } catch {
+      setError(true)
+      toast.error('Could not load voices.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <label htmlFor="tts-elevenlabs-voice" className="mb-1 block text-sm text-text-sub">
+        ElevenLabs voice
+      </label>
+      <select
+        id="tts-elevenlabs-voice"
+        aria-label="ElevenLabs voice"
+        value={selected}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => {
+          void loadVoices()
+        }}
+        disabled={disabled}
+        className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {loading && <option value="">Loading voices…</option>}
+        {error && <option value="">Could not load voices</option>}
+        {!loading && !error && voices === null && (
+          <option value="">Save your API key to load voices.</option>
+        )}
+        {!loading && !error && voices !== null && voices.length === 0 && (
+          <option value="">No voices available</option>
+        )}
+        {voices?.map((v) => (
+          <option key={v.voice_id} value={v.voice_id}>
+            {v.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+// ==========================================================================
+// TTSGroup — main component
+// ==========================================================================
+
 export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   const { displaySettings: d, onChange, isPremium, onPreview } = props
 
@@ -171,6 +547,11 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   const provider = (d.tts_provider ?? 'browser') as 'browser' | 'elevenlabs'
   const filterMode = d.tts_filter_mode ?? 'sample'
   const platforms = d.tts_enabled_platforms ?? [...ALL_PLATFORMS]
+
+  // Advanced block — ElevenLabs voice selection state. Held locally because
+  // the chosen voice is sent with the Save-key call, NOT persisted to
+  // display_settings (ElevenLabs voice_id lives in overlay_tts_configs).
+  const [pickedVoiceId, setPickedVoiceId] = useState('')
 
   function handlePlatformToggle(platform: string): void {
     const current = d.tts_enabled_platforms ?? [...ALL_PLATFORMS]
@@ -416,21 +797,67 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             />
           )}
 
-          {/* ---------- ADVANCED (ELEVENLABS) — STUB FOR PLAN 03 ---------- */}
+          {/* ---------- ADVANCED (ELEVENLABS) ---------- */}
           {provider === 'elevenlabs' && (
             <>
               <SubSectionHeader label="ADVANCED (ELEVENLABS)" />
-              <div className="rounded-lg border border-dashed border-border bg-surface-alt p-4 text-sm text-text-sub">
-                <p>
-                  ElevenLabs controls (API key, voice picker, test, OBS URL) ship in Plan 03.
-                </p>
+              <div className={`space-y-3 ${!isPremium ? 'relative' : ''}`}>
                 {!isPremium && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <PremiumBadge />
-                    <span className="text-xs text-text-dim">
-                      Upgrade to Premium to use ElevenLabs voices.
-                    </span>
+                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface/80">
+                    <div className="flex flex-col items-center gap-2 text-center">
+                      <PremiumBadge />
+                      <span className="text-xs text-text-dim">
+                        Upgrade to Premium to use ElevenLabs voices.
+                      </span>
+                    </div>
                   </div>
+                )}
+                <ElevenLabsVoicePicker
+                  selected={pickedVoiceId}
+                  onChange={setPickedVoiceId}
+                  onFetchVoices={props.onFetchVoices}
+                  disabled={!isPremium}
+                />
+                <ApiKeyInput
+                  hasSavedKey={props.hasElevenLabsConfig}
+                  isPremium={isPremium}
+                  disabled={!isPremium}
+                  voiceId={pickedVoiceId}
+                  onSave={props.onSaveKey ?? (async (): Promise<void> => {})}
+                  onRemove={props.onRemoveKey ?? (async (): Promise<void> => {})}
+                  onTest={
+                    props.onTestKey ??
+                    (async (): Promise<TestKeyResult> => ({ ok: false, errorCode: 0 }))
+                  }
+                />
+                {props.hasElevenLabsConfig && props.obsUrl && (
+                  <ObsUrlPanel
+                    obsUrl={props.obsUrl}
+                    onCopy={async (): Promise<void> => {
+                      if (!props.obsUrl) return
+                      try {
+                        await navigator.clipboard.writeText(props.obsUrl)
+                        toast.success('OBS URL copied.')
+                      } catch {
+                        toast.error('Could not copy URL.')
+                      }
+                    }}
+                    onRegenerate={async (): Promise<void> => {
+                      if (!props.onRotateToken) return
+                      try {
+                        const result = await props.onRotateToken()
+                        try {
+                          await navigator.clipboard.writeText(result.obsUrl)
+                        } catch {
+                          // Clipboard permission missing — toast still surfaces success,
+                          // but on failure we fall through to the catch below.
+                        }
+                        toast.success('New OBS URL copied to clipboard.')
+                      } catch {
+                        toast.error('Could not regenerate URL. Try again.')
+                      }
+                    }}
+                  />
                 )}
               </div>
             </>
