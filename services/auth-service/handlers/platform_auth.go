@@ -34,13 +34,13 @@ import (
 
 // PlatformAuthHandler handles authentication for any OAuth platform
 type PlatformAuthHandler struct {
-	providers   map[oauth.Platform]oauth.OAuthProvider
-	userRepo    *repository.UserRepository
-	redis       *redis.Client
-	jwtSecret   string
-	jwtExpiry   time.Duration
-	logger      *zap.Logger
-	frontendURL string
+	providers    map[oauth.Platform]oauth.OAuthProvider
+	userRepo     *repository.UserRepository
+	redis        *redis.Client
+	userKeyChain *auth.KeyChain
+	jwtExpiry    time.Duration
+	logger       *zap.Logger
+	frontendURL  string
 }
 
 // NewPlatformAuthHandler creates a new platform auth handler
@@ -48,19 +48,19 @@ func NewPlatformAuthHandler(
 	providers map[oauth.Platform]oauth.OAuthProvider,
 	userRepo *repository.UserRepository,
 	redisClient *redis.Client,
-	jwtSecret string,
+	userKeyChain *auth.KeyChain,
 	jwtExpiryHours int,
 	frontendURL string,
 	logger *zap.Logger,
 ) *PlatformAuthHandler {
 	return &PlatformAuthHandler{
-		providers:   providers,
-		userRepo:    userRepo,
-		redis:       redisClient,
-		jwtSecret:   jwtSecret,
-		jwtExpiry:   time.Duration(jwtExpiryHours) * time.Hour,
-		frontendURL: frontendURL,
-		logger:      logger,
+		providers:    providers,
+		userRepo:     userRepo,
+		redis:        redisClient,
+		userKeyChain: userKeyChain,
+		jwtExpiry:    time.Duration(jwtExpiryHours) * time.Hour,
+		frontendURL:  frontendURL,
+		logger:       logger,
 	}
 }
 
@@ -247,7 +247,7 @@ func (h *PlatformAuthHandler) HandleCallback(platform oauth.Platform) gin.Handle
 		}
 
 		// Generate JWT
-		jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry, user.IsAdmin)
+		jwtToken, err := auth.GenerateTokenWithKid(h.userKeyChain.LatestKid(), user.ID, user.Username, string(h.userKeyChain.LatestSecret()), h.jwtExpiry, user.IsAdmin)
 		if err != nil {
 			h.logger.Error("Failed to generate JWT", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})

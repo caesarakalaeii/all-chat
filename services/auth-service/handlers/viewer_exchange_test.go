@@ -92,9 +92,9 @@ func TestHandleKickExchange_MissingCode(t *testing.T) {
 func TestGenerateViewerJWT_HasViewerID(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	h := &ViewerAuthHandler{
-		jwtSecret: "test-secret-32-bytes-long-for-jwt",
-		jwtExpiry: 24 * time.Hour,
-		logger:    logger,
+		userKeyChain: testUserKeyChain("test-secret-32-bytes-long-for-jwt"),
+		jwtExpiry:    24 * time.Hour,
+		logger:       logger,
 	}
 
 	viewerID := uuid.New()

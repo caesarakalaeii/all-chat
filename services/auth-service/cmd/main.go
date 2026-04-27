@@ -32,6 +32,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/handlers"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
+	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/logger"
@@ -99,7 +100,6 @@ func main() {
 	discordBotToken := os.Getenv("DISCORD_BOT_TOKEN")
 	discordRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/discord/callback")
 
-	jwtSecret := os.Getenv("JWT_SECRET")
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)
 
 	if twitchClientID == "" || twitchClientSecret == "" {
@@ -122,9 +122,11 @@ func main() {
 		log.Warn("DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_BOT_TOKEN not set — Discord integration disabled")
 	}
 
-	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET must be set")
+	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
+	if err != nil {
+		log.Fatal("JWT key chain init failed (JWT_SECRET_V1 must be set)", zap.Error(err))
 	}
+	log.Info("JWT key chain initialized", zap.String("latest_kid", userKeyChain.LatestKid()))
 
 	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnv()
 	if err != nil {
@@ -220,9 +222,9 @@ func main() {
 	viewerIdentityRepo := repository.NewViewerIdentityRepository(db)
 
 	// Create handlers
-	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)
-	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, jwtSecret, jwtExpiryHours, log).WithMetrics(businessMetrics)
-	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, jwtSecret, jwtExpiryHours, frontendURL, tokenCipher, log).WithMetrics(businessMetrics)
+	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)
+	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, userKeyChain, jwtExpiryHours, log).WithMetrics(businessMetrics)
+	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, tokenCipher, log).WithMetrics(businessMetrics)
 
 	// Seed the persistent total-users gauge from the database so Grafana retains
 	// an accurate baseline even after pod restarts (Prometheus counters are ephemeral).
@@ -233,7 +235,7 @@ func main() {
 		log.Info("Seeded allchat_total_users_by_platform from database", zap.Any("counts", counts))
 	}
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
-	adminHandler := handlers.NewAdminHandler(userRepo, db, log, jwtSecret)
+	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient)
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
@@ -334,7 +336,7 @@ func main() {
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
-	protected.Use(middleware.JWTAuth(jwtSecret))
+	protected.Use(middleware.JWTAuth(userKeyChain))
 	{
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
@@ -367,7 +369,7 @@ func main() {
 
 	// Viewer protected routes (require viewer JWT)
 	viewerProtected := router.Group("/viewer")
-	viewerProtected.Use(middleware.JWTAuth(jwtSecret))
+	viewerProtected.Use(middleware.JWTAuth(userKeyChain))
 	{
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
@@ -380,7 +382,7 @@ func main() {
 
 	// Admin routes (JWT + Admin role required)
 	admin := router.Group("/admin")
-	admin.Use(middleware.JWTAuth(jwtSecret))
+	admin.Use(middleware.JWTAuth(userKeyChain))
 	admin.Use(middleware.AdminOnly())
 	{
 		admin.GET("/users", adminHandler.ListUsers)

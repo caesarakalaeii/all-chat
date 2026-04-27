@@ -26,10 +26,20 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
+	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap/zaptest"
 )
+
+// testUserKeyChain builds a single-key KeyChain suitable for tests.
+func testUserKeyChain(secret string) *auth.KeyChain {
+	return auth.NewKeyChain(
+		map[string][]byte{"v1": []byte(secret)},
+		[]byte(secret),
+		"v1",
+	)
+}
 
 // TestAuthHandlerCreation verifies the auth handler can be created
 func TestAuthHandlerCreation(t *testing.T) {
@@ -53,17 +63,13 @@ func TestAuthHandlerCreation(t *testing.T) {
 		youtubeOAuth,
 		userRepo,
 		redisClient,
-		"test-jwt-secret",
+		testUserKeyChain("test-jwt-secret"),
 		24,
 		logger,
 	)
 
 	if handler == nil {
 		t.Fatal("NewAuthHandler returned nil")
-	}
-
-	if handler.jwtSecret != "test-jwt-secret" {
-		t.Errorf("jwtSecret = %v, want test-jwt-secret", handler.jwtSecret)
 	}
 
 	if handler.jwtExpiry != 24*time.Hour {
@@ -116,7 +122,7 @@ func TestAuthHandlerLogout(t *testing.T) {
 				nil,
 				userRepo,
 				redisClient,
-				"test-jwt-secret",
+				testUserKeyChain("test-jwt-secret"),
 				24,
 				logger,
 			)
@@ -165,7 +171,7 @@ func TestAuthHandlerGetMe_Unauthorized(t *testing.T) {
 		nil,
 		userRepo,
 		redisClient,
-		"test-jwt-secret",
+		testUserKeyChain("test-jwt-secret"),
 		24,
 		logger,
 	)

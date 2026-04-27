@@ -29,6 +29,7 @@ import (
 	"github.com/caesar/all-chat/services/share-service/handlers"
 	"github.com/caesar/all-chat/services/share-service/jobs"
 	"github.com/caesar/all-chat/services/share-service/repository"
+	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/logger"
@@ -52,11 +53,18 @@ func main() {
 	// Load configuration from environment
 	config := loadConfig()
 
-	// Get JWT secret from environment
-	jwtSecret := getEnv("JWT_SECRET", "")
-	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET environment variable required")
+	// Build JWT KeyChains from versioned env vars (D-10: user and service chains are isolated)
+	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
+	if err != nil {
+		log.Fatal("JWT key chain init failed (JWT_SECRET_V1 must be set)", zap.Error(err))
 	}
+	log.Info("JWT key chain initialized", zap.String("latest_kid", userKeyChain.LatestKid()))
+
+	serviceKeyChain, err := sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET")
+	if err != nil {
+		log.Fatal("service JWT key chain init failed (SERVICE_JWT_SECRET_V1 must be set)", zap.Error(err))
+	}
+	log.Info("service JWT key chain initialized", zap.String("latest_kid", serviceKeyChain.LatestKid()))
 
 	// Connect to PostgreSQL
 	log.Info("Connecting to PostgreSQL",
@@ -123,7 +131,7 @@ func main() {
 	// Initialize handlers
 	adminHandler := handlers.NewAdminHandler(premiumRepo, log)
 	searchHandler := handlers.NewSearchHandler(userSearchRepo, log)
-	shareHandler := handlers.NewShareHandler(shareRepo, userSearchRepo, dbPool, log, cycleDetector, jwtSecret)
+	shareHandler := handlers.NewShareHandler(shareRepo, userSearchRepo, dbPool, log, cycleDetector, serviceKeyChain)
 	adminFGHandler := handlers.NewAdminFeatureGatesHandler(dbPool, redisClientForJobs, log)
 
 	// Setup Gin router
@@ -168,7 +176,7 @@ func main() {
 
 	// API routes with authentication
 	api := router.Group("/api/v1")
-	api.Use(middleware.JWTAuth(jwtSecret)) // All routes require auth
+	api.Use(middleware.JWTAuth(userKeyChain)) // All routes require auth
 	{
 		// User search - no premium required
 		api.GET("/users/search", searchHandler.SearchUsers)
