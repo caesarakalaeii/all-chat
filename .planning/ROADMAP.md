@@ -377,3 +377,13 @@ Plans:
 - [x] 13-01-PLAN.md — Web Speech tier: ttsPlayer TDD utility + TTSGroup UI + AppearancePanel mount + overlay/embed page wiring (Wave 1)
 - [x] 13-02-PLAN.md — Backend: migration 049 + shared/featuregates+middleware move + AES-GCM key storage + JWT + 7 TTS endpoints in overlay-manager (Wave 1)
 - [x] 13-03-PLAN.md — ElevenLabs UX: API-key flow, Copy/Regenerate OBS URL, test-key + quota display, runtime wiring in overlay + embed (Wave 2, depends on 13-01 + 13-02) — pending human UAT (see 13-HUMAN-UAT.md)
+
+### Phase 14: Secret Rotation Infrastructure
+
+**Goal:** Following a secret leak, design and build a rotation mechanism (or per-secret-type set of mechanisms) into the platform — covering DB password (CNPG), JWT signing keys, and the AES-GCM TOKEN_ENCRYPTION_KEY used for OAuth access/refresh tokens stored encrypted in the database. Must minimize impact on running services and existing encrypted DB values during rotation, and support repeatable rotation going forward (not a one-shot fix).
+**Requirements**: TBD
+**Depends on:** Phase 13
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 14 to break down)
