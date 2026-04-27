@@ -28,8 +28,9 @@ import (
 
 func TestServiceJWTAuthMissingToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	kc := auth.NewKeyChain(map[string][]byte{"v1": []byte("test-secret")}, nil, "v1")
 	router := gin.New()
-	router.Use(ServiceJWTAuth("test-secret"))
+	router.Use(ServiceJWTAuth(kc))
 	router.GET("/protected", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -46,14 +47,14 @@ func TestServiceJWTAuthMissingToken(t *testing.T) {
 
 func TestServiceJWTAuthDisallowedService(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	secret := "test-secret"
-	token, err := auth.GenerateServiceJWT("youtube-listener", secret, time.Minute)
+	kc := auth.NewKeyChain(map[string][]byte{"v1": []byte("test-secret")}, nil, "v1")
+	token, err := auth.GenerateServiceJWTWithKid(kc.LatestKid(), "youtube-listener", string(kc.LatestSecret()), time.Minute)
 	if err != nil {
 		t.Fatalf("failed to generate token: %v", err)
 	}
 
 	router := gin.New()
-	router.Use(ServiceJWTAuth(secret, "source-manager"))
+	router.Use(ServiceJWTAuth(kc, "source-manager"))
 	router.GET("/protected", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -71,14 +72,14 @@ func TestServiceJWTAuthDisallowedService(t *testing.T) {
 
 func TestServiceJWTAuthAllowedService(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	secret := "test-secret"
-	token, err := auth.GenerateServiceJWT("source-manager", secret, time.Minute)
+	kc := auth.NewKeyChain(map[string][]byte{"v1": []byte("test-secret")}, nil, "v1")
+	token, err := auth.GenerateServiceJWTWithKid(kc.LatestKid(), "source-manager", string(kc.LatestSecret()), time.Minute)
 	if err != nil {
 		t.Fatalf("failed to generate token: %v", err)
 	}
 
 	router := gin.New()
-	router.Use(ServiceJWTAuth(secret, "source-manager"))
+	router.Use(ServiceJWTAuth(kc, "source-manager"))
 	router.GET("/protected", func(c *gin.Context) {
 		svc, _ := c.Get("service_name")
 		c.JSON(http.StatusOK, gin.H{"service": svc})
@@ -92,5 +93,36 @@ func TestServiceJWTAuthAllowedService(t *testing.T) {
 
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+}
+
+// TestServiceJWTAuth_ChainIsolation proves D-10: a token signed with the user-chain
+// secret must NOT validate against the service chain (cross-chain isolation).
+func TestServiceJWTAuth_ChainIsolation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Token signed with the USER chain secret
+	userToken, err := auth.GenerateServiceJWTWithKid("v1", "share-service", "user-chain-secret", 30*time.Second)
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
+
+	// Service chain has DIFFERENT secret
+	serviceKC := auth.NewKeyChain(map[string][]byte{"v1": []byte("service-chain-secret")}, nil, "v1")
+
+	router := gin.New()
+	router.Use(ServiceJWTAuth(serviceKC, "share-service"))
+	router.GET("/internal/foo", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/foo", nil)
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("user-chain token must NOT validate against service chain (D-10): got %d", resp.Code)
 	}
 }

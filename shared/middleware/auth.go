@@ -24,8 +24,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// JWTAuth returns a gin middleware that validates JWT tokens
-func JWTAuth(secret string) gin.HandlerFunc {
+// JWTAuth returns a gin middleware that validates JWT tokens using a KeyChain.
+// The KeyChain dispatches by kid header for versioned secrets and falls back to
+// the legacy secret for tokens without a kid (D-08). Non-HMAC tokens are
+// rejected outright (D-12).
+func JWTAuth(kc *auth.KeyChain) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get token from Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -48,7 +51,7 @@ func JWTAuth(secret string) gin.HandlerFunc {
 		}
 
 		// Try to validate as viewer token first (more specific)
-		viewerClaims, err := auth.ValidateViewerJWT(tokenString, secret)
+		viewerClaims, err := auth.ValidateViewerJWTWithKeyChain(tokenString, kc)
 		if err == nil && viewerClaims.IsViewer {
 			// Viewer token
 			c.Set("viewer_id", viewerClaims.ViewerID)
@@ -66,7 +69,7 @@ func JWTAuth(secret string) gin.HandlerFunc {
 		}
 
 		// Try to validate as regular user token
-		claims, err := auth.ValidateJWT(tokenString, secret)
+		claims, err := auth.ValidateJWTWithKeyChain(tokenString, kc)
 		if err == nil {
 			// Regular user token
 			c.Set("user_id", claims.UserID)
