@@ -758,6 +758,53 @@ describe('TTSGroup', () => {
     expect(input.compareDocumentPosition(select) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  // Test A19d: ADVANCED (ELEVENLABS) block renders BEFORE the THROTTLING
+  // header — i.e. directly under the provider radio, not at the bottom of
+  // the panel. Defends against the regression that the user reported.
+  it('A19d: Advanced (ElevenLabs) block precedes the THROTTLING header in DOM order', () => {
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: false,
+    })
+    const advancedHeader = screen.getByText(/ADVANCED \(ELEVENLABS\)/)
+    const throttlingHeader = screen.getByText('THROTTLING')
+    expect(
+      advancedHeader.compareDocumentPosition(throttlingHeader) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  // Test A19e: Voices auto-select the first option when the list loads with
+  // no prior selection. Without this, Save fails with "Pick a voice before
+  // saving." (the second symptom the user reported).
+  it('A19e: typed key → voices load → first voice auto-selected → Save uses it', async () => {
+    const onPreviewVoices = vi
+      .fn<(apiKey: string) => Promise<ElevenLabsVoice[]>>()
+      .mockResolvedValue([
+        { voice_id: 'v-first', name: 'First' },
+        { voice_id: 'v-second', name: 'Second' },
+      ])
+    const onSaveKey = vi.fn().mockResolvedValue(undefined)
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: false,
+      onPreviewVoices,
+      onSaveKey,
+    })
+    const input = screen.getByLabelText(/ElevenLabs API key/i) as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'sk-typed-key' } })
+    const select = await waitForVoiceOption('First')
+    // Auto-select kicks in: select.value should equal the first voice without
+    // any explicit fireEvent.change(select, …).
+    await waitFor(() => expect(select.value).toBe('v-first'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Save key$/ }))
+    })
+    expect(onSaveKey).toHaveBeenCalledWith('sk-typed-key', 'v-first')
+  })
+
   // Test A20: Non-premium user sees disabled inputs + PremiumBadge overlay + upgrade copy
   it('A20: non-premium user sees upgrade copy and disabled API-key input under the Advanced block', () => {
     renderTTSGroup({
