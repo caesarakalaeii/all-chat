@@ -89,16 +89,57 @@ func TestAdminOnly_AdminRole(t *testing.T) {
 	}
 }
 
-func TestJWTAuth_ValidUserToken(t *testing.T) {
+// TestJWTAuth_KidValidation tests the new KeyChain-based JWTAuth middleware.
+func TestJWTAuth_KidValidation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	secret := "test-secret"
-	token, err := auth.GenerateToken("user-123", "testuser", secret, time.Hour, true)
+
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		[]byte("test-secret-legacy"),
+		"v1",
+	)
+
+	// Generate a kid'd token
+	token, err := auth.GenerateTokenWithKid(kc.LatestKid(), "user-123", "testuser", string(kc.LatestSecret()), time.Hour, false)
 	if err != nil {
 		t.Fatalf("failed to generate token: %v", err)
 	}
 
 	router := gin.New()
-	router.Use(JWTAuth(secret))
+	router.Use(JWTAuth(kc))
+	router.GET("/protected", func(c *gin.Context) {
+		userID, _ := c.Get("user_id")
+		c.JSON(http.StatusOK, gin.H{"user_id": userID})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid kid'd token, got %d", resp.Code)
+	}
+}
+
+func TestJWTAuth_ValidUserToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		[]byte("test-secret"),
+		"v1",
+	)
+
+	// Legacy token (no kid) — uses legacy fallback
+	token, err := auth.GenerateToken("user-123", "testuser", "test-secret", time.Hour, true)
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
+
+	router := gin.New()
+	router.Use(JWTAuth(kc))
 	router.GET("/protected", func(c *gin.Context) {
 		userID, _ := c.Get("user_id")
 		c.JSON(http.StatusOK, gin.H{"user_id": userID})
@@ -117,8 +158,13 @@ func TestJWTAuth_ValidUserToken(t *testing.T) {
 
 func TestJWTAuth_MissingHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		nil,
+		"v1",
+	)
 	router := gin.New()
-	router.Use(JWTAuth("test-secret"))
+	router.Use(JWTAuth(kc))
 	router.GET("/protected", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -135,8 +181,13 @@ func TestJWTAuth_MissingHeader(t *testing.T) {
 
 func TestJWTAuth_InvalidToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		nil,
+		"v1",
+	)
 	router := gin.New()
-	router.Use(JWTAuth("test-secret"))
+	router.Use(JWTAuth(kc))
 	router.GET("/protected", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -154,23 +205,28 @@ func TestJWTAuth_InvalidToken(t *testing.T) {
 
 func TestJWTAuth_AdminRouteIntegration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	secret := "test-secret"
 
-	// Generate admin token
-	adminToken, err := auth.GenerateToken("admin-1", "admin", secret, time.Hour, true)
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		[]byte("test-secret"),
+		"v1",
+	)
+
+	// Generate admin token (legacy path for back-compat)
+	adminToken, err := auth.GenerateToken("admin-1", "admin", "test-secret", time.Hour, true)
 	if err != nil {
 		t.Fatalf("failed to generate admin token: %v", err)
 	}
 
 	// Generate non-admin token
-	userToken, err := auth.GenerateToken("user-1", "user", secret, time.Hour, false)
+	userToken, err := auth.GenerateToken("user-1", "user", "test-secret", time.Hour, false)
 	if err != nil {
 		t.Fatalf("failed to generate user token: %v", err)
 	}
 
 	router := gin.New()
 	admin := router.Group("/admin")
-	admin.Use(JWTAuth(secret))
+	admin.Use(JWTAuth(kc))
 	admin.Use(AdminOnly())
 	admin.GET("/users", func(c *gin.Context) {
 		c.Status(http.StatusOK)

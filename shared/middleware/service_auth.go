@@ -25,9 +25,10 @@ import (
 )
 
 // ServiceJWTAuth enforces service-to-service authentication using signed JWTs.
-// Optionally accepts a list of allowed service names. If provided, requests from
-// other services will receive a 403 response.
-func ServiceJWTAuth(secret string, allowedServices ...string) gin.HandlerFunc {
+// kc is the SERVICE_JWT_SECRET KeyChain — it must be independent from the user
+// JWT KeyChain (D-10 chain isolation). Optionally accepts a list of allowed
+// service names. If provided, requests from other services will receive a 403.
+func ServiceJWTAuth(kc *auth.KeyChain, allowedServices ...string) gin.HandlerFunc {
 	allowed := map[string]struct{}{}
 	for _, svc := range allowedServices {
 		if svc == "" {
@@ -55,7 +56,7 @@ func ServiceJWTAuth(secret string, allowedServices ...string) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := auth.ValidateServiceJWT(tokenString, secret)
+		claims, err := auth.ValidateServiceJWTWithKeyChain(tokenString, kc)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Invalid or expired service token",

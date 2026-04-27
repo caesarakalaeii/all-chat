@@ -23,8 +23,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ViewerJWTAuth returns a middleware that validates viewer JWT tokens
-func ViewerJWTAuth(jwtSecret string) gin.HandlerFunc {
+// ViewerJWTAuth returns a middleware that validates viewer JWT tokens using a KeyChain.
+// The KeyChain dispatches by kid header for versioned secrets and falls back
+// to the legacy secret for tokens without a kid (D-08).
+func ViewerJWTAuth(kc *auth.KeyChain) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -50,7 +52,7 @@ func ViewerJWTAuth(jwtSecret string) gin.HandlerFunc {
 		}
 
 		// Validate token as viewer JWT
-		claims, err := auth.ValidateViewerJWT(token, jwtSecret)
+		claims, err := auth.ValidateViewerJWTWithKeyChain(token, kc)
 		if err != nil {
 			c.JSON(401, gin.H{"error": "invalid or expired token"})
 			c.Abort()
