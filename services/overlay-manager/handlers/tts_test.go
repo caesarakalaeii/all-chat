@@ -433,8 +433,9 @@ func TestGetVoicesPreviewRequiresAPIKey(t *testing.T) {
 	assert.Equal(t, 0, calls, "upstream must not be called when api_key is missing")
 }
 
-// TestGetVoicesPreviewMapsUpstream401 — invalid key surfaces as 401 with the
-// human-readable copy the frontend toasts on.
+// TestGetVoicesPreviewMapsUpstream401 — an unstructured 401 from upstream
+// surfaces as 422 (NOT 401, which would log the user out client-side) with
+// the generic "Invalid API key" copy.
 func TestGetVoicesPreviewMapsUpstream401(t *testing.T) {
 	upstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -451,8 +452,40 @@ func TestGetVoicesPreviewMapsUpstream401(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code,
+		"must be 422 not 401 — client.ts treats 401 as session-auth failure")
 	assert.Contains(t, w.Body.String(), "Invalid API key")
+	assert.Contains(t, w.Body.String(), "invalid_key")
+}
+
+// TestGetVoicesPreviewMapsMissingPermissions — when ElevenLabs returns its
+// structured "missing_permissions" envelope (key valid but lacks scope), the
+// handler propagates the upstream message verbatim plus a remediation hint
+// and a stable "missing_permissions" code. Reported by user as: "the error
+// should reflect this issue so users don't get confused".
+func TestGetVoicesPreviewMapsMissingPermissions(t *testing.T) {
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"detail":{"status":"missing_permissions","message":"The API key you used is missing the permission voices_read to execute this operation."}}`))
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	req := httptest.NewRequest(http.MethodPost, "/overlay-scope/tts-voices/preview",
+		strings.NewReader(`{"api_key":"sk_real_but_scoped"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "voices_read", "must propagate the specific missing scope")
+	assert.Contains(t, body, "missing_permissions", "must include the stable code")
+	assert.Contains(t, body, "Regenerate the key", "must include remediation hint")
 }
 
 // TestGetVoicesPreviewRequiresPremium — the new endpoint must sit behind the
@@ -526,7 +559,10 @@ func TestTestKeyHandler_Success(t *testing.T) {
 	assert.Equal(t, "fake-mp3-bytes", w.Body.String())
 }
 
-// TestTestKeyHandler_401 — verbose error copy (D-39).
+// TestTestKeyHandler_401 — upstream 401 surfaces as 422 (NOT 401, which the
+// frontend would treat as a session-auth failure and force-logout) plus the
+// "Invalid API key" copy. ElevenLabs's structured detail body is preserved
+// when present (covered by TestTestKeyHandler_MissingPermissions).
 func TestTestKeyHandler_401(t *testing.T) {
 	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/user/subscription" {
@@ -548,8 +584,42 @@ func TestTestKeyHandler_401(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code,
+		"must be 422 not 401 — client.ts force-logs out on 401")
 	assert.Contains(t, w.Body.String(), "Invalid API key")
+}
+
+// TestTestKeyHandler_MissingPermissions — when ElevenLabs's subscription
+// endpoint returns a structured missing_permissions error, the handler
+// propagates the upstream message + remediation hint plus a stable code
+// the frontend can branch on.
+func TestTestKeyHandler_MissingPermissions(t *testing.T) {
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/user/subscription" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"detail":{"status":"missing_permissions","message":"The API key you used is missing the permission user_read to execute this operation."}}`))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+	r.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/overlay-mp/tts-config",
+			strings.NewReader(`{"api_key":"sk_scoped","voice_id":"v1"}`)))
+
+	req := httptest.NewRequest(http.MethodPost, "/overlay-mp/tts-config/test", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "user_read", "specific missing scope must be surfaced")
+	assert.Contains(t, body, "missing_permissions")
 }
 
 // TestTestKeyHandler_429 — verbose error copy (D-39).

@@ -57,6 +57,10 @@ export interface TestKeyResult {
   charactersRemaining?: number
   charactersLimit?: number
   errorCode?: number
+  // Backend's `error` field on non-ok responses (e.g. ElevenLabs's
+  // missing_permissions copy naming the missing scope). Falls back to a
+  // generic toast when absent.
+  errorMessage?: string
   audioBlob?: Blob
 }
 
@@ -286,7 +290,19 @@ export const overlaysApi = {
         headers,
       })
       if (!r.ok) {
-        return { ok: false, errorCode: r.status }
+        // Best-effort parse the structured error body so the UI can render
+        // the specific reason (e.g. missing ElevenLabs scope) instead of a
+        // generic "service unavailable" toast.
+        let errorMessage: string | undefined
+        try {
+          const body = (await r.json()) as { error?: string }
+          if (typeof body?.error === 'string' && body.error !== '') {
+            errorMessage = body.error
+          }
+        } catch {
+          // Ignore — body might be empty or non-JSON.
+        }
+        return { ok: false, errorCode: r.status, errorMessage }
       }
       const remainingHeader = r.headers.get('x-characters-remaining')
       const limitHeader = r.headers.get('x-characters-limit')

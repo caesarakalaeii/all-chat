@@ -190,6 +190,59 @@ func (h *TTSHandler) buildOBSURL(overlayID string, jwtToken string) string {
 	return fmt.Sprintf("%s/overlay/%s?tts_token=%s", strings.TrimRight(h.publicBaseURL, "/"), overlayID, jwtToken)
 }
 
+// ---- ElevenLabs error mapping ----------------------------------------------
+
+// elevenLabsErrorBody mirrors ElevenLabs' /detail error envelope. The shape is:
+//
+//	{"detail":{"status":"missing_permissions","message":"The API key … missing the permission voices_read …"}}
+//
+// We surface this back to the client verbatim so the user sees exactly which
+// scope is missing instead of a generic "Invalid API key".
+type elevenLabsErrorBody struct {
+	Detail struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	} `json:"detail"`
+}
+
+// decodeElevenLabsError best-effort decodes the upstream error body. The
+// caller is responsible for closing the body and for handling any zero-value
+// fields. Failures are silent because the goal is best-effort enrichment.
+func decodeElevenLabsError(body io.Reader) elevenLabsErrorBody {
+	var ev elevenLabsErrorBody
+	_ = json.NewDecoder(body).Decode(&ev)
+	return ev
+}
+
+// elevenLabsAuthErrorResponse turns a 401/403 from ElevenLabs into the JSON
+// body the frontend should toast. It distinguishes between truly-invalid keys
+// and valid-but-scoped keys (the most common cause of confusion). The HTTP
+// status is intentionally 422 — NOT 401 — because client.ts treats 401 as a
+// session-auth failure and force-logs out the user (which is wrong here: the
+// user's session is fine; only the ElevenLabs key is rejected).
+func elevenLabsAuthErrorResponse(ev elevenLabsErrorBody) gin.H {
+	switch ev.Detail.Status {
+	case "missing_permissions":
+		// Keep the upstream message — it names the missing scope.
+		msg := ev.Detail.Message
+		if msg == "" {
+			msg = "API key is missing required permissions."
+		}
+		return gin.H{
+			"error": msg + " Regenerate the key in ElevenLabs with voices_read, text_to_speech and user_read enabled.",
+			"code":  "missing_permissions",
+		}
+	case "":
+		return gin.H{"error": "Invalid API key", "code": "invalid_key"}
+	default:
+		msg := ev.Detail.Message
+		if msg == "" {
+			msg = "ElevenLabs rejected the API key."
+		}
+		return gin.H{"error": msg, "code": ev.Detail.Status}
+	}
+}
+
 // ---- HandleSaveTTSConfig (D-11) --------------------------------------------
 
 // HandleSaveTTSConfig handles POST /:id/tts-config. Body {api_key, voice_id}.
@@ -340,7 +393,15 @@ func (h *TTSHandler) HandleGetVoices(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		ev := decodeElevenLabsError(resp.Body)
+		c.JSON(http.StatusUnprocessableEntity, elevenLabsAuthErrorResponse(ev))
+		return
+	case resp.StatusCode == http.StatusTooManyRequests:
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Rate-limited — try again in a minute"})
+		return
+	case resp.StatusCode < 200 || resp.StatusCode >= 300:
 		c.JSON(http.StatusBadGateway, gin.H{"error": "ElevenLabs returned non-200"})
 		return
 	}
@@ -397,7 +458,8 @@ func (h *TTSHandler) HandleGetVoicesPreview(c *gin.Context) {
 
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
+		ev := decodeElevenLabsError(resp.Body)
+		c.JSON(http.StatusUnprocessableEntity, elevenLabsAuthErrorResponse(ev))
 		return
 	case resp.StatusCode == http.StatusTooManyRequests:
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Rate-limited — try again in a minute"})
@@ -463,7 +525,8 @@ func (h *TTSHandler) HandleTestKey(c *gin.Context) {
 	case http.StatusOK:
 		// fall through
 	case http.StatusUnauthorized, http.StatusForbidden:
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
+		ev := decodeElevenLabsError(subResp.Body)
+		c.JSON(http.StatusUnprocessableEntity, elevenLabsAuthErrorResponse(ev))
 		return
 	case http.StatusTooManyRequests:
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Rate-limited — try again in a minute"})

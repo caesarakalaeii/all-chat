@@ -530,6 +530,62 @@ describe('TTSGroup', () => {
     })
   })
 
+  // Test A10b: 422 with errorMessage (backend's structured ElevenLabs error,
+  // e.g. missing_permissions naming the missing scope) is propagated to the
+  // toast verbatim instead of a generic copy. Reported by user as: "the error
+  // should reflect this issue so users don't get confused".
+  it('A10b: onTestKey {ok:false, errorCode:422, errorMessage:"…voices_read…"} surfaces that copy in the toast', async () => {
+    const onTestKey = vi.fn().mockResolvedValue({
+      ok: false,
+      errorCode: 422,
+      errorMessage:
+        'The API key you used is missing the permission voices_read to execute this operation. Regenerate the key in ElevenLabs with voices_read, text_to_speech and user_read enabled.',
+    })
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: true,
+      onTestKey,
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Test key$/ }))
+    })
+    await waitFor(() => {
+      expect(toastMocks.error).toHaveBeenCalledWith(
+        expect.stringContaining('voices_read'),
+      )
+    })
+  })
+
+  // Test A10c: typed-key preview throwing an Error with a backend-provided
+  // message surfaces that message in the toast (instead of the generic
+  // "Could not load voices.").
+  it('A10c: onPreviewVoices throwing Error("…missing the permission voices_read…") surfaces that copy in the toast', async () => {
+    const onPreviewVoices = vi
+      .fn<(apiKey: string) => Promise<ElevenLabsVoice[]>>()
+      .mockRejectedValue(
+        new Error(
+          'The API key you used is missing the permission voices_read to execute this operation.',
+        ),
+      )
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: false,
+      onPreviewVoices,
+    })
+    const input = screen.getByLabelText(/ElevenLabs API key/i) as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'sk-typed-but-scoped' } })
+    await waitFor(
+      () => {
+        expect(toastMocks.error).toHaveBeenCalledWith(
+          expect.stringContaining('voices_read'),
+        )
+      },
+      { timeout: 2000 },
+    )
+  })
+
   // Test A11: obsUrl prop -> read-only input + Copy button
   it('A11: obsUrl prop renders read-only <input readOnly> + Copy button', () => {
     renderTTSGroup({
