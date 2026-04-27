@@ -51,7 +51,7 @@ type Manager struct {
 	logger   *zap.Logger
 	resolver UserIDResolver
 	callback SubscriptionCallback
-	cipher   *encryption.AESEncryptor
+	cipher   *encryption.MultiKeyEncryptor
 
 	mu       sync.RWMutex
 	channels map[string]*Channel // broadcaster_id -> Channel
@@ -71,7 +71,7 @@ type Manager struct {
 var _ listener.ChannelManager = (*Manager)(nil)
 
 // NewManager creates a new channel manager
-func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, cipher *encryption.AESEncryptor, syncInterval time.Duration) *Manager {
+func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, cipher *encryption.MultiKeyEncryptor, syncInterval time.Duration) *Manager {
 	return &Manager{
 		db:           db,
 		cipher:       cipher,
