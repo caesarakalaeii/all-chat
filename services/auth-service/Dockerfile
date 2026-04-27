@@ -13,8 +13,11 @@ COPY services/auth-service/ ./services/auth-service/
 WORKDIR /app/services/auth-service
 RUN go work vendor || go mod download
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/auth-service ./cmd
+# Build auth-service
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/auth-service ./cmd
+
+# Build key-rotator sweeper (D-03/D-06 — idempotent per-table re-encryption job)
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/key-rotator ./cmd/key-rotator
 
 # Runtime stage
 FROM alpine:3.21
@@ -25,6 +28,7 @@ RUN apk --no-cache add ca-certificates && \
 WORKDIR /app
 
 COPY --from=builder /app/auth-service .
+COPY --from=builder /app/key-rotator /app/key-rotator
 COPY LICENSE ./LICENSE
 
 RUN chown -R appuser:appuser /app
