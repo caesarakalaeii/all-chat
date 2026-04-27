@@ -38,14 +38,14 @@ import (
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
-	twitchOAuth  *oauth.TwitchOAuth
-	youtubeOAuth *oauth.YouTubeOAuth
-	userRepo     *repository.UserRepository
-	redis        *redis.Client
-	jwtSecret    string
-	jwtExpiry    time.Duration
-	logger       *zap.Logger
-	metrics      *metrics.BusinessMetrics
+	twitchOAuth    *oauth.TwitchOAuth
+	youtubeOAuth   *oauth.YouTubeOAuth
+	userRepo       *repository.UserRepository
+	redis          *redis.Client
+	userKeyChain   *auth.KeyChain
+	jwtExpiry      time.Duration
+	logger         *zap.Logger
+	metrics        *metrics.BusinessMetrics
 }
 
 // NewAuthHandler creates a new auth handler
@@ -54,7 +54,7 @@ func NewAuthHandler(
 	youtubeOAuth *oauth.YouTubeOAuth,
 	userRepo *repository.UserRepository,
 	redisClient *redis.Client,
-	jwtSecret string,
+	userKeyChain *auth.KeyChain,
 	jwtExpiryHours int,
 	logger *zap.Logger,
 ) *AuthHandler {
@@ -63,7 +63,7 @@ func NewAuthHandler(
 		youtubeOAuth: youtubeOAuth,
 		userRepo:     userRepo,
 		redis:        redisClient,
-		jwtSecret:    jwtSecret,
+		userKeyChain: userKeyChain,
 		jwtExpiry:    time.Duration(jwtExpiryHours) * time.Hour,
 		logger:       logger,
 	}
@@ -224,7 +224,7 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 	}
 
 	// Generate JWT
-	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry, user.IsAdmin)
+	jwtToken, err := auth.GenerateTokenWithKid(h.userKeyChain.LatestKid(), user.ID, user.Username, string(h.userKeyChain.LatestSecret()), h.jwtExpiry, user.IsAdmin)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
@@ -363,7 +363,7 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	}
 
 	// Generate JWT
-	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry, user.IsAdmin)
+	jwtToken, err := auth.GenerateTokenWithKid(h.userKeyChain.LatestKid(), user.ID, user.Username, string(h.userKeyChain.LatestSecret()), h.jwtExpiry, user.IsAdmin)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
@@ -435,7 +435,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	}
 
 	// Generate new JWT
-	jwtToken, err := auth.GenerateToken(user.ID, user.Username, h.jwtSecret, h.jwtExpiry, user.IsAdmin)
+	jwtToken, err := auth.GenerateTokenWithKid(h.userKeyChain.LatestKid(), user.ID, user.Username, string(h.userKeyChain.LatestSecret()), h.jwtExpiry, user.IsAdmin)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})

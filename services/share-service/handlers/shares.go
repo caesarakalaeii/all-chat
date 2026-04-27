@@ -39,12 +39,12 @@ type CycleDetector interface {
 
 // ShareHandler handles share request operations
 type ShareHandler struct {
-	shareRepo     *repository.ShareRepository
-	userRepo      *repository.UserSearchRepository
-	db            *pgxpool.Pool
-	logger        *zap.Logger
-	cycleDetector CycleDetector
-	jwtSecret     string
+	shareRepo       *repository.ShareRepository
+	userRepo        *repository.UserSearchRepository
+	db              *pgxpool.Pool
+	logger          *zap.Logger
+	cycleDetector   CycleDetector
+	serviceKeyChain *auth.KeyChain
 }
 
 // NewShareHandler creates a new share handler
@@ -54,15 +54,15 @@ func NewShareHandler(
 	db *pgxpool.Pool,
 	logger *zap.Logger,
 	cycleDetector CycleDetector,
-	jwtSecret string,
+	serviceKeyChain *auth.KeyChain,
 ) *ShareHandler {
 	return &ShareHandler{
-		shareRepo:     shareRepo,
-		userRepo:      userRepo,
-		db:            db,
-		logger:        logger,
-		cycleDetector: cycleDetector,
-		jwtSecret:     jwtSecret,
+		shareRepo:       shareRepo,
+		userRepo:        userRepo,
+		db:              db,
+		logger:          logger,
+		cycleDetector:   cycleDetector,
+		serviceKeyChain: serviceKeyChain,
 	}
 }
 
@@ -392,7 +392,12 @@ func (h *ShareHandler) notifyShareAccepted(ctx context.Context, senderUserID, sh
 	req, _ := http.NewRequestWithContext(ctx, "POST", "http://api-gateway:8080/internal/ws/notify", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	serviceToken, err := auth.GenerateServiceJWT("share-service", h.jwtSecret, 30*time.Second)
+	serviceToken, err := auth.GenerateServiceJWTWithKid(
+		h.serviceKeyChain.LatestKid(),
+		"share-service",
+		string(h.serviceKeyChain.LatestSecret()),
+		30*time.Second,
+	)
 	if err != nil {
 		h.logger.Error("Failed to generate service JWT for notification", zap.Error(err))
 		return
@@ -648,7 +653,12 @@ func (h *ShareHandler) notifyShareRevoked(ctx context.Context, targetUserID, sha
 	req, _ := http.NewRequestWithContext(ctx, "POST", "http://api-gateway:8080/internal/ws/notify", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	serviceToken, err := auth.GenerateServiceJWT("share-service", h.jwtSecret, 30*time.Second)
+	serviceToken, err := auth.GenerateServiceJWTWithKid(
+		h.serviceKeyChain.LatestKid(),
+		"share-service",
+		string(h.serviceKeyChain.LatestSecret()),
+		30*time.Second,
+	)
 	if err != nil {
 		h.logger.Error("Failed to generate service JWT for revocation notification", zap.Error(err))
 		return

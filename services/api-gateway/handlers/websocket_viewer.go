@@ -37,7 +37,7 @@ type ViewerWebSocketHandler struct {
 	wsManager    *wsconn.Manager
 	subscriber   *subscription.Subscriber
 	repo         *subscription.Repository
-	jwtSecret    string
+	userKeyChain *auth.KeyChain
 	replayBuffer replay.DeletionReplayBuffer
 	logger       *zap.Logger
 	upgrader     websocket.Upgrader
@@ -48,7 +48,7 @@ func NewViewerWebSocketHandler(
 	wsManager *wsconn.Manager,
 	subscriber *subscription.Subscriber,
 	repo *subscription.Repository,
-	jwtSecret string,
+	userKeyChain *auth.KeyChain,
 	replayBuffer replay.DeletionReplayBuffer,
 	logger *zap.Logger,
 ) *ViewerWebSocketHandler {
@@ -56,7 +56,7 @@ func NewViewerWebSocketHandler(
 		wsManager:    wsManager,
 		subscriber:   subscriber,
 		repo:         repo,
-		jwtSecret:    jwtSecret,
+		userKeyChain: userKeyChain,
 		replayBuffer: replayBuffer,
 		logger:       logger.Named("viewer-websocket"),
 	}
@@ -96,7 +96,7 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 
 	if token != "" {
 		// Try to validate as viewer JWT
-		viewerClaims, err := auth.ValidateViewerJWT(token, h.jwtSecret)
+		viewerClaims, err := auth.ValidateViewerJWTWithKeyChain(token, h.userKeyChain)
 		if err == nil && viewerClaims.IsViewer {
 			viewerID = viewerClaims.SessionID
 			viewerUsername = viewerClaims.Username
@@ -153,7 +153,7 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 
 	// Allow viewers to authenticate via WebSocket message (preferred over URL token)
 	wsConn.SetOnAuth(func(token string) (string, string, bool) {
-		claims, err := auth.ValidateViewerJWT(token, h.jwtSecret)
+		claims, err := auth.ValidateViewerJWTWithKeyChain(token, h.userKeyChain)
 		if err != nil || !claims.IsViewer {
 			return "", "", false
 		}

@@ -31,6 +31,7 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/handlers"
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/caesar/all-chat/services/overlay-manager/youtube"
+	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/featuregates"
@@ -139,6 +140,12 @@ func main() {
 		log.Fatal("failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}
 	log.Info("token cipher initialized", zap.Uint8("current_kid", tokenCipher.CurrentKid()))
+
+	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
+	if err != nil {
+		log.Fatal("JWT key chain init failed (JWT_SECRET_V1 must be set)", zap.Error(err))
+	}
+	log.Info("JWT key chain initialized", zap.String("latest_kid", userKeyChain.LatestKid()))
 
 	// Initialize metrics (available via /metrics endpoint)
 	bm := metrics.NewBusinessMetrics()
@@ -254,7 +261,7 @@ func main() {
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
-	protected.Use(middleware.JWTAuth(config.JWTSecret))
+	protected.Use(middleware.JWTAuth(userKeyChain))
 	{
 		// Overlay CRUD routes (no :id prefix)
 		protected.POST("/", overlayHandler.HandleCreateOverlay)
@@ -311,7 +318,7 @@ func main() {
 
 	// Admin routes (JWT + Admin role required)
 	admin := router.Group("/admin")
-	admin.Use(middleware.JWTAuth(config.JWTSecret))
+	admin.Use(middleware.JWTAuth(userKeyChain))
 	admin.Use(middleware.AdminOnly())
 	{
 		admin.GET("/overlays", adminHandler.ListOverlays)

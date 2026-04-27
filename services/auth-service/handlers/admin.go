@@ -29,19 +29,19 @@ import (
 
 // AdminHandler handles admin-specific endpoints
 type AdminHandler struct {
-	repo      *repository.UserRepository
-	db        *pgxpool.Pool
-	logger    *zap.Logger
-	jwtSecret string
+	repo         *repository.UserRepository
+	db           *pgxpool.Pool
+	logger       *zap.Logger
+	userKeyChain *auth.KeyChain
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(repo *repository.UserRepository, db *pgxpool.Pool, logger *zap.Logger, jwtSecret string) *AdminHandler {
+func NewAdminHandler(repo *repository.UserRepository, db *pgxpool.Pool, logger *zap.Logger, userKeyChain *auth.KeyChain) *AdminHandler {
 	return &AdminHandler{
-		repo:      repo,
-		db:        db,
-		logger:    logger,
-		jwtSecret: jwtSecret,
+		repo:         repo,
+		db:           db,
+		logger:       logger,
+		userKeyChain: userKeyChain,
 	}
 }
 
@@ -174,13 +174,14 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 	}
 
 	// Generate impersonation JWT
-	token, err := auth.GenerateImpersonationJWT(
+	token, err := auth.GenerateImpersonationJWTWithKid(
+		h.userKeyChain.LatestKid(),
 		adminUserID.(string),
 		adminUsername.(string),
 		targetUser.ID,
 		targetUser.Username,
 		targetTwitchID,
-		h.jwtSecret,
+		string(h.userKeyChain.LatestSecret()),
 	)
 	if err != nil {
 		h.logger.Error("Failed to generate impersonation token",

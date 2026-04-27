@@ -62,7 +62,7 @@ type ViewerAuthHandler struct {
 	identityRepo    ViewerIdentityRepo
 	userRepo        *repository.UserRepository
 	redis           *redis.Client
-	jwtSecret       string
+	userKeyChain    *sharedAuth.KeyChain
 	jwtExpiry       time.Duration
 	logger          *zap.Logger
 	frontendURL     string
@@ -79,7 +79,7 @@ func NewViewerAuthHandler(
 	identityRepo *repository.ViewerIdentityRepository,
 	userRepo *repository.UserRepository,
 	redisClient *redis.Client,
-	jwtSecret string,
+	userKeyChain *sharedAuth.KeyChain,
 	jwtExpiryHours int,
 	frontendURL string,
 	cipher StringEncryptor,
@@ -93,7 +93,7 @@ func NewViewerAuthHandler(
 		identityRepo:    identityRepo,
 		userRepo:        userRepo,
 		redis:           redisClient,
-		jwtSecret:       jwtSecret,
+		userKeyChain:    userKeyChain,
 		jwtExpiry:       time.Duration(jwtExpiryHours) * time.Hour,
 		frontendURL:     frontendURL,
 		cipher:          cipher,
@@ -531,8 +531,7 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, vie
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(h.jwtSecret))
+	return sharedAuth.GenerateViewerJWTWithKid(h.userKeyChain.LatestKid(), claims, string(h.userKeyChain.LatestSecret()))
 }
 
 // redirectToFrontendWithError redirects to frontend with error message

@@ -30,6 +30,7 @@ import (
 	"github.com/caesar/all-chat/services/source-manager/election"
 	"github.com/caesar/all-chat/services/source-manager/handlers"
 	"github.com/caesar/all-chat/services/source-manager/registry"
+	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
@@ -149,9 +150,14 @@ func main() {
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	serviceAuthSecret := getEnvOrDefault("SERVICE_JWT_SECRET", "dev-service-secret")
+	serviceKeyChain, err := sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET")
+	if err != nil {
+		log.Fatal("service JWT key chain init failed (SERVICE_JWT_SECRET_V1 must be set)", zap.Error(err))
+	}
+	log.Info("service JWT key chain initialized", zap.String("latest_kid", serviceKeyChain.LatestKid()))
+
 	protected := router.Group("/")
-	protected.Use(middleware.ServiceJWTAuth(serviceAuthSecret))
+	protected.Use(middleware.ServiceJWTAuth(serviceKeyChain))
 
 	// Source handlers
 	sourceHandler := handlers.NewSourceHandler(sourceRegistry, leaderManager)

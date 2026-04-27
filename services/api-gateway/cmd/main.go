@@ -37,6 +37,7 @@ import (
 	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
+	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
@@ -260,11 +261,18 @@ func main() {
 	}
 	defer statusSubscriber.Stop()
 
-	// Get JWT secret from environment
-	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
-	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET environment variable is required")
+	// Build JWT KeyChains from versioned env vars
+	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
+	if err != nil {
+		log.Fatal("JWT key chain init failed (JWT_SECRET_V1 must be set)", zap.Error(err))
 	}
+	log.Info("JWT key chain initialized", zap.String("latest_kid", userKeyChain.LatestKid()))
+
+	serviceKeyChain, err := sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET")
+	if err != nil {
+		log.Fatal("service JWT key chain init failed (SERVICE_JWT_SECRET_V1 must be set)", zap.Error(err))
+	}
+	log.Info("service JWT key chain initialized", zap.String("latest_kid", serviceKeyChain.LatestKid()))
 
 	// Get Twitch API credentials for badge fetching
 	// For automatic token refresh, use TWITCH_CLIENT_SECRET (recommended)
@@ -284,14 +292,14 @@ func main() {
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
 	avatarProxyHandler := handlers.NewAvatarProxyHandler(redisClient, log)
 	statsHandler := handlers.NewStatsHandler(redisClient)
-	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, statusSubscriber, jwtSecret, replayBuffer, log)
+	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, statusSubscriber, userKeyChain, replayBuffer, log)
 
 	// Create viewer WebSocket handler (same origin policy as owner handler)
 	viewerWsHandler := handlers.NewViewerWebSocketHandler(
 		wsManager,
 		subscriber,
 		subRepo,
-		jwtSecret,
+		userKeyChain,
 		replayBuffer,
 		log,
 	)
@@ -434,7 +442,7 @@ func main() {
 
 	// Protected routes (JWT auth required for streamers/admins and viewers)
 	protectedAPI := router.Group("/api/v1")
-	protectedAPI.Use(sharedmiddleware.JWTAuth(jwtSecret))
+	protectedAPI.Use(sharedmiddleware.JWTAuth(userKeyChain))
 	{
 		// Auth service - protected routes
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
@@ -512,7 +520,7 @@ func main() {
 
 	// Admin routes (require JWT + admin role — defense-in-depth at gateway level)
 	adminAPI := router.Group("/api/v1/admin")
-	adminAPI.Use(sharedmiddleware.JWTAuth(jwtSecret))
+	adminAPI.Use(sharedmiddleware.JWTAuth(userKeyChain))
 	adminAPI.Use(sharedmiddleware.AdminOnly())
 	{
 		adminAPI.POST("/premium/users/:id", proxyHandler.ForwardRequest) // -> share-service
@@ -561,7 +569,7 @@ func main() {
 
 	// Internal routes (service-to-service, requires service JWT)
 	internal := router.Group("/internal")
-	internal.Use(sharedmiddleware.ServiceJWTAuth(jwtSecret, "share-service", "overlay-manager", "auth-service"))
+	internal.Use(sharedmiddleware.ServiceJWTAuth(serviceKeyChain, "share-service", "overlay-manager", "auth-service"))
 	{
 		internal.POST("/ws/notify", wsHandler.NotifyUser)
 	}

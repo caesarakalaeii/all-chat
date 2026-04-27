@@ -40,7 +40,7 @@ type WebSocketHandler struct {
 	subscriber       *subscription.Subscriber
 	repo             *subscription.Repository
 	statusSubscriber *subscription.StatusSubscriber
-	jwtSecret        string
+	userKeyChain     *auth.KeyChain
 	replayBuffer     replay.DeletionReplayBuffer
 	logger           *zap.Logger
 	upgrader         websocket.Upgrader
@@ -55,7 +55,7 @@ func NewWebSocketHandler(
 	subscriber *subscription.Subscriber,
 	repo *subscription.Repository,
 	statusSubscriber *subscription.StatusSubscriber,
-	jwtSecret string,
+	userKeyChain *auth.KeyChain,
 	replayBuffer replay.DeletionReplayBuffer,
 	logger *zap.Logger,
 ) *WebSocketHandler {
@@ -65,7 +65,7 @@ func NewWebSocketHandler(
 		subscriber:       subscriber,
 		repo:             repo,
 		statusSubscriber: statusSubscriber,
-		jwtSecret:        jwtSecret,
+		userKeyChain:     userKeyChain,
 		replayBuffer:     replayBuffer,
 		logger:           logger,
 		allowedOrigins:   allowedOrigins,
@@ -108,7 +108,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	// If token provided, validate and check ownership
 	if token != "" {
-		claims, err := auth.ValidateJWT(token, h.jwtSecret)
+		claims, err := auth.ValidateJWTWithKeyChain(token, h.userKeyChain)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			return
