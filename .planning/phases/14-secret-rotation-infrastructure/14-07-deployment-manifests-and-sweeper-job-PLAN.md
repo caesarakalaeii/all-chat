@@ -200,6 +200,21 @@ Pitfall 1 — token-refresh-service and twitch-eventsub-listener currently have 
     - .planning/phases/14-secret-rotation-infrastructure/14-05-SUMMARY.md (KeyChain wiring topology)
   </read_first>
   <action>
+    Step 0 (PREFLIGHT — youtube-listener (non-innertube) production status verification, per RESEARCH.md A3 medium-risk assumption):
+
+    a) Run the following kubectl commands and capture the output:
+    ```
+    kubectl --context default get deploy -n allchat | grep youtube || echo "NO_DEPLOY_MATCH"
+    kubectl --context default get statefulset -n allchat | grep youtube || echo "NO_STATEFULSET_MATCH"
+    ```
+    (User's global memory `reference_k8s_context.md`: the allchat cluster uses kubectl context "default" — pass `--context default` explicitly for clarity, even though it should be the active context.)
+
+    b) Document the FULL output verbatim in `.planning/phases/14-secret-rotation-infrastructure/14-07-SUMMARY.md` under a new section header `## youtube-listener (non-innertube) status: [active|inactive]`. The status field is `active` if either kubectl command found a `youtube-listener` resource (NOT `youtube-listener-innertube`); otherwise `inactive`.
+
+    c) BRANCH:
+       - **IF `youtube-listener` (non-innertube) IS active** in the cluster: ADD a new file `caesar-deployment/apps/workloads/all-chat/youtube-listener-deployment.yaml` (or, if a manifest already exists outside `caesar-deployment`, locate and update it) with the standard `TOKEN_ENCRYPTION_KEY` (key: token-encryption-key) + `TOKEN_ENCRYPTION_KEY_V1` (key: token-encryption-key-v1) + `JWT_SECRET` (key: jwt-secret) + `JWT_SECRET_V1` (key: jwt-secret-v1) + `SERVICE_JWT_SECRET` (key: service-jwt-secret) + `SERVICE_JWT_SECRET_V1` (key: service-jwt-secret-v1) + legacy `YOUTUBE_TOKEN_ENCRYPTION_KEY` (key: youtube-token-encryption-key) env entries. Add the manifest filename to `kustomization.yaml` resources list. Re-run YAML/kustomize validation. Add the file to this plan's `files_modified` audit (note in SUMMARY).
+       - **ELSE (no active `youtube-listener` deployment found)**: document in SUMMARY: "youtube-listener (non-innertube) is inactive in production — no deployment manifest exists in `caesar-deployment` and `kubectl get deploy/statefulset` confirms the binary is not running. The encryption-callsite migration in Plan 14-04 (which touches `services/youtube-listener/cmd/main.go` so the binary requires the new `TOKEN_ENCRYPTION_KEY_V1` env var if ever re-deployed) is therefore dead-code-safe — the binary update will compile and ship in the auth-service-shared image but will not be reached at runtime until/unless the deployment is reactivated. Re-activation MUST go through Phase 14 manifest discipline first."
+
     Step 1 — twitch-listener-deployment.yaml: After existing `SERVICE_JWT_SECRET` (line 80), insert `SERVICE_JWT_SECRET_V1` (key: service-jwt-secret-v1).
 
     Step 2 — kick-listener-deployment.yaml:
@@ -234,6 +249,8 @@ Pitfall 1 — token-refresh-service and twitch-eventsub-listener currently have 
     - `grep -q "name: SERVICE_JWT_SECRET\b" caesar-deployment/apps/workloads/all-chat/youtube-listener-innertube-deployment.yaml`
     - `grep -q "name: SERVICE_JWT_SECRET_V1" caesar-deployment/apps/workloads/all-chat/youtube-listener-innertube-deployment.yaml`
     - `grep -q "name: SERVICE_JWT_SECRET_V1" caesar-deployment/apps/workloads/all-chat/discord-listener-deployment.yaml`
+    - SUMMARY.md (`.planning/phases/14-secret-rotation-infrastructure/14-07-SUMMARY.md`) contains a section header `## youtube-listener (non-innertube) status: [active|inactive]` with the verbatim `kubectl --context default get deploy/statefulset` output and the chosen branch's documentation (per Step 0 c).
+    - IF the kubectl preflight reported `active`: a `youtube-listener-deployment.yaml` exists in `caesar-deployment/apps/workloads/all-chat/` (or its existing location is updated) with all six standard env entries (`TOKEN_ENCRYPTION_KEY`, `TOKEN_ENCRYPTION_KEY_V1`, `JWT_SECRET`, `JWT_SECRET_V1`, `SERVICE_JWT_SECRET`, `SERVICE_JWT_SECRET_V1`) plus the legacy `YOUTUBE_TOKEN_ENCRYPTION_KEY`; AND the file is registered in `kustomization.yaml`. ELSE (`inactive`): no manifest is added.
   </acceptance_criteria>
   <done>All five listener deployments have SERVICE_JWT_SECRET_V1. kick-listener gains TOKEN_ENCRYPTION_KEY + V1. tiktok-listener intentionally does NOT gain encryption env vars (Node.js scope deferral).</done>
 </task>

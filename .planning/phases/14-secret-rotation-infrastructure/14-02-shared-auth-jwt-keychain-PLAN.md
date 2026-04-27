@@ -13,6 +13,7 @@ decisions_addressed:
   - D-08
   - D-09
   - D-10
+  - D-11
   - D-12
 must_haves:
   truths:
@@ -41,7 +42,9 @@ must_haves:
 <objective>
 Add `kid` header support and multi-key validation to `shared/auth/jwt.go`. This is the JWT counterpart to Plan 14-01's encryption work — every other plan in Wave 2 depends on `KeyChain` and the new `*WithKid` / `*WithKeyChain` functions existing.
 
-Purpose: Implements decisions D-07 (kid header on issuance), D-08 (multi-key validation with legacy fallback), D-09 (timeline doesn't change retire logic — that lives in deployment manifests, but the validator must accept multiple kids in parallel), D-10 (separate User vs Service chains via prefix arg), D-12 (no denylist — rotation+TTL is the sole revocation).
+Purpose: Implements decisions D-07 (kid header on issuance), D-08 (multi-key validation with legacy fallback), D-09 (timeline doesn't change retire logic — that lives in deployment manifests, but the validator must accept multiple kids in parallel), D-10 (separate User vs Service chains via prefix arg), D-11 (TTS overlay JWT scope boundary — see acknowledgement below), D-12 (no denylist — rotation+TTL is the sole revocation).
+
+D-11 honored: `services/overlay-manager/tts/jwt.go` is intentionally NOT in `files_modified` for this plan or for 14-05 — TTS overlay JWTs use Phase 13's per-overlay `tts_signing_secret` regeneration model, untouched by Phase 14. The User/Viewer/Service KeyChain plumbing added here does not extend into TTS-overlay token issuance.
 
 Output:
 - `KeyChain` type with `byKid map[string][]byte` and `legacy []byte`.

@@ -7,7 +7,6 @@ depends_on:
   - "14-01"
 files_modified:
   - services/auth-service/cmd/main.go
-  - services/auth-service/handlers/viewer_auth.go
   - services/overlay-manager/cmd/main.go
   - services/overlay-manager/models/tts_config.go
   - services/token-refresh-service/cmd/main.go
