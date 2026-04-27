@@ -390,7 +390,7 @@ Plans:
 - [x] 14-02-shared-auth-jwt-keychain-PLAN.md — KeyChain, KeyFunc, *WithKid issuance + *WithKeyChain validation in shared/auth (D-07, D-08, D-09, D-10, D-12) [Wave 1]
 - [x] 14-03-kick-tiktok-encryption-migrations-PLAN.md — Migrations 050/051 add encryption_version columns (D-16) [Wave 1]
 - [x] 14-04-encryption-callsite-migration-PLAN.md — Migrate auth-service, overlay-manager, token-refresh-service, twitch-eventsub-listener, youtube-listener to *MultiKeyEncryptor (D-02, D-04, D-05) [Wave 2]
-- [ ] 14-05-jwt-validators-and-kick-encryption-gapfill-PLAN.md — Migrate JWT middlewares + handlers to *KeyChain; FIX share-service & api-gateway cross-chain bugs; encrypt kick_oauth_tokens read/write (D-07, D-08, D-09, D-10, D-16, D-17) [Wave 2]
+- [x] 14-05-jwt-validators-and-kick-encryption-gapfill-PLAN.md — Migrate JWT middlewares + handlers to *KeyChain; FIX share-service & api-gateway cross-chain bugs; encrypt kick_oauth_tokens read/write (D-07, D-08, D-09, D-10, D-16, D-17) [Wave 2]
 - [ ] 14-06-key-rotator-sweeper-PLAN.md — services/auth-service/cmd/key-rotator binary with idempotent per-table sweeps + telemetry (D-03, D-06) [Wave 2]
 - [ ] 14-07-deployment-manifests-and-sweeper-job-PLAN.md — Add _V1 env entries to all 12 deployments + Pitfall 1 fix + key-rotator Job/CronJob manifests (D-02, D-04, D-06, D-08, D-10) [Wave 3]
 - [ ] 14-08-rotation-runbook-PLAN.md — docs/runbooks/secret-rotation.md + docs/runbooks/db-password-rotation.md (D-13, D-14, D-15, D-18, D-19) [Wave 3]

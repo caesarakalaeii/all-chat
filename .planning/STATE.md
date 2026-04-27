@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 14 Plan 03 complete — 1 commit (7c15932a), migrations 050/051 adding encryption_version to kick_oauth_tokens and tiktok_oauth_tokens
-last_updated: "2026-04-27T14:02:19.995Z"
+stopped_at: Phase 14 Plan 05 complete — 3 commits (4530ef62, ee5c618d, 7b9b9757) — JWT validators migrated to KeyChain, cross-chain bugs fixed, kick_oauth_tokens encryption wired
+last_updated: "2026-04-27T16:30:00.000Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 21
   completed_phases: 19
   total_plans: 88
-  completed_plans: 83
-  percent: 94
+  completed_plans: 84
+  percent: 95
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 14 (Secret Rotation Infrastructure) — EXECUTING
-Plan: 5 of 8
-Plans: 3/3 complete across 2 waves
-Status: Ready to execute
+Plan: 6 of 8
+Plans: 5/8 complete
+Status: Ready to execute plan 06
 
 ## Performance Metrics
 
@@ -104,6 +104,7 @@ Status: Ready to execute
 | Phase 14 P02 | 17m | 1 tasks | 2 files |
 | Phase 14 P03 | 11min | 1 tasks | 4 files |
 | Phase 14 P04 | 25m | 2 tasks | 11 files |
+| Phase 14 P05 | multi-session | 3 tasks | 28 files |
 
 ## Accumulated Context
 
@@ -246,6 +247,11 @@ Key decisions relevant to v1.6:
 - [Phase ?]: D-10: NewKeyChainFromEnv prefix isolates JWT_SECRET vs SERVICE_JWT_SECRET chains; cross-chain validation fails by HMAC mismatch
 - [Phase ?]: D-12: KeyChain.KeyFunc rejects non-HMAC signing methods (alg-confusion defence)
 - [Phase ?]: [Phase 14-03]: D-16 schema half — encryption_version SMALLINT NOT NULL DEFAULT 0 added to kick_oauth_tokens and tiktok_oauth_tokens; Node.js tiktok code-side deferred; 14-06 sweeper must skip encryption_version=0 tiktok rows
+- [Phase 14-05]: D-07/D-08 enforced: all JWT middleware accepts *auth.KeyChain; kid-dispatch at every validation callsite
+- [Phase 14-05]: D-10 enforced: api-gateway /internal uses serviceKeyChain (was jwtSecret — silent cross-chain acceptance bug fixed)
+- [Phase 14-05]: D-10 enforced: share-service GenerateServiceJWT uses serviceKeyChain (was h.jwtSecret — Pitfall 4 security bug fixed)
+- [Phase 14-05]: D-16 code half: kick-listener decryptKickToken (version=0 passthrough, version>=1 decrypt); overlay-manager copyKickTokenForChannel encrypts on write with encryption_version=1
+- [Phase 14-05]: cipher optional in kick-listener (warn+continue when TOKEN_ENCRYPTION_KEY_V1 absent) — avoids blocking startup in envs without encryption keys
 
 ### Roadmap Evolution
 
@@ -298,9 +304,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-27T14:02:19.989Z
+Last session: 2026-04-27T16:30:00.000Z
 Last activity: 2026-04-27
-Stopped at: Phase 14 Plan 03 complete — 1 commit (7c15932a), migrations 050/051 adding encryption_version to kick_oauth_tokens and tiktok_oauth_tokens
+Stopped at: Phase 14 Plan 05 complete — 3 commits (4530ef62, ee5c618d, 7b9b9757) — JWT middleware migrated to KeyChain, Pitfall 4 and api-gateway parallel bug fixed, kick_oauth_tokens encryption wired
 Resume file: None
 
-**Next action:** Human UAT pass — run the 5 items in 13-HUMAN-UAT.md with a real ElevenLabs API key and OBS browser source, update the `result:` lines in that file, then /gsd-next to kick off Phase 14.
+**Next action:** Execute Phase 14 Plan 06 — key-rotator sweeper.
