@@ -20,11 +20,11 @@ import "time"
 
 // TTSConfig represents a row of the overlay_tts_configs table.
 //
-// EncryptedAPIKey is base64(nonce||ciphertext||authTag) of the user-supplied
-// ElevenLabs API key, encrypted via shared/encryption.AESEncryptor using the
-// service-wide TOKEN_ENCRYPTION_KEY master key. It is stored as BYTEA in
-// Postgres and tagged json:"-" here to guarantee the encrypted blob is never
-// serialised to an HTTP response, even by accident.
+// EncryptedAPIKey is base64([kid(1B)][nonce(12B)][ciphertext][tag(16B)]) of the
+// user-supplied ElevenLabs API key, encrypted via shared/encryption.MultiKeyEncryptor
+// using the service-wide TOKEN_ENCRYPTION_KEY_V1 master key (Phase 14 versioned format).
+// It is stored as BYTEA in Postgres and tagged json:"-" here to guarantee the encrypted
+// blob is never serialised to an HTTP response, even by accident.
 //
 // SigningSecret is the 32 random bytes used as the HMAC secret for tts_token
 // JWTs (Phase 13 D-08). Also json:"-" — must never leak out over the wire.

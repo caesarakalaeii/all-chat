@@ -131,21 +131,14 @@ func main() {
 		log.Fatal("Failed to start feature gate cache", zap.Error(err))
 	}
 
-	// Phase 13: AES-GCM cipher for overlay_tts_configs.encrypted_api_key.
-	// Master key from env TOKEN_ENCRYPTION_KEY (same K8s secret used by
-	// auth-service). 16/24/32 bytes, raw or base64-encoded.
-	tokenEncryptionKey := os.Getenv("TOKEN_ENCRYPTION_KEY")
-	if tokenEncryptionKey == "" {
-		log.Fatal("TOKEN_ENCRYPTION_KEY environment variable required for Phase 13 TTS")
-	}
-	parsedKey, err := encryption.ParseKey(tokenEncryptionKey)
+	// Phase 13+14: Multi-key AES-GCM cipher for overlay_tts_configs.encrypted_api_key.
+	// Reads TOKEN_ENCRYPTION_KEY_V1 (required) plus TOKEN_ENCRYPTION_KEY (legacy fallback).
+	// Same unified chain used by auth-service (D-04).
+	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnv()
 	if err != nil {
-		log.Fatal("failed to parse TOKEN_ENCRYPTION_KEY", zap.Error(err))
+		log.Fatal("failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}
-	tokenCipher, err := encryption.NewAESEncryptor(parsedKey)
-	if err != nil {
-		log.Fatal("failed to initialize token cipher", zap.Error(err))
-	}
+	log.Info("token cipher initialized", zap.Uint8("current_kid", tokenCipher.CurrentKid()))
 
 	// Initialize metrics (available via /metrics endpoint)
 	bm := metrics.NewBusinessMetrics()

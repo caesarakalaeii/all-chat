@@ -37,12 +37,12 @@ type TokenStore interface {
 // PostgresTokenStore implements TokenStore using PostgreSQL
 type PostgresTokenStore struct {
 	db     *pgxpool.Pool
-	enc    *encryption.AESEncryptor
+	enc    *encryption.MultiKeyEncryptor
 	logger *zap.Logger
 }
 
 // NewPostgresTokenStore creates a new PostgreSQL token store
-func NewPostgresTokenStore(db *pgxpool.Pool, enc *encryption.AESEncryptor, logger *zap.Logger) *PostgresTokenStore {
+func NewPostgresTokenStore(db *pgxpool.Pool, enc *encryption.MultiKeyEncryptor, logger *zap.Logger) *PostgresTokenStore {
 	return &PostgresTokenStore{
 		db:     db,
 		enc:    enc,
