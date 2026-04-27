@@ -83,7 +83,7 @@ type overlayOwnershipChecker interface {
 }
 
 // aesCipher is the narrow surface the handler needs from
-// shared/encryption.AESEncryptor.
+// shared/encryption.MultiKeyEncryptor (or AESEncryptor in tests).
 type aesCipher interface {
 	EncryptString(plaintext string) (string, error)
 	DecryptString(ciphertext string) (string, error)

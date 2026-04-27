@@ -101,17 +101,17 @@ func main() {
 		log.Fatal("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET are required")
 	}
 
-	// Load encryption key for OAuth tokens
-	youtubeEncryptionKey := os.Getenv("YOUTUBE_TOKEN_ENCRYPTION_KEY")
-	parsedKey, err := encryption.ParseKey(youtubeEncryptionKey)
+	// Initialize multi-key encryptor for YouTube OAuth tokens (D-04 unified chain).
+	// NewMultiKeyEncryptorFromEnv reads TOKEN_ENCRYPTION_KEY_V1 (required for new writes)
+	// and YOUTUBE_TOKEN_ENCRYPTION_KEY as a legacy fallback so that tokens encrypted
+	// before Phase 14 still decrypt transparently. TOKEN_ENCRYPTION_KEY is also a
+	// legacy fallback (unified chain, D-04).
+	tokenEncryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
 	if err != nil {
-		log.Fatal("Invalid YOUTUBE_TOKEN_ENCRYPTION_KEY", zap.Error(err))
+		log.Fatal("Failed to initialize token encryptor (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}
-
-	tokenEncryptor, err := encryption.NewAESEncryptor(parsedKey)
-	if err != nil {
-		log.Fatal("Failed to initialize token encryptor", zap.Error(err))
-	}
+	log.Info("YouTube token cipher initialized — unified chain reads TOKEN_ENCRYPTION_KEY_V<n>; legacy fallback also reads YOUTUBE_TOKEN_ENCRYPTION_KEY",
+		zap.Uint8("current_kid", tokenEncryptor.CurrentKid()))
 
 	// Connect to PostgreSQL
 	dbHost := listener.Env("DATABASE_HOST", "localhost")

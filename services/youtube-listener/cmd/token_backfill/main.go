@@ -34,15 +34,13 @@ func main() {
 	log := logger.NewLogger("youtube-token-backfill", getEnvOrDefault("LOG_LEVEL", "info"))
 	defer log.Sync()
 
-	encryptionKey := os.Getenv("YOUTUBE_TOKEN_ENCRYPTION_KEY")
-	parsedKey, err := encryption.ParseKey(encryptionKey)
+	// Use unified multi-key encryptor (D-04). Reads TOKEN_ENCRYPTION_KEY_V1 plus
+	// YOUTUBE_TOKEN_ENCRYPTION_KEY as legacy fallback.
+	// NOTE: The new sweeper from Plan 14-06 supersedes this binary. This binary
+	// remains compiled for historical reproducibility but is not in the rotation runbook.
+	encryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
 	if err != nil {
-		log.Fatal("Invalid YOUTUBE_TOKEN_ENCRYPTION_KEY", zap.Error(err))
-	}
-
-	encryptor, err := encryption.NewAESEncryptor(parsedKey)
-	if err != nil {
-		log.Fatal("Failed to initialize encryptor", zap.Error(err))
+		log.Fatal("Failed to initialize encryptor (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}
 
 	connString := buildConnString()
@@ -63,7 +61,7 @@ func main() {
 	log.Info("Token backfill complete", zap.Int("rows_encrypted", total))
 }
 
-func backfillTokens(ctx context.Context, pool *pgxpool.Pool, encryptor *encryption.AESEncryptor, log *zap.Logger) (int, error) {
+func backfillTokens(ctx context.Context, pool *pgxpool.Pool, encryptor *encryption.MultiKeyEncryptor, log *zap.Logger) (int, error) {
 	rows, err := pool.Query(ctx, `
         SELECT user_id, channel_id, access_token, refresh_token
         FROM youtube_oauth_tokens
