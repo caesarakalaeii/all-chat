@@ -100,12 +100,12 @@ type ExpiringToken struct {
 // TokenRepository handles database operations for OAuth tokens
 type TokenRepository struct {
 	db     *pgxpool.Pool
-	cipher *encryption.AESEncryptor
+	cipher *encryption.MultiKeyEncryptor
 	logger *zap.Logger
 }
 
 // NewTokenRepository creates a new token repository
-func NewTokenRepository(db *pgxpool.Pool, cipher *encryption.AESEncryptor, logger *zap.Logger) *TokenRepository {
+func NewTokenRepository(db *pgxpool.Pool, cipher *encryption.MultiKeyEncryptor, logger *zap.Logger) *TokenRepository {
 	return &TokenRepository{
 		db:     db,
 		cipher: cipher,

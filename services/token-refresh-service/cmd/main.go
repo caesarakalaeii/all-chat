@@ -90,22 +90,15 @@ func main() {
 		log.Fatal("KICK_CLIENT_ID and KICK_CLIENT_SECRET are required")
 	}
 
-	// Load encryption key for token decryption
-	encryptionKey := os.Getenv("ENCRYPTION_KEY")
-	if encryptionKey == "" {
-		log.Fatal("ENCRYPTION_KEY is required")
-	}
-
-	// Initialize AES encryptor for token encryption/decryption (must match auth-service)
-	parsedKey, err := encryption.ParseKey(encryptionKey)
+	// Initialize multi-key encryptor for token encryption/decryption.
+	// Reads TOKEN_ENCRYPTION_KEY_V1 (required) and TOKEN_ENCRYPTION_KEY (legacy fallback).
+	// NOTE: Deployment manifest must mount token-encryption-key as TOKEN_ENCRYPTION_KEY
+	// (not ENCRYPTION_KEY). Plan 14-07 owns the manifest rename.
+	encryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
 	if err != nil {
-		log.Fatal("Failed to parse ENCRYPTION_KEY", zap.Error(err))
+		log.Fatal("Failed to initialize encryption (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}
-
-	encryptor, err := encryption.NewAESEncryptor(parsedKey)
-	if err != nil {
-		log.Fatal("Failed to initialize encryptor", zap.Error(err))
-	}
+	log.Info("Token encryptor initialized", zap.Uint8("current_kid", encryptor.CurrentKid()))
 
 	// Connect to PostgreSQL
 	dbHost := getEnv("DATABASE_HOST", "localhost")

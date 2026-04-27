@@ -101,7 +101,6 @@ func main() {
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)
-	tokenEncryptionKey := os.Getenv("TOKEN_ENCRYPTION_KEY")
 
 	if twitchClientID == "" || twitchClientSecret == "" {
 		log.Fatal("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set")
@@ -127,19 +126,11 @@ func main() {
 		log.Fatal("JWT_SECRET must be set")
 	}
 
-	if tokenEncryptionKey == "" {
-		log.Fatal("TOKEN_ENCRYPTION_KEY must be set and must be 16, 24, or 32 bytes")
-	}
-
-	parsedKey, err := encryption.ParseKey(tokenEncryptionKey)
+	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnv()
 	if err != nil {
-		log.Fatal("failed to parse TOKEN_ENCRYPTION_KEY", zap.Error(err))
+		log.Fatal("failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set; legacy TOKEN_ENCRYPTION_KEY optional)", zap.Error(err))
 	}
-
-	tokenCipher, err := encryption.NewAESEncryptor(parsedKey)
-	if err != nil {
-		log.Fatal("failed to initialize token cipher", zap.Error(err))
-	}
+	log.Info("token cipher initialized", zap.Uint8("current_kid", tokenCipher.CurrentKid()))
 
 	// Connect to PostgreSQL
 	dbHost := getEnvOrDefault("DATABASE_HOST", "localhost")

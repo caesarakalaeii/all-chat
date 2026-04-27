@@ -128,21 +128,15 @@ func main() {
 
 	log.Info("Connected to Redis")
 
-	// Load encryption key for token decryption (must match auth-service encryption)
-	encryptionKey := os.Getenv("ENCRYPTION_KEY")
-	if encryptionKey == "" {
-		log.Fatal("ENCRYPTION_KEY is required for decrypting user OAuth tokens")
-	}
-
-	parsedKey, err := encryption.ParseKey(encryptionKey)
+	// Initialize multi-key encryptor for decrypting user OAuth tokens (must match auth-service).
+	// Reads TOKEN_ENCRYPTION_KEY_V1 (required) and TOKEN_ENCRYPTION_KEY (legacy fallback).
+	// NOTE: Deployment manifest currently mounts ENCRYPTION_KEY; Plan 14-07 renames it to
+	// TOKEN_ENCRYPTION_KEY. This service will fail to start until Plan 14-07 ships.
+	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnv()
 	if err != nil {
-		log.Fatal("Failed to parse ENCRYPTION_KEY", zap.Error(err))
+		log.Fatal("Failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}
-
-	tokenCipher, err := encryption.NewAESEncryptor(parsedKey)
-	if err != nil {
-		log.Fatal("Failed to initialize token cipher", zap.Error(err))
-	}
+	log.Info("Token cipher initialized", zap.Uint8("current_kid", tokenCipher.CurrentKid()))
 
 	// Initialize LeadershipListener — per D-12/D-13 EventSub gets demand gating
 	ll, err := listener.NewLeadershipListenerFromEnv("twitch-eventsub", redisClient, log)
