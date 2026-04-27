@@ -30,6 +30,7 @@ import (
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
 	"github.com/caesar/all-chat/services/kick-listener/status"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -77,9 +78,10 @@ type Manager struct {
 	httpClient      *http.Client
 	dbConn          DBConnInterface
 	leader          *sourcemanager.LeadershipCoordinator
-	redisClient     *redis.Client     // Redis client for migration confirmations
-	podID           string            // Pod ID for migration confirmations
-	statusPublisher *status.Publisher // Publishes platform status to Redis Pub/Sub
+	redisClient     *redis.Client               // Redis client for migration confirmations
+	podID           string                      // Pod ID for migration confirmations
+	statusPublisher *status.Publisher           // Publishes platform status to Redis Pub/Sub
+	cipher          *encryption.MultiKeyEncryptor // Decrypts versioned kick_oauth_tokens (D-16; nil = no encryption)
 
 	// Coordinator integration
 	assignedSourceIDs       map[string]bool                    // From coordinator
@@ -99,7 +101,10 @@ type Manager struct {
 	wg     sync.WaitGroup
 }
 
-// NewManager creates a new channel manager
+// NewManager creates a new channel manager.
+// cipher may be nil when TOKEN_ENCRYPTION_KEY_V1 is not configured; in that case
+// kick_oauth_tokens with encryption_version=0 (plaintext) are still supported.
+// Rows with encryption_version>=1 require a non-nil cipher or getKickAuthToken returns an error.
 func NewManager(
 	repo *Repository,
 	wsClient WebSocketClient,
@@ -109,6 +114,7 @@ func NewManager(
 	assignedSourceIDs map[string]bool,
 	redisClient *redis.Client,
 	podID string,
+	cipher *encryption.MultiKeyEncryptor,
 	logger *zap.Logger,
 ) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -124,6 +130,7 @@ func NewManager(
 		assignedSourceIDs: assignedSourceIDs,
 		redisClient:       redisClient,
 		podID:             podID,
+		cipher:            cipher,
 		firstMessageChan:  make(map[int]chan struct{}),
 		subscriptions:     make(map[string]*trackedChannel),
 		chatroomIndex:     make(map[int]*trackedChannel),
@@ -962,10 +969,11 @@ func (m *Manager) getKickAuthToken(channelSlug string, channelName string) (stri
 		return "", fmt.Errorf("no socket_id available (WebSocket not connected)")
 	}
 
-	// Get OAuth access token from database
+	// Get OAuth access token from database (with encryption_version for D-16 decryption)
 	var accessToken string
+	var encryptionVersion int
 	query := `
-		SELECT access_token
+		SELECT access_token, encryption_version
 		FROM kick_oauth_tokens
 		WHERE channel_id = $1
 		  AND expiry > NOW()
@@ -974,9 +982,15 @@ func (m *Manager) getKickAuthToken(channelSlug string, channelName string) (stri
 	`
 
 	pool := m.dbConn.GetPool().(*pgxpool.Pool)
-	err := pool.QueryRow(m.ctx, query, channelSlug).Scan(&accessToken)
+	err := pool.QueryRow(m.ctx, query, channelSlug).Scan(&accessToken, &encryptionVersion)
 	if err != nil {
 		return "", fmt.Errorf("failed to get Kick OAuth token for %s: %w", channelSlug, err)
+	}
+
+	// Decrypt if the token was stored encrypted (D-16).
+	accessToken, err = m.decryptKickToken(accessToken, encryptionVersion)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt Kick OAuth token for %s: %w", channelSlug, err)
 	}
 
 	// Call Kick's /broadcasting/auth endpoint
@@ -1022,4 +1036,21 @@ func (m *Manager) getKickAuthToken(channelSlug string, channelName string) (stri
 	)
 
 	return authResp.Auth, nil
+}
+
+// decryptKickToken returns the plaintext OAuth token for use in API requests.
+// When encryptionVersion >= 1 the token was stored encrypted by overlay-manager (D-16);
+// m.cipher is used to decrypt it. When encryptionVersion == 0 the token is plaintext
+// (legacy rows written before encryption was introduced) and is returned as-is.
+// Returns an error when version >= 1 but no cipher is configured.
+func (m *Manager) decryptKickToken(token string, encryptionVersion int) (string, error) {
+	if encryptionVersion == 0 {
+		return token, nil
+	}
+	if m.cipher == nil {
+		return "", fmt.Errorf(
+			"kick_oauth_token has encryption_version=%d but no cipher is configured "+
+				"(TOKEN_ENCRYPTION_KEY_V1 must be set)", encryptionVersion)
+	}
+	return m.cipher.DecryptString(token)
 }
