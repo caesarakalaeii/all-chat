@@ -24,18 +24,18 @@ BEGIN
         CHECK (auth_provider IN ('twitch', 'youtube', 'tiktok', 'kick'));
 END $$;
 
--- Add constraint: at least one OAuth provider ID must be present
--- Wrapped because Postgres has no ADD CONSTRAINT IF NOT EXISTS.
+-- Add constraint: at least one OAuth provider ID must be present.
+-- Drop + recreate so we can widen the predicate as new providers are added
+-- (kick was added in 005_kick_support.sql; tiktok will follow). Without
+-- this widening, kick-only users (twitch_id NULL, google_id NULL,
+-- kick_id NOT NULL) violate the original predicate and ON_ERROR_STOP=1
+-- aborts the migration. The pattern keeps this single source of truth
+-- here, where the column lives.
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'users_at_least_one_oauth_id'
-          AND conrelid = 'users'::regclass
-    ) THEN
-        ALTER TABLE users ADD CONSTRAINT users_at_least_one_oauth_id
-          CHECK (twitch_id IS NOT NULL OR google_id IS NOT NULL);
-    END IF;
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_at_least_one_oauth_id;
+    ALTER TABLE users ADD CONSTRAINT users_at_least_one_oauth_id
+      CHECK (twitch_id IS NOT NULL OR google_id IS NOT NULL OR kick_id IS NOT NULL);
 END $$;
 
 -- Create index on google_id

@@ -19,9 +19,20 @@
 #      migrations were audited for idempotency on re-run (CREATE … IF NOT
 #      EXISTS, DROP TRIGGER IF EXISTS + CREATE TRIGGER, ON CONFLICT DO
 #      NOTHING for INSERTs, DO blocks for ADD CONSTRAINT and CREATE TYPE).
-#      Verified by running the full migration set three times against a
-#      fresh postgres:16-alpine container with no errors. New migrations
-#      MUST follow these patterns or the next pod restart will fail.
+#      Verified by running the full set three times against a fresh
+#      postgres:16-alpine. New migrations MUST follow these patterns or
+#      the next pod restart will fail.
+#
+#      Production gotcha (resolved 2026-04-27): CREATE INDEX IF NOT EXISTS
+#      requires ownership of the target table even when the index already
+#      exists. The CNPG cluster originally had 6 legacy tables (users,
+#      overlays, overlay_configs, overlay_chat_sources, supported_platforms,
+#      youtube_quota_usage) owned by the role `allchat` instead of
+#      `allchat_user` (the role the migration runner connects as). The
+#      first ON_ERROR_STOP=1 deploy aborted on 001's CREATE INDEX. Fix was
+#      a one-shot `REASSIGN OWNED BY allchat TO allchat_user` run as the
+#      postgres superuser. New tables are created by the runner under
+#      `allchat_user` and need no further intervention.
 
 set -u
 
