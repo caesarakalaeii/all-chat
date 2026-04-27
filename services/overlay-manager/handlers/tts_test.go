@@ -200,6 +200,7 @@ func newRouter(t *testing.T, h *TTSHandler, gates sharedMiddleware.GateChecker, 
 		gated.DELETE("/:id/tts-config", h.HandleDeleteTTSConfig)
 		gated.POST("/:id/tts-config/rotate-token", h.HandleRotateToken)
 		gated.GET("/:id/tts-voices", h.HandleGetVoices)
+		gated.POST("/:id/tts-voices/preview", h.HandleGetVoicesPreview)
 		gated.POST("/:id/tts-config/test", h.HandleTestKey)
 	}
 
@@ -370,6 +371,120 @@ func TestGetVoicesProxies(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "sk_voices", gotHeader, "decrypted key should be forwarded")
 	assert.Contains(t, w.Body.String(), "voice_id")
+}
+
+// TestGetVoicesPreviewProxies — POST /:id/tts-voices/preview with a body
+// {api_key:"sk_typed"} forwards that key as xi-api-key without persisting,
+// and returns the upstream voices payload verbatim. Crucially, the repo is
+// untouched so the chicken-and-egg with HandleSaveTTSConfig is broken.
+func TestGetVoicesPreviewProxies(t *testing.T) {
+	var gotHeader string
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/voices" {
+			gotHeader = r.Header.Get("xi-api-key")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"voices":[{"voice_id":"vp1"},{"voice_id":"vp2"}]}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	body := strings.NewReader(`{"api_key":"sk_typed"}`)
+	req := httptest.NewRequest(http.MethodPost, "/overlay-prev/tts-voices/preview", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	assert.Equal(t, "sk_typed", gotHeader, "typed key must be forwarded as xi-api-key")
+	assert.Contains(t, w.Body.String(), "voice_id")
+	assert.Nil(t, f.repo.row, "preview must not persist anything to the repo")
+}
+
+// TestGetVoicesPreviewRequiresAPIKey — empty body or missing api_key returns
+// 400 without calling upstream.
+func TestGetVoicesPreviewRequiresAPIKey(t *testing.T) {
+	calls := 0
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusOK)
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	cases := []string{`{"api_key":""}`, `{"api_key":"   "}`, `{}`}
+	for _, c := range cases {
+		req := httptest.NewRequest(http.MethodPost, "/overlay-bad/tts-voices/preview",
+			strings.NewReader(c))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code, "body case=%q", c)
+	}
+	assert.Equal(t, 0, calls, "upstream must not be called when api_key is missing")
+}
+
+// TestGetVoicesPreviewMapsUpstream401 — invalid key surfaces as 401 with the
+// human-readable copy the frontend toasts on.
+func TestGetVoicesPreviewMapsUpstream401(t *testing.T) {
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	req := httptest.NewRequest(http.MethodPost, "/overlay-401/tts-voices/preview",
+		strings.NewReader(`{"api_key":"sk_bad"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "Invalid API key")
+}
+
+// TestGetVoicesPreviewRequiresPremium — the new endpoint must sit behind the
+// same RequirePremium gate as the rest of the TTS surface.
+func TestGetVoicesPreviewRequiresPremium(t *testing.T) {
+	f := newTestHandler(t, nil)
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, false, "user-1")
+
+	req := httptest.NewRequest(http.MethodPost, "/overlay-1/tts-voices/preview",
+		strings.NewReader(`{"api_key":"sk"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// TestGetVoicesPreviewRejectsNonOwner — ownership check still applies.
+func TestGetVoicesPreviewRejectsNonOwner(t *testing.T) {
+	f := newTestHandler(t, nil)
+	f.overlays.owned = false
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	req := httptest.NewRequest(http.MethodPost, "/overlay-stranger/tts-voices/preview",
+		strings.NewReader(`{"api_key":"sk"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 // TestTestKeyHandler_Success — upstream returns 200 for GET

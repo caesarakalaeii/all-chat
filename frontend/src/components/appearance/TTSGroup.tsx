@@ -67,6 +67,10 @@ export interface TTSGroupProps {
   onRotateToken?: () => Promise<{ obsUrl: string }>
   onRemoveKey?: () => Promise<void>
   onFetchVoices?: () => Promise<ElevenLabsVoice[]>
+  // Lists voices using the typed (unsaved) key — used before the very first
+  // save so the picker can populate. See services/overlay-manager
+  // /handlers/tts.go HandleGetVoicesPreview.
+  onPreviewVoices?: (apiKey: string) => Promise<ElevenLabsVoice[]>
 }
 
 const ALL_PLATFORMS: readonly string[] = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
@@ -174,6 +178,10 @@ interface ApiKeyInputProps {
   disabled: boolean
   isPremium: boolean
   voiceId: string
+  // Controlled value lifted to TTSGroup so the voice picker can react to the
+  // typed (unsaved) key in real time.
+  apiKey: string
+  onApiKeyChange: (next: string) => void
 }
 
 function ApiKeyInput({
@@ -184,8 +192,9 @@ function ApiKeyInput({
   disabled,
   isPremium,
   voiceId,
+  apiKey,
+  onApiKeyChange,
 }: ApiKeyInputProps): React.ReactElement {
-  const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
@@ -209,12 +218,16 @@ function ApiKeyInput({
       setError('API key cannot be empty.')
       return
     }
+    if (voiceId.trim() === '') {
+      setError('Pick a voice before saving.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
       await onSave(apiKey, voiceId)
       // T-13-07 mitigation: clear key from state immediately after POST resolves.
-      setApiKey('')
+      onApiKeyChange('')
       toast.success('API key saved.')
     } catch (e) {
       setError('Could not save. Try again.')
@@ -299,7 +312,7 @@ function ApiKeyInput({
             <input
               type="password"
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={(e) => onApiKeyChange(e.target.value)}
               placeholder="sk-..."
               autoComplete="off"
               spellCheck={false}
@@ -465,7 +478,18 @@ function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.
 interface ElevenLabsVoicePickerProps {
   selected: string
   onChange: (voiceId: string) => void
+  // Used when the overlay already has a saved key — proxies via the
+  // saved-key-aware GET /:id/tts-voices endpoint.
   onFetchVoices?: () => Promise<ElevenLabsVoice[]>
+  // Used when the user has typed a key but not yet saved — proxies via the
+  // unsaved-key POST /:id/tts-voices/preview endpoint.
+  onPreviewVoices?: (apiKey: string) => Promise<ElevenLabsVoice[]>
+  // True when the overlay has a persisted ElevenLabs config. Decides which
+  // loader to call.
+  hasSavedKey: boolean
+  // Live (typed) value of the API key input. Drives the preview path. Empty
+  // string means the user hasn't started typing.
+  typedApiKey: string
   disabled: boolean
 }
 
@@ -473,27 +497,63 @@ function ElevenLabsVoicePicker({
   selected,
   onChange,
   onFetchVoices,
+  onPreviewVoices,
+  hasSavedKey,
+  typedApiKey,
   disabled,
 }: ElevenLabsVoicePickerProps): React.ReactElement {
   const [voices, setVoices] = useState<ElevenLabsVoice[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
-  const triedRef = useRef(false)
+  // Track which key fingerprint produced the current voices list so re-renders
+  // with the same value skip the network call.
+  const lastKeyRef = useRef<string>('')
 
-  async function loadVoices(): Promise<void> {
-    if (triedRef.current || !onFetchVoices) return
-    triedRef.current = true
-    setLoading(true)
-    try {
-      const list = await onFetchVoices()
-      setVoices(list)
-    } catch {
-      setError(true)
-      toast.error('Could not load voices.')
-    } finally {
-      setLoading(false)
+  // Auto-load voices whenever the input that drives the loader changes:
+  //   - hasSavedKey=true → load once via GET /tts-voices
+  //   - hasSavedKey=false → debounce on typedApiKey, load via POST preview
+  useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    async function run(loader: () => Promise<ElevenLabsVoice[]>, fingerprint: string): Promise<void> {
+      if (lastKeyRef.current === fingerprint) return
+      lastKeyRef.current = fingerprint
+      setLoading(true)
+      setError(false)
+      try {
+        const list = await loader()
+        if (!cancelled) setVoices(list)
+      } catch {
+        if (!cancelled) {
+          setError(true)
+          toast.error('Could not load voices.')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
-  }
+
+    if (hasSavedKey && onFetchVoices) {
+      void run(onFetchVoices, '__saved__')
+    } else if (!hasSavedKey && onPreviewVoices && typedApiKey.trim().length >= 8) {
+      // Debounce so we don't hammer ElevenLabs while the user is still typing.
+      timer = setTimeout(() => {
+        void run(() => onPreviewVoices(typedApiKey.trim()), `typed:${typedApiKey.trim()}`)
+      }, 500)
+    } else if (!hasSavedKey) {
+      // Not enough input yet — keep the picker empty + reset cache so a future
+      // edit re-triggers the loader.
+      lastKeyRef.current = ''
+      setVoices(null)
+      setError(false)
+    }
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [hasSavedKey, onFetchVoices, onPreviewVoices, typedApiKey])
 
   return (
     <div>
@@ -505,16 +565,15 @@ function ElevenLabsVoicePicker({
         aria-label="ElevenLabs voice"
         value={selected}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => {
-          void loadVoices()
-        }}
         disabled={disabled}
         className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading && <option value="">Loading voices…</option>}
         {error && <option value="">Could not load voices</option>}
         {!loading && !error && voices === null && (
-          <option value="">Save your API key to load voices.</option>
+          <option value="">
+            {hasSavedKey ? 'Voices will load shortly…' : 'Enter your API key above to load voices.'}
+          </option>
         )}
         {!loading && !error && voices !== null && voices.length === 0 && (
           <option value="">No voices available</option>
@@ -552,6 +611,9 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   // the chosen voice is sent with the Save-key call, NOT persisted to
   // display_settings (ElevenLabs voice_id lives in overlay_tts_configs).
   const [pickedVoiceId, setPickedVoiceId] = useState('')
+  // Lifted out of ApiKeyInput so the voice picker can react to the typed
+  // (unsaved) key in real time and call the preview endpoint.
+  const [advancedApiKey, setAdvancedApiKey] = useState('')
 
   function handlePlatformToggle(platform: string): void {
     const current = d.tts_enabled_platforms ?? [...ALL_PLATFORMS]
@@ -812,23 +874,28 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                     </div>
                   </div>
                 )}
-                <ElevenLabsVoicePicker
-                  selected={pickedVoiceId}
-                  onChange={setPickedVoiceId}
-                  onFetchVoices={props.onFetchVoices}
-                  disabled={!isPremium}
-                />
                 <ApiKeyInput
                   hasSavedKey={props.hasElevenLabsConfig}
                   isPremium={isPremium}
                   disabled={!isPremium}
                   voiceId={pickedVoiceId}
+                  apiKey={advancedApiKey}
+                  onApiKeyChange={setAdvancedApiKey}
                   onSave={props.onSaveKey ?? (async (): Promise<void> => {})}
                   onRemove={props.onRemoveKey ?? (async (): Promise<void> => {})}
                   onTest={
                     props.onTestKey ??
                     (async (): Promise<TestKeyResult> => ({ ok: false, errorCode: 0 }))
                   }
+                />
+                <ElevenLabsVoicePicker
+                  selected={pickedVoiceId}
+                  onChange={setPickedVoiceId}
+                  onFetchVoices={props.onFetchVoices}
+                  onPreviewVoices={props.onPreviewVoices}
+                  hasSavedKey={props.hasElevenLabsConfig}
+                  typedApiKey={advancedApiKey}
+                  disabled={!isPremium}
                 />
                 {props.hasElevenLabsConfig && props.obsUrl && (
                   <ObsUrlPanel

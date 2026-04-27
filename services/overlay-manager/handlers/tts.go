@@ -350,6 +350,68 @@ func (h *TTSHandler) HandleGetVoices(c *gin.Context) {
 	_, _ = io.Copy(c.Writer, resp.Body)
 }
 
+// ---- HandleGetVoicesPreview (chicken-and-egg break) ------------------------
+
+// HandleGetVoicesPreview handles POST /:id/tts-voices/preview. Body
+// {api_key}. The supplied key is used for a one-shot ElevenLabs /v1/voices
+// proxy call and is NOT persisted. This breaks the chicken-and-egg between
+// HandleSaveTTSConfig (which requires voice_id) and HandleGetVoices (which
+// requires a saved key) — clients can populate the voice picker before the
+// first save.
+func (h *TTSHandler) HandleGetVoicesPreview(c *gin.Context) {
+	_, overlayID, ok := h.checkOwnership(c)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	apiKey := strings.TrimSpace(req.APIKey)
+	if apiKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "api_key is required"})
+		return
+	}
+
+	upstreamReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet,
+		h.elevenLabsBaseURL+"/v1/voices", nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build request"})
+		return
+	}
+	upstreamReq.Header.Set("xi-api-key", apiKey)
+	upstreamReq.Header.Set("Accept", "application/json")
+
+	resp, err := h.httpClient.Do(upstreamReq)
+	if err != nil {
+		h.logger.Warn("tts voices preview: upstream error",
+			zap.String("overlay_id", overlayID), zap.Error(err))
+		c.JSON(http.StatusBadGateway, gin.H{"error": "ElevenLabs request failed"})
+		return
+	}
+	defer resp.Body.Close()
+
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
+		return
+	case resp.StatusCode == http.StatusTooManyRequests:
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Rate-limited — try again in a minute"})
+		return
+	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		c.JSON(http.StatusBadGateway, gin.H{"error": "ElevenLabs returned non-200"})
+		return
+	}
+
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Status(http.StatusOK)
+	_, _ = io.Copy(c.Writer, resp.Body)
+}
+
 // ---- HandleTestKey (D-15) --------------------------------------------------
 
 // HandleTestKey handles POST /:id/tts-config/test. It first validates the

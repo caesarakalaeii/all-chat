@@ -249,6 +249,23 @@ export const overlaysApi = {
   },
 
   /**
+   * One-shot proxy that lists voices for an UNSAVED ElevenLabs key. Breaks the
+   * chicken-and-egg between save (requires voice_id) and the saved-key voice
+   * list (requires a saved key) — see Plan 02 / TTS bugfix.
+   * Backend: POST /api/v1/overlays/:id/tts-voices/preview with `{api_key}`.
+   * The key is NOT persisted server-side.
+   */
+  async previewTTSVoices(overlayId: string, apiKey: string): Promise<ElevenLabsVoice[]> {
+    const resp = await apiClient.post<{ voices?: ElevenLabsVoice[] } | ElevenLabsVoice[]>(
+      `/api/v1/overlays/${overlayId}/tts-voices/preview`,
+      { api_key: apiKey },
+    )
+    if (Array.isArray(resp)) return resp
+    if (resp && Array.isArray(resp.voices)) return resp.voices
+    return []
+  },
+
+  /**
    * Validate the saved ElevenLabs key and retrieve the remaining character quota,
    * plus a ~2-second audio sample for user feedback.
    * Backend: POST /api/v1/overlays/:id/tts-config/test.
