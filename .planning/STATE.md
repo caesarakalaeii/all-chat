@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 14 Plan 02 complete — 2 commits (4c835d02, d0032506), KeyChain + all *WithKid/*WithKeyChain functions in shared/auth/jwt.go, 19/19 tests passing with -race
-last_updated: "2026-04-27T13:33:37.642Z"
+stopped_at: Phase 14 Plan 03 complete — 1 commit (7c15932a), migrations 050/051 adding encryption_version to kick_oauth_tokens and tiktok_oauth_tokens
+last_updated: "2026-04-27T13:49:38.628Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 21
   completed_phases: 19
   total_plans: 88
-  completed_plans: 81
-  percent: 92
+  completed_plans: 82
+  percent: 93
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 14 (Secret Rotation Infrastructure) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Plans: 3/3 complete across 2 waves
 Status: Ready to execute
 
@@ -102,6 +102,7 @@ Status: Ready to execute
 | Phase 09 P03 | 5min | 2 tasks | 2 files |
 | Phase 13 P03 | 35min | 4 tasks | 6 files |
 | Phase 14 P02 | 17m | 1 tasks | 2 files |
+| Phase 14 P03 | 11min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -243,6 +244,7 @@ Key decisions relevant to v1.6:
 - [Phase ?]: D-07: kid header set on all five *WithKid issuance variants in shared/auth/jwt.go
 - [Phase ?]: D-10: NewKeyChainFromEnv prefix isolates JWT_SECRET vs SERVICE_JWT_SECRET chains; cross-chain validation fails by HMAC mismatch
 - [Phase ?]: D-12: KeyChain.KeyFunc rejects non-HMAC signing methods (alg-confusion defence)
+- [Phase ?]: [Phase 14-03]: D-16 schema half — encryption_version SMALLINT NOT NULL DEFAULT 0 added to kick_oauth_tokens and tiktok_oauth_tokens; Node.js tiktok code-side deferred; 14-06 sweeper must skip encryption_version=0 tiktok rows
 
 ### Roadmap Evolution
 
@@ -295,9 +297,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-27T13:33:37.632Z
+Last session: 2026-04-27T13:49:38.622Z
 Last activity: 2026-04-27
-Stopped at: Phase 14 Plan 02 complete — 2 commits (4c835d02, d0032506), KeyChain + all *WithKid/*WithKeyChain functions in shared/auth/jwt.go, 19/19 tests passing with -race
+Stopped at: Phase 14 Plan 03 complete — 1 commit (7c15932a), migrations 050/051 adding encryption_version to kick_oauth_tokens and tiktok_oauth_tokens
 Resume file: None
 
 **Next action:** Human UAT pass — run the 5 items in 13-HUMAN-UAT.md with a real ElevenLabs API key and OBS browser source, update the `result:` lines in that file, then /gsd-next to kick off Phase 14.
