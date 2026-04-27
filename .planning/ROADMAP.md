@@ -383,10 +383,10 @@ Plans:
 **Goal:** Following a secret leak, design and build a rotation mechanism (or per-secret-type set of mechanisms) into the platform — covering DB password (CNPG), JWT signing keys, and the AES-GCM TOKEN_ENCRYPTION_KEY used for OAuth access/refresh tokens stored encrypted in the database. Must minimize impact on running services and existing encrypted DB values during rotation, and support repeatable rotation going forward (not a one-shot fix).
 **Requirements**: TBD
 **Depends on:** Phase 13
-**Plans:** 8 plans across 3 waves
+**Plans:** 1/8 plans executed
 
 Plans:
-- [ ] 14-01-shared-encryption-versioning-PLAN.md — MultiKeyEncryptor + golden ciphertexts + delete shared/crypto (D-01, D-02, D-04, D-05) [Wave 1]
+- [x] 14-01-shared-encryption-versioning-PLAN.md — MultiKeyEncryptor + golden ciphertexts + delete shared/crypto (D-01, D-02, D-04, D-05) [Wave 1]
 - [ ] 14-02-shared-auth-jwt-keychain-PLAN.md — KeyChain, KeyFunc, *WithKid issuance + *WithKeyChain validation in shared/auth (D-07, D-08, D-09, D-10, D-12) [Wave 1]
 - [ ] 14-03-kick-tiktok-encryption-migrations-PLAN.md — Migrations 050/051 add encryption_version columns (D-16) [Wave 1]
 - [ ] 14-04-encryption-callsite-migration-PLAN.md — Migrate auth-service, overlay-manager, token-refresh-service, twitch-eventsub-listener, youtube-listener to *MultiKeyEncryptor (D-02, D-04, D-05) [Wave 2]
