@@ -32,6 +32,8 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/caesar/all-chat/services/overlay-manager/youtube"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/encryption"
+	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
@@ -120,6 +122,31 @@ func main() {
 
 	log.Info("Connected to Redis successfully")
 
+	// Phase 13: Feature-gate cache for TTS premium enforcement (ADR-0008).
+	// Subscribes to feature-gates:invalidate on Redis Pub/Sub and falls back
+	// to a 60s ticker if Redis is unavailable. Unknown keys return true
+	// (safe default: premium-required).
+	gateCache := featuregates.NewFeatureGateCache(dbPool, redisClient, log)
+	if err := gateCache.Start(context.Background()); err != nil {
+		log.Fatal("Failed to start feature gate cache", zap.Error(err))
+	}
+
+	// Phase 13: AES-GCM cipher for overlay_tts_configs.encrypted_api_key.
+	// Master key from env TOKEN_ENCRYPTION_KEY (same K8s secret used by
+	// auth-service). 16/24/32 bytes, raw or base64-encoded.
+	tokenEncryptionKey := os.Getenv("TOKEN_ENCRYPTION_KEY")
+	if tokenEncryptionKey == "" {
+		log.Fatal("TOKEN_ENCRYPTION_KEY environment variable required for Phase 13 TTS")
+	}
+	parsedKey, err := encryption.ParseKey(tokenEncryptionKey)
+	if err != nil {
+		log.Fatal("failed to parse TOKEN_ENCRYPTION_KEY", zap.Error(err))
+	}
+	tokenCipher, err := encryption.NewAESEncryptor(parsedKey)
+	if err != nil {
+		log.Fatal("failed to initialize token cipher", zap.Error(err))
+	}
+
 	// Initialize metrics (available via /metrics endpoint)
 	bm := metrics.NewBusinessMetrics()
 	log.Info("Initialized Prometheus metrics")
@@ -175,6 +202,14 @@ func main() {
 	creditRollHandler := creditroll.NewHandler(creditRollRepo, overlayRepo, sourceRepo, redisClient, log, twitchClipsClient)
 	maintenanceHandler := handlers.NewMaintenanceHandler(maintenanceRepo, log)
 
+	// Phase 13: TTS — repository + handler. The repo uses the existing
+	// pgxpool.Pool; the handler owns the AES cipher and the per-overlay
+	// in-memory rate limiter. OVERLAY_PUBLIC_BASE_URL is the external URL
+	// the browser reaches (for building obs_url links).
+	ttsConfigRepo := repository.NewTTSConfigRepository(dbPool)
+	publicBaseURL := getEnv("OVERLAY_PUBLIC_BASE_URL", "https://allch.at")
+	ttsHandler := handlers.NewTTSHandler(ttsConfigRepo, overlayRepo, tokenCipher, publicBaseURL, log)
+
 	// YouTube helper
 	youtubeAPIKey := getEnv("YOUTUBE_API_KEY", "")
 
@@ -219,6 +254,11 @@ func main() {
 	router.GET("/public/:id/creditroll", creditRollHandler.HandleGetPublicConfig)
 	router.GET("/public/:id/credit-roll", creditRollHandler.HandleGetCreditRoll)
 
+	// Phase 13 TTS streaming proxy (D-16). Uses per-overlay tts_token JWT
+	// verification inside the handler rather than the user-JWT auth
+	// middleware, because OBS browser sources cannot carry a session.
+	router.POST("/:id/tts", ttsHandler.HandleTTS)
+
 	// Protected routes (require JWT)
 	protected := router.Group("/")
 	protected.Use(middleware.JWTAuth(config.JWTSecret))
@@ -244,6 +284,23 @@ func main() {
 		protected.GET("/:id/creditroll", creditRollHandler.HandleGetConfig)
 		protected.POST("/:id/creditroll", creditRollHandler.HandleUpdateConfig)
 		protected.POST("/:id/mock-messages", mockHandler.HandleSendMockMessage)
+
+		// Phase 13 TTS — authed, NOT premium-gated. Exposed so users whose
+		// subscription lapsed can still see whether a config exists and
+		// grab the OBS URL (graceful-downgrade visibility).
+		protected.GET("/:id/tts-config", ttsHandler.HandleGetTTSConfig)
+
+		// Phase 13 TTS — authed + RequirePremium("tts") gated endpoints
+		// (D-11..D-15). Same protected group, extra middleware layer.
+		ttsPremium := protected.Group("")
+		ttsPremium.Use(middleware.RequirePremium(dbPool, gateCache, "tts", log))
+		{
+			ttsPremium.POST("/:id/tts-config", ttsHandler.HandleSaveTTSConfig)
+			ttsPremium.DELETE("/:id/tts-config", ttsHandler.HandleDeleteTTSConfig)
+			ttsPremium.POST("/:id/tts-config/rotate-token", ttsHandler.HandleRotateToken)
+			ttsPremium.GET("/:id/tts-voices", ttsHandler.HandleGetVoices)
+			ttsPremium.POST("/:id/tts-config/test", ttsHandler.HandleTestKey)
+		}
 
 		// YouTube helper routes
 		protected.POST("/youtube/resolve", youtubeHandler.ResolveChannel)

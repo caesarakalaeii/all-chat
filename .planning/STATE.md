@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Phase 12 context gathered
-last_updated: "2026-04-12T00:35:44.302Z"
-last_activity: 2026-04-12
+status: Phase 13 complete — 5 manual UAT items pending in 13-HUMAN-UAT.md
+stopped_at: Phase 13 — all automated checks passed; user to run live OBS + real ElevenLabs key tests
+last_updated: "2026-04-24T07:20:00.000Z"
+last_activity: 2026-04-24
 progress:
-  total_phases: 19
-  completed_phases: 18
-  total_plans: 77
-  completed_plans: 75
-  percent: 97
+  total_phases: 20
+  completed_phases: 19
+  total_plans: 80
+  completed_plans: 80
+  percent: 100
 ---
 
 # Project State
@@ -25,8 +25,9 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 12
-Plan: Not started
+Phase: 13 — text-to-speech-tts-for-chat-messages — COMPLETE (automated), HUMAN-UAT pending
+Plans: 3/3 complete across 2 waves
+Status: 353 frontend tests + 38 overlay-manager Go tests + shared/+share-service tests all green; 5 items in 13-HUMAN-UAT.md await real ElevenLabs key + OBS runtime verification
 
 ## Performance Metrics
 
@@ -98,6 +99,7 @@ Plan: Not started
 | Phase 09 P01 | 451s | 2 tasks | 8 files |
 | Phase 09 P02 | 3min | 2 tasks | 6 files |
 | Phase 09 P03 | 5min | 2 tasks | 2 files |
+| Phase 13 P03 | 35min | 4 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -229,6 +231,12 @@ Key decisions relevant to v1.6:
 - [Phase 08]: PublishBatch replaced pipeline with individual ring buffer calls — each message independently retried on failure, eliminates LI-02 batch pipeline failure mode
 - [Phase 09]: PronounEnricher uses newPronounEnricherWithURL internal constructor for test injection; test server registers paths without /v1 prefix since baseURL replaces full constant; empty string used as 404 sentinel (distinguishable from redis.Nil cache miss)
 - [Phase 09]: pronounPill.ts extracted as pure helper for testability — follows usernameSpan.ts pattern
+- [Phase 13-03]: Inline role="alertdialog" div over @base-ui/react/alert-dialog — repo doesn't already use the primitive; inline div satisfies test + semantic requirements without adding a dependency
+- [Phase 13-03]: Bearer-token pattern in testTTSKey inlined rather than exposing apiClient.authHeaders() — keeps ApiClient public surface unchanged; mirrors the 3-line localStorage read from client.ts private fetch
+- [Phase 13-03]: ttsSettings state lives beside soundSettings (not merged) — single-concern handlers; AppearancePanel receives the merged record via {...soundSettings, ...ttsSettings} spread
+- [Phase 13-03]: Empty voiceId in live overlay relies on Plan 02's cfg.VoiceID fallback — avoids an extra GET /tts-config call where the public OBS browser source has no user JWT
+- [Phase 13-03]: vi.hoisted() for toast mock fn sharing — vi.mock factories are hoisted above top-level declarations, so shared mocks must use vi.hoisted to avoid ReferenceError TDZ
+- [Phase 13-03]: elevenLabsRuntimeRef in embed iframe — useRef cache populated on mount from getTTSConfig + URL parsing of obs_url, merged into every TTS_SETTINGS_UPDATE handler so editor tweaks never clobber the fetch path
 - [Phase 09]: Config cascade for pronouns: display_settings loaded first, visual_settings overrides second — matches platformBadge pattern
 
 ### Roadmap Evolution
@@ -245,6 +253,7 @@ Key decisions relevant to v1.6:
 - Phase 10 added: Message pipeline resilience — fix silent failure modes across Twitch message pipeline
 - Phase 11 added: Add username/keyword exclude list to overlay filter settings (issue #240)
 - Phase 12 added: Notification sound on incoming messages with premium custom sound support (issue #241)
+- Phase 13 added: Text-to-Speech (TTS) for chat messages — Web Speech API free tier and premium ElevenLabs streaming, with priority queue/sampling/cooldown (issue #270)
 
 ### Pending Todos
 
@@ -280,9 +289,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-12T00:18:53.256Z
-Last activity: 2026-04-12
-Stopped at: Phase 12 context gathered
-Resume file: .planning/phases/12-notification-sound-on-incoming-messages-with-premium-custom-/12-CONTEXT.md
+Last session: 2026-04-24T06:55:00.000Z
+Last activity: 2026-04-24
+Stopped at: Phase 13 Plan 03 complete — 4 task commits (a8a52f44, dcd8a4e2, 1c2b5f70, 6ef7be0b), TTSGroup stub replaced, 353/353 tests passing, HUMAN-UAT.md persists 5 pending manual items (real ElevenLabs + OBS E2E)
+Resume file: .planning/phases/13-text-to-speech-tts-for-chat-messages/13-HUMAN-UAT.md
 
-**Next action:** Phase 05 Plan 04 Task 3 — E2E demand signal verification: make docker-up, open overlay, check logs.
+**Next action:** Human UAT pass — run the 5 items in 13-HUMAN-UAT.md with a real ElevenLabs API key and OBS browser source, update the `result:` lines in that file, then /gsd-next to kick off Phase 14.

@@ -32,8 +32,9 @@
 'use client'
 
 import Image from 'next/image'
-import { use, useEffect, useState, useRef, useMemo } from 'react'
+import { use, useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import clsx from 'clsx'
+import toast from 'react-hot-toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { WebSocketClient } from '@/lib/api/websocket'
 import { overlaysApi } from '@/lib/api/overlays'
@@ -49,6 +50,8 @@ import { shouldFilterMessage } from '@/lib/utils/filterMessage'
 import type { FilterSettings } from '@/lib/types/overlay'
 import { createSoundPlayer } from '@/lib/utils/soundPlayer'
 import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
+import { createTTSPlayer } from '@/lib/utils/ttsPlayer'
+import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
 import '@/styles/events.css'
 
 // ---- Utilities (identical to preview/page.tsx) ----------------------------
@@ -213,6 +216,48 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     cooldownMs: 500,
   })
 
+  // Phase 13: TTS player state (D-41, D-42)
+  const ttsPlayerRef = useRef<TTSPlayer | null>(null)
+  const ttsSettingsRef = useRef<TTSSettings>({
+    enabled: false,
+    provider: 'browser',
+    volume: 0.8,
+    rate: 1.0,
+    pitch: 1.0,
+    filter_mode: 'sample',
+    sample_rate: 0.25,
+    max_queue: 5,
+    messages_per_minute: 8,
+    user_cooldown_seconds: 30,
+    staleness_seconds: 15,
+    priority_events: true,
+    priority_bits_min: 0,
+    read_username: true,
+    read_platform: false,
+    max_message_chars: 200,
+    skip_emote_only: true,
+    skip_links: true,
+    enabled_platforms: ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
+  })
+  const ttsFallbackToastShownRef = useRef(false)
+
+  // Phase 13 Plan 03: cache ElevenLabs runtime params (endpoint / token / voice_id)
+  // loaded once from GET /tts-config. The TTS_SETTINGS_UPDATE postMessage from the
+  // editor only carries display_settings; these runtime fields must survive those
+  // updates so the fetch path continues to work after the editor tweaks settings.
+  const elevenLabsRuntimeRef = useRef<{
+    ttsEndpoint?: string
+    ttsToken?: string
+    voiceId?: string
+  }>({})
+
+  // Phase 13: ElevenLabs session fallback callback (D-38)
+  const handleTTSFallback = useCallback(() => {
+    if (ttsFallbackToastShownRef.current) return
+    ttsFallbackToastShownRef.current = true
+    toast('ElevenLabs unavailable — using browser voice.')
+  }, [])
+
   const wsClientRef = useRef<WebSocketClient | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -283,6 +328,51 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           soundPlayerRef.current.updateSettings(newSettings)
         } else {
           soundPlayerRef.current = createSoundPlayer(newSettings)
+        }
+        return
+      }
+      // Phase 13: Real-time TTS settings from editor (D-22)
+      if (event.data?.type === 'TTS_SETTINGS_UPDATE') {
+        const s = event.data.ttsSettings as Partial<import('@/lib/types/overlay').DisplaySettings>
+        const prev = ttsSettingsRef.current
+        const newSettings: TTSSettings = {
+          enabled: s.tts_enabled ?? prev.enabled,
+          provider: (s.tts_provider ?? prev.provider) as 'browser' | 'elevenlabs',
+          volume: s.tts_volume ?? prev.volume,
+          voice_uri: s.tts_voice_uri ?? prev.voice_uri,
+          rate: s.tts_rate ?? prev.rate,
+          pitch: s.tts_pitch ?? prev.pitch,
+          filter_mode: (s.tts_filter_mode ?? prev.filter_mode) as
+            | 'all'
+            | 'sample'
+            | 'priority_only',
+          sample_rate: s.tts_sample_rate ?? prev.sample_rate,
+          max_queue: s.tts_max_queue ?? prev.max_queue,
+          messages_per_minute: s.tts_messages_per_minute ?? prev.messages_per_minute,
+          user_cooldown_seconds: s.tts_user_cooldown_seconds ?? prev.user_cooldown_seconds,
+          staleness_seconds: s.tts_staleness_seconds ?? prev.staleness_seconds,
+          priority_events: s.tts_priority_events ?? prev.priority_events,
+          priority_bits_min: s.tts_priority_bits_min ?? prev.priority_bits_min,
+          read_username: s.tts_read_username ?? prev.read_username,
+          read_platform: s.tts_read_platform ?? prev.read_platform,
+          max_message_chars: s.tts_max_message_chars ?? prev.max_message_chars,
+          skip_emote_only: s.tts_skip_emote_only ?? prev.skip_emote_only,
+          skip_links: s.tts_skip_links ?? prev.skip_links,
+          enabled_platforms: Array.isArray(s.tts_enabled_platforms)
+            ? s.tts_enabled_platforms
+            : prev.enabled_platforms,
+          // Phase 13 Plan 03: preserve ElevenLabs runtime params across settings
+          // updates. The editor only sends display_settings; the endpoint/token
+          // comes from the one-shot /tts-config GET on mount.
+          ttsEndpoint: elevenLabsRuntimeRef.current.ttsEndpoint ?? prev.ttsEndpoint,
+          ttsToken: elevenLabsRuntimeRef.current.ttsToken ?? prev.ttsToken,
+          voiceId: elevenLabsRuntimeRef.current.voiceId ?? prev.voiceId,
+        }
+        ttsSettingsRef.current = newSettings
+        if (ttsPlayerRef.current) {
+          ttsPlayerRef.current.updateSettings(newSettings)
+        } else {
+          ttsPlayerRef.current = createTTSPlayer(newSettings, handleTTSFallback)
         }
         return
       }
@@ -368,13 +458,94 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         } else {
           soundPlayerRef.current = createSoundPlayer(newSoundSettings)
         }
+
+        // Phase 13: Load TTS settings from display_settings (D-24)
+        const ttsLoaded: TTSSettings = {
+          enabled: display.tts_enabled === true,
+          provider: display.tts_provider === 'elevenlabs' ? 'elevenlabs' : 'browser',
+          volume: typeof display.tts_volume === 'number' ? display.tts_volume : 0.8,
+          voice_uri: typeof display.tts_voice_uri === 'string' ? display.tts_voice_uri : undefined,
+          rate: typeof display.tts_rate === 'number' ? display.tts_rate : 1.0,
+          pitch: typeof display.tts_pitch === 'number' ? display.tts_pitch : 1.0,
+          filter_mode:
+            display.tts_filter_mode === 'all' || display.tts_filter_mode === 'priority_only'
+              ? display.tts_filter_mode
+              : 'sample',
+          sample_rate:
+            typeof display.tts_sample_rate === 'number' ? display.tts_sample_rate : 0.25,
+          max_queue: typeof display.tts_max_queue === 'number' ? display.tts_max_queue : 5,
+          messages_per_minute:
+            typeof display.tts_messages_per_minute === 'number'
+              ? display.tts_messages_per_minute
+              : 8,
+          user_cooldown_seconds:
+            typeof display.tts_user_cooldown_seconds === 'number'
+              ? display.tts_user_cooldown_seconds
+              : 30,
+          staleness_seconds:
+            typeof display.tts_staleness_seconds === 'number'
+              ? display.tts_staleness_seconds
+              : 15,
+          priority_events: display.tts_priority_events !== false,
+          priority_bits_min:
+            typeof display.tts_priority_bits_min === 'number' ? display.tts_priority_bits_min : 0,
+          read_username: display.tts_read_username !== false,
+          read_platform: display.tts_read_platform === true,
+          max_message_chars:
+            typeof display.tts_max_message_chars === 'number'
+              ? display.tts_max_message_chars
+              : 200,
+          skip_emote_only: display.tts_skip_emote_only !== false,
+          skip_links: display.tts_skip_links !== false,
+          enabled_platforms: Array.isArray(display.tts_enabled_platforms)
+            ? display.tts_enabled_platforms.filter((p: unknown): p is string => typeof p === 'string')
+            : ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
+        }
+
+        // Phase 13 Plan 03: For the ElevenLabs branch, hydrate the runtime fetch
+        // endpoint + tts_token JWT. The editor preview is authed (user JWT in
+        // localStorage), so we can call GET /tts-config to recover the obs_url
+        // and extract the token query param — mirroring the live overlay's
+        // URLSearchParams read.
+        if (ttsLoaded.provider === 'elevenlabs') {
+          try {
+            const meta = await overlaysApi.getTTSConfig(id)
+            if (meta.has_elevenlabs_config && meta.obs_url) {
+              try {
+                const u = new URL(meta.obs_url, window.location.origin)
+                const t = u.searchParams.get('tts_token') ?? undefined
+                elevenLabsRuntimeRef.current = {
+                  ttsEndpoint: `/api/v1/overlays/${id}/tts`,
+                  ttsToken: t,
+                  voiceId: meta.voice_id ?? '',
+                }
+                ttsLoaded.ttsEndpoint = elevenLabsRuntimeRef.current.ttsEndpoint
+                ttsLoaded.ttsToken = elevenLabsRuntimeRef.current.ttsToken
+                ttsLoaded.voiceId = elevenLabsRuntimeRef.current.voiceId
+              } catch {
+                // Bad URL — silently skip; editor preview won't play ElevenLabs,
+                // but browser voice still works.
+              }
+            }
+          } catch {
+            // Non-fatal — if the overlay has no key saved yet, the proxy isn't
+            // reachable anyway and the player will fall back to browser voice.
+          }
+        }
+
+        ttsSettingsRef.current = ttsLoaded
+        if (ttsPlayerRef.current) {
+          ttsPlayerRef.current.updateSettings(ttsLoaded)
+        } else {
+          ttsPlayerRef.current = createTTSPlayer(ttsLoaded, handleTTSFallback)
+        }
       } catch (error) {
         console.warn('[Embed] Failed to load overlay config', error)
       }
     }
 
     loadConfig()
-  }, [id, token])
+  }, [id, token, handleTTSFallback])
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -398,6 +569,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
       // Phase 12: play notification sound for messages that pass the filter
       soundPlayerRef.current?.play()
+      // Phase 13: speak the message via TTS (D-41, D-42 — independent of sound; both fire on non-filtered)
+      ttsPlayerRef.current?.speak(message)
 
       setMessages((prev) => [...prev, message].slice(-maxMessages))
     })
@@ -424,6 +597,14 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     return () => {
       soundPlayerRef.current?.destroy()
       soundPlayerRef.current = null
+    }
+  }, [])
+
+  // Phase 13: Destroy TTS player on unmount
+  useEffect(() => {
+    return () => {
+      ttsPlayerRef.current?.destroy()
+      ttsPlayerRef.current = null
     }
   }, [])
 

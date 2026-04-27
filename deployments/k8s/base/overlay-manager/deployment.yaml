@@ -87,6 +87,18 @@ spec:
             secretKeyRef:
               name: allchat-secrets
               key: MESSAGE_PROCESSOR_API_KEY
+        # Phase 13 TTS — AES-GCM master key for overlay_tts_configs.
+        # Auth-service already consumes the same secret entry; key name must
+        # match prod convention `token-encryption-key` (lowercase-kebab).
+        - name: TOKEN_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: token-encryption-key
+        # Phase 13 TTS — external base URL used to construct OBS URLs in
+        # HandleGetTTSConfig / HandleRotateToken responses.
+        - name: OVERLAY_PUBLIC_BASE_URL
+          value: "https://allch.at"
         resources:
           requests:
             memory: "128Mi"

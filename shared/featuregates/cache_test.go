@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/caesar/all-chat/services/share-service/featuregates"
+	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

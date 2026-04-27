@@ -26,12 +26,11 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/share-service/cycles"
-	"github.com/caesar/all-chat/services/share-service/featuregates"
 	"github.com/caesar/all-chat/services/share-service/handlers"
 	"github.com/caesar/all-chat/services/share-service/jobs"
-	localMiddleware "github.com/caesar/all-chat/services/share-service/middleware"
 	"github.com/caesar/all-chat/services/share-service/repository"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
@@ -184,7 +183,7 @@ func main() {
 
 		// Premium-only routes (only creating a share requires premium)
 		premiumRoutes := api.Group("")
-		premiumRoutes.Use(localMiddleware.RequirePremium(dbPool, gateCache, featuregates.GateSharing, log)) // Premium middleware
+		premiumRoutes.Use(middleware.RequirePremium(dbPool, gateCache, featuregates.GateSharing, log)) // Premium middleware
 		{
 			premiumRoutes.POST("/shares", shareHandler.CreateRequest)
 		}

@@ -72,6 +72,38 @@ export interface DisplaySettings {
   notification_sound_url?: string
   notification_sound_volume?: number
   notification_sound_cooldown?: number
+
+  // --- Phase 13: Text-to-speech (D-24) ---
+
+  // Core
+  tts_enabled?: boolean
+  tts_provider?: 'browser' | 'elevenlabs'
+  tts_volume?: number
+
+  // Web Speech API options
+  tts_voice_uri?: string
+  tts_rate?: number
+  tts_pitch?: number
+
+  // Message selection / throttling
+  tts_filter_mode?: 'all' | 'sample' | 'priority_only'
+  tts_sample_rate?: number
+  tts_max_queue?: number
+  tts_messages_per_minute?: number
+  tts_user_cooldown_seconds?: number
+  tts_staleness_seconds?: number
+
+  // Priority overrides
+  tts_priority_events?: boolean
+  tts_priority_bits_min?: number
+
+  // Content formatting
+  tts_read_username?: boolean
+  tts_read_platform?: boolean
+  tts_max_message_chars?: number
+  tts_skip_emote_only?: boolean
+  tts_skip_links?: boolean
+  tts_enabled_platforms?: string[]
 }
 
 export interface FilterSettings {
