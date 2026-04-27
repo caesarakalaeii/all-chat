@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 14 Plan 05 complete — 3 commits (4530ef62, ee5c618d, 7b9b9757) — JWT middleware migrated to KeyChain, Pitfall 4 and api-gateway parallel bug fixed, kick_oauth_tokens encryption wired
-last_updated: "2026-04-27T16:41:16.796Z"
+stopped_at: Phase 14 Plan 07 complete — 2 commits in caesar-deployment (bd48cd8, cb7d995) — V1 env entries wired to all 12 deployments, Pitfall 1 fixed, key-rotator Job+CronJob created
+last_updated: "2026-04-27T16:48:13.728Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 21
   completed_phases: 19
   total_plans: 88
-  completed_plans: 85
-  percent: 97
+  completed_plans: 86
+  percent: 98
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 14 (Secret Rotation Infrastructure) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Plans: 5/8 complete
 Status: Ready to execute
 
@@ -106,6 +106,7 @@ Status: Ready to execute
 | Phase 14 P04 | 25m | 2 tasks | 11 files |
 | Phase 14 P05 | multi-session | 3 tasks | 28 files |
 | Phase 14 P06 | 753 | 3 tasks | 5 files |
+| Phase 14 P07 | 420 | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,8 @@ Key decisions relevant to v1.6:
 - [Phase 14-05]: cipher optional in kick-listener (warn+continue when TOKEN_ENCRYPTION_KEY_V1 absent) — avoids blocking startup in envs without encryption keys
 - [Phase ?]: Sweeper ships as cmd binary (D-06) in auth-service image; K8s Job overrides CMD to /app/key-rotator
 - [Phase ?]: Kick v0 rows encrypted-direct (no Decrypt step); TikTok v0 rows skipped via SQL WHERE encryption_version >= 1 deferral
+- [Phase ?]: [Phase 14-07]: key-rotator-job.yaml not in kustomization (template only); CronJob registered; operator triggers manual run via kubectl create job --from=cronjob
+- [Phase ?]: [Phase 14-07]: Pitfall 1 reconciled — ENCRYPTION_KEY renamed to TOKEN_ENCRYPTION_KEY in token-refresh-service + twitch-eventsub-listener; secretKeyRef.key unchanged
 
 ### Roadmap Evolution
 
@@ -307,9 +310,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-27T16:41:12.629Z
+Last session: 2026-04-27T16:48:10.669Z
 Last activity: 2026-04-27
-Stopped at: Phase 14 Plan 05 complete — 3 commits (4530ef62, ee5c618d, 7b9b9757) — JWT middleware migrated to KeyChain, Pitfall 4 and api-gateway parallel bug fixed, kick_oauth_tokens encryption wired
+Stopped at: Phase 14 Plan 07 complete — 2 commits in caesar-deployment (bd48cd8, cb7d995) — V1 env entries wired to all 12 deployments, Pitfall 1 fixed, key-rotator Job+CronJob created
 Resume file: None
 
 **Next action:** Execute Phase 14 Plan 06 — key-rotator sweeper.
