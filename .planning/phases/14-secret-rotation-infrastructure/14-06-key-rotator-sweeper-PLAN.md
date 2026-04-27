@@ -11,6 +11,7 @@ files_modified:
   - services/auth-service/cmd/key-rotator/main_test.go
   - services/auth-service/cmd/key-rotator/sweeper.go
   - services/auth-service/cmd/key-rotator/sweeper_test.go
+  - services/auth-service/Dockerfile
 autonomous: true
 decisions_addressed:
   - D-03
@@ -329,11 +330,10 @@ Tables (per RESEARCH.md §6 sweep order):
 
     func (s *Sweeper) sweepKickOAuthTokens(ctx context.Context) error {
         const sel = `SELECT id, COALESCE(access_token,''), COALESCE(refresh_token,''), encryption_version FROM kick_oauth_tokens ORDER BY id`
-        // ... same iteration; if encryption_version == 0, leave alone (plaintext — overlay-manager will encrypt on next write per Plan 14-05)
-        // ... if encryption_version >= 1, run encryptIfNotCurrentKid and bump encryption_version stays at 1+ (always 1 since we're using current kid)
-        // Implementation detail: we want sweeper to migrate v0→v1 OR not? Per CONTEXT D-16: lazy + sweeper. So YES, sweeper SHOULD encrypt v0 rows in kick_oauth_tokens for completeness.
-        // BUT a v0 row in kick_oauth_tokens means a row written before Plan 14-05 deployed; encrypt it now.
-        // SO: if encryption_version == 0, encrypt the plaintext access_token/refresh_token directly (no decrypt step needed) and set encryption_version=1.
+        // POLICY (matches Step 2 of Task 1's action body — single source of truth):
+        //   if encryption_version == 0:  v0 = plaintext (written before Plan 14-05 deploy); sweeper encrypts directly without a Decrypt step, then sets encryption_version=1.
+        //   if encryption_version >= 1:  run encryptIfNotCurrentKid; the helper auto-detects versioned vs legacy ciphertext and re-encrypts under the current kid.
+        // The sweeper DOES encrypt kick v0 rows directly; the previous "leave alone" comment was wrong and has been removed.
         // ... full implementation in code
         return nil // placeholder — fill out per behaviors above
     }
@@ -543,6 +543,60 @@ Tables (per RESEARCH.md §6 sweep order):
   <done>key-rotator binary builds. main_test.go covers flag parsing, env preflight, and the run() contract. Help output lists all four flags.</done>
 </task>
 
+<task type="auto">
+  <name>Task 3: Update auth-service Dockerfile to build key-rotator binary alongside auth-service</name>
+  <files>services/auth-service/Dockerfile</files>
+  <read_first>
+    - services/auth-service/Dockerfile (full — current builder builds only `/app/auth-service`)
+    - services/auth-service/cmd/token-encryption-backfill/main.go (precedent: another `cmd/<tool>` binary; check whether the existing Dockerfile builds it. If not, this Phase 14 Dockerfile change establishes the multi-binary build pattern for auth-service.)
+    - services/auth-service/cmd/key-rotator/main.go (Task 2 output — the binary entry point we're now packaging)
+  </read_first>
+  <action>
+    Step 1 — Inspect current Dockerfile to confirm it builds only `/app/auth-service`:
+    ```
+    grep -n "go build\|COPY --from=builder" services/auth-service/Dockerfile
+    ```
+    Expected: a single `RUN CGO_ENABLED=0 GOOS=linux go build -o /app/auth-service ./cmd` line in the builder stage and a single `COPY --from=builder /app/auth-service .` line in the final stage. Confirm `cmd/token-encryption-backfill` is also NOT built today (this plan is the precedent for multi-binary auth-service images).
+
+    Step 2 — In the BUILDER stage, AFTER the existing `RUN ... -o /app/auth-service ./cmd` line, ADD a second build line for the key-rotator:
+    ```dockerfile
+    RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/key-rotator ./cmd/key-rotator
+    ```
+    Rationale: same builder stage, same vendored deps, no extra layer cost beyond the binary itself. The `-ldflags="-s -w"` strips debug symbols to keep the binary lean (the existing auth-service line can be left unchanged since it's covered by the same image).
+
+    Step 3 — In the FINAL (runtime) stage, AFTER the existing `COPY --from=builder /app/auth-service .` line, ADD:
+    ```dockerfile
+    COPY --from=builder /app/key-rotator /app/key-rotator
+    ```
+    Both binaries land in `/app/`. The default `CMD ["./auth-service"]` is unchanged — the Job/CronJob in Plan 14-07 explicitly overrides `command: ["/app/key-rotator"]` to invoke the sweeper.
+
+    Step 4 — Verify the build locally if Docker is available:
+    ```
+    docker build -t auth-service-test services/auth-service/
+    docker run --rm auth-service-test ls /app/
+    ```
+    Expected output includes BOTH `auth-service` AND `key-rotator`.
+
+    Fallback acceptance check if Docker is NOT available in the executor environment: run a multi-stage `go build` dry-run that mimics the Dockerfile commands:
+    ```
+    cd /home/moersener/Hobby/all-chat/services/auth-service &&       CGO_ENABLED=0 GOOS=linux go build -o /tmp/auth-service-build ./cmd &&       CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /tmp/key-rotator-build ./cmd/key-rotator &&       ls -la /tmp/auth-service-build /tmp/key-rotator-build
+    ```
+    Both binaries should exist after the dry-run.
+  </action>
+  <verify>
+    <automated>grep -q "go build .* -o /app/key-rotator ./cmd/key-rotator" services/auth-service/Dockerfile && grep -q "COPY --from=builder /app/key-rotator" services/auth-service/Dockerfile && CGO_ENABLED=0 GOOS=linux go build -o /tmp/auth-service-build ./services/auth-service/cmd && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /tmp/key-rotator-build ./services/auth-service/cmd/key-rotator && test -x /tmp/auth-service-build && test -x /tmp/key-rotator-build</automated>
+  </verify>
+  <acceptance_criteria>
+    - `grep -q "go build .* -o /app/key-rotator ./cmd/key-rotator" services/auth-service/Dockerfile`
+    - `grep -q "COPY --from=builder /app/key-rotator" services/auth-service/Dockerfile`
+    - `grep -q "go build .* -o /app/auth-service ./cmd" services/auth-service/Dockerfile` (existing line preserved)
+    - `grep -q "COPY --from=builder /app/auth-service" services/auth-service/Dockerfile` (existing line preserved)
+    - `cd /home/moersener/Hobby/all-chat && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /tmp/key-rotator-build ./services/auth-service/cmd/key-rotator` exits 0 (dry-run multi-stage build proxy)
+    - Optional (if Docker available): `docker build -t auth-service-test services/auth-service/ && docker run --rm auth-service-test ls /app/` lists both `auth-service` AND `key-rotator`.
+  </acceptance_criteria>
+  <done>The auth-service Docker image contains BOTH `/app/auth-service` AND `/app/key-rotator` binaries. Plan 14-07's `key-rotator-job.yaml` reference to `/app/key-rotator` resolves to a real executable; the sweeper Job is no longer guaranteed to crashloop with "exec format error" / "no such file."</done>
+</task>
+
 </tasks>
 
 <threat_model>
@@ -566,6 +620,7 @@ Tables (per RESEARCH.md §6 sweep order):
 | T-14-06-06 | Denial of Service | Sweeper hung indefinitely on a slow query | mitigate | Context propagation from `signal.NotifyContext` (SIGINT/SIGTERM) cancels in-flight queries. Job spec sets activeDeadlineSeconds=3600 in Plan 14-07 |
 | T-14-06-07 | Tampering | Sweeper accidentally migrates tiktok_oauth_tokens v0 plaintext rows by mis-applying the kick code path | mitigate | sweepTikTokOAuthTokens uses SQL filter `WHERE encryption_version >= 1`, NOT the kick "encrypt v0 plaintext" path; TestSweeper_SkipsTikTokV0 asserts v0 rows are untouched |
 | T-14-06-08 | Repudiation | Sweeper "completed" but operator can't audit which rows were updated when | mitigate | Per-batch flush logs a structured event with `{table, batch_size, dry_run}`; final `sweep complete` log includes per-table SweeperMetrics counts; CronJob retains last 3 successful + last 1 failed Job per Plan 14-07 |
+| T-14-06-09 | Denial of Service | Sweeper binary missing from container image → Job pods crashloop with `exec format error` or `no such file or directory` → no rotation telemetry → silent failure mode (D-03/D-06 non-functional) | mitigate | Task 3 modifies `services/auth-service/Dockerfile` to build BOTH binaries in the same builder stage and COPY both into the runtime image; acceptance criteria assert `grep -q "go build .* -o /app/key-rotator ./cmd/key-rotator"` AND `grep -q "COPY --from=builder /app/key-rotator"` AND a multi-stage `go build` dry-run produces a working `/tmp/key-rotator-build` executable |
 </threat_model>
 
 <verification>

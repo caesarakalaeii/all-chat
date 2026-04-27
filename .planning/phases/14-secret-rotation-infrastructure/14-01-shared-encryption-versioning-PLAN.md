@@ -17,6 +17,7 @@ decisions_addressed:
   - D-02
   - D-04
   - D-05
+  - D-20
 must_haves:
   truths:
     - "shared/encryption exposes MultiKeyEncryptor that prepends a 1-byte kid to new ciphertext"
@@ -49,7 +50,7 @@ must_haves:
 <objective>
 Build the versioned multi-key AES-GCM primitive in `shared/encryption` and remove the duplicate `shared/crypto` package by migrating its only caller. This is the cryptographic foundation for the entire phase — every other plan depends on `MultiKeyEncryptor` existing.
 
-Purpose: Implements decisions D-01 (kid-byte ciphertext format), D-02 (multi-key env-driven chain), D-04 (unify TOKEN_ENCRYPTION_KEY + YOUTUBE_TOKEN_ENCRYPTION_KEY), and D-05 (legacy backwards-compat with AEAD-fail fallback).
+Purpose: Implements decisions D-01 (kid-byte ciphertext format), D-02 (multi-key env-driven chain), D-04 (unify TOKEN_ENCRYPTION_KEY + YOUTUBE_TOKEN_ENCRYPTION_KEY), and D-05 (legacy backwards-compat with AEAD-fail fallback). D-20 honored: All four workstreams (encryption versioning in 14-01/04/06, JWT rotation in 14-02/05, gap-fill in 14-03/05, DB password in 14-08) ship in this single phase across 8 plans / 3 waves; this plan is the phase anchor (Wave 1, primary shared library).
 
 Output:
 - `shared/encryption/versioned.go` — `MultiKeyEncryptor` type, env loader, encrypt/decrypt with kid dispatch.
