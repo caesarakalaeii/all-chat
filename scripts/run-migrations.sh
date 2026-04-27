@@ -15,11 +15,13 @@
 # Three current safeguards address that class of failure:
 #   1. We pg_isready-poll the DB for up to ~120 s before any psql work.
 #   2. We propagate psql's exit code instead of unconditional `exit 0`.
-#   3. ON_ERROR_STOP stays 0 (per-statement) because not every migration is
-#      idempotent for CREATE INDEX / CREATE TRIGGER on re-runs — a fatal
-#      connection failure still produces a non-zero psql exit code, which
-#      this script now respects. Future cleanup: make all migrations
-#      idempotent and flip ON_ERROR_STOP=1.
+#   3. ON_ERROR_STOP=1: every statement-level error aborts the run. All
+#      migrations were audited for idempotency on re-run (CREATE … IF NOT
+#      EXISTS, DROP TRIGGER IF EXISTS + CREATE TRIGGER, ON CONFLICT DO
+#      NOTHING for INSERTs, DO blocks for ADD CONSTRAINT and CREATE TYPE).
+#      Verified by running the full migration set three times against a
+#      fresh postgres:16-alpine container with no errors. New migrations
+#      MUST follow these patterns or the next pod restart will fail.
 
 set -u
 
@@ -91,7 +93,7 @@ PGPASSWORD="$DATABASE_PASSWORD" psql \
     -p "$DATABASE_PORT" \
     -U "$DATABASE_USER" \
     -d "$DATABASE_NAME" \
-    -v ON_ERROR_STOP=0 \
+    -v ON_ERROR_STOP=1 \
     -f "$BATCH"
 psql_rc=$?
 

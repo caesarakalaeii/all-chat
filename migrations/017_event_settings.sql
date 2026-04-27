@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS overlay_event_settings (
     UNIQUE(overlay_id)
 );
 
-CREATE INDEX idx_overlay_event_settings_overlay_id ON overlay_event_settings(overlay_id);
+CREATE INDEX IF NOT EXISTS idx_overlay_event_settings_overlay_id ON overlay_event_settings(overlay_id);
 
 -- Function to auto-create event settings for new overlays
 CREATE OR REPLACE FUNCTION create_overlay_event_settings()
@@ -56,6 +56,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to auto-create event settings when overlay is created
+DROP TRIGGER IF EXISTS trigger_create_overlay_event_settings ON overlays;
 CREATE TRIGGER trigger_create_overlay_event_settings
     AFTER INSERT ON overlays
     FOR EACH ROW

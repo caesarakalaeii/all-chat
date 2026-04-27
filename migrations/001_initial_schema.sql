@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_users_twitch_id ON users(twitch_id);
-CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_twitch_id ON users(twitch_id);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 -- Overlays table
 CREATE TABLE IF NOT EXISTS overlays (
@@ -30,9 +30,9 @@ CREATE TABLE IF NOT EXISTS overlays (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_overlays_user_id ON overlays(user_id);
-CREATE INDEX idx_overlays_is_active ON overlays(is_active);
-CREATE INDEX idx_overlays_user_id_is_active ON overlays(user_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_overlays_user_id ON overlays(user_id);
+CREATE INDEX IF NOT EXISTS idx_overlays_is_active ON overlays(is_active);
+CREATE INDEX IF NOT EXISTS idx_overlays_user_id_is_active ON overlays(user_id, is_active);
 
 -- Overlay configurations
 CREATE TABLE IF NOT EXISTS overlay_configs (
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS overlay_configs (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_overlay_configs_overlay_id ON overlay_configs(overlay_id);
+CREATE INDEX IF NOT EXISTS idx_overlay_configs_overlay_id ON overlay_configs(overlay_id);
 
 -- Supported platforms registry
 CREATE TABLE IF NOT EXISTS supported_platforms (
@@ -83,10 +83,10 @@ CREATE TABLE IF NOT EXISTS overlay_chat_sources (
     UNIQUE(overlay_id, platform, channel_id)    -- Prevent duplicate sources
 );
 
-CREATE INDEX idx_overlay_chat_sources_overlay_id ON overlay_chat_sources(overlay_id);
-CREATE INDEX idx_overlay_chat_sources_platform ON overlay_chat_sources(platform);
-CREATE INDEX idx_overlay_chat_sources_is_active ON overlay_chat_sources(is_active);
-CREATE INDEX idx_overlay_chat_sources_overlay_platform ON overlay_chat_sources(overlay_id, platform, is_active);
+CREATE INDEX IF NOT EXISTS idx_overlay_chat_sources_overlay_id ON overlay_chat_sources(overlay_id);
+CREATE INDEX IF NOT EXISTS idx_overlay_chat_sources_platform ON overlay_chat_sources(platform);
+CREATE INDEX IF NOT EXISTS idx_overlay_chat_sources_is_active ON overlay_chat_sources(is_active);
+CREATE INDEX IF NOT EXISTS idx_overlay_chat_sources_overlay_platform ON overlay_chat_sources(overlay_id, platform, is_active);
 
 -- Trigger to automatically create overlay_config when overlay is created
 CREATE OR REPLACE FUNCTION create_overlay_config()
@@ -98,6 +98,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_create_overlay_config ON overlays;
 CREATE TRIGGER trigger_create_overlay_config
     AFTER INSERT ON overlays
     FOR EACH ROW
@@ -113,17 +114,22 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Apply updated_at trigger to all tables
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_overlays_updated_at ON overlays;
 CREATE TRIGGER update_overlays_updated_at BEFORE UPDATE ON overlays
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_overlay_configs_updated_at ON overlay_configs;
 CREATE TRIGGER update_overlay_configs_updated_at BEFORE UPDATE ON overlay_configs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_overlay_chat_sources_updated_at ON overlay_chat_sources;
 CREATE TRIGGER update_overlay_chat_sources_updated_at BEFORE UPDATE ON overlay_chat_sources
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_supported_platforms_updated_at ON supported_platforms;
 CREATE TRIGGER update_supported_platforms_updated_at BEFORE UPDATE ON supported_platforms
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

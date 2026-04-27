@@ -27,9 +27,9 @@ CREATE TABLE IF NOT EXISTS viewer_sessions (
     UNIQUE(platform, platform_user_id)          -- One session per platform user
 );
 
-CREATE INDEX idx_viewer_sessions_platform ON viewer_sessions(platform);
-CREATE INDEX idx_viewer_sessions_platform_user_id ON viewer_sessions(platform, platform_user_id);
-CREATE INDEX idx_viewer_sessions_token_expires_at ON viewer_sessions(token_expires_at);
+CREATE INDEX IF NOT EXISTS idx_viewer_sessions_platform ON viewer_sessions(platform);
+CREATE INDEX IF NOT EXISTS idx_viewer_sessions_platform_user_id ON viewer_sessions(platform, platform_user_id);
+CREATE INDEX IF NOT EXISTS idx_viewer_sessions_token_expires_at ON viewer_sessions(token_expires_at);
 
 -- Message history table - audit log of messages sent through All-Chat
 CREATE TABLE IF NOT EXISTS viewer_message_history (
@@ -48,12 +48,13 @@ CREATE TABLE IF NOT EXISTS viewer_message_history (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_viewer_message_history_viewer_session_id ON viewer_message_history(viewer_session_id);
-CREATE INDEX idx_viewer_message_history_streamer_user_id ON viewer_message_history(streamer_user_id);
-CREATE INDEX idx_viewer_message_history_sent_at ON viewer_message_history(sent_at DESC);
-CREATE INDEX idx_viewer_message_history_platform ON viewer_message_history(platform);
+CREATE INDEX IF NOT EXISTS idx_viewer_message_history_viewer_session_id ON viewer_message_history(viewer_session_id);
+CREATE INDEX IF NOT EXISTS idx_viewer_message_history_streamer_user_id ON viewer_message_history(streamer_user_id);
+CREATE INDEX IF NOT EXISTS idx_viewer_message_history_sent_at ON viewer_message_history(sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_viewer_message_history_platform ON viewer_message_history(platform);
 
 -- Apply updated_at trigger to viewer_sessions
+DROP TRIGGER IF EXISTS update_viewer_sessions_updated_at ON viewer_sessions;
 CREATE TRIGGER update_viewer_sessions_updated_at BEFORE UPDATE ON viewer_sessions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

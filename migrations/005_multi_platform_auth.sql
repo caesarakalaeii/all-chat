@@ -11,9 +11,32 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(50) UNIQUE;
 -- Add provider column to track which OAuth provider was used
 ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) DEFAULT 'twitch';
 
+-- Define the auth_provider CHECK constraint here, where the column is created.
+-- Includes 'kick' (added in 005_kick_support.sql) and 'tiktok' (planned). The
+-- DROP IF EXISTS makes this safe on re-run and lets future migrations widen
+-- the allowed set without an ordering bug — see git history of 005_kick_support
+-- for the original (broken) split. Wrapped in a DO block so the DROP+ADD pair
+-- is atomic and idempotent.
+DO $$
+BEGIN
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_auth_provider_check;
+    ALTER TABLE users ADD CONSTRAINT users_auth_provider_check
+        CHECK (auth_provider IN ('twitch', 'youtube', 'tiktok', 'kick'));
+END $$;
+
 -- Add constraint: at least one OAuth provider ID must be present
-ALTER TABLE users ADD CONSTRAINT users_at_least_one_oauth_id
-  CHECK (twitch_id IS NOT NULL OR google_id IS NOT NULL);
+-- Wrapped because Postgres has no ADD CONSTRAINT IF NOT EXISTS.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'users_at_least_one_oauth_id'
+          AND conrelid = 'users'::regclass
+    ) THEN
+        ALTER TABLE users ADD CONSTRAINT users_at_least_one_oauth_id
+          CHECK (twitch_id IS NOT NULL OR google_id IS NOT NULL);
+    END IF;
+END $$;
 
 -- Create index on google_id
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);

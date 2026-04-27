@@ -5,11 +5,11 @@
 --          and maintains overlay ID secrecy.
 
 -- Add flag to control which overlay is exposed to viewers
-ALTER TABLE overlays ADD COLUMN is_public_for_viewers BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE overlays ADD COLUMN IF NOT EXISTS is_public_for_viewers BOOLEAN NOT NULL DEFAULT false;
 
 -- Add index for efficient viewer queries
 -- Partial index only on public, active overlays for performance
-CREATE INDEX idx_overlays_user_public ON overlays(user_id, is_public_for_viewers)
+CREATE INDEX IF NOT EXISTS idx_overlays_user_public ON overlays(user_id, is_public_for_viewers)
 WHERE is_public_for_viewers = true AND is_active = true;
 
 -- Add comment for documentation

@@ -11,7 +11,7 @@
 DROP INDEX IF EXISTS idx_users_username;
 
 -- Create new case-insensitive index
-CREATE INDEX idx_users_username_lower ON users(LOWER(username));
+CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users(LOWER(username));
 
 -- Note: The query in GetByUsername has been updated to use:
 -- WHERE LOWER(username) = LOWER($1)

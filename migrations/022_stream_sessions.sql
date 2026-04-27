@@ -26,6 +26,6 @@ CREATE TABLE IF NOT EXISTS stream_sessions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_stream_sessions_overlay_id ON stream_sessions(overlay_id);
-CREATE INDEX idx_stream_sessions_started_at ON stream_sessions(started_at DESC);
-CREATE INDEX idx_stream_sessions_state ON stream_sessions(state);
+CREATE INDEX IF NOT EXISTS idx_stream_sessions_overlay_id ON stream_sessions(overlay_id);
+CREATE INDEX IF NOT EXISTS idx_stream_sessions_started_at ON stream_sessions(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_stream_sessions_state ON stream_sessions(state);

@@ -38,11 +38,11 @@ CREATE TABLE IF NOT EXISTS youtube_channel_quota (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_youtube_quota_user_id ON youtube_channel_quota(user_id);
-CREATE INDEX idx_youtube_quota_priority ON youtube_channel_quota(priority_tier);
-CREATE INDEX idx_youtube_quota_last_live ON youtube_channel_quota(last_seen_live_at);
-CREATE INDEX idx_youtube_quota_reset ON youtube_channel_quota(quota_reset_at);
-CREATE INDEX idx_youtube_quota_cached_video ON youtube_channel_quota(cached_video_id)
+CREATE INDEX IF NOT EXISTS idx_youtube_quota_user_id ON youtube_channel_quota(user_id);
+CREATE INDEX IF NOT EXISTS idx_youtube_quota_priority ON youtube_channel_quota(priority_tier);
+CREATE INDEX IF NOT EXISTS idx_youtube_quota_last_live ON youtube_channel_quota(last_seen_live_at);
+CREATE INDEX IF NOT EXISTS idx_youtube_quota_reset ON youtube_channel_quota(quota_reset_at);
+CREATE INDEX IF NOT EXISTS idx_youtube_quota_cached_video ON youtube_channel_quota(cached_video_id)
     WHERE cached_video_id IS NOT NULL;
 
 -- Trigger to update updated_at timestamp
@@ -54,6 +54,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS youtube_channel_quota_updated_at_trigger ON youtube_channel_quota;
 CREATE TRIGGER youtube_channel_quota_updated_at_trigger
     BEFORE UPDATE ON youtube_channel_quota
     FOR EACH ROW

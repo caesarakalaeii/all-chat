@@ -21,4 +21,4 @@ DROP INDEX IF EXISTS idx_users_username_lower;
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key;
 
 -- Create a case-insensitive UNIQUE index
-CREATE UNIQUE INDEX idx_users_username_lower_unique ON users(LOWER(username));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower_unique ON users(LOWER(username));

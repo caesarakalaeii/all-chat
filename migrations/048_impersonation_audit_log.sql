@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS impersonation_audit_log (
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_impersonation_audit_admin ON impersonation_audit_log(admin_user_id);
-CREATE INDEX idx_impersonation_audit_target ON impersonation_audit_log(target_user_id);
-CREATE INDEX idx_impersonation_audit_created ON impersonation_audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_impersonation_audit_admin ON impersonation_audit_log(admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_impersonation_audit_target ON impersonation_audit_log(target_user_id);
+CREATE INDEX IF NOT EXISTS idx_impersonation_audit_created ON impersonation_audit_log(created_at);
 
 COMMENT ON TABLE impersonation_audit_log IS
     'DSGVO Art.5(2) accountability: tracks every admin impersonation event.';
