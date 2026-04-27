@@ -254,6 +254,7 @@ Key decisions relevant to v1.6:
 - Phase 11 added: Add username/keyword exclude list to overlay filter settings (issue #240)
 - Phase 12 added: Notification sound on incoming messages with premium custom sound support (issue #241)
 - Phase 13 added: Text-to-Speech (TTS) for chat messages — Web Speech API free tier and premium ElevenLabs streaming, with priority queue/sampling/cooldown (issue #270)
+- Phase 14 added: Secret Rotation Infrastructure — design rotation mechanisms per secret type (DB password, JWT signing keys, AES-GCM TOKEN_ENCRYPTION_KEY for OAuth tokens) following recent leak; minimize impact on encrypted DB values during rotation, support repeatable rotation going forward
 
 ### Pending Todos
 
