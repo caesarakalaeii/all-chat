@@ -71,6 +71,11 @@ services:
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
       MESSAGE_PROCESSOR_URL: http://message-processor:8087
       MESSAGE_PROCESSOR_API_KEY: dev-frontend-key
+      # Phase 13 TTS — AES-GCM master key (32 bytes, base64 or hex). Match prod
+      # docker-compose.yml fallback so `make frontend-dev` works without an .env.
+      # Override for local key-rotation testing: TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      OVERLAY_PUBLIC_BASE_URL: ${OVERLAY_PUBLIC_BASE_URL:-http://localhost:3000}
     ports:
       - "8082:8082"
     depends_on:

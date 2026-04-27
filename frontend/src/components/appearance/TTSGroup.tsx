@@ -1,0 +1,869 @@
+'use client'
+
+/**
+ * This file is part of All-Chat.
+ * Copyright (C) 2026 caesarakalaeii
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+import React, { useEffect, useRef, useState } from 'react'
+import toast from 'react-hot-toast'
+import { ToggleSwitch } from './ToggleSwitch'
+import { SliderControl } from './SliderControl'
+import { PremiumBadge } from '@/components/PremiumBadge'
+import { useBrowserVoices } from '@/lib/hooks/useBrowserVoices'
+import type { DisplaySettings } from '@/lib/types/overlay'
+
+/**
+ * TTSGroup — the Text-to-Speech settings group under the AppearancePanel.
+ * Mirrors SoundGroup/FilterGroup in shape. Sub-sections: Voice, Throttling,
+ * Content, Priority, and Advanced (ElevenLabs premium).
+ *
+ * Plan 03 replaced Plan 01's Advanced stub with the full ElevenLabs UX:
+ * API-key input (Save / Remove), Test-key button + character-quota display,
+ * ElevenLabs voice picker (lazy-loaded on focus), read-only OBS URL input
+ * with Copy / Regenerate buttons + confirmation modal.
+ *
+ * See 13-UI-SPEC.md for the authoritative copy and interaction contract.
+ */
+
+export interface ElevenLabsVoice {
+  voice_id: string
+  name: string
+  category?: string
+}
+
+export interface TestKeyResult {
+  ok: boolean
+  charactersRemaining?: number
+  charactersLimit?: number
+  errorCode?: number
+}
+
+export interface TTSGroupProps {
+  displaySettings: Partial<DisplaySettings>
+  onChange: (patch: Partial<DisplaySettings>) => void
+  isPremium: boolean
+  overlayId: string
+  hasElevenLabsConfig: boolean
+  obsUrl?: string
+  onPreview?: () => void
+  onPreviewStop?: () => void
+  // ElevenLabs async callbacks — Plan 03 wires these in the editor page.
+  onSaveKey?: (key: string, voiceId: string) => Promise<void>
+  onTestKey?: () => Promise<TestKeyResult>
+  onRotateToken?: () => Promise<{ obsUrl: string }>
+  onRemoveKey?: () => Promise<void>
+  onFetchVoices?: () => Promise<ElevenLabsVoice[]>
+}
+
+const ALL_PLATFORMS: readonly string[] = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
+const PLATFORM_LABELS: Record<string, string> = {
+  twitch: 'Twitch',
+  youtube: 'YouTube',
+  kick: 'Kick',
+  tiktok: 'TikTok',
+  discord: 'Discord',
+}
+
+interface SubHeaderProps {
+  label: string
+  first?: boolean
+}
+
+function SubSectionHeader({ label, first }: SubHeaderProps): React.ReactElement {
+  const border = first ? '' : 'border-t border-border pt-4 mt-4'
+  return (
+    <div className={`flex items-center gap-2 ${border}`}>
+      <span className="text-xs font-semibold uppercase tracking-wide text-text-dim">{label}</span>
+    </div>
+  )
+}
+
+interface NumberControlProps {
+  label: string
+  value: number
+  min: number
+  max: number
+  step?: number
+  unit?: string
+  onChange: (v: number) => void
+}
+
+function NumberControl({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  unit,
+  onChange,
+}: NumberControlProps): React.ReactElement {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-40 shrink-0 text-sm text-text-sub">{label}</span>
+      <input
+        type="number"
+        aria-label={label}
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => {
+          const parsed = parseFloat(e.target.value)
+          if (Number.isFinite(parsed)) onChange(parsed)
+        }}
+        className="w-24 rounded-lg border border-border bg-surface px-2 py-1 text-sm text-text"
+      />
+      {unit && <span className="text-xs text-text-dim">{unit}</span>}
+    </div>
+  )
+}
+
+interface PlatformChipRowProps {
+  platforms: string[]
+  onToggle: (platform: string) => void
+}
+
+function PlatformChipRow({ platforms, onToggle }: PlatformChipRowProps): React.ReactElement {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {ALL_PLATFORMS.map((p) => {
+        const active = platforms.includes(p)
+        return (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onToggle(p)}
+            className={
+              active
+                ? 'rounded-full border border-twitch bg-twitch/15 px-3 py-1 text-xs text-text'
+                : 'rounded-full border border-border bg-surface-alt px-3 py-1 text-xs text-text-sub'
+            }
+            aria-pressed={active}
+          >
+            {PLATFORM_LABELS[p] ?? p}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ==========================================================================
+// Advanced (ElevenLabs) sub-components — Plan 03
+// ==========================================================================
+
+interface ApiKeyInputProps {
+  hasSavedKey: boolean
+  onSave: (key: string, voiceId: string) => Promise<void>
+  onRemove: () => Promise<void>
+  onTest: () => Promise<TestKeyResult>
+  disabled: boolean
+  isPremium: boolean
+  voiceId: string
+}
+
+function ApiKeyInput({
+  hasSavedKey,
+  onSave,
+  onRemove,
+  onTest,
+  disabled,
+  isPremium,
+  voiceId,
+}: ApiKeyInputProps): React.ReactElement {
+  const [apiKey, setApiKey] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [quota, setQuota] = useState<{ remaining: number; limit: number } | null>(null)
+  const [removeArmed, setRemoveArmed] = useState(false)
+  const removeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [removing, setRemoving] = useState(false)
+
+  useEffect(
+    () => () => {
+      if (removeTimerRef.current) {
+        clearTimeout(removeTimerRef.current)
+        removeTimerRef.current = null
+      }
+    },
+    [],
+  )
+
+  async function handleSave(): Promise<void> {
+    if (apiKey.trim() === '') {
+      setError('API key cannot be empty.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(apiKey, voiceId)
+      // T-13-07 mitigation: clear key from state immediately after POST resolves.
+      setApiKey('')
+      toast.success('API key saved.')
+    } catch (e) {
+      setError('Could not save. Try again.')
+      toast.error(
+        `Could not save key: ${e instanceof Error ? e.message : 'network error'}`,
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleTest(): Promise<void> {
+    setTesting(true)
+    try {
+      const r = await onTest()
+      if (r.ok) {
+        if (
+          typeof r.charactersRemaining === 'number' &&
+          typeof r.charactersLimit === 'number'
+        ) {
+          setQuota({ remaining: r.charactersRemaining, limit: r.charactersLimit })
+        }
+      } else {
+        switch (r.errorCode) {
+          case 401:
+            toast.error('Invalid API key')
+            break
+          case 429:
+            toast.error('Rate-limited — try again in a minute')
+            break
+          case 0:
+            toast.error('Could not reach ElevenLabs. Check your connection.')
+            break
+          default:
+            toast.error('ElevenLabs service unavailable')
+        }
+      }
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  async function handleRemoveClick(): Promise<void> {
+    if (!removeArmed) {
+      setRemoveArmed(true)
+      if (removeTimerRef.current) clearTimeout(removeTimerRef.current)
+      removeTimerRef.current = setTimeout(() => {
+        setRemoveArmed(false)
+        removeTimerRef.current = null
+      }, 3000)
+      return
+    }
+    if (removeTimerRef.current) {
+      clearTimeout(removeTimerRef.current)
+      removeTimerRef.current = null
+    }
+    setRemoving(true)
+    try {
+      await onRemove()
+      toast.success('API key removed.')
+      setQuota(null)
+    } catch {
+      toast.error('Could not remove key. Try again.')
+    } finally {
+      setRemoving(false)
+      setRemoveArmed(false)
+    }
+  }
+
+  const quotaPct = quota ? Math.round((quota.remaining / quota.limit) * 100) : null
+
+  return (
+    <div className="space-y-3">
+      {!hasSavedKey && (
+        <div>
+          <p className="mb-1 text-xs text-text-dim">
+            {isPremium
+              ? 'Your key is encrypted server-side and never returned.'
+              : 'Upgrade to Premium to use ElevenLabs voices.'}
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk-..."
+              autoComplete="off"
+              spellCheck={false}
+              aria-label="ElevenLabs API key"
+              disabled={disabled || saving}
+              className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text font-mono placeholder:text-text-dim disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                void handleSave()
+              }}
+              disabled={disabled || saving}
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save key'}
+            </button>
+          </div>
+          {error && (
+            <p role="alert" className="mt-1 text-xs font-medium text-red-400">
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+
+      {hasSavedKey && (
+        <>
+          <p className="text-xs text-text-dim">
+            Key saved and encrypted. Click Test key to verify.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void handleTest()
+            }}
+            disabled={disabled || testing}
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {testing ? 'Testing…' : 'Test key'}
+          </button>
+
+          {quota ? (
+            <p className="text-xs text-text-dim">
+              {quota.remaining.toLocaleString()} / {quota.limit.toLocaleString()}
+              {' '}characters this month ({quotaPct}%)
+            </p>
+          ) : (
+            <p className="text-xs text-text-dim">Click Test key to see your remaining quota.</p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              void handleRemoveClick()
+            }}
+            disabled={disabled || removing}
+            className={`rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50 ${
+              removeArmed
+                ? 'border-red-500 bg-red-500/10 text-red-400'
+                : 'border-border bg-surface text-text-sub'
+            }`}
+          >
+            {removing ? 'Removing…' : removeArmed ? 'Confirm remove' : 'Remove key'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+interface ObsUrlPanelProps {
+  obsUrl: string
+  onCopy: () => Promise<void>
+  onRegenerate: () => Promise<void>
+}
+
+function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.ReactElement {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [rotating, setRotating] = useState(false)
+
+  async function handleConfirm(): Promise<void> {
+    setRotating(true)
+    try {
+      await onRegenerate()
+    } finally {
+      setRotating(false)
+      setConfirmOpen(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-text-dim">
+        Paste this URL into OBS as your browser source to enable ElevenLabs TTS.
+      </p>
+      <input
+        type="text"
+        readOnly
+        value={obsUrl}
+        onFocus={(e) => e.target.select()}
+        aria-label="OBS URL — copy and paste into OBS browser source"
+        className="w-full select-all rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+      />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            void onCopy()
+          }}
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt"
+        >
+          Copy OBS URL
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt"
+        >
+          Regenerate URL
+        </button>
+      </div>
+      {confirmOpen && (
+        <div
+          role="alertdialog"
+          aria-labelledby="tts-regen-title"
+          aria-describedby="tts-regen-body"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+        >
+          <div className="max-w-md rounded-lg border border-border bg-surface p-6">
+            <h3 id="tts-regen-title" className="mb-2 text-sm font-medium text-text">
+              Regenerate OBS URL?
+            </h3>
+            <p id="tts-regen-body" className="mb-4 text-xs text-text-sub">
+              This invalidates the current OBS URL. You&apos;ll need to paste the new URL into OBS.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-sub hover:bg-surface-alt"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleConfirm()
+                }}
+                disabled={rotating}
+                className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {rotating ? 'Regenerating…' : 'Regenerate URL'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ElevenLabsVoicePickerProps {
+  selected: string
+  onChange: (voiceId: string) => void
+  onFetchVoices?: () => Promise<ElevenLabsVoice[]>
+  disabled: boolean
+}
+
+function ElevenLabsVoicePicker({
+  selected,
+  onChange,
+  onFetchVoices,
+  disabled,
+}: ElevenLabsVoicePickerProps): React.ReactElement {
+  const [voices, setVoices] = useState<ElevenLabsVoice[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(false)
+  const triedRef = useRef(false)
+
+  async function loadVoices(): Promise<void> {
+    if (triedRef.current || !onFetchVoices) return
+    triedRef.current = true
+    setLoading(true)
+    try {
+      const list = await onFetchVoices()
+      setVoices(list)
+    } catch {
+      setError(true)
+      toast.error('Could not load voices.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <label htmlFor="tts-elevenlabs-voice" className="mb-1 block text-sm text-text-sub">
+        ElevenLabs voice
+      </label>
+      <select
+        id="tts-elevenlabs-voice"
+        aria-label="ElevenLabs voice"
+        value={selected}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => {
+          void loadVoices()
+        }}
+        disabled={disabled}
+        className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {loading && <option value="">Loading voices…</option>}
+        {error && <option value="">Could not load voices</option>}
+        {!loading && !error && voices === null && (
+          <option value="">Save your API key to load voices.</option>
+        )}
+        {!loading && !error && voices !== null && voices.length === 0 && (
+          <option value="">No voices available</option>
+        )}
+        {voices?.map((v) => (
+          <option key={v.voice_id} value={v.voice_id}>
+            {v.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+// ==========================================================================
+// TTSGroup — main component
+// ==========================================================================
+
+export function TTSGroup(props: TTSGroupProps): React.ReactElement {
+  const { displaySettings: d, onChange, isPremium, onPreview } = props
+
+  const voices = useBrowserVoices()
+
+  // Detect Web Speech API availability. In jsdom the global may or may not
+  // be present; guard for both cases.
+  const supportsSpeech =
+    typeof window !== 'undefined' && typeof window.speechSynthesis !== 'undefined'
+
+  const enabled = d.tts_enabled ?? false
+  const provider = (d.tts_provider ?? 'browser') as 'browser' | 'elevenlabs'
+  const filterMode = d.tts_filter_mode ?? 'sample'
+  const platforms = d.tts_enabled_platforms ?? [...ALL_PLATFORMS]
+
+  // Advanced block — ElevenLabs voice selection state. Held locally because
+  // the chosen voice is sent with the Save-key call, NOT persisted to
+  // display_settings (ElevenLabs voice_id lives in overlay_tts_configs).
+  const [pickedVoiceId, setPickedVoiceId] = useState('')
+
+  function handlePlatformToggle(platform: string): void {
+    const current = d.tts_enabled_platforms ?? [...ALL_PLATFORMS]
+    const next = current.includes(platform)
+      ? current.filter((p) => p !== platform)
+      : [...current, platform]
+    onChange({ tts_enabled_platforms: next })
+  }
+
+  return (
+    <div className="space-y-4">
+      <ToggleSwitch
+        label="Enable text-to-speech"
+        checked={enabled && supportsSpeech}
+        onChange={(checked) => {
+          if (!supportsSpeech) return
+          onChange({ tts_enabled: checked })
+        }}
+      />
+      {!supportsSpeech && (
+        <p className="text-xs text-text-dim">This browser does not support text-to-speech.</p>
+      )}
+
+      {enabled && supportsSpeech && (
+        <>
+          {/* ---------- VOICE ---------- */}
+          <SubSectionHeader label="VOICE" first />
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm text-text-sub">Voice provider</legend>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="tts_provider"
+                value="browser"
+                checked={provider === 'browser'}
+                onChange={() => onChange({ tts_provider: 'browser' })}
+              />
+              <span>Browser (free)</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="tts_provider"
+                value="elevenlabs"
+                checked={provider === 'elevenlabs'}
+                onChange={() => onChange({ tts_provider: 'elevenlabs' })}
+                disabled={!isPremium}
+              />
+              <span>ElevenLabs (premium)</span>
+              {!isPremium && <PremiumBadge />}
+            </label>
+            {!isPremium && (
+              <p className="text-xs text-text-dim">
+                Upgrade to Premium to use ElevenLabs voices.
+              </p>
+            )}
+          </fieldset>
+
+          <SliderControl
+            label="Volume"
+            value={d.tts_volume ?? 0.8}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(v) => onChange({ tts_volume: v })}
+          />
+
+          <div>
+            <label className="mb-1 block text-sm text-text-sub">
+              Voice
+              <select
+                aria-label="Voice"
+                value={d.tts_voice_uri ?? ''}
+                onChange={(e) => onChange({ tts_voice_uri: e.target.value })}
+                className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+              >
+                <option value="">Default</option>
+                {voices.map((v) => (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {v.name} ({v.lang})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs text-text-dim">
+              Browser voice — list depends on your OS/browser.
+            </p>
+          </div>
+
+          <SliderControl
+            label="Speech rate"
+            value={d.tts_rate ?? 1.0}
+            min={0.5}
+            max={2}
+            step={0.05}
+            onChange={(v) => onChange({ tts_rate: v })}
+          />
+
+          {provider !== 'elevenlabs' && (
+            <SliderControl
+              label="Pitch"
+              value={d.tts_pitch ?? 1.0}
+              min={0}
+              max={2}
+              step={0.05}
+              onChange={(v) => onChange({ tts_pitch: v })}
+            />
+          )}
+
+          {onPreview && (
+            <button
+              type="button"
+              onClick={onPreview}
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt"
+            >
+              Test voice
+            </button>
+          )}
+
+          {/* ---------- THROTTLING ---------- */}
+          <SubSectionHeader label="THROTTLING" />
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm text-text-sub">Which messages are spoken</legend>
+            {(['all', 'sample', 'priority_only'] as const).map((mode) => (
+              <label key={mode} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="tts_filter_mode"
+                  value={mode}
+                  checked={filterMode === mode}
+                  onChange={() => onChange({ tts_filter_mode: mode })}
+                />
+                <span>
+                  {mode === 'all' && 'All'}
+                  {mode === 'sample' && 'Sample'}
+                  {mode === 'priority_only' && 'Priority-only'}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+
+          {filterMode === 'sample' && (
+            <div>
+              <SliderControl
+                label="Sample rate"
+                value={d.tts_sample_rate ?? 0.25}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => onChange({ tts_sample_rate: v })}
+              />
+              <p className="text-xs text-text-dim">
+                Chance a non-priority message is spoken.
+              </p>
+            </div>
+          )}
+
+          <NumberControl
+            label="Max queue length"
+            value={d.tts_max_queue ?? 5}
+            min={1}
+            max={50}
+            onChange={(v) => onChange({ tts_max_queue: v })}
+          />
+          <NumberControl
+            label="Messages per minute"
+            value={d.tts_messages_per_minute ?? 8}
+            min={1}
+            max={120}
+            onChange={(v) => onChange({ tts_messages_per_minute: v })}
+          />
+          <NumberControl
+            label="Per-user cooldown"
+            value={d.tts_user_cooldown_seconds ?? 30}
+            min={0}
+            max={600}
+            unit=" s"
+            onChange={(v) => onChange({ tts_user_cooldown_seconds: v })}
+          />
+          <NumberControl
+            label="Drop messages older than"
+            value={d.tts_staleness_seconds ?? 15}
+            min={1}
+            max={300}
+            unit=" s"
+            onChange={(v) => onChange({ tts_staleness_seconds: v })}
+          />
+
+          {/* ---------- CONTENT ---------- */}
+          <SubSectionHeader label="CONTENT" />
+
+          <ToggleSwitch
+            label="Read username"
+            checked={d.tts_read_username ?? true}
+            onChange={(v) => onChange({ tts_read_username: v })}
+          />
+          <ToggleSwitch
+            label="Read platform name"
+            checked={d.tts_read_platform ?? false}
+            onChange={(v) => onChange({ tts_read_platform: v })}
+          />
+          <NumberControl
+            label="Max message length"
+            value={d.tts_max_message_chars ?? 200}
+            min={20}
+            max={1000}
+            unit=" chars"
+            onChange={(v) => onChange({ tts_max_message_chars: v })}
+          />
+          <ToggleSwitch
+            label="Skip emote-only messages"
+            checked={d.tts_skip_emote_only ?? true}
+            onChange={(v) => onChange({ tts_skip_emote_only: v })}
+          />
+          <ToggleSwitch
+            label="Skip link-only messages"
+            checked={d.tts_skip_links ?? true}
+            onChange={(v) => onChange({ tts_skip_links: v })}
+          />
+
+          <div>
+            <p className="mb-2 text-sm text-text-sub">Platforms</p>
+            <PlatformChipRow platforms={platforms} onToggle={handlePlatformToggle} />
+          </div>
+
+          {/* ---------- PRIORITY ---------- */}
+          <SubSectionHeader label="PRIORITY" />
+
+          <ToggleSwitch
+            label="Announce priority events"
+            checked={d.tts_priority_events ?? true}
+            onChange={(v) => onChange({ tts_priority_events: v })}
+          />
+          {(d.tts_priority_events ?? true) && (
+            <NumberControl
+              label="Minimum bits to announce"
+              value={d.tts_priority_bits_min ?? 0}
+              min={0}
+              max={100000}
+              onChange={(v) => onChange({ tts_priority_bits_min: v })}
+            />
+          )}
+
+          {/* ---------- ADVANCED (ELEVENLABS) ---------- */}
+          {provider === 'elevenlabs' && (
+            <>
+              <SubSectionHeader label="ADVANCED (ELEVENLABS)" />
+              <div className={`space-y-3 ${!isPremium ? 'relative' : ''}`}>
+                {!isPremium && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface/80">
+                    <div className="flex flex-col items-center gap-2 text-center">
+                      <PremiumBadge />
+                      <span className="text-xs text-text-dim">
+                        Upgrade to Premium to use ElevenLabs voices.
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <ElevenLabsVoicePicker
+                  selected={pickedVoiceId}
+                  onChange={setPickedVoiceId}
+                  onFetchVoices={props.onFetchVoices}
+                  disabled={!isPremium}
+                />
+                <ApiKeyInput
+                  hasSavedKey={props.hasElevenLabsConfig}
+                  isPremium={isPremium}
+                  disabled={!isPremium}
+                  voiceId={pickedVoiceId}
+                  onSave={props.onSaveKey ?? (async (): Promise<void> => {})}
+                  onRemove={props.onRemoveKey ?? (async (): Promise<void> => {})}
+                  onTest={
+                    props.onTestKey ??
+                    (async (): Promise<TestKeyResult> => ({ ok: false, errorCode: 0 }))
+                  }
+                />
+                {props.hasElevenLabsConfig && props.obsUrl && (
+                  <ObsUrlPanel
+                    obsUrl={props.obsUrl}
+                    onCopy={async (): Promise<void> => {
+                      if (!props.obsUrl) return
+                      try {
+                        await navigator.clipboard.writeText(props.obsUrl)
+                        toast.success('OBS URL copied.')
+                      } catch {
+                        toast.error('Could not copy URL.')
+                      }
+                    }}
+                    onRegenerate={async (): Promise<void> => {
+                      if (!props.onRotateToken) return
+                      try {
+                        const result = await props.onRotateToken()
+                        try {
+                          await navigator.clipboard.writeText(result.obsUrl)
+                        } catch {
+                          // Clipboard permission missing — toast still surfaces success,
+                          // but on failure we fall through to the catch below.
+                        }
+                        toast.success('New OBS URL copied to clipboard.')
+                      } catch {
+                        toast.error('Could not regenerate URL. Try again.')
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}

@@ -365,3 +365,15 @@ Plans:
 Plans:
 - [ ] 12-01-PLAN.md — soundPlayer.ts TDD utility, DisplaySettings extension, preset audio files, overlay + embed page playback wiring
 - [ ] 12-02-PLAN.md — SoundGroup UI component with tests, AppearancePanel integration, editor page state/save/postMessage
+
+### Phase 13: Text-to-Speech (TTS) for chat messages
+
+**Goal:** Add TTS support to the overlay so streamers can have chat messages read aloud (issue #270). Two tiers: free Web Speech API (default) and premium ElevenLabs (user-supplied API key, streamed from browser). Includes a TTSQueue with sampling, per-user cooldown, token-bucket rate limiter, staleness discard, and priority bypass for subs/raids/bits/superchats. Adds tts_* fields to overlay DisplaySettings JSONB, a ttsPlayer.ts client utility, integration in overlay/[id]/page.tsx after the filter check, and a TTS settings section in the dashboard. Fallback to Web Speech on ElevenLabs 401/403.
+**Requirements**: D-01 through D-42 (42/42 covered; D-07 reuses `shared/encryption` + `TOKEN_ENCRYPTION_KEY` instead of new `shared/crypto` per research finding)
+**Depends on:** Phase 12
+**Plans:** 3/3 plans complete (2026-04-23) — 5 manual UAT items pending in 13-HUMAN-UAT.md (real ElevenLabs key + OBS runtime)
+
+Plans:
+- [x] 13-01-PLAN.md — Web Speech tier: ttsPlayer TDD utility + TTSGroup UI + AppearancePanel mount + overlay/embed page wiring (Wave 1)
+- [x] 13-02-PLAN.md — Backend: migration 049 + shared/featuregates+middleware move + AES-GCM key storage + JWT + 7 TTS endpoints in overlay-manager (Wave 1)
+- [x] 13-03-PLAN.md — ElevenLabs UX: API-key flow, Copy/Regenerate OBS URL, test-key + quota display, runtime wiring in overlay + embed (Wave 2, depends on 13-01 + 13-02) — pending human UAT (see 13-HUMAN-UAT.md)

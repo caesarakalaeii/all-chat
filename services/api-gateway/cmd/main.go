@@ -416,6 +416,10 @@ func main() {
 		publicAPI.GET("/overlays/public/:id/creditroll", proxyHandler.ForwardRequest)
 		publicAPI.GET("/overlays/public/:id/credit-roll", proxyHandler.ForwardRequest)
 
+		// Phase 13: TTS streaming proxy — uses per-overlay tts_token JWT (not user JWT).
+		// Auth is enforced downstream in overlay-manager via the tts_token query param.
+		publicAPI.POST("/overlays/:id/tts", proxyHandler.ForwardRequest)
+
 		// Viewer cosmetics catalog (public — no auth required)
 		publicAPI.GET("/auth/viewer/catalog/frames", proxyHandler.ForwardRequest) // -> auth-service
 		publicAPI.GET("/auth/viewer/catalog/flairs", proxyHandler.ForwardRequest) // -> auth-service
@@ -473,6 +477,16 @@ func main() {
 		protectedAPI.GET("/overlays/:id/creditroll", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/creditroll", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/credit-roll", proxyHandler.ForwardRequest)
+
+		// Phase 13: TTS endpoints on overlay-manager.
+		// POST /overlays/:id/tts is NOT listed here — it uses per-overlay tts_token JWT
+		// (not user JWT) and must be forwarded as a public endpoint (added above).
+		protectedAPI.GET("/overlays/:id/tts-config", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/tts-config", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/overlays/:id/tts-config", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/tts-config/rotate-token", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/tts-config/test", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/overlays/:id/tts-voices", proxyHandler.ForwardRequest)
 
 		// YouTube resolver routes (protected)
 		protectedAPI.POST("/youtube/resolve", proxyHandler.ForwardRequest)

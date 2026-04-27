@@ -32,6 +32,8 @@ import { PlatformColorsGroup } from './PlatformColorsGroup'
 import { EventsGroup } from './EventsGroup'
 import { FilterGroup } from './FilterGroup'
 import { SoundGroup } from './SoundGroup'
+import { TTSGroup } from './TTSGroup'
+import type { ElevenLabsVoice, TestKeyResult } from './TTSGroup'
 
 export interface AppearancePanelProps {
   visualSettings: Partial<VisualSettings>
@@ -42,6 +44,19 @@ export interface AppearancePanelProps {
   displaySettings?: Partial<DisplaySettings>
   onSoundChange?: (patch: Partial<DisplaySettings>) => void
   isPremium?: boolean
+  // Phase 13: Text-to-Speech wiring (Plan 01 passes optionally; Plan 03 fills
+  // the async callbacks for the Advanced ElevenLabs block)
+  onTTSChange?: (patch: Partial<DisplaySettings>) => void
+  overlayId?: string
+  hasElevenLabsConfig?: boolean
+  obsUrl?: string
+  onTTSPreview?: () => void
+  onTTSPreviewStop?: () => void
+  onSaveTTSKey?: (key: string, voiceId: string) => Promise<void>
+  onTestTTSKey?: () => Promise<TestKeyResult>
+  onRotateTTSToken?: () => Promise<{ obsUrl: string }>
+  onRemoveTTSKey?: () => Promise<void>
+  onFetchTTSVoices?: () => Promise<ElevenLabsVoice[]>
 }
 
 export function AppearancePanel({
@@ -53,6 +68,17 @@ export function AppearancePanel({
   displaySettings,
   onSoundChange,
   isPremium,
+  onTTSChange,
+  overlayId,
+  hasElevenLabsConfig,
+  obsUrl,
+  onTTSPreview,
+  onTTSPreviewStop,
+  onSaveTTSKey,
+  onTestTTSKey,
+  onRotateTTSToken,
+  onRemoveTTSKey,
+  onFetchTTSVoices,
 }: AppearancePanelProps): React.ReactElement {
   return (
     <div className="flex flex-col gap-0">
@@ -92,6 +118,25 @@ export function AppearancePanel({
             displaySettings={displaySettings}
             onChange={onSoundChange}
             isPremium={isPremium ?? false}
+          />
+        </CollapsibleSection>
+      )}
+      {displaySettings && onTTSChange && overlayId && (
+        <CollapsibleSection id="tts" title="Text-to-Speech">
+          <TTSGroup
+            displaySettings={displaySettings}
+            onChange={onTTSChange}
+            isPremium={isPremium ?? false}
+            overlayId={overlayId}
+            hasElevenLabsConfig={hasElevenLabsConfig ?? false}
+            obsUrl={obsUrl}
+            onPreview={onTTSPreview}
+            onPreviewStop={onTTSPreviewStop}
+            onSaveKey={onSaveTTSKey}
+            onTestKey={onTestTTSKey}
+            onRotateToken={onRotateTTSToken}
+            onRemoveKey={onRemoveTTSKey}
+            onFetchVoices={onFetchTTSVoices}
           />
         </CollapsibleSection>
       )}

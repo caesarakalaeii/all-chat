@@ -45,6 +45,7 @@ import Link from 'next/link'
 import { ChevronLeft, ChevronRight, X, Clipboard, Share2, Puzzle } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { overlaysApi } from '@/lib/api/overlays'
+import type { TTSConfigMetadata, ElevenLabsVoice, TestKeyResult } from '@/lib/api/overlays'
 import { sharesApi } from '@/lib/api/shares'
 import { getGuilds, getGuildChannels, updateSourceConfig } from '@/lib/api/discord'
 import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
@@ -1129,6 +1130,17 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const soundSettingsRef = useRef<Partial<DisplaySettings>>({})
   soundSettingsRef.current = soundSettings
 
+  // --- TTS settings state (Phase 13 — Plans 01 & 03) ---
+  // `ttsSettings` holds the tts_* fields that live in display_settings (persisted
+  // via the existing updateConfig flow). `hasElevenLabsConfig` + `obsUrl` come
+  // from the separate GET /tts-config endpoint (Plan 02) — the ElevenLabs key
+  // and voice_id are NEVER in display_settings.
+  const [ttsSettings, setTtsSettings] = useState<Partial<DisplaySettings>>({})
+  const ttsSettingsRef = useRef<Partial<DisplaySettings>>({})
+  ttsSettingsRef.current = ttsSettings
+  const [hasElevenLabsConfig, setHasElevenLabsConfig] = useState(false)
+  const [obsUrl, setObsUrl] = useState<string | undefined>(undefined)
+
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
 
@@ -1160,6 +1172,42 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const sendSoundSettingsToIframe = useCallback((settings: Partial<DisplaySettings>) => {
     iframeRef.current?.contentWindow?.postMessage(
       { type: 'SOUND_SETTINGS_UPDATE', soundSettings: settings },
+      '*'
+    )
+  }, [])
+
+  // --- sendTtsSettingsToIframe: post TTS settings to the embed iframe (Phase 13 D-22) ---
+  // No debounce — fires on every change so the editor preview reflects the tuning
+  // immediately. Only the 20 tts_* display_settings fields travel here; the
+  // ElevenLabs runtime (endpoint/token/voiceId) is loaded by the iframe itself
+  // via GET /tts-config and is preserved across these postMessages.
+  const sendTtsSettingsToIframe = useCallback((settings: Partial<DisplaySettings>) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        type: 'TTS_SETTINGS_UPDATE',
+        ttsSettings: {
+          tts_enabled: settings.tts_enabled,
+          tts_provider: settings.tts_provider,
+          tts_volume: settings.tts_volume,
+          tts_voice_uri: settings.tts_voice_uri,
+          tts_rate: settings.tts_rate,
+          tts_pitch: settings.tts_pitch,
+          tts_filter_mode: settings.tts_filter_mode,
+          tts_sample_rate: settings.tts_sample_rate,
+          tts_max_queue: settings.tts_max_queue,
+          tts_messages_per_minute: settings.tts_messages_per_minute,
+          tts_user_cooldown_seconds: settings.tts_user_cooldown_seconds,
+          tts_staleness_seconds: settings.tts_staleness_seconds,
+          tts_priority_events: settings.tts_priority_events,
+          tts_priority_bits_min: settings.tts_priority_bits_min,
+          tts_read_username: settings.tts_read_username,
+          tts_read_platform: settings.tts_read_platform,
+          tts_max_message_chars: settings.tts_max_message_chars,
+          tts_skip_emote_only: settings.tts_skip_emote_only,
+          tts_skip_links: settings.tts_skip_links,
+          tts_enabled_platforms: settings.tts_enabled_platforms,
+        },
+      },
       '*'
     )
   }, [])
@@ -1213,6 +1261,58 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     })
   }, [sendSoundSettingsToIframe])
 
+  // --- handleTTSSettingsChange: merge patch, update state, send to embed iframe (Phase 13 D-22) ---
+  const handleTTSSettingsChange = useCallback((patch: Partial<DisplaySettings>) => {
+    setTtsSettings((prev) => {
+      const next = { ...prev, ...patch }
+      sendTtsSettingsToIframe(next)
+      return next
+    })
+  }, [sendTtsSettingsToIframe])
+
+  // Phase 13 Plan 03 — ElevenLabs flow handlers (wired via AppearancePanel -> TTSGroup props)
+  const handleSaveTTSKey = useCallback(async (apiKey: string, voiceId: string): Promise<void> => {
+    await overlaysApi.saveTTSKey(id, apiKey, voiceId)
+    // Refresh metadata so the OBS URL + Test button render.
+    const meta = await overlaysApi.getTTSConfig(id)
+    setHasElevenLabsConfig(meta.has_elevenlabs_config)
+    setObsUrl(meta.obs_url)
+  }, [id])
+
+  const handleRemoveTTSKey = useCallback(async (): Promise<void> => {
+    await overlaysApi.removeTTSKey(id)
+    setHasElevenLabsConfig(false)
+    setObsUrl(undefined)
+  }, [id])
+
+  const handleRotateTTSToken = useCallback(async (): Promise<{ obsUrl: string }> => {
+    const result = await overlaysApi.rotateTTSToken(id)
+    setObsUrl(result.obsUrl)
+    return result
+  }, [id])
+
+  const handleTestTTSKey = useCallback(async (): Promise<TestKeyResult> => {
+    const result = await overlaysApi.testTTSKey(id)
+    if (result.ok && result.audioBlob) {
+      // Autoplay is user-initiated (Test key click), so the browser grants playback.
+      try {
+        const audio = new Audio(URL.createObjectURL(result.audioBlob))
+        await audio.play()
+        audio.onended = (): void => {
+          URL.revokeObjectURL(audio.src)
+        }
+      } catch {
+        // Swallow — the quota number still renders, and the caller shows
+        // verbose errors for non-ok cases.
+      }
+    }
+    return result
+  }, [id])
+
+  const handleFetchTTSVoices = useCallback(async (): Promise<ElevenLabsVoice[]> => {
+    return overlaysApi.getTTSVoices(id)
+  }, [id])
+
   // --- sendCustomCssToIframe: post the full theme CSS to the embed preview ---
   const sendCustomCssToIframe = useCallback((css: string) => {
     iframeRef.current?.contentWindow?.postMessage(
@@ -1253,7 +1353,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  // --- EMBED_READY: re-send CSS, filter settings, and sound settings when embed page signals its listener is registered ---
+  // --- EMBED_READY: re-send CSS, filter settings, sound settings, and TTS settings when embed page signals its listener is registered ---
   useEffect(() => {
     const handleEmbedReady = (event: MessageEvent) => {
       if (event.data?.type !== 'EMBED_READY') return
@@ -1262,10 +1362,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       sendFilterSettingsToIframe(filterSettingsRef.current)
       // Also send current sound settings to the embed on ready
       sendSoundSettingsToIframe(soundSettingsRef.current)
+      // Phase 13: send current TTS settings to the embed on ready (D-22)
+      sendTtsSettingsToIframe(ttsSettingsRef.current)
     }
     window.addEventListener('message', handleEmbedReady)
     return () => window.removeEventListener('message', handleEmbedReady)
-  }, [sendCssToIframe, sendFilterSettingsToIframe, sendSoundSettingsToIframe])
+  }, [sendCssToIframe, sendFilterSettingsToIframe, sendSoundSettingsToIframe, sendTtsSettingsToIframe])
 
   // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
   const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
@@ -1400,6 +1502,52 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             if (typeof d.notification_sound_cooldown === 'number') loaded.notification_sound_cooldown = d.notification_sound_cooldown
             if (typeof d.notification_sound_url === 'string') loaded.notification_sound_url = d.notification_sound_url
             setSoundSettings(loaded)
+          }
+
+          // Phase 13: Load TTS display_settings (Plan 01 fields — 20 total)
+          if (config.display_settings) {
+            const d = config.display_settings
+            const tts: Partial<DisplaySettings> = {}
+            if (typeof d.tts_enabled === 'boolean') tts.tts_enabled = d.tts_enabled
+            if (d.tts_provider === 'browser' || d.tts_provider === 'elevenlabs') tts.tts_provider = d.tts_provider
+            if (typeof d.tts_volume === 'number') tts.tts_volume = d.tts_volume
+            if (typeof d.tts_voice_uri === 'string') tts.tts_voice_uri = d.tts_voice_uri
+            if (typeof d.tts_rate === 'number') tts.tts_rate = d.tts_rate
+            if (typeof d.tts_pitch === 'number') tts.tts_pitch = d.tts_pitch
+            if (d.tts_filter_mode === 'all' || d.tts_filter_mode === 'sample' || d.tts_filter_mode === 'priority_only') {
+              tts.tts_filter_mode = d.tts_filter_mode
+            }
+            if (typeof d.tts_sample_rate === 'number') tts.tts_sample_rate = d.tts_sample_rate
+            if (typeof d.tts_max_queue === 'number') tts.tts_max_queue = d.tts_max_queue
+            if (typeof d.tts_messages_per_minute === 'number') tts.tts_messages_per_minute = d.tts_messages_per_minute
+            if (typeof d.tts_user_cooldown_seconds === 'number') tts.tts_user_cooldown_seconds = d.tts_user_cooldown_seconds
+            if (typeof d.tts_staleness_seconds === 'number') tts.tts_staleness_seconds = d.tts_staleness_seconds
+            if (typeof d.tts_priority_events === 'boolean') tts.tts_priority_events = d.tts_priority_events
+            if (typeof d.tts_priority_bits_min === 'number') tts.tts_priority_bits_min = d.tts_priority_bits_min
+            if (typeof d.tts_read_username === 'boolean') tts.tts_read_username = d.tts_read_username
+            if (typeof d.tts_read_platform === 'boolean') tts.tts_read_platform = d.tts_read_platform
+            if (typeof d.tts_max_message_chars === 'number') tts.tts_max_message_chars = d.tts_max_message_chars
+            if (typeof d.tts_skip_emote_only === 'boolean') tts.tts_skip_emote_only = d.tts_skip_emote_only
+            if (typeof d.tts_skip_links === 'boolean') tts.tts_skip_links = d.tts_skip_links
+            if (Array.isArray(d.tts_enabled_platforms)) {
+              tts.tts_enabled_platforms = d.tts_enabled_platforms.filter(
+                (p: unknown): p is string => typeof p === 'string',
+              )
+            }
+            setTtsSettings(tts)
+          }
+
+          // Phase 13 Plan 03: Load ElevenLabs config metadata (has-key + OBS URL).
+          // Non-fatal — a 404 on first edit or a non-premium user simply leaves
+          // the Advanced block in its unsaved-empty state.
+          try {
+            const meta: TTSConfigMetadata = await overlaysApi.getTTSConfig(id)
+            if (!cancelled) {
+              setHasElevenLabsConfig(meta.has_elevenlabs_config)
+              setObsUrl(meta.obs_url)
+            }
+          } catch (e) {
+            console.warn('[OverlayEditor] getTTSConfig failed:', e)
           }
         } catch (err) {
           console.warn('[OverlayEditor] Failed to load config', err)
@@ -1743,6 +1891,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           notification_sound_volume: soundSettings.notification_sound_volume ?? 0.5,
           notification_sound_cooldown: soundSettings.notification_sound_cooldown ?? 500,
           ...(soundSettings.notification_sound_url ? { notification_sound_url: soundSettings.notification_sound_url } : {}),
+          // Phase 13: persist all 20 tts_* fields (ElevenLabs key/voice live in overlay_tts_configs, NOT here)
+          ...ttsSettings,
         },
         enable_7tv: enable7tv,
         enable_bttv: enableBttv,
@@ -2073,9 +2223,45 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   visibilityDefaults={iframeVisibilityDefaults}
                   filterSettings={filterSettings}
                   onFilterChange={handleFilterSettingsChange}
-                  displaySettings={soundSettings}
+                  displaySettings={{ ...soundSettings, ...ttsSettings }}
                   onSoundChange={handleSoundSettingsChange}
                   isPremium={user?.is_premium ?? false}
+                  onTTSChange={handleTTSSettingsChange}
+                  overlayId={id}
+                  hasElevenLabsConfig={hasElevenLabsConfig}
+                  obsUrl={obsUrl}
+                  onTTSPreview={() => {
+                    // Browser Web Speech API preview — fires the fixed sample phrase through the
+                    // current rate/pitch/volume/voice_uri. Click again mid-speech cancels.
+                    if (typeof window === 'undefined' || typeof window.speechSynthesis === 'undefined') return
+                    const synth = window.speechSynthesis
+                    if (synth.speaking) {
+                      synth.cancel()
+                      return
+                    }
+                    const u = new SpeechSynthesisUtterance(
+                      'Hello, this is how your chat will sound.',
+                    )
+                    u.volume = ttsSettings.tts_volume ?? 0.8
+                    u.rate = ttsSettings.tts_rate ?? 1.0
+                    u.pitch = ttsSettings.tts_pitch ?? 1.0
+                    const savedUri = ttsSettings.tts_voice_uri
+                    if (savedUri) {
+                      const match = synth.getVoices().find((v) => v.voiceURI === savedUri)
+                      if (match) u.voice = match
+                    }
+                    synth.speak(u)
+                  }}
+                  onTTSPreviewStop={() => {
+                    if (typeof window !== 'undefined' && window.speechSynthesis) {
+                      window.speechSynthesis.cancel()
+                    }
+                  }}
+                  onSaveTTSKey={handleSaveTTSKey}
+                  onTestTTSKey={handleTestTTSKey}
+                  onRotateTTSToken={handleRotateTTSToken}
+                  onRemoveTTSKey={handleRemoveTTSKey}
+                  onFetchTTSVoices={handleFetchTTSVoices}
                 />
               </CollapsibleSection>
 
