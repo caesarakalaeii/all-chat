@@ -19,14 +19,18 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
-	ErrInvalidToken = errors.New("invalid token")
-	ErrExpiredToken = errors.New("token expired")
+	ErrInvalidToken          = errors.New("invalid token")
+	ErrExpiredToken          = errors.New("token expired")
+	ErrNoVersionedJWTSecrets = errors.New("no versioned JWT secrets configured: set <PREFIX>_V1")
+	ErrUnknownKidNoLegacy    = errors.New("unknown kid and no legacy fallback secret")
 )
 
 // Claims represents the JWT claims for All-Chat
@@ -235,5 +239,250 @@ func ValidateServiceJWT(tokenString, secret string) (*ServiceClaims, error) {
 		return claims, nil
 	}
 
+	return nil, ErrInvalidToken
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KeyChain — multi-key JWT validation (D-07, D-08, D-10, D-12)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// KeyChain holds multiple HS256 secrets indexed by string kid ("v1", "v2", ...).
+// The legacy field holds the kid-less <PREFIX> env var value for backwards-compat
+// with tokens issued before kid headers were introduced (D-08).
+//
+// Two independent chains are used in practice:
+//   - NewKeyChainFromEnv("JWT_SECRET")         — User + Viewer JWTs
+//   - NewKeyChainFromEnv("SERVICE_JWT_SECRET") — Service JWTs (D-10)
+type KeyChain struct {
+	byKid     map[string][]byte
+	legacy    []byte
+	latestKid string // highest "v<n>" registered; used by callers for issuance
+}
+
+// NewKeyChainFromEnv reads <prefix>_V1, <prefix>_V2, ... in sequence until an env
+// var is missing or empty. <prefix> (no version suffix) is loaded as the legacy
+// fallback for tokens that have no kid header.
+//
+// prefix examples: "JWT_SECRET" for user/viewer tokens, "SERVICE_JWT_SECRET" for
+// service-to-service tokens. The prefix determines which env var namespace is
+// scanned, giving the two chains full isolation (D-10).
+//
+// Returns ErrNoVersionedJWTSecrets if no <prefix>_V1 is set; the legacy var alone
+// is not sufficient because new code MUST issue with kid headers per D-07.
+func NewKeyChainFromEnv(prefix string) (*KeyChain, error) {
+	byKid := make(map[string][]byte)
+	var latestKid string
+	for n := 1; ; n++ {
+		envName := prefix + "_V" + strconv.Itoa(n)
+		v := os.Getenv(envName)
+		if v == "" {
+			break
+		}
+		kid := "v" + strconv.Itoa(n)
+		byKid[kid] = []byte(v)
+		latestKid = kid
+	}
+	if len(byKid) == 0 {
+		return nil, fmt.Errorf("%w (looked for %s_V1)", ErrNoVersionedJWTSecrets, prefix)
+	}
+	var legacy []byte
+	if v := os.Getenv(prefix); v != "" {
+		legacy = []byte(v)
+	}
+	return &KeyChain{byKid: byKid, legacy: legacy, latestKid: latestKid}, nil
+}
+
+// NewKeyChain constructs a KeyChain from explicit arguments. Intended for tests
+// and for callers that already hold secret bytes (e.g. sweeper, bootstrapper).
+func NewKeyChain(byKid map[string][]byte, legacy []byte, latestKid string) *KeyChain {
+	return &KeyChain{byKid: byKid, legacy: legacy, latestKid: latestKid}
+}
+
+// LatestKid returns the highest "v<n>" registered in this chain.
+// Issuers should sign new tokens with this kid.
+func (kc *KeyChain) LatestKid() string { return kc.latestKid }
+
+// LatestSecret returns the secret bytes for LatestKid.
+// Convenience for issuer call sites that need the raw bytes for SignedString.
+func (kc *KeyChain) LatestSecret() []byte { return kc.byKid[kc.latestKid] }
+
+// KeyFunc is a jwt.Keyfunc that selects the correct HS256 secret based on the
+// token's kid header.
+//
+// Dispatch logic:
+//  1. Reject any non-HMAC signing method (alg-confusion defence, D-12).
+//  2. If kid header is absent or empty → use legacy secret (backwards compat).
+//  3. If kid is present and known → use that version's secret.
+//  4. If kid is present but unknown → fall back to legacy (future-version tolerance).
+//  5. If both lookup paths miss AND legacy is nil → return ErrUnknownKidNoLegacy.
+func (kc *KeyChain) KeyFunc(token *jwt.Token) (interface{}, error) {
+	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+	}
+	kid, hasKid := token.Header["kid"].(string)
+	if !hasKid || kid == "" {
+		if kc.legacy == nil {
+			return nil, errors.New("token has no kid and no legacy fallback configured")
+		}
+		return kc.legacy, nil
+	}
+	if key, ok := kc.byKid[kid]; ok {
+		return key, nil
+	}
+	if kc.legacy == nil {
+		return nil, fmt.Errorf("%w: kid=%q", ErrUnknownKidNoLegacy, kid)
+	}
+	return kc.legacy, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Issuance helpers — *WithKid variants (D-07)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GenerateJWTWithKid is identical to GenerateJWT but sets token.Header["kid"]
+// before signing, enabling multi-key validation on the receiving end.
+func GenerateJWTWithKid(kid, userID, twitchID, username, secret string, isAdmin bool) (string, error) {
+	roles := []string{"user"}
+	if isAdmin {
+		roles = append(roles, "admin")
+	}
+	claims := Claims{
+		UserID:   userID,
+		TwitchID: twitchID,
+		Username: username,
+		Roles:    roles,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			Issuer:    "all-chat",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["kid"] = kid
+	return token.SignedString([]byte(secret))
+}
+
+// GenerateTokenWithKid is identical to GenerateToken but sets token.Header["kid"].
+func GenerateTokenWithKid(kid, userID, username, secret string, expiry time.Duration, isAdmin bool) (string, error) {
+	roles := []string{"user"}
+	if isAdmin {
+		roles = append(roles, "admin")
+	}
+	claims := Claims{
+		UserID:   userID,
+		Username: username,
+		Roles:    roles,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
+			Issuer:    "all-chat",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["kid"] = kid
+	return token.SignedString([]byte(secret))
+}
+
+// GenerateImpersonationJWTWithKid is identical to GenerateImpersonationJWT but
+// sets token.Header["kid"] before signing.
+func GenerateImpersonationJWTWithKid(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, secret string) (string, error) {
+	roles := []string{"user", "admin"}
+	claims := Claims{
+		UserID:           targetUserID,
+		TwitchID:         targetTwitchID,
+		Username:         targetUsername,
+		Roles:            roles,
+		ImpersonatedBy:   adminUserID,
+		ImpersonatedUser: targetUserID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(2 * time.Hour)),
+			Issuer:    "all-chat-admin",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["kid"] = kid
+	return token.SignedString([]byte(secret))
+}
+
+// GenerateServiceJWTWithKid is identical to GenerateServiceJWT but sets
+// token.Header["kid"] before signing. Use this for new service tokens; pass
+// the kid from ServiceKeyChain.LatestKid() for automatic rotation support.
+func GenerateServiceJWTWithKid(kid, serviceName, secret string, expiry time.Duration) (string, error) {
+	claims := ServiceClaims{
+		ServiceName: serviceName,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   serviceName,
+			Issuer:    "all-chat-services",
+			Audience:  []string{"internal"},
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["kid"] = kid
+	return token.SignedString([]byte(secret))
+}
+
+// GenerateViewerJWTWithKid issues a viewer JWT with a kid header. The caller
+// provides a fully constructed ViewerClaims value (matching the inline pattern
+// in services/auth-service/handlers/viewer_auth.go) so that all viewer-specific
+// fields are set before signing.
+func GenerateViewerJWTWithKid(kid string, claims ViewerClaims, secret string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["kid"] = kid
+	return token.SignedString([]byte(secret))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Validation helpers — *WithKeyChain variants (D-08)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ValidateJWTWithKeyChain validates a user JWT using multi-key dispatch via kc.KeyFunc.
+// Preserves identical error semantics to ValidateJWT: ErrExpiredToken or ErrInvalidToken.
+func ValidateJWTWithKeyChain(tokenString string, kc *KeyChain) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, kc.KeyFunc)
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
+	}
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		return claims, nil
+	}
+	return nil, ErrInvalidToken
+}
+
+// ValidateViewerJWTWithKeyChain validates a viewer JWT using multi-key dispatch via kc.KeyFunc.
+func ValidateViewerJWTWithKeyChain(tokenString string, kc *KeyChain) (*ViewerClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &ViewerClaims{}, kc.KeyFunc)
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
+	}
+	if claims, ok := token.Claims.(*ViewerClaims); ok && token.Valid {
+		return claims, nil
+	}
+	return nil, ErrInvalidToken
+}
+
+// ValidateServiceJWTWithKeyChain validates a service JWT using multi-key dispatch via kc.KeyFunc.
+// Pass the service-chain KeyChain (built from "SERVICE_JWT_SECRET" prefix) to enforce
+// cross-chain isolation (D-10): a user-chain token will fail here because the HMAC
+// was computed with a different secret.
+func ValidateServiceJWTWithKeyChain(tokenString string, kc *KeyChain) (*ServiceClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &ServiceClaims{}, kc.KeyFunc)
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
+	}
+	if claims, ok := token.Claims.(*ServiceClaims); ok && token.Valid {
+		return claims, nil
+	}
 	return nil, ErrInvalidToken
 }
