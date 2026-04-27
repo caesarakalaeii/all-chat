@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 13 Plan 03 complete — 4 task commits (a8a52f44, dcd8a4e2, 1c2b5f70, 6ef7be0b), TTSGroup stub replaced, 353/353 tests passing, HUMAN-UAT.md persists 5 pending manual items (real ElevenLabs + OBS E2E)
-last_updated: "2026-04-27T13:04:48.496Z"
+stopped_at: Phase 14 Plan 02 complete — 2 commits (4c835d02, d0032506), KeyChain + all *WithKid/*WithKeyChain functions in shared/auth/jwt.go, 19/19 tests passing with -race
+last_updated: "2026-04-27T13:33:37.642Z"
 last_activity: 2026-04-27
 progress:
   total_phases: 21
   completed_phases: 19
   total_plans: 88
-  completed_plans: 80
-  percent: 91
+  completed_plans: 81
+  percent: 92
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 14 (Secret Rotation Infrastructure) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Plans: 3/3 complete across 2 waves
 Status: Ready to execute
 
@@ -101,6 +101,7 @@ Status: Ready to execute
 | Phase 09 P02 | 3min | 2 tasks | 6 files |
 | Phase 09 P03 | 5min | 2 tasks | 2 files |
 | Phase 13 P03 | 35min | 4 tasks | 6 files |
+| Phase 14 P02 | 17m | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -239,6 +240,9 @@ Key decisions relevant to v1.6:
 - [Phase 13-03]: vi.hoisted() for toast mock fn sharing — vi.mock factories are hoisted above top-level declarations, so shared mocks must use vi.hoisted to avoid ReferenceError TDZ
 - [Phase 13-03]: elevenLabsRuntimeRef in embed iframe — useRef cache populated on mount from getTTSConfig + URL parsing of obs_url, merged into every TTS_SETTINGS_UPDATE handler so editor tweaks never clobber the fetch path
 - [Phase 09]: Config cascade for pronouns: display_settings loaded first, visual_settings overrides second — matches platformBadge pattern
+- [Phase ?]: D-07: kid header set on all five *WithKid issuance variants in shared/auth/jwt.go
+- [Phase ?]: D-10: NewKeyChainFromEnv prefix isolates JWT_SECRET vs SERVICE_JWT_SECRET chains; cross-chain validation fails by HMAC mismatch
+- [Phase ?]: D-12: KeyChain.KeyFunc rejects non-HMAC signing methods (alg-confusion defence)
 
 ### Roadmap Evolution
 
@@ -291,9 +295,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-27T13:04:48.489Z
+Last session: 2026-04-27T13:33:37.632Z
 Last activity: 2026-04-27
-Stopped at: Phase 13 Plan 03 complete — 4 task commits (a8a52f44, dcd8a4e2, 1c2b5f70, 6ef7be0b), TTSGroup stub replaced, 353/353 tests passing, HUMAN-UAT.md persists 5 pending manual items (real ElevenLabs + OBS E2E)
+Stopped at: Phase 14 Plan 02 complete — 2 commits (4c835d02, d0032506), KeyChain + all *WithKid/*WithKeyChain functions in shared/auth/jwt.go, 19/19 tests passing with -race
 Resume file: None
 
 **Next action:** Human UAT pass — run the 5 items in 13-HUMAN-UAT.md with a real ElevenLabs API key and OBS browser source, update the `result:` lines in that file, then /gsd-next to kick off Phase 14.
