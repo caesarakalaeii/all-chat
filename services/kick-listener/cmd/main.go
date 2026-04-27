@@ -35,6 +35,7 @@ import (
 	"github.com/caesar/all-chat/services/kick-listener/status"
 	"github.com/caesar/all-chat/services/kick-listener/websocket"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/logger"
 	sharedmetrics "github.com/caesar/all-chat/shared/metrics"
@@ -136,6 +137,19 @@ func main() {
 		Clusters: clusterList,
 	}
 
+	// Initialize token cipher for kick_oauth_tokens decryption (D-16).
+	// Optional: if TOKEN_ENCRYPTION_KEY_V1 is not set, cipher is nil and only
+	// plaintext rows (encryption_version=0) are supported.
+	var tokenCipher *encryption.MultiKeyEncryptor
+	if cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnv(); cipherErr == nil {
+		tokenCipher = cipher
+		log.Info("kick token cipher initialized", zap.Uint8("current_kid", tokenCipher.CurrentKid()))
+	} else {
+		log.Warn("kick token cipher not configured — encrypted kick_oauth_tokens will fail",
+			zap.Error(cipherErr),
+		)
+	}
+
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 	channelRepo := channels.NewRepository(db, log)
@@ -167,7 +181,7 @@ func main() {
 
 	// Now initialize channel manager with the WebSocket client
 	// Pass nil for assignedSourceIDs — SDK populates via UpdateAssignedSourceIDs inside ll.Start
-	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, ll.LeadershipCoordinator(), nil, redisClient, podName, log)
+	channelMgr = channels.NewManager(channelRepo, wsClient, streamPublisher, dbWrapper, ll.LeadershipCoordinator(), nil, redisClient, podName, tokenCipher, log)
 
 	// Inject status publisher into channel manager
 	channelMgr.SetStatusPublisher(statusPublisher)

@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,6 +49,7 @@ type SourcesHandler struct {
 	redis       redis.Cmdable
 	logger      *zap.Logger
 	bm          *metrics.BusinessMetrics
+	cipher      *encryption.MultiKeyEncryptor // Encrypts kick_oauth_tokens on write (D-16; nil = no encryption)
 }
 
 // discordChannelEntry is the JSON value stored at discord:channels:{channel_id}.
@@ -60,7 +62,9 @@ type discordChannelEntry struct {
 // redisClient is used to maintain the Discord channel registry keys.
 // It accepts redis.Cmdable for testability; *redis.Client implements this interface.
 // bm is the shared business metrics instance (may be nil — metrics are skipped if nil).
-func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger, redisClient redis.Cmdable, bm *metrics.BusinessMetrics) *SourcesHandler {
+// cipher is used to encrypt kick_oauth_tokens on write (D-16); may be nil when
+// TOKEN_ENCRYPTION_KEY_V1 is not configured (tokens stored as plaintext with encryption_version=0).
+func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger, redisClient redis.Cmdable, bm *metrics.BusinessMetrics, cipher *encryption.MultiKeyEncryptor) *SourcesHandler {
 	return &SourcesHandler{
 		sourceRepo:  sourceRepo,
 		overlayRepo: overlayRepo,
@@ -68,6 +72,7 @@ func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepositor
 		redis:       redisClient,
 		logger:      logger,
 		bm:          bm,
+		cipher:      cipher,
 	}
 }
 
@@ -196,8 +201,9 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 	return nil
 }
 
-// copyKickTokenForChannel copies the admin's Kick OAuth token to a new channel
-// This allows admins to add Kick channels manually without OAuth flow
+// copyKickTokenForChannel copies the admin's Kick OAuth token to a new channel.
+// If a cipher is configured, the access_token is encrypted before write and
+// encryption_version=1 is stored; otherwise plaintext is written with encryption_version=0.
 func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
 	// Step 1: Find the best Kick token for this admin.
 	// Prefer non-expired tokens first, but fall back to any token because the
@@ -205,14 +211,15 @@ func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserI
 	// first use. Excluding expired tokens here prevents copy when the access_token
 	// has expired but the refresh_token is still valid — blocking detection permanently.
 	var existingToken struct {
-		AccessToken  string
-		RefreshToken string
-		TokenType    string
-		Expiry       string // Store as string to avoid timestamp parsing issues
+		AccessToken       string
+		RefreshToken      string
+		TokenType         string
+		Expiry            string // Store as string to avoid timestamp parsing issues
+		EncryptionVersion int
 	}
 
 	query := `
-		SELECT access_token, refresh_token, token_type, expiry::text
+		SELECT access_token, refresh_token, token_type, expiry::text, encryption_version
 		FROM kick_oauth_tokens
 		WHERE user_id = $1
 		ORDER BY expiry DESC  -- Prefer tokens that expire furthest in the future
@@ -224,34 +231,60 @@ func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserI
 		&existingToken.RefreshToken,
 		&existingToken.TokenType,
 		&existingToken.Expiry,
+		&existingToken.EncryptionVersion,
 	)
 
 	if err != nil {
 		return fmt.Errorf("admin has no Kick OAuth token - please authorize Kick first: %w", err)
 	}
 
+	// Decrypt the source token if it was stored encrypted (so we always work with plaintext).
+	plainAccessToken := existingToken.AccessToken
+	if existingToken.EncryptionVersion >= 1 {
+		if h.cipher == nil {
+			return fmt.Errorf("source kick_oauth_token has encryption_version=%d but no cipher configured", existingToken.EncryptionVersion)
+		}
+		plainAccessToken, err = h.cipher.DecryptString(existingToken.AccessToken)
+		if err != nil {
+			return fmt.Errorf("failed to decrypt source Kick token: %w", err)
+		}
+	}
+
+	// Encrypt for the destination row (D-16): use cipher when available.
+	writeToken := plainAccessToken
+	encryptionVersion := 0
+	if h.cipher != nil {
+		writeToken, err = h.cipher.EncryptString(plainAccessToken)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt Kick token for write: %w", err)
+		}
+		encryptionVersion = 1
+	}
+
 	// Step 2: Copy token to new channel_id (insert or update)
 	insertQuery := `
 		INSERT INTO kick_oauth_tokens (
 			user_id, channel_id, access_token, refresh_token,
-			token_type, expiry, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6::timestamp, NOW(), NOW())
+			token_type, expiry, encryption_version, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6::timestamp, $7, NOW(), NOW())
 		ON CONFLICT (user_id, channel_id)
 		DO UPDATE SET
 			access_token = EXCLUDED.access_token,
 			refresh_token = EXCLUDED.refresh_token,
 			token_type = EXCLUDED.token_type,
 			expiry = EXCLUDED.expiry,
+			encryption_version = EXCLUDED.encryption_version,
 			updated_at = NOW()
 	`
 
 	_, err = h.db.Exec(ctx, insertQuery,
 		adminUserID,
 		newChannelID,
-		existingToken.AccessToken,
+		writeToken,
 		existingToken.RefreshToken,
 		existingToken.TokenType,
 		existingToken.Expiry,
+		encryptionVersion,
 	)
 
 	if err != nil {
@@ -261,6 +294,7 @@ func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserI
 	h.logger.Info("Copied Kick OAuth token for new channel",
 		zap.String("admin_user_id", adminUserID),
 		zap.String("new_channel_id", newChannelID),
+		zap.Int("encryption_version", encryptionVersion),
 	)
 
 	return nil
