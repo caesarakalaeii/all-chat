@@ -548,12 +548,21 @@ function ElevenLabsVoicePicker({
       setVoices(null)
       setError(false)
     }
-
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)
     }
   }, [hasSavedKey, onFetchVoices, onPreviewVoices, typedApiKey])
+
+  // Auto-select the first voice when the list loads and the user hasn't
+  // already chosen one. Without this, Save fails with "Pick a voice before
+  // saving." for users who type a key, see voices appear, and click Save
+  // without first opening the picker.
+  useEffect(() => {
+    if (selected === '' && voices && voices.length > 0) {
+      onChange(voices[0].voice_id)
+    }
+  }, [voices, selected, onChange])
 
   return (
     <div>
@@ -623,6 +632,81 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
     onChange({ tts_enabled_platforms: next })
   }
 
+  // ADVANCED (ELEVENLABS) — extracted so it can render directly under the
+  // provider radio (where the user expects it after picking ElevenLabs)
+  // instead of at the very bottom of the panel after Throttling/Content/
+  // Priority. See bug report: "place it directly under the selector so it's
+  // immediately visible, not after scrolling a bunch".
+  const advancedBlock = provider === 'elevenlabs' ? (
+    <>
+      <SubSectionHeader label="ADVANCED (ELEVENLABS)" />
+      <div className={`space-y-3 ${!isPremium ? 'relative' : ''}`}>
+        {!isPremium && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface/80">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <PremiumBadge />
+              <span className="text-xs text-text-dim">
+                Upgrade to Premium to use ElevenLabs voices.
+              </span>
+            </div>
+          </div>
+        )}
+        <ApiKeyInput
+          hasSavedKey={props.hasElevenLabsConfig}
+          isPremium={isPremium}
+          disabled={!isPremium}
+          voiceId={pickedVoiceId}
+          apiKey={advancedApiKey}
+          onApiKeyChange={setAdvancedApiKey}
+          onSave={props.onSaveKey ?? (async (): Promise<void> => {})}
+          onRemove={props.onRemoveKey ?? (async (): Promise<void> => {})}
+          onTest={
+            props.onTestKey ??
+            (async (): Promise<TestKeyResult> => ({ ok: false, errorCode: 0 }))
+          }
+        />
+        <ElevenLabsVoicePicker
+          selected={pickedVoiceId}
+          onChange={setPickedVoiceId}
+          onFetchVoices={props.onFetchVoices}
+          onPreviewVoices={props.onPreviewVoices}
+          hasSavedKey={props.hasElevenLabsConfig}
+          typedApiKey={advancedApiKey}
+          disabled={!isPremium}
+        />
+        {props.hasElevenLabsConfig && props.obsUrl && (
+          <ObsUrlPanel
+            obsUrl={props.obsUrl}
+            onCopy={async (): Promise<void> => {
+              if (!props.obsUrl) return
+              try {
+                await navigator.clipboard.writeText(props.obsUrl)
+                toast.success('OBS URL copied.')
+              } catch {
+                toast.error('Could not copy URL.')
+              }
+            }}
+            onRegenerate={async (): Promise<void> => {
+              if (!props.onRotateToken) return
+              try {
+                const result = await props.onRotateToken()
+                try {
+                  await navigator.clipboard.writeText(result.obsUrl)
+                } catch {
+                  // Clipboard permission missing — toast still surfaces success,
+                  // but on failure we fall through to the catch below.
+                }
+                toast.success('New OBS URL copied to clipboard.')
+              } catch {
+                toast.error('Could not regenerate URL. Try again.')
+              }
+            }}
+          />
+        )}
+      </div>
+    </>
+  ) : null
+
   return (
     <div className="space-y-4">
       <ToggleSwitch
@@ -673,6 +757,11 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             )}
           </fieldset>
 
+          {/* Render the ElevenLabs config (API key + voice picker + OBS URL)
+              directly under the provider radio so it is visible without
+              scrolling past Throttling/Content/Priority. */}
+          {advancedBlock}
+
           <SliderControl
             label="Volume"
             value={d.tts_volume ?? 0.8}
@@ -682,27 +771,29 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             onChange={(v) => onChange({ tts_volume: v })}
           />
 
-          <div>
-            <label className="mb-1 block text-sm text-text-sub">
-              Voice
-              <select
-                aria-label="Voice"
-                value={d.tts_voice_uri ?? ''}
-                onChange={(e) => onChange({ tts_voice_uri: e.target.value })}
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
-              >
-                <option value="">Default</option>
-                {voices.map((v) => (
-                  <option key={v.voiceURI} value={v.voiceURI}>
-                    {v.name} ({v.lang})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="text-xs text-text-dim">
-              Browser voice — list depends on your OS/browser.
-            </p>
-          </div>
+          {provider !== 'elevenlabs' && (
+            <div>
+              <label className="mb-1 block text-sm text-text-sub">
+                Voice
+                <select
+                  aria-label="Voice"
+                  value={d.tts_voice_uri ?? ''}
+                  onChange={(e) => onChange({ tts_voice_uri: e.target.value })}
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+                >
+                  <option value="">Default</option>
+                  {voices.map((v) => (
+                    <option key={v.voiceURI} value={v.voiceURI}>
+                      {v.name} ({v.lang})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="text-xs text-text-dim">
+                Browser voice — list depends on your OS/browser.
+              </p>
+            </div>
+          )}
 
           <SliderControl
             label="Speech rate"
@@ -859,76 +950,9 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             />
           )}
 
-          {/* ---------- ADVANCED (ELEVENLABS) ---------- */}
-          {provider === 'elevenlabs' && (
-            <>
-              <SubSectionHeader label="ADVANCED (ELEVENLABS)" />
-              <div className={`space-y-3 ${!isPremium ? 'relative' : ''}`}>
-                {!isPremium && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface/80">
-                    <div className="flex flex-col items-center gap-2 text-center">
-                      <PremiumBadge />
-                      <span className="text-xs text-text-dim">
-                        Upgrade to Premium to use ElevenLabs voices.
-                      </span>
-                    </div>
-                  </div>
-                )}
-                <ApiKeyInput
-                  hasSavedKey={props.hasElevenLabsConfig}
-                  isPremium={isPremium}
-                  disabled={!isPremium}
-                  voiceId={pickedVoiceId}
-                  apiKey={advancedApiKey}
-                  onApiKeyChange={setAdvancedApiKey}
-                  onSave={props.onSaveKey ?? (async (): Promise<void> => {})}
-                  onRemove={props.onRemoveKey ?? (async (): Promise<void> => {})}
-                  onTest={
-                    props.onTestKey ??
-                    (async (): Promise<TestKeyResult> => ({ ok: false, errorCode: 0 }))
-                  }
-                />
-                <ElevenLabsVoicePicker
-                  selected={pickedVoiceId}
-                  onChange={setPickedVoiceId}
-                  onFetchVoices={props.onFetchVoices}
-                  onPreviewVoices={props.onPreviewVoices}
-                  hasSavedKey={props.hasElevenLabsConfig}
-                  typedApiKey={advancedApiKey}
-                  disabled={!isPremium}
-                />
-                {props.hasElevenLabsConfig && props.obsUrl && (
-                  <ObsUrlPanel
-                    obsUrl={props.obsUrl}
-                    onCopy={async (): Promise<void> => {
-                      if (!props.obsUrl) return
-                      try {
-                        await navigator.clipboard.writeText(props.obsUrl)
-                        toast.success('OBS URL copied.')
-                      } catch {
-                        toast.error('Could not copy URL.')
-                      }
-                    }}
-                    onRegenerate={async (): Promise<void> => {
-                      if (!props.onRotateToken) return
-                      try {
-                        const result = await props.onRotateToken()
-                        try {
-                          await navigator.clipboard.writeText(result.obsUrl)
-                        } catch {
-                          // Clipboard permission missing — toast still surfaces success,
-                          // but on failure we fall through to the catch below.
-                        }
-                        toast.success('New OBS URL copied to clipboard.')
-                      } catch {
-                        toast.error('Could not regenerate URL. Try again.')
-                      }
-                    }}
-                  />
-                )}
-              </div>
-            </>
-          )}
+          {/* The ADVANCED (ELEVENLABS) block is rendered higher up — directly
+              under the provider radio — so the API key field is visible
+              without scrolling past Throttling/Content/Priority. */}
         </>
       )}
     </div>
