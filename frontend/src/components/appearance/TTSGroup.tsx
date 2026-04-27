@@ -50,6 +50,7 @@ export interface TestKeyResult {
   charactersRemaining?: number
   charactersLimit?: number
   errorCode?: number
+  errorMessage?: string
 }
 
 export interface TTSGroupProps {
@@ -251,18 +252,28 @@ function ApiKeyInput({
           setQuota({ remaining: r.charactersRemaining, limit: r.charactersLimit })
         }
       } else {
-        switch (r.errorCode) {
-          case 401:
-            toast.error('Invalid API key')
-            break
-          case 429:
-            toast.error('Rate-limited — try again in a minute')
-            break
-          case 0:
-            toast.error('Could not reach ElevenLabs. Check your connection.')
-            break
-          default:
-            toast.error('ElevenLabs service unavailable')
+        // Backend returns 422 for ElevenLabs-rejected keys (missing scope,
+        // truly invalid, etc.) with a structured `error` field. Prefer that
+        // specific copy when available; fall back to generic per-code toasts.
+        if (r.errorCode === 422 && r.errorMessage) {
+          toast.error(r.errorMessage)
+        } else {
+          switch (r.errorCode) {
+            case 401:
+              toast.error('Invalid API key')
+              break
+            case 422:
+              toast.error('Invalid API key')
+              break
+            case 429:
+              toast.error('Rate-limited — try again in a minute')
+              break
+            case 0:
+              toast.error('Could not reach ElevenLabs. Check your connection.')
+              break
+            default:
+              toast.error('ElevenLabs service unavailable')
+          }
         }
       }
     } finally {
@@ -524,10 +535,18 @@ function ElevenLabsVoicePicker({
       try {
         const list = await loader()
         if (!cancelled) setVoices(list)
-      } catch {
+      } catch (e) {
         if (!cancelled) {
           setError(true)
-          toast.error('Could not load voices.')
+          // Surface the backend's specific message (e.g. ElevenLabs
+          // missing_permissions text naming the missing scope) instead of a
+          // generic "Could not load voices." Falls back to the generic copy
+          // when the error has no readable message.
+          const msg =
+            e instanceof Error && e.message && e.message !== 'Unknown error'
+              ? e.message
+              : 'Could not load voices.'
+          toast.error(msg)
         }
       } finally {
         if (!cancelled) setLoading(false)
