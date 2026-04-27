@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS feature_gates (
     updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS update_feature_gates_updated_at ON feature_gates;
 CREATE TRIGGER update_feature_gates_updated_at
     BEFORE UPDATE ON feature_gates
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

@@ -21,6 +21,6 @@ WHERE id IN (
 
 -- Create partial unique index: at most one row per user_id may have is_public_for_viewers = true.
 -- A partial index on a boolean column achieves a per-user uniqueness constraint efficiently.
-CREATE UNIQUE INDEX idx_overlays_one_public_per_user
+CREATE UNIQUE INDEX IF NOT EXISTS idx_overlays_one_public_per_user
     ON overlays (user_id)
     WHERE is_public_for_viewers = true;

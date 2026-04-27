@@ -19,9 +19,9 @@ CREATE TABLE IF NOT EXISTS youtube_oauth_tokens (
     UNIQUE(user_id, channel_id)
 );
 
-CREATE INDEX idx_youtube_oauth_user_id ON youtube_oauth_tokens(user_id);
-CREATE INDEX idx_youtube_oauth_channel_id ON youtube_oauth_tokens(channel_id);
-CREATE INDEX idx_youtube_oauth_expiry ON youtube_oauth_tokens(expiry);
+CREATE INDEX IF NOT EXISTS idx_youtube_oauth_user_id ON youtube_oauth_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_youtube_oauth_channel_id ON youtube_oauth_tokens(channel_id);
+CREATE INDEX IF NOT EXISTS idx_youtube_oauth_expiry ON youtube_oauth_tokens(expiry);
 
 -- YouTube quota usage tracking
 -- Tracks daily YouTube API quota consumption
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS youtube_quota_usage (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_youtube_quota_date ON youtube_quota_usage(date);
+CREATE INDEX IF NOT EXISTS idx_youtube_quota_date ON youtube_quota_usage(date);
 
 -- Supported platforms registry (optional - for future extensibility)
 -- Tracks which platforms are enabled and their configuration
@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS supported_platforms (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_supported_platforms_platform ON supported_platforms(platform);
-CREATE INDEX idx_supported_platforms_is_enabled ON supported_platforms(is_enabled);
+CREATE INDEX IF NOT EXISTS idx_supported_platforms_platform ON supported_platforms(platform);
+CREATE INDEX IF NOT EXISTS idx_supported_platforms_is_enabled ON supported_platforms(is_enabled);
 
 -- Insert default supported platforms
 INSERT INTO supported_platforms (platform, display_name, is_enabled, requires_oauth, config_schema)

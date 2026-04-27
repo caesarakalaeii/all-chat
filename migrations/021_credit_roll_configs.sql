@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS credit_roll_configs (
     UNIQUE(overlay_id)
 );
 
-CREATE INDEX idx_credit_roll_configs_overlay_id ON credit_roll_configs(overlay_id);
+CREATE INDEX IF NOT EXISTS idx_credit_roll_configs_overlay_id ON credit_roll_configs(overlay_id);
 
 -- Function to auto-create credit roll config for new overlays
 CREATE OR REPLACE FUNCTION create_credit_roll_config()
@@ -55,6 +55,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to auto-create credit roll config when overlay is created
+DROP TRIGGER IF EXISTS trigger_create_credit_roll_config ON overlays;
 CREATE TRIGGER trigger_create_credit_roll_config
     AFTER INSERT ON overlays
     FOR EACH ROW

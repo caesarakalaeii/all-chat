@@ -22,10 +22,10 @@ CREATE TABLE IF NOT EXISTS tiktok_oauth_tokens (
     UNIQUE(user_id, open_id)
 );
 
-CREATE INDEX idx_tiktok_oauth_user_id ON tiktok_oauth_tokens(user_id);
-CREATE INDEX idx_tiktok_oauth_open_id ON tiktok_oauth_tokens(open_id);
-CREATE INDEX idx_tiktok_oauth_union_id ON tiktok_oauth_tokens(union_id);
-CREATE INDEX idx_tiktok_oauth_expiry ON tiktok_oauth_tokens(expiry);
+CREATE INDEX IF NOT EXISTS idx_tiktok_oauth_user_id ON tiktok_oauth_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_tiktok_oauth_open_id ON tiktok_oauth_tokens(open_id);
+CREATE INDEX IF NOT EXISTS idx_tiktok_oauth_union_id ON tiktok_oauth_tokens(union_id);
+CREATE INDEX IF NOT EXISTS idx_tiktok_oauth_expiry ON tiktok_oauth_tokens(expiry);
 
 -- Enable TikTok platform (currently in BETA - using unofficial API)
 UPDATE supported_platforms

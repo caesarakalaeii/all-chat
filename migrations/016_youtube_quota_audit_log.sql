@@ -40,13 +40,13 @@ CREATE TABLE IF NOT EXISTS youtube_quota_audit_log (
 );
 
 -- Indexes for efficient querying
-CREATE INDEX idx_youtube_audit_timestamp ON youtube_quota_audit_log(timestamp DESC);
-CREATE INDEX idx_youtube_audit_date ON youtube_quota_audit_log(date DESC);
-CREATE INDEX idx_youtube_audit_endpoint ON youtube_quota_audit_log(endpoint, timestamp DESC);
-CREATE INDEX idx_youtube_audit_service ON youtube_quota_audit_log(service_name, timestamp DESC);
-CREATE INDEX idx_youtube_audit_reservation ON youtube_quota_audit_log(reservation_id) WHERE reservation_id IS NOT NULL;
-CREATE INDEX idx_youtube_audit_channel ON youtube_quota_audit_log(channel_id, timestamp DESC) WHERE channel_id IS NOT NULL;
-CREATE INDEX idx_youtube_audit_overlay ON youtube_quota_audit_log(overlay_id, timestamp DESC) WHERE overlay_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_youtube_audit_timestamp ON youtube_quota_audit_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_youtube_audit_date ON youtube_quota_audit_log(date DESC);
+CREATE INDEX IF NOT EXISTS idx_youtube_audit_endpoint ON youtube_quota_audit_log(endpoint, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_youtube_audit_service ON youtube_quota_audit_log(service_name, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_youtube_audit_reservation ON youtube_quota_audit_log(reservation_id) WHERE reservation_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_youtube_audit_channel ON youtube_quota_audit_log(channel_id, timestamp DESC) WHERE channel_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_youtube_audit_overlay ON youtube_quota_audit_log(overlay_id, timestamp DESC) WHERE overlay_id IS NOT NULL;
 
 -- Create daily reconciliation table to track drift
 CREATE TABLE IF NOT EXISTS youtube_quota_reconciliation (
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS youtube_quota_reconciliation (
     by_endpoint JSONB                     -- {"Search.List": 5000, "LiveChatMessages.List": 4500, ...}
 );
 
-CREATE INDEX idx_youtube_reconciliation_date ON youtube_quota_reconciliation(date DESC);
+CREATE INDEX IF NOT EXISTS idx_youtube_reconciliation_date ON youtube_quota_reconciliation(date DESC);
 
 -- Function to auto-cleanup old audit logs (keep 30 days for forensics)
 CREATE OR REPLACE FUNCTION cleanup_old_youtube_audit_logs() RETURNS INTEGER AS $$

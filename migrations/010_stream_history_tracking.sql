@@ -37,15 +37,16 @@ CREATE TABLE IF NOT EXISTS stream_history (
 );
 
 -- Indexes for efficient queries
-CREATE INDEX idx_stream_history_platform_channel ON stream_history(platform, channel_id);
-CREATE INDEX idx_stream_history_last_seen_live ON stream_history(last_seen_live)
+CREATE INDEX IF NOT EXISTS idx_stream_history_platform_channel ON stream_history(platform, channel_id);
+CREATE INDEX IF NOT EXISTS idx_stream_history_last_seen_live ON stream_history(last_seen_live)
     WHERE last_seen_live IS NOT NULL;
-CREATE INDEX idx_stream_history_last_check ON stream_history(last_check_time);
-CREATE INDEX idx_stream_history_platform ON stream_history(platform);
-CREATE INDEX idx_stream_history_consecutive_offline ON stream_history(consecutive_offline_checks)
+CREATE INDEX IF NOT EXISTS idx_stream_history_last_check ON stream_history(last_check_time);
+CREATE INDEX IF NOT EXISTS idx_stream_history_platform ON stream_history(platform);
+CREATE INDEX IF NOT EXISTS idx_stream_history_consecutive_offline ON stream_history(consecutive_offline_checks)
     WHERE consecutive_offline_checks > 0;
 
 -- Trigger for updated_at timestamp
+DROP TRIGGER IF EXISTS update_stream_history_updated_at ON stream_history;
 CREATE TRIGGER update_stream_history_updated_at
     BEFORE UPDATE ON stream_history
     FOR EACH ROW

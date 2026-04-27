@@ -15,8 +15,9 @@ CREATE TABLE IF NOT EXISTS overlay_tts_configs (
     updated_at         TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_overlay_tts_configs_overlay ON overlay_tts_configs(overlay_id);
+CREATE INDEX IF NOT EXISTS idx_overlay_tts_configs_overlay ON overlay_tts_configs(overlay_id);
 
+DROP TRIGGER IF EXISTS update_overlay_tts_configs_updated_at ON overlay_tts_configs;
 CREATE TRIGGER update_overlay_tts_configs_updated_at
     BEFORE UPDATE ON overlay_tts_configs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

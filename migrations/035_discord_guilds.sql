@@ -13,6 +13,14 @@ CREATE TABLE IF NOT EXISTS discord_guilds (
 CREATE INDEX IF NOT EXISTS idx_discord_guilds_user_id ON discord_guilds(user_id);
 CREATE INDEX IF NOT EXISTS idx_discord_guilds_guild_id ON discord_guilds(guild_id);
 
--- Grant application user access (required for CloudNativePG where migrations run as postgres superuser)
-GRANT ALL ON discord_guilds TO allchat_user;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO allchat_user;
+-- Grant application user access. CloudNativePG (production) runs migrations
+-- as the postgres superuser and the app connects as a separate allchat_user
+-- role. Local dev / docker-compose / test containers may not have that role,
+-- so guard the GRANTs to keep this migration runnable everywhere.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'allchat_user') THEN
+        GRANT ALL ON discord_guilds TO allchat_user;
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO allchat_user;
+    END IF;
+END $$;

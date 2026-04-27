@@ -8,15 +8,25 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS kick_id VARCHAR(255);
 CREATE INDEX IF NOT EXISTS idx_users_kick_id ON users(kick_id);
 
 -- Add unique constraint to ensure one account per Kick ID
-ALTER TABLE users ADD CONSTRAINT users_kick_id_unique UNIQUE (kick_id);
+-- Wrapped in a DO block because Postgres has no ADD CONSTRAINT IF NOT EXISTS;
+-- the pg_constraint check makes this safe to re-run.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'users_kick_id_unique'
+          AND conrelid = 'users'::regclass
+    ) THEN
+        ALTER TABLE users ADD CONSTRAINT users_kick_id_unique UNIQUE (kick_id);
+    END IF;
+END $$;
 
--- Update auth_provider check constraint to include 'kick'
--- First drop the existing constraint
-ALTER TABLE users DROP CONSTRAINT IF EXISTS users_auth_provider_check;
-
--- Recreate with 'kick' included
-ALTER TABLE users ADD CONSTRAINT users_auth_provider_check
-    CHECK (auth_provider IN ('twitch', 'youtube', 'tiktok', 'kick'));
+-- The auth_provider CHECK constraint that includes 'kick' is now defined in
+-- 005_multi_platform_auth.sql (where the auth_provider column is added).
+-- Keeping it here was an ordering bug: this file sorts before
+-- 005_multi_platform_auth.sql, so the column didn't yet exist when this ran.
+-- The bug was masked while the runner used ON_ERROR_STOP=0; the migration
+-- silently failed once and was retried on the next pod start.
 
 -- Create kick_oauth_tokens table for storing Kick OAuth tokens
 -- Similar to youtube_oauth_tokens, this allows the Kick listener to access tokens

@@ -1,9 +1,9 @@
 -- Add channel_handle field to overlay_chat_sources
 ALTER TABLE overlay_chat_sources
-ADD COLUMN channel_handle VARCHAR(255);
+ADD COLUMN IF NOT EXISTS channel_handle VARCHAR(255);
 
 -- Create index for efficient handle lookups
-CREATE INDEX idx_overlay_chat_sources_channel_handle
+CREATE INDEX IF NOT EXISTS idx_overlay_chat_sources_channel_handle
 ON overlay_chat_sources(LOWER(channel_handle));
 
 -- Backfill existing data:
