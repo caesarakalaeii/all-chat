@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
-	"github.com/caesar/all-chat/shared/crypto"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -124,7 +124,11 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 }
 
 func newTestUserRepository(t *testing.T, pool *pgxpool.Pool) *UserRepository {
-	cipher, err := crypto.NewAESGCMCipher(testEncryptionKey)
+	key, err := encryption.ParseKey(testEncryptionKey)
+	if err != nil {
+		t.Fatalf("failed to parse test encryption key: %v", err)
+	}
+	cipher, err := encryption.NewAESEncryptor(key)
 	if err != nil {
 		t.Fatalf("failed to create cipher: %v", err)
 	}

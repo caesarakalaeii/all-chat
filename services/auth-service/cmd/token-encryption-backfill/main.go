@@ -24,13 +24,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/caesar/all-chat/shared/crypto"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type backfillRunner struct {
 	pool   *pgxpool.Pool
-	cipher crypto.StringCipher
+	cipher *encryption.AESEncryptor
 	dryRun bool
 }
 
@@ -57,7 +57,11 @@ func main() {
 	}
 	defer pool.Close()
 
-	cipher, err := crypto.NewAESGCMCipher(encryptionKey)
+	key, err := encryption.ParseKey(encryptionKey)
+	if err != nil {
+		log.Fatalf("failed to parse TOKEN_ENCRYPTION_KEY: %v", err)
+	}
+	cipher, err := encryption.NewAESEncryptor(key)
 	if err != nil {
 		log.Fatalf("failed to build cipher: %v", err)
 	}
