@@ -487,6 +487,7 @@ func main() {
 		protectedAPI.POST("/overlays/:id/tts-config/rotate-token", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/tts-config/test", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/tts-voices", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/tts-voices/preview", proxyHandler.ForwardRequest)
 
 		// YouTube resolver routes (protected)
 		protectedAPI.POST("/youtube/resolve", proxyHandler.ForwardRequest)
