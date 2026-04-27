@@ -131,3 +131,6 @@ DISTRIBUTED_TRACING_COMPLETE.md
 
 # Marketing / outreach (private, never commit)
 docs/marketing/
+
+# Sub-repo symlinks (managed via .planning/config.json sub_repos)
+/caesar-deployment
