@@ -299,6 +299,7 @@ func main() {
 			ttsPremium.DELETE("/:id/tts-config", ttsHandler.HandleDeleteTTSConfig)
 			ttsPremium.POST("/:id/tts-config/rotate-token", ttsHandler.HandleRotateToken)
 			ttsPremium.GET("/:id/tts-voices", ttsHandler.HandleGetVoices)
+			ttsPremium.POST("/:id/tts-voices/preview", ttsHandler.HandleGetVoicesPreview)
 			ttsPremium.POST("/:id/tts-config/test", ttsHandler.HandleTestKey)
 		}
 

@@ -41,8 +41,25 @@ vi.mock('react-hot-toast', () => {
 })
 
 import { TTSGroup } from '../TTSGroup'
-import type { TTSGroupProps } from '../TTSGroup'
+import type { TTSGroupProps, ElevenLabsVoice } from '../TTSGroup'
 import type { DisplaySettings } from '@/lib/types/overlay'
+
+/**
+ * Wait for the ElevenLabs voice <select> to render an <option> with the given
+ * label, then return the select element. Used by tests that exercise the new
+ * typed-key → preview-voices auto-load flow (replaces the old on-focus loader).
+ */
+async function waitForVoiceOption(name: string): Promise<HTMLSelectElement> {
+  const select = screen.getByLabelText(/ElevenLabs voice/i) as HTMLSelectElement
+  await waitFor(
+    () => {
+      const opts = Array.from(select.options).map((o) => o.textContent ?? '')
+      expect(opts).toContain(name)
+    },
+    { timeout: 2000 },
+  )
+  return select
+}
 
 afterEach(() => {
   cleanup()
@@ -328,31 +345,44 @@ describe('TTSGroup', () => {
   // Test A2: Clicking Save-key fires onSaveKey with key+voice
   it('A2: clicking Save key fires onSaveKey(key, voiceId)', async () => {
     const onSaveKey = vi.fn().mockResolvedValue(undefined)
+    const onPreviewVoices = vi
+      .fn<(apiKey: string) => Promise<ElevenLabsVoice[]>>()
+      .mockResolvedValue([{ voice_id: 'v-alpha', name: 'Alpha' }])
     renderTTSGroup({
       displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
       isPremium: true,
       hasElevenLabsConfig: false,
       onSaveKey,
+      onPreviewVoices,
     })
     const input = screen.getByLabelText(/ElevenLabs API key/i) as HTMLInputElement
     fireEvent.change(input, { target: { value: 'sk-real-key' } })
+    // Wait for the debounced preview load + select a voice (new precondition).
+    const select = await waitForVoiceOption('Alpha')
+    fireEvent.change(select, { target: { value: 'v-alpha' } })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Save key$/ }))
     })
-    expect(onSaveKey).toHaveBeenCalledWith('sk-real-key', expect.any(String))
+    expect(onSaveKey).toHaveBeenCalledWith('sk-real-key', 'v-alpha')
   })
 
   // Test A3: After successful save, input clears
   it('A3: after onSaveKey resolves, the API-key input clears to empty', async () => {
     const onSaveKey = vi.fn().mockResolvedValue(undefined)
+    const onPreviewVoices = vi
+      .fn<(apiKey: string) => Promise<ElevenLabsVoice[]>>()
+      .mockResolvedValue([{ voice_id: 'v-alpha', name: 'Alpha' }])
     renderTTSGroup({
       displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
       isPremium: true,
       hasElevenLabsConfig: false,
       onSaveKey,
+      onPreviewVoices,
     })
     const input = screen.getByLabelText(/ElevenLabs API key/i) as HTMLInputElement
     fireEvent.change(input, { target: { value: 'sk-secret' } })
+    const select = await waitForVoiceOption('Alpha')
+    fireEvent.change(select, { target: { value: 'v-alpha' } })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Save key$/ }))
     })
@@ -362,21 +392,27 @@ describe('TTSGroup', () => {
   // Test A4: Save-key error surfaces inline error
   it('A4: Save-key error leaves input intact and shows "Could not save. Try again."', async () => {
     const onSaveKey = vi.fn().mockRejectedValue(new Error('boom'))
+    const onPreviewVoices = vi
+      .fn<(apiKey: string) => Promise<ElevenLabsVoice[]>>()
+      .mockResolvedValue([{ voice_id: 'v-alpha', name: 'Alpha' }])
     renderTTSGroup({
       displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
       isPremium: true,
       hasElevenLabsConfig: false,
       onSaveKey,
+      onPreviewVoices,
     })
     const input = screen.getByLabelText(/ElevenLabs API key/i) as HTMLInputElement
-    fireEvent.change(input, { target: { value: 'sk-bad' } })
+    fireEvent.change(input, { target: { value: 'sk-bad-typed' } })
+    const select = await waitForVoiceOption('Alpha')
+    fireEvent.change(select, { target: { value: 'v-alpha' } })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Save key$/ }))
     })
     await waitFor(() => {
       expect(screen.getByText(/Could not save\. Try again\./)).toBeDefined()
     })
-    expect(input.value).toBe('sk-bad')
+    expect(input.value).toBe('sk-bad-typed')
   })
 
   // Test A5: Saved state shows Test/Remove + saved helper copy
@@ -636,8 +672,8 @@ describe('TTSGroup', () => {
     }
   })
 
-  // Test A18: Voice picker lazy-loads voices on focus
-  it('A18: ElevenLabs voice picker calls onFetchVoices on focus; voice names become options', async () => {
+  // Test A18: Saved-key flow auto-loads voices via onFetchVoices
+  it('A18: hasSavedKey=true auto-loads voices via onFetchVoices on mount', async () => {
     const onFetchVoices = vi.fn().mockResolvedValue([
       { voice_id: 'v-alpha', name: 'Alpha' },
       { voice_id: 'v-bravo', name: 'Bravo' },
@@ -650,9 +686,6 @@ describe('TTSGroup', () => {
       onFetchVoices,
     })
     const select = screen.getByLabelText(/ElevenLabs voice/i) as HTMLSelectElement
-    await act(async () => {
-      fireEvent.focus(select)
-    })
     await waitFor(() => {
       expect(onFetchVoices).toHaveBeenCalledTimes(1)
       const optionTexts = Array.from(select.options).map((o) => o.textContent ?? '')
@@ -661,34 +694,68 @@ describe('TTSGroup', () => {
     })
   })
 
-  // Test A19: Selecting an ElevenLabs voice -> the voiceId flows into next onSaveKey call
-  it('A19: selecting an ElevenLabs voice sends that voice_id to the next Save-key call', async () => {
-    const onFetchVoices = vi.fn().mockResolvedValue([
-      { voice_id: 'v-alpha', name: 'Alpha' },
-      { voice_id: 'v-bravo', name: 'Bravo' },
-    ])
+  // Test A19: Typed (unsaved) key drives onPreviewVoices and the picked voice
+  // flows into the Save-key call. End-to-end exercise of the chicken-and-egg
+  // bugfix.
+  it('A19: typed key auto-fetches voices via onPreviewVoices; selection flows to onSaveKey', async () => {
+    const onPreviewVoices = vi
+      .fn<(apiKey: string) => Promise<ElevenLabsVoice[]>>()
+      .mockResolvedValue([
+        { voice_id: 'v-alpha', name: 'Alpha' },
+        { voice_id: 'v-bravo', name: 'Bravo' },
+      ])
     const onSaveKey = vi.fn().mockResolvedValue(undefined)
     renderTTSGroup({
       displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
       isPremium: true,
       hasElevenLabsConfig: false,
-      onFetchVoices,
+      onPreviewVoices,
       onSaveKey,
     })
-    const select = screen.getByLabelText(/ElevenLabs voice/i) as HTMLSelectElement
-    await act(async () => {
-      fireEvent.focus(select)
-    })
-    await waitFor(() => {
-      expect(onFetchVoices).toHaveBeenCalled()
-    })
-    fireEvent.change(select, { target: { value: 'v-bravo' } })
     const input = screen.getByLabelText(/ElevenLabs API key/i) as HTMLInputElement
     fireEvent.change(input, { target: { value: 'sk-new-key' } })
+    const select = await waitForVoiceOption('Bravo')
+    expect(onPreviewVoices).toHaveBeenCalledWith('sk-new-key')
+    fireEvent.change(select, { target: { value: 'v-bravo' } })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Save key$/ }))
     })
     expect(onSaveKey).toHaveBeenCalledWith('sk-new-key', 'v-bravo')
+  })
+
+  // Test A19b: Save-key without a picked voice surfaces inline guidance
+  // instead of failing server-side with "voice_id is required".
+  it('A19b: Save-key with no picked voice shows "Pick a voice before saving." and does NOT call onSaveKey', async () => {
+    const onSaveKey = vi.fn().mockResolvedValue(undefined)
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: false,
+      onSaveKey,
+    })
+    const input = screen.getByLabelText(/ElevenLabs API key/i) as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'sk-typed-but-no-voice' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Save key$/ }))
+    })
+    expect(screen.getByText(/Pick a voice before saving\./)).toBeDefined()
+    expect(onSaveKey).not.toHaveBeenCalled()
+  })
+
+  // Test A19c: API key input is rendered ABOVE the voice picker (placement
+  // requirement — bug report: "the placement of the api key field is also
+  // not good. please place it directly under the selector so it's
+  // immediately visible, not after scrolling a bunch").
+  it('A19c: API key input precedes the voice picker in DOM order', () => {
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: false,
+    })
+    const input = screen.getByLabelText(/ElevenLabs API key/i)
+    const select = screen.getByLabelText(/ElevenLabs voice/i)
+    // compareDocumentPosition: bit 0x04 = DOCUMENT_POSITION_FOLLOWING (select follows input)
+    expect(input.compareDocumentPosition(select) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   // Test A20: Non-premium user sees disabled inputs + PremiumBadge overlay + upgrade copy

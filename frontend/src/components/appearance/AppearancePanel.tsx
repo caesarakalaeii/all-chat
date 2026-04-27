@@ -57,6 +57,7 @@ export interface AppearancePanelProps {
   onRotateTTSToken?: () => Promise<{ obsUrl: string }>
   onRemoveTTSKey?: () => Promise<void>
   onFetchTTSVoices?: () => Promise<ElevenLabsVoice[]>
+  onPreviewTTSVoices?: (apiKey: string) => Promise<ElevenLabsVoice[]>
 }
 
 export function AppearancePanel({
@@ -79,6 +80,7 @@ export function AppearancePanel({
   onRotateTTSToken,
   onRemoveTTSKey,
   onFetchTTSVoices,
+  onPreviewTTSVoices,
 }: AppearancePanelProps): React.ReactElement {
   return (
     <div className="flex flex-col gap-0">
@@ -137,6 +139,7 @@ export function AppearancePanel({
             onRotateToken={onRotateTTSToken}
             onRemoveKey={onRemoveTTSKey}
             onFetchVoices={onFetchTTSVoices}
+            onPreviewVoices={onPreviewTTSVoices}
           />
         </CollapsibleSection>
       )}

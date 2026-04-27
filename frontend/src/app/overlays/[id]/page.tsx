@@ -1313,6 +1313,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     return overlaysApi.getTTSVoices(id)
   }, [id])
 
+  const handlePreviewTTSVoices = useCallback(
+    async (apiKey: string): Promise<ElevenLabsVoice[]> => {
+      return overlaysApi.previewTTSVoices(id, apiKey)
+    },
+    [id],
+  )
+
   // --- sendCustomCssToIframe: post the full theme CSS to the embed preview ---
   const sendCustomCssToIframe = useCallback((css: string) => {
     iframeRef.current?.contentWindow?.postMessage(
@@ -2262,6 +2269,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   onRotateTTSToken={handleRotateTTSToken}
                   onRemoveTTSKey={handleRemoveTTSKey}
                   onFetchTTSVoices={handleFetchTTSVoices}
+                  onPreviewTTSVoices={handlePreviewTTSVoices}
                 />
               </CollapsibleSection>
 
