@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 14 Plan 07 complete — 2 commits in caesar-deployment (bd48cd8, cb7d995) — V1 env entries wired to all 12 deployments, Pitfall 1 fixed, key-rotator Job+CronJob created
-last_updated: "2026-04-27T16:48:13.728Z"
-last_activity: 2026-04-27
+status: verifying
+stopped_at: Phase 14 Plan 08 complete — rotation runbooks for TOKEN_ENCRYPTION_KEY/JWT_SECRET/SERVICE_JWT_SECRET and CNPG DB password
+last_updated: "2026-04-28T06:41:51.417Z"
+last_activity: 2026-04-28
 progress:
   total_phases: 21
-  completed_phases: 19
+  completed_phases: 20
   total_plans: 88
-  completed_plans: 86
-  percent: 98
+  completed_plans: 87
+  percent: 99
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 Phase: 14 (Secret Rotation Infrastructure) — EXECUTING
 Plan: 8 of 8
 Plans: 5/8 complete
-Status: Ready to execute
+Status: Phase complete — ready for verification
 
 ## Performance Metrics
 
@@ -107,6 +107,7 @@ Status: Ready to execute
 | Phase 14 P05 | multi-session | 3 tasks | 28 files |
 | Phase 14 P06 | 753 | 3 tasks | 5 files |
 | Phase 14 P07 | 420 | 3 tasks | 12 files |
+| Phase 14 P08 | 811s | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -258,6 +259,9 @@ Key decisions relevant to v1.6:
 - [Phase ?]: Kick v0 rows encrypted-direct (no Decrypt step); TikTok v0 rows skipped via SQL WHERE encryption_version >= 1 deferral
 - [Phase ?]: [Phase 14-07]: key-rotator-job.yaml not in kustomization (template only); CronJob registered; operator triggers manual run via kubectl create job --from=cronjob
 - [Phase ?]: [Phase 14-07]: Pitfall 1 reconciled — ENCRYPTION_KEY renamed to TOKEN_ENCRYPTION_KEY in token-refresh-service + twitch-eventsub-listener; secretKeyRef.key unchanged
+- [Phase 14]: D-13/D-14: CNPG ManagedRoles unsuitable for app-user rotation; manual ALTER ROLE + kubectl patch is canonical path; documented in db-password-rotation.md
+- [Phase 14]: D-15: kubectl patch is the only safe K8s Secret edit path while SOPS drift persists; sops set explicitly forbidden in both runbooks
+- [Phase 14]: D-18/D-19: No live rotation in Phase 14; mechanism shipped; first post-Phase-14 run by operator IS the leaked-key remediation
 
 ### Roadmap Evolution
 
@@ -310,9 +314,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-27T16:48:10.669Z
-Last activity: 2026-04-27
-Stopped at: Phase 14 Plan 07 complete — 2 commits in caesar-deployment (bd48cd8, cb7d995) — V1 env entries wired to all 12 deployments, Pitfall 1 fixed, key-rotator Job+CronJob created
+Last session: 2026-04-28T06:41:51.410Z
+Last activity: 2026-04-28
+Stopped at: Phase 14 Plan 08 complete — rotation runbooks for TOKEN_ENCRYPTION_KEY/JWT_SECRET/SERVICE_JWT_SECRET and CNPG DB password
 Resume file: None
 
 **Next action:** Execute Phase 14 Plan 06 — key-rotator sweeper.
