@@ -72,6 +72,7 @@ const (
 type ttsConfigStore interface {
 	GetByOverlayID(ctx context.Context, overlayID string) (*models.TTSConfig, error)
 	CreateOrUpdate(ctx context.Context, overlayID string, encryptedKey []byte, voiceID string) (*models.TTSConfig, error)
+	UpdateVoiceID(ctx context.Context, overlayID string, voiceID string) error
 	Delete(ctx context.Context, overlayID string) error
 	RotateSigningSecret(ctx context.Context, overlayID string) ([]byte, error)
 }
@@ -287,6 +288,48 @@ func (h *TTSHandler) HandleSaveTTSConfig(c *gin.Context) {
 
 	h.logger.Info("tts config saved", zap.String("overlay_id", overlayID))
 	c.JSON(http.StatusOK, gin.H{"status": "saved"})
+}
+
+// ---- HandleSaveVoice (Issue #276) ------------------------------------------
+
+// HandleSaveVoice handles PATCH /:id/tts-config/voice. Body {voice_id}.
+// Updates only the voice_id column without touching the encrypted_api_key or
+// tts_signing_secret. Lets users switch voices after the key is already
+// saved (where POST /:id/tts-config requires the api_key in the body and
+// the UI hides the "Save key" button once a key exists).
+func (h *TTSHandler) HandleSaveVoice(c *gin.Context) {
+	_, overlayID, ok := h.checkOwnership(c)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		VoiceID string `json:"voice_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	voiceID := strings.TrimSpace(req.VoiceID)
+	if voiceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "voice_id is required"})
+		return
+	}
+
+	if err := h.repo.UpdateVoiceID(c.Request.Context(), overlayID, voiceID); err != nil {
+		if errors.Is(err, repository.ErrTTSConfigNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "tts config not found"})
+			return
+		}
+		h.logger.Error("tts voice update: persist failed",
+			zap.String("overlay_id", overlayID), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save voice"})
+		return
+	}
+
+	h.logger.Info("tts voice updated",
+		zap.String("overlay_id", overlayID), zap.String("voice_id", voiceID))
+	c.JSON(http.StatusOK, gin.H{"status": "saved", "voice_id": voiceID})
 }
 
 // ---- HandleDeleteTTSConfig (D-12) ------------------------------------------
