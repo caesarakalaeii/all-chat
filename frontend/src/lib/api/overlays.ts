@@ -214,6 +214,19 @@ export const overlaysApi = {
   },
 
   /**
+   * Update only the saved ElevenLabs voice for the overlay (Issue #276).
+   * Backend: PATCH /api/v1/overlays/:id/tts-config/voice (RequirePremium("tts")).
+   * The encrypted_api_key and tts_signing_secret are left untouched — used by
+   * the picker once a key is already saved (no "Save key" button is shown then).
+   */
+  async saveTTSVoice(overlayId: string, voiceId: string): Promise<void> {
+    await apiClient.patch<{ status: string; voice_id: string }>(
+      `/api/v1/overlays/${overlayId}/tts-config/voice`,
+      { voice_id: voiceId },
+    )
+  },
+
+  /**
    * Remove the saved ElevenLabs key/voice + signing secret for the overlay.
    * Backend: DELETE /api/v1/overlays/:id/tts-config.
    */

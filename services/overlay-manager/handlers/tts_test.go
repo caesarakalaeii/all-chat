@@ -88,6 +88,17 @@ func (m *mockTTSRepo) CreateOrUpdate(_ context.Context, overlayID string, encryp
 	return &copied, nil
 }
 
+func (m *mockTTSRepo) UpdateVoiceID(_ context.Context, _ string, voiceID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.row == nil {
+		return repository.ErrTTSConfigNotFound
+	}
+	m.row.VoiceID = voiceID
+	m.row.UpdatedAt = time.Now()
+	return nil
+}
+
 func (m *mockTTSRepo) Delete(_ context.Context, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -197,6 +208,7 @@ func newRouter(t *testing.T, h *TTSHandler, gates sharedMiddleware.GateChecker, 
 	gated.Use(authShim, premium)
 	{
 		gated.POST("/:id/tts-config", h.HandleSaveTTSConfig)
+		gated.PATCH("/:id/tts-config/voice", h.HandleSaveVoice)
 		gated.DELETE("/:id/tts-config", h.HandleDeleteTTSConfig)
 		gated.POST("/:id/tts-config/rotate-token", h.HandleRotateToken)
 		gated.GET("/:id/tts-voices", h.HandleGetVoices)
@@ -265,6 +277,83 @@ func TestSaveTTSConfigRejectsNonOwner(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// TestSaveVoiceUpdatesRowWithoutTouchingKey — the new PATCH endpoint
+// (Issue #276) rewrites only voice_id; the encrypted_api_key stays as-is.
+func TestSaveVoiceUpdatesRowWithoutTouchingKey(t *testing.T) {
+	f := newTestHandler(t, nil)
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	// Seed a saved config with key "sk_secret_key" + voice "v-original".
+	save := httptest.NewRequest(http.MethodPost, "/overlay-voice/tts-config",
+		strings.NewReader(`{"api_key":"sk_secret_key","voice_id":"v-original"}`))
+	save.Header.Set("Content-Type", "application/json")
+	saveW := httptest.NewRecorder()
+	r.ServeHTTP(saveW, save)
+	require.Equal(t, http.StatusOK, saveW.Code)
+	originalKey := append([]byte(nil), f.repo.row.EncryptedAPIKey...)
+
+	// PATCH the voice only.
+	patch := httptest.NewRequest(http.MethodPatch, "/overlay-voice/tts-config/voice",
+		strings.NewReader(`{"voice_id":"v-new"}`))
+	patch.Header.Set("Content-Type", "application/json")
+	patchW := httptest.NewRecorder()
+	r.ServeHTTP(patchW, patch)
+
+	require.Equal(t, http.StatusOK, patchW.Code, "body=%s", patchW.Body.String())
+	assert.Contains(t, patchW.Body.String(), `"voice_id":"v-new"`)
+	assert.Equal(t, "v-new", f.repo.row.VoiceID)
+	assert.Equal(t, originalKey, f.repo.row.EncryptedAPIKey,
+		"encrypted_api_key must be untouched by voice-only patch")
+}
+
+// TestSaveVoiceReturns404WhenNoConfig — patching before the user has saved a
+// key returns 404 so the UI can prompt for the key first.
+func TestSaveVoiceReturns404WhenNoConfig(t *testing.T) {
+	f := newTestHandler(t, nil)
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	patch := httptest.NewRequest(http.MethodPatch, "/overlay-empty/tts-config/voice",
+		strings.NewReader(`{"voice_id":"v-new"}`))
+	patch.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, patch)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// TestSaveVoiceRejectsEmptyVoiceID — voice_id is required, blank gets 400.
+func TestSaveVoiceRejectsEmptyVoiceID(t *testing.T) {
+	f := newTestHandler(t, nil)
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	patch := httptest.NewRequest(http.MethodPatch, "/overlay-x/tts-config/voice",
+		strings.NewReader(`{"voice_id":"   "}`))
+	patch.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, patch)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// TestSaveVoiceRejectsNonOwner — ownership check fires before any DB work.
+func TestSaveVoiceRejectsNonOwner(t *testing.T) {
+	f := newTestHandler(t, nil)
+	f.overlays.owned = false
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	patch := httptest.NewRequest(http.MethodPatch, "/overlay-stranger/tts-config/voice",
+		strings.NewReader(`{"voice_id":"v"}`))
+	patch.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, patch)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }

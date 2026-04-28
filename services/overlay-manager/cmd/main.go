@@ -296,6 +296,7 @@ func main() {
 		ttsPremium.Use(middleware.RequirePremium(dbPool, gateCache, "tts", log))
 		{
 			ttsPremium.POST("/:id/tts-config", ttsHandler.HandleSaveTTSConfig)
+			ttsPremium.PATCH("/:id/tts-config/voice", ttsHandler.HandleSaveVoice)
 			ttsPremium.DELETE("/:id/tts-config", ttsHandler.HandleDeleteTTSConfig)
 			ttsPremium.POST("/:id/tts-config/rotate-token", ttsHandler.HandleRotateToken)
 			ttsPremium.GET("/:id/tts-voices", ttsHandler.HandleGetVoices)

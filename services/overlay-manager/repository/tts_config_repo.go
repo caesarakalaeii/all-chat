@@ -98,6 +98,27 @@ func (r *TTSConfigRepository) CreateOrUpdate(ctx context.Context, overlayID stri
 	return cfg, nil
 }
 
+// UpdateVoiceID updates only the voice_id column for overlayID, leaving the
+// encrypted_api_key and tts_signing_secret untouched. Returns
+// ErrTTSConfigNotFound if no row matched. Used by PATCH /:id/tts-config/voice
+// so users can change voices after the key is already saved without having
+// to re-submit the key.
+func (r *TTSConfigRepository) UpdateVoiceID(ctx context.Context, overlayID string, voiceID string) error {
+	const q = `
+		UPDATE overlay_tts_configs
+		   SET voice_id = $1, updated_at = NOW()
+		 WHERE overlay_id = $2
+	`
+	tag, err := r.pool.Exec(ctx, q, voiceID, overlayID)
+	if err != nil {
+		return fmt.Errorf("tts_config_repo: update voice: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrTTSConfigNotFound
+	}
+	return nil
+}
+
 // Delete removes the config row for overlayID. Returns ErrTTSConfigNotFound
 // if no row matched.
 func (r *TTSConfigRepository) Delete(ctx context.Context, overlayID string) error {
