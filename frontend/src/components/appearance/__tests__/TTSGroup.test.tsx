@@ -861,6 +861,102 @@ describe('TTSGroup', () => {
     expect(onSaveKey).toHaveBeenCalledWith('sk-typed-key', 'v-first')
   })
 
+  // ---- Issue #276: Save-voice flow when key is already saved ----------------
+
+  // The bug: once a key is saved, ApiKeyInput hides "Save key", and changing
+  // the voice picker silently does nothing. These tests pin the new
+  // `onSaveVoice` prop and the picker initial value driven by `savedVoiceId`.
+
+  it('276-1: pickedVoiceId initialises from savedVoiceId so the saved selection is shown on load', async () => {
+    const voices: ElevenLabsVoice[] = [
+      { voice_id: 'v-saved', name: 'Saved Voice' },
+      { voice_id: 'v-other', name: 'Other Voice' },
+    ]
+    const onFetchVoices = vi.fn().mockResolvedValue(voices)
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: true,
+      savedVoiceId: 'v-saved',
+      onFetchVoices,
+    })
+    const select = await waitForVoiceOption('Saved Voice')
+    expect(select.value).toBe('v-saved')
+  })
+
+  it('276-2: Save voice button is HIDDEN when the picker matches savedVoiceId', async () => {
+    const voices: ElevenLabsVoice[] = [
+      { voice_id: 'v-saved', name: 'Saved Voice' },
+      { voice_id: 'v-other', name: 'Other Voice' },
+    ]
+    const onFetchVoices = vi.fn().mockResolvedValue(voices)
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: true,
+      savedVoiceId: 'v-saved',
+      onFetchVoices,
+      onSaveVoice: vi.fn(),
+    })
+    await waitForVoiceOption('Saved Voice')
+    expect(screen.queryByRole('button', { name: /^Save voice/ })).toBeNull()
+  })
+
+  it('276-3: Save voice button appears after the picker changes and fires onSaveVoice with the new id', async () => {
+    const voices: ElevenLabsVoice[] = [
+      { voice_id: 'v-saved', name: 'Saved Voice' },
+      { voice_id: 'v-other', name: 'Other Voice' },
+    ]
+    const onFetchVoices = vi.fn().mockResolvedValue(voices)
+    const onSaveVoice = vi.fn().mockResolvedValue(undefined)
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: true,
+      savedVoiceId: 'v-saved',
+      onFetchVoices,
+      onSaveVoice,
+    })
+    const select = await waitForVoiceOption('Other Voice')
+
+    // Switch to the other voice — Save voice should appear.
+    fireEvent.change(select, { target: { value: 'v-other' } })
+    const saveBtn = await screen.findByRole('button', { name: /^Save voice$/ })
+    await act(async () => {
+      fireEvent.click(saveBtn)
+    })
+    expect(onSaveVoice).toHaveBeenCalledWith('v-other')
+    await waitFor(() => {
+      expect(toastMocks.success).toHaveBeenCalledWith('Voice updated.')
+    })
+  })
+
+  it('276-4: Save voice toasts the error when onSaveVoice rejects', async () => {
+    const voices: ElevenLabsVoice[] = [
+      { voice_id: 'v-saved', name: 'Saved Voice' },
+      { voice_id: 'v-other', name: 'Other Voice' },
+    ]
+    const onFetchVoices = vi.fn().mockResolvedValue(voices)
+    const onSaveVoice = vi.fn().mockRejectedValue(new Error('boom'))
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: true,
+      savedVoiceId: 'v-saved',
+      onFetchVoices,
+      onSaveVoice,
+    })
+    const select = await waitForVoiceOption('Other Voice')
+    fireEvent.change(select, { target: { value: 'v-other' } })
+    const saveBtn = await screen.findByRole('button', { name: /^Save voice$/ })
+    await act(async () => {
+      fireEvent.click(saveBtn)
+    })
+    await waitFor(() => {
+      expect(toastMocks.error).toHaveBeenCalledWith(expect.stringContaining('boom'))
+    })
+  })
+
   // Test A20: Non-premium user sees disabled inputs + PremiumBadge overlay + upgrade copy
   it('A20: non-premium user sees upgrade copy and disabled API-key input under the Advanced block', () => {
     renderTTSGroup({
