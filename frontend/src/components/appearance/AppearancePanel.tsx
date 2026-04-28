@@ -53,6 +53,11 @@ export interface AppearancePanelProps {
   onTTSPreview?: () => void
   onTTSPreviewStop?: () => void
   onSaveTTSKey?: (key: string, voiceId: string) => Promise<void>
+  // Issue #276 — voice-only PATCH after a key is already saved.
+  onSaveTTSVoice?: (voiceId: string) => Promise<void>
+  // Issue #276 — persisted voice_id from GET /tts-config; drives picker initial
+  // value and "Save voice" button visibility.
+  savedTTSVoiceId?: string
   onTestTTSKey?: () => Promise<TestKeyResult>
   onRotateTTSToken?: () => Promise<{ obsUrl: string }>
   onRemoveTTSKey?: () => Promise<void>
@@ -76,6 +81,8 @@ export function AppearancePanel({
   onTTSPreview,
   onTTSPreviewStop,
   onSaveTTSKey,
+  onSaveTTSVoice,
+  savedTTSVoiceId,
   onTestTTSKey,
   onRotateTTSToken,
   onRemoveTTSKey,
@@ -135,6 +142,8 @@ export function AppearancePanel({
             onPreview={onTTSPreview}
             onPreviewStop={onTTSPreviewStop}
             onSaveKey={onSaveTTSKey}
+            onSaveVoice={onSaveTTSVoice}
+            savedVoiceId={savedTTSVoiceId}
             onTestKey={onTestTTSKey}
             onRotateToken={onRotateTTSToken}
             onRemoveKey={onRemoveTTSKey}

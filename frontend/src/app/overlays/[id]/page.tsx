@@ -1140,6 +1140,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   ttsSettingsRef.current = ttsSettings
   const [hasElevenLabsConfig, setHasElevenLabsConfig] = useState(false)
   const [obsUrl, setObsUrl] = useState<string | undefined>(undefined)
+  // Persisted ElevenLabs voice_id (Issue #276). Lives outside display_settings
+  // because the voice_id column is on overlay_tts_configs, not the overlay
+  // configs blob. Drives TTSGroup's picker initial value and the visibility of
+  // the "Save voice" button.
+  const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState<string | undefined>(undefined)
 
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
@@ -1277,12 +1282,22 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     const meta = await overlaysApi.getTTSConfig(id)
     setHasElevenLabsConfig(meta.has_elevenlabs_config)
     setObsUrl(meta.obs_url)
+    setElevenLabsVoiceId(meta.voice_id)
+  }, [id])
+
+  // Issue #276 — voice-only update path. Persists to PATCH /tts-config/voice
+  // and refreshes local state so the picker no longer shows the "Save voice"
+  // button (pickedVoiceId === savedVoiceId).
+  const handleSaveTTSVoice = useCallback(async (voiceId: string): Promise<void> => {
+    await overlaysApi.saveTTSVoice(id, voiceId)
+    setElevenLabsVoiceId(voiceId)
   }, [id])
 
   const handleRemoveTTSKey = useCallback(async (): Promise<void> => {
     await overlaysApi.removeTTSKey(id)
     setHasElevenLabsConfig(false)
     setObsUrl(undefined)
+    setElevenLabsVoiceId(undefined)
   }, [id])
 
   const handleRotateTTSToken = useCallback(async (): Promise<{ obsUrl: string }> => {
@@ -1552,6 +1567,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             if (!cancelled) {
               setHasElevenLabsConfig(meta.has_elevenlabs_config)
               setObsUrl(meta.obs_url)
+              setElevenLabsVoiceId(meta.voice_id)
             }
           } catch (e) {
             console.warn('[OverlayEditor] getTTSConfig failed:', e)
@@ -2265,6 +2281,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     }
                   }}
                   onSaveTTSKey={handleSaveTTSKey}
+                  onSaveTTSVoice={handleSaveTTSVoice}
+                  savedTTSVoiceId={elevenLabsVoiceId}
                   onTestTTSKey={handleTestTTSKey}
                   onRotateTTSToken={handleRotateTTSToken}
                   onRemoveTTSKey={handleRemoveTTSKey}

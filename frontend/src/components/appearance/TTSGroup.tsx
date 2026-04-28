@@ -60,10 +60,17 @@ export interface TTSGroupProps {
   overlayId: string
   hasElevenLabsConfig: boolean
   obsUrl?: string
+  // Persisted voice_id for the overlay, read from the GET /tts-config response
+  // (Issue #276). Used to initialise the picker so the saved selection is
+  // shown on load, and to drive the "Save voice" button visibility.
+  savedVoiceId?: string
   onPreview?: () => void
   onPreviewStop?: () => void
   // ElevenLabs async callbacks — Plan 03 wires these in the editor page.
   onSaveKey?: (key: string, voiceId: string) => Promise<void>
+  // Voice-only PATCH used after a key is saved (Issue #276) — switches voice
+  // without re-submitting the api_key (which the UI doesn't have anymore).
+  onSaveVoice?: (voiceId: string) => Promise<void>
   onTestKey?: () => Promise<TestKeyResult>
   onRotateToken?: () => Promise<{ obsUrl: string }>
   onRemoveKey?: () => Promise<void>
@@ -638,10 +645,27 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   // Advanced block — ElevenLabs voice selection state. Held locally because
   // the chosen voice is sent with the Save-key call, NOT persisted to
   // display_settings (ElevenLabs voice_id lives in overlay_tts_configs).
-  const [pickedVoiceId, setPickedVoiceId] = useState('')
+  // Initialised from savedVoiceId (Issue #276) so the persisted selection is
+  // shown on load instead of the auto-pick-first-voice fallback.
+  const [pickedVoiceId, setPickedVoiceId] = useState<string>(() => props.savedVoiceId ?? '')
   // Lifted out of ApiKeyInput so the voice picker can react to the typed
   // (unsaved) key in real time and call the preview endpoint.
   const [advancedApiKey, setAdvancedApiKey] = useState('')
+  // Saving state for the voice-only PATCH (Issue #276).
+  const [savingVoice, setSavingVoice] = useState(false)
+
+  // Sync the picker when the parent provides a fresh savedVoiceId — for
+  // example, after the very first key save resolves and the page reads back
+  // meta.voice_id from getTTSConfig.
+  useEffect(() => {
+    if (props.savedVoiceId && pickedVoiceId === '') {
+      setPickedVoiceId(props.savedVoiceId)
+    }
+    // Intentionally only react to savedVoiceId changes; pickedVoiceId is the
+    // user's live selection and must not be clobbered after they pick a new
+    // voice but before they save it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.savedVoiceId])
 
   function handlePlatformToggle(platform: string): void {
     const current = d.tts_enabled_platforms ?? [...ALL_PLATFORMS]
@@ -693,6 +717,37 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
           typedApiKey={advancedApiKey}
           disabled={!isPremium}
         />
+        {/* Save voice (Issue #276) — visible only when the user has changed
+            the picker after a key is already saved. The pre-save flow uses the
+            "Save key" button inside ApiKeyInput, which carries voice_id. */}
+        {props.hasElevenLabsConfig &&
+          props.onSaveVoice &&
+          pickedVoiceId !== '' &&
+          pickedVoiceId !== (props.savedVoiceId ?? '') && (
+            <button
+              type="button"
+              disabled={!isPremium || savingVoice}
+              onClick={() => {
+                if (!props.onSaveVoice) return
+                setSavingVoice(true)
+                void (async (): Promise<void> => {
+                  try {
+                    await props.onSaveVoice!(pickedVoiceId)
+                    toast.success('Voice updated.')
+                  } catch (e) {
+                    toast.error(
+                      `Could not save voice: ${e instanceof Error ? e.message : 'network error'}`,
+                    )
+                  } finally {
+                    setSavingVoice(false)
+                  }
+                })()
+              }}
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingVoice ? 'Saving voice…' : 'Save voice'}
+            </button>
+          )}
         {props.hasElevenLabsConfig && props.obsUrl && (
           <ObsUrlPanel
             obsUrl={props.obsUrl}
