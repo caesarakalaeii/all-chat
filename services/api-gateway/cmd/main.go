@@ -491,6 +491,7 @@ func main() {
 		// (not user JWT) and must be forwarded as a public endpoint (added above).
 		protectedAPI.GET("/overlays/:id/tts-config", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/tts-config", proxyHandler.ForwardRequest)
+		protectedAPI.PATCH("/overlays/:id/tts-config/voice", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/overlays/:id/tts-config", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/tts-config/rotate-token", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/tts-config/test", proxyHandler.ForwardRequest)
