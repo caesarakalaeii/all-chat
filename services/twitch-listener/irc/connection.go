@@ -68,6 +68,22 @@ type ConnectionManager struct {
 	// format and the gempir lib's internal map.
 	pendingJoins   map[string]time.Time
 	pendingJoinsMu sync.Mutex
+
+	// bannedChannels marks channels Twitch has explicitly rejected our JOIN for
+	// (msg_banned, msg_channel_suspended, msg_room_not_found, or
+	// msg_concurrent_channel_limit_reached). Re-joining these on the next sync
+	// or after a reconnect is wasted effort: bans/suspensions never recover, and
+	// the cap is per-account so a fresh connection hits the same wall.
+	//
+	// Value semantics:
+	//   zero time     -> permanent (never re-attempt for this process lifetime)
+	//   non-zero time -> back off until this instant, then allow a re-attempt
+	//
+	// Without this guard the joinAckWatchdog enters a tight reconnect loop on a
+	// pod that holds a single banned/cap-rejected channel: ack never arrives,
+	// watchdog reconnects, fresh JOIN gets the same NOTICE, repeat.
+	bannedChannels   map[string]time.Time
+	bannedChannelsMu sync.Mutex
 }
 
 // Config holds the configuration for IRC connection
@@ -98,6 +114,7 @@ func NewConnectionManager(
 		stopChan:         make(chan struct{}),
 		firstMessageChan: make(map[string]chan struct{}),
 		pendingJoins:     make(map[string]time.Time),
+		bannedChannels:   make(map[string]time.Time),
 	}
 
 	cm.setupClientCallbacks(client)
@@ -156,6 +173,22 @@ const (
 	// pendingJoins for expired entries. Half of joinAckTimeout so a stuck
 	// JOIN is detected within ~1.5x the timeout in the worst case.
 	joinAckWatchdogInterval = 30 * time.Second
+
+	// concurrentChannelLimitBackoff is how long a channel is skipped after
+	// Twitch returns msg_concurrent_channel_limit_reached. The cap is per
+	// bot-account and shared across pods, so reconnecting doesn't free a
+	// slot — backing off and letting other PARTs/idle-aging make room is
+	// the only useful response.
+	concurrentChannelLimitBackoff = 10 * time.Minute
+)
+
+// JOIN-rejection NOTICE msg_id values that mean "do not re-attempt this JOIN".
+// See https://dev.twitch.tv/docs/irc/msg-id/ for the full list.
+const (
+	twitchMsgIDBanned                  = "msg_banned"
+	twitchMsgIDChannelSuspended        = "msg_channel_suspended"
+	twitchMsgIDRoomNotFound            = "msg_room_not_found"
+	twitchMsgIDConcurrentChannelLimit  = "msg_concurrent_channel_limit_reached"
 )
 
 // Connect establishes connection to Twitch IRC with automatic reconnection.
@@ -336,13 +369,26 @@ func (cm *ConnectionManager) Disconnect() error {
 // Join joins a Twitch channel.
 // Records the channel as a pending JOIN so the joinAckWatchdog can detect
 // silent failures where Twitch never returns the SELFJOIN ack.
+//
+// Channels in the bannedChannels skip list (populated by handleNotice on
+// JOIN-rejection NOTICEs) are short-circuited: re-attempting them just churns
+// the connection without producing any messages, and historically caused the
+// joinAckWatchdog to enter a reconnect loop.
 func (cm *ConnectionManager) Join(channel string) {
+	lower := strings.ToLower(channel)
+
+	if cm.isJoinBanned(lower) {
+		cm.logger.Debug("Skipping JOIN for banned/cap-rejected channel",
+			zap.String("channel", lower),
+		)
+		return
+	}
+
 	cm.mu.RLock()
 	client := cm.client
 	connected := cm.connected
 	cm.mu.RUnlock()
 
-	lower := strings.ToLower(channel)
 	client.Join(channel)
 
 	// Only track pending acks while connected; if we're offline, the gempir
@@ -354,6 +400,28 @@ func (cm *ConnectionManager) Join(channel string) {
 	}
 
 	cm.logger.Debug("IRC JOIN", zap.String("channel", channel))
+}
+
+// isJoinBanned reports whether channel is currently in the JOIN-rejection
+// skip list. Permanent entries (zero time) always return true; transient
+// entries return true until their backoff expires, after which the entry is
+// evicted lazily so the next attempt proceeds normally.
+func (cm *ConnectionManager) isJoinBanned(channel string) bool {
+	cm.bannedChannelsMu.Lock()
+	defer cm.bannedChannelsMu.Unlock()
+
+	until, exists := cm.bannedChannels[channel]
+	if !exists {
+		return false
+	}
+	if until.IsZero() {
+		return true
+	}
+	if time.Now().Before(until) {
+		return true
+	}
+	delete(cm.bannedChannels, channel)
+	return false
 }
 
 // Depart leaves a Twitch channel.
@@ -419,6 +487,37 @@ func (cm *ConnectionManager) handleNotice(message twitch.NoticeMessage) {
 		zap.String("message", message.Message),
 	)
 	cm.metrics.RecordError("twitch", "twitch-listener", "irc_notice", "warning")
+
+	// JOIN-rejection NOTICEs: Twitch is telling us this JOIN will not produce
+	// a SELFJOIN. Drop the pendingJoins entry so the watchdog stops counting
+	// it as stuck, and remember the channel so future Join() calls short-
+	// circuit. Without this guard the watchdog enters a tight reconnect loop
+	// because the post-reconnect re-JOIN gets the same NOTICE.
+	var blockUntil time.Time
+	switch message.MsgID {
+	case twitchMsgIDBanned, twitchMsgIDChannelSuspended, twitchMsgIDRoomNotFound:
+		// Permanent within this process lifetime. zero time = forever.
+	case twitchMsgIDConcurrentChannelLimit:
+		// Per-account cap is shared across pods, so reconnecting to retry
+		// won't free a slot. Back off and let normal PARTs / idle-aging
+		// reduce demand before re-attempting.
+		blockUntil = time.Now().Add(concurrentChannelLimitBackoff)
+	default:
+		return
+	}
+
+	if channel == "" {
+		// Unparseable channel — nothing to skip.
+		return
+	}
+
+	cm.bannedChannelsMu.Lock()
+	cm.bannedChannels[channel] = blockUntil
+	cm.bannedChannelsMu.Unlock()
+
+	cm.pendingJoinsMu.Lock()
+	delete(cm.pendingJoins, channel)
+	cm.pendingJoinsMu.Unlock()
 }
 
 // joinAckWatchdog scans pendingJoins on a periodic ticker and forces a
