@@ -73,6 +73,41 @@ func TestNormalizeEvent_TwitchSubscription(t *testing.T) {
 	assert.Equal(t, "xqc", unified.ChannelID)
 }
 
+// TestNormalizeEvent_TwitchSubscriptionWithoutMonths covers the EventSub
+// `channel.subscribe` payload, which has no cumulative_months field. Before the
+// fix in #254 the normalizer formatted DisplayText as "Tier 1 - 0 months", and
+// every initial sub overlay entry showed "0 months" tenure for users who had
+// in fact been subscribed for years. The duration suffix must be omitted.
+func TestNormalizeEvent_TwitchSubscriptionWithoutMonths(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "test-msg-no-months",
+		Platform:  "twitch",
+		ChannelID: "xqc",
+		UserID:    "12345",
+		Username:  "viewer123",
+		Text:      "Subscribed at 1000",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "subscription",
+		EventData: map[string]interface{}{
+			"tier":      "1000",
+			"is_gift":   false,
+			"plan_name": "1000",
+		},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-no-months")
+	require.NoError(t, err)
+	require.NotNil(t, unified)
+	require.NotNil(t, unified.Event.Value)
+
+	assert.Contains(t, unified.Event.Value.DisplayText, "Tier 1")
+	assert.NotContains(t, unified.Event.Value.DisplayText, "months",
+		"channel.subscribe carries no months data — must not render a 0-month suffix")
+}
+
 func TestNormalizeEvent_TwitchGiftSubscription(t *testing.T) {
 	normalizer := NewTwitchNormalizer()
 

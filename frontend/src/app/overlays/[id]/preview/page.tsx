@@ -743,8 +743,8 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
           <div className="event-metadata mt-1 ml-14 text-xs text-text-dim">
             {(event.metadata as any).viewer_count &&
               `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
-            {(event.metadata as any).months && `${(event.metadata as any).months} months`}
-            {(event.metadata as any).streak && ` • ${(event.metadata as any).streak} month streak`}
+            {Number((event.metadata as any).months) > 0 && `${(event.metadata as any).months} months`}
+            {Number((event.metadata as any).streak) > 0 && ` • ${(event.metadata as any).streak} month streak`}
             {(event.metadata as any).gift_count && `${(event.metadata as any).gift_count} gifts`}
             {(event.metadata as any).bits && `${(event.metadata as any).bits} bits`}
             {(event.metadata as any).like_count && `${(event.metadata as any).like_count} likes`}

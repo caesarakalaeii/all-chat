@@ -819,8 +819,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         {event.metadata && Object.keys(event.metadata).length > 0 && (
           <div className="text-xs event-metadata text-gray-400 mt-1 ml-14">
             {(event.metadata as any).viewer_count && `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
-            {(event.metadata as any).months && `${(event.metadata as any).months} months`}
-            {(event.metadata as any).streak && ` • ${(event.metadata as any).streak} month streak`}
+            {Number((event.metadata as any).months) > 0 && `${(event.metadata as any).months} months`}
+            {Number((event.metadata as any).streak) > 0 && ` • ${(event.metadata as any).streak} month streak`}
             {(event.metadata as any).gift_count && `${(event.metadata as any).gift_count} gifts`}
             {(event.metadata as any).bits && `${(event.metadata as any).bits} bits`}
             {(event.metadata as any).like_count && `${(event.metadata as any).like_count} likes`}
