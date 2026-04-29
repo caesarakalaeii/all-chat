@@ -16,10 +16,15 @@
 -- An index on the column lets the listener's WHERE-clause evaluate cheaply at
 -- 30s sync cadence even with thousands of overlays.
 
+-- IDEMPOTENCY: every service runs the full migration set on each pod restart
+-- (the runner does not track applied migrations), so this script must be
+-- safe to re-execute. The original version omitted IF NOT EXISTS on the
+-- ADD COLUMN, which crashloops every pod after the first successful run.
+
 BEGIN;
 
 ALTER TABLE overlays
-    ADD COLUMN last_connected_at TIMESTAMP NOT NULL DEFAULT NOW();
+    ADD COLUMN IF NOT EXISTS last_connected_at TIMESTAMP NOT NULL DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_overlays_last_connected_at
     ON overlays(last_connected_at);
