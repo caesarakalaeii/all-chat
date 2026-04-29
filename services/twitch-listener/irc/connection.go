@@ -164,15 +164,21 @@ const (
 	staleLivenessThreshold = 10 * time.Minute
 
 	// joinAckTimeout is how long we wait for Twitch to send a SELFJOIN ack
-	// for a JOIN we issued. Twitch normally responds within seconds; if no
-	// ack arrives in this window the connection is silently dropping our
-	// JOINs and the joinAckWatchdog forces a reconnect to recover.
-	joinAckTimeout = 60 * time.Second
+	// for a JOIN we issued. Twitch normally responds within seconds, but
+	// the gempir lib's JOIN rate-limiter throttles us to 20 channels per
+	// 10s — a 94-channel sync burst takes ~47s on the wire before the last
+	// JOIN is even sent, and any cap pressure (msg_concurrent_channel_limit
+	// _reached) further delays NOTICE replies. The original 60s value
+	// blew through every burst and looped the watchdog into reconnect
+	// storms. 180s leaves comfortable headroom for the burst + ack while
+	// still catching genuinely silently-dropped JOINs (the original PR #279
+	// motivation) within ~3 minutes.
+	joinAckTimeout = 180 * time.Second
 
 	// joinAckWatchdogInterval is how often the joinAckWatchdog scans
-	// pendingJoins for expired entries. Half of joinAckTimeout so a stuck
-	// JOIN is detected within ~1.5x the timeout in the worst case.
-	joinAckWatchdogInterval = 30 * time.Second
+	// pendingJoins for expired entries. Tuned to ~1/3 of joinAckTimeout so
+	// a stuck JOIN is detected within ~1.3x the timeout in the worst case.
+	joinAckWatchdogInterval = 60 * time.Second
 
 	// concurrentChannelLimitBackoff is how long a channel is skipped after
 	// Twitch returns msg_concurrent_channel_limit_reached. The cap is per
