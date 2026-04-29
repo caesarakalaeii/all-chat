@@ -228,8 +228,14 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 
 	// For regular messages, check if deletion was buffered
 	if rawMsg.EventType == "" || rawMsg.EventType == "chat_message" {
-		// Extract platform message ID from tags
+		// Extract platform message ID from tags. Twitch sets Tags["id"] (IRC tag),
+		// YouTube sets Tags["youtube_message_id"] (InnerTube renderer ID); without
+		// the YouTube fallback, buffered deletions for YouTube messages would
+		// never drain (#284).
 		platformMsgID := rawMsg.Tags["id"]
+		if platformMsgID == "" {
+			platformMsgID = rawMsg.Tags["youtube_message_id"]
+		}
 		if platformMsgID != "" {
 			// NOTE: registry.Add() happens in twitch-listener per user decision (CONTEXT.md)
 			// We only CHECK the buffer here for pending deletions
