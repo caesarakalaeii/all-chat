@@ -183,8 +183,8 @@ func TestParseMessages(t *testing.T) {
 				if msg.Text != "Thanks!" {
 					t.Errorf("Text = %v, want 'Thanks!'", msg.Text)
 				}
-				if amount, ok := msg.EventData["amount"].(string); !ok || amount != "$5.00" {
-					t.Errorf("EventData[amount] = %v, want '$5.00'", msg.EventData["amount"])
+				if amount, ok := msg.EventData["amount_display"].(string); !ok || amount != "$5.00" {
+					t.Errorf("EventData[amount_display] = %v, want '$5.00'", msg.EventData["amount_display"])
 				}
 			},
 		},
@@ -702,9 +702,11 @@ func TestSuperChatWithMetadata(t *testing.T) {
 		t.Errorf("EventType = %v, want super_chat", msg.EventType)
 	}
 
-	// Verify amount
-	if amount, ok := msg.EventData["amount"].(string); !ok || amount != "$50.00" {
-		t.Errorf("EventData[amount] = %v, want '$50.00'", msg.EventData["amount"])
+	// Verify amount display string. The normalizer reads EventData["amount_display"];
+	// historically the parser stored "$X.YZ" under "amount", so superchats normalized
+	// to a hardcoded "$0.00" fallback (#254). The key name is now aligned.
+	if amount, ok := msg.EventData["amount_display"].(string); !ok || amount != "$50.00" {
+		t.Errorf("EventData[amount_display] = %v, want '$50.00'", msg.EventData["amount_display"])
 	}
 
 	// Verify amount_micros
