@@ -25,165 +25,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseUserNotice_Subscription(t *testing.T) {
+// TestParseUserNotice_EventSubCoveredMsgIDsAreSkipped asserts that USERNOTICEs
+// for events the EventSub listener already produces (subs, resubs, gift subs,
+// mystery gifts, raids) are dropped silently — both nil rawMsg and nil error,
+// so handleUserNotice publishes nothing. Without this, every Twitch
+// subscription would surface twice (once via IRC, once via EventSub), and the
+// IRC copy would also miss the months tenure that EventSub carries (#254).
+func TestParseUserNotice_EventSubCoveredMsgIDsAreSkipped(t *testing.T) {
 	parser := NewParser()
 
-	msg := twitch.UserNoticeMessage{
-		MsgID:     "sub",
-		Channel:   "#xqc",
-		SystemMsg: "viewer123 subscribed at Tier 1",
-		User: twitch.User{
-			ID:          "12345",
-			Name:        "viewer123",
-			DisplayName: "Viewer123",
-		},
-		Tags: map[string]string{
-			"msg-param-sub-plan":          "1000",
-			"msg-param-cumulative-months": "12",
-			"msg-param-streak-months":     "6",
-		},
-		Time: time.Now(),
+	covered := []string{"sub", "resub", "subgift", "anonsubgift", "submysterygift", "raid"}
+	for _, msgID := range covered {
+		t.Run(msgID, func(t *testing.T) {
+			msg := twitch.UserNoticeMessage{
+				MsgID:   msgID,
+				Channel: "#somechannel",
+				User: twitch.User{ID: "1", Name: "u", DisplayName: "U"},
+				Tags:    map[string]string{},
+				Time:    time.Now(),
+			}
+			rawMsg, err := parser.ParseUserNotice(msg)
+			require.NoError(t, err, "EventSub-covered USERNOTICEs must not error — they are simply skipped")
+			assert.Nil(t, rawMsg, "rawMsg must be nil so handleUserNotice does not publish")
+		})
 	}
-
-	rawMsg, err := parser.ParseUserNotice(msg)
-	require.NoError(t, err)
-	assert.NotNil(t, rawMsg)
-
-	// Verify basic fields
-	assert.Equal(t, "twitch", rawMsg.Platform)
-	assert.Equal(t, "xqc", rawMsg.ChannelID)
-	assert.Equal(t, "12345", rawMsg.UserID)
-	assert.Equal(t, "viewer123", rawMsg.Username)
-
-	// Verify event fields
-	assert.Equal(t, "subscription", rawMsg.EventType)
-	assert.NotNil(t, rawMsg.EventData)
-
-	// Verify event data
-	assert.Equal(t, "1000", rawMsg.EventData["tier"])
-	assert.Equal(t, 12, rawMsg.EventData["months"])
-	assert.Equal(t, 6, rawMsg.EventData["streak_months"])
-	assert.Equal(t, false, rawMsg.EventData["is_gift"])
-}
-
-func TestParseUserNotice_Resubscription(t *testing.T) {
-	parser := NewParser()
-
-	msg := twitch.UserNoticeMessage{
-		MsgID:     "resub",
-		Channel:   "#summit1g",
-		SystemMsg: "viewer456 subscribed at Tier 2. They've subscribed for 24 months!",
-		User: twitch.User{
-			ID:          "67890",
-			Name:        "viewer456",
-			DisplayName: "Viewer456",
-		},
-		Tags: map[string]string{
-			"msg-param-sub-plan":          "2000",
-			"msg-param-cumulative-months": "24",
-			"msg-param-streak-months":     "18",
-		},
-		Time: time.Now(),
-	}
-
-	rawMsg, err := parser.ParseUserNotice(msg)
-	require.NoError(t, err)
-
-	assert.Equal(t, "resubscription", rawMsg.EventType)
-	assert.Equal(t, "2000", rawMsg.EventData["tier"])
-	assert.Equal(t, 24, rawMsg.EventData["months"])
-	assert.Equal(t, 18, rawMsg.EventData["streak_months"])
-}
-
-func TestParseUserNotice_GiftSubscription(t *testing.T) {
-	parser := NewParser()
-
-	msg := twitch.UserNoticeMessage{
-		MsgID:     "subgift",
-		Channel:   "#pokimane",
-		SystemMsg: "gifter123 gifted a Tier 1 sub to recipient456!",
-		User: twitch.User{
-			ID:          "11111",
-			Name:        "gifter123",
-			DisplayName: "Gifter123",
-		},
-		Tags: map[string]string{
-			"msg-param-sub-plan":            "1000",
-			"msg-param-recipient-id":        "22222",
-			"msg-param-recipient-user-name": "recipient456",
-			"msg-param-months":              "1",
-			"msg-param-sender-count":        "5",
-		},
-		Time: time.Now(),
-	}
-
-	rawMsg, err := parser.ParseUserNotice(msg)
-	require.NoError(t, err)
-
-	assert.Equal(t, "gift_subscription", rawMsg.EventType)
-	assert.Equal(t, "1000", rawMsg.EventData["tier"])
-	assert.Equal(t, true, rawMsg.EventData["is_gift"])
-	assert.Equal(t, "22222", rawMsg.EventData["recipient_id"])
-	assert.Equal(t, "recipient456", rawMsg.EventData["recipient_name"])
-	assert.Equal(t, 1, rawMsg.EventData["months"])
-	assert.Equal(t, 5, rawMsg.EventData["sender_total_gifts"])
-}
-
-func TestParseUserNotice_MysteryGift(t *testing.T) {
-	parser := NewParser()
-
-	msg := twitch.UserNoticeMessage{
-		MsgID:     "submysterygift",
-		Channel:   "#shroud",
-		SystemMsg: "gifter789 is gifting 50 Tier 1 Subs to the community!",
-		User: twitch.User{
-			ID:          "99999",
-			Name:        "gifter789",
-			DisplayName: "Gifter789",
-		},
-		Tags: map[string]string{
-			"msg-param-sub-plan":        "1000",
-			"msg-param-mass-gift-count": "50",
-			"msg-param-sender-count":    "100",
-		},
-		Time: time.Now(),
-	}
-
-	rawMsg, err := parser.ParseUserNotice(msg)
-	require.NoError(t, err)
-
-	assert.Equal(t, "mystery_gift", rawMsg.EventType)
-	assert.Equal(t, "1000", rawMsg.EventData["tier"])
-	assert.Equal(t, 50, rawMsg.EventData["gift_count"])
-	assert.Equal(t, 100, rawMsg.EventData["sender_total_gifts"])
-}
-
-func TestParseUserNotice_Raid(t *testing.T) {
-	parser := NewParser()
-
-	msg := twitch.UserNoticeMessage{
-		MsgID:     "raid",
-		Channel:   "#target_channel",
-		SystemMsg: "5000 raiders from raider_channel have joined!",
-		User: twitch.User{
-			ID:          "55555",
-			Name:        "raider_channel",
-			DisplayName: "RaiderChannel",
-		},
-		Tags: map[string]string{
-			"msg-param-displayName":  "RaiderChannel",
-			"msg-param-login":        "raider_channel",
-			"msg-param-viewerCount":  "5000",
-		},
-		Time: time.Now(),
-	}
-
-	rawMsg, err := parser.ParseUserNotice(msg)
-	require.NoError(t, err)
-
-	assert.Equal(t, "raid", rawMsg.EventType)
-	assert.Equal(t, "raider_channel", rawMsg.EventData["raider_login"])
-	assert.Equal(t, 5000, rawMsg.EventData["viewer_count"])
 }
 
 func TestParseUserNotice_Bits(t *testing.T) {

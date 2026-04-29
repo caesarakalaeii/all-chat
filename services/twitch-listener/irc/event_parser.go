@@ -27,7 +27,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// ParseUserNotice converts a Twitch IRC USERNOTICE into a RawChatMessage with event fields
+// ParseUserNotice converts a Twitch IRC USERNOTICE into a RawChatMessage with
+// event fields. Returns (nil, nil) for events covered by twitch-eventsub-listener
+// (subs, resubs, gifts, raids) — those are surfaced canonically via EventSub
+// with richer data; emitting them from IRC too produces duplicate overlay
+// entries and a bogus "0 months" tenure for new subs (#254).
 func (p *Parser) ParseUserNotice(msg twitch.UserNoticeMessage) (*models.RawChatMessage, error) {
 	if msg.Channel == "" {
 		return nil, fmt.Errorf("missing channel")
@@ -37,6 +41,10 @@ func (p *Parser) ParseUserNotice(msg twitch.UserNoticeMessage) (*models.RawChatM
 	msgID := msg.MsgID
 	if msgID == "" {
 		return nil, fmt.Errorf("missing msg-id")
+	}
+
+	if isCoveredByEventSub(msgID) {
+		return nil, nil
 	}
 
 	// Map msg-id to our event type taxonomy
@@ -98,6 +106,20 @@ func (p *Parser) ParseUserNotice(msg twitch.UserNoticeMessage) (*models.RawChatM
 	}
 
 	return rawMsg, nil
+}
+
+// isCoveredByEventSub reports whether the given USERNOTICE msg-id corresponds
+// to an event type the twitch-eventsub-listener already subscribes to. The
+// EventSub variants carry strictly richer data (cumulative_months, gift counts
+// from channel.subscription.gift, viewer counts from channel.raid) so emitting
+// them from IRC too is pure duplication.
+func isCoveredByEventSub(msgID string) bool {
+	switch msgID {
+	case "sub", "resub", "subgift", "anonsubgift", "submysterygift", "raid":
+		return true
+	default:
+		return false
+	}
 }
 
 // mapMsgIDToEventType converts Twitch msg-id to our event type taxonomy
