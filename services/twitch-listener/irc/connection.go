@@ -383,6 +383,25 @@ func (cm *ConnectionManager) Disconnect() error {
 func (cm *ConnectionManager) Join(channel string) {
 	lower := strings.ToLower(channel)
 
+	// Reject syntactically-invalid Twitch logins before they reach the wire.
+	// Twitch silently drops these JOINs (no SELFJOIN, no NOTICE) and the
+	// joinAckWatchdog used to age them out at 180s and force a full reconnect.
+	// channels.SyncChannels already filters these at the desired-set boundary;
+	// this is belt-and-suspenders for any other path that calls Join (e.g.
+	// post-reconnect re-join). Mark permanent (zero time) in bannedChannels so
+	// future Join() calls short-circuit at isJoinBanned.
+	if !IsValidTwitchLogin(lower) {
+		cm.bannedChannelsMu.Lock()
+		if _, already := cm.bannedChannels[lower]; !already {
+			cm.bannedChannels[lower] = time.Time{}
+		}
+		cm.bannedChannelsMu.Unlock()
+		cm.logger.Warn("Refusing JOIN for invalid Twitch login",
+			zap.String("channel", lower),
+		)
+		return
+	}
+
 	if cm.isJoinBanned(lower) {
 		cm.logger.Debug("Skipping JOIN for banned/cap-rejected channel",
 			zap.String("channel", lower),
@@ -834,6 +853,15 @@ func (cm *ConnectionManager) handleUserNotice(message twitch.UserNoticeMessage) 
 			zap.Error(err),
 		)
 		cm.metrics.RecordError("twitch", "twitch-listener", "parsing", "warning")
+		return
+	}
+	if rawMsg == nil {
+		// Event is covered by twitch-eventsub-listener (sub/resub/gift/raid).
+		// Skipping here avoids the duplicate overlay entries reported in #254.
+		cm.logger.Debug("Skipping IRC USERNOTICE covered by EventSub",
+			zap.String("channel", message.Channel),
+			zap.String("msg-id", message.MsgID),
+		)
 		return
 	}
 
