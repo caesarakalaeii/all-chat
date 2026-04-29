@@ -73,7 +73,10 @@ func (k *KickOAuth) GetAuthURL(state string) string {
 	params.Set("response_type", "code")
 	params.Set("redirect_uri", k.redirectURL)
 	params.Set("state", state)
-	params.Set("scope", "chat:read user:read channel:read")
+	// Streamer flow only needs `user:read` for identity. `chat:read` is
+	// unused — kick-listener consumes chat over WebSocket without an OAuth
+	// gate. `channel:read` had no caller. See ADR 0012.
+	params.Set("scope", "user:read")
 	params.Set("code_challenge", codeChallenge)
 	params.Set("code_challenge_method", "S256")
 
@@ -99,7 +102,10 @@ func (k *KickOAuth) GetAuthURLWithPKCE(state string) (authURL string, codeVerifi
 	params.Set("response_type", "code")
 	params.Set("redirect_uri", k.redirectURL)
 	params.Set("state", state)
-	params.Set("scope", "chat:read user:read channel:read")
+	// Streamer flow only needs `user:read` for identity. `chat:read` is
+	// unused — kick-listener consumes chat over WebSocket without an OAuth
+	// gate. `channel:read` had no caller. See ADR 0012.
+	params.Set("scope", "user:read")
 	params.Set("code_challenge", codeChallenge)
 	params.Set("code_challenge_method", "S256")
 

@@ -42,9 +42,15 @@ func NewViewerYouTubeOAuth(clientID, clientSecret, redirectURL string) *ViewerYo
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
+		// `youtube.force-ssl` (write) was dropped in v1.6.0 — chat sending now
+		// goes through the extension's native YouTube input bar (InnerTube +
+		// SAPISIDHASH from the page session), no longer through this token.
+		// `youtube.readonly` is still required for `channels?part=id&mine=true`
+		// in GetChannelID, which resolves the viewer's YouTube channel ID.
+		// See ADR 0012.
 		Scopes: []string{
-			"https://www.googleapis.com/auth/youtube.force-ssl", // Required for sending messages
-			"https://www.googleapis.com/auth/userinfo.profile",  // For user info
+			"https://www.googleapis.com/auth/youtube.readonly", // GetChannelID for viewer identity
+			"https://www.googleapis.com/auth/userinfo.profile", // Display name / profile pic
 		},
 		Endpoint: google.Endpoint,
 	}
