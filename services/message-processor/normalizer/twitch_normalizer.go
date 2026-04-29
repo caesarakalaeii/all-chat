@@ -278,11 +278,18 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 			months = int(m)
 		}
 
+		// channel.subscribe (EventSub) carries no cumulative_months — emitting
+		// "Tier 1 - 0 months" was the visible part of the bug report in #254.
+		// Render the duration only when we actually have it.
 		tierName := getTierName(tier)
+		displayText := tierName
+		if months > 0 {
+			displayText = fmt.Sprintf("%s - %d months", tierName, months)
+		}
 		eventValue = &models.EventValue{
 			Amount:      float64(months),
 			Currency:    "months",
-			DisplayText: fmt.Sprintf("%s - %d months", tierName, months),
+			DisplayText: displayText,
 		}
 
 	case "gift_subscription":
