@@ -28,6 +28,7 @@ func newTestConnectionManager() *ConnectionManager {
 		stopChan:         make(chan struct{}),
 		firstMessageChan: make(map[string]chan struct{}),
 		pendingJoins:     make(map[string]time.Time),
+		bannedChannels:   make(map[string]time.Time),
 		logger:           zap.NewNop(),
 	}
 }
