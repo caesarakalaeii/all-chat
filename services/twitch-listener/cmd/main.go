@@ -162,8 +162,28 @@ func main() {
 	zombieDetector := zombie.NewDetector(time.Duration(zombieStallMinutes) * time.Minute)
 	log.Info("Initialized zombie detector", zap.Int("stall_window_minutes", zombieStallMinutes))
 
+	// Idle-overlay threshold — overlays whose last_connected_at is older than
+	// this drop out of the listener's desired-channel set on the next sync,
+	// so dormant twitch sources stop occupying slots in the bot's per-account
+	// concurrent-channel cap. Env: IDLE_OVERLAY_THRESHOLD (Go duration syntax,
+	// e.g. "168h", "72h"). Default: 7 days.
+	idleThreshold := channels.DefaultIdleOverlayThreshold
+	if v := listener.Env("IDLE_OVERLAY_THRESHOLD", ""); v != "" {
+		parsed, err := time.ParseDuration(v)
+		if err != nil {
+			log.Fatal("Invalid IDLE_OVERLAY_THRESHOLD",
+				zap.String("value", v),
+				zap.Error(err),
+			)
+		}
+		idleThreshold = parsed
+	}
+	log.Info("Idle overlay threshold configured",
+		zap.Duration("threshold", idleThreshold),
+	)
+
 	// Initialize channel manager — pass nil for assignedSourceIDs; SDK calls UpdateAssignedSourceIDs inside ll.Start
-	channelRepo := channels.NewRepository(db)
+	channelRepo := channels.NewRepository(db, idleThreshold)
 	dbConnWrapper := &dbConnWrapper{pool: db}
 	channelMgr := channels.NewManager(channelRepo, ircConn, dbConnWrapper, ll.LeadershipCoordinator(), nil, redisClient, podName, log, listenerMetrics)
 
