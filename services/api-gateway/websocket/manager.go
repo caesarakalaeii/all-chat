@@ -45,6 +45,7 @@ type Manager struct {
 	logger      *zap.Logger
 	metrics     *metrics.GatewayMetrics
 	redisClient *redis.Client
+	db          *pgxpool.Pool // For bumping overlays.last_connected_at on attach + heartbeat
 
 	// Grace period tracking for disconnection events
 	gracePeriodTimers map[string]*time.Timer
@@ -99,6 +100,7 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		logger:                logger,
 		metrics:               m,
 		redisClient:           redisClient,
+		db:                    db,
 		gracePeriodTimers:     make(map[string]*time.Timer),
 		disconnectGracePeriod: gracePeriod,
 		heartbeatInterval:     heartbeatInterval,
@@ -177,6 +179,31 @@ func (m *Manager) AddConnection(ctx context.Context, conn *Connection) {
 	// Publish overlay connection event if this is the first connection
 	if isFirstConnection {
 		m.publishConnectionEvent(ctx, overlayID, "connected")
+	}
+
+	// Bump overlays.last_connected_at so twitch-listener keeps this overlay's
+	// channels in its desired set. Fire-and-forget on a goroutine — DB latency
+	// must not delay the WebSocket handshake completion.
+	go m.bumpLastConnectedAt(context.Background(), overlayID)
+}
+
+// bumpLastConnectedAt updates overlays.last_connected_at = NOW() for the given
+// overlay IDs. Used both on first WebSocket attach (single ID) and on each
+// heartbeat tick (all currently-connected IDs in one batched UPDATE).
+//
+// Failures are logged but never returned — this is a best-effort idle-tracking
+// signal and must not break user-visible operations.
+func (m *Manager) bumpLastConnectedAt(ctx context.Context, overlayIDs ...string) {
+	if len(overlayIDs) == 0 || m.db == nil {
+		return
+	}
+	const query = `UPDATE overlays SET last_connected_at = NOW() WHERE id = ANY($1)`
+	if _, err := m.db.Exec(ctx, query, overlayIDs); err != nil {
+		m.logger.Warn("Failed to bump overlays.last_connected_at",
+			zap.Int("count", len(overlayIDs)),
+			zap.Error(err),
+		)
+		m.metrics.RecordSubscriptionEvent("api-gateway", "last_connected_bump_failed")
 	}
 }
 
@@ -504,6 +531,10 @@ func (m *Manager) refreshConnectionTTLs() {
 		zap.Int("count", refreshed),
 		zap.Int("total_overlays", len(overlayIDs)),
 	)
+
+	// Single batched UPDATE so twitch-listener's idle-overlay filter stays
+	// fresh for streamers who keep OBS open all week without ever closing it.
+	m.bumpLastConnectedAt(ctx, overlayIDs...)
 }
 
 // Shutdown gracefully stops the WebSocket manager
