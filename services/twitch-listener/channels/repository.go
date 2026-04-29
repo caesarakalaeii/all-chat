@@ -19,10 +19,17 @@ package channels
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/caesar/all-chat/services/twitch-listener/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// DefaultIdleOverlayThreshold is the default value for the freshness window
+// applied to overlays.last_connected_at. Overlays whose last WebSocket attach
+// is older than this fall out of the listener's desired-channel set and get
+// IRC-PARTed on the next sync. Configurable via IDLE_OVERLAY_THRESHOLD env var.
+const DefaultIdleOverlayThreshold = 7 * 24 * time.Hour
 
 // RepositoryInterface defines the interface for channel repository
 type RepositoryInterface interface {
@@ -35,12 +42,31 @@ type RepositoryInterface interface {
 
 // Repository handles database queries for channel management
 type Repository struct {
-	db *pgxpool.Pool
+	db              *pgxpool.Pool
+	idleThreshold   time.Duration
 }
 
-// NewRepository creates a new channel repository
-func NewRepository(db *pgxpool.Pool) *Repository {
-	return &Repository{db: db}
+// NewRepository creates a new channel repository.
+// idleThreshold gates which overlays are considered "in use" — overlays with
+// last_connected_at older than now()-idleThreshold are excluded so the listener
+// PARTs their twitch channels. A non-positive value disables the filter (every
+// is_active overlay is included).
+func NewRepository(db *pgxpool.Pool, idleThreshold time.Duration) *Repository {
+	return &Repository{db: db, idleThreshold: idleThreshold}
+}
+
+// freshnessClause renders the SQL predicate that gates overlays on
+// last_connected_at. Returns an empty string when idleThreshold is non-positive
+// so callers can append it unconditionally.
+func (r *Repository) freshnessClause() string {
+	if r.idleThreshold <= 0 {
+		return ""
+	}
+	// Use a parameter-free interval literal because pgx's $N substitution does
+	// not interpolate intervals nicely; the threshold is a server-trusted value
+	// derived once from configuration, so direct embedding is safe.
+	return fmt.Sprintf(" AND o.last_connected_at > NOW() - INTERVAL '%d seconds'",
+		int64(r.idleThreshold.Seconds()))
 }
 
 // GetActiveChannels returns all active Twitch channels that should be monitored
@@ -54,7 +80,7 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]models.ChannelSou
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
-		  AND ocs.platform = 'twitch'
+		  AND ocs.platform = 'twitch'` + r.freshnessClause() + `
 		ORDER BY ocs.channel_name
 	`
 
@@ -82,16 +108,18 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]models.ChannelSou
 
 // GetUniqueChannels returns a deduplicated list of channel names (usernames)
 // For Twitch IRC, we need the channel_name (username) not the channel_id (numeric ID)
-// NOTE: This query intentionally does NOT check ocs.is_active because that field
-// is used as a runtime status indicator (is the listener currently connected),
-// not a configuration flag. We determine what to listen to based on active overlays.
+//
+// NOTE: ocs.is_active is intentionally NOT in this filter — it's a runtime
+// status flag set by the listener itself ("is currently connected"), not a
+// config flag. Idle gating is done via overlays.last_connected_at instead
+// (bumped by api-gateway on every WebSocket attach + heartbeat).
 func (r *Repository) GetUniqueChannels(ctx context.Context) ([]string, error) {
 	query := `
 		SELECT DISTINCT ocs.channel_name
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
-		  AND ocs.platform = 'twitch'
+		  AND ocs.platform = 'twitch'` + r.freshnessClause() + `
 		ORDER BY ocs.channel_name
 	`
 
