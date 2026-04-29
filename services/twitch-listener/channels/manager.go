@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/caesar/all-chat/services/twitch-listener/irc"
 	"github.com/caesar/all-chat/services/twitch-listener/status"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/metrics"
@@ -377,6 +378,40 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	desiredChannels, err := m.repo.GetUniqueChannels(ctx)
 	if err != nil {
 		return err
+	}
+
+	// Drop syntactically-invalid Twitch logins before they reach the IRC layer.
+	// Twitch silently ignores JOINs for names that don't match the login regex
+	// (^[a-z0-9_]{4,25}$) — no SELFJOIN, no NOTICE — which used to age out in
+	// pendingJoins and trigger the joinAckWatchdog into a full reconnect storm.
+	// Sources reach the listener with display-name strings (e.g. "شوشو") when
+	// the write path stored channel_name as display_name; migration 020 patched
+	// some, but orphan rows persist. Filtering here keeps the metric honest and
+	// short-circuits the watchdog cycle.
+	if len(desiredChannels) > 0 {
+		valid := desiredChannels[:0]
+		var skipped []string
+		for _, ch := range desiredChannels {
+			if irc.IsValidTwitchLogin(ch) {
+				valid = append(valid, ch)
+			} else {
+				skipped = append(skipped, ch)
+			}
+		}
+		desiredChannels = valid
+		if len(skipped) > 0 {
+			sample := skipped
+			if len(sample) > 5 {
+				sample = sample[:5]
+			}
+			m.logger.Warn("Skipping Twitch sources with invalid login format",
+				zap.Int("count", len(skipped)),
+				zap.Strings("sample", sample),
+			)
+			if m.metrics != nil {
+				m.metrics.RecordInvalidChannels("twitch", "twitch-listener", len(skipped))
+			}
+		}
 	}
 
 	// Rebalance leadership leases before acquiring new ones.
