@@ -227,9 +227,11 @@ func parsePaidMessage(renderer *LiveChatPaidMessageRenderer, channelID string) (
 		text, _ = extractMessageText(renderer.Message)
 	}
 
-	// Build rich event data
+	// Build rich event data. The "amount_display" key is the contract the
+	// message-processor's youtube_normalizer reads — using "amount" caused
+	// every super_chat to fall back to a hardcoded "$0.00" (#254).
 	eventData := map[string]interface{}{
-		"amount": renderer.PurchaseAmountText.SimpleText,
+		"amount_display": renderer.PurchaseAmountText.SimpleText,
 	}
 
 	// Add amount in micros if available (for sorting by amount)
@@ -342,9 +344,9 @@ func parsePaidSticker(renderer *LiveChatPaidStickerRenderer, channelID string) (
 		return nil, fmt.Errorf("parse timestamp: %w", err)
 	}
 
-	// Build rich event data
+	// Build rich event data. Same "amount_display" contract as parsePaidMessage (#254).
 	eventData := map[string]interface{}{
-		"amount": renderer.PurchaseAmountText.SimpleText,
+		"amount_display": renderer.PurchaseAmountText.SimpleText,
 	}
 
 	// Add amount in micros if available
