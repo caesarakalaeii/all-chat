@@ -186,6 +186,21 @@ const (
 	// slot — backing off and letting other PARTs/idle-aging make room is
 	// the only useful response.
 	concurrentChannelLimitBackoff = 10 * time.Minute
+
+	// joinAckReconnectThreshold is the stuck-pendingJoins count above which
+	// the watchdog falls back to a full IRC reconnect (the original PR #279
+	// "zombie session" recovery path). Below the threshold, individual stuck
+	// channels are transiently banned instead of kicking the entire pod's
+	// active set. Tuned to be larger than the typical "deleted/suspended
+	// channel" cluster (1–4 names per cycle) but well below the population
+	// size that would actually mean the connection is broken.
+	joinAckReconnectThreshold = 10
+
+	// joinAckStuckBackoff is how long a stuck-but-otherwise-fine channel is
+	// kept out of bannedChannels. Twitch sometimes silently drops JOINs for
+	// recently-renamed or recently-restored accounts; a 1-hour backoff lets
+	// the situation resolve without permanently giving up on the channel.
+	joinAckStuckBackoff = 1 * time.Hour
 )
 
 // JOIN-rejection NOTICE msg_id values that mean "do not re-attempt this JOIN".
@@ -545,12 +560,25 @@ func (cm *ConnectionManager) handleNotice(message twitch.NoticeMessage) {
 	cm.pendingJoinsMu.Unlock()
 }
 
-// joinAckWatchdog scans pendingJoins on a periodic ticker and forces a
-// reconnect when entries exceed joinAckTimeout. This recovers from the
-// long-lived-session bug where the gempir client's internal map shows the
-// channel as joined but Twitch silently dropped our JOIN and never delivers
-// PRIVMSGs. A fresh client (created by the reconnect loop) re-issues every
-// JOIN cleanly.
+// joinAckWatchdog scans pendingJoins on a periodic ticker and recovers from
+// silent-drop JOINs (Twitch acknowledges no SELFJOIN, no NOTICE).
+//
+// Two failure modes have been observed in production:
+//
+//  1. *Per-channel*: a specific channel name (deleted, suspended, renamed,
+//     mod-only-chat without our mod status, …) silently never acks. The
+//     pendingJoins entry ages past joinAckTimeout but every other JOIN on the
+//     same connection works fine. Forcing a reconnect here is destructive —
+//     it kicks every other channel on the pod for ~30s. We instead transiently
+//     ban the stuck channel(s) so they're skipped on the next sync, leaving the
+//     connection intact.
+//
+//  2. *Connection-wide* (the original PR #279 motivation): the gempir client's
+//     internal map shows channels as joined but Twitch silently dropped *all*
+//     new JOINs since some point. The fix here is a fresh client. We detect
+//     this by stuck-count threshold — a single bad channel doesn't trigger a
+//     reconnect, but more than `joinAckReconnectThreshold` simultaneously stuck
+//     entries do.
 func (cm *ConnectionManager) joinAckWatchdog(ctx context.Context) {
 	defer cm.wg.Done()
 	ticker := time.NewTicker(joinAckWatchdogInterval)
@@ -592,16 +620,48 @@ func (cm *ConnectionManager) joinAckWatchdog(ctx context.Context) {
 				continue
 			}
 
-			cm.logger.Warn("JOIN ack missing past timeout, forcing reconnect",
+			if len(stuck) >= joinAckReconnectThreshold {
+				cm.logger.Warn("JOIN ack missing past timeout for many channels, forcing reconnect",
+					zap.Strings("channels", stuck),
+					zap.Int("stuck_count", len(stuck)),
+					zap.Duration("oldest_age", oldest),
+					zap.Duration("threshold", joinAckTimeout),
+				)
+				cm.metrics.RecordError("twitch", "twitch-listener", "join_ack_timeout", "warning")
+
+				if err := client.Disconnect(); err != nil {
+					cm.logger.Warn("Error forcing disconnect for stuck JOINs", zap.Error(err))
+				}
+				continue
+			}
+
+			cm.logger.Warn("JOIN ack missing past timeout, banning channels (no reconnect)",
 				zap.Strings("channels", stuck),
+				zap.Int("stuck_count", len(stuck)),
 				zap.Duration("oldest_age", oldest),
 				zap.Duration("threshold", joinAckTimeout),
+				zap.Duration("ban_duration", joinAckStuckBackoff),
 			)
-			cm.metrics.RecordError("twitch", "twitch-listener", "join_ack_timeout", "warning")
+			cm.metrics.RecordError("twitch", "twitch-listener", "join_ack_stuck", "warning")
 
-			// Disconnect triggers the reconnect loop — fresh client re-joins all channels.
-			if err := client.Disconnect(); err != nil {
-				cm.logger.Warn("Error forcing disconnect for stuck JOINs", zap.Error(err))
+			until := now.Add(joinAckStuckBackoff)
+			cm.bannedChannelsMu.Lock()
+			for _, ch := range stuck {
+				if existing, present := cm.bannedChannels[ch]; present && existing.IsZero() {
+					continue
+				}
+				cm.bannedChannels[ch] = until
+			}
+			cm.bannedChannelsMu.Unlock()
+
+			cm.pendingJoinsMu.Lock()
+			for _, ch := range stuck {
+				delete(cm.pendingJoins, ch)
+			}
+			cm.pendingJoinsMu.Unlock()
+
+			for _, ch := range stuck {
+				client.Depart(ch)
 			}
 		}
 	}
