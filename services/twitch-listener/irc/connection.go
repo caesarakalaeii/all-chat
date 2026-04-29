@@ -59,6 +59,15 @@ type ConnectionManager struct {
 	onDisconnect     func()                   // Called when IRC connection is lost (for channel manager reset)
 	onConnect        func()                   // Called when a new IRC connection is established (for channel re-join)
 	zombieDetector   zombieTracker            // Tracks received-vs-published drift for zombie detection
+
+	// pendingJoins tracks channels for which a JOIN was sent on the wire but Twitch
+	// has not yet acknowledged via SELFJOIN. Long-lived IRC sessions can silently
+	// drop new JOINs (the gempir lib's local map is updated, but Twitch never starts
+	// delivering PRIVMSGs); the joinAckWatchdog forces a reconnect when entries here
+	// exceed joinAckTimeout. Keyed by lowercase channel name to match Twitch's wire
+	// format and the gempir lib's internal map.
+	pendingJoins   map[string]time.Time
+	pendingJoinsMu sync.Mutex
 }
 
 // Config holds the configuration for IRC connection
@@ -88,6 +97,7 @@ func NewConnectionManager(
 		metrics:          m,
 		stopChan:         make(chan struct{}),
 		firstMessageChan: make(map[string]chan struct{}),
+		pendingJoins:     make(map[string]time.Time),
 	}
 
 	cm.setupClientCallbacks(client)
@@ -109,6 +119,15 @@ func (cm *ConnectionManager) setupClientCallbacks(client *twitch.Client) {
 	// Connection handler
 	client.OnConnect(cm.handleConnect)
 
+	// JOIN ack — Twitch echoes our own JOINs back to us. We use this to confirm
+	// JOINs reached Twitch; missing acks within joinAckTimeout indicate the
+	// connection silently dropped the JOIN and the watchdog forces a reconnect.
+	client.OnSelfJoinMessage(cm.handleSelfJoin)
+
+	// NOTICE — surfaces error replies (msg_banned, msg_channel_suspended, etc.)
+	// that would otherwise be silent. Without this, failed JOINs leave no trace.
+	client.OnNoticeMessage(cm.handleNotice)
+
 	// PING sent by our client — update activity so the watchdog knows the TCP
 	// connection is still alive even when no chat messages are flowing.
 	client.OnPingSent(cm.recordActivity)
@@ -126,6 +145,17 @@ const (
 	// staleConnectionTimeout to give the watchdog multiple attempts to recover
 	// before Kubernetes restarts the pod.
 	staleLivenessThreshold = 10 * time.Minute
+
+	// joinAckTimeout is how long we wait for Twitch to send a SELFJOIN ack
+	// for a JOIN we issued. Twitch normally responds within seconds; if no
+	// ack arrives in this window the connection is silently dropping our
+	// JOINs and the joinAckWatchdog forces a reconnect to recover.
+	joinAckTimeout = 60 * time.Second
+
+	// joinAckWatchdogInterval is how often the joinAckWatchdog scans
+	// pendingJoins for expired entries. Half of joinAckTimeout so a stuck
+	// JOIN is detected within ~1.5x the timeout in the worst case.
+	joinAckWatchdogInterval = 30 * time.Second
 )
 
 // Connect establishes connection to Twitch IRC with automatic reconnection.
@@ -138,6 +168,10 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 	// Start watchdog that detects zombie connections
 	cm.wg.Add(1)
 	go cm.connectionWatchdog(ctx)
+
+	// Start watchdog that detects JOINs that never got a SELFJOIN ack from Twitch
+	cm.wg.Add(1)
+	go cm.joinAckWatchdog(ctx)
 
 	cm.wg.Add(1)
 	go func() {
@@ -157,6 +191,10 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 			if wasConnected {
 				cm.metrics.RecordConnection("twitch", "twitch-listener", "irc", false)
 				cm.logger.Warn("IRC connection lost", zap.Error(err))
+
+				// Drop pending join tracking — JOINs will be re-issued on the
+				// fresh client by the next SyncChannels and re-recorded then.
+				cm.clearPendingJoins()
 
 				// Notify channel manager to clear stale activeChans
 				cm.mu.RLock()
@@ -295,12 +333,26 @@ func (cm *ConnectionManager) Disconnect() error {
 	return nil
 }
 
-// Join joins a Twitch channel
+// Join joins a Twitch channel.
+// Records the channel as a pending JOIN so the joinAckWatchdog can detect
+// silent failures where Twitch never returns the SELFJOIN ack.
 func (cm *ConnectionManager) Join(channel string) {
 	cm.mu.RLock()
 	client := cm.client
+	connected := cm.connected
 	cm.mu.RUnlock()
+
+	lower := strings.ToLower(channel)
 	client.Join(channel)
+
+	// Only track pending acks while connected; if we're offline, the gempir
+	// lib defers the wire send and the next reconnect re-issues all JOINs.
+	if connected {
+		cm.pendingJoinsMu.Lock()
+		cm.pendingJoins[lower] = time.Now()
+		cm.pendingJoinsMu.Unlock()
+	}
+
 	cm.logger.Debug("IRC JOIN", zap.String("channel", channel))
 }
 
@@ -312,8 +364,123 @@ func (cm *ConnectionManager) Depart(channel string) {
 	cm.mu.RLock()
 	client := cm.client
 	cm.mu.RUnlock()
-	client.Depart(strings.ToLower(channel))
+	lower := strings.ToLower(channel)
+	client.Depart(lower)
+
+	// Drop any pending ack — Departing means we no longer expect to be in this channel.
+	cm.pendingJoinsMu.Lock()
+	delete(cm.pendingJoins, lower)
+	cm.pendingJoinsMu.Unlock()
+
 	cm.logger.Debug("IRC PART", zap.String("channel", channel))
+}
+
+// clearPendingJoins drops all pending JOIN ack tracking. Called on disconnect
+// (and at the start of a fresh connection) because reconnects discard the
+// gempir client's internal channel map; JOINs are re-issued by the next sync.
+func (cm *ConnectionManager) clearPendingJoins() {
+	cm.pendingJoinsMu.Lock()
+	if len(cm.pendingJoins) > 0 {
+		cm.pendingJoins = make(map[string]time.Time)
+	}
+	cm.pendingJoinsMu.Unlock()
+}
+
+// handleSelfJoin records that Twitch has acknowledged our JOIN by echoing it
+// back. Removing from pendingJoins prevents the watchdog from forcing a
+// reconnect for this channel.
+func (cm *ConnectionManager) handleSelfJoin(message twitch.UserJoinMessage) {
+	cm.recordActivity()
+
+	channel := strings.ToLower(message.Channel)
+	cm.pendingJoinsMu.Lock()
+	_, wasPending := cm.pendingJoins[channel]
+	delete(cm.pendingJoins, channel)
+	cm.pendingJoinsMu.Unlock()
+
+	if wasPending {
+		cm.logger.Debug("JOIN acknowledged by Twitch",
+			zap.String("channel", channel),
+		)
+	}
+}
+
+// handleNotice surfaces NOTICE replies from Twitch. The msg-id tag indicates
+// the kind of notice (msg_banned, msg_channel_suspended, msg_room_not_found,
+// etc.) — without this handler, failed JOINs and other server-side errors are
+// invisible to operators.
+func (cm *ConnectionManager) handleNotice(message twitch.NoticeMessage) {
+	cm.recordActivity()
+
+	channel := strings.ToLower(message.Channel)
+	cm.logger.Warn("Twitch IRC NOTICE",
+		zap.String("channel", channel),
+		zap.String("msg_id", message.MsgID),
+		zap.String("message", message.Message),
+	)
+	cm.metrics.RecordError("twitch", "twitch-listener", "irc_notice", "warning")
+}
+
+// joinAckWatchdog scans pendingJoins on a periodic ticker and forces a
+// reconnect when entries exceed joinAckTimeout. This recovers from the
+// long-lived-session bug where the gempir client's internal map shows the
+// channel as joined but Twitch silently dropped our JOIN and never delivers
+// PRIVMSGs. A fresh client (created by the reconnect loop) re-issues every
+// JOIN cleanly.
+func (cm *ConnectionManager) joinAckWatchdog(ctx context.Context) {
+	defer cm.wg.Done()
+	ticker := time.NewTicker(joinAckWatchdogInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cm.stopChan:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cm.mu.RLock()
+			connected := cm.connected
+			client := cm.client
+			cm.mu.RUnlock()
+
+			if !connected {
+				continue
+			}
+
+			now := time.Now()
+			var stuck []string
+			var oldest time.Duration
+
+			cm.pendingJoinsMu.Lock()
+			for ch, sentAt := range cm.pendingJoins {
+				age := now.Sub(sentAt)
+				if age > joinAckTimeout {
+					stuck = append(stuck, ch)
+					if age > oldest {
+						oldest = age
+					}
+				}
+			}
+			cm.pendingJoinsMu.Unlock()
+
+			if len(stuck) == 0 {
+				continue
+			}
+
+			cm.logger.Warn("JOIN ack missing past timeout, forcing reconnect",
+				zap.Strings("channels", stuck),
+				zap.Duration("oldest_age", oldest),
+				zap.Duration("threshold", joinAckTimeout),
+			)
+			cm.metrics.RecordError("twitch", "twitch-listener", "join_ack_timeout", "warning")
+
+			// Disconnect triggers the reconnect loop — fresh client re-joins all channels.
+			if err := client.Disconnect(); err != nil {
+				cm.logger.Warn("Error forcing disconnect for stuck JOINs", zap.Error(err))
+			}
+		}
+	}
 }
 
 // IsConnected returns whether the IRC client is connected
@@ -350,6 +517,10 @@ func (cm *ConnectionManager) handleConnect() {
 	statusPublisher := cm.statusPublisher
 	onConnect := cm.onConnect
 	cm.mu.Unlock()
+
+	// Discard any stale pending JOIN tracking from a previous client; the next
+	// SyncChannels will re-issue all JOINs on this fresh client and re-record them.
+	cm.clearPendingJoins()
 
 	// Record successful connection
 	cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "success")
