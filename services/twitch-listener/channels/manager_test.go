@@ -162,6 +162,29 @@ func TestManager_SyncChannels_InitialJoin(t *testing.T) {
 	assert.True(t, manager.IsChannelActive("shroud"))
 }
 
+// Display-name strings (e.g. "شوشو") sometimes leak into
+// overlay_chat_sources.channel_name. Twitch silently drops JOINs for these,
+// which used to age out in pendingJoins and force a full IRC reconnect every
+// ~4 minutes. SyncChannels must filter them out before issuing any JOIN.
+func TestManager_SyncChannels_FiltersInvalidLogins(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{
+		channels: []string{"caedrel", "شوشو", "一代鹹魚", "summit1g", "hello-world"},
+	}
+
+	mockJP := NewMockJoinParter()
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	require.NoError(t, manager.SyncChannels(ctx))
+
+	joined := mockJP.GetJoined()
+	assert.ElementsMatch(t, []string{"caedrel", "summit1g"}, joined,
+		"only syntactically valid Twitch logins should reach the IRC layer")
+	assert.Equal(t, 2, manager.GetActiveChannelCount())
+}
+
 func TestManager_SyncChannels_PartRemovedChannels(t *testing.T) {
 	ctx := context.Background()
 	logger := zaptest.NewLogger(t)
@@ -285,10 +308,12 @@ func TestManager_RateLimiting(t *testing.T) {
 	ctx := context.Background()
 	logger := zaptest.NewLogger(t)
 
-	// Create a lot of channels to test rate limiting
+	// Create a lot of channels to test rate limiting. Names must satisfy
+	// IsValidTwitchLogin (^[a-z0-9_]{3,25}$) — otherwise SyncChannels filters
+	// them out before the rate limiter ever runs.
 	channels := make([]string, 50)
 	for i := 0; i < 50; i++ {
-		channels[i] = string(rune('a' + i))
+		channels[i] = fmt.Sprintf("ch_%02d", i)
 	}
 
 	repo := &MockRepository{

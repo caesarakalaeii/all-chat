@@ -29,8 +29,9 @@ type ListenerMetrics struct {
 	ConnectionDuration   *prometheus.HistogramVec
 
 	// Channel/Source Monitoring
-	ActiveSources  *prometheus.GaugeVec
-	SourceEvents   *prometheus.CounterVec
+	ActiveSources         *prometheus.GaugeVec
+	SourceEvents          *prometheus.CounterVec
+	InvalidChannelsTotal  *prometheus.CounterVec
 
 	// Message Ingestion
 	MessagesReceived  *prometheus.CounterVec
@@ -89,6 +90,13 @@ func NewListenerMetrics(platform, serviceName string) *ListenerMetrics {
 				Help: "Source lifecycle events",
 			},
 			[]string{"platform", "service", "event"},
+		),
+		InvalidChannelsTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "listener_invalid_channels_total",
+				Help: "Configured sources rejected before JOIN because the channel name is not a syntactically valid platform login",
+			},
+			[]string{"platform", "service"},
 		),
 		MessagesReceived: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -207,6 +215,16 @@ func (m *ListenerMetrics) SetActiveSources(platform, service string, count int) 
 // RecordSourceEvent records a source lifecycle event
 func (m *ListenerMetrics) RecordSourceEvent(platform, service, event string) {
 	m.SourceEvents.WithLabelValues(platform, service, event).Inc()
+}
+
+// RecordInvalidChannels increments the invalid-channel counter by n.
+// Used when a sync cycle filters configured sources that cannot possibly
+// produce JOIN acks (e.g. non-ASCII names that aren't valid Twitch logins).
+func (m *ListenerMetrics) RecordInvalidChannels(platform, service string, n int) {
+	if n <= 0 {
+		return
+	}
+	m.InvalidChannelsTotal.WithLabelValues(platform, service).Add(float64(n))
 }
 
 // SetQuotaRemaining sets the remaining quota
