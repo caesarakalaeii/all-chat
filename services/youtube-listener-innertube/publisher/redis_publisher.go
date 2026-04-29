@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/deletion"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
@@ -53,6 +54,11 @@ type StreamPublisher struct {
 	metrics        *metrics.InnerTubeMetrics
 	deletionBuffer *deletion.DeletionBuffer
 	ringBuffer     *sharedlistener.RingBufferPublisher
+	// registry maps platform-side message IDs (the InnerTube renderer ID stored in
+	// Tags["youtube_message_id"]) to the internal UUID we publish to Redis Streams.
+	// Without this mapping, single-message deletions in the message-processor
+	// cannot resolve TargetItemID → internal UUID and are silently dropped (#284).
+	registry registry.MessageIDRegistry
 }
 
 // NewStreamPublisher creates a new Redis Streams publisher backed by a RingBufferPublisher.
@@ -135,6 +141,14 @@ func (p *StreamPublisher) SetDeletionBuffer(deletionBuffer *deletion.DeletionBuf
 	p.deletionBuffer = deletionBuffer
 }
 
+// SetMessageIDRegistry wires the message-ID registry used to map InnerTube
+// renderer IDs (Tags["youtube_message_id"]) to internal UUIDs. The registry
+// is consulted by the message-processor on deletion events; without it, every
+// single-message deletion is silently dropped (#284).
+func (p *StreamPublisher) SetMessageIDRegistry(r registry.MessageIDRegistry) {
+	p.registry = r
+}
+
 // Publish publishes a raw chat message to Redis Streams.
 // Contract: Must publish with exact same schema as official youtube-listener
 // to maintain drop-in compatibility with message-processor.
@@ -197,6 +211,22 @@ func (p *StreamPublisher) publishViaRingBuffer(ctx context.Context, msg *innertu
 						zap.Error(cacheErr),
 					)
 				}
+			}
+		}
+	}
+
+	// Register the platform→internal UUID mapping BEFORE publishing so a deletion
+	// arriving immediately after has a populated registry to resolve against.
+	// Mirrors the twitch-listener pattern (irc/connection.go). Without this call
+	// every single-message deletion is silently dropped (#284).
+	if p.registry != nil {
+		if ytMsgID := msg.Tags["youtube_message_id"]; ytMsgID != "" {
+			if err := p.registry.Add(ctx, "youtube", msg.ChannelID, ytMsgID, msg.MessageID); err != nil {
+				p.logger.Debug("Failed to register YouTube message ID",
+					zap.String("channel_id", msg.ChannelID),
+					zap.String("youtube_message_id", ytMsgID),
+					zap.Error(err),
+				)
 			}
 		}
 	}

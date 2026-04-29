@@ -27,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/deletion"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/handlers"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
@@ -139,6 +140,14 @@ func main() {
 
 	// Publisher
 	streamPublisher := publisher.NewStreamPublisher(redisClient, logger, innertubeMetrics, nil)
+
+	// Message-ID registry: maps InnerTube renderer IDs (Tags["youtube_message_id"])
+	// to the internal UUIDs we publish. The message-processor consults this
+	// registry when a deletion event arrives — without it, every single-message
+	// deletion is silently dropped (#284). 1-hour TTL matches twitch-listener.
+	msgRegistry := registry.NewRedisRegistry(redisClient, 1*time.Hour)
+	streamPublisher.SetMessageIDRegistry(msgRegistry)
+	logger.Info("Initialized message ID registry", zap.Duration("ttl", 1*time.Hour))
 
 	// Create publisher adapter for deletion buffer (adapts RawMessage to RawChatMessage)
 	bufferPublisher := &publisherAdapter{publisher: streamPublisher}
