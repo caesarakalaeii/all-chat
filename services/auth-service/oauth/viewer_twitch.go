@@ -37,9 +37,12 @@ func NewViewerTwitchOAuth(clientID, clientSecret, redirectURL string) *ViewerTwi
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
-		Scopes: []string{
-			"user:write:chat", // Required to send messages on behalf of the user
-		},
+		// No scopes requested. The viewer flow only needs to identify the
+		// user, and `helix/users GET` works without any scope on the access
+		// token. Chat sending moved to the extension's native Twitch session
+		// (GraphQL via cookie auth) in v1.6.0, so `user:write:chat` is no
+		// longer reachable from any current client. See ADR 0012.
+		Scopes: []string{},
 		Endpoint: twitch.Endpoint,
 	}
 

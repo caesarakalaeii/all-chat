@@ -48,9 +48,15 @@ func NewYouTubeOAuth(clientID, clientSecret, redirectURL string) *YouTubeOAuth {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
+		// `youtube.force-ssl` was dropped in v1.6.0 — backend's
+		// sendStreamerYouTubeMessage path is no longer called by any current
+		// client (streamer-side YouTube sending happens via the streamer's
+		// own browser session in the extension or YT Studio directly).
+		// `youtube.readonly` is required by youtube-listener for polling
+		// liveChat/messages/stream against the streamer's account.
+		// See ADR 0012.
 		Scopes: []string{
 			"https://www.googleapis.com/auth/youtube.readonly",
-			"https://www.googleapis.com/auth/youtube.force-ssl",
 			"https://www.googleapis.com/auth/userinfo.profile",
 		},
 		Endpoint: google.Endpoint,

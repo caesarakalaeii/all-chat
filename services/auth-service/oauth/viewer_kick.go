@@ -62,7 +62,11 @@ func (k *ViewerKickOAuth) GetAuthURLWithPKCE(state string) (authURL string, code
 	params.Set("response_type", "code")
 	params.Set("redirect_uri", k.redirectURL)
 	params.Set("state", state)
-	params.Set("scope", "chat:read chat:write user:read channel:read") // Added chat:write for sending messages
+	// Only `user:read` is needed for viewer identity. `chat:write` was dropped
+	// in v1.6.0 (extension uses Kick's REST API with cookie XSRF token now,
+	// not OAuth). `chat:read` and `channel:read` had no consumer in code.
+	// See ADR 0012.
+	params.Set("scope", "user:read")
 	params.Set("code_challenge", codeChallenge)
 	params.Set("code_challenge_method", "S256")
 
