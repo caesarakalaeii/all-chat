@@ -131,6 +131,10 @@
     color: var(--color-text);
     min-height: 100vh;
   }
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
 }
 
 /* ============================================================
