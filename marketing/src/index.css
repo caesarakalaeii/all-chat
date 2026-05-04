@@ -1,0 +1,93 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   DESIGN TOKENS — subset of frontend/src/app/globals.css
+   Tier 1 (palette) + Tier 2 (semantic) only. No marketplace
+   themes, no legal-light overrides.
+   ============================================================ */
+@theme {
+  /* Platform colors — WCAG AA on dark backgrounds */
+  --color-twitch: #a37bff;
+  --color-youtube: #ff4444;
+  --color-kick: #53fc18;
+  --color-tiktok: #69c9d0;
+  --color-discord: #5865f2;
+
+  /* Neutral scale */
+  --color-neutral-950: oklch(0.09 0.007 270);
+  --color-neutral-900: oklch(0.11 0.009 270);
+  --color-neutral-800: oklch(0.14 0.008 270);
+  --color-neutral-700: oklch(0.22 0.007 270);
+  --color-neutral-600: oklch(0.35 0.007 270);
+  --color-neutral-400: oklch(0.58 0.007 270);
+  --color-neutral-200: oklch(0.78 0.005 270);
+  --color-neutral-100: oklch(0.91 0.003 270);
+
+  /* Semantic */
+  --color-bg: var(--color-neutral-950);
+  --color-surface: var(--color-neutral-900);
+  --color-surface-2: var(--color-neutral-800);
+  --color-text: var(--color-neutral-100);
+  --color-text-sub: var(--color-neutral-400);
+  --color-text-dim: var(--color-neutral-600);
+
+  /* Glows for stat cards / platform highlights */
+  --shadow-glow-twitch: 0 0 24px color-mix(in oklch, var(--color-twitch) 40%, transparent);
+  --shadow-glow-youtube: 0 0 24px color-mix(in oklch, var(--color-youtube) 40%, transparent);
+  --shadow-glow-kick: 0 0 24px color-mix(in oklch, var(--color-kick) 40%, transparent);
+  --shadow-glow-tiktok: 0 0 24px color-mix(in oklch, var(--color-tiktok) 40%, transparent);
+
+  --color-badge-bg: oklch(from var(--color-neutral-100) l c h / 0.08);
+
+  /* Typography sizes — kept relative for OBS overlay legibility */
+  --text-sm: 0.95rem;
+  --text-base: 1.05rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+  --text-3xl: 3rem;
+  --text-4xl: 4.5rem;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Font families are written from src/theme/fonts.ts via inline style on the
+     composition root so @remotion/google-fonts can register them at load time.
+     These fallbacks apply if the font module hasn't run (e.g. in Storybook
+     for primitives). */
+  --font-sans: 'Barlow', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, 'SF Mono', monospace;
+}
+
+/* Remotion renders at exact composition size; no body backgrounds —
+   each scene paints its own. */
+html,
+body,
+#__next {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  color: var(--color-text);
+}
+
+/* Subtle moving grid background for non-overlay scenes */
+@keyframes grid-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 80px 80px;
+  }
+}
+
+.bg-grid {
+  background-color: var(--color-bg);
+  background-image:
+    linear-gradient(oklch(from var(--color-neutral-100) l c h / 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(from var(--color-neutral-100) l c h / 0.025) 1px, transparent 1px);
+  background-size: 80px 80px;
+  animation: grid-drift 20s linear infinite;
+}
