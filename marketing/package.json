@@ -1,0 +1,32 @@
+{
+  "name": "allchat-marketing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remotion-based marketing videos for All-Chat. POC: HeroShowcase 30s feature reel.",
+  "license": "AGPL-3.0-or-later",
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "dev": "remotion studio",
+    "build": "remotion render HeroShowcase out/hero.mp4",
+    "build:social": "remotion render HeroShowcaseSocial out/hero-social.mp4",
+    "build:all": "npm run build && npm run build:social",
+    "build:webm": "remotion render HeroShowcase out/hero.webm --codec=vp8",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.457",
+    "@remotion/google-fonts": "4.0.457",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "remotion": "4.0.457"
+  },
+  "devDependencies": {
+    "@remotion/tailwind-v4": "4.0.457",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.3.3"
+  }
+}
