@@ -282,6 +282,16 @@ func apiKeyMiddleware(expectedKey string, log *zap.Logger) gin.HandlerFunc {
 
 func rateLimitMiddleware(rl *rateLimiter, log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Kubelet probes and Prometheus scrapes must never be rate-limited:
+		// at the default 60 req/min/IP all probe traffic from a single node
+		// gateway can saturate one bucket, then 429s trip the liveness probe
+		// and kubelet restarts the pod in a loop.
+		switch c.Request.URL.Path {
+		case "/health/live", "/health/ready", "/metrics":
+			c.Next()
+			return
+		}
+
 		if rl == nil || rl.limit <= 0 {
 			c.Next()
 			return
