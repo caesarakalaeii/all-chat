@@ -368,53 +368,56 @@ func mergeSevenTVEmotes(globals, channel []models.Emote) []models.Emote {
 }
 
 // FetchCombinedEmotes fetches channel + user emotes and merges them.
-// User emotes take precedence over channel/global emotes with the same code.
+// Precedence (highest wins on a code collision): user > override-set > channel > global.
 // For non-Twitch platforms, if twitchChannel is provided (from a sibling Twitch source
-// on the same overlay), 7TV channel emotes are fetched using that Twitch channel.
-// Otherwise only global emotes are returned for non-Twitch platforms.
-func (c *SevenTVClient) FetchCombinedEmotes(ctx context.Context, channel, platform, userID, twitchChannel string) ([]models.Emote, error) {
+// on the same overlay), 7TV channel emotes are fetched using that Twitch channel; the
+// platform's own 7TV connection is consulted otherwise.
+// seventvSetID is an optional per-overlay 7TV emote-set override that's merged in
+// regardless of platform.
+func (c *SevenTVClient) FetchCombinedEmotes(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string) ([]models.Emote, error) {
 	if strings.TrimSpace(channel) == "" {
 		return nil, fmt.Errorf("channel cannot be empty")
 	}
 
-	// Fetch channel emotes (includes global + channel).
-	// For non-Twitch platforms, use the twitchChannel hint if available to look up
-	// 7TV channel emotes via the sibling Twitch source. Otherwise only global emotes.
 	channelEmotes, err := c.fetchEmotesForPlatform(ctx, channel, platform, twitchChannel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch channel emotes: %w", err)
 	}
 
-	// If no user ID provided, just return channel emotes
-	if strings.TrimSpace(userID) == "" {
-		return channelEmotes, nil
+	var overrideEmotes []models.Emote
+	if strings.TrimSpace(seventvSetID) != "" {
+		overrideEmotes, err = c.fetchEmoteSetByID(ctx, seventvSetID, channel)
+		if err != nil {
+			c.logger.Warn("Failed to fetch 7TV override emote set, ignoring override",
+				zap.String("set_id", seventvSetID),
+				zap.Error(err))
+			overrideEmotes = nil
+		}
 	}
 
-	// Fetch user emotes
-	userEmotes, err := c.FetchUserEmotes(ctx, platform, userID)
-	if err != nil {
-		// Log warning but don't fail - channel emotes are still valid
-		c.logger.Warn("Failed to fetch user emotes, returning channel emotes only",
-			zap.String("platform", platform),
-			zap.String("user_id", userID),
-			zap.Error(err))
-		return channelEmotes, nil
+	var userEmotes []models.Emote
+	if strings.TrimSpace(userID) != "" {
+		userEmotes, err = c.FetchUserEmotes(ctx, platform, userID)
+		if err != nil {
+			c.logger.Warn("Failed to fetch user emotes, ignoring user-set",
+				zap.String("platform", platform),
+				zap.String("user_id", userID),
+				zap.Error(err))
+			userEmotes = nil
+		}
 	}
 
-	// Merge emotes with user emotes taking precedence
-	emoteMap := make(map[string]models.Emote)
-
-	// Add channel emotes first (global + channel)
+	emoteMap := make(map[string]models.Emote, len(channelEmotes)+len(overrideEmotes)+len(userEmotes))
 	for _, emote := range channelEmotes {
 		emoteMap[emote.Code] = emote
 	}
-
-	// Add user emotes (overwrites channel/global if same code exists)
+	for _, emote := range overrideEmotes {
+		emoteMap[emote.Code] = emote
+	}
 	for _, emote := range userEmotes {
 		emoteMap[emote.Code] = emote
 	}
 
-	// Convert map back to slice
 	allEmotes := make([]models.Emote, 0, len(emoteMap))
 	for _, emote := range emoteMap {
 		allEmotes = append(allEmotes, emote)
@@ -423,11 +426,45 @@ func (c *SevenTVClient) FetchCombinedEmotes(ctx context.Context, channel, platfo
 	c.logger.Debug("Fetched combined 7TV emotes",
 		zap.String("channel", channel),
 		zap.String("user_id", userID),
+		zap.String("override_set", seventvSetID),
 		zap.Int("channel_emotes", len(channelEmotes)),
+		zap.Int("override_emotes", len(overrideEmotes)),
 		zap.Int("user_emotes", len(userEmotes)),
 		zap.Int("total", len(allEmotes)))
 
 	return allEmotes, nil
+}
+
+// fetchEmoteSetByID fetches a specific 7TV emote set by its 24-char hex ID.
+// channel is only used to populate the Channel field on the parsed emotes.
+func (c *SevenTVClient) fetchEmoteSetByID(ctx context.Context, setID, channel string) ([]models.Emote, error) {
+	urlPath := fmt.Sprintf("%s/v3/emote-sets/%s", c.baseURL, setID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "All-Chat/1.0")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch override emote set: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("override emote set %s not found", setID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("override emote set lookup returned status %d", resp.StatusCode)
+	}
+
+	var emoteSet sevenTVEmoteSet
+	if err := json.NewDecoder(resp.Body).Decode(&emoteSet); err != nil {
+		return nil, fmt.Errorf("failed to decode override response: %w", err)
+	}
+
+	return c.parseEmoteSet(emoteSet, channel), nil
 }
 
 // fetchEmoteSet fetches a specific emote set (e.g., global)

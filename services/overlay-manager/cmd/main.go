@@ -193,7 +193,8 @@ func main() {
 	// Initialize handlers
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, tracingEnabled, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo, sourceRepo, configRepo)
-	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo)
+	seventvResolver := clients.NewSevenTVResolver(log)
+	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo, seventvResolver)
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient, bm, tokenCipher)
 	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient, log)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
@@ -279,6 +280,7 @@ func main() {
 
 		protected.GET("/:id/config", configHandler.HandleGetConfig)
 		protected.PUT("/:id/config", configHandler.HandleUpdateConfig)
+		protected.POST("/:id/config/seventv/resolve", configHandler.HandleResolveSevenTV)
 		protected.GET("/:id/event-settings", eventSettingsHandler.HandleGetEventSettings)
 		protected.PUT("/:id/event-settings", eventSettingsHandler.HandleUpdateEventSettings)
 		protected.GET("/:id/creditroll", creditRollHandler.HandleGetConfig)

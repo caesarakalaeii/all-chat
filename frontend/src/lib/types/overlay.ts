@@ -47,8 +47,16 @@ export interface OverlayConfig {
   enable_ffz: boolean
   custom_css?: string
   visual_settings?: Partial<VisualSettings>
+  /** Optional 7TV emote-set ID override; lets users attach a 7TV set independent of source platforms. */
+  seventv_emote_set_id?: string
   created_at: string
   updated_at: string
+}
+
+export interface SevenTVResolvedSet {
+  emote_set_id: string
+  name?: string
+  emote_count?: number
 }
 
 export interface DisplaySettings {

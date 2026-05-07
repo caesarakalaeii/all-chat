@@ -35,7 +35,7 @@ import (
 // EmoteServiceClient is an interface for calling the Emote Service
 type EmoteServiceClient interface {
 	GetEmotesForChannel(ctx context.Context, channel string) ([]EmoteServiceEmote, error)
-	GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel string) ([]EmoteServiceEmote, error)
+	GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string) ([]EmoteServiceEmote, error)
 }
 
 // EmoteServiceEmote represents an emote from the Emote Service
@@ -102,8 +102,9 @@ func (c *HTTPEmoteClient) GetEmotesForChannel(ctx context.Context, channel strin
 
 // GetEmotesForChannelWithUser fetches emotes for a channel including user-specific emotes.
 // twitchChannel is an optional hint from a sibling Twitch source on the same overlay,
-// enabling 7TV channel emote lookup for non-Twitch platforms.
-func (c *HTTPEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel string) ([]EmoteServiceEmote, error) {
+// enabling 7TV channel emote lookup for non-Twitch platforms. seventvSetID is an
+// optional per-overlay 7TV emote-set override that's merged into the result.
+func (c *HTTPEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string) ([]EmoteServiceEmote, error) {
 	escapedChannel := url.PathEscape(channel)
 	endpoint, err := url.JoinPath(c.baseURL, "emotes", "channel", escapedChannel)
 	if err != nil {
@@ -125,6 +126,9 @@ func (c *HTTPEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, chann
 	}
 	if twitchChannel != "" {
 		query.Set("twitch_channel", twitchChannel)
+	}
+	if seventvSetID != "" {
+		query.Set("seventv_set_id", seventvSetID)
 	}
 	parsedURL.RawQuery = query.Encode()
 
@@ -207,9 +211,16 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 			twitchChannel = s
 		}
 	}
+	// Per-overlay 7TV emote-set override (set by main.go from overlay_configs).
+	var seventvSetID string
+	if hint, ok := msg.Metadata["seventv_emote_set_id"]; ok {
+		if s, ok := hint.(string); ok {
+			seventvSetID = s
+		}
+	}
 
 	// Fetch emotes for the channel (with user context if available)
-	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID, twitchChannel)
+	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID, twitchChannel, seventvSetID)
 	if err != nil {
 		// Don't fail the message if emote enrichment fails
 		e.logger.Warn("Failed to fetch emotes, skipping enrichment",
@@ -256,9 +267,15 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	return nil
 }
 
-func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, twitchChannel string) ([]cache.CachedEmote, error) {
+func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string) ([]cache.CachedEmote, error) {
+	// When a per-overlay 7TV override is set, the cache key would need to include
+	// it to stay correct. Overrides are rare per request volume — bypass the cache
+	// entirely for these calls and skip cache writes too. The emote-service still
+	// caches at its own layer.
+	useCache := seventvSetID == "" && e.cache != nil
+
 	// If user ID is provided, use user-specific cache
-	if userID != "" && e.cache != nil {
+	if userID != "" && useCache {
 		if cached, err := e.cache.GetWithUser(ctx, channel, userID); err == nil {
 			e.logger.Debug("Emote cache hit (with user)",
 				zap.String("channel", channel),
@@ -276,7 +293,7 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 				zap.Error(err),
 			)
 		}
-	} else if e.cache != nil {
+	} else if useCache {
 		// No user ID, use regular cache
 		if cached, err := e.cache.Get(ctx, channel); err == nil {
 			e.logger.Debug("Emote cache hit",
@@ -304,8 +321,8 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 	var thirdPartyEmotes []EmoteServiceEmote
 	var err error
 
-	if userID != "" || twitchChannel != "" {
-		thirdPartyEmotes, err = e.client.GetEmotesForChannelWithUser(ctx, channel, platform, userID, twitchChannel)
+	if userID != "" || twitchChannel != "" || seventvSetID != "" {
+		thirdPartyEmotes, err = e.client.GetEmotesForChannelWithUser(ctx, channel, platform, userID, twitchChannel, seventvSetID)
 	} else {
 		thirdPartyEmotes, err = e.client.GetEmotesForChannel(ctx, channel)
 	}
@@ -335,8 +352,8 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 
 	converted := convertToCached(thirdPartyEmotes)
 
-	// Store in cache
-	if e.cache != nil {
+	// Store in cache (skip when an override is in play to avoid poisoning shared keys)
+	if useCache {
 		if userID != "" {
 			if err := e.cache.SetWithUser(ctx, channel, userID, converted); err != nil {
 				e.logger.Warn("Failed to populate emote cache",

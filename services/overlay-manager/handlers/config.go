@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/caesar/all-chat/services/overlay-manager/clients"
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
 )
@@ -31,16 +32,22 @@ type OverlayConfigRepository interface {
 	Update(ctx context.Context, config *models.OverlayConfig) error
 }
 
+// SevenTVResolver normalizes user-supplied 7TV input to a canonical emote-set ID.
+type SevenTVResolver interface {
+	Resolve(ctx context.Context, input string) (clients.ResolvedSet, error)
+}
+
 // ConfigHandler manages overlay configuration routes.
 type ConfigHandler struct {
-	repo     OverlayConfigRepository
-	overlays OverlayRepository
-	sources  SourceRepository
+	repo            OverlayConfigRepository
+	overlays        OverlayRepository
+	sources         SourceRepository
+	seventvResolver SevenTVResolver
 }
 
 // NewConfigHandler returns a ConfigHandler.
-func NewConfigHandler(repo OverlayConfigRepository, overlays OverlayRepository, sources SourceRepository) *ConfigHandler {
-	return &ConfigHandler{repo: repo, overlays: overlays, sources: sources}
+func NewConfigHandler(repo OverlayConfigRepository, overlays OverlayRepository, sources SourceRepository, seventvResolver SevenTVResolver) *ConfigHandler {
+	return &ConfigHandler{repo: repo, overlays: overlays, sources: sources, seventvResolver: seventvResolver}
 }
 
 // HandleGetConfig returns the configuration for an overlay owned by the requester.
@@ -97,13 +104,14 @@ func (h *ConfigHandler) HandleUpdateConfig(c *gin.Context) {
 	}
 
 	var req struct {
-		DisplaySettings map[string]any `json:"display_settings"`
-		FilterSettings  map[string]any `json:"filter_settings"`
-		Enable7TV       *bool          `json:"enable_7tv"`
-		EnableBTTV      *bool          `json:"enable_bttv"`
-		EnableFFZ       *bool          `json:"enable_ffz"`
-		CustomCSS       *string        `json:"custom_css"`
-		VisualSettings  map[string]any `json:"visual_settings"`
+		DisplaySettings   map[string]any `json:"display_settings"`
+		FilterSettings    map[string]any `json:"filter_settings"`
+		Enable7TV         *bool          `json:"enable_7tv"`
+		EnableBTTV        *bool          `json:"enable_bttv"`
+		EnableFFZ         *bool          `json:"enable_ffz"`
+		CustomCSS         *string        `json:"custom_css"`
+		VisualSettings    map[string]any `json:"visual_settings"`
+		SevenTVEmoteSetID *string        `json:"seventv_emote_set_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -132,6 +140,18 @@ func (h *ConfigHandler) HandleUpdateConfig(c *gin.Context) {
 	if req.VisualSettings != nil {
 		config.VisualSettings = req.VisualSettings
 	}
+	if req.SevenTVEmoteSetID != nil {
+		if h.seventvResolver == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "seventv resolver not configured"})
+			return
+		}
+		resolved, err := h.seventvResolver.Resolve(c.Request.Context(), *req.SevenTVEmoteSetID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid 7TV reference: " + err.Error()})
+			return
+		}
+		config.SevenTVEmoteSetID = resolved.EmoteSetID
+	}
 
 	if err := h.repo.Update(c.Request.Context(), config); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update overlay config"})
@@ -139,6 +159,31 @@ func (h *ConfigHandler) HandleUpdateConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, config)
+}
+
+// HandleResolveSevenTV validates a 7TV input string and returns the canonical
+// emote-set descriptor without persisting anything. Lets the frontend show
+// "Resolved: <set name> (N emotes)" feedback before the user saves.
+func (h *ConfigHandler) HandleResolveSevenTV(c *gin.Context) {
+	if h.seventvResolver == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "seventv resolver not configured"})
+		return
+	}
+
+	var req struct {
+		Input string `json:"input"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resolved, err := h.seventvResolver.Resolve(c.Request.Context(), req.Input)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, resolved)
 }
 
 // HandleGetPublicConfig exposes safe configuration fields without authentication.
@@ -179,10 +224,11 @@ func (h *ConfigHandler) HandleGetPublicConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"display_settings": config.DisplaySettings,
-		"filter_settings":  config.FilterSettings,
-		"custom_css":       config.CustomCSS,
-		"visual_settings":  config.VisualSettings,
-		"sources":          sourceStatus,
+		"display_settings":     config.DisplaySettings,
+		"filter_settings":      config.FilterSettings,
+		"custom_css":           config.CustomCSS,
+		"visual_settings":      config.VisualSettings,
+		"seventv_emote_set_id": config.SevenTVEmoteSetID,
+		"sources":              sourceStatus,
 	})
 }

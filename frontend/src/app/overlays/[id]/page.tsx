@@ -1091,6 +1091,17 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [enable7tv, setEnable7tv] = useState(true)
   const [enableBttv, setEnableBttv] = useState(true)
   const [enableFfz, setEnableFfz] = useState(true)
+  // Per-overlay 7TV override input. The user can paste a 24-char emote-set ID,
+  // a 7tv.app emote-set URL, or a 7tv.app user profile URL; the backend
+  // resolves and stores the canonical set ID.
+  const [seventvOverrideInput, setSeventvOverrideInput] = useState('')
+  const [seventvOverrideSavedID, setSeventvOverrideSavedID] = useState('')
+  const [seventvResolveState, setSeventvResolveState] = useState<
+    | { status: 'idle' }
+    | { status: 'resolving' }
+    | { status: 'resolved'; setID: string; name?: string; emoteCount?: number }
+    | { status: 'error'; message: string }
+  >({ status: 'idle' })
   const [isPublicForViewers, setIsPublicForViewers] = useState(false)
   const [configLoaded, setConfigLoaded] = useState(false)
   const [isSavingConfig, setIsSavingConfig] = useState(false)
@@ -1470,6 +1481,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           if (typeof config.enable_7tv === 'boolean') setEnable7tv(config.enable_7tv)
           if (typeof config.enable_bttv === 'boolean') setEnableBttv(config.enable_bttv)
           if (typeof config.enable_ffz === 'boolean') setEnableFfz(config.enable_ffz)
+          if (typeof config.seventv_emote_set_id === 'string') {
+            setSeventvOverrideInput(config.seventv_emote_set_id)
+            setSeventvOverrideSavedID(config.seventv_emote_set_id)
+          }
 
           const css = config.custom_css || ''
           setCustomCss(css)
@@ -1923,7 +1938,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         custom_css: useCustomCss ? customCss : '',
         visual_settings: visualSettings,
         filter_settings: filterSettings,
+        // Send the (already-resolved) override only when the user touched it.
+        // Sending an empty string clears the override server-side.
+        ...(seventvOverrideInput !== seventvOverrideSavedID || seventvOverrideInput === ''
+          ? { seventv_emote_set_id: seventvOverrideInput.trim() }
+          : {}),
       })
+      setSeventvOverrideSavedID(seventvOverrideInput.trim())
       setConfigAlert({ type: 'success', message: 'Configuration saved!' })
     } catch (error) {
       console.error('[Editor] Failed to save config', error)
@@ -2475,6 +2496,73 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         FrankerFaceZ
                       </label>
                     </div>
+                  </div>
+
+                  {/* 7TV emote-set override — useful when no Twitch source exists */}
+                  <div>
+                    <p className="mb-1 text-xs text-text-sub">7TV Emote Set</p>
+                    <p className="mb-2 text-[11px] text-text-sub/70">
+                      Optional. Paste a 7TV emote-set ID, an emote-set URL, or your
+                      7TV profile URL to attach those emotes to this overlay
+                      regardless of which platforms you stream on.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={seventvOverrideInput}
+                        onChange={(e) => {
+                          setSeventvOverrideInput(e.target.value)
+                          setSeventvResolveState({ status: 'idle' })
+                        }}
+                        placeholder="https://7tv.app/users/..."
+                        className="flex-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        disabled={
+                          seventvResolveState.status === 'resolving' ||
+                          seventvOverrideInput.trim() === ''
+                        }
+                        onClick={async () => {
+                          setSeventvResolveState({ status: 'resolving' })
+                          try {
+                            const result = await overlaysApi.resolveSevenTV(
+                              id,
+                              seventvOverrideInput.trim(),
+                            )
+                            setSeventvResolveState({
+                              status: 'resolved',
+                              setID: result.emote_set_id,
+                              name: result.name,
+                              emoteCount: result.emote_count,
+                            })
+                          } catch (err) {
+                            const message =
+                              err instanceof Error ? err.message : 'Could not resolve 7TV reference'
+                            setSeventvResolveState({ status: 'error', message })
+                          }
+                        }}
+                      >
+                        {seventvResolveState.status === 'resolving' ? 'Checking…' : 'Verify'}
+                      </Button>
+                    </div>
+                    {seventvResolveState.status === 'resolved' && (
+                      <p className="mt-1 text-[11px] text-green-500">
+                        Resolved
+                        {seventvResolveState.name ? ` to "${seventvResolveState.name}"` : ''}
+                        {typeof seventvResolveState.emoteCount === 'number'
+                          ? ` (${seventvResolveState.emoteCount} emotes)`
+                          : ''}
+                      </p>
+                    )}
+                    {seventvResolveState.status === 'error' && (
+                      <p className="mt-1 text-[11px] text-red-500">
+                        {seventvResolveState.message}
+                      </p>
+                    )}
                   </div>
                 </div>
               </CollapsibleSection>
