@@ -47,6 +47,22 @@ func (m *mockTwitchLookup) GetUserID(ctx context.Context, login string) (string,
 	return m.id, nil
 }
 
+type mockKickLookup struct {
+	id       string
+	err      error
+	called   bool
+	lastSlug string
+}
+
+func (m *mockKickLookup) GetUserID(ctx context.Context, slug string) (string, error) {
+	m.called = true
+	m.lastSlug = slug
+	if m.err != nil {
+		return "", m.err
+	}
+	return m.id, nil
+}
+
 func TestSevenTVClient_FetchEmotes(t *testing.T) {
 	channelResponse := `{
 		"emote_set": {
@@ -223,7 +239,7 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 				err: tt.mockTwitchErr,
 			}
 
-			client := NewSevenTVClient(logger, mockTwitch)
+			client := NewSevenTVClient(logger, mockTwitch, &mockKickLookup{id: "0"})
 			client.baseURL = server.URL
 
 			emotes, err := client.FetchEmotes(context.Background(), tt.channel)
@@ -266,11 +282,14 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 
 func TestSevenTVClient_Provider(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	client := NewSevenTVClient(logger, &mockTwitchLookup{id: "1"})
+	client := NewSevenTVClient(logger, &mockTwitchLookup{id: "1"}, &mockKickLookup{id: "0"})
 	assert.Equal(t, "7tv", client.Provider())
 }
 
-func TestSevenTVClient_FetchCombinedEmotes_NonTwitchPlatform(t *testing.T) {
+func TestSevenTVClient_FetchCombinedEmotes_NonTwitchPlatform_NoConnection(t *testing.T) {
+	// Verifies fallback behavior: when a non-Twitch platform has no 7TV connection
+	// (and no twitch_channel hint), only global emotes are returned. The platform
+	// connection lookup is attempted and gracefully degrades on 404.
 	globalResponse := `{
 		"id": "global-set",
 		"name": "Global Emotes",
@@ -291,36 +310,137 @@ func TestSevenTVClient_FetchCombinedEmotes_NonTwitchPlatform(t *testing.T) {
 	}`
 
 	tests := []struct {
-		name           string
-		platform       string
-		channel        string
-		userID         string
-		wantGlobalOnly bool
-		twitchCalled   bool
+		name               string
+		platform           string
+		channel            string
+		userID             string
+		wantPlatformLookup string
+		kickLookupCalled   bool
 	}{
 		{
-			name:           "youtube platform — only global emotes, no Twitch lookup",
-			platform:       "youtube",
-			channel:        "UCxxxxxxxxxxxxxx",
-			userID:         "UCyyyyyy",
-			wantGlobalOnly: true,
-			twitchCalled:   false,
+			name:               "youtube — connection lookup attempted, falls back to globals on 404",
+			platform:           "youtube",
+			channel:            "UCxxxxxxxxxxxxxx",
+			userID:             "UCyyyyyy",
+			wantPlatformLookup: "youtube",
 		},
 		{
-			name:           "kick platform — only global emotes, no Twitch lookup",
-			platform:       "kick",
-			channel:        "xqc",
-			userID:         "12345",
-			wantGlobalOnly: true,
-			twitchCalled:   false,
+			name:               "kick — slug resolved, connection lookup attempted, falls back to globals",
+			platform:           "kick",
+			channel:            "xqc",
+			userID:             "12345",
+			wantPlatformLookup: "kick",
+			kickLookupCalled:   true,
 		},
 		{
-			name:           "tiktok platform — only global emotes, no Twitch lookup",
-			platform:       "tiktok",
-			channel:        "@someuser",
-			userID:         "67890",
-			wantGlobalOnly: true,
-			twitchCalled:   false,
+			name:     "tiktok — no connection support, globals only",
+			platform: "tiktok",
+			channel:  "@someuser",
+			userID:   "67890",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var sawPlatformLookup string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/v3/emote-sets/global") {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(globalResponse))
+					return
+				}
+				if strings.Contains(r.URL.Path, "/v3/users/youtube/") {
+					sawPlatformLookup = "youtube"
+				}
+				if strings.Contains(r.URL.Path, "/v3/users/kick/") {
+					sawPlatformLookup = "kick"
+				}
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+
+			logger := zaptest.NewLogger(t)
+			mockTwitch := &mockTwitchLookup{id: "ignored"}
+			mockKick := &mockKickLookup{id: "12345"}
+
+			client := NewSevenTVClient(logger, mockTwitch, mockKick)
+			client.baseURL = server.URL
+
+			emotes, err := client.FetchCombinedEmotes(context.Background(), tt.channel, tt.platform, tt.userID, "")
+
+			require.NoError(t, err)
+			assert.False(t, mockTwitch.called, "Twitch lookup should not be called for non-Twitch platforms without hint")
+			assert.Equal(t, tt.kickLookupCalled, mockKick.called, "Kick lookup invocation expectation")
+			assert.Equal(t, tt.wantPlatformLookup, sawPlatformLookup, "Expected platform connection lookup")
+
+			found := false
+			for _, e := range emotes {
+				if e.Code == "POGGERS" {
+					found = true
+				}
+			}
+			assert.True(t, found, "Expected global emote 'POGGERS' to be present")
+		})
+	}
+}
+
+func TestSevenTVClient_FetchCombinedEmotes_NonTwitchPlatform_ConnectionFound(t *testing.T) {
+	// Verifies the new behavior: when a non-Twitch platform DOES have a 7TV
+	// connection, channel-specific emotes are returned alongside globals.
+	youtubeChannelResponse := `{
+		"emote_set": {
+			"id": "yt-set",
+			"name": "YouTuber Emotes",
+			"emotes": [{
+				"id": "yt-emote-1",
+				"name": "ytPog",
+				"data": {"host": {"url": "//cdn.7tv.app/emote/yt-emote-1", "files": [{"name": "1x.webp", "width": 28}]}}
+			}]
+		}
+	}`
+	kickChannelResponse := `{
+		"emote_set": {
+			"id": "kick-set",
+			"name": "Kick Streamer Emotes",
+			"emotes": [{
+				"id": "kick-emote-1",
+				"name": "kickW",
+				"data": {"host": {"url": "//cdn.7tv.app/emote/kick-emote-1", "files": [{"name": "1x.webp", "width": 28}]}}
+			}]
+		}
+	}`
+	globalResponse := `{
+		"id": "global-set",
+		"name": "Global Emotes",
+		"emotes": [{
+			"id": "global-1",
+			"name": "POGGERS",
+			"data": {"host": {"url": "//cdn.7tv.app/emote/global-1", "files": [{"name": "1x.webp", "width": 28}]}}
+		}]
+	}`
+
+	tests := []struct {
+		name             string
+		platform         string
+		channel          string
+		response         string
+		expectedEmote    string
+		kickLookupCalled bool
+	}{
+		{
+			name:          "youtube connection returns channel emotes",
+			platform:      "youtube",
+			channel:       "UCxxxxxxxxxxxxxx",
+			response:      youtubeChannelResponse,
+			expectedEmote: "ytPog",
+		},
+		{
+			name:             "kick slug resolves and connection returns channel emotes",
+			platform:         "kick",
+			channel:          "somekickslug",
+			response:         kickChannelResponse,
+			expectedEmote:    "kickW",
+			kickLookupCalled: true,
 		},
 	}
 
@@ -332,33 +452,31 @@ func TestSevenTVClient_FetchCombinedEmotes_NonTwitchPlatform(t *testing.T) {
 					w.Write([]byte(globalResponse))
 					return
 				}
-				// Any channel or user-specific call should not be reached for non-Twitch
-				// Return 404 so test fails clearly if it is called unexpectedly
+				if strings.Contains(r.URL.Path, "/v3/users/youtube/") || strings.Contains(r.URL.Path, "/v3/users/kick/") {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(tt.response))
+					return
+				}
 				w.WriteHeader(http.StatusNotFound)
 			}))
 			defer server.Close()
 
 			logger := zaptest.NewLogger(t)
-			mockTwitch := &mockTwitchLookup{id: "ignored"}
-
-			client := NewSevenTVClient(logger, mockTwitch)
+			mockKick := &mockKickLookup{id: "98765"}
+			client := NewSevenTVClient(logger, &mockTwitchLookup{}, mockKick)
 			client.baseURL = server.URL
 
-			emotes, err := client.FetchCombinedEmotes(context.Background(), tt.channel, tt.platform, tt.userID, "")
+			emotes, err := client.FetchCombinedEmotes(context.Background(), tt.channel, tt.platform, "", "")
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.twitchCalled, mockTwitch.called, "Twitch lookup should not be called for non-Twitch platforms")
+			assert.Equal(t, tt.kickLookupCalled, mockKick.called, "Kick lookup invocation expectation")
 
-			if tt.wantGlobalOnly {
-				// Should contain global emote
-				found := false
-				for _, e := range emotes {
-					if e.Code == "POGGERS" {
-						found = true
-					}
-				}
-				assert.True(t, found, "Expected global emote 'POGGERS' to be present")
+			emoteMap := make(map[string]models.Emote)
+			for _, e := range emotes {
+				emoteMap[e.Code] = e
 			}
+			assert.Contains(t, emoteMap, tt.expectedEmote, "Expected channel emote from platform connection")
+			assert.Contains(t, emoteMap, "POGGERS", "Expected global emote alongside channel emotes")
 		})
 	}
 }
@@ -418,7 +536,7 @@ func TestSevenTVClient_FetchCombinedEmotes_TwitchChannelHint(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	mockTwitch := &mockTwitchLookup{id: "71092938"}
 
-	client := NewSevenTVClient(logger, mockTwitch)
+	client := NewSevenTVClient(logger, mockTwitch, &mockKickLookup{id: "0"})
 	client.baseURL = server.URL
 
 	// YouTube message with twitch_channel hint should get channel emotes via the Twitch channel
@@ -443,7 +561,7 @@ func TestSevenTVClient_Timeout(t *testing.T) {
 	defer server.Close()
 
 	logger := zaptest.NewLogger(t)
-	client := NewSevenTVClient(logger, &mockTwitchLookup{id: "1"})
+	client := NewSevenTVClient(logger, &mockTwitchLookup{id: "1"}, &mockKickLookup{id: "0"})
 	client.baseURL = server.URL
 	client.httpClient.Timeout = 50 * time.Millisecond
 

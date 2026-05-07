@@ -128,12 +128,13 @@ func main() {
 	}
 
 	twitchClient := clients.NewTwitchClient(twitchClientID, twitchClientSecret, log)
+	kickClient := clients.NewKickClient(log)
 
 	// Initialize emote clients
 	twitchEmoteClient := clients.NewTwitchEmoteClient(twitchClient, log)
 	emoteClients := map[string]handlers.EmoteClient{
 		"twitch": twitchEmoteClient,
-		"7tv":    clients.NewSevenTVClient(log, twitchClient),
+		"7tv":    clients.NewSevenTVClient(log, twitchClient, kickClient),
 		"bttv":   clients.NewBTTVClient(log),
 		"ffz":    clients.NewFFZClient(log),
 	}
