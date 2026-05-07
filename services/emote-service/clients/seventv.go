@@ -40,6 +40,7 @@ type SevenTVClient struct {
 	httpClient   *http.Client
 	logger       *zap.Logger
 	twitchClient TwitchUserLookup
+	kickClient   KickUserLookup
 }
 
 type sevenTVUserResponse struct {
@@ -76,8 +77,10 @@ type sevenTVHostFile struct {
 	Height     int    `json:"height"`
 }
 
-// NewSevenTVClient creates a new 7TV API client
-func NewSevenTVClient(logger *zap.Logger, twitchClient TwitchUserLookup) *SevenTVClient {
+// NewSevenTVClient creates a new 7TV API client.
+// kickClient is optional — when provided, 7TV channel emotes can be resolved for Kick
+// sources by mapping the slug to its numeric Kick user ID for /v3/users/kick/{id}.
+func NewSevenTVClient(logger *zap.Logger, twitchClient TwitchUserLookup, kickClient KickUserLookup) *SevenTVClient {
 	return &SevenTVClient{
 		baseURL: seventvAPIURL,
 		httpClient: &http.Client{
@@ -85,6 +88,7 @@ func NewSevenTVClient(logger *zap.Logger, twitchClient TwitchUserLookup) *SevenT
 		},
 		logger:       logger,
 		twitchClient: twitchClient,
+		kickClient:   kickClient,
 	}
 }
 
@@ -241,20 +245,126 @@ func (c *SevenTVClient) FetchUserEmotes(ctx context.Context, platform, userID st
 
 // fetchEmotesForPlatform fetches 7TV emotes with platform awareness.
 // For Twitch, it fetches both channel-specific and global emotes.
-// For non-Twitch platforms, if a twitchChannel hint is provided (from a sibling Twitch
-// source on the same overlay), channel emotes are fetched using that Twitch channel.
-// Otherwise only global emotes are returned.
+// For non-Twitch platforms, the lookup order is:
+//  1. If a twitchChannel hint is provided (from a sibling Twitch source on the same
+//     overlay), use it via the Twitch connection — best coverage when available.
+//  2. Otherwise try the platform's own 7TV connection (/v3/users/{platform}/{id}) —
+//     works for streamers who linked 7TV to YouTube or Kick directly.
+//  3. Otherwise return globals only.
 func (c *SevenTVClient) fetchEmotesForPlatform(ctx context.Context, channel, platform, twitchChannel string) ([]models.Emote, error) {
-	if platform != "twitch" {
-		if twitchChannel != "" {
-			// Use the sibling Twitch channel for 7TV channel emote lookup
-			return c.FetchEmotes(ctx, twitchChannel)
-		}
-		// Non-Twitch platform without Twitch hint: only global 7TV emotes
-		return c.fetchEmoteSet(ctx, "global", channel)
+	if platform == "twitch" {
+		return c.FetchEmotes(ctx, channel)
 	}
-	// Twitch: fetch both channel-specific and global emotes
-	return c.FetchEmotes(ctx, channel)
+
+	if twitchChannel != "" {
+		return c.FetchEmotes(ctx, twitchChannel)
+	}
+
+	// Try the platform's own 7TV connection. On any failure (no linked account,
+	// network error, slug-resolution miss) fall back to globals — channel-specific
+	// emotes are a bonus, never a hard requirement.
+	if platformEmotes, err := c.fetchPlatformConnectionEmotes(ctx, platform, channel); err == nil {
+		globals, gerr := c.fetchEmoteSet(ctx, "global", channel)
+		if gerr != nil {
+			c.logger.Warn("Failed to fetch global emotes alongside platform connection, returning channel only",
+				zap.String("platform", platform),
+				zap.String("channel", channel),
+				zap.Error(gerr))
+			return platformEmotes, nil
+		}
+		return mergeSevenTVEmotes(globals, platformEmotes), nil
+	} else {
+		c.logger.Debug("7TV platform connection lookup unavailable, falling back to globals",
+			zap.String("platform", platform),
+			zap.String("channel", channel),
+			zap.Error(err))
+	}
+
+	return c.fetchEmoteSet(ctx, "global", channel)
+}
+
+// fetchPlatformConnectionEmotes resolves the channel identifier to a 7TV connection
+// for the given non-Twitch platform and returns the linked emote set, if any.
+// Supported platforms: youtube (channel ID is used directly), kick (slug is resolved
+// to numeric user_id via the Kick public API). Other platforms return an error so
+// the caller can fall back to globals.
+func (c *SevenTVClient) fetchPlatformConnectionEmotes(ctx context.Context, platform, channel string) ([]models.Emote, error) {
+	channel = strings.TrimSpace(channel)
+	if channel == "" {
+		return nil, fmt.Errorf("channel cannot be empty")
+	}
+
+	var (
+		platformID string
+		err        error
+	)
+
+	switch platform {
+	case "youtube":
+		// YouTube channel IDs (UC...) are already in the form 7TV stores connections by.
+		platformID = channel
+	case "kick":
+		if c.kickClient == nil {
+			return nil, fmt.Errorf("kick client is not configured")
+		}
+		platformID, err = c.kickClient.GetUserID(ctx, channel)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve kick user: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("platform %q has no 7TV connection support", platform)
+	}
+
+	urlPath := fmt.Sprintf("%s/v3/users/%s/%s", c.baseURL, platform, platformID)
+
+	c.logger.Debug("Fetching 7TV emotes via platform connection",
+		zap.String("platform", platform),
+		zap.String("channel", channel),
+		zap.String("platform_id", platformID),
+		zap.String("url", urlPath))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "All-Chat/1.0")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch platform connection: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("7TV %s connection not found for %s", platform, channel)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("7TV %s connection returned status %d", platform, resp.StatusCode)
+	}
+
+	var apiResp sevenTVUserResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return c.parseEmoteSet(apiResp.EmoteSet, channel), nil
+}
+
+// mergeSevenTVEmotes merges two 7TV emote slices, with the second slice taking
+// precedence on code collisions (channel-specific wins over globals).
+func mergeSevenTVEmotes(globals, channel []models.Emote) []models.Emote {
+	emoteMap := make(map[string]models.Emote, len(globals)+len(channel))
+	for _, e := range globals {
+		emoteMap[e.Code] = e
+	}
+	for _, e := range channel {
+		emoteMap[e.Code] = e
+	}
+	result := make([]models.Emote, 0, len(emoteMap))
+	for _, e := range emoteMap {
+		result = append(result, e)
+	}
+	return result
 }
 
 // FetchCombinedEmotes fetches channel + user emotes and merges them.
