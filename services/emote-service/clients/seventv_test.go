@@ -366,7 +366,7 @@ func TestSevenTVClient_FetchCombinedEmotes_NonTwitchPlatform_NoConnection(t *tes
 			client := NewSevenTVClient(logger, mockTwitch, mockKick)
 			client.baseURL = server.URL
 
-			emotes, err := client.FetchCombinedEmotes(context.Background(), tt.channel, tt.platform, tt.userID, "")
+			emotes, err := client.FetchCombinedEmotes(context.Background(), tt.channel, tt.platform, tt.userID, "", "")
 
 			require.NoError(t, err)
 			assert.False(t, mockTwitch.called, "Twitch lookup should not be called for non-Twitch platforms without hint")
@@ -466,7 +466,7 @@ func TestSevenTVClient_FetchCombinedEmotes_NonTwitchPlatform_ConnectionFound(t *
 			client := NewSevenTVClient(logger, &mockTwitchLookup{}, mockKick)
 			client.baseURL = server.URL
 
-			emotes, err := client.FetchCombinedEmotes(context.Background(), tt.channel, tt.platform, "", "")
+			emotes, err := client.FetchCombinedEmotes(context.Background(), tt.channel, tt.platform, "", "", "")
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.kickLookupCalled, mockKick.called, "Kick lookup invocation expectation")
@@ -540,7 +540,7 @@ func TestSevenTVClient_FetchCombinedEmotes_TwitchChannelHint(t *testing.T) {
 	client.baseURL = server.URL
 
 	// YouTube message with twitch_channel hint should get channel emotes via the Twitch channel
-	emotes, err := client.FetchCombinedEmotes(context.Background(), "UCxxxxxx", "youtube", "", "xqc")
+	emotes, err := client.FetchCombinedEmotes(context.Background(), "UCxxxxxx", "youtube", "", "xqc", "")
 
 	require.NoError(t, err)
 	assert.True(t, mockTwitch.called, "Twitch lookup should be called when twitch_channel hint is provided")

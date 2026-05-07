@@ -116,6 +116,23 @@ func (r *Repository) FindTwitchChannelForOverlay(ctx context.Context, overlayID 
 	return channelName, nil
 }
 
+// FindSevenTVEmoteSetIDForOverlay returns the explicit per-overlay 7TV emote-set
+// override, or the empty string if none is set.
+func (r *Repository) FindSevenTVEmoteSetIDForOverlay(ctx context.Context, overlayID string) (string, error) {
+	query := `
+		SELECT COALESCE(seventv_emote_set_id, '')
+		FROM overlay_configs
+		WHERE overlay_id = $1
+	`
+
+	var setID string
+	err := r.db.QueryRow(ctx, query, overlayID).Scan(&setID)
+	if err != nil {
+		return "", nil
+	}
+	return setID, nil
+}
+
 // Router routes messages to the appropriate overlays
 type Router struct {
 	repo   *Repository
@@ -134,6 +151,12 @@ func NewRouter(repo *Repository, logger *zap.Logger) *Router {
 // on the same overlay. Used for cross-platform 7TV emote enrichment.
 func (r *Router) TwitchChannelForOverlay(ctx context.Context, overlayID string) (string, error) {
 	return r.repo.FindTwitchChannelForOverlay(ctx, overlayID)
+}
+
+// SevenTVEmoteSetIDForOverlay returns the per-overlay 7TV emote-set override,
+// or empty if the user hasn't configured one.
+func (r *Router) SevenTVEmoteSetIDForOverlay(ctx context.Context, overlayID string) (string, error) {
+	return r.repo.FindSevenTVEmoteSetIDForOverlay(ctx, overlayID)
 }
 
 // Route finds all overlays that should receive this message

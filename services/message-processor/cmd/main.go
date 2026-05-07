@@ -403,6 +403,13 @@ func main() {
 							unified.Metadata["twitch_channel_hint"] = twitchCh
 						}
 					}
+					// Per-overlay 7TV emote-set override applies to all platforms.
+					if setID, err := overlayRouter.SevenTVEmoteSetIDForOverlay(ctx, overlay.OverlayID); err == nil && setID != "" {
+						if unified.Metadata == nil {
+							unified.Metadata = make(map[string]interface{})
+						}
+						unified.Metadata["seventv_emote_set_id"] = setID
+					}
 
 					startEmote := time.Now()
 					if err := emoteEnricher.Enrich(ctx, unified); err != nil {
@@ -490,6 +497,13 @@ func main() {
 						}
 						unified.Metadata["twitch_channel_hint"] = twitchCh
 					}
+				}
+				// Per-overlay 7TV emote-set override applies to all platforms.
+				if setID, err := overlayRouter.SevenTVEmoteSetIDForOverlay(ctx, overlay.OverlayID); err == nil && setID != "" {
+					if unified.Metadata == nil {
+						unified.Metadata = make(map[string]interface{})
+					}
+					unified.Metadata["seventv_emote_set_id"] = setID
 				}
 
 				// Enrich with emotes

@@ -34,6 +34,7 @@ import type {
   MockMessagePayload,
   CreditRollConfig,
   CreditRollResponse,
+  SevenTVResolvedSet,
 } from '../types/overlay'
 
 // --- Phase 13: TTS types (see Plan 02 handlers/tts.go) ---
@@ -120,6 +121,14 @@ export const overlaysApi = {
    */
   async updateConfig(id: string, config: Partial<OverlayConfig>): Promise<OverlayConfig> {
     return apiClient.put<OverlayConfig>(`/api/v1/overlays/${id}/config`, config)
+  },
+
+  /**
+   * Resolve a 7TV reference (set ID, profile URL, or emote-set URL) to a canonical
+   * emote-set descriptor without persisting. Used to give the user pre-save feedback.
+   */
+  async resolveSevenTV(id: string, input: string): Promise<SevenTVResolvedSet> {
+    return apiClient.post<SevenTVResolvedSet>(`/api/v1/overlays/${id}/config/seventv/resolve`, { input })
   },
 
   /**
