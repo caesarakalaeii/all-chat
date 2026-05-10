@@ -81,6 +81,11 @@ vi.mock('discord.js', () => {
       MessageCreate: 'messageCreate',
       InteractionCreate: 'interactionCreate',
     },
+    PermissionFlagsBits: {
+      BanMembers: 1n << 2n,
+      ManageMessages: 1n << 13n,
+      Administrator: 1n << 3n,
+    },
     EmbedBuilder,
     SlashCommandBuilder: vi.fn().mockImplementation(() => ({
       setName: vi.fn().mockReturnThis(),
@@ -247,6 +252,8 @@ function buildMessage(overrides: Partial<{
     content: opts.content,
     author: { bot: opts.authorBot, username: 'Alice', id: 'user-alice' },
     channel,
+    channelId: 'channel1',
+    attachments: new Map(),
     mentions: {
       has: vi.fn().mockReturnValue(opts.mentionsBot),
     },
@@ -702,6 +709,241 @@ describe('InteractionCreate handler (/support slash command)', () => {
       name: expect.any(String),
       autoArchiveDuration: 1440,
     }));
+  });
+});
+
+const MODERATION_GUILD_ID = 'guild-allchat-official';
+
+function buildModeratedMessage(overrides: {
+  authorId: string;
+  channelId: string;
+  content: string;
+  guildId?: string;
+  bansCreate?: ReturnType<typeof vi.fn>;
+  isPrivileged?: boolean;
+  authorBot?: boolean;
+  attachmentSizes?: number[];
+}) {
+  const bansCreate = overrides.bansCreate ?? vi.fn().mockResolvedValue(undefined);
+  const guildId = overrides.guildId ?? MODERATION_GUILD_ID;
+  const isPrivileged = overrides.isPrivileged ?? false;
+
+  // Privileged member: BanMembers permission set so the detector skips them.
+  const memberPerms = {
+    has: vi.fn().mockImplementation((flag: bigint) => {
+      if (!isPrivileged) return false;
+      return flag === (1n << 2n) || flag === (1n << 13n) || flag === (1n << 3n);
+    }),
+  };
+
+  return {
+    id: `msg-${overrides.authorId}-${overrides.channelId}`,
+    content: overrides.content,
+    author: {
+      bot: overrides.authorBot ?? false,
+      username: `user-${overrides.authorId}`,
+      id: overrides.authorId,
+      tag: `user-${overrides.authorId}#0000`,
+    },
+    channel: {
+      id: overrides.channelId,
+      isThread: () => false,
+      send: vi.fn().mockResolvedValue({}),
+      sendTyping: vi.fn().mockResolvedValue(undefined),
+    },
+    channelId: overrides.channelId,
+    guildId,
+    guild: { id: guildId, bans: { create: bansCreate } },
+    member: { permissions: memberPerms },
+    attachments: new Map(
+      (overrides.attachmentSizes ?? []).map((size, i) => [
+        `att-${i}`,
+        { id: `att-${i}`, size, url: `https://cdn.example/att-${i}` },
+      ]),
+    ),
+    mentions: { has: vi.fn().mockReturnValue(false) },
+    reply: vi.fn().mockResolvedValue({ id: 'r' }),
+    startThread: vi.fn().mockResolvedValue({ id: 't', send: vi.fn().mockResolvedValue({}) }),
+  };
+}
+
+describe('Cross-channel spam moderation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockQueryCodebase.mockResolvedValue({
+      answer: 'irrelevant',
+      issueProposal: null,
+      infraVerdict: null,
+      memoryMarker: null,
+      updateMemoryMarker: null,
+    });
+  });
+
+  it('does NOT moderate when moderationGuildId is not configured', async () => {
+    await startBot(testConfig, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const bansCreate = vi.fn().mockResolvedValue(undefined);
+    const spam = 'free nitro check it out at evil.example';
+    for (const ch of ['c1', 'c2', 'c3']) {
+      await handler!(buildModeratedMessage({ authorId: 'spammer', channelId: ch, content: spam, bansCreate }));
+    }
+
+    expect(bansCreate).not.toHaveBeenCalled();
+  });
+
+  it('does NOT moderate messages from other guilds', async () => {
+    const config = { ...testConfig, moderationGuildId: MODERATION_GUILD_ID };
+    await startBot(config, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const bansCreate = vi.fn().mockResolvedValue(undefined);
+    const spam = 'free nitro check it out at evil.example';
+    for (const ch of ['c1', 'c2', 'c3']) {
+      await handler!(buildModeratedMessage({
+        authorId: 'spammer', channelId: ch, content: spam, bansCreate,
+        guildId: 'some-other-guild',
+      }));
+    }
+
+    expect(bansCreate).not.toHaveBeenCalled();
+  });
+
+  it('bans a user who posts the same message in 3 channels of the moderated guild', async () => {
+    const config = { ...testConfig, moderationGuildId: MODERATION_GUILD_ID };
+    await startBot(config, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const bansCreate = vi.fn().mockResolvedValue(undefined);
+    const spam = 'free nitro check it out at evil.example';
+    for (const ch of ['c1', 'c2', 'c3']) {
+      await handler!(buildModeratedMessage({ authorId: 'spammer', channelId: ch, content: spam, bansCreate }));
+    }
+    // Allow the fire-and-forget ban promise to resolve.
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(bansCreate).toHaveBeenCalledTimes(1);
+    expect(bansCreate).toHaveBeenCalledWith(
+      'spammer',
+      expect.objectContaining({
+        deleteMessageSeconds: 6 * 60 * 60,
+        reason: expect.stringMatching(/compromised|cross-channel|3\+/i),
+      }),
+    );
+  });
+
+  it('does NOT ban when same message is posted in only 2 channels', async () => {
+    const config = { ...testConfig, moderationGuildId: MODERATION_GUILD_ID };
+    await startBot(config, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const bansCreate = vi.fn().mockResolvedValue(undefined);
+    const spam = 'free nitro check it out at evil.example';
+    for (const ch of ['c1', 'c2']) {
+      await handler!(buildModeratedMessage({ authorId: 'spammer', channelId: ch, content: spam, bansCreate }));
+    }
+
+    expect(bansCreate).not.toHaveBeenCalled();
+  });
+
+  it('does NOT ban privileged members (mods/admins/lead-dev)', async () => {
+    const config = { ...testConfig, moderationGuildId: MODERATION_GUILD_ID };
+    await startBot(config, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const bansCreate = vi.fn().mockResolvedValue(undefined);
+    const announcement = 'reminder: server maintenance window tonight';
+    for (const ch of ['c1', 'c2', 'c3', 'c4']) {
+      await handler!(buildModeratedMessage({
+        authorId: 'mod-user', channelId: ch, content: announcement,
+        bansCreate, isPrivileged: true,
+      }));
+    }
+
+    expect(bansCreate).not.toHaveBeenCalled();
+  });
+
+  it('does NOT ban the lead developer', async () => {
+    const config = { ...testConfig, moderationGuildId: MODERATION_GUILD_ID };
+    await startBot(config, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const bansCreate = vi.fn().mockResolvedValue(undefined);
+    const cross = 'announcement to multiple channels';
+    for (const ch of ['c1', 'c2', 'c3']) {
+      await handler!(buildModeratedMessage({
+        authorId: testConfig.leadDeveloperDiscordId, channelId: ch, content: cross, bansCreate,
+      }));
+    }
+
+    expect(bansCreate).not.toHaveBeenCalled();
+  });
+
+  it('short-circuits the support flow for the spam-trigger message that gets banned', async () => {
+    const config = { ...testConfig, moderationGuildId: MODERATION_GUILD_ID };
+    await startBot(config, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const bansCreate = vi.fn().mockResolvedValue(undefined);
+    // Spam @mentions the bot — without the short-circuit it would call queryCodebase 3x.
+    const spam = '<@123456789> free nitro check it out at evil.example';
+    for (const ch of ['c1', 'c2', 'c3']) {
+      const msg = buildModeratedMessage({ authorId: 'spammer', channelId: ch, content: spam, bansCreate });
+      msg.mentions.has = vi.fn().mockReturnValue(true);
+      await handler!(msg);
+    }
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(bansCreate).toHaveBeenCalledTimes(1);
+    // c1+c2 still legitimately hit the support flow; c3 is the trigger and must be intercepted.
+    expect(mockQueryCodebase).toHaveBeenCalledTimes(2);
+  });
+
+  it('bans a user posting short text "bro" + same image (size) across 3 channels', async () => {
+    const config = { ...testConfig, moderationGuildId: MODERATION_GUILD_ID };
+    await startBot(config, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const bansCreate = vi.fn().mockResolvedValue(undefined);
+    for (const ch of ['c1', 'c2', 'c3']) {
+      await handler!(buildModeratedMessage({
+        authorId: 'spammer', channelId: ch, content: 'bro',
+        attachmentSizes: [314_159], bansCreate,
+      }));
+    }
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(bansCreate).toHaveBeenCalledTimes(1);
+    expect(bansCreate).toHaveBeenCalledWith('spammer', expect.objectContaining({
+      deleteMessageSeconds: 6 * 60 * 60,
+    }));
+  });
+
+  it('does NOT ban when "bro" is posted with different attachment sizes', async () => {
+    const config = { ...testConfig, moderationGuildId: MODERATION_GUILD_ID };
+    await startBot(config, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const bansCreate = vi.fn().mockResolvedValue(undefined);
+    for (const [ch, size] of [['c1', 1000], ['c2', 2000], ['c3', 3000]] as const) {
+      await handler!(buildModeratedMessage({
+        authorId: 'maybe-genuine', channelId: ch, content: 'bro',
+        attachmentSizes: [size], bansCreate,
+      }));
+    }
+
+    expect(bansCreate).not.toHaveBeenCalled();
+  });
+
+  it('still answers normal @mention questions when moderation is enabled', async () => {
+    const config = { ...testConfig, moderationGuildId: MODERATION_GUILD_ID };
+    await startBot(config, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const msg = buildMessage({ content: '<@123456789> how does twitch work?' });
+    await handler!(msg);
+
+    expect(mockQueryCodebase).toHaveBeenCalled();
   });
 });
 

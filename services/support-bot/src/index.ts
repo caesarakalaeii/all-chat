@@ -41,6 +41,7 @@ export function validateEnv(): BotConfig {
     grafanaUrl: required['GRAFANA_URL'] as string,
     grafanaServiceAccountToken: required['GRAFANA_SERVICE_ACCOUNT_TOKEN'] as string,
     databaseUrl: required['DATABASE_URL'] as string,
+    moderationGuildId: process.env['MODERATION_GUILD_ID'],
   };
 }
 

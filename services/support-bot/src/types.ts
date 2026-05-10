@@ -28,6 +28,10 @@ export interface BotConfig {
   grafanaUrl: string;
   grafanaServiceAccountToken: string;
   databaseUrl: string;
+  /** Discord guild ID of the official all-chat server. When set, the bot will
+   *  auto-ban users whose identical messages appear in 3+ channels (suspected
+   *  compromised account) and delete their last 6h of messages. */
+  moderationGuildId?: string;
 }
 
 export type MemoryType = 'error_pattern' | 'correction' | 'codebase_insight';
