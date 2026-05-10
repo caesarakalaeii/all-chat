@@ -3,6 +3,8 @@ import {
   EmbedBuilder,
   Events,
   GatewayIntentBits,
+  PermissionFlagsBits,
+  type Message,
   type TextChannel,
   type ThreadChannel,
 } from 'discord.js';
@@ -10,7 +12,36 @@ import type { Octokit } from '@octokit/rest';
 import { queryCodebase } from './claude/agent.js';
 import { createIssue, createOctokitClient } from './github/issues.js';
 import { MemoryRepository, extractTagsFromQuestion } from './memory/repository.js';
+import { CrossChannelSpamDetector } from './moderation/cross-channel-spam.js';
 import type { BotConfig } from './types.js';
+
+const SIX_HOURS_SECONDS = 6 * 60 * 60;
+
+async function autoBanForCrossChannelSpam(message: Message): Promise<void> {
+  if (!message.guild) return;
+  try {
+    await message.guild.bans.create(message.author.id, {
+      deleteMessageSeconds: SIX_HOURS_SECONDS,
+      reason: 'Auto-ban: same message posted in 3+ channels (suspected compromised account)',
+    });
+    console.log(
+      `[moderation] Banned ${message.author.tag} (${message.author.id}) in guild ${message.guildId} for cross-channel spam; deleted last 6h of messages`,
+    );
+  } catch (err) {
+    console.error('[moderation] Failed to auto-ban user:', err);
+  }
+}
+
+function isPrivilegedMember(message: Message, leadDeveloperDiscordId: string): boolean {
+  if (message.author.id === leadDeveloperDiscordId) return true;
+  const perms = message.member?.permissions;
+  if (!perms) return false;
+  return (
+    perms.has(PermissionFlagsBits.BanMembers) ||
+    perms.has(PermissionFlagsBits.ManageMessages) ||
+    perms.has(PermissionFlagsBits.Administrator)
+  );
+}
 
 async function fetchThreadHistory(thread: ThreadChannel): Promise<string[]> {
   const messages = await thread.messages.fetch({ limit: 20 });
@@ -95,6 +126,11 @@ export async function startBot(config: BotConfig, memoryRepo: MemoryRepository):
   const octokit = createOctokitClient(config.githubToken);
   const repoPaths = [config.allChatRepoPath, config.allChatExtensionRepoPath];
 
+  const spamDetector = new CrossChannelSpamDetector();
+  if (config.moderationGuildId) {
+    console.log(`[moderation] Cross-channel spam detection enabled for guild ${config.moderationGuildId}`);
+  }
+
   // Track thread IDs the bot has created or posted in this session.
   // Used to recognise bot-managed threads even if ownerId doesn't match.
   const botThreadIds = new Set<string>();
@@ -114,6 +150,26 @@ export async function startBot(config: BotConfig, memoryRepo: MemoryRepository):
 
   client.on(Events.MessageCreate, (message) => {
     if (message.author.bot) return;
+
+    // Cross-channel spam moderation — only in the official all-chat guild.
+    // We exempt mods/admins/lead-dev so privileged cross-posting doesn't trip it.
+    if (
+      config.moderationGuildId &&
+      message.guildId === config.moderationGuildId &&
+      !isPrivilegedMember(message, config.leadDeveloperDiscordId)
+    ) {
+      const attachmentSizes = [...message.attachments.values()].map(a => a.size);
+      const triggered = spamDetector.record(
+        message.author.id,
+        message.channelId,
+        message.content,
+        attachmentSizes,
+      );
+      if (triggered) {
+        void autoBanForCrossChannelSpam(message);
+        return;
+      }
+    }
 
     const inBotThread =
       message.channel.isThread() && (
