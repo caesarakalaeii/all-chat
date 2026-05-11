@@ -1091,17 +1091,25 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [enable7tv, setEnable7tv] = useState(true)
   const [enableBttv, setEnableBttv] = useState(true)
   const [enableFfz, setEnableFfz] = useState(true)
-  // Per-overlay 7TV override input. The user can paste a 24-char emote-set ID,
-  // a 7tv.app emote-set URL, or a 7tv.app user profile URL; the backend
-  // resolves and stores the canonical set ID.
+  // Per-overlay 7TV override input. The user can paste an emote-set ID
+  // (24-char hex or 26-char ULID), a 7tv.app emote-set URL, or a 7tv.app user
+  // profile URL; the backend resolves and stores the canonical set ID.
   const [seventvOverrideInput, setSeventvOverrideInput] = useState('')
   const [seventvOverrideSavedID, setSeventvOverrideSavedID] = useState('')
+  // Descriptor for the currently-saved set, populated by an auto-resolve on
+  // config load so the editor shows the human name + emote count instead of
+  // an opaque ULID. Cleared whenever the saved ID changes to "".
+  const [seventvSavedDescriptor, setSeventvSavedDescriptor] = useState<
+    | { name?: string; emoteCount?: number }
+    | null
+  >(null)
   const [seventvResolveState, setSeventvResolveState] = useState<
     | { status: 'idle' }
     | { status: 'resolving' }
     | { status: 'resolved'; setID: string; name?: string; emoteCount?: number }
     | { status: 'error'; message: string }
   >({ status: 'idle' })
+  const [seventvRemoving, setSeventvRemoving] = useState(false)
   const [isPublicForViewers, setIsPublicForViewers] = useState(false)
   const [configLoaded, setConfigLoaded] = useState(false)
   const [isSavingConfig, setIsSavingConfig] = useState(false)
@@ -1482,8 +1490,31 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           if (typeof config.enable_bttv === 'boolean') setEnableBttv(config.enable_bttv)
           if (typeof config.enable_ffz === 'boolean') setEnableFfz(config.enable_ffz)
           if (typeof config.seventv_emote_set_id === 'string') {
-            setSeventvOverrideInput(config.seventv_emote_set_id)
-            setSeventvOverrideSavedID(config.seventv_emote_set_id)
+            const saved = config.seventv_emote_set_id
+            setSeventvOverrideInput(saved)
+            setSeventvOverrideSavedID(saved)
+            // Auto-resolve the saved set so the editor can show "Currently
+            // active: <name> (N emotes)" instead of a raw ULID — otherwise
+            // the user has no way to tell what's attached.
+            if (saved.trim() !== '') {
+              overlaysApi
+                .resolveSevenTV(id, saved)
+                .then((result) => {
+                  if (cancelled) return
+                  setSeventvSavedDescriptor({
+                    name: result.name,
+                    emoteCount: result.emote_count,
+                  })
+                })
+                .catch(() => {
+                  // Best-effort: if 7TV is unreachable or the saved ID is
+                  // stale, fall back silently to showing just the ID.
+                  if (cancelled) return
+                  setSeventvSavedDescriptor(null)
+                })
+            } else {
+              setSeventvSavedDescriptor(null)
+            }
           }
 
           const css = config.custom_css || ''
@@ -1944,7 +1975,21 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           ? { seventv_emote_set_id: seventvOverrideInput.trim() }
           : {}),
       })
-      setSeventvOverrideSavedID(seventvOverrideInput.trim())
+      const newSavedID = seventvOverrideInput.trim()
+      setSeventvOverrideSavedID(newSavedID)
+      // Mirror the descriptor to whatever the user just verified, so the
+      // "Currently active" line refreshes without re-resolving.
+      if (newSavedID === '') {
+        setSeventvSavedDescriptor(null)
+      } else if (
+        seventvResolveState.status === 'resolved' &&
+        seventvResolveState.setID === newSavedID
+      ) {
+        setSeventvSavedDescriptor({
+          name: seventvResolveState.name,
+          emoteCount: seventvResolveState.emoteCount,
+        })
+      }
       setConfigAlert({ type: 'success', message: 'Configuration saved!' })
     } catch (error) {
       console.error('[Editor] Failed to save config', error)
@@ -2506,6 +2551,60 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       7TV profile URL to attach those emotes to this overlay
                       regardless of which platforms you stream on.
                     </p>
+                    {/* Saved-state pill: shows what's actually attached right now,
+                        with a one-click Remove. Hidden while nothing is saved. */}
+                    {seventvOverrideSavedID !== '' && (
+                      <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-2 py-1.5 text-[11px]">
+                        <span className="truncate text-text">
+                          <span className="text-text-sub">Currently active: </span>
+                          {seventvSavedDescriptor?.name ? (
+                            <>
+                              <span className="font-medium">&quot;{seventvSavedDescriptor.name}&quot;</span>
+                              {typeof seventvSavedDescriptor.emoteCount === 'number'
+                                ? ` (${seventvSavedDescriptor.emoteCount} emotes)`
+                                : ''}
+                            </>
+                          ) : (
+                            <span className="font-mono">{seventvOverrideSavedID}</span>
+                          )}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="shrink-0 text-[11px] text-red-500 hover:text-red-400"
+                          disabled={seventvRemoving || isSavingConfig}
+                          onClick={async () => {
+                            setSeventvRemoving(true)
+                            try {
+                              await overlaysApi.updateConfig(id, {
+                                seventv_emote_set_id: '',
+                              })
+                              setSeventvOverrideInput('')
+                              setSeventvOverrideSavedID('')
+                              setSeventvSavedDescriptor(null)
+                              setSeventvResolveState({ status: 'idle' })
+                              setConfigAlert({
+                                type: 'success',
+                                message: '7TV emote set removed',
+                              })
+                              setTimeout(() => setConfigAlert(null), 5000)
+                            } catch (err) {
+                              const message =
+                                err instanceof Error
+                                  ? err.message
+                                  : 'Failed to remove 7TV emote set'
+                              setConfigAlert({ type: 'error', message })
+                              setTimeout(() => setConfigAlert(null), 5000)
+                            } finally {
+                              setSeventvRemoving(false)
+                            }
+                          }}
+                        >
+                          {seventvRemoving ? 'Removing…' : 'Remove'}
+                        </Button>
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -2514,7 +2613,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           setSeventvOverrideInput(e.target.value)
                           setSeventvResolveState({ status: 'idle' })
                         }}
-                        placeholder="https://7tv.app/users/..."
+                        placeholder={
+                          seventvOverrideSavedID !== ''
+                            ? 'Paste a new ID/URL to replace…'
+                            : 'https://7tv.app/users/...'
+                        }
                         className="flex-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
                       />
                       <Button
@@ -2524,7 +2627,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         className="text-xs"
                         disabled={
                           seventvResolveState.status === 'resolving' ||
-                          seventvOverrideInput.trim() === ''
+                          seventvOverrideInput.trim() === '' ||
+                          seventvOverrideInput.trim() === seventvOverrideSavedID
                         }
                         onClick={async () => {
                           setSeventvResolveState({ status: 'resolving' })
@@ -2549,14 +2653,16 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         {seventvResolveState.status === 'resolving' ? 'Checking…' : 'Verify'}
                       </Button>
                     </div>
-                    {seventvResolveState.status === 'resolved' && (
-                      <p className="mt-1 text-[11px] text-green-500">
-                        Resolved
-                        {seventvResolveState.name ? ` to "${seventvResolveState.name}"` : ''}
-                        {typeof seventvResolveState.emoteCount === 'number'
-                          ? ` (${seventvResolveState.emoteCount} emotes)`
-                          : ''}
-                      </p>
+                    {seventvResolveState.status === 'resolved' &&
+                      seventvResolveState.setID !== seventvOverrideSavedID && (
+                        <p className="mt-1 text-[11px] text-green-500">
+                          Resolved
+                          {seventvResolveState.name ? ` to "${seventvResolveState.name}"` : ''}
+                          {typeof seventvResolveState.emoteCount === 'number'
+                            ? ` (${seventvResolveState.emoteCount} emotes)`
+                            : ''}
+                          {' — click Save Configuration to apply.'}
+                        </p>
                     )}
                     {seventvResolveState.status === 'error' && (
                       <p className="mt-1 text-[11px] text-red-500">
