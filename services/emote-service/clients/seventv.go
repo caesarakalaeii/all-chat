@@ -435,8 +435,9 @@ func (c *SevenTVClient) FetchCombinedEmotes(ctx context.Context, channel, platfo
 	return allEmotes, nil
 }
 
-// fetchEmoteSetByID fetches a specific 7TV emote set by its 24-char hex ID.
-// channel is only used to populate the Channel field on the parsed emotes.
+// fetchEmoteSetByID fetches a specific 7TV emote set by its ID (24-char hex
+// legacy ObjectID or 26-char ULID). channel is only used to populate the
+// Channel field on the parsed emotes.
 func (c *SevenTVClient) fetchEmoteSetByID(ctx context.Context, setID, channel string) ([]models.Emote, error) {
 	urlPath := fmt.Sprintf("%s/v3/emote-sets/%s", c.baseURL, setID)
 
