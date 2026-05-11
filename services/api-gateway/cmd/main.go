@@ -474,6 +474,7 @@ func main() {
 		protectedAPI.POST("/overlays/:id/clone", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/config", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/overlays/:id/config", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/config/seventv/resolve", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/sources", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/sources", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/mock-messages", proxyHandler.ForwardRequest)
