@@ -975,24 +975,42 @@ func (m *Manager) syncSources(ctx context.Context) {
 // UpdateDemandedChannels receives the set of channel IDs that currently have overlay demand.
 // nil means no demand filtering (backward compat). Empty map means zero demand.
 // Calling this method also triggers reconcileDemand to stop pollers/discovery for channels
-// that lost demand.
+// that lost demand, and immediately starts discovery for newly-demanded channels so we
+// don't wait up to 30s for the next periodic sync tick.
 func (m *Manager) UpdateDemandedChannels(demanded map[string]bool) {
 	m.demandMu.Lock()
+	prev := m.demandedChannels
 	m.demandedChannels = demanded
 	m.demandMu.Unlock()
 
 	m.logger.Info("Demanded channels updated",
 		zap.Int("demanded_count", len(demanded)))
 
+	// Detect newly-demanded channels (present in new set, absent in old set).
+	// These need discovery immediately — don't wait for the next 30s periodic sync.
+	hasNewChannels := false
+	if demanded != nil {
+		for ch := range demanded {
+			if prev == nil || !prev[ch] {
+				hasNewChannels = true
+				break
+			}
+		}
+	}
+	if hasNewChannels {
+		ctx := context.Background()
+		go m.syncSources(ctx)
+	}
+
 	// Stop pollers and cancel discovery for channels that lost demand
 	m.reconcileDemand()
 }
 
-// reconcileDemand schedules deferred stops for channels that are no longer demanded.
-// A 90-second grace period allows transient WebSocket reconnects (which publish a
-// disconnect → reconnect cycle through source:demand) to settle before the poller
-// is actually killed. This prevents the ~50% message loss caused by repeated
-// poller restarts during brief overlay page refreshes or network hiccups.
+// reconcileDemand cancels in-progress discovery for channels that lost demand.
+// Running pollers are intentionally NOT stopped here — periodicSync already
+// stops pollers for sources that are removed from the DB, and demand reflects
+// transient WebSocket connection state which can flicker on page refreshes or
+// network blips. Killing a poller on every WebSocket drop causes message loss.
 func (m *Manager) reconcileDemand() {
 	m.demandMu.RLock()
 	demanded := m.demandedChannels
@@ -1002,131 +1020,18 @@ func (m *Manager) reconcileDemand() {
 		return // nil = no filtering (backward compat)
 	}
 
-	// Collect channels that lost demand without holding the main lock.
-	m.mu.RLock()
-	var lostChannels []string
-	for videoID, stream := range m.activeStreams {
-		if _, ok := demanded[stream.ChannelID]; !ok {
-			lostChannels = append(lostChannels, stream.ChannelID)
-			_ = videoID
-		}
-	}
-	var lostDiscoveries []string
-	for channelID := range m.discovering {
-		if _, ok := demanded[channelID]; !ok {
-			lostDiscoveries = append(lostDiscoveries, channelID)
-		}
-	}
-	m.mu.RUnlock()
-
-	// Debounce poller stops: wait 90s then re-check demand before actually stopping.
-	// 90s > 60s WebSocket disconnect grace period so a page refresh never kills the poller.
-	for _, channelID := range lostChannels {
-		chID := channelID
-		m.logger.Info("Demand lost, scheduling deferred poller stop",
-			zap.String("channel_id", chID),
-			zap.Duration("debounce", 90*time.Second))
-		go m.stopPollerAfterDemandDebounce(chID)
-	}
-
-	// Cancel discovery immediately — it hasn't started publishing yet, so there's
-	// no message continuity to preserve.
-	if len(lostDiscoveries) > 0 {
-		m.mu.Lock()
-		for _, channelID := range lostDiscoveries {
-			if state, exists := m.discovering[channelID]; exists {
-				// Re-check demand under lock before cancelling.
-				m.demandMu.RLock()
-				_, stillDemanded := m.demandedChannels[channelID]
-				m.demandMu.RUnlock()
-				if !stillDemanded {
-					state.CancelFunc()
-					delete(m.discovering, channelID)
-					m.logger.Info("Demand lost, cancelling discovery",
-						zap.String("channel_id", channelID))
-				}
-			}
-		}
-		m.mu.Unlock()
-	}
-}
-
-// stopPollerAfterDemandDebounce waits 90s then stops the poller only if the channel
-// is still not demanded. This debounce absorbs transient WebSocket disconnect/reconnect
-// cycles that would otherwise kill and restart the poller every page refresh.
-func (m *Manager) stopPollerAfterDemandDebounce(channelID string) {
-	const demandDebounce = 90 * time.Second
-	time.Sleep(demandDebounce)
-
-	// Re-check demand after debounce.
-	m.demandMu.RLock()
-	demanded := m.demandedChannels
-	m.demandMu.RUnlock()
-
-	if demanded == nil {
-		return // demand filtering disabled
-	}
-	if _, ok := demanded[channelID]; ok {
-		m.logger.Info("Demand restored during debounce, keeping poller",
-			zap.String("channel_id", channelID))
-		return
-	}
-
-	// Demand still absent after 90s — stop the poller.
+	// Cancel discovery for channels without demand — discovery hasn't published
+	// yet so there is no message continuity to preserve, and we avoid hammering
+	// the YouTube watch-page API for overlays with no active viewers.
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for videoID, stream := range m.activeStreams {
-		if stream.ChannelID == channelID {
-			if p, exists := m.pollers[videoID]; exists {
-				p.Stop()
-				delete(m.pollers, videoID)
-				m.logger.Info("Demand lost, stopping poller",
-					zap.String("channel_id", channelID),
-					zap.String("video_id", videoID))
-			}
-			delete(m.activeStreams, videoID)
-
-			if m.leader != nil {
-				m.leader.Release(videoID)
-			}
-			if m.batchDetector != nil {
-				if err := m.batchDetector.Cleanup(channelID); err != nil {
-					m.logger.Warn("Failed to cleanup batch detector",
-						zap.String("channel_id", channelID),
-						zap.Error(err),
-					)
-				}
-			}
-			if m.deletionBuffer != nil {
-				m.deletionBuffer.Cleanup(channelID)
-			}
-
-			ctx := context.Background()
-			if err := m.repository.DeleteChannelVideoMapping(ctx, channelID); err != nil {
-				m.logger.Warn("Failed to clear channel video mapping",
-					zap.String("channel_id", channelID),
-					zap.Error(err),
-				)
-			}
-			m.statusPublisher.Publish(ctx, status.Message{
-				Platform:  "youtube",
-				ChannelID: channelID,
-				Status:    "offline",
-			})
-
-			if m.smClient != nil {
-				chID := channelID
-				go func() {
-					if err := m.smClient.DeactivateSource(context.Background(), "youtube", chID); err != nil {
-						m.logger.Warn("Failed to deactivate source after demand loss",
-							zap.String("channel_id", chID),
-							zap.Error(err),
-						)
-					}
-				}()
-			}
-			break
+	for channelID, state := range m.discovering {
+		if _, ok := demanded[channelID]; !ok {
+			state.CancelFunc()
+			delete(m.discovering, channelID)
+			m.logger.Info("Demand lost, cancelling discovery",
+				zap.String("channel_id", channelID))
 		}
 	}
 }
