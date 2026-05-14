@@ -34,13 +34,14 @@ import (
 // ViewerWebSocketHandler handles WebSocket connections for viewers
 // Viewers connect via /ws/chat/{streamer_username} without knowing the overlay ID
 type ViewerWebSocketHandler struct {
-	wsManager    *wsconn.Manager
-	subscriber   *subscription.Subscriber
-	repo         *subscription.Repository
-	userKeyChain *auth.KeyChain
-	replayBuffer replay.DeletionReplayBuffer
-	logger       *zap.Logger
-	upgrader     websocket.Upgrader
+	wsManager        *wsconn.Manager
+	subscriber       *subscription.Subscriber
+	repo             *subscription.Repository
+	userKeyChain     *auth.KeyChain
+	replayBuffer     replay.DeletionReplayBuffer
+	chatReplayBuffer replay.ChatReplayBuffer
+	logger           *zap.Logger
+	upgrader         websocket.Upgrader
 }
 
 // NewViewerWebSocketHandler creates a new viewer WebSocket handler
@@ -50,15 +51,17 @@ func NewViewerWebSocketHandler(
 	repo *subscription.Repository,
 	userKeyChain *auth.KeyChain,
 	replayBuffer replay.DeletionReplayBuffer,
+	chatReplayBuffer replay.ChatReplayBuffer,
 	logger *zap.Logger,
 ) *ViewerWebSocketHandler {
 	h := &ViewerWebSocketHandler{
-		wsManager:    wsManager,
-		subscriber:   subscriber,
-		repo:         repo,
-		userKeyChain: userKeyChain,
-		replayBuffer: replayBuffer,
-		logger:       logger.Named("viewer-websocket"),
+		wsManager:        wsManager,
+		subscriber:       subscriber,
+		repo:             repo,
+		userKeyChain:     userKeyChain,
+		replayBuffer:     replayBuffer,
+		chatReplayBuffer: chatReplayBuffer,
+		logger:           logger.Named("viewer-websocket"),
 	}
 
 	// Configure WebSocket upgrader with permissive origin check for viewers
@@ -185,6 +188,34 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 	connectedMsg := models.NewViewerConnected()
 	connectedJSON, _ := connectedMsg.ToJSON()
 	wsConn.Send(connectedJSON)
+
+	// Replay messages buffered since the viewer's last-seen timestamp.
+	// For viewers we *require* an explicit ?since= — first-time viewers should
+	// not receive a flood of 5 minutes of chat history they never saw before.
+	// A reconnecting viewer client provides since=<last-msg-ms> to recover the
+	// gap. The owner-handler replays everything by default; this is intentionally
+	// stricter for public-facing viewer connections.
+	if h.chatReplayBuffer != nil {
+		if sinceMs := parseSinceQuery(c.Query("since")); sinceMs > 0 {
+			replayed, err := h.chatReplayBuffer.GetSince(context.Background(), overlayID, sinceMs)
+			if err != nil {
+				h.logger.Warn("Failed to fetch chat replay buffer",
+					zap.String("overlay_id", overlayID),
+					zap.Error(err),
+				)
+			} else if len(replayed) > 0 {
+				h.logger.Info("Replaying buffered messages to reconnected viewer",
+					zap.String("overlay_id", overlayID),
+					zap.String("viewer_id", viewerID),
+					zap.Int("message_count", len(replayed)),
+					zap.Int64("since_ms", sinceMs),
+				)
+				for _, payload := range replayed {
+					wsConn.Send(payload)
+				}
+			}
+		}
+	}
 
 	h.logger.Info("Viewer WebSocket connection established",
 		zap.String("overlay_id", overlayID),

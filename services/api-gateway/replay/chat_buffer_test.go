@@ -1,0 +1,123 @@
+// This file is part of All-Chat.
+// Copyright (C) 2026 caesarakalaeii
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+package replay
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestChatReplayBuffer_AddAndReplayAll(t *testing.T) {
+	client, _ := setupTestRedis(t)
+	defer client.Close()
+
+	buf := NewRedisChatReplayBuffer(client, 5*time.Minute, 500)
+	ctx := context.Background()
+	overlayID := "ov-chat-1"
+
+	t0 := time.Unix(1000, 0).UTC()
+	for i := 0; i < 3; i++ {
+		payload := []byte(fmt.Sprintf(`{"type":"chat_message","data":{"id":"msg-%d"}}`, i))
+		require.NoError(t, buf.Add(ctx, overlayID, payload, t0.Add(time.Duration(i)*time.Second)))
+	}
+
+	got, err := buf.GetSince(ctx, overlayID, 0)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	assert.Contains(t, string(got[0]), `"id":"msg-0"`)
+	assert.Contains(t, string(got[1]), `"id":"msg-1"`)
+	assert.Contains(t, string(got[2]), `"id":"msg-2"`)
+}
+
+func TestChatReplayBuffer_GetSinceFiltersOlder(t *testing.T) {
+	client, _ := setupTestRedis(t)
+	defer client.Close()
+
+	buf := NewRedisChatReplayBuffer(client, 5*time.Minute, 500)
+	ctx := context.Background()
+	overlayID := "ov-chat-2"
+
+	t0 := time.Unix(2000, 0).UTC()
+	for i := 0; i < 5; i++ {
+		payload := []byte(fmt.Sprintf(`{"id":"%d"}`, i))
+		require.NoError(t, buf.Add(ctx, overlayID, payload, t0.Add(time.Duration(i)*time.Second)))
+	}
+
+	// Ask for messages strictly after the second message's timestamp (i=1).
+	since := t0.Add(1 * time.Second).UnixMilli()
+	got, err := buf.GetSince(ctx, overlayID, since)
+	require.NoError(t, err)
+	require.Len(t, got, 3, "should return msgs 2,3,4 — exclusive lower bound drops msg 1")
+}
+
+func TestChatReplayBuffer_DuplicateMillisecondsBothPreserved(t *testing.T) {
+	client, _ := setupTestRedis(t)
+	defer client.Close()
+
+	buf := NewRedisChatReplayBuffer(client, 5*time.Minute, 500)
+	ctx := context.Background()
+	overlayID := "ov-chat-3"
+
+	// Two messages at the same ms but different ns — both should be retained.
+	base := time.Date(2026, 5, 15, 0, 0, 0, 100_000, time.UTC)
+	require.NoError(t, buf.Add(ctx, overlayID, []byte(`{"id":"a"}`), base))
+	require.NoError(t, buf.Add(ctx, overlayID, []byte(`{"id":"b"}`), base.Add(500*time.Nanosecond)))
+
+	got, err := buf.GetSince(ctx, overlayID, 0)
+	require.NoError(t, err)
+	assert.Len(t, got, 2, "both messages at the same ms should be preserved via nanosecond suffix")
+}
+
+func TestChatReplayBuffer_TrimsToMaxEntries(t *testing.T) {
+	client, _ := setupTestRedis(t)
+	defer client.Close()
+
+	const cap = 3
+	buf := NewRedisChatReplayBuffer(client, 5*time.Minute, cap)
+	ctx := context.Background()
+	overlayID := "ov-chat-4"
+
+	t0 := time.Unix(3000, 0).UTC()
+	for i := 0; i < 10; i++ {
+		payload := []byte(fmt.Sprintf(`{"id":"%d"}`, i))
+		require.NoError(t, buf.Add(ctx, overlayID, payload, t0.Add(time.Duration(i)*time.Second)))
+	}
+
+	got, err := buf.GetSince(ctx, overlayID, 0)
+	require.NoError(t, err)
+	require.Len(t, got, cap, "buffer must trim to MaxEntries")
+	// Most recent should remain (ids 7, 8, 9).
+	assert.Contains(t, string(got[0]), `"id":"7"`)
+	assert.Contains(t, string(got[2]), `"id":"9"`)
+}
+
+func TestChatReplayBuffer_EmptyOverlayReturnsNil(t *testing.T) {
+	client, _ := setupTestRedis(t)
+	defer client.Close()
+
+	buf := NewRedisChatReplayBuffer(client, 5*time.Minute, 500)
+	ctx := context.Background()
+
+	got, err := buf.GetSince(ctx, "no-such-overlay", 0)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
