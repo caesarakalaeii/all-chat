@@ -149,6 +149,29 @@ func main() {
 	replayBuffer := replay.NewRedisDeletionReplayBuffer(redisClient, 60*time.Second)
 	log.Info("Initialized deletion replay buffer", zap.Duration("ttl", 60*time.Second))
 
+	// Initialize chat replay buffer.
+	// Sliding window covers brief WebSocket disconnects so reconnecting clients
+	// receive messages that arrived while their socket was down. TTL matches the
+	// youtube-listener demand-stop debounce so a hiccup ≤5min produces no gap.
+	// MaxEntries caps memory at ~500 messages per overlay (well below Redis
+	// memory pressure even with hundreds of active overlays).
+	chatReplayTTL := 5 * time.Minute
+	if envVal := os.Getenv("CHAT_REPLAY_TTL_SECONDS"); envVal != "" {
+		if seconds, err := strconv.Atoi(envVal); err == nil && seconds > 0 {
+			chatReplayTTL = time.Duration(seconds) * time.Second
+		}
+	}
+	chatReplayMax := 500
+	if envVal := os.Getenv("CHAT_REPLAY_MAX_ENTRIES"); envVal != "" {
+		if n, err := strconv.Atoi(envVal); err == nil && n > 0 {
+			chatReplayMax = n
+		}
+	}
+	chatReplayBuffer := replay.NewRedisChatReplayBuffer(redisClient, chatReplayTTL, chatReplayMax)
+	log.Info("Initialized chat replay buffer",
+		zap.Duration("ttl", chatReplayTTL),
+		zap.Int("max_entries", chatReplayMax))
+
 	// Create WebSocket health checker for state reconciliation
 	healthChecker := wsconn.NewHealthChecker(wsManager, redisClient, log, gatewayMetrics)
 	healthChecker.Start()
@@ -231,6 +254,17 @@ func main() {
 			return
 		}
 
+		// Store in replay buffer FIRST, then broadcast. Ordering matters: if a
+		// client reconnects after the broadcast but before the Add returns, we
+		// want them to see the message via replay rather than miss it entirely.
+		// Best-effort: log on error but never block broadcast.
+		if err := chatReplayBuffer.Add(context.Background(), overlayID, wsJSON, wsMsg.Timestamp); err != nil {
+			log.Warn("Failed to add message to chat replay buffer",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		}
+
 		// Broadcast wrapped message to all connections in this overlay
 		count := wsManager.BroadcastToOverlay(overlayID, wsJSON)
 		log.Debug("Broadcast message to overlay",
@@ -243,7 +277,8 @@ func main() {
 			gatewayMetrics.RecordMessageSent("api-gateway", overlayID, "success")
 		}
 		if count == 0 {
-			gatewayMetrics.RecordMessageDropped("api-gateway", "no_clients")
+			// Not dropped — buffered for replay on next reconnect.
+			gatewayMetrics.RecordMessageDropped("api-gateway", "buffered_no_clients")
 		}
 	}
 
@@ -292,7 +327,7 @@ func main() {
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
 	avatarProxyHandler := handlers.NewAvatarProxyHandler(redisClient, log)
 	statsHandler := handlers.NewStatsHandler(redisClient)
-	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, statusSubscriber, userKeyChain, replayBuffer, log)
+	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, statusSubscriber, userKeyChain, replayBuffer, chatReplayBuffer, log)
 
 	// Create viewer WebSocket handler (same origin policy as owner handler)
 	viewerWsHandler := handlers.NewViewerWebSocketHandler(
@@ -301,6 +336,7 @@ func main() {
 		subRepo,
 		userKeyChain,
 		replayBuffer,
+		chatReplayBuffer,
 		log,
 	)
 

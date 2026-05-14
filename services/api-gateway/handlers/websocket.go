@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +35,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// parseSinceQuery parses the ?since=<ms-epoch> query parameter. Returns 0 if
+// the value is missing, empty, malformed, or non-positive — meaning "replay
+// the entire buffer".
+func parseSinceQuery(raw string) int64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || v < 0 {
+		return 0
+	}
+	return v
+}
+
 // WebSocketHandler handles WebSocket connections for overlays
 type WebSocketHandler struct {
 	wsManager        *wsconn.Manager
@@ -42,6 +58,7 @@ type WebSocketHandler struct {
 	statusSubscriber *subscription.StatusSubscriber
 	userKeyChain     *auth.KeyChain
 	replayBuffer     replay.DeletionReplayBuffer
+	chatReplayBuffer replay.ChatReplayBuffer
 	logger           *zap.Logger
 	upgrader         websocket.Upgrader
 	allowAllOrigins  bool
@@ -57,6 +74,7 @@ func NewWebSocketHandler(
 	statusSubscriber *subscription.StatusSubscriber,
 	userKeyChain *auth.KeyChain,
 	replayBuffer replay.DeletionReplayBuffer,
+	chatReplayBuffer replay.ChatReplayBuffer,
 	logger *zap.Logger,
 ) *WebSocketHandler {
 	allowedOrigins, allowedPrefixes, allowAll := loadAllowedOrigins()
@@ -67,6 +85,7 @@ func NewWebSocketHandler(
 		statusSubscriber: statusSubscriber,
 		userKeyChain:     userKeyChain,
 		replayBuffer:     replayBuffer,
+		chatReplayBuffer: chatReplayBuffer,
 		logger:           logger,
 		allowedOrigins:   allowedOrigins,
 		allowedPrefixes:  allowedPrefixes,
@@ -221,6 +240,30 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 						wsConn.Send(msgJSON)
 					}
 				}
+			}
+		}
+	}
+
+	// Replay any chat messages buffered while no WebSocket was connected.
+	// Clients can pass ?since=<ms-epoch> to skip messages they already saw
+	// (useful for resilient reconnect logic on the client side).
+	if h.chatReplayBuffer != nil {
+		sinceMs := parseSinceQuery(c.Query("since"))
+		replayed, err := h.chatReplayBuffer.GetSince(context.Background(), overlayID, sinceMs)
+		if err != nil {
+			h.logger.Warn("Failed to fetch chat replay buffer",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		} else if len(replayed) > 0 {
+			h.logger.Info("Replaying buffered messages to reconnected client",
+				zap.String("overlay_id", overlayID),
+				zap.String("user_id", userID),
+				zap.Int("message_count", len(replayed)),
+				zap.Int64("since_ms", sinceMs),
+			)
+			for _, payload := range replayed {
+				wsConn.Send(payload)
 			}
 		}
 	}
