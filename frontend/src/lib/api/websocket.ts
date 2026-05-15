@@ -52,6 +52,8 @@ function getWebSocketUrl(): string {
 
 const WS_URL = getWebSocketUrl()
 
+const SEEN_ID_CAPACITY = 1024
+
 export class WebSocketClient {
   private ws: WebSocket | null = null
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
@@ -61,6 +63,23 @@ export class WebSocketClient {
   private overlayId: string = ''
   private token: string = ''
   private lastSeenTimestamp: number = 0
+  // Bounded recent-id cache for client-side dedup. Same FIFO eviction as the
+  // overlay page. Catches race-window duplicates the server can't fully
+  // suppress (broadcast-to-closing-conn followed by replay-buffer write).
+  private seenIds: Set<string> = new Set()
+  private seenOrder: string[] = []
+
+  private markIdSeen(id: string): boolean {
+    if (!id) return false
+    if (this.seenIds.has(id)) return true
+    this.seenIds.add(id)
+    this.seenOrder.push(id)
+    if (this.seenOrder.length > SEEN_ID_CAPACITY) {
+      const evicted = this.seenOrder.shift()
+      if (evicted) this.seenIds.delete(evicted)
+    }
+    return false
+  }
 
   /**
    * Connect to WebSocket for a specific overlay
@@ -76,7 +95,12 @@ export class WebSocketClient {
       this.lastSeenTimestamp = parseInt(storedTimestamp, 10)
     }
 
-    const url = `${WS_URL}/ws/overlay/${overlayId}?token=${token}`
+    // Pass ?since= so the server's replay buffer flushes only the messages
+    // we haven't already rendered (server uses an exclusive lower bound).
+    let url = `${WS_URL}/ws/overlay/${overlayId}?token=${token}`
+    if (this.lastSeenTimestamp > 0) {
+      url += `&since=${this.lastSeenTimestamp}`
+    }
     console.log('[WebSocket] Connecting to:', url)
 
     this.ws = new WebSocket(url)
@@ -84,22 +108,8 @@ export class WebSocketClient {
     this.ws.onopen = () => {
       console.log('[WebSocket] Connected')
       this.reconnectAttempts = 0
-
-      // Request replay if reconnecting (not first connect)
-      if (this.lastSeenTimestamp > 0) {
-        const replayRequest = {
-          type: 'replay_request',
-          data: {
-            since: this.lastSeenTimestamp,
-          },
-          timestamp: new Date().toISOString(),
-        }
-        this.ws?.send(JSON.stringify(replayRequest))
-        console.log(
-          '[WebSocket] Requested deletion replay since:',
-          new Date(this.lastSeenTimestamp)
-        )
-      }
+      // No in-band replay_request: server handles replay via ?since= during
+      // the connect handshake.
     }
 
     this.ws.onmessage = (event) => {
@@ -107,8 +117,18 @@ export class WebSocketClient {
         const wsMessage: WebSocketMessage = JSON.parse(event.data)
 
         if (wsMessage.type === 'chat_message' && wsMessage.data) {
-          // Notify all listeners (type narrowing: only ChatMessage in this branch)
-          this.messageCallbacks.forEach((cb) => cb(wsMessage.data as ChatMessage))
+          const chat = wsMessage.data as ChatMessage
+          if (this.markIdSeen(chat.id)) {
+            // Already rendered — drop duplicate.
+            return
+          }
+          // Advance the lastSeen watermark so future reconnects skip this msg.
+          const tsMs = Date.parse(chat.timestamp)
+          if (Number.isFinite(tsMs) && tsMs > this.lastSeenTimestamp) {
+            this.lastSeenTimestamp = tsMs
+            try { localStorage.setItem(storageKey, String(tsMs)) } catch {}
+          }
+          this.messageCallbacks.forEach((cb) => cb(chat))
         } else if (wsMessage.type === 'ping') {
           // Respond to server ping
           this.ws?.send(

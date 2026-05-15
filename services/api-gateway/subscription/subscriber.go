@@ -19,6 +19,8 @@ package subscription
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -32,7 +34,14 @@ import (
 // channel parameter allows distinguishing between main and update channels
 type MessageHandler func(overlayID string, channel string, message []byte)
 
-// Subscriber manages Redis Pub/Sub subscriptions for overlays
+// Subscriber manages Redis Pub/Sub subscriptions for overlays.
+//
+// Subscription lifetime is decoupled from connection lifetime: when the last
+// connection for an overlay drops, the Pub/Sub subscription is held open for
+// lingerDuration (default 5 min) so messages arriving during the disconnect
+// gap continue to flow into the chat replay buffer for replay on reconnect.
+// If a new connection arrives within the window, the linger timer is cancelled
+// and the existing subscription is reused — no break in capture.
 type Subscriber struct {
 	client        *redis.Client
 	logger        *zap.Logger
@@ -43,25 +52,126 @@ type Subscriber struct {
 	// viewerOnly tracks whether each subscription was created by SubscribeViewerOnly
 	// (single main channel) vs Subscribe (main + updates channels)
 	viewerOnly map[string]bool
-	mu         sync.RWMutex
-	stopChan   chan struct{}
-	wg         sync.WaitGroup
+	// lingerTimers holds pending deferred-close timers. A non-nil entry means
+	// refCount is 0 but the subscription is intentionally kept alive to capture
+	// messages for the chat replay buffer during a connection gap.
+	lingerTimers   map[string]*time.Timer
+	lingerDuration time.Duration
+	mu             sync.RWMutex
+	stopChan       chan struct{}
+	wg             sync.WaitGroup
 }
+
+// defaultLingerDuration is how long we keep a Pub/Sub subscription alive after
+// the last WebSocket connection drops, so messages arriving during a brief
+// disconnect are captured by the replay buffer and replayed on reconnect.
+// Must match the chat replay buffer's TTL.
+const defaultLingerDuration = 5 * time.Minute
 
 // NewSubscriber creates a new Redis Pub/Sub subscriber.
 // The metrics parameter may be nil; if provided, pubsub_reconnect_total is incremented
 // on each Pub/Sub reconnect attempt.
+//
+// PUBSUB_LINGER_SECONDS env var overrides the default 5-minute linger window.
+// Set to 0 to disable lingering (revert to immediate unsubscribe).
 func NewSubscriber(client *redis.Client, logger *zap.Logger, handler MessageHandler, m *metrics.GatewayMetrics) *Subscriber {
-	return &Subscriber{
-		client:        client,
-		logger:        logger,
-		handler:       handler,
-		metrics:       m,
-		subscriptions: make(map[string]*redis.PubSub),
-		refCounts:     make(map[string]int),
-		viewerOnly:    make(map[string]bool),
-		stopChan:      make(chan struct{}),
+	linger := defaultLingerDuration
+	if v := os.Getenv("PUBSUB_LINGER_SECONDS"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
+			linger = time.Duration(secs) * time.Second
+		}
 	}
+	logger.Info("Subscriber initialised", zap.Duration("linger", linger))
+	return &Subscriber{
+		client:         client,
+		logger:         logger,
+		handler:        handler,
+		metrics:        m,
+		subscriptions:  make(map[string]*redis.PubSub),
+		refCounts:      make(map[string]int),
+		viewerOnly:     make(map[string]bool),
+		lingerTimers:   make(map[string]*time.Timer),
+		lingerDuration: linger,
+		stopChan:       make(chan struct{}),
+	}
+}
+
+// cancelLingerLocked cancels any pending linger timer for overlayID.
+// Caller MUST hold s.mu.
+func (s *Subscriber) cancelLingerLocked(overlayID string) {
+	if timer, exists := s.lingerTimers[overlayID]; exists {
+		timer.Stop()
+		delete(s.lingerTimers, overlayID)
+		s.logger.Debug("Cancelled pending pubsub linger close",
+			zap.String("overlay_id", overlayID))
+	}
+}
+
+// scheduleLingerCloseLocked schedules a deferred unsubscribe. Caller MUST hold s.mu.
+// If lingerDuration is 0, closes immediately (legacy behaviour).
+func (s *Subscriber) scheduleLingerCloseLocked(overlayID string) {
+	if s.lingerDuration <= 0 {
+		// Lingering disabled — close right now.
+		s.closeSubscriptionLocked(overlayID)
+		return
+	}
+	// Cancel any older timer so we don't double-fire.
+	if old, exists := s.lingerTimers[overlayID]; exists {
+		old.Stop()
+	}
+	timer := time.AfterFunc(s.lingerDuration, func() {
+		s.fireLingerClose(overlayID)
+	})
+	s.lingerTimers[overlayID] = timer
+	s.logger.Info("Last connection dropped — keeping pubsub open during linger window",
+		zap.String("overlay_id", overlayID),
+		zap.Duration("linger", s.lingerDuration))
+}
+
+// fireLingerClose runs in a timer goroutine. Re-checks refCount under lock —
+// a connection that arrived after the timer fired but before we acquired the
+// lock will have already cancelled the timer (so we wouldn't be here), so
+// when we see refCount == 0 here we can safely close.
+func (s *Subscriber) fireLingerClose(overlayID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Has the timer been cancelled? Map entry will be gone if so.
+	if _, exists := s.lingerTimers[overlayID]; !exists {
+		return
+	}
+	delete(s.lingerTimers, overlayID)
+
+	// Re-check refCount: a new connection could have arrived while we were
+	// waiting for the lock and bumped the count back above 0. In that case
+	// the new Subscribe would have cancelled the timer (clearing the map
+	// entry above), so reaching here means the count is genuinely 0.
+	if s.refCounts[overlayID] > 0 {
+		s.logger.Debug("Skipping linger close: connection arrived",
+			zap.String("overlay_id", overlayID),
+			zap.Int("ref_count", s.refCounts[overlayID]))
+		return
+	}
+
+	s.logger.Info("Linger window expired — closing pubsub subscription",
+		zap.String("overlay_id", overlayID))
+	s.closeSubscriptionLocked(overlayID)
+}
+
+// closeSubscriptionLocked closes and removes the subscription for overlayID.
+// Caller MUST hold s.mu.
+func (s *Subscriber) closeSubscriptionLocked(overlayID string) {
+	pubsub, exists := s.subscriptions[overlayID]
+	if !exists {
+		return
+	}
+	if err := pubsub.Close(); err != nil {
+		s.logger.Warn("Error closing subscription",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err))
+	}
+	delete(s.subscriptions, overlayID)
+	delete(s.viewerOnly, overlayID)
 }
 
 // Subscribe subscribes to an overlay channel
@@ -72,6 +182,11 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 
 	// Increment reference count
 	s.refCounts[overlayID]++
+
+	// If a linger timer is pending for this overlay, the subscription is still
+	// alive — cancel the timer and reuse it. This is the reconnect-within-window
+	// fast path: no Pub/Sub re-subscribe, no message loss between drops.
+	s.cancelLingerLocked(overlayID)
 
 	// If already subscribed, just return
 	if _, exists := s.subscriptions[overlayID]; exists {
@@ -110,8 +225,10 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 	return nil
 }
 
-// Unsubscribe unsubscribes from an overlay channel
-// Decrements reference count, only unsubscribes when count reaches 0
+// Unsubscribe unsubscribes from an overlay channel.
+// Decrements reference count; when count hits zero, schedules a deferred close
+// (lingerDuration) so the Pub/Sub subscription stays alive long enough to
+// capture messages for the replay buffer during a brief disconnect.
 func (s *Subscriber) Unsubscribe(ctx context.Context, overlayID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -140,26 +257,15 @@ func (s *Subscriber) Unsubscribe(ctx context.Context, overlayID string) error {
 	// Remove from ref counts
 	delete(s.refCounts, overlayID)
 
-	// Get subscription
-	pubsub, exists := s.subscriptions[overlayID]
-	if !exists {
+	// No subscription? Nothing to do.
+	if _, exists := s.subscriptions[overlayID]; !exists {
 		return nil
 	}
 
-	// Unsubscribe
-	if err := pubsub.Close(); err != nil {
-		s.logger.Warn("Error closing subscription",
-			zap.String("overlay_id", overlayID),
-			zap.Error(err),
-		)
-	}
-
-	delete(s.subscriptions, overlayID)
-	delete(s.viewerOnly, overlayID)
-
-	s.logger.Info("Unsubscribed from overlay channel",
-		zap.String("overlay_id", overlayID),
-	)
+	// Schedule deferred close — keep capturing messages for the buffer during
+	// the linger window. If a connection arrives within the window, the timer
+	// is cancelled and the subscription is reused.
+	s.scheduleLingerCloseLocked(overlayID)
 
 	return nil
 }
@@ -167,6 +273,9 @@ func (s *Subscriber) Unsubscribe(ctx context.Context, overlayID string) error {
 // listen listens for messages on a subscription.
 // When the channel is closed (ok == false), it triggers resubscribe() in a new
 // goroutine and returns so the WaitGroup counter is decremented correctly.
+// If the subscription was closed intentionally (linger window expired or Stop
+// called), we detect that by checking whether the overlay is still in the
+// subscriptions map and exit without re-subscribing.
 func (s *Subscriber) listen(ctx context.Context, overlayID string, pubsub *redis.PubSub) {
 	defer s.wg.Done()
 
@@ -180,7 +289,18 @@ func (s *Subscriber) listen(ctx context.Context, overlayID string, pubsub *redis
 			return
 		case msg, ok := <-ch:
 			if !ok {
-				// AG-01: Channel closed — trigger re-subscription.
+				// Was the close intentional (linger expired / Stop called)?
+				// If our pubsub object is no longer in the map, yes — give up.
+				s.mu.RLock()
+				current, stillTracked := s.subscriptions[overlayID]
+				s.mu.RUnlock()
+				if !stillTracked || current != pubsub {
+					s.logger.Debug("Listen goroutine exiting after intentional close",
+						zap.String("overlay_id", overlayID))
+					return
+				}
+
+				// AG-01: Unexpected channel close — trigger re-subscription.
 				// The new goroutine adds itself to wg before this one exits (AG-05).
 				s.logger.Warn("Subscription channel closed — re-subscribing",
 					zap.String("overlay_id", overlayID),
@@ -287,6 +407,10 @@ func (s *Subscriber) Stop() {
 	close(s.stopChan)
 
 	s.mu.Lock()
+	for overlayID, timer := range s.lingerTimers {
+		timer.Stop()
+		delete(s.lingerTimers, overlayID)
+	}
 	for overlayID, pubsub := range s.subscriptions {
 		pubsub.Close()
 		s.logger.Info("Closed subscription",
@@ -336,6 +460,9 @@ func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) 
 	// Increment reference count
 	s.refCounts[overlayID]++
 
+	// Cancel any pending linger close — we're reusing the subscription.
+	s.cancelLingerLocked(overlayID)
+
 	// If already subscribed, just return (shared subscription)
 	if _, exists := s.subscriptions[overlayID]; exists {
 		s.logger.Debug("Already subscribed to overlay (viewer connection)",
@@ -370,7 +497,9 @@ func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) 
 }
 
 // UnsubscribeViewerOnly unsubscribes from an overlay channel (viewer connection)
-// Same as Unsubscribe() but does NOT publish disconnection events
+// Same as Unsubscribe() but does NOT publish disconnection events.
+// Honours the same linger window so messages keep flowing into the replay
+// buffer while the viewer reconnects.
 func (s *Subscriber) UnsubscribeViewerOnly(ctx context.Context, overlayID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -399,26 +528,13 @@ func (s *Subscriber) UnsubscribeViewerOnly(ctx context.Context, overlayID string
 	// Remove from ref counts
 	delete(s.refCounts, overlayID)
 
-	// Get subscription
-	pubsub, exists := s.subscriptions[overlayID]
-	if !exists {
+	// No subscription? Nothing to do.
+	if _, exists := s.subscriptions[overlayID]; !exists {
 		return nil
 	}
 
-	// Unsubscribe
-	if err := pubsub.Close(); err != nil {
-		s.logger.Warn("Error closing subscription (viewer)",
-			zap.String("overlay_id", overlayID),
-			zap.Error(err),
-		)
-	}
-
-	delete(s.subscriptions, overlayID)
-	delete(s.viewerOnly, overlayID)
-
-	s.logger.Info("Unsubscribed from overlay channel (viewer-only)",
-		zap.String("overlay_id", overlayID),
-	)
+	// Defer the actual close so messages keep landing in the replay buffer.
+	s.scheduleLingerCloseLocked(overlayID)
 
 	return nil
 }

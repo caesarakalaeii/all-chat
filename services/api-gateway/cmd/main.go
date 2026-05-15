@@ -188,8 +188,10 @@ func main() {
 		}
 
 		// Check if this is a deletion event for replay buffer
-		// Parse the message to detect deletion events
+		// Parse the message to detect deletion events and to extract the stable
+		// message ID used for cross-pod buffer dedup.
 		var unifiedMsg struct {
+			ID       string `json:"id"`
 			Platform string `json:"platform"`
 			Event    *struct {
 				Type     string                 `json:"type"`
@@ -266,19 +268,25 @@ func main() {
 			gatewayMetrics.RecordMessageSent("api-gateway", overlayID, "success")
 		}
 
-		// Only buffer messages when there are no live connections.
-		// If at least one connection received the message live, replaying it on
-		// reconnect would just duplicate what the client already has. The buffer
-		// is exclusively for messages that arrived during a connection gap, so
-		// reconnecting clients see a strict superset of what they had — no overlap.
+		// Buffer when there are no live connections on this pod, regardless of
+		// whether another replica has a live connection. The pod-local Pub/Sub
+		// subscription lingers for a window after the last connection drops, so
+		// messages keep flowing into the buffer while the client reconnects.
+		// AddOnce uses a stable per-message SETNX marker so multi-pod writes
+		// converge on a single buffer entry — no cross-pod duplicates.
 		if count == 0 {
-			if err := chatReplayBuffer.Add(context.Background(), overlayID, wsJSON, wsMsg.Timestamp); err != nil {
+			added, err := chatReplayBuffer.AddOnce(context.Background(), overlayID, unifiedMsg.ID, wsJSON, wsMsg.Timestamp)
+			if err != nil {
 				log.Warn("Failed to add message to chat replay buffer",
 					zap.String("overlay_id", overlayID),
 					zap.Error(err),
 				)
 			}
-			gatewayMetrics.RecordMessageDropped("api-gateway", "buffered_no_clients")
+			if added {
+				gatewayMetrics.RecordMessageDropped("api-gateway", "buffered_no_clients")
+			} else {
+				gatewayMetrics.RecordMessageDropped("api-gateway", "buffered_dedup_skip")
+			}
 		}
 	}
 
