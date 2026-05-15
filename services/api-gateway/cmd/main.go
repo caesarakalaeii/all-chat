@@ -254,18 +254,7 @@ func main() {
 			return
 		}
 
-		// Store in replay buffer FIRST, then broadcast. Ordering matters: if a
-		// client reconnects after the broadcast but before the Add returns, we
-		// want them to see the message via replay rather than miss it entirely.
-		// Best-effort: log on error but never block broadcast.
-		if err := chatReplayBuffer.Add(context.Background(), overlayID, wsJSON, wsMsg.Timestamp); err != nil {
-			log.Warn("Failed to add message to chat replay buffer",
-				zap.String("overlay_id", overlayID),
-				zap.Error(err),
-			)
-		}
-
-		// Broadcast wrapped message to all connections in this overlay
+		// Broadcast wrapped message to all live connections in this overlay.
 		count := wsManager.BroadcastToOverlay(overlayID, wsJSON)
 		log.Debug("Broadcast message to overlay",
 			zap.String("overlay_id", overlayID),
@@ -276,8 +265,19 @@ func main() {
 		for i := 0; i < count; i++ {
 			gatewayMetrics.RecordMessageSent("api-gateway", overlayID, "success")
 		}
+
+		// Only buffer messages when there are no live connections.
+		// If at least one connection received the message live, replaying it on
+		// reconnect would just duplicate what the client already has. The buffer
+		// is exclusively for messages that arrived during a connection gap, so
+		// reconnecting clients see a strict superset of what they had — no overlap.
 		if count == 0 {
-			// Not dropped — buffered for replay on next reconnect.
+			if err := chatReplayBuffer.Add(context.Background(), overlayID, wsJSON, wsMsg.Timestamp); err != nil {
+				log.Warn("Failed to add message to chat replay buffer",
+					zap.String("overlay_id", overlayID),
+					zap.Error(err),
+				)
+			}
 			gatewayMetrics.RecordMessageDropped("api-gateway", "buffered_no_clients")
 		}
 	}
