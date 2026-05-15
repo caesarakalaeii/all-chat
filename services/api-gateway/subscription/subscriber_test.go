@@ -39,6 +39,9 @@ func newTestSubscriber(t *testing.T, addr string) (*Subscriber, *metrics.Gateway
 	m := metrics.NewGatewayMetricsForTest()
 	handler := func(overlayID, channel string, message []byte) {}
 	sub := NewSubscriber(client, logger, handler, m)
+	// Disable Pub/Sub lingering for legacy ref-count tests: they assert immediate
+	// teardown on refCount==0. Lingering behaviour is covered by dedicated tests.
+	sub.lingerDuration = 0
 	return sub, m
 }
 
@@ -303,6 +306,129 @@ func TestSubscriberResubscribeSucceedsOnSecondAttempt(t *testing.T) {
 	_, exists := sub.subscriptions[overlayID]
 	sub.mu.RUnlock()
 	assert.True(t, exists, "should have a subscription after successful retry")
+
+	sub.Stop()
+}
+
+// newTestSubscriberWithLinger is like newTestSubscriber but lets the test
+// configure the Pub/Sub linger window. Linger behaviour is the production path
+// (kept open for reconnect), so we exercise it explicitly here.
+func newTestSubscriberWithLinger(t *testing.T, addr string, linger time.Duration) *Subscriber {
+	t.Helper()
+	client := redis.NewClient(&redis.Options{Addr: addr})
+	t.Cleanup(func() { client.Close() })
+	logger := zap.NewNop()
+	m := metrics.NewGatewayMetricsForTest()
+	handler := func(overlayID, channel string, message []byte) {}
+	sub := NewSubscriber(client, logger, handler, m)
+	sub.lingerDuration = linger
+	return sub
+}
+
+// TestSubscriberLinger_KeepsSubscriptionAliveWhenRefCountHitsZero verifies
+// that after the last connection drops, the subscription is held open for
+// the linger window so messages keep flowing into the replay buffer.
+func TestSubscriberLinger_KeepsSubscriptionAliveWhenRefCountHitsZero(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	// 5-second linger so the test runs quickly while still proving the behaviour.
+	sub := newTestSubscriberWithLinger(t, mr.Addr(), 5*time.Second)
+	ctx := context.Background()
+
+	var mu sync.Mutex
+	received := []string{}
+	sub.handler = func(overlayID, channel string, message []byte) {
+		mu.Lock()
+		received = append(received, string(message))
+		mu.Unlock()
+	}
+
+	overlayID := "overlay-linger"
+	require.NoError(t, sub.Subscribe(ctx, overlayID))
+
+	// Drop the last ref — Pub/Sub must stay alive.
+	require.NoError(t, sub.Unsubscribe(ctx, overlayID))
+	assert.True(t, sub.IsSubscribed(overlayID),
+		"subscription must remain alive during linger window")
+
+	// A message published *after* refCount hit zero must still reach the handler.
+	mr.Publish("overlay:"+overlayID, "captured-during-linger")
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, m := range received {
+			if m == "captured-during-linger" {
+				return true
+			}
+		}
+		return false
+	}, 2*time.Second, 25*time.Millisecond,
+		"message published during linger must be captured by handler")
+
+	sub.Stop()
+}
+
+// TestSubscriberLinger_ResubscribeCancelsTimer verifies the reconnect-within-
+// window path: when a new Subscribe arrives during the linger window, the
+// pending close is cancelled and the existing subscription is reused (same
+// pubsub object, no Pub/Sub re-subscribe).
+func TestSubscriberLinger_ResubscribeCancelsTimer(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	sub := newTestSubscriberWithLinger(t, mr.Addr(), 10*time.Second)
+	ctx := context.Background()
+
+	overlayID := "overlay-relinger"
+	require.NoError(t, sub.Subscribe(ctx, overlayID))
+
+	sub.mu.RLock()
+	original := sub.subscriptions[overlayID]
+	sub.mu.RUnlock()
+
+	require.NoError(t, sub.Unsubscribe(ctx, overlayID))
+
+	sub.mu.RLock()
+	_, hasTimer := sub.lingerTimers[overlayID]
+	sub.mu.RUnlock()
+	require.True(t, hasTimer, "linger timer must be scheduled after refCount==0")
+
+	// Reconnect within the window.
+	require.NoError(t, sub.Subscribe(ctx, overlayID))
+
+	sub.mu.RLock()
+	_, hasTimerAfterReconnect := sub.lingerTimers[overlayID]
+	current := sub.subscriptions[overlayID]
+	sub.mu.RUnlock()
+
+	assert.False(t, hasTimerAfterReconnect, "linger timer must be cancelled when reconnecting")
+	assert.Same(t, original, current, "subscription must be reused, not re-created")
+
+	sub.Stop()
+}
+
+// TestSubscriberLinger_FiresAfterWindow verifies the close-after-timeout
+// path: if no reconnect happens within the window, the subscription is closed.
+func TestSubscriberLinger_FiresAfterWindow(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	// Very short linger so the test stays fast.
+	sub := newTestSubscriberWithLinger(t, mr.Addr(), 200*time.Millisecond)
+	ctx := context.Background()
+
+	overlayID := "overlay-linger-fires"
+	require.NoError(t, sub.Subscribe(ctx, overlayID))
+	require.NoError(t, sub.Unsubscribe(ctx, overlayID))
+
+	require.Eventually(t, func() bool {
+		return !sub.IsSubscribed(overlayID)
+	}, 2*time.Second, 25*time.Millisecond,
+		"subscription must be closed after linger window expires")
 
 	sub.Stop()
 }

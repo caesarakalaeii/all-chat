@@ -157,6 +157,27 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // Keep a ref so the WebSocket onmessage closure always sees the latest value
   // without maxMessages needing to be in the WebSocket effect dependency array.
   const maxMessagesRef = useRef<number>(50);
+  // Bounded set of recently-seen message IDs. Used to drop duplicates that
+  // can appear when a reconnect-replay overlaps with a message we already
+  // rendered live (race between Pub/Sub broadcast and replay-buffer write).
+  // FIFO eviction caps memory at SEEN_ID_CAPACITY entries.
+  const SEEN_ID_CAPACITY = 1024;
+  const seenMessageIdsRef = useRef<{ set: Set<string>; order: string[] }>({
+    set: new Set(),
+    order: [],
+  });
+  const markIdSeen = (messageId: string): boolean => {
+    if (!messageId) return false; // can't dedup without an id
+    const cache = seenMessageIdsRef.current;
+    if (cache.set.has(messageId)) return true;
+    cache.set.add(messageId);
+    cache.order.push(messageId);
+    if (cache.order.length > SEEN_ID_CAPACITY) {
+      const evicted = cache.order.shift();
+      if (evicted) cache.set.delete(evicted);
+    }
+    return false;
+  };
 
   // Keep filterSettingsRef in sync so the ws.onmessage closure always reads the latest value
   useEffect(() => {
@@ -391,16 +412,25 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
   // Initialize WebSocket connection (no auth required)
   useEffect(() => {
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/overlay/${id}`;
-
-    console.log('[OBS Overlay] Connecting to:', wsUrl, reconnectAttempts ? `(attempt ${reconnectAttempts + 1})` : '');
-
-    // Load last seen timestamp from localStorage (survives page reload)
+    // Load last seen timestamp from localStorage (survives page reload).
+    // Must happen before constructing the URL so ?since= is in the handshake.
     const storageKey = `ws_last_seen_${id}`;
     const storedTimestamp = localStorage.getItem(storageKey);
     if (storedTimestamp) {
       lastSeenTimestampRef.current = parseInt(storedTimestamp, 10);
     }
+
+    // Server-side replay buffer keys on ?since=<ms-epoch>. Passing it in the
+    // URL means messages buffered while the WebSocket was down are flushed to
+    // us immediately after the `connected` handshake, before any new live
+    // messages arrive.
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    let wsUrl = `${protocol}//${window.location.host}/ws/overlay/${id}`;
+    if (lastSeenTimestampRef.current > 0) {
+      wsUrl += `?since=${lastSeenTimestampRef.current}`;
+    }
+
+    console.log('[OBS Overlay] Connecting to:', wsUrl, reconnectAttempts ? `(attempt ${reconnectAttempts + 1})` : '');
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -410,18 +440,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       // Reset reconnection attempts on successful connection
       setReconnectAttempts(0);
 
-      // Request replay if reconnecting (not first connect)
-      if (lastSeenTimestampRef.current > 0) {
-        const replayRequest = {
-          type: 'replay_request',
-          data: {
-            since: lastSeenTimestampRef.current,
-          },
-          timestamp: new Date().toISOString(),
-        };
-        ws.send(JSON.stringify(replayRequest));
-        console.log('[OBS Overlay] Requested deletion replay since:', new Date(lastSeenTimestampRef.current));
-      }
+      // Note: the legacy `replay_request` JSON message is intentionally not
+      // sent here. The server now performs replay during the connect handshake
+      // based on the ?since= query param (see URL construction above), so an
+      // additional in-band request would be redundant.
     };
 
     ws.onmessage = async (event) => {
@@ -509,6 +531,25 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         // Handle chat messages and events
         if (envelope.type === 'chat_message' && envelope.data) {
           let message: ChatMessage = envelope.data;
+
+          // Dedup by stable message id — guards against the rare race where a
+          // message is both broadcast live to a closing connection and buffered
+          // for replay. The server SETNX-dedups across pods; this is the final
+          // safety net at render time.
+          if (markIdSeen(message.id)) {
+            console.debug('[OBS Overlay] Dropping duplicate message', message.id);
+            return;
+          }
+
+          // Track this message's wall-clock time so the next reconnect's
+          // ?since= skips everything we already rendered. Persist to
+          // localStorage so reloads keep the same skip point.
+          const tsMs = Date.parse(message.timestamp);
+          if (Number.isFinite(tsMs) && tsMs > lastSeenTimestampRef.current) {
+            lastSeenTimestampRef.current = tsMs;
+            try { localStorage.setItem(`ws_last_seen_${id}`, String(tsMs)); } catch {}
+          }
+
           message = await resolveTwitchBadgeIcons(message);
           message = sortMessageBadges(message);
           if (message.user?.name_gradient && typeof message.user.name_gradient === 'string') {
@@ -532,6 +573,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         // Handle message updates (TikTok like aggregates)
         if (envelope.type === 'message_update' && envelope.data) {
           let updatedMessage: ChatMessage = envelope.data;
+
+          // Bump lastSeenTimestamp; aggregate updates carry their own
+          // wall-clock and replaying a stale aggregate just lands as a no-op
+          // visually, but we still want the watermark to advance.
+          const tsMs = Date.parse(updatedMessage.timestamp);
+          if (Number.isFinite(tsMs) && tsMs > lastSeenTimestampRef.current) {
+            lastSeenTimestampRef.current = tsMs;
+            try { localStorage.setItem(`ws_last_seen_${id}`, String(tsMs)); } catch {}
+          }
+
           updatedMessage = await resolveTwitchBadgeIcons(updatedMessage);
           updatedMessage = sortMessageBadges(updatedMessage);
           if (updatedMessage.user?.name_gradient && typeof updatedMessage.user.name_gradient === 'string') {

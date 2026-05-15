@@ -121,3 +121,53 @@ func TestChatReplayBuffer_EmptyOverlayReturnsNil(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
+
+func TestChatReplayBuffer_AddOnceSuppressesDuplicates(t *testing.T) {
+	client, _ := setupTestRedis(t)
+	defer client.Close()
+
+	buf := NewRedisChatReplayBuffer(client, 5*time.Minute, 500)
+	ctx := context.Background()
+	overlayID := "ov-chat-addonce"
+
+	t0 := time.Unix(4000, 0).UTC()
+	payload := []byte(`{"type":"chat_message","data":{"id":"msg-abc"}}`)
+
+	// First pod sees it: should buffer.
+	added, err := buf.AddOnce(ctx, overlayID, "msg-abc", payload, t0)
+	require.NoError(t, err)
+	require.True(t, added)
+
+	// Second pod tries the same id: must be skipped.
+	added, err = buf.AddOnce(ctx, overlayID, "msg-abc", payload, t0.Add(time.Millisecond))
+	require.NoError(t, err)
+	require.False(t, added)
+
+	got, err := buf.GetSince(ctx, overlayID, 0)
+	require.NoError(t, err)
+	require.Len(t, got, 1, "duplicate id must only produce one buffer entry")
+}
+
+func TestChatReplayBuffer_AddOnceEmptyIDFallsBack(t *testing.T) {
+	client, _ := setupTestRedis(t)
+	defer client.Close()
+
+	buf := NewRedisChatReplayBuffer(client, 5*time.Minute, 500)
+	ctx := context.Background()
+	overlayID := "ov-chat-addonce-noid"
+
+	t0 := time.Unix(5000, 0).UTC()
+
+	// Two messages with no stable ID — both should buffer (no dedup possible).
+	added1, err1 := buf.AddOnce(ctx, overlayID, "", []byte(`{"id":"a"}`), t0)
+	require.NoError(t, err1)
+	require.True(t, added1)
+
+	added2, err2 := buf.AddOnce(ctx, overlayID, "", []byte(`{"id":"b"}`), t0.Add(time.Second))
+	require.NoError(t, err2)
+	require.True(t, added2)
+
+	got, err := buf.GetSince(ctx, overlayID, 0)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+}

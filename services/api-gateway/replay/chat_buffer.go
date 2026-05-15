@@ -35,10 +35,25 @@ import (
 //   - Bounded by both TTL (sliding window) and MaxEntries (drop oldest on overflow).
 //   - Buffer is only populated for overlays that currently have a Pub/Sub
 //     subscription, so dormant overlays do not accumulate Redis memory.
+//
+// Cross-pod dedup:
+//   - With multiple api-gateway replicas, every pod that has the Pub/Sub
+//     subscription open will see the same message and try to buffer it.
+//   - AddOnce uses a stable per-message marker (SETNX) so the ZADD only runs
+//     on the first pod to see the message; the rest no-op. This keeps the
+//     buffer free of cross-pod duplicates without coordination.
 type ChatReplayBuffer interface {
 	// Add stores a serialised WSMessage envelope keyed by ms-precision timestamp.
 	// Caller passes the raw JSON bytes that are sent on the wire.
+	// Use AddOnce if you have a stable message ID that should suppress duplicates.
 	Add(ctx context.Context, overlayID string, payload []byte, ts time.Time) error
+
+	// AddOnce is Add gated by a per-message SETNX marker. Returns (true, nil)
+	// if the message was newly buffered, (false, nil) if a prior pod already
+	// buffered the same messageID for the same overlay within the TTL window.
+	// messageID must be a stable, globally unique identifier (e.g. the unified
+	// message UUID published by message-processor).
+	AddOnce(ctx context.Context, overlayID, messageID string, payload []byte, ts time.Time) (bool, error)
 
 	// GetSince returns all buffered envelopes with timestamp > sinceMs.
 	// Pass 0 to fetch the entire buffer.
@@ -72,6 +87,39 @@ func NewRedisChatReplayBuffer(client *redis.Client, ttl time.Duration, maxEntrie
 // chatKey returns the Redis key for a given overlay's chat buffer.
 func chatKey(overlayID string) string {
 	return fmt.Sprintf("replay:chat:%s", overlayID)
+}
+
+// chatSeenKey returns the per-message SETNX marker key used by AddOnce.
+// One key per (overlay, message) pair, expired by the buffer's TTL.
+func chatSeenKey(overlayID, messageID string) string {
+	return fmt.Sprintf("replay:chat:%s:seen:%s", overlayID, messageID)
+}
+
+// AddOnce wraps Add with a SETNX marker keyed on messageID. If the marker
+// already exists (another pod buffered it first), AddOnce returns (false, nil)
+// without modifying the sorted set. Otherwise the marker is set with the same
+// TTL as the buffer, the message is appended, and (true, nil) is returned.
+//
+// Failure to SETNX is treated as "first time, proceed" — preferring the rare
+// duplicate over the worse failure mode of dropping a message under Redis
+// hiccup. The frontend's render-time ID dedup is the final safety net.
+func (b *RedisChatReplayBuffer) AddOnce(ctx context.Context, overlayID, messageID string, payload []byte, ts time.Time) (bool, error) {
+	if messageID == "" {
+		// No stable ID — fall back to unconditional Add.
+		return true, b.Add(ctx, overlayID, payload, ts)
+	}
+
+	seenKey := chatSeenKey(overlayID, messageID)
+	ok, err := b.client.SetNX(ctx, seenKey, "1", b.ttl).Result()
+	if err != nil {
+		// Best-effort dedup; on Redis error proceed as if first-seen.
+		return true, b.Add(ctx, overlayID, payload, ts)
+	}
+	if !ok {
+		// Another pod already buffered this message.
+		return false, nil
+	}
+	return true, b.Add(ctx, overlayID, payload, ts)
 }
 
 // Add appends a payload to the buffer. The score is the millisecond-precision
