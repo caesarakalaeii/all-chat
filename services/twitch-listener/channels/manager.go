@@ -50,9 +50,16 @@ const (
 )
 
 // JoinParterInterface defines the interface for joining/parting channels
-// This allows for mocking in tests
+// This allows for mocking in tests.
+//
+// Join returns true when a JOIN was actually issued on the IRC wire, and false
+// when the call was short-circuited (banned/suspended/invalid-login channel).
+// Callers MUST gate their activeChans bookkeeping on this return value — recording
+// a phantom join when Twitch never received the JOIN causes channels to be
+// permanently treated as "already joined" by subsequent SyncChannels cycles, so
+// no retry ever happens once the ban expires.
 type JoinParterInterface interface {
-	Join(channel string)
+	Join(channel string) bool
 	Depart(channel string)
 }
 
@@ -736,11 +743,33 @@ func (m *Manager) verifyCoverageComplete(ctx context.Context, sourceIDMap map[st
 // exist while the server-side JOIN was never acknowledged. Departing first
 // removes the map entry so the subsequent Join() always sends a real IRC JOIN.
 //
+// activeChans is updated only when the underlying Join() actually reached the
+// wire. When Join() short-circuits (banned/suspended/invalid-login channel),
+// the channel is intentionally left out of activeChans so that the next sync
+// cycle still sees it in toJoin — once the ban expires, isJoinBanned will allow
+// the next attempt through. Without this gate a transient ban (e.g. the 1-hour
+// stuck-JOIN backoff applied during a silently-dead connection) would freeze
+// the channel as "joined-but-not-really" indefinitely.
+//
 // This method acquires m.mu briefly to update activeChans, so it must NOT be
 // called while m.mu is already held.
 func (m *Manager) joinChannel(ctx context.Context, channel string) {
 	m.joinParter.Depart(channel)
-	m.joinParter.Join(channel)
+	joined := m.joinParter.Join(channel)
+
+	if !joined {
+		// Join was short-circuited (banned/suspended/invalid-login). Leave the
+		// channel out of activeChans so the next sync retries it. The IRC layer
+		// has already logged the reason; emit one warning here so operators can
+		// see at the channel-manager level that the channel is being skipped.
+		m.logger.Warn("Channel skipped at IRC layer (banned/suspended); will retry on next sync",
+			zap.String("channel", channel),
+		)
+		if m.metrics != nil {
+			m.metrics.RecordSourceEvent("twitch", "twitch-listener", "join_skipped")
+		}
+		return
+	}
 
 	m.mu.Lock()
 	m.activeChans[channel] = true
@@ -970,7 +999,20 @@ func (m *Manager) joinChannelsMultipleConnectionsUnlocked(ctx context.Context, c
 				break
 			}
 			m.joinParter.Depart(ch) // Clear stale library state
-			m.joinParter.Join(ch)
+
+			// Only record the channel as active when the Join actually reached
+			// the wire. A banned/suspended/invalid-login channel returns false
+			// here and stays out of activeChans so the next sync retries it
+			// once the ban expires. See joinChannel for the full rationale.
+			if !m.joinParter.Join(ch) {
+				m.logger.Warn("Channel skipped at IRC layer (banned/suspended); will retry on next sync",
+					zap.String("channel", ch),
+				)
+				if m.metrics != nil {
+					m.metrics.RecordSourceEvent("twitch", "twitch-listener", "join_skipped")
+				}
+				continue
+			}
 
 			m.mu.Lock()
 			m.activeChans[ch] = true

@@ -194,7 +194,32 @@ const (
 	// active set. Tuned to be larger than the typical "deleted/suspended
 	// channel" cluster (1–4 names per cycle) but well below the population
 	// size that would actually mean the connection is broken.
-	joinAckReconnectThreshold = 10
+	//
+	// Incident 2026-05-19: a zombie connection silently dropped 8 simultaneous
+	// JOINs (caesarlp + 7 others) and the watchdog applied 1-hour transient
+	// bans to all of them because 8 < 10. Combined with a pre-fix bug where
+	// joinChannel set activeChans=true even when Join() was banned, this froze
+	// caesarlp out of chat for 10+ hours until manually toggled. Lowering the
+	// absolute threshold (and adding the fraction check below) keeps the
+	// connection-wide failure mode catchable before per-channel bans pile up.
+	joinAckReconnectThreshold = 5
+
+	// joinAckStuckFractionThreshold is the proportion of currently-pending
+	// JOINs that must be stuck before the watchdog forces a reconnect, even
+	// if the absolute count is below joinAckReconnectThreshold. The intuition
+	// is that a connection-wide failure stalls *most* pending JOINs (because
+	// the wire is silently broken), whereas individual bad channels show as
+	// a small fraction of an otherwise-healthy ack stream. 0.5 means "if
+	// more than half of all pending JOINs are stuck, the connection is the
+	// problem, not the channels".
+	joinAckStuckFractionThreshold = 0.5
+
+	// joinAckMinPendingForFractionCheck guards the fraction heuristic against
+	// false positives when very few JOINs are pending. With only 1–2 in flight
+	// a single stuck entry trivially clears the 50% bar — that case is
+	// indistinguishable from "one bad channel" and should fall through to the
+	// per-channel-ban branch.
+	joinAckMinPendingForFractionCheck = 4
 
 	// joinAckStuckBackoff is how long a stuck-but-otherwise-fine channel is
 	// kept out of bannedChannels. Twitch sometimes silently drops JOINs for
@@ -387,15 +412,24 @@ func (cm *ConnectionManager) Disconnect() error {
 	return nil
 }
 
-// Join joins a Twitch channel.
+// Join joins a Twitch channel and returns true when the JOIN was actually
+// issued on the IRC wire, false when the call was short-circuited.
+//
 // Records the channel as a pending JOIN so the joinAckWatchdog can detect
 // silent failures where Twitch never returns the SELFJOIN ack.
 //
 // Channels in the bannedChannels skip list (populated by handleNotice on
-// JOIN-rejection NOTICEs) are short-circuited: re-attempting them just churns
-// the connection without producing any messages, and historically caused the
-// joinAckWatchdog to enter a reconnect loop.
-func (cm *ConnectionManager) Join(channel string) {
+// JOIN-rejection NOTICEs, the invalid-login filter, or the joinAckWatchdog
+// stuck-channel ban) are short-circuited and return false: re-attempting them
+// just churns the connection without producing any messages, and historically
+// caused the joinAckWatchdog to enter a reconnect loop.
+//
+// The bool return is load-bearing for activeChans bookkeeping in the channel
+// manager — see JoinParterInterface for the contract. Callers that ignore it
+// (and unconditionally mark activeChans[channel] = true) create a phantom-join
+// state that survives across reconnects and prevents the channel from ever
+// being retried, even after the ban expires.
+func (cm *ConnectionManager) Join(channel string) bool {
 	lower := strings.ToLower(channel)
 
 	// Reject syntactically-invalid Twitch logins before they reach the wire.
@@ -414,14 +448,14 @@ func (cm *ConnectionManager) Join(channel string) {
 		cm.logger.Warn("Refusing JOIN for invalid Twitch login",
 			zap.String("channel", lower),
 		)
-		return
+		return false
 	}
 
 	if cm.isJoinBanned(lower) {
 		cm.logger.Debug("Skipping JOIN for banned/cap-rejected channel",
 			zap.String("channel", lower),
 		)
-		return
+		return false
 	}
 
 	cm.mu.RLock()
@@ -440,6 +474,7 @@ func (cm *ConnectionManager) Join(channel string) {
 	}
 
 	cm.logger.Debug("IRC JOIN", zap.String("channel", channel))
+	return true
 }
 
 // isJoinBanned reports whether channel is currently in the JOIN-rejection
@@ -603,8 +638,10 @@ func (cm *ConnectionManager) joinAckWatchdog(ctx context.Context) {
 			now := time.Now()
 			var stuck []string
 			var oldest time.Duration
+			var totalPending int
 
 			cm.pendingJoinsMu.Lock()
+			totalPending = len(cm.pendingJoins)
 			for ch, sentAt := range cm.pendingJoins {
 				age := now.Sub(sentAt)
 				if age > joinAckTimeout {
@@ -620,10 +657,16 @@ func (cm *ConnectionManager) joinAckWatchdog(ctx context.Context) {
 				continue
 			}
 
-			if len(stuck) >= joinAckReconnectThreshold {
+			// Decide between per-channel ban and connection-wide reconnect.
+			// See joinAckShouldReconnect for the rationale behind both signals.
+			fractionTriggered, fractionStuck := joinAckShouldReconnect(len(stuck), totalPending)
+			if len(stuck) >= joinAckReconnectThreshold || fractionTriggered {
 				cm.logger.Warn("JOIN ack missing past timeout for many channels, forcing reconnect",
 					zap.Strings("channels", stuck),
 					zap.Int("stuck_count", len(stuck)),
+					zap.Int("total_pending", totalPending),
+					zap.Float64("fraction_stuck", fractionStuck),
+					zap.Bool("fraction_triggered", fractionTriggered),
 					zap.Duration("oldest_age", oldest),
 					zap.Duration("threshold", joinAckTimeout),
 				)
@@ -665,6 +708,27 @@ func (cm *ConnectionManager) joinAckWatchdog(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// joinAckShouldReconnect decides whether the joinAckWatchdog should force a
+// connection-wide reconnect (true) or only ban the individual stuck channels
+// (false). The decision combines an absolute-count check (handled by the
+// caller via joinAckReconnectThreshold) with a fraction check implemented
+// here.
+//
+// Returns (triggered, fractionStuck) where fractionStuck is exposed for
+// logging. triggered is true when total pending is large enough for the
+// fraction signal to be meaningful AND a majority of pending JOINs are stuck —
+// the signature of a silently-dead connection where many channels' JOINs
+// queue indefinitely without acks (incident 2026-05-19).
+func joinAckShouldReconnect(stuckCount, totalPending int) (bool, float64) {
+	if totalPending == 0 {
+		return false, 0
+	}
+	fractionStuck := float64(stuckCount) / float64(totalPending)
+	triggered := totalPending >= joinAckMinPendingForFractionCheck &&
+		fractionStuck > joinAckStuckFractionThreshold
+	return triggered, fractionStuck
 }
 
 // IsConnected returns whether the IRC client is connected
