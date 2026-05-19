@@ -37,20 +37,41 @@ type MockJoinParter struct {
 	departed    []string
 	joinCalls   int
 	departCalls int
+	// bannedChannels simulates the IRC-layer ban list: Join() returns false
+	// for any channel in this set, mirroring the production short-circuit
+	// path. Tests that exercise the activeChans bookkeeping gate (Join
+	// returning false must NOT mark a channel as active) populate this map.
+	bannedChannels map[string]bool
 }
 
 func NewMockJoinParter() *MockJoinParter {
 	return &MockJoinParter{
-		joined:   make([]string, 0),
-		departed: make([]string, 0),
+		joined:         make([]string, 0),
+		departed:       make([]string, 0),
+		bannedChannels: make(map[string]bool),
 	}
 }
 
-func (m *MockJoinParter) Join(channel string) {
+// SetBanned marks channel as banned in the mock IRC layer. Subsequent Join
+// calls for this channel return false (the wire JOIN is short-circuited),
+// matching the production isJoinBanned path.
+func (m *MockJoinParter) SetBanned(channel string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.joined = append(m.joined, channel)
+	m.bannedChannels[channel] = true
+}
+
+func (m *MockJoinParter) Join(channel string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.joinCalls++
+	if m.bannedChannels[channel] {
+		// Banned channels do not record a "joined" entry — production Join
+		// short-circuits before client.Join, so the wire never sees the JOIN.
+		return false
+	}
+	m.joined = append(m.joined, channel)
+	return true
 }
 
 func (m *MockJoinParter) Depart(channel string) {
@@ -252,6 +273,78 @@ func TestManager_SyncChannels_JoinNewChannels(t *testing.T) {
 	assert.True(t, manager.IsChannelActive("xqc"))
 	assert.True(t, manager.IsChannelActive("summit1g"))
 	assert.True(t, manager.IsChannelActive("shroud"))
+}
+
+// Regression for the 2026-05-19 caesarlp outage: when the IRC layer short-
+// circuits a JOIN (transient ban applied by joinAckWatchdog while the
+// underlying connection was zombie), the channel manager MUST NOT record the
+// channel in activeChans. Recording a phantom join means subsequent sync
+// cycles see the channel as "already joined" and never retry it, leaving the
+// streamer's chat completely offline until the source is manually toggled —
+// even after the ban window expires.
+//
+// Expectation: SyncChannels calls Join() once; Join() returns false; activeChans
+// stays empty; the next sync cycle (after Join() starts returning true again)
+// finally records the channel as active.
+func TestManager_SyncChannels_DoesNotMarkActiveWhenJoinShortCircuited(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{
+		channels: []string{"caesarlp"},
+	}
+
+	mockJP := NewMockJoinParter()
+	mockJP.SetBanned("caesarlp") // IRC layer will refuse this JOIN
+
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	// First sync: Join() returns false; channel must not be recorded as active.
+	require.NoError(t, manager.SyncChannels(ctx))
+	assert.Equal(t, 0, manager.GetActiveChannelCount(),
+		"a banned channel must not appear in activeChans — recording it freezes the channel out of all future syncs")
+	assert.False(t, manager.IsChannelActive("caesarlp"))
+	assert.Equal(t, 1, mockJP.GetJoinCallCount(),
+		"the manager should still attempt the JOIN — the gating is on the *result*, not on skipping the call")
+
+	// Simulate ban expiry: clear the mock's ban list. The next sync must retry
+	// the JOIN (because activeChans is still empty) and finally mark it active.
+	mockJP.mu.Lock()
+	mockJP.bannedChannels = make(map[string]bool)
+	mockJP.mu.Unlock()
+
+	require.NoError(t, manager.SyncChannels(ctx))
+	assert.Equal(t, 1, manager.GetActiveChannelCount(),
+		"after the IRC ban clears, the channel must finally be recorded as active")
+	assert.True(t, manager.IsChannelActive("caesarlp"))
+}
+
+// A banned channel must remain in toJoin across many syncs as long as the IRC
+// ban persists — i.e. Join() is retried each cycle so the channel comes back
+// the moment the ban expires. Without this property, the only way to recover
+// from a transient ban is to manually toggle the source in the database.
+func TestManager_SyncChannels_RetriesBannedChannelEachCycle(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
+
+	repo := &MockRepository{
+		channels: []string{"caesarlp"},
+	}
+
+	mockJP := NewMockJoinParter()
+	mockJP.SetBanned("caesarlp")
+
+	manager := NewManager(repo, mockJP, nil, nil, nil, nil, "", logger, nil)
+
+	const cycles = 5
+	for i := 0; i < cycles; i++ {
+		require.NoError(t, manager.SyncChannels(ctx))
+	}
+
+	assert.Equal(t, cycles, mockJP.GetJoinCallCount(),
+		"Join() must be retried every sync cycle while the ban is in effect; "+
+			"otherwise a transient ban becomes permanent in the manager's bookkeeping")
+	assert.Equal(t, 0, manager.GetActiveChannelCount())
 }
 
 func TestManager_SyncChannels_NoChanges(t *testing.T) {
@@ -638,12 +731,13 @@ type slowJoinParter struct {
 	once     sync.Once
 }
 
-func (s *slowJoinParter) Join(_ string) {
+func (s *slowJoinParter) Join(_ string) bool {
 	s.once.Do(func() {
 		// Signal that we have reached the blocking point.
 		close(s.blocking)
 	})
 	<-s.blockCh // block until test unblocks us
+	return true
 }
 
 func (s *slowJoinParter) Depart(_ string) {}

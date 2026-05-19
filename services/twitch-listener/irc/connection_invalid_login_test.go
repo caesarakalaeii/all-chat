@@ -18,6 +18,7 @@ package irc
 
 import (
 	"testing"
+	"time"
 )
 
 // Join("شوشو") used to add the channel to pendingJoins, where it would age
@@ -62,5 +63,37 @@ func TestJoin_InvalidLogin_IsIdempotent(t *testing.T) {
 	cm.bannedChannelsMu.Unlock()
 	if !banned || !until.IsZero() {
 		t.Errorf("repeated Join must keep permanent ban; got banned=%v until=%v", banned, until)
+	}
+}
+
+// Join() returns false when the channel is short-circuited (invalid login).
+// The bool return is load-bearing for the channel manager's activeChans gate:
+// callers that ignore it record a phantom join and the channel never recovers.
+// See JoinParterInterface doc in channels/manager.go.
+func TestJoin_InvalidLogin_ReturnsFalse(t *testing.T) {
+	cm := newTestConnectionManager()
+	if got := cm.Join("شوشو"); got {
+		t.Error("Join() must return false for invalid Twitch logins so the channel manager skips activeChans bookkeeping")
+	}
+}
+
+// Pre-existing transient ban (e.g. stuck-JOIN backoff): Join() must return
+// false without touching the wire, so the manager retries on the next sync
+// instead of phantom-marking the channel as active.
+func TestJoin_TransientBan_ReturnsFalse(t *testing.T) {
+	cm := newTestConnectionManager()
+	cm.bannedChannels["caesarlp"] = time.Now().Add(5 * time.Minute)
+	if got := cm.Join("caesarlp"); got {
+		t.Error("Join() must return false when the channel is in a transient ban window")
+	}
+}
+
+// Pre-existing permanent ban (msg_banned, msg_channel_suspended): same
+// requirement as the transient case.
+func TestJoin_PermanentBan_ReturnsFalse(t *testing.T) {
+	cm := newTestConnectionManager()
+	cm.bannedChannels["kashashgaming"] = time.Time{}
+	if got := cm.Join("kashashgaming"); got {
+		t.Error("Join() must return false for permanently-banned channels")
 	}
 }

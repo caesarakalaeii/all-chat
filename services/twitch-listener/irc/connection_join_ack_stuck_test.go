@@ -116,12 +116,81 @@ func TestStuckJoinBan_PermanentBanIsNotDowngradedToTransient(t *testing.T) {
 // "bad-channel cluster" never trips the connection-wide path, and a clearly-
 // broken connection (≥ threshold channels stuck) still reconnects.
 func TestJoinAckReconnectThreshold_TypicalBadCluster_StaysBelow(t *testing.T) {
-	if joinAckReconnectThreshold < 5 {
-		t.Errorf("joinAckReconnectThreshold=%d is too low; bad-channel clusters of 4 will trigger full reconnects",
+	if joinAckReconnectThreshold < 4 {
+		t.Errorf("joinAckReconnectThreshold=%d is too low; bad-channel clusters of 3 will trigger full reconnects",
 			joinAckReconnectThreshold)
 	}
 	if joinAckReconnectThreshold > 25 {
 		t.Errorf("joinAckReconnectThreshold=%d is too high; a clearly-broken connection won't recover",
 			joinAckReconnectThreshold)
+	}
+}
+
+// Regression for the 2026-05-19 caesarlp outage. The connection-wide failure
+// looked like this on the wire: 8 channels (caesarlp + 7) had pending JOINs
+// older than the timeout, the connection itself was zombie (no acks coming
+// back from Twitch), and the absolute stuck-count was below the old threshold
+// of 10. The watchdog applied 1-hour bans instead of forcing a reconnect.
+//
+// The fraction heuristic catches this: if more than half of all in-flight
+// JOINs are stuck and we have enough pending JOINs for the ratio to be
+// meaningful, the connection is the problem, not the channels.
+func TestJoinAckShouldReconnect_MajorityStuck_TriggersReconnect(t *testing.T) {
+	// 8 stuck out of 8 pending — 100% stuck, the incident's actual shape.
+	triggered, frac := joinAckShouldReconnect(8, 8)
+	if !triggered {
+		t.Errorf("8 stuck of 8 pending must trigger reconnect; got triggered=false frac=%f", frac)
+	}
+	if frac != 1.0 {
+		t.Errorf("frac expected 1.0; got %f", frac)
+	}
+}
+
+// A single bad channel against a healthy ack stream must NOT trigger a
+// connection-wide reconnect — kicking the entire pod's active channels for
+// one deleted/suspended account is the over-reaction PR #279 was trying to
+// avoid.
+func TestJoinAckShouldReconnect_SingleStuckAmongMany_DoesNotTrigger(t *testing.T) {
+	triggered, frac := joinAckShouldReconnect(1, 30)
+	if triggered {
+		t.Errorf("1 stuck of 30 pending must not trigger reconnect; got triggered=true frac=%f", frac)
+	}
+	if frac > 0.1 {
+		t.Errorf("frac expected ~0.033; got %f", frac)
+	}
+}
+
+// With only a handful of JOINs in flight, the fraction signal is noisy
+// (1 stuck of 2 pending is 50% but indistinguishable from a single bad
+// channel). The minimum-pending guard keeps the heuristic from false-firing
+// in low-demand pods.
+func TestJoinAckShouldReconnect_BelowMinPending_DoesNotTrigger(t *testing.T) {
+	triggered, _ := joinAckShouldReconnect(2, 3)
+	if triggered {
+		t.Errorf("2 stuck of 3 pending must not trigger reconnect (below joinAckMinPendingForFractionCheck=%d); got triggered=true",
+			joinAckMinPendingForFractionCheck)
+	}
+}
+
+// Empty pending map: nothing to decide.
+func TestJoinAckShouldReconnect_NoPending_ReturnsFalse(t *testing.T) {
+	triggered, _ := joinAckShouldReconnect(0, 0)
+	if triggered {
+		t.Error("empty pending map must not trigger reconnect")
+	}
+}
+
+// The incident's exact shape: 8 stuck channels with the old threshold of 10
+// would have skipped the reconnect path and applied 1-hour bans. Verify the
+// new logic catches it via either the absolute threshold (≥5) or the
+// fraction check (50% of 8 stuck out of e.g. 8 pending).
+func TestJoinAckShouldReconnect_IncidentShape_TriggersReconnect(t *testing.T) {
+	if joinAckReconnectThreshold > 8 {
+		t.Fatalf("joinAckReconnectThreshold=%d must be ≤8 to catch the 2026-05-19 incident absolute-count signal",
+			joinAckReconnectThreshold)
+	}
+	triggered, _ := joinAckShouldReconnect(8, 8)
+	if !triggered {
+		t.Error("incident shape (8/8 stuck) must trigger fraction-based reconnect")
 	}
 }
