@@ -3,7 +3,7 @@ module github.com/caesar/all-chat/services/api-gateway
 go 1.25.6
 
 require (
-	github.com/alicebob/miniredis/v2 v2.37.0
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/caesar/all-chat/shared v0.0.0-00010101000000-000000000000
 	github.com/caesar/all-chat/shared/ratelimit v0.0.0-00010101000000-000000000000
 	github.com/gin-contrib/cors v1.7.7
