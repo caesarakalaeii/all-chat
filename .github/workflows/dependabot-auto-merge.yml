@@ -5,8 +5,10 @@ name: Dependabot auto-merge
 # for manual review. Auto-merge only completes once required status checks pass.
 #
 # Uses pull_request_target intentionally so GITHUB_TOKEN has write scope to
-# approve and label. We do NOT check out PR code here — only fetch metadata
-# and call gh on the PR — so the elevated token cannot run untrusted code.
+# enable auto-merge and label. We do NOT check out PR code here — only fetch
+# metadata and call gh on the PR — so the elevated token cannot run untrusted
+# code. No approval step: branch protection on main has no required reviews,
+# and GitHub Actions cannot approve PRs anyway (org-level restriction).
 
 on:
   pull_request_target:
@@ -36,7 +38,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          gh pr review "$PR_URL" --approve --body "Auto-approved: ${{ steps.meta.outputs.dependency-names }} (${{ steps.meta.outputs.update-type }})"
           gh pr merge "$PR_URL" --auto --squash
 
       - name: Comment on minor/major bumps
