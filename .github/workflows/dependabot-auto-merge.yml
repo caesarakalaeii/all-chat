@@ -1,8 +1,9 @@
 name: Dependabot auto-merge
 
-# Auto-approves and enables auto-merge for Dependabot PRs that are low-risk:
-# patch bumps and security updates of any severity. Minor and major bumps stay
-# for manual review. Auto-merge only completes once required status checks pass.
+# Enables auto-merge for Dependabot PRs that are low-risk: patch bumps and
+# security updates of any severity. Minor and major bumps stay for manual
+# review (labelled `needs-manual-review`). Auto-merge only completes once
+# required status checks pass.
 #
 # Uses pull_request_target intentionally so GITHUB_TOKEN has write scope to
 # enable auto-merge and label. We do NOT check out PR code here — only fetch

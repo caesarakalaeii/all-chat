@@ -134,3 +134,9 @@ docs/marketing/
 
 # Sub-repo symlinks (managed via .planning/config.json sub_repos)
 /caesar-deployment
+
+# Personal/local artifacts not part of the project
+.claude/projects/
+.claude/scheduled_tasks.lock
+package-lock.artillery.json
+post-save.yml
