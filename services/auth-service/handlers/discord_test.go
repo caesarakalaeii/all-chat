@@ -57,8 +57,8 @@ func (m *mockDiscordOAuth) CheckBotPermissions(_ context.Context, _ string) ([]s
 	return m.missingPerms, m.checkPermsErr
 }
 
-func (m *mockDiscordOAuth) GetGuildInfo(_ context.Context, _ string) (*oauth.GuildInfo, error) {
-	return nil, nil
+func (m *mockDiscordOAuth) GetGuildInfo(_ context.Context, guildID string) (*oauth.GuildInfo, error) {
+	return &oauth.GuildInfo{Name: "Guild " + guildID, Icon: ""}, nil
 }
 
 type mockDiscordRepo struct {
@@ -141,10 +141,11 @@ func TestHandleDiscordConnect(t *testing.T) {
 	}
 }
 
-// TestHandleDiscordConnect_MissingPerms verifies that HandleCallback returns 403 with a
-// human-readable error when CheckBotPermissions reports missing permissions, and that
-// UpsertGuild is NOT called (guild must not be saved on permission failure).
-func TestHandleDiscordConnect_MissingPerms(t *testing.T) {
+// TestHandleDiscordConnect_MissingPermsNonFatal verifies that missing-permissions reports
+// from CheckBotPermissions do NOT block the callback. Discord enforces permissions=68608 at
+// invite time, so a successful code exchange is sufficient proof — the membership check is
+// advisory only. Regression coverage for the non-fatal behavior introduced in f1befa7c.
+func TestHandleDiscordConnect_MissingPermsNonFatal(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mockOAuth := &mockDiscordOAuth{
@@ -154,7 +155,6 @@ func TestHandleDiscordConnect_MissingPerms(t *testing.T) {
 	mockRepo := &mockDiscordRepo{}
 
 	handler := newTestDiscordHandlerNoRedis(mockOAuth, mockRepo, "http://localhost:3000")
-	// Inject a fake state-lookup function so callback can validate state without Redis
 	handler.stateStore = &fakeStateStore{states: map[string]string{"validstate": "user-456"}}
 
 	router := gin.New()
@@ -164,20 +164,12 @@ func TestHandleDiscordConnect_MissingPerms(t *testing.T) {
 	req := httptest.NewRequest("GET", "/discord/callback?state=validstate&code=authcode&guild_id=guild-789", nil)
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Errorf("expected 403 Forbidden, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusFound && w.Code != http.StatusSeeOther && w.Code != http.StatusTemporaryRedirect {
+		t.Errorf("expected redirect (3xx) — missing perms must be non-fatal, got %d: %s", w.Code, w.Body.String())
 	}
 
-	body := w.Body.String()
-	if !containsString(body, "View Channels") {
-		t.Errorf("expected error body to mention 'View Channels', got: %s", body)
-	}
-	if !containsString(body, "Bot is missing") {
-		t.Errorf("expected error body to contain 'Bot is missing', got: %s", body)
-	}
-
-	if mockRepo.upsertCalled {
-		t.Error("UpsertGuild must NOT be called when permissions check fails")
+	if !mockRepo.upsertCalled {
+		t.Error("UpsertGuild must be called even when permissions check reports missing perms")
 	}
 }
 

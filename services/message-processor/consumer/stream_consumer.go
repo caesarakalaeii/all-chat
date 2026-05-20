@@ -109,9 +109,12 @@ func (c *StreamConsumer) Stop() {
 
 // createConsumerGroup creates the consumer group if it doesn't exist
 func (c *StreamConsumer) createConsumerGroup(ctx context.Context) error {
-	// Try to create the consumer group
-	// $ means start from the end (only new messages)
-	err := c.client.XGroupCreateMkStream(ctx, StreamKey, ConsumerGroup, "$").Err()
+	// Try to create the consumer group.
+	// Offset "0" (not "$") so pre-existing messages in the stream are not silently
+	// skipped on the first start — F-07 from phase 10 (message pipeline resilience).
+	// "$" would mean "only new messages", causing data loss on cold start when the
+	// listeners have already buffered chat into the stream.
+	err := c.client.XGroupCreateMkStream(ctx, StreamKey, ConsumerGroup, "0").Err()
 	if err != nil {
 		// BUSYGROUP error means group already exists, which is fine
 		if !strings.Contains(err.Error(), "BUSYGROUP") {

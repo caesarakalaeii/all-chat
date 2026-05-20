@@ -558,6 +558,10 @@ func (m *mockLeadershipClient) RegisterPeer(_ context.Context, _, _ string) (int
 // This test simulates two concurrent managers (pod A and pod B) joining the same 100+
 // channels. With correct leadership, each channel must be joined by exactly one pod.
 func TestManager_JoinChannelsMultipleConnections_RespectsLeadership(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping long-running leadership coordination test in short mode (takes ~45s, flakes on slow CI runners)")
+	}
+
 	ctx := context.Background()
 	logger := zaptest.NewLogger(t)
 

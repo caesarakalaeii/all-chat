@@ -302,12 +302,15 @@ func TestCreateConsumerGroup_UsesZeroOffset(t *testing.T) {
 	err = c.createConsumerGroup(ctx)
 	require.NoError(t, err)
 
-	// Now read with ">" — if offset was "0", the pre-existing message is available
+	// Now read with ">" — if offset was "0", the pre-existing message is available.
+	// Block: -1 disables BLOCK arg entirely; the zero value would map to `BLOCK 0`
+	// (block forever) since go-redis only omits BLOCK when Block < 0.
 	streams, err := client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    ConsumerGroup,
 		Consumer: "test-consumer",
 		Streams:  []string{StreamKey, ">"},
 		Count:    10,
+		Block:    -1,
 	}).Result()
 	require.NoError(t, err)
 	require.Len(t, streams, 1, "should see the pre-existing message when group created with offset 0")

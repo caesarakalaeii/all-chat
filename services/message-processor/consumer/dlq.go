@@ -48,8 +48,10 @@ func (c *StreamConsumer) writeToDLQ(ctx context.Context, originalID, sourceServi
 		},
 	}).Result()
 	if err != nil {
-		c.logger.Error("Failed to write message to DLQ",
-			zap.String("original_id", originalID),
+		// F-05: structured sentinel log so DLQ write failures are searchable.
+		c.logger.Error("dlq_write_failure",
+			zap.String("stream", DLQStreamKey),
+			zap.String("message_id", originalID),
 			zap.Error(err),
 		)
 		c.metrics.DLQWriteFailures.Inc()
