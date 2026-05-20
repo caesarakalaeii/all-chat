@@ -182,7 +182,7 @@ describe('queryCodebase', () => {
     expect(result.infraVerdict).toBeNull();
   });
 
-  it('uses timeout of 180_000ms (not 120_000ms)', async () => {
+  it('uses timeout of 600_000ms (not 180_000ms)', async () => {
     mockExeca.mockResolvedValueOnce({
       stdout: JSON.stringify({ result: 'answer' }),
     } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
@@ -190,7 +190,7 @@ describe('queryCodebase', () => {
     await queryCodebase('question', ['/repos/all-chat']);
 
     const [, , options] = mockExeca.mock.calls[0] as [string, string[], { timeout: number }];
-    expect(options.timeout).toBe(180_000);
+    expect(options.timeout).toBe(600_000);
   });
 
   it('system prompt contains "NEVER include raw log lines" leak prevention guardrail', async () => {
