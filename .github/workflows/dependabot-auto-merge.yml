@@ -1,0 +1,54 @@
+name: Dependabot auto-merge
+
+# Auto-approves and enables auto-merge for Dependabot PRs that are low-risk:
+# patch bumps and security updates of any severity. Minor and major bumps stay
+# for manual review. Auto-merge only completes once required status checks pass.
+#
+# Uses pull_request_target intentionally so GITHUB_TOKEN has write scope to
+# approve and label. We do NOT check out PR code here — only fetch metadata
+# and call gh on the PR — so the elevated token cannot run untrusted code.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for patch and security updates
+        if: |
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.alert-state == 'AUTO_DISMISSED' ||
+          steps.meta.outputs.ghsa-id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr review "$PR_URL" --approve --body "Auto-approved: ${{ steps.meta.outputs.dependency-names }} (${{ steps.meta.outputs.update-type }})"
+          gh pr merge "$PR_URL" --auto --squash
+
+      - name: Comment on minor/major bumps
+        if: |
+          steps.meta.outputs.update-type != 'version-update:semver-patch' &&
+          steps.meta.outputs.ghsa-id == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          # Idempotent: only comment if we haven't already labelled the PR.
+          if ! gh pr view "$PR_URL" --json labels --jq '.labels[].name' | grep -qx 'needs-manual-review'; then
+            gh pr edit "$PR_URL" --add-label "needs-manual-review"
+            gh pr comment "$PR_URL" --body "Skipping auto-merge — ${{ steps.meta.outputs.update-type }} requires manual review."
+          fi
