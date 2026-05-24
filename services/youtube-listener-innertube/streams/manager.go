@@ -344,6 +344,11 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			zap.String("strategy", state.StreamSelect),
 		)
 
+		// discoveryErr captures why this attempt failed so the backoff warning can
+		// surface it. Without this, schema regressions (e.g. YouTube replacing
+		// videoRenderer with lockupViewModel) look identical to "channel offline".
+		var discoveryErr error
+
 		// Multi-stream strategies: discover and poll every matching stream
 		if innertube.IsMultiStreamStrategy(state.StreamSelect) {
 			titleFilter := ""
@@ -375,6 +380,9 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 					return
 				}
 				// All pollers failed (leadership held etc.) — fall through to backoff
+				discoveryErr = errors.New("all pollers failed to start (leadership contention)")
+			} else {
+				discoveryErr = err
 			}
 		} else {
 			// Single-stream strategies
@@ -411,11 +419,14 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 						zap.String("video_id", videoID),
 						zap.Error(err),
 					)
+					discoveryErr = err
 					// Fall through to backoff and retry the whole discovery+poller process
 				} else {
 					m.cleanupDiscoveryState(state.ChannelID)
 					return
 				}
+			} else {
+				discoveryErr = err
 			}
 		}
 
@@ -430,6 +441,7 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			zap.String("channel_id", state.ChannelID),
 			zap.Duration("backoff", backoffDuration),
 			zap.Int("attempt", state.Attempts),
+			zap.Error(discoveryErr),
 		)
 
 		// Notify overlay: channel is reconnecting (no live stream found yet)

@@ -136,9 +136,10 @@ func (d *Discovery) browseLiveCandidates(ctx context.Context, channelID string) 
 
 	// Collect live stream candidates from the browse response using the LIVE badge.
 	// The player API (/youtubei/v1/player) is blocked by YouTube bot-detection on
-	// datacenter IPs (returns LOGIN_REQUIRED with no videoDetails), so we rely on the
-	// thumbnailOverlayTimeStatusRenderer.style == "LIVE" field present in the browse
-	// response for each currently-live stream.
+	// datacenter IPs (returns LOGIN_REQUIRED with no videoDetails), so we read the
+	// LIVE badge directly out of the browse response. YouTube serves two schemas
+	// during their 2026 view-model migration; collectLiveCandidatesFromBrowse
+	// handles both.
 	return collectLiveCandidatesFromBrowse(browseResponse), nil
 }
 
@@ -321,10 +322,18 @@ func (d *Discovery) checkIsLiveViaPlayer(ctx context.Context, videoID string) (b
 	return isLive, nil
 }
 
-// collectLiveCandidatesFromBrowse recursively finds live stream candidates
-// by checking for thumbnailOverlayTimeStatusRenderer.style == "LIVE" in the browse response.
-// Extracts videoId, title, and viewer count for each live stream to support
-// stream selection strategies (most viewers, title match, etc.).
+// collectLiveCandidatesFromBrowse recursively finds live stream candidates in a
+// browse response. Supports two schemas YouTube emits side-by-side during their
+// migration to "view models":
+//
+//  1. Legacy videoRenderer schema — videoId + thumbnailOverlays[].thumbnailOverlayTimeStatusRenderer.style == "LIVE".
+//  2. New lockupViewModel schema (rolled out cluster-wide in 2026) — contentId
+//     + contentType == "LOCKUP_CONTENT_TYPE_VIDEO" + a nested badge with
+//     thumbnailBadgeViewModel.badgeStyle == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE".
+//
+// Without the lockupViewModel path, discovery returns zero candidates for every
+// channel once YouTube switches a region to the new schema, breaking all
+// YouTube stream detection. Both walks share a single dedup set keyed by video ID.
 func collectLiveCandidatesFromBrowse(data interface{}) []LiveStreamCandidate {
 	var candidates []LiveStreamCandidate
 	seen := map[string]struct{}{}
@@ -335,29 +344,29 @@ func collectLiveCandidatesFromBrowse(data interface{}) []LiveStreamCandidate {
 		}
 		switch v := data.(type) {
 		case map[string]interface{}:
-			// Check if this map is a videoRenderer with a LIVE overlay
+			// Legacy schema: videoRenderer with thumbnailOverlayTimeStatusRenderer
 			if videoID, ok := v["videoId"].(string); ok && videoID != "" {
-				if overlays, ok := v["thumbnailOverlays"].([]interface{}); ok {
-					for _, overlay := range overlays {
-						ovMap, ok := overlay.(map[string]interface{})
-						if !ok {
-							continue
-						}
-						ts, ok := ovMap["thumbnailOverlayTimeStatusRenderer"].(map[string]interface{})
-						if !ok {
-							continue
-						}
-						if style, _ := ts["style"].(string); style == "LIVE" {
-							if _, exists := seen[videoID]; !exists {
-								seen[videoID] = struct{}{}
-								candidates = append(candidates, LiveStreamCandidate{
-									VideoID:     videoID,
-									Title:       extractTitle(v),
-									ViewerCount: extractViewerCount(v),
-								})
-							}
-							break
-						}
+				if isLiveLegacyRenderer(v) {
+					if _, exists := seen[videoID]; !exists {
+						seen[videoID] = struct{}{}
+						candidates = append(candidates, LiveStreamCandidate{
+							VideoID:     videoID,
+							Title:       extractTitle(v),
+							ViewerCount: extractViewerCount(v),
+						})
+					}
+				}
+			}
+			// New schema: lockupViewModel with thumbnailBadgeViewModel
+			if contentID, ok := v["contentId"].(string); ok && contentID != "" {
+				if ct, _ := v["contentType"].(string); ct == "LOCKUP_CONTENT_TYPE_VIDEO" && isLiveLockupViewModel(v) {
+					if _, exists := seen[contentID]; !exists {
+						seen[contentID] = struct{}{}
+						candidates = append(candidates, LiveStreamCandidate{
+							VideoID:     contentID,
+							Title:       extractLockupTitle(v),
+							ViewerCount: extractLockupViewerCount(v),
+						})
 					}
 				}
 			}
@@ -372,6 +381,109 @@ func collectLiveCandidatesFromBrowse(data interface{}) []LiveStreamCandidate {
 	}
 	collect(data)
 	return candidates
+}
+
+// isLiveLegacyRenderer reports whether a videoRenderer-shaped map carries the
+// legacy LIVE thumbnail overlay.
+func isLiveLegacyRenderer(v map[string]interface{}) bool {
+	overlays, ok := v["thumbnailOverlays"].([]interface{})
+	if !ok {
+		return false
+	}
+	for _, overlay := range overlays {
+		ovMap, ok := overlay.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		ts, ok := ovMap["thumbnailOverlayTimeStatusRenderer"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if style, _ := ts["style"].(string); style == "LIVE" {
+			return true
+		}
+	}
+	return false
+}
+
+// isLiveLockupViewModel reports whether a lockupViewModel-shaped map carries the
+// new-schema LIVE badge. YouTube nests this at:
+// contentImage.thumbnailViewModel.overlays[].thumbnailBottomOverlayViewModel.badges[].thumbnailBadgeViewModel.badgeStyle == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE".
+func isLiveLockupViewModel(v map[string]interface{}) bool {
+	ci, _ := v["contentImage"].(map[string]interface{})
+	tv, _ := ci["thumbnailViewModel"].(map[string]interface{})
+	overlays, _ := tv["overlays"].([]interface{})
+	for _, overlay := range overlays {
+		om, ok := overlay.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		bottom, _ := om["thumbnailBottomOverlayViewModel"].(map[string]interface{})
+		badges, _ := bottom["badges"].([]interface{})
+		for _, badge := range badges {
+			bm, ok := badge.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			tbvm, _ := bm["thumbnailBadgeViewModel"].(map[string]interface{})
+			if style, _ := tbvm["badgeStyle"].(string); style == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// extractLockupTitle reads the stream title from a lockupViewModel map.
+// Path: metadata.lockupMetadataViewModel.title.content.
+func extractLockupTitle(v map[string]interface{}) string {
+	md, _ := v["metadata"].(map[string]interface{})
+	lmvm, _ := md["lockupMetadataViewModel"].(map[string]interface{})
+	title, _ := lmvm["title"].(map[string]interface{})
+	if content, ok := title["content"].(string); ok {
+		return content
+	}
+	return ""
+}
+
+// extractLockupViewerCount reads "<N> watching" out of a lockupViewModel map.
+// Path: metadata.lockupMetadataViewModel.metadata.contentMetadataViewModel.metadataRows[].metadataParts[].text.content.
+// Returns -1 if no "watching" row is present (e.g. premieres, ended streams).
+func extractLockupViewerCount(v map[string]interface{}) int {
+	md, _ := v["metadata"].(map[string]interface{})
+	lmvm, _ := md["lockupMetadataViewModel"].(map[string]interface{})
+	inner, _ := lmvm["metadata"].(map[string]interface{})
+	cmvm, _ := inner["contentMetadataViewModel"].(map[string]interface{})
+	rows, _ := cmvm["metadataRows"].([]interface{})
+	for _, row := range rows {
+		rm, ok := row.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		parts, _ := rm["metadataParts"].([]interface{})
+		for _, part := range parts {
+			pm, ok := part.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			text, _ := pm["text"].(map[string]interface{})
+			content, _ := text["content"].(string)
+			if !strings.Contains(strings.ToLower(content), "watching") {
+				continue
+			}
+			match := viewerCountRegex.FindString(content)
+			if match == "" {
+				return -1
+			}
+			cleaned := strings.NewReplacer(",", "", ".", "").Replace(match)
+			count, err := strconv.Atoi(cleaned)
+			if err != nil {
+				return -1
+			}
+			return count
+		}
+	}
+	return -1
 }
 
 // collectLiveVideoIDsFromBrowse is a convenience wrapper that returns only video IDs.

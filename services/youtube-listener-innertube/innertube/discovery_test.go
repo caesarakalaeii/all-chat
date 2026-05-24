@@ -754,4 +754,128 @@ func TestCollectLiveCandidatesFromBrowse(t *testing.T) {
 			t.Errorf("expected 0 candidates, got %d", len(candidates))
 		}
 	})
+
+	// The lockupViewModel schema replaced videoRenderer in YouTube's 2026 rollout.
+	// Real-world example: channel UC8Zo7KTX9KFoly5x8DNu_zA streaming q_TkIzJAxrs.
+
+	t.Run("finds live stream in lockupViewModel schema", func(t *testing.T) {
+		data := newLockupCandidate("q_TkIzJAxrs", "TS HEAT IS FRYING ME | Just Chatting And Gaming | India Live", "4 watching", "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE")
+		candidates := collectLiveCandidatesFromBrowse(data)
+		if len(candidates) != 1 {
+			t.Fatalf("expected 1 candidate, got %d", len(candidates))
+		}
+		if candidates[0].VideoID != "q_TkIzJAxrs" {
+			t.Errorf("expected videoID q_TkIzJAxrs, got %s", candidates[0].VideoID)
+		}
+		if candidates[0].Title != "TS HEAT IS FRYING ME | Just Chatting And Gaming | India Live" {
+			t.Errorf("unexpected title %q", candidates[0].Title)
+		}
+		if candidates[0].ViewerCount != 4 {
+			t.Errorf("expected 4 viewers, got %d", candidates[0].ViewerCount)
+		}
+	})
+
+	t.Run("skips non-LIVE lockupViewModel entries", func(t *testing.T) {
+		// Recorded (replay) stream from the same channel: same shape but DEFAULT badge.
+		data := newLockupCandidate("Z0tNZVht1-I", "Yesterday's stream", "3:19:55", "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT")
+		candidates := collectLiveCandidatesFromBrowse(data)
+		if len(candidates) != 0 {
+			t.Errorf("expected 0 candidates for non-LIVE lockup, got %d", len(candidates))
+		}
+	})
+
+	t.Run("skips lockupViewModel without VIDEO contentType", func(t *testing.T) {
+		data := newLockupCandidate("not_a_video", "Some playlist", "0 watching", "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE")
+		data["contentType"] = "LOCKUP_CONTENT_TYPE_PLAYLIST"
+		candidates := collectLiveCandidatesFromBrowse(data)
+		if len(candidates) != 0 {
+			t.Errorf("expected 0 candidates for non-VIDEO lockup, got %d", len(candidates))
+		}
+	})
+
+	t.Run("deduplicates across legacy and lockup schemas", func(t *testing.T) {
+		// Same videoId appears in both a videoRenderer and a lockupViewModel in
+		// the same response (YouTube serves both during the migration window).
+		data := map[string]interface{}{
+			"contents": []interface{}{
+				map[string]interface{}{
+					"videoRenderer": map[string]interface{}{
+						"videoId": "shared_id",
+						"title":   map[string]interface{}{"runs": []interface{}{map[string]interface{}{"text": "Legacy title"}}},
+						"thumbnailOverlays": []interface{}{
+							map[string]interface{}{"thumbnailOverlayTimeStatusRenderer": map[string]interface{}{"style": "LIVE"}},
+						},
+					},
+				},
+				newLockupCandidate("shared_id", "Lockup title", "10 watching", "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE"),
+			},
+		}
+		candidates := collectLiveCandidatesFromBrowse(data)
+		if len(candidates) != 1 {
+			t.Errorf("expected 1 deduplicated candidate, got %d", len(candidates))
+		}
+	})
+
+	t.Run("lockup viewer count parses 'N watching' format", func(t *testing.T) {
+		data := newLockupCandidate("v1", "t", "1,234 watching", "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE")
+		candidates := collectLiveCandidatesFromBrowse(data)
+		if len(candidates) != 1 || candidates[0].ViewerCount != 1234 {
+			t.Errorf("expected viewer count 1234, got %+v", candidates)
+		}
+	})
+
+	t.Run("lockup viewer count returns -1 when row absent", func(t *testing.T) {
+		// Premiere-style entry with metadata that doesn't say "watching".
+		data := newLockupCandidate("v2", "t", "Premieres Tomorrow", "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE")
+		candidates := collectLiveCandidatesFromBrowse(data)
+		if len(candidates) != 1 || candidates[0].ViewerCount != -1 {
+			t.Errorf("expected viewer count -1, got %+v", candidates)
+		}
+	})
+}
+
+// newLockupCandidate builds a lockupViewModel-shaped map mirroring YouTube's
+// 2026 browse response schema, so tests document the structure the parser must
+// handle. badgeStyle controls whether the entry registers as LIVE.
+func newLockupCandidate(contentID, title, metadataText, badgeStyle string) map[string]interface{} {
+	return map[string]interface{}{
+		"contentId":   contentID,
+		"contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+		"contentImage": map[string]interface{}{
+			"thumbnailViewModel": map[string]interface{}{
+				"overlays": []interface{}{
+					map[string]interface{}{
+						"thumbnailBottomOverlayViewModel": map[string]interface{}{
+							"badges": []interface{}{
+								map[string]interface{}{
+									"thumbnailBadgeViewModel": map[string]interface{}{
+										"text":       "LIVE",
+										"badgeStyle": badgeStyle,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"metadata": map[string]interface{}{
+			"lockupMetadataViewModel": map[string]interface{}{
+				"title": map[string]interface{}{"content": title},
+				"metadata": map[string]interface{}{
+					"contentMetadataViewModel": map[string]interface{}{
+						"metadataRows": []interface{}{
+							map[string]interface{}{
+								"metadataParts": []interface{}{
+									map[string]interface{}{
+										"text": map[string]interface{}{"content": metadataText},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }
