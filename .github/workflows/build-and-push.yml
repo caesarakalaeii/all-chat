@@ -205,7 +205,7 @@ jobs:
       - name: Extract metadata
         if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event_name == 'workflow_dispatch'
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}
           tags: |
