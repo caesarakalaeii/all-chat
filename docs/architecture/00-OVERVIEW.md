@@ -1,8 +1,8 @@
 # All-Chat: Architecture Overview
 
-**Version**: 2.0
-**Last Updated**: 2026-01-28
-**Status**: Phase 4 Complete - Production Ready
+**Version**: 2.1
+**Last Updated**: 2026-05-27
+**Status**: Production
 
 ---
 
@@ -21,7 +21,7 @@
 
 ## Introduction
 
-All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from multiple live streaming platforms (Twitch, YouTube, Kick, TikTok) on streaming overlays.
+All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from multiple live streaming platforms (Twitch, YouTube, Kick, TikTok, Discord) on streaming overlays.
 
 **Core Value Proposition**: Unified chat display for multi-platform streamers, supporting 7TV, BTTV, and FFZ emotes with real-time updates.
 
@@ -60,17 +60,20 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     External Platforms                       │
-│  Twitch IRC  │  YouTube API  │  Kick WebSocket  │  TikTok   │
+│ Twitch │ YouTube │ Kick │ TikTok │ Discord                   │
 └──────────────┬──────────────┬──────────────┬────────────────┘
                │              │              │
                ▼              ▼              ▼
-         ┌──────────────────────────────────────┐
-         │      Platform Listeners (8085-8089)   │
-         │  • Twitch Listener (IRC)              │
-         │  • YouTube Listener (HTTP polling)    │
-         │  • Kick Listener (Pusher WebSocket)   │
-         │  • TikTok Listener (unofficial lib)   │
-         └───────────────┬──────────────────────┘
+         ┌──────────────────────────────────────────┐
+         │           Platform Listeners              │
+         │  • twitch-listener (IRC)                  │
+         │  • twitch-eventsub-listener (webhooks/WS) │
+         │  • youtube-listener (Data API)            │
+         │  • youtube-listener-innertube             │
+         │  • kick-listener (Pusher WebSocket)       │
+         │  • tiktok-listener (Node, unofficial lib) │
+         │  • discord-listener (gateway WS)          │
+         └───────────────┬──────────────────────────┘
                          │ publish raw messages
                          ▼
                   ┌─────────────┐
@@ -147,6 +150,10 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 ---
 
 ## Service Map
+
+> **Port note:** Ports listed below match `deployments/docker-compose.yml`. Several listener
+> services use port `8089`/`8090` defaults that overlap in code (`PORT` env var); in production
+> they're set via deployment manifests, so trust the manifest, not the default constant.
 
 ### Edge Layer
 
@@ -489,18 +496,19 @@ All services have detailed READMEs: [services/*/README.md](../../services/)
 
 ## Current Status
 
-**Phase 4 Complete** (2026-01-28):
-- ✅ All 13 services implemented and deployed
-- ✅ Twitch, YouTube, Kick, TikTok integrations ready for production
-- ✅ CloudNativePG deployed (3-node cluster, automated failover)
-- ✅ LGTM observability stack deployed (Loki, Grafana, Prometheus)
-- ✅ Comprehensive metrics (100% service coverage)
-- ✅ HPA autoscaling configured (all services)
+**Production** (2026-05-27):
+- ✅ 17 services in `services/` (14 Go services + 3 TypeScript/Node services: `discord-bot`, `support-bot`, `tiktok-listener`)
+- ✅ Twitch (IRC + EventSub), YouTube (Data API + InnerTube), Kick, TikTok, Discord integrations live
+- ✅ CloudNativePG deployed
+- ✅ LGTM observability stack (Loki, Grafana, Prometheus, Tempo)
+- ✅ Prometheus metrics across all main Go services (`shared/metrics/`)
+- ✅ HPA autoscaling configured
+- ✅ AES-GCM token encryption (`shared/encryption/`, versioned key rotation)
+- ✅ Service-to-service signing (`shared/signing/`)
+- ✅ Rate limiting (`shared/ratelimit/`)
+- ✅ Distributed tracing via OpenTelemetry (`shared/tracing/`)
 
 **Known Limitations**:
-- YouTube API quota: 10,000 units/day (request increase to 1M)
-- Redis single instance (Phase 1 bottleneck, Redis Cluster in Phase 2)
-- Token encryption is basic (TODO: implement AES-GCM)
-- No service-to-service auth (Kubernetes NetworkPolicies only)
-
-**Next Phase**: Phase 5 - Production hardening (multi-node K8s, Redis Cluster, security enhancements)
+- YouTube API quota: 1,009,000 units/day (default — increase via Google Cloud quota request as needed)
+- Redis single instance
+- Kubernetes NetworkPolicies still recommended on top of s2s signing

@@ -187,7 +187,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 # Full environment
 make docker-up         # Start PostgreSQL, Redis, and all services
 make test              # Run tests
-make migrate-up        # Apply database migrations
+make migrate           # Apply database migrations
 
 # Frontend-only (minimal backend)
 make frontend-dev      # Start only what the frontend needs
@@ -210,7 +210,7 @@ cp .env.example .env
 make docker-up
 ```
 
-Visit `http://localhost:8080` — you're live.
+Visit `http://localhost:3000` (frontend) — you're live. The API Gateway is on `http://localhost:8080`.
 
 **Prerequisites:**
 - Docker & Docker Compose

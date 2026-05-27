@@ -220,31 +220,30 @@ For iterative frontend development with LLM agents:
 
 ### Overlay Manager (`:8082`)
 
+The overlay-manager mounts routes at the root path (no `/api/overlays` prefix). Most endpoints require a JWT (`middleware.JWTAuth`). For dev, the easier path is to call through the API gateway (`/api/v1/overlays/...` on port 8080) or hit the public read-only endpoints directly:
+
 ```bash
-# Get overlay
-curl http://localhost:8082/api/overlays/00000000-0000-0000-0000-000000000002
+# Public overlay config (no auth)
+curl http://localhost:8082/public/00000000-0000-0000-0000-000000000002/config
 
-# List chat sources
-curl http://localhost:8082/api/overlays/00000000-0000-0000-0000-000000000002/sources
-
-# Send mock message
-curl -X POST http://localhost:8082/api/mock/message \
-  -H "Content-Type: application/json" \
-  -d '{"overlay_id":"00000000-0000-0000-0000-000000000002","message":"Test"}'
+# Protected (requires JWT in Authorization: Bearer ...)
+# GET /:id              -> get overlay
+# GET /:id/sources      -> list chat sources
+# POST /:id/mock-messages -> send mock message via overlay-manager (also JWT-protected)
 ```
 
 ### Message Processor (`:8087`)
 
 ```bash
-# Send mock message
-curl -X POST http://localhost:8087/api/mock/message \
+# Send mock message via the message-processor internal endpoint
+curl -X POST http://localhost:8087/internal/mock-messages \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: dev-frontend-key" \
+  -H "X-Internal-Token: dev-frontend-key" \
   -d '{
     "overlay_id": "00000000-0000-0000-0000-000000000002",
     "platform": "twitch",
     "username": "TestUser",
-    "message": "Hello from API!"
+    "text": "Hello from API!"
   }'
 ```
 

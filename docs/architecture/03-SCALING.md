@@ -237,7 +237,7 @@ Examples:
 **Capacity**: 50+ concurrent live streams per pod (with leader election)
 
 **Limits**:
-- YouTube API quota: 10,000 units/day (can request increase to 1M)
+- YouTube API quota: 1,009,000 units/day default (`QUOTA_LIMIT_DAILY` env; original Google default is 10,000 — Google quota increase already in place)
 - Poll interval: 2-5 seconds per stream
 - Expected usage: 2,000-3,000 units/day with optimizations
 - **Real bottleneck: API quota, not pod capacity**

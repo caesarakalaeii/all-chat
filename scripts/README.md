@@ -60,7 +60,7 @@ TEST_OVERLAY_ID=your-uuid ./scripts/generate-test-messages.sh
 - `REDIS_HOST` - Redis host (default: localhost)
 - `REDIS_PORT` - Redis port (default: 6379)
 - `MESSAGE_PROCESSOR_URL` - Message processor URL (default: http://localhost:8087)
-- `API_KEY` - API key for message processor (default: dev-frontend-key)
+- `MESSAGE_PROCESSOR_API_KEY` - Token for `X-Internal-Token` header (default: dev-frontend-key)
 - `TEST_OVERLAY_ID` - Target overlay ID (default: test overlay UUID)
 - `MESSAGE_INTERVAL` - Seconds between messages (default: 3)
 - `MESSAGE_COUNT` - Number of messages to send (default: 0 = infinite)

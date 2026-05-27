@@ -187,7 +187,7 @@ To apply the migration:
 
 ```bash
 # Local development
-make migrate-up
+make migrate
 
 # Kubernetes
 kubectl exec -n allchat <postgres-pod> -- psql -U postgres -d allchat < migrations/009_add_admin_role.sql

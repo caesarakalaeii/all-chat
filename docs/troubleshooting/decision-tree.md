@@ -87,7 +87,7 @@ Service can't connect to dependencies?
 │  │  Guide: connection-errors.md#postgres-auth
 │  │
 │  ├─ "database does not exist" → Missing schema
-│  │  Solution: Run migrations: make migrate-up
+│  │  Solution: Run migrations: make migrate
 │  │  Guide: connection-errors.md#postgres-schema-missing
 │  │
 │  └─ "timeout" → Network or firewall issue

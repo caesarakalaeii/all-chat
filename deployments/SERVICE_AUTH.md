@@ -4,7 +4,7 @@ The Source Manager HTTP API now enforces authentication for every endpoint excep
 
 ## 1. Configure the shared signing secret
 
-Set `SERVICE_JWT_SECRET` for the Source Manager deployment. The Docker Compose file defaults this to `dev-service-secret`; override it in production via an `.env` file or your orchestration secrets store.
+Set `SERVICE_JWT_SECRET_V1` (versioned key — `_V1`, `_V2`, … to enable hitless rotation) for the Source Manager deployment. The keychain helper `sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET")` reads all `SERVICE_JWT_SECRET_V*` variables. The Docker Compose file uses dev defaults; override in production via your orchestration secrets store.
 
 ## 2. Issue per-service credentials
 

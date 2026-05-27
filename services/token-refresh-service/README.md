@@ -295,7 +295,7 @@ Email/Slack: "Your YouTube connection expired. Please re-authorize at https://al
 1. **CronJob Schedule**: Run every 6 hours (4× per day) to catch tokens expiring within 24 hours
 2. **Retry Limits**: Max 3 retries with exponential backoff
 3. **Alert Integration**: Configure `ALERT_WEBHOOK_URL` for Slack/PagerDuty
-4. **Token Encryption**: Tokens encrypted at rest (basic XOR currently, TODO: AES-GCM)
+4. **Token Encryption**: Tokens encrypted at rest via AES-256-GCM (`shared/encryption/`)
 5. **Audit Logging**: Log all token refresh attempts (success/failure) for compliance
 6. **Failed Jobs**: Monitor CronJob failures in Kubernetes (alert if job fails 3× consecutively)
 

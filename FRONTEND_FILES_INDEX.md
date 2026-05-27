@@ -36,6 +36,7 @@ all-chat/
 - API Gateway (WebSocket + HTTP)
 - Overlay Manager (CRUD operations)
 - Message Processor (message normalization)
+- Share Service (shareable overlay links)
 
 **Key Features**:
 - Isolated volumes (doesn't conflict with main stack)

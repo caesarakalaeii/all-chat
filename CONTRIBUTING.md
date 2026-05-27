@@ -20,8 +20,8 @@ Thank you for contributing to All-Chat! This guide will help you submit high-qua
 ### Code Style
 
 **Go**:
-- Run `make fmt` before committing (gofmt)
-- Run `make lint` to check with golangci-lint
+- Run `gofmt -w` (or your editor's format-on-save) before committing
+- Run `golangci-lint run` if installed (no `make lint` target yet)
 - Follow [Standard Go Layout](./docs/adr/0001-standard-go-layout.md)
 - Use structured logging (Zap) with context
 
@@ -68,7 +68,7 @@ func TestFeature(t *testing.T) {
 
 <body>
 
-Co-Authored-By: Claude Sonnet 4.5 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 **Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
@@ -80,7 +80,7 @@ feat: Add Kick OAuth support to auth-service
 Implements Kick OAuth 2.0 authorization flow with token storage
 and refresh logic.
 
-Co-Authored-By: Claude Sonnet 4.5 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 ---
@@ -91,8 +91,8 @@ Co-Authored-By: Claude Sonnet 4.5 (1M context) <noreply@anthropic.com>
 
 - [ ] Code compiles: `make build`
 - [ ] Tests pass: `make test`
-- [ ] Code formatted: `make fmt`
-- [ ] Lint passes: `make lint`
+- [ ] Code formatted: `gofmt -w .` (frontend: `cd frontend && npm run format`)
+- [ ] Lint passes: `golangci-lint run` (frontend: `cd frontend && npm run lint`)
 - [ ] Commit messages follow format
 - [ ] Documentation updated (if applicable)
 
@@ -201,7 +201,7 @@ Closes #123
 
 - **Technical questions**: File a GitHub issue
 - **Documentation unclear**: Submit PR to improve it
-- **Security concerns**: Email security@example.com (private disclosure)
+- **Security concerns**: Email all.chat.support@gmail.com (private disclosure)
 
 ---
 

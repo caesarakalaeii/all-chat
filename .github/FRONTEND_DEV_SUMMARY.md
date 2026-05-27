@@ -5,7 +5,7 @@ This document summarizes the frontend development environment created for fast i
 ## 📁 Files Created
 
 ### Docker Compose
-- `docker-compose.frontend.yml` - Minimal backend services (PostgreSQL, Redis, API Gateway, Overlay Manager, Message Processor)
+- `docker-compose.frontend.yml` - Minimal backend services (PostgreSQL, Redis, API Gateway, Overlay Manager, Message Processor, Share Service)
 
 ### Scripts
 - `scripts/seed-test-data.sh` - Creates test user, overlay, and chat sources

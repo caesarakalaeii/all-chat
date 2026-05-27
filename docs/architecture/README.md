@@ -10,7 +10,7 @@ This directory contains comprehensive architecture documentation for All-Chat, o
 
 1. **[00-OVERVIEW.md](./00-OVERVIEW.md)** (~487 lines, 15-20 min)
    - High-level system overview
-   - Service map with all 13 services
+   - Service map (17 services across Go + Node.js)
    - Technology stack
    - Key design decisions
    - Links to detailed documentation
@@ -208,4 +208,4 @@ This directory contains **6 core architecture documents** totaling **~3,725 line
 
 **Reading time**: ~2 hours for complete understanding
 
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-05-27

@@ -4,15 +4,20 @@ This guide helps validate all the changes made to fix TikTok stream detection is
 
 ## Prerequisites
 
-```bash
-# Start the services
-make docker-up
+> **Note:** `tiktok-listener` is not in `deployments/docker-compose.yml`. To validate it locally,
+> either build and run the container manually from `services/tiktok-listener/Dockerfile`, or run
+> it directly with `npm` (`cd services/tiktok-listener && npm install && npm run dev`).
+> In Kubernetes it runs as the `tiktok-listener` deployment.
 
-# Check TikTok listener is running
-docker logs tiktok-listener
+```bash
+# Run TikTok listener directly (one option)
+cd services/tiktok-listener && npm install && npm run dev
+
+# Or, if running via a manually-built docker image:
+docker logs <your-tiktok-container-name>
 
 # Check logs for backoff configuration
-docker logs tiktok-listener | grep -i "backoff"
+docker logs <your-tiktok-container-name> | grep -i "backoff"
 ```
 
 ## 1. Verify Reduced Backoff Parameters

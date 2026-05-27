@@ -59,7 +59,7 @@ FATAL: database "allchat" does not exist
 createdb allchat
 
 # Run migrations
-make migrate-up
+make migrate
 ```
 
 ### Timeout
