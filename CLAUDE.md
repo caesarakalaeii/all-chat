@@ -6,16 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
+All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok, Discord) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
 
-**Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from Twitch + YouTube + Kick + TikTok simultaneously, providing full flexibility for streamers who multistream.
+**Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from Twitch + YouTube + Kick + TikTok + Discord simultaneously, providing full flexibility for streamers who multistream.
 
 **Architecture**: Standard Go Layout with microservices communicating via Redis Streams (raw messages) → Message Processor (normalization + enrichment) → Redis Pub/Sub (overlay-specific) → API Gateway WebSocket (client delivery).
 
 **Platform Status**:
-- ✅ Twitch (IRC-based) | ✅ YouTube (HTTP polling with quota tracking) | ✅ Kick (Pusher WebSocket) | ✅ TikTok (Unofficial library)
-
-**Current Phase**: Phase 4 complete. All 6 core listener services implemented and production-ready.
+- ✅ Twitch (IRC + EventSub) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Pusher WebSocket) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
 
 ---
 
@@ -25,7 +23,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 # Full development environment (all services)
 make docker-up         # Start postgres, redis, all services
 make test              # Run tests
-make migrate-up        # Apply database migrations
+make migrate           # Apply database migrations (use `make migrate-down` to roll back)
 
 # Frontend-only development (minimal backend)
 make frontend-dev      # Start postgres, redis, gateway, overlay-manager, message-processor
@@ -109,18 +107,19 @@ Each service has a detailed README:
 - [youtube-listener-innertube](./services/youtube-listener-innertube/README.md) - InnerTube API polling (no quota cost)
 - [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
-- [discord-listener](./services/discord-listener/README.md) - Discord channel chat relay
+- discord-listener — Discord channel chat relay (`services/discord-listener/`, no README yet)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
-- [share-service](./services/share-service/README.md) - Shareable overlay links
+- share-service — Shareable overlay links (`services/share-service/`, no README yet)
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
+- [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
 
 ### Development Guides
 
 - [GETTING_STARTED.md](./GETTING_STARTED.md) - Complete navigation guide for LLM agents
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Pull request process, code review guidelines
-- [Testing Guide](./docs/development/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
+- [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
 
 ---
 
@@ -165,10 +164,10 @@ services/<service-name>/
 ## Message Flow Architecture
 
 ```
-Listeners (Twitch/YouTube/Kick/TikTok)
+Listeners (Twitch/YouTube/Kick/TikTok/Discord)
   ↓ publish raw messages
 Redis Streams (chat:raw)
-  ↓ consume via XREADGROUP
+  ↓ consume via XREADGROUP (group: message-processors)
 Message Processor
   ├─ Normalize (platform → unified format)
   ├─ Enrich (7TV, BTTV, FFZ emotes)
@@ -217,9 +216,9 @@ REDIS_PORT=6379
 ## Known Issues & Technical Debt
 
 ### Security
-- Token encryption is basic (TODO: implement AES-GCM)
+- Token encryption uses AES-GCM (`shared/encryption/`); a versioned multi-key rotation API is available in `shared/encryption/versioned.go`
 - CORS allows `*` in dev (configure for production)
-- No service-to-service auth (Kubernetes NetworkPolicies only)
+- Service-to-service signing implemented in `shared/signing/` (Kubernetes NetworkPolicies still recommended)
 
 ### Testing
 - Integration tests incomplete for YouTube Listener

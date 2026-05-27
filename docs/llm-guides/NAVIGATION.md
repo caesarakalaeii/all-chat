@@ -2,7 +2,7 @@
 
 **Purpose**: Quick navigation to locate relevant files for any task in All-Chat repository.
 
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-05-27
 
 ---
 
@@ -56,10 +56,10 @@
 **Key Files**:
 - `services/overlay-manager/cmd/main.go` - Entry point
 - `services/overlay-manager/handlers/config.go` - Overlay CRUD endpoints
-- `services/overlay-manager/handlers/mock.go` - Mock chat injection for testing
+- `services/overlay-manager/handlers/mock_message.go` - Mock chat injection for testing
 - `services/overlay-manager/creditroll/` - Credit roll configuration
 - `services/overlay-manager/repository/` - Database access for overlays, sources
-- `services/overlay-manager/youtube/resolver.go` - YouTube @handle → channel ID resolution
+- `services/overlay-manager/handlers/youtube.go` - YouTube @handle → channel ID resolution
 
 **Read When**: Working on overlay configuration, chat source management, mock chat, or YouTube channel resolution.
 
@@ -73,9 +73,9 @@
 
 **Key Files**:
 - `services/emote-service/cmd/main.go` - Entry point
-- `services/emote-service/providers/` - 7TV, BTTV, FFZ API clients
-- `services/emote-service/cache/redis.go` - Cache layer (1-hour TTL)
-- `services/emote-service/handlers/emotes.go` - HTTP API for emote resolution
+- `services/emote-service/clients/` - 7TV, BTTV, FFZ API clients
+- `services/emote-service/cache/` - Cache layer (Redis-backed)
+- `services/emote-service/handlers/` - HTTP API for emote resolution
 
 **Read When**: Working on emote providers, caching strategy, or emote API integration.
 
@@ -89,9 +89,11 @@
 
 **Key Files**:
 - `services/twitch-listener/cmd/main.go` - Entry point, IRC client initialization
-- `services/twitch-listener/irc/client.go` - Twitch IRC client (gempir/go-twitch-irc)
+- `services/twitch-listener/irc/connection.go` - Twitch IRC connection wrapper (gempir/go-twitch-irc)
+- `services/twitch-listener/irc/parser.go` / `event_parser.go` - PRIVMSG/event parsing
 - `services/twitch-listener/channels/manager.go` - Dynamic channel JOIN/PART management
-- `services/twitch-listener/publisher/redis.go` - Publish to Redis Stream `chat:raw`
+- `services/twitch-listener/publisher/stream_publisher.go` - Publish to Redis Stream `chat:raw`
+- `services/twitch-listener/zombie/detector.go` - Zombie liveness detector (see ADR-0011)
 
 **Read When**: Working on Twitch IRC integration, channel management, or IRC message parsing.
 
@@ -105,11 +107,11 @@
 
 **Key Files**:
 - `services/youtube-listener/cmd/main.go` - Entry point with leader election
-- `services/youtube-listener/youtube/client.go` - YouTube API client wrapper
+- `services/youtube-listener/api/client.go` - YouTube API client wrapper (also `grpc_client.go`)
 - `services/youtube-listener/streams/poller.go` - Live chat polling (2-5s intervals)
+- `services/youtube-listener/streams/manager.go` - Active stream tracking
 - `services/youtube-listener/quota/tracker.go` - **Reserve-confirm-rollback quota tracking**
-- `services/youtube-listener/channels/manager.go` - Active stream tracking
-- `services/youtube-listener/publisher/redis.go` - Publish to Redis Stream `chat:raw`
+- `services/youtube-listener/publisher/stream_publisher.go` - Publish to Redis Stream `chat:raw`
 
 **Read When**: Working on YouTube integration, quota management, leader election, or API polling.
 
@@ -123,13 +125,15 @@
 
 **Key Files**:
 - `services/message-processor/cmd/main.go` - Consumer group initialization
-- `services/message-processor/consumer/streams.go` - Redis Streams XREADGROUP consumer
-- `services/message-processor/normalizer/` - Platform-specific normalizers (twitch, youtube, kick, tiktok)
+- `services/message-processor/consumer/stream_consumer.go` - Redis Streams XREADGROUP consumer
+- `services/message-processor/consumer/dlq.go` / `retry.go` - DLQ and retry handling
+- `services/message-processor/normalizer/` - Platform-specific normalizers (twitch, youtube, kick, tiktok, discord)
 - `services/message-processor/enricher/emote_enricher.go` - Emote enrichment pipeline
-- `services/message-processor/publisher/pubsub.go` - Publish to Redis Pub/Sub `overlay:{id}`
-- `services/message-processor/router/router.go` - Route messages by platform
+- `services/message-processor/enricher/pronoun_enricher.go` - Alejo pronoun enricher (ADR-0010)
+- `services/message-processor/publisher/pubsub_publisher.go` - Publish to Redis Pub/Sub `overlay:{id}`
+- `services/message-processor/router/overlay_router.go` - Route messages to overlays
 - `services/message-processor/seventv/` - 7TV EventAPI real-time updates
-- `services/message-processor/sessions/tracker.go` - Stream session tracking (credit roll)
+- `services/message-processor/sessions/capture.go` - Stream session tracking (credit roll)
 
 **Read When**: Working on message normalization, emote enrichment, platform support, or credit roll feature.
 
@@ -282,7 +286,7 @@ psql -c "SELECT * FROM youtube_quota_usage WHERE date = CURRENT_DATE;"
 ls -1 migrations/*.sql | tail -1
 
 # Run migrations
-make migrate-up
+make migrate
 ```
 
 **→ Complete Guide**: [QUICK-REF-DATABASE-MIGRATION.md](./QUICK-REF-DATABASE-MIGRATION.md) (~100 lines)
@@ -312,6 +316,12 @@ Read in numbered order (00 → 05):
 - [ADR-0004](../adr/0004-no-hexagonal-architecture.md) - No ports/adapters
 - [ADR-0005](../adr/0005-react-nextjs-frontend.md) - React + Next.js
 - [ADR-0006](../adr/0006-youtube-quota-tracking.md) - YouTube quota tracking
+- [ADR-0007](../adr/0007-leadership-rebalancing.md) — Leadership rebalancing
+- [ADR-0008](../adr/0008-feature-gate-infrastructure.md) — Feature gate infra
+- [ADR-0009](../adr/0009-ring-buffer-publisher.md) — Ring buffer publisher
+- [ADR-0010](../adr/0010-pronoun-enricher-alejo-api.md) — Pronoun enricher (Alejo)
+- [ADR-0011](../adr/0011-zombie-listener-detection.md) — Zombie listener detection
+- [ADR-0012](../adr/0012-oauth-scope-minimisation.md) — OAuth scope minimisation
 
 ---
 
@@ -374,7 +384,7 @@ make test               # Run all tests
 make docker-up          # Start local environment
 
 # Database
-make migrate-up         # Apply migrations
+make migrate            # Apply migrations
 psql postgresql://allchat:allchat_dev_password@localhost:5432/allchat
 
 # Redis

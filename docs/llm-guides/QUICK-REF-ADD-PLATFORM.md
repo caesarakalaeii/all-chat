@@ -367,7 +367,7 @@ COMMENT ON COLUMN overlay_chat_sources.metadata IS
 ### 4.3 Run Migration
 
 ```bash
-make migrate-up
+make migrate
 # Or manually:
 psql postgresql://allchat:allchat_dev_password@localhost:5432/allchat -f migrations/023_<platform>_support.sql
 ```

@@ -1,5 +1,11 @@
 # Coordinator Filtering Fix - Implementation Summary
 
+> **Status (2026-05):** Historical implementation note. The `services/source-manager/coordination/`
+> package referenced below has since been refactored — heartbeat/coordinator logic now lives
+> in `services/source-manager/election/`, `registry/`, and `demand/`. The `ENABLE_COORDINATOR_FILTERING`
+> env flag is gone (filtering is the default). The shard metrics described here still exist in
+> `shared/metrics/shard_metrics.go`. Preserved for historical context.
+
 ## Date: 2026-02-21
 
 ## Overview

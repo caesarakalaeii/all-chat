@@ -11,7 +11,7 @@
 → **[docs/llm-guides/NAVIGATION.md](./docs/llm-guides/NAVIGATION.md)** (~400 lines)
 
 This guide includes:
-- Service-by-service navigation (all 13 services)
+- Service-by-service navigation (all 17 services)
 - Common tasks and where to find relevant code
 - Quick reference card links
 - Troubleshooting guides
@@ -46,7 +46,7 @@ make docker-up         # Postgres, Redis, all services
 make test
 
 # Apply database migrations
-make migrate-up
+make migrate
 
 # Access services
 # - API Gateway: http://localhost:8080
@@ -61,8 +61,8 @@ All documentation has been reorganized into focused, LLM-optimized guides:
 
 ```
 docs/
-├── llm-guides/              # Task-oriented quick references (8 guides)
-├── adr/                     # Architecture Decision Records (6 ADRs)
+├── llm-guides/              # Task-oriented quick references (9 guides + NAVIGATION)
+├── adr/                     # Architecture Decision Records (12 ADRs)
 ├── architecture/            # System architecture (6 docs, numbered 00-05)
 ├── troubleshooting/         # Diagnostic guides (decision tree + 5 guides)
 ├── operations/              # Deployment and runbooks

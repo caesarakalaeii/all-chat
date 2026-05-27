@@ -225,6 +225,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0012: OAuth Scope Minimisation Post Extension v1.6.0
+
+**Status**: ✅ Accepted
+**Date**: 2026-04-29
+**Problem**: Viewer OAuth flows requested send-capable scopes (`user:write:chat`, `youtube.force-ssl`, `chat:write`) even though chat sending moved client-side in extension v1.6.0
+**Decision**: Drop send scopes from viewer OAuth requests — the backend no longer needs to send chat on behalf of viewers
+**Impact**: Reduced consent friction, smaller attack surface, simpler review for app verification
+**→ Read**: [0012-oauth-scope-minimisation.md](./0012-oauth-scope-minimisation.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -294,7 +305,7 @@ The skill will:
 4. Generate complete ADR using MADR template
 5. Update this index automatically
 
-**→ See**: [Phase 5 Skills](../llm-guides/QUICK-REF-CLAUDE-CODE-SKILLS.md)
+**→ See**: ADR skill in `.claude/skills/doc-adr.md`
 
 ---
 
@@ -346,13 +357,13 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 11
+**Total ADRs**: 12
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-04-08
+**Last Updated**: 2026-05-27

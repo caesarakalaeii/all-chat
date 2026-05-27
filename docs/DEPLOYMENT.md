@@ -88,7 +88,7 @@ make docker-up
 ### 5. Run Migrations
 
 ```bash
-make migrate-up
+make migrate
 ```
 
 ### 6. Build Services
@@ -304,7 +304,7 @@ MESSAGE_DURATION_SECONDS=15
 
 ```bash
 # Up (apply migrations)
-make migrate-up
+make migrate
 
 # Down (rollback)
 make migrate-down
@@ -420,7 +420,7 @@ docker-compose ps postgres
 psql postgresql://allchat:password@localhost:5432/allchat -c "SELECT 1"
 
 # Run migrations
-make migrate-up
+make migrate
 ```
 
 ### Redis Connection Errors

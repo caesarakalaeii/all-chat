@@ -115,7 +115,7 @@ pg_dump postgresql://allchat:allchat_dev_password@localhost:5432/allchat > backu
 psql postgresql://allchat:allchat_dev_password@localhost:5432/allchat -f migrations/023_your_feature_name.sql
 
 # Or use make target
-make migrate-up
+make migrate
 ```
 
 ### 3.3 Verify Schema Changes

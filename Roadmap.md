@@ -1,5 +1,11 @@
 ## Kick Listener Hardening Roadmap
 
+> **Status (2026-05):** Items 1–6 are substantially implemented in `services/kick-listener/`:
+> Postgres `LISTEN/NOTIFY` activation (`channels/manager.go`), Pusher control plane
+> (`websocket/client.go` with `pusher:connection_established`, `pusher:ping`/`pusher:pong`),
+> health probes (`/health/live`, `/health/ready` in `cmd/main.go`), and Prometheus metrics
+> (`metrics/`). The listener is read-only; outbound writes still require a separate service.
+
 1. **Activation Parity with Other Listeners**
    - Adopt the same activation workflow used by existing listeners (e.g., TikTok). Rely on PostgreSQL `LISTEN/NOTIFY` to react immediately when overlay sources are (de)activated.
    - Ensure the Kick listener spins services up/down based on the activation events so idle Pusher subscriptions never linger.

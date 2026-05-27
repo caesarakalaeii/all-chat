@@ -9,10 +9,10 @@ This guide helps validate all the changes made to fix YouTube stream detection i
 make docker-up
 
 # Check YouTube listener is running
-docker logs youtube-listener
+docker logs allchat-youtube-listener
 
 # Check logs for quota budget initialization
-docker logs youtube-listener | grep "Quota budget system configured"
+docker logs allchat-youtube-listener | grep "Quota budget system configured"
 ```
 
 ## 1. Verify Quota Budgeting System
@@ -20,7 +20,7 @@ docker logs youtube-listener | grep "Quota budget system configured"
 ### Check Initialization
 ```bash
 # Should see quota budget startup in logs
-docker logs youtube-listener | grep -A 10 "Quota budget system configured"
+docker logs allchat-youtube-listener | grep -A 10 "Quota budget system configured"
 ```
 
 **Expected Output:**
@@ -51,7 +51,7 @@ curl http://localhost:8086/admin/detection/quota-budget | jq
 ### Check Configuration
 ```bash
 # Circuit breaker should use new thresholds
-docker logs youtube-listener | grep "circuit"
+docker logs allchat-youtube-listener | grep "circuit"
 ```
 
 **Expected Behavior:**
@@ -126,7 +126,7 @@ curl -X POST http://localhost:8086/admin/detection/channels/${CHANNEL_ID}/reset-
 curl -X POST http://localhost:8086/admin/detection/channels/${CHANNEL_ID}/force-check
 
 # Check logs for manual operation
-docker logs youtube-listener | tail -20
+docker logs allchat-youtube-listener | tail -20
 ```
 
 **Expected Log:**

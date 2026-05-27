@@ -6,20 +6,15 @@ This package provides Prometheus metrics for the All-Chat platform following the
 
 ## Current Implementation Status
 
-### ✅ Completed
-- **Metrics Package Created**: Common metrics patterns for listeners, processors, gateway, and business metrics
-- **Twitch Listener**: `/metrics` endpoint added
+### ✅ Completed (rolled out 2026)
+- **Metrics Package**: Common helpers for listeners, processors, gateway, business, and shard metrics
+- **/metrics endpoint**: Live on all main Go services (api-gateway, auth-service, twitch-listener,
+  youtube-listener, kick-listener, message-processor, overlay-manager, source-manager, emote-service)
+- **Recording**: Wired into listener IRC/WS/HTTP paths, processor pipeline, gateway WebSocket layer
+- **Shard metrics**: `shard_*` metrics for coordinator coverage and ghost-pod detection
+- **Business metrics**: Active overlays, users, sources tracked
 
-### 🚧 In Progress
-- Adding `/metrics` endpoints to remaining services
-- Integrating metrics recording into service components
-
-### 📋 TODO
-- Wire up metrics recording in all listener components (IRC, WebSocket, HTTP polling)
-- Add metrics recording to Message Processor pipeline
-- Add metrics recording to API Gateway WebSocket handling
-- Implement business metrics tracking (active overlays, users, etc.)
-- Add platform-specific metrics (Twitch IRC commands, YouTube quota, etc.)
+### Newer services (`discord-listener`, `share-service`, `support-bot`) do not yet expose `/metrics`.
 
 ## Quick Start
 

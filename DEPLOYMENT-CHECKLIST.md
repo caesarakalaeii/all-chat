@@ -1,5 +1,11 @@
 # Coordinator Filtering Fix - Deployment Checklist
 
+> **Status (2026-05):** Historical document. The `ENABLE_COORDINATOR_FILTERING` env var
+> is no longer referenced in the codebase — the feature has been rolled out and is now
+> the default behavior. The `shard_coverage_gaps_detected_total`, `shard_unassigned_sources`,
+> and `shard_ghost_pods_detected_total` metrics still exist in `shared/metrics/shard_metrics.go`.
+> This checklist is preserved as a reference for the rollout process pattern.
+
 ## Pre-Deployment Verification ✅
 
 - [x] All tests pass (32/32 coordination tests)

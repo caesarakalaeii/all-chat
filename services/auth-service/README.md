@@ -401,7 +401,7 @@ kubectl exec -n allchat allchat-cluster-1 -- psql -U allchat -c "SELECT * FROM u
 
 1. **JWT Secret**: Use strong, random secret (min 32 characters). Store in Kubernetes Secret.
 2. **OAuth Credentials**: Store in Kubernetes Secrets (not ConfigMaps or environment variables)
-3. **Token Encryption**: Basic XOR encryption currently (TODO: migrate to AES-GCM)
+3. **Token Encryption**: AES-256-GCM via `shared/encryption/` (versioned key rotation supported in `shared/encryption/versioned.go`)
 4. **Session Storage**: Redis sessions expire after 24 hours (matches JWT expiry)
 5. **Rate Limiting**: Consider adding rate limits to OAuth endpoints (prevent abuse)
 6. **HTTPS Only**: OAuth callbacks must use HTTPS in production (Twitch/Google requirement)

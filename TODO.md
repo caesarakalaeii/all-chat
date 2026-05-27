@@ -1,6 +1,6 @@
 # All-Chat TODO Tracker
 
-**Last Updated**: 2026-01-15
+**Last Updated**: 2026-05-27 (doc audit)
 
 ## 🔴 High Priority (Security & Critical)
 
@@ -75,10 +75,11 @@
   - Scope: All services (coverage varies by service)
   - Impact: Code quality, prevent regressions
 
-- [ ] **Add Prometheus metrics endpoints**
-  - Status: Partial - kick-listener has full implementation (`services/kick-listener/metrics/metrics.go`)
-  - Scope: All services (currently only kick-listener has metrics)
-  - Impact: Better monitoring and debugging
+- [x] **Add Prometheus metrics endpoints** ✅ COMPLETE
+  - Status: Rolled out across all Go services (api-gateway, auth-service, twitch-listener,
+    youtube-listener, message-processor, overlay-manager, source-manager, emote-service,
+    kick-listener); shared helpers in `shared/metrics/`
+  - Impact: Service-level monitoring and dashboards in place
 
 - [x] **Implement distributed tracing with OpenTelemetry** ✅ COMPLETE (2026-01-15)
   - Location: `shared/tracing/tracing.go`, `services/api-gateway/cmd/main.go`
@@ -142,7 +143,7 @@
 
 - Extension (all-chat-extension) has no pending TODOs after recent bug fixes
 - **Major completions (2026-01-15)**:
-  - ✅ All 4 platform listeners implemented (Twitch, YouTube, Kick, TikTok)
+  - ✅ All 5 platform listeners implemented (Twitch [IRC + EventSub], YouTube [Data API + InnerTube], Kick, TikTok, Discord)
   - ✅ Frontend fully built with React + Next.js
   - ✅ Overlay management API complete
   - ✅ OpenTelemetry distributed tracing implemented

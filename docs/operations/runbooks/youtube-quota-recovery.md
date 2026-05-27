@@ -124,8 +124,8 @@ Expected Usage:
 - 5 units per liveChatMessages.list call
 - Estimated: 100,000-200,000 units/day
 
-Current Quota: 10,000 units/day (insufficient)
-Requested Quota: 1,000,000 units/day
+Current Quota: 1,009,000 units/day (already increased from default 10,000)
+Requested Quota: 10,000,000 units/day (if further headroom needed)
 
 Justification: Educational platform for multi-streaming creators.
 ```

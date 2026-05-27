@@ -89,7 +89,7 @@ Detailed explanation of:
 - How the fix works
 - Any side effects or considerations
 
-Co-Authored-By: Claude Sonnet 4.5 (1M context) <noreply@anthropic.com>"
+Co-Authored-By: Claude <noreply@anthropic.com>"
 
 # Push to trigger CI/CD
 git push

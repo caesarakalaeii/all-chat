@@ -75,15 +75,15 @@ wscat -c ws://localhost:8080/ws/overlay/00000000-0000-0000-0000-000000000002
 
 ### Direct API Test
 ```bash
-# Send a message via API
-curl -X POST http://localhost:8087/api/mock/message \
+# Send a message via the message-processor mock endpoint
+curl -X POST http://localhost:8087/internal/mock-messages \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: dev-frontend-key" \
+  -H "X-Internal-Token: dev-frontend-key" \
   -d '{
     "overlay_id": "00000000-0000-0000-0000-000000000002",
     "platform": "twitch",
     "username": "APIUser",
-    "message": "Hello from API!"
+    "text": "Hello from API!"
   }'
 ```
 
@@ -184,6 +184,7 @@ docker-compose -f docker-compose.frontend.yml down --rmi all -v
 | API Gateway | 8080 | WebSocket + HTTP |
 | Overlay Manager | 8082 | CRUD operations |
 | Message Processor | 8087 | Message normalization |
+| Share Service | 8090 | Shareable overlay links |
 
 **Not running** (to save resources):
 - Auth Service

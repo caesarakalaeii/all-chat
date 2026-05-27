@@ -41,13 +41,14 @@ Welcome to the All-Chat documentation hub. This directory contains comprehensive
 
 ### Architecture Decision Records (ADRs)
 
-**Understand WHY decisions were made**:
+**Understand WHY decisions were made** (12 ADRs total — see index):
 - [ADR-0001](./adr/0001-standard-go-layout.md) - Standard Go Layout (not hexagonal)
 - [ADR-0002](./adr/0002-redis-streams-pubsub.md) - Redis Streams + Pub/Sub hybrid
 - [ADR-0003](./adr/0003-cloudnative-postgres.md) - CloudNativePG operator
 - [ADR-0004](./adr/0004-no-hexagonal-architecture.md) - No ports/adapters
 - [ADR-0005](./adr/0005-react-nextjs-frontend.md) - React + Next.js
 - [ADR-0006](./adr/0006-youtube-quota-tracking.md) - YouTube quota tracking
+- ADR-0007 to ADR-0012 — see index
 
 **→ ADR Index**: [adr/README.md](./adr/README.md)
 
@@ -56,17 +57,17 @@ Welcome to the All-Chat documentation hub. This directory contains comprehensive
 ### For Users & Streamers
 
 **Overlay Customization**:
-- [CSS Customization Guide](./user-guides/CSS_CUSTOMIZATION.md) - Complete CSS reference
-- [Overlay Themes Gallery](./user-guides/overlay-themes/README.md) - Pre-built themes
+- [CSS Customization Guide](./CSS_CUSTOMIZATION.md) - Complete CSS reference
+- [Overlay Themes Gallery](./overlay-themes/README.md) - Pre-built themes
 
 ---
 
 ### For Operators & DevOps
 
 **Operations**:
-- [DEPLOYMENT.md](./operations/DEPLOYMENT.md) - Self-hosting guide
-- [PRODUCTION_DEPLOYMENT.md](./operations/PRODUCTION_DEPLOYMENT.md) - Production checklist
-- [OBSERVABILITY_DEPLOYMENT_GUIDE.md](./operations/OBSERVABILITY_DEPLOYMENT_GUIDE.md) - Deploy LGTM stack
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Self-hosting guide
+- [PRODUCTION_DEPLOYMENT.md](./PRODUCTION_DEPLOYMENT.md) - Production checklist
+- [OBSERVABILITY_DEPLOYMENT_GUIDE.md](./OBSERVABILITY_DEPLOYMENT_GUIDE.md) - Deploy LGTM stack
 
 **Runbooks**:
 - [scale-api-gateway.md](./operations/runbooks/scale-api-gateway.md) - Scale WebSocket capacity
@@ -77,7 +78,7 @@ Welcome to the All-Chat documentation hub. This directory contains comprehensive
 
 ### Development
 
-- [TESTING_COMPREHENSIVE.md](./development/TESTING_COMPREHENSIVE.md) - Testing strategy
+- [TESTING_COMPREHENSIVE.md](./TESTING_COMPREHENSIVE.md) - Testing strategy
 - [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines
 
 ---
@@ -104,16 +105,14 @@ These are superseded by current documentation but preserved for historical refer
 
 ## Summary
 
-**Total Documentation**: ~10,000 lines across 50+ files
-
-**Organization**:
-- 📖 8 quick reference cards (task-oriented, <200 lines each)
-- 📖 6 ADRs (design decisions with context)
+**Organization** (current counts as of 2026-05-27):
+- 📖 9 quick reference cards in `llm-guides/` (task-oriented, <200 lines each)
+- 📖 12 ADRs (design decisions with context)
 - 📖 6 architecture docs (numbered 00-05, ~3,700 lines total)
-- 📖 13 service READMEs (100% coverage)
-- 📖 6 troubleshooting guides (diagnostic workflows)
-- 📖 3 operational runbooks (incident response)
+- 📖 ~14 service READMEs (most services have one; `share-service` and `discord-listener` don't)
+- 📖 6 troubleshooting guides + decision tree
+- 📖 6 operational runbooks (4 in `operations/runbooks/`, 2 in `runbooks/`)
 
 **For LLM Agents**: Documentation refactored for 75-86% reduction in reading for common tasks.
 
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-05-27
