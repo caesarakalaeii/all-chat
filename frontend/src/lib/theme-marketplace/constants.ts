@@ -118,8 +118,8 @@ export const EMBEDDED_FALLBACK_THEMES: Theme[] = [
     description: 'Inline layout with colorful usernames, no backgrounds or avatars',
     tags: ['minimal', 'clean', 'inline', 'simple'],
     author: 'All-Chat Team',
-    version: '1.0.0',
-    updated: '2026-01-08',
+    version: '1.0.1',
+    updated: '2026-05-28',
     css: `/* Minimal theme CSS will be fetched from GitHub */
 body {
   background: transparent !important;
@@ -133,15 +133,20 @@ body {
 .flex-shrink-0 {
   display: none !important;
 }
+.flex.items-center.gap-2 {
+  display: inline !important;
+}
 .font-semibold.text-sm {
-  font-size: 18px !important;
+  font-size: 16px !important;
   font-weight: 700 !important;
-  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000 !important;
+  paint-order: stroke fill !important;
+  -webkit-text-stroke: 3px #000 !important;
 }
 .text-white.break-words {
   font-size: 16px !important;
   color: #ffffff !important;
-  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000 !important;
+  paint-order: stroke fill !important;
+  -webkit-text-stroke: 3px #000 !important;
 }`,
   },
   {
