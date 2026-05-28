@@ -4,8 +4,8 @@
  * Description: Inline layout with colorful usernames, no backgrounds or avatars
  * Tags: minimal, clean, inline, simple
  * Author: All-Chat Team
- * Version: 1.0.0
- * Updated: 2026-01-08
+ * Version: 1.0.1
+ * Updated: 2026-05-28
  */
 
 /* ============================================================
@@ -88,12 +88,11 @@ body {
   min-width: 0 !important;
 }
 
-/* Header container - inline-flex to keep badges and platform icon horizontal */
+/* Header container - plain inline so the username shares the same text baseline
+   as the message. Using inline-flex here would blockify the username into a
+   flex item, breaking baseline alignment with the surrounding inline text. */
 .flex.items-center.gap-2 {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-  flex-wrap: nowrap !important;
+  display: inline !important;
 }
 
 /* Platform badge (icon) - inline with proper sizing */
@@ -172,19 +171,10 @@ body {
   font-family: var(--chat-font-family, 'Roboto', Arial, sans-serif) !important;
   font-size: var(--chat-font-size, 16px) !important;
   font-weight: var(--chat-font-weight, 400) !important;
-  text-shadow:
-    -1px -1px 0 #000,
-     1px -1px 0 #000,
-    -1px  1px 0 #000,
-     1px  1px 0 #000,
-    -2px -2px 0 #000,
-     2px -2px 0 #000,
-    -2px  2px 0 #000,
-     2px  2px 0 #000,
-    -1px  0   0 #000,
-     1px  0   0 #000,
-     0   -1px 0 #000,
-     0    1px 0 #000 !important;
+  /* Smooth vector outline via -webkit-text-stroke + paint-order */
+  text-shadow: none !important;
+  paint-order: stroke fill !important;
+  -webkit-text-stroke: 3px #000 !important;
   margin-left: 0 !important;
 }
 
@@ -223,38 +213,29 @@ body {
    USERNAME STYLES - COLORFUL WITH BLACK OUTLINE
    ============================================================ */
 
-/* Username with thick black outline for maximum readability */
+/* Username with thick black outline for maximum readability.
+   Font-size and line-height match the message text so glyphs share a baseline
+   in the inline layout — bold weight + color provide the visual hierarchy. */
 .font-semibold.text-sm {
   font-family: var(--chat-username-font-family, 'Roboto', Arial, sans-serif) !important;
-  font-size: var(--chat-username-font-size, 18px) !important;
+  font-size: var(--chat-username-font-size, 16px) !important;
   font-weight: var(--chat-username-font-weight, 700) !important;
-  line-height: var(--chat-line-height, 1.4) !important;
+  line-height: var(--chat-line-height, 1.5) !important;
   display: var(--chat-show-username, inline) !important;
   margin-bottom: 0 !important;
   margin-right: 0 !important;
-  /* Multiple text-shadow layers create thick black outline */
-  text-shadow:
-    -1px -1px 0 #000,
-     1px -1px 0 #000,
-    -1px  1px 0 #000,
-     1px  1px 0 #000,
-    -2px -2px 0 #000,
-     2px -2px 0 #000,
-    -2px  2px 0 #000,
-     2px  2px 0 #000,
-    -1px  0   0 #000,
-     1px  0   0 #000,
-     0   -1px 0 #000,
-     0    1px 0 #000 !important;
+  /* Smooth vector outline via -webkit-text-stroke + paint-order, replacing
+     the previous 12-layer text-shadow that produced choppy corners. */
+  text-shadow: none !important;
+  paint-order: stroke fill !important;
+  -webkit-text-stroke: 3px #000 !important;
   /* Colors are preserved from backend (dynamic per user) */
-  /* The outline ensures readability on any background */
 }
 
 /* Add colon after username */
 .font-semibold.text-sm::after {
   content: ": " !important;
   color: inherit !important;
-  text-shadow: inherit !important;
 }
 
 /* ============================================================
@@ -289,20 +270,10 @@ body {
   word-break: break-word !important;
   overflow-wrap: break-word !important;
   white-space: pre-wrap !important;
-  /* Multiple text-shadow layers for black outline */
-  text-shadow:
-    -1px -1px 0 #000,
-     1px -1px 0 #000,
-    -1px  1px 0 #000,
-     1px  1px 0 #000,
-    -2px -2px 0 #000,
-     2px -2px 0 #000,
-    -2px  2px 0 #000,
-     2px  2px 0 #000,
-    -1px  0   0 #000,
-     1px  0   0 #000,
-     0   -1px 0 #000,
-     0    1px 0 #000 !important;
+  /* Smooth vector outline (see username block for rationale) */
+  text-shadow: none !important;
+  paint-order: stroke fill !important;
+  -webkit-text-stroke: 3px #000 !important;
   margin: 0 !important;
   padding: 0 !important;
   background: transparent !important;
