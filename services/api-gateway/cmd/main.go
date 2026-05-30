@@ -465,6 +465,7 @@ func main() {
 
 		// Overlay config for public overlays
 		publicAPI.GET("/overlays/public/:id/config", proxyHandler.ForwardRequest)
+		publicAPI.GET("/overlays/public/:id/event-settings", proxyHandler.ForwardRequest)
 		publicAPI.GET("/overlays/public/:id/creditroll", proxyHandler.ForwardRequest)
 		publicAPI.GET("/overlays/public/:id/credit-roll", proxyHandler.ForwardRequest)
 
