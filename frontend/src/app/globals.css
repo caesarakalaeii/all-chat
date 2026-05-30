@@ -26,7 +26,7 @@
   --color-youtube: #ff4444;
   --color-kick: #53fc18;
   --color-tiktok: #69c9d0;
-  --color-discord: #5865F2;
+  --color-discord: #5865f2;
 
   /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
   --color-neutral-950: oklch(0.09 0.007 270); /* #07070a — bg */
@@ -277,4 +277,32 @@ span.font-semibold.text-sm.username-gradient {
 
 .legal-prose ul li {
   margin-top: 0.25rem;
+}
+
+/* ============================================================
+   OVERLAY OBSERVABILITY VIEW — /overlay/[id]/view
+   Self-contained light/dark surface. Intentionally IGNORES the
+   overlay marketplace themes (custom_css / visual_settings): the
+   route never injects those <style> tags, so this token block is
+   the only styling authority. Mirrors the #legal-wrapper pattern.
+   ============================================================ */
+.overlay-view {
+  /* Dark defaults come from the global @theme tokens; restate the
+     surface/text so the wrapper paints its own background. */
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+}
+
+/* Light mode token overrides — scoped to .overlay-view.light */
+.overlay-view.light {
+  --color-bg: #f8f9fa;
+  --color-surface: #ffffff;
+  --color-surface-2: #f0f1f3;
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-border-md: rgba(0, 0, 0, 0.15);
+  --color-text: #1a1a2e;
+  --color-text-sub: #374151;
+  --color-text-dim: #6b7280;
+  --color-nav-bg: rgba(255, 255, 255, 0.9);
 }
