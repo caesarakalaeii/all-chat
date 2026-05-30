@@ -64,6 +64,8 @@ https://allch.at/overlay/YOUR_OVERLAY_ID/view
 
 A Twitch-dashboard-inspired monitor with a **resizable live Chat panel + Activity feed**, per-platform connection indicators, a config summary, and its own **light/dark mode**. It ignores the overlay's themes and animations — purely for observability — and even keeps moderated messages visible (struck-through) with a moderation log. No login required; it reuses the same public overlay link.
 
+You can also open it from your overlay's settings page (or its preview page) via the **Monitor View** button.
+
 ### 3. Customize the look
 
 All-Chat ships with **12 ready-made themes** you can paste into your OBS Browser Source custom CSS:
