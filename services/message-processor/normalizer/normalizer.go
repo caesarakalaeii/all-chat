@@ -55,8 +55,16 @@ func NormalizeDeletion(raw *models.RawChatMessage) *models.UnifiedChatMessage {
 		if username, ok := raw.EventData["target_username"].(string); ok {
 			eventMetadata["target_username"] = username
 		}
-		if duration, ok := raw.EventData["ban_duration"].(int); ok {
-			eventMetadata["ban_duration"] = duration
+		// ban_duration survives a JSON round-trip over Redis Streams as float64
+		// (gempir emits an int; the processor json.Unmarshals into a
+		// map[string]interface{}, widening numbers to float64). Accept both —
+		// otherwise the timeout duration is dropped and a timeout becomes
+		// indistinguishable from a permanent ban downstream.
+		switch d := raw.EventData["ban_duration"].(type) {
+		case float64:
+			eventMetadata["ban_duration"] = int(d)
+		case int:
+			eventMetadata["ban_duration"] = d
 		}
 
 	case "clear":
