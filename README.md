@@ -54,6 +54,16 @@ No bots. No IRC tokens. No complicated setup.
 
 > **Tip:** The overlay has a transparent background by default, so it layers cleanly over your stream.
 
+### Monitor your chat on a second screen
+
+The OBS overlay is built for compositing on stream, not for reading. For a **readable, dashboard-style view** of everything happening in an overlay, open:
+
+```
+https://allch.at/overlay/YOUR_OVERLAY_ID/view
+```
+
+A Twitch-dashboard-inspired monitor with a **resizable live Chat panel + Activity feed**, per-platform connection indicators, a config summary, and its own **light/dark mode**. It ignores the overlay's themes and animations — purely for observability — and even keeps moderated messages visible (struck-through) with a moderation log. No login required; it reuses the same public overlay link.
+
 ### 3. Customize the look
 
 All-Chat ships with **12 ready-made themes** you can paste into your OBS Browser Source custom CSS:
@@ -229,6 +239,7 @@ Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README
 - **ADR-0006**: YouTube quota reserve-confirm-rollback pattern
 - **ADR-0007**: Leadership rebalancing for auto-scaling listeners
 - **ADR-0008**: Feature gate infrastructure for premium capabilities
+- **ADR-0013**: Public overlay observability view + shared `useOverlayStream` hook
 
 ### Documentation
 
