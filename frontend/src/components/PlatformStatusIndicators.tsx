@@ -44,6 +44,12 @@ interface PlatformStatusIndicatorsProps {
   configuredSources: Map<string, SourceInfo>
   activeChannels: Set<string>
   channelStatuses: Map<string, PlatformStatus>
+  /**
+   * 'fixed' (default) pins the cluster to the top-right corner for the OBS
+   * overlay. 'inline' drops the fixed positioning so it can sit inside a header
+   * (used by the observability view).
+   */
+  variant?: 'fixed' | 'inline'
 }
 
 // Platform SVG Icons - Using official brand colors per platform guidelines
@@ -115,6 +121,7 @@ export default function PlatformStatusIndicators({
   configuredSources,
   activeChannels,
   channelStatuses,
+  variant = 'fixed',
 }: PlatformStatusIndicatorsProps) {
   const [countdowns, setCountdowns] = useState<Map<string, number>>(new Map())
 
@@ -144,7 +151,12 @@ export default function PlatformStatusIndicators({
   const entries = Array.from(configuredSources.entries())
 
   return (
-    <div className="platform-status-indicators fixed top-4 right-4 z-50 flex gap-2 rounded-lg bg-bg/80 px-3 py-2 shadow-lg backdrop-blur-sm">
+    <div
+      className={clsx(
+        'platform-status-indicators flex gap-2 rounded-lg bg-bg/80 px-3 py-2 shadow-lg backdrop-blur-sm',
+        variant === 'fixed' && 'fixed top-4 right-4 z-50'
+      )}
+    >
       {entries.map(([channelId, source]) => {
         const platformDef = platformIcons[source.platform]
         if (!platformDef) return null

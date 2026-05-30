@@ -59,6 +59,67 @@ export interface SevenTVResolvedSet {
   emote_count?: number
 }
 
+/** One source's status as exposed by the public config endpoint. */
+export interface PublicSourceStatus {
+  platform: string
+  channel_id: string
+  channel_name?: string
+  is_active: boolean
+}
+
+/**
+ * Shape of `GET /api/v1/overlays/public/:id/config` — the unauthenticated subset
+ * served to overlay renderers (no auth, no ownership). Mirrors
+ * `ConfigHandler.HandleGetPublicConfig` in overlay-manager.
+ */
+export interface PublicOverlayConfig {
+  display_settings?: DisplaySettings
+  filter_settings?: FilterSettings
+  custom_css?: string
+  visual_settings?: Partial<VisualSettings>
+  seventv_emote_set_id?: string
+  sources?: PublicSourceStatus[]
+}
+
+/**
+ * Per-overlay event toggles — mirrors `models.EventSettings` in overlay-manager.
+ * Served by `GET /api/v1/overlays/public/:id/event-settings` (public) when the
+ * gateway route is enabled; the observability view degrades gracefully without it.
+ */
+export interface EventSettings {
+  id: string
+  overlay_id: string
+  created_at?: string
+  updated_at?: string
+  // Twitch
+  enable_twitch_subs: boolean
+  enable_twitch_resubs: boolean
+  enable_twitch_gift_subs: boolean
+  enable_twitch_bits: boolean
+  enable_twitch_raids: boolean
+  enable_twitch_channel_points: boolean
+  enable_twitch_follows: boolean
+  // YouTube
+  enable_youtube_super_chat: boolean
+  enable_youtube_super_sticker: boolean
+  enable_youtube_members: boolean
+  enable_youtube_member_milestones: boolean
+  enable_youtube_member_gifts: boolean
+  // Kick
+  enable_kick_subs: boolean
+  enable_kick_gifts: boolean
+  // TikTok
+  enable_tiktok_likes: boolean
+  enable_tiktok_gifts: boolean
+  enable_tiktok_follows: boolean
+  enable_tiktok_shares: boolean
+  // System
+  enable_token_warnings: boolean
+  // Aggregation
+  tiktok_like_aggregation_window_seconds: number
+  event_display_duration_multiplier: number
+}
+
 export interface DisplaySettings {
   font_family?: string
   font_size?: number
@@ -134,7 +195,13 @@ export interface ChatSource {
   share_status?: 'accepted' | 'revoked' | 'expired' // Only present for shared_overlay sources
 }
 
-export type StreamSelectionStrategy = 'first_found' | 'most_viewers' | 'fewest_viewers' | 'title_match' | 'title_match_all' | 'all'
+export type StreamSelectionStrategy =
+  | 'first_found'
+  | 'most_viewers'
+  | 'fewest_viewers'
+  | 'title_match'
+  | 'title_match_all'
+  | 'all'
 
 export interface YouTubeSourceConfig {
   stream_select?: StreamSelectionStrategy

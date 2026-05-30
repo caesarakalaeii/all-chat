@@ -46,6 +46,7 @@
 import Image from 'next/image'
 import { use, useEffect, useState, useRef, useMemo } from 'react'
 import clsx from 'clsx'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { WebSocketClient } from '@/lib/api/websocket'
@@ -735,16 +736,16 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
           )}
         </div>
         {message.message.text && (
-          <div className="event-message-text ml-14 text-sm text-text">
-            {message.message.text}
-          </div>
+          <div className="event-message-text ml-14 text-sm text-text">{message.message.text}</div>
         )}
         {event.metadata && Object.keys(event.metadata).length > 0 && (
           <div className="event-metadata mt-1 ml-14 text-xs text-text-dim">
             {(event.metadata as any).viewer_count &&
               `${(event.metadata as any).viewer_count.toLocaleString()} viewers`}
-            {Number((event.metadata as any).months) > 0 && `${(event.metadata as any).months} months`}
-            {Number((event.metadata as any).streak) > 0 && ` • ${(event.metadata as any).streak} month streak`}
+            {Number((event.metadata as any).months) > 0 &&
+              `${(event.metadata as any).months} months`}
+            {Number((event.metadata as any).streak) > 0 &&
+              ` • ${(event.metadata as any).streak} month streak`}
             {(event.metadata as any).gift_count && `${(event.metadata as any).gift_count} gifts`}
             {(event.metadata as any).bits && `${(event.metadata as any).bits} bits`}
             {(event.metadata as any).like_count && `${(event.metadata as any).like_count} likes`}
@@ -1010,12 +1011,23 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
             </span>
           </div>
 
-          <button
-            onClick={copyOverlayUrl}
-            className="rounded-lg bg-twitch px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
-          >
-            📋 Copy OBS URL
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/overlay/${id}/view`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text-sub transition-colors hover:border-border-md hover:text-text"
+              title="Open the readable chat & activity monitor in a new tab"
+            >
+              🖥️ Monitor view
+            </Link>
+            <button
+              onClick={copyOverlayUrl}
+              className="rounded-lg bg-twitch px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
+            >
+              📋 Copy OBS URL
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1131,9 +1143,17 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                                     <div className="flex gap-1">
                                       {message.user.badges.map((badge, index) =>
                                         badge.name === 'allchat' ? (
-                                          <AllChatBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                          <AllChatBadge
+                                            key={`${badge.name}-${index}`}
+                                            size={16}
+                                            title={badge.name}
+                                          />
                                         ) : badge.name === 'allchat-premium' ? (
-                                          <PremiumBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                          <PremiumBadge
+                                            key={`${badge.name}-${index}`}
+                                            size={16}
+                                            title={badge.name}
+                                          />
                                         ) : badge.icon_url ? (
                                           <Image
                                             key={`${badge.name}-${index}`}
@@ -1190,9 +1210,17 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                                     <div className="flex gap-1">
                                       {message.user.badges.map((badge, index) =>
                                         badge.name === 'allchat' ? (
-                                          <AllChatBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                          <AllChatBadge
+                                            key={`${badge.name}-${index}`}
+                                            size={16}
+                                            title={badge.name}
+                                          />
                                         ) : badge.name === 'allchat-premium' ? (
-                                          <PremiumBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                          <PremiumBadge
+                                            key={`${badge.name}-${index}`}
+                                            size={16}
+                                            title={badge.name}
+                                          />
                                         ) : badge.icon_url ? (
                                           <Image
                                             key={`${badge.name}-${index}`}
@@ -1223,7 +1251,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
                               </div>
 
                               {/* Timestamp */}
-                              <div className="mt-1 text-xs text-gray-500">
+                              <div className="mt-1 text-xs text-slate-500">
                                 {new Date(message.timestamp).toLocaleTimeString()}
                               </div>
                             </div>

@@ -236,6 +236,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0013: Public Overlay Observability View + Shared `useOverlayStream` Hook
+
+**Status**: ✅ Accepted
+**Date**: 2026-05-31
+**Problem**: The OBS render route is the only way to watch an overlay's chat, but it is transparent/fading/theme-styled and unreadable as a monitor
+**Decision**: Extract the realtime connection logic into a shared `useOverlayStream` hook (both the overlay and a new public `/overlay/[id]/view` consume it); the view is a readable, theme-agnostic, light/dark dashboard with resizable Chat + Activity panels
+**Impact**: One implementation of reconnect/replay/dedup; overlay behavior preserved; streamers get a second-monitor observability dashboard with moderation logging
+**→ Read**: [0013-overlay-observability-view.md](./0013-overlay-observability-view.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -357,13 +368,13 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 12
+**Total ADRs**: 13
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-05-27
+**Last Updated**: 2026-05-31
