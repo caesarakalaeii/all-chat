@@ -2090,6 +2090,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => window.open(`/overlay/${id}/view`, '_blank', 'noopener,noreferrer')}
+                title="Open the readable chat & activity monitor in a new tab"
+              >
+                Monitor View
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => router.push(`/overlays/${id}/events`)}
               >
                 Event Settings
