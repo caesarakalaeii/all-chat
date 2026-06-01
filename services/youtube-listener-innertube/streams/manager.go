@@ -307,20 +307,21 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts Discover
 	go m.discoveryLoop(discoveryCtx, state)
 }
 
-// discoveryLoop attempts discovery with exponential backoff
-// Backoff sequence: 30s, 1m, 2m, 5m, 10m (matches official listener pattern)
-// 15-minute timeout per user decision
+// discoveryLoop attempts discovery with exponential backoff.
+// Backoff sequence: 10s, 20s, 30s, 60s — aggressive detection capped at 1 minute so a
+// channel going live is picked up within ~1m. Discovery only runs for demanded channels
+// (an overlay is connected, see isChannelDemanded), so the 1m cap stays well within
+// YouTube's tolerance for the InnerTube channel-page scrape.
 func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 	defer m.wg.Done()
 
-	// Exponential backoff capped at 10 minutes to respect YouTube rate limits
-	// Keep polling indefinitely until stream is discovered or source is deactivated
+	// Exponential backoff capped at 1 minute. Keep polling indefinitely until a stream is
+	// discovered or the source is deactivated.
 	backoffSequence := []time.Duration{
+		10 * time.Second,
+		20 * time.Second,
 		30 * time.Second,
-		1 * time.Minute,
-		2 * time.Minute,
-		5 * time.Minute,
-		10 * time.Minute, // Max backoff - continue at 10m intervals
+		60 * time.Second, // Max backoff - continue at 1m intervals
 	}
 
 	for {
