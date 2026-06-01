@@ -88,6 +88,17 @@ func setupSourceTestDatabase(t *testing.T) (*SourceRepository, func()) {
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW()
 		);
+
+		-- Minimal users table (owned by auth-service; shared DB in prod). Required so the
+		-- chat_via_eventsub subquery in ListByOverlayID resolves. No rows are inserted by
+		-- these tests, so chat_via_eventsub is false for every source here.
+		CREATE TABLE IF NOT EXISTS users (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			username VARCHAR(50) NOT NULL,
+			auth_provider VARCHAR(20) NOT NULL DEFAULT 'twitch',
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			token_expires_at TIMESTAMP NOT NULL DEFAULT NOW()
+		);
 	`)
 	require.NoError(t, err)
 

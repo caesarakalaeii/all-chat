@@ -84,11 +84,22 @@ func (r *SourceRepository) Create(ctx context.Context, source *models.ChatSource
 // For shared_overlay sources, it JOINs share_requests to populate ShareStatus.
 // Non-shared_overlay sources have ShareStatus == nil (omitted from JSON).
 func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error) {
+	// chat_via_eventsub mirrors the IRC/EventSub partition predicate (see
+	// twitch-eventsub-listener/channels/manager.go and twitch-listener/channels/repository.go):
+	// a Twitch source is read via EventSub when its channel owner granted user:read:chat
+	// and still has a valid token. The frontend uses it to show a badge / reconnect CTA.
 	query := `
 		SELECT ocs.id, ocs.overlay_id, ocs.platform, ocs.channel_id, ocs.channel_name,
 		       ocs.channel_handle, ocs.auth_required, ocs.config, ocs.is_active,
 		       ocs.created_at, ocs.updated_at,
-		       sr.status AS share_status
+		       sr.status AS share_status,
+		       (ocs.platform = 'twitch' AND EXISTS (
+		           SELECT 1 FROM users u
+		           WHERE LOWER(u.username) = LOWER(ocs.channel_id)
+		             AND u.auth_provider = 'twitch'
+		             AND 'user:read:chat' = ANY(u.granted_scopes)
+		             AND u.token_expires_at > NOW()
+		       )) AS chat_via_eventsub
 		FROM overlay_chat_sources ocs
 		LEFT JOIN share_requests sr
 		    ON ocs.platform = 'shared_overlay'
@@ -119,6 +130,7 @@ func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string
 			&source.CreatedAt,
 			&source.UpdatedAt,
 			&source.ShareStatus,
+			&source.ChatViaEventSub,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan source: %w", err)

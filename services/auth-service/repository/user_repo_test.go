@@ -96,6 +96,7 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			access_token TEXT NOT NULL,
 			refresh_token TEXT NOT NULL,
 			token_expires_at TIMESTAMP NOT NULL,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW(),
 			CONSTRAINT check_auth_ids CHECK (

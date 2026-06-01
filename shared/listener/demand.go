@@ -113,9 +113,10 @@ func (ll *LeadershipListener) runDemandSubscriber(ctx context.Context, mgr Chann
 // reconcileDemand filters the demand update by platform and calls
 // mgr.UpdateDemandedSourceIDs with the result.
 func (ll *LeadershipListener) reconcileDemand(mgr ChannelManager, update demandUpdate) {
+	demandPlatform := ll.config.demandPlatform()
 	demanded := make(map[string]DemandedSource, len(update.Sources))
 	for _, src := range update.Sources {
-		if ll.config.Platform != "" && src.Platform != ll.config.Platform {
+		if demandPlatform != "" && src.Platform != demandPlatform {
 			continue
 		}
 		demanded[src.SourceID] = DemandedSource{
@@ -129,7 +130,7 @@ func (ll *LeadershipListener) reconcileDemand(mgr ChannelManager, update demandU
 		ll.logger.Debug("Demand update reconciled",
 			zap.Int("total_in_update", len(update.Sources)),
 			zap.Int("demanded_after_filter", len(demanded)),
-			zap.String("platform_filter", ll.config.Platform),
+			zap.String("platform_filter", demandPlatform),
 		)
 	}
 	mgr.UpdateDemandedSourceIDs(demanded)

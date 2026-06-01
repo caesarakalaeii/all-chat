@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -214,29 +215,133 @@ func (sm *SubscriptionManager) SubscribeToStreamOnline(ctx context.Context, broa
 	return sm.subscribeWithCondition(ctx, "stream.online", broadcasterID, token, "1", condition, cacheKey)
 }
 
-// Unsubscribe deletes a subscription
-func (sm *SubscriptionManager) Unsubscribe(ctx context.Context, broadcasterID string) error {
+// SubscribeToChatMessages creates a channel.chat.message subscription for reading chat.
+//
+// For own-channel reading the broadcaster authorizes their own channel, so the condition
+// carries broadcaster_user_id == user_id == the streamer's Twitch ID. Webhook transport
+// uses the app access token, but Twitch additionally requires the chatter (here, the
+// broadcaster) to hold user:read:chat + user:bot, plus channel:bot on the channel — all
+// satisfied because broadcaster == chatter. Authorization is validated by Twitch at
+// subscription-creation time; a 4xx scope error means the streamer must re-auth with the
+// chat scopes (handled non-fatally by the caller).
+func (sm *SubscriptionManager) SubscribeToChatMessages(ctx context.Context, broadcasterID string) (string, error) {
+	cacheKey := broadcasterID + ":channel.chat.message"
 	sm.mu.RLock()
-	subscriptionID, exists := sm.subscriptions[broadcasterID]
+	if subID, exists := sm.subscriptions[cacheKey]; exists {
+		sm.mu.RUnlock()
+		return subID, nil
+	}
 	sm.mu.RUnlock()
 
-	if !exists {
-		return nil // Already unsubscribed
+	token, err := sm.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get app access token: %w", err)
 	}
 
-	// Get access token
+	// chatter (user_id) == broadcaster for own-channel reading
+	condition := map[string]string{
+		"broadcaster_user_id": broadcasterID,
+		"user_id":             broadcasterID,
+	}
+
+	return sm.subscribeWithCondition(ctx, "channel.chat.message", broadcasterID, token, "1", condition, cacheKey)
+}
+
+// Unsubscribe deletes ALL EventSub subscriptions for a broadcaster.
+//
+// Every subscription is cached under "broadcasterID:type" (see subscribeWithCondition),
+// so we delete every cache entry carrying that prefix — not a bare "broadcasterID" key,
+// which never matches and previously made this a silent no-op that leaked subscriptions.
+// That leak matters most for channel.chat.message: an orphaned chat subscription keeps
+// delivering live chat traffic and consuming the subscription budget. HTTP 404 is treated
+// as already-gone. Returns the first error encountered but attempts every deletion.
+func (sm *SubscriptionManager) Unsubscribe(ctx context.Context, broadcasterID string) error {
+	prefix := broadcasterID + ":"
+
+	sm.mu.RLock()
+	toDelete := make(map[string]string, 4) // cacheKey -> subscription_id
+	for key, subID := range sm.subscriptions {
+		if strings.HasPrefix(key, prefix) {
+			toDelete[key] = subID
+		}
+	}
+	sm.mu.RUnlock()
+
+	if len(toDelete) == 0 {
+		return nil // Already unsubscribed / never subscribed
+	}
+
 	token, err := sm.getAccessToken(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get access token: %w", err)
 	}
 
-	// Delete subscription
-	url := fmt.Sprintf("%s?id=%s", EventSubAPIURL, subscriptionID)
-	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	var firstErr error
+	for key, subscriptionID := range toDelete {
+		url := fmt.Sprintf("%s?id=%s", EventSubAPIURL, subscriptionID)
+		req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("failed to create delete request for %s: %w", key, err)
+			}
+			continue
+		}
+
+		req.Header.Set("Client-Id", sm.clientID)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("failed to delete subscription %s: %w", key, err)
+			}
+			continue
+		}
+
+		// 204 = deleted; 404 = already gone on Twitch's side. Both let us drop the cache entry.
+		if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
+			sm.mu.Lock()
+			delete(sm.subscriptions, key)
+			sm.mu.Unlock()
+			sm.logger.Info("Deleted EventSub subscription",
+				zap.String("broadcaster_id", broadcasterID),
+				zap.String("subscription_id", subscriptionID),
+				zap.String("cache_key", key),
+			)
+		} else {
+			body, _ := io.ReadAll(resp.Body)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("delete %s failed with status %d: %s", key, resp.StatusCode, string(body))
+			}
+		}
+		resp.Body.Close()
+	}
+
+	return firstErr
+}
+
+// UnsubscribeType deletes a single EventSub subscription type for a broadcaster (e.g.
+// "channel.chat.message"), leaving the other types intact. Used to drop the chat
+// subscription when an overlay's demand goes away while keeping the event subscriptions.
+// HTTP 404 is treated as already-gone.
+func (sm *SubscriptionManager) UnsubscribeType(ctx context.Context, broadcasterID, subType string) error {
+	cacheKey := broadcasterID + ":" + subType
+	sm.mu.RLock()
+	subscriptionID, exists := sm.subscriptions[cacheKey]
+	sm.mu.RUnlock()
+	if !exists {
+		return nil
+	}
+
+	token, err := sm.getAccessToken(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get access token: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "DELETE", fmt.Sprintf("%s?id=%s", EventSubAPIURL, subscriptionID), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create delete request: %w", err)
 	}
-
 	req.Header.Set("Client-Id", sm.clientID)
 	req.Header.Set("Authorization", "Bearer "+token)
 
@@ -246,21 +351,20 @@ func (sm *SubscriptionManager) Unsubscribe(ctx context.Context, broadcasterID st
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNoContent {
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("delete failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("delete %s failed with status %d: %s", cacheKey, resp.StatusCode, string(body))
 	}
 
-	// Remove from tracking
 	sm.mu.Lock()
-	delete(sm.subscriptions, broadcasterID)
+	delete(sm.subscriptions, cacheKey)
 	sm.mu.Unlock()
 
-	sm.logger.Info("Deleted EventSub subscription",
+	sm.logger.Info("Deleted EventSub subscription (single type)",
 		zap.String("broadcaster_id", broadcasterID),
+		zap.String("type", subType),
 		zap.String("subscription_id", subscriptionID),
 	)
-
 	return nil
 }
 
@@ -299,8 +403,8 @@ func (sm *SubscriptionManager) subscribeWithCondition(ctx context.Context, subsc
 
 	// Create subscription request
 	reqBody := map[string]interface{}{
-		"type":    subscriptionType,
-		"version": version,
+		"type":      subscriptionType,
+		"version":   version,
 		"condition": condition,
 		"transport": map[string]interface{}{
 			"method":   "webhook",

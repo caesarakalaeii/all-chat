@@ -22,12 +22,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/twitch"
 )
+
+// TwitchChatScopes are requested only in the add-source flow, where a streamer
+// authorizes their OWN channel for EventSub channel.chat.message reading. Because
+// the broadcaster is also the chatter, one consent grants everything the webhook
+// subscription needs: user:read:chat + user:bot (chatter side) and channel:bot
+// (broadcaster side). See services/twitch-eventsub-listener for the consumer.
+var TwitchChatScopes = []string{"user:read:chat", "user:bot", "channel:bot"}
 
 // TwitchOAuth handles Twitch OAuth 2.0 flow
 type TwitchOAuth struct {
@@ -59,6 +67,48 @@ func NewTwitchOAuth(clientID, clientSecret, redirectURL string) *TwitchOAuth {
 // GetAuthURL generates the OAuth authorization URL
 func (t *TwitchOAuth) GetAuthURL(state string) string {
 	return t.config.AuthCodeURL(state)
+}
+
+// GetAuthURLWithChatScopes builds the consent URL with the base login scopes PLUS
+// the chat scopes (TwitchChatScopes). force_verify=true is REQUIRED: without it
+// Twitch may silently reissue a token for a prior, narrower grant, so an
+// already-connected streamer would never actually be prompted to grant the new
+// chat scopes and would stay stuck on the IRC listener.
+func (t *TwitchOAuth) GetAuthURLWithChatScopes(state string) string {
+	scopes := append(append([]string{}, t.config.Scopes...), TwitchChatScopes...)
+	return t.config.AuthCodeURL(state,
+		oauth2.SetAuthURLParam("scope", strings.Join(scopes, " ")),
+		oauth2.SetAuthURLParam("force_verify", "true"),
+	)
+}
+
+// ExtractGrantedScopes pulls the granted scope list out of a Twitch token exchange
+// or refresh response. Twitch returns "scope" as a JSON array, which oauth2 surfaces
+// via Extra("scope") as []interface{}. Returns nil when absent. The string case is
+// defensive (some providers return a space-delimited scope string).
+func ExtractGrantedScopes(token *oauth2.Token) []string {
+	if token == nil {
+		return nil
+	}
+	switch v := token.Extra("scope").(type) {
+	case []interface{}:
+		out := make([]string, 0, len(v))
+		for _, s := range v {
+			if str, ok := s.(string); ok && str != "" {
+				out = append(out, str)
+			}
+		}
+		return out
+	case []string:
+		return v
+	case string:
+		if v == "" {
+			return nil
+		}
+		return strings.Fields(v)
+	default:
+		return nil
+	}
 }
 
 // ExchangeCode exchanges authorization code for tokens

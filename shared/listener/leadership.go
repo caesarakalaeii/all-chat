@@ -29,14 +29,28 @@ import (
 // LeadershipConfig holds the minimal configuration for LeadershipListener.
 type LeadershipConfig struct {
 	// Platform is the platform identifier for this listener (e.g. "kick", "twitch", "youtube").
-	// When set, the demand subscriber loop filters incoming demand updates to only
-	// sources matching this platform.
+	// It identifies the listener for leadership coordination.
 	Platform string
+
+	// DemandPlatform is the platform value to match against incoming demand-update sources
+	// (which carry the overlay_chat_sources.platform, e.g. "twitch"). It defaults to Platform
+	// when empty. Set it when the leadership identifier differs from the source platform —
+	// e.g. twitch-eventsub-listener coordinates as "twitch-eventsub" but reads "twitch" sources.
+	DemandPlatform string
 
 	// DisableDemandFiltering treats all sources as having demand.
 	// When true, the SDK demand subscriber loop exits immediately without subscribing
 	// to source:demand Pub/Sub.
 	DisableDemandFiltering bool
+}
+
+// demandPlatform returns the platform used to filter demand updates: DemandPlatform when
+// set, otherwise Platform.
+func (c LeadershipConfig) demandPlatform() string {
+	if c.DemandPlatform != "" {
+		return c.DemandPlatform
+	}
+	return c.Platform
 }
 
 // LeadershipListener is a standalone struct that owns leadership coordination and
@@ -144,4 +158,12 @@ func (ll *LeadershipListener) SMClient() *sourcemanager.Client {
 // Must be called before Start. When true, all platform sources are treated as in-demand.
 func (ll *LeadershipListener) SetDisableDemandFiltering(v bool) {
 	ll.config.DisableDemandFiltering = v
+}
+
+// SetDemandPlatform overrides the platform used to match incoming demand-update sources.
+// Use it when the leadership identifier differs from the source platform (e.g.
+// twitch-eventsub-listener coordinates as "twitch-eventsub" but reads "twitch" sources).
+// Must be called before Start().
+func (ll *LeadershipListener) SetDemandPlatform(p string) {
+	ll.config.DemandPlatform = p
 }

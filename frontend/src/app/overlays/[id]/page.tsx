@@ -243,14 +243,22 @@ function SourceCard({
   onRevoke,
   onConfigureRelay,
   onConfigureStreamSelect,
+  isOwnChannel,
+  onReconnectChat,
 }: {
   source: ChatSource
   onRemove: (id: string) => void
   onRevoke?: (source: ChatSource) => void
   onConfigureRelay?: (source: ChatSource) => void
   onConfigureStreamSelect?: (source: ChatSource) => void
+  // isOwnChannel is true when this Twitch source belongs to the logged-in user's own
+  // channel (only then can they grant the chat scopes); onReconnectChat starts the
+  // add-source OAuth reflow that requests them.
+  isOwnChannel?: boolean
+  onReconnectChat?: () => void
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const isTwitch = source.platform === 'twitch'
   const isShared = source.platform === 'shared_overlay'
   const isInactiveShared = isShared && !source.is_active
   const isDiscord = source.platform === 'discord'
@@ -316,6 +324,24 @@ function SourceCard({
             )}
             {isInactiveShared && source.share_status && (
               <StatusBadge status={source.share_status} size="sm" />
+            )}
+            {/* Twitch: surface whether chat is read via EventSub, and offer a reconnect
+                CTA on the owner's own channel when it is not yet enabled. */}
+            {isTwitch && source.chat_via_eventsub && (
+              <div className="mt-1">
+                <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
+                  <span className="size-1.5 rounded-full bg-green-400" />
+                  Chat via EventSub
+                </span>
+              </div>
+            )}
+            {isTwitch && !source.chat_via_eventsub && isOwnChannel && onReconnectChat && (
+              <button
+                onClick={onReconnectChat}
+                className="mt-1 inline-flex items-center gap-1 rounded text-xs text-text-sub underline-offset-2 transition-colors hover:text-text hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+              >
+                Reconnect to enable chat
+              </button>
             )}
           </div>
         </div>
@@ -1711,6 +1737,26 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // Starts the Twitch add-source OAuth reflow so the streamer can (re)grant the EventSub
+  // chat scopes for their own channel. The add-source endpoint now requests
+  // user:read:chat + user:bot + channel:bot; once granted, the channel moves to the
+  // EventSub listener on the next sync.
+  async function handleReconnectTwitchChat() {
+    try {
+      const res = await fetch(`/api/v1/auth/twitch/add-source/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (data.auth_url) {
+        window.location.href = data.auth_url
+      } else {
+        console.error('No auth_url returned for Twitch reconnect', data)
+      }
+    } catch (err) {
+      console.error('Failed to start Twitch chat reconnect', err)
+    }
+  }
+
   async function handleAddTikTokSource(username: string) {
     try {
       const source = await overlaysApi.addSource(id, {
@@ -2388,6 +2434,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           onConfigureStreamSelect={(s) =>
                             setStreamSelectExpandedSourceId((prev) => (prev === s.id ? null : s.id))
                           }
+                          isOwnChannel={
+                            user?.auth_provider === 'twitch' &&
+                            !!user?.username &&
+                            user.username.toLowerCase() === source.channel_id.toLowerCase()
+                          }
+                          onReconnectChat={handleReconnectTwitchChat}
                         />
                         {source.id === relayExpandedSourceId && source.platform === 'discord' && (
                           <RelayPanel

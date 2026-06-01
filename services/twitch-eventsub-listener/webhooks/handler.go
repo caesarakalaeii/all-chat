@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
@@ -254,6 +256,8 @@ func (h *Handler) handleRevocation(c *gin.Context, body []byte) {
 // routeEvent routes events to appropriate handlers based on subscription type
 func (h *Handler) routeEvent(ctx context.Context, subscriptionType string, eventData json.RawMessage) error {
 	switch subscriptionType {
+	case "channel.chat.message":
+		return h.handleChatMessage(ctx, eventData)
 	case "channel.channel_points_custom_reward_redemption.add":
 		return h.handleChannelPointsRedemption(ctx, eventData)
 	case "channel.subscribe":
@@ -578,4 +582,152 @@ func (h *Handler) handleFollow(ctx context.Context, eventData json.RawMessage) e
 	}
 
 	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// handleChatMessage processes a channel.chat.message event into an IRC-compatible
+// RawChatMessage so the message-processor normalizes and renders it identically to chat
+// ingested over IRC by twitch-listener. EventType is left empty so the message flows
+// through the regular chat path (Normalize), not the event path (NormalizeEvent).
+func (h *Handler) handleChatMessage(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.ChatMessageEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal channel.chat.message: %w", err)
+	}
+	if event.MessageID == "" || event.ChatterUserLogin == "" {
+		h.logger.Warn("channel.chat.message missing required fields",
+			zap.String("broadcaster", event.BroadcasterUserLogin))
+		return nil
+	}
+
+	rawMsg := &models.RawChatMessage{
+		MessageID: uuid.New().String(), // internal UUID; native Twitch id lives in Tags["id"]
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(event.BroadcasterUserLogin),
+		UserID:    event.ChatterUserID,
+		Username:  strings.ToLower(event.ChatterUserLogin),
+		Text:      event.Message.Text,
+		Timestamp: time.Now().UTC(),
+		Tags:      buildChatTags(&event),
+		EventType: "", // regular chat → message-processor uses Normalize()
+	}
+
+	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// buildChatTags reconstructs the IRC-style tag map (see twitch-listener/irc/parser.go and
+// the keys consumed by message-processor/normalizer/twitch_normalizer.go) from a
+// channel.chat.message payload, so downstream normalization and enrichment behave
+// identically for EventSub- and IRC-sourced chat.
+func buildChatTags(e *eventsub.ChatMessageEvent) map[string]string {
+	tags := make(map[string]string)
+
+	if e.ChatterUserName != "" {
+		tags["display-name"] = e.ChatterUserName
+	}
+	if e.Color != "" {
+		tags["color"] = e.Color
+	}
+
+	// Boolean flags are derived from badges (EventSub has no separate sub/mod/turbo fields).
+	tags["subscriber"], tags["mod"], tags["turbo"] = "0", "0", "0"
+	if len(e.Badges) > 0 {
+		// "set_id/id,set_id/id" — EventSub's badge id IS the version the badge enricher expects.
+		parts := make([]string, 0, len(e.Badges))
+		for _, b := range e.Badges {
+			parts = append(parts, b.SetID+"/"+b.ID)
+			switch b.SetID {
+			case "subscriber":
+				tags["subscriber"] = "1"
+			case "moderator":
+				tags["mod"] = "1"
+			case "turbo":
+				tags["turbo"] = "1"
+			}
+		}
+		tags["badges"] = strings.Join(parts, ",")
+	}
+
+	tags["id"] = e.MessageID
+	// CRITICAL: the normalizer surfaces room-id as twitch_room_id, which every enricher
+	// (emote/badge/cheermote) uses as the channel key. Missing it silently breaks
+	// per-channel emotes and badge tiers.
+	tags["room-id"] = e.BroadcasterUserID
+	tags["tmi-sent-ts"] = strconv.FormatInt(time.Now().UnixMilli(), 10)
+
+	// bits: prefer the top-level cheer total, else sum cheermote fragments.
+	bits := 0
+	if e.Cheer != nil {
+		bits = e.Cheer.Bits
+	}
+	if bits == 0 {
+		for _, f := range e.Message.Fragments {
+			if f.Type == "cheermote" && f.Cheermote != nil {
+				bits += f.Cheermote.Bits
+			}
+		}
+	}
+	if bits > 0 {
+		tags["bits"] = strconv.Itoa(bits)
+	}
+
+	if em := buildEmotesTag(e.Message.Fragments); em != "" {
+		tags["emotes"] = em
+	}
+
+	// Shared-chat parity (mirrors the IRC parser's source-* tags). Note: the normalizer
+	// reads source-id as the source user id, but Twitch's IRC source-id tag is actually the
+	// source message id; we set the same value the IRC path would, so behaviour matches.
+	if e.SourceBroadcasterUserID != "" {
+		tags["source-room-id"] = e.SourceBroadcasterUserID
+		if e.SourceMessageID != "" {
+			tags["source-id"] = e.SourceMessageID
+		}
+		if len(e.SourceBadges) > 0 {
+			parts := make([]string, 0, len(e.SourceBadges))
+			for _, b := range e.SourceBadges {
+				parts = append(parts, b.SetID+"/"+b.ID)
+			}
+			tags["source-badges"] = strings.Join(parts, ",")
+		}
+	}
+
+	return tags
+}
+
+// buildEmotesTag renders the IRC "emotes" tag ("id:start-end,start-end/id:...") from the
+// ordered message fragments. Positions are inclusive byte offsets into Message.Text,
+// matching the byte slicing in message-processor's extractTwitchEmotes. Without this,
+// first-party Twitch emotes would not render (a regression versus IRC); third-party
+// 7TV/BTTV/FFZ emotes are added separately by the emote enricher from message text.
+func buildEmotesTag(frags []eventsub.ChatMessageFragment) string {
+	type span struct{ start, end int }
+	positions := make(map[string][]span)
+	order := make([]string, 0)
+
+	offset := 0
+	for _, f := range frags {
+		n := len(f.Text) // byte length — IRC emote positions are byte offsets into the text
+		if f.Type == "emote" && f.Emote != nil && f.Emote.ID != "" && n > 0 {
+			if _, seen := positions[f.Emote.ID]; !seen {
+				order = append(order, f.Emote.ID)
+			}
+			positions[f.Emote.ID] = append(positions[f.Emote.ID], span{start: offset, end: offset + n - 1})
+		}
+		offset += n
+	}
+
+	if len(order) == 0 {
+		return ""
+	}
+
+	groups := make([]string, 0, len(order))
+	for _, id := range order {
+		spans := positions[id]
+		ps := make([]string, 0, len(spans))
+		for _, s := range spans {
+			ps = append(ps, fmt.Sprintf("%d-%d", s.start, s.end))
+		}
+		groups = append(groups, id+":"+strings.Join(ps, ","))
+	}
+	return strings.Join(groups, "/")
 }

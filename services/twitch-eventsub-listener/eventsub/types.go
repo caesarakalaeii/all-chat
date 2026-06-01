@@ -185,6 +185,97 @@ type FollowEvent struct {
 	FollowedAt           time.Time `json:"followed_at"`
 }
 
+// ChatMessageEvent represents a chat message event.
+// subscription type: channel.chat.message (v1)
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#channelchatmessage
+type ChatMessageEvent struct {
+	BroadcasterUserID    string          `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string          `json:"broadcaster_user_login"`
+	BroadcasterUserName  string          `json:"broadcaster_user_name"`
+	ChatterUserID        string          `json:"chatter_user_id"`
+	ChatterUserLogin     string          `json:"chatter_user_login"`
+	ChatterUserName      string          `json:"chatter_user_name"`
+	MessageID            string          `json:"message_id"`
+	Message              ChatMessageBody `json:"message"`
+	Color                string          `json:"color"` // hex, may be ""
+	Badges               []ChatBadge     `json:"badges"`
+	MessageType          string          `json:"message_type"` // "text", "channel_points_highlighted", "power_ups_message_effect", ...
+	Cheer                *ChatCheer      `json:"cheer,omitempty"`
+	Reply                *ChatReply      `json:"reply,omitempty"`
+
+	// Shared-chat fields — present only during a shared-chat session.
+	SourceBroadcasterUserID    string      `json:"source_broadcaster_user_id,omitempty"`
+	SourceBroadcasterUserLogin string      `json:"source_broadcaster_user_login,omitempty"`
+	SourceBroadcasterUserName  string      `json:"source_broadcaster_user_name,omitempty"`
+	SourceMessageID            string      `json:"source_message_id,omitempty"`
+	SourceBadges               []ChatBadge `json:"source_badges,omitempty"`
+}
+
+// ChatMessageBody is the structured message of a channel.chat.message event.
+type ChatMessageBody struct {
+	Text      string                `json:"text"`
+	Fragments []ChatMessageFragment `json:"fragments"`
+}
+
+// ChatMessageFragment is one piece of a chat message. Type is one of
+// "text", "cheermote", "emote", "mention".
+type ChatMessageFragment struct {
+	Type      string         `json:"type"`
+	Text      string         `json:"text"`
+	Cheermote *ChatCheermote `json:"cheermote,omitempty"`
+	Emote     *ChatEmote     `json:"emote,omitempty"`
+	Mention   *ChatMention   `json:"mention,omitempty"`
+}
+
+// ChatEmote describes a first-party Twitch emote in a message fragment.
+type ChatEmote struct {
+	ID         string   `json:"id"`
+	EmoteSetID string   `json:"emote_set_id"`
+	OwnerID    string   `json:"owner_id"`
+	Format     []string `json:"format"` // "static", "animated"
+}
+
+// ChatCheermote describes a cheermote (bits) fragment.
+type ChatCheermote struct {
+	Prefix string `json:"prefix"`
+	Bits   int    `json:"bits"`
+	Tier   int    `json:"tier"`
+}
+
+// ChatMention describes an @-mention fragment.
+type ChatMention struct {
+	UserID    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user_name"`
+}
+
+// ChatBadge is a chat badge on a channel.chat.message event. Unlike IRC tags, the
+// badge version lives in ID (e.g. set_id "subscriber", id "12"); Info carries extra
+// context (e.g. months subscribed) for badges that have it.
+type ChatBadge struct {
+	SetID string `json:"set_id"`
+	ID    string `json:"id"`
+	Info  string `json:"info"`
+}
+
+// ChatCheer is the top-level cheer (bits) total on a chat message, when present.
+type ChatCheer struct {
+	Bits int `json:"bits"`
+}
+
+// ChatReply describes reply threading metadata, when the message is a reply.
+type ChatReply struct {
+	ParentMessageID   string `json:"parent_message_id"`
+	ParentMessageBody string `json:"parent_message_body"`
+	ParentUserID      string `json:"parent_user_id"`
+	ParentUserLogin   string `json:"parent_user_login"`
+	ParentUserName    string `json:"parent_user_name"`
+	ThreadMessageID   string `json:"thread_message_id"`
+	ThreadUserID      string `json:"thread_user_id"`
+	ThreadUserLogin   string `json:"thread_user_login"`
+	ThreadUserName    string `json:"thread_user_name"`
+}
+
 // SubscriptionInfo contains subscription metadata (used in webhook callbacks)
 type SubscriptionInfo struct {
 	ID        string                 `json:"id"`

@@ -31,6 +31,23 @@ import (
 // IRC-PARTed on the next sync. Configurable via IDLE_OVERLAY_THRESHOLD env var.
 const DefaultIdleOverlayThreshold = 7 * 24 * time.Hour
 
+// eventSubOwnedExclusion excludes Twitch sources that the EventSub chat listener owns —
+// channels whose owner granted the chat scope (user:read:chat) and still has a valid
+// token. It is the exact complement of the scope/token predicate in
+// services/twitch-eventsub-listener/channels/manager.go SyncChannels; the two MUST stay
+// byte-identical so every Twitch source is read by exactly one listener — no double-read,
+// no gap. Keyed on ocs.channel_id (the Twitch login, matching the EventSub join), NOT
+// ocs.channel_name (the display name, which may differ in case/Unicode and would silently
+// fail to match). Used by both GetUniqueChannels and GetActiveChannels so they cannot drift.
+const eventSubOwnedExclusion = `
+		  AND NOT EXISTS (
+		      SELECT 1 FROM users u
+		      WHERE LOWER(u.username) = LOWER(ocs.channel_id)
+		        AND u.auth_provider = 'twitch'
+		        AND 'user:read:chat' = ANY(u.granted_scopes)
+		        AND u.token_expires_at > NOW()
+		  )`
+
 // RepositoryInterface defines the interface for channel repository
 type RepositoryInterface interface {
 	GetActiveChannels(ctx context.Context) ([]models.ChannelSource, error)
@@ -42,8 +59,8 @@ type RepositoryInterface interface {
 
 // Repository handles database queries for channel management
 type Repository struct {
-	db              *pgxpool.Pool
-	idleThreshold   time.Duration
+	db            *pgxpool.Pool
+	idleThreshold time.Duration
 }
 
 // NewRepository creates a new channel repository.
@@ -80,7 +97,7 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]models.ChannelSou
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
-		  AND ocs.platform = 'twitch'` + r.freshnessClause() + `
+		  AND ocs.platform = 'twitch'` + eventSubOwnedExclusion + r.freshnessClause() + `
 		ORDER BY ocs.channel_name
 	`
 
@@ -119,7 +136,7 @@ func (r *Repository) GetUniqueChannels(ctx context.Context) ([]string, error) {
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
-		  AND ocs.platform = 'twitch'` + r.freshnessClause() + `
+		  AND ocs.platform = 'twitch'` + eventSubOwnedExclusion + r.freshnessClause() + `
 		ORDER BY ocs.channel_name
 	`
 

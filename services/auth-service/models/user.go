@@ -37,6 +37,7 @@ type User struct {
 	AccessToken     string     `json:"-"`                         // Never expose in JSON
 	RefreshToken    string     `json:"-"`                         // Never expose in JSON
 	TokenExpiresAt  time.Time  `json:"-"`
+	GrantedScopes   []string   `json:"-"`                         // OAuth scopes granted at consent (TEXT[] in DB); gates EventSub chat reading
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
