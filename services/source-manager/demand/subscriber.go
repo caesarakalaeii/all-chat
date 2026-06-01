@@ -116,53 +116,106 @@ func (s *OverlayDemandSubscriber) Start(ctx context.Context) error {
 		go s.listenForSourceChanges(ctx)
 	}
 
-	// Step 4: subscribe to live events with retry loop.
+	// Step 4: periodically reconcile against the source-of-truth keys so a replica that missed
+	// a Pub/Sub event converges back instead of leaving listeners stuck on a stale snapshot.
+	go s.reconcileLoop(ctx)
+
+	// Step 5: subscribe to live events with retry loop.
 	return s.subscribeLoop(ctx)
 }
 
-// hydrate scans overlay:connected:* keys and populates the demand map.
-func (s *OverlayDemandSubscriber) hydrate(ctx context.Context) error {
-	keys, err := s.redisClient.Keys(ctx, "overlay:connected:*").Result()
-	if err != nil {
-		return err
-	}
+// reconcileInterval bounds how long a diverged demand view (e.g. after a missed Pub/Sub event)
+// can persist before being corrected from the source-of-truth keys.
+const reconcileInterval = 15 * time.Second
 
-	overlayIDs := make([]string, 0, len(keys))
-	for _, key := range keys {
+// buildDemandFromKeys derives the authoritative demand map from the `overlay:connected:*` keys
+// (set with a TTL by api-gateway for every live overlay WebSocket) plus the sources configured
+// for those overlays. This is the source of truth: source-manager runs on multiple replicas and
+// Redis Pub/Sub has no replay, so the event-driven in-memory map can diverge (a replica that
+// briefly drops its `overlay:connections` subscription misses connect/disconnect events). Two
+// replicas then publish conflicting full-replacement snapshots and demand-gated listeners flap or
+// get stuck on the wrong set of channels. Rebuilding from the keys lets every replica converge to
+// the same set. Uses SCAN (not KEYS) so it is safe to call on the periodic reconcile path.
+func (s *OverlayDemandSubscriber) buildDemandFromKeys(ctx context.Context) (map[string][]DemandSource, error) {
+	overlayIDs := make([]string, 0)
+	iter := s.redisClient.Scan(ctx, 0, "overlay:connected:*", 256).Iterator()
+	for iter.Next(ctx) {
 		// key format: overlay:connected:{overlay_id}
-		overlayID := strings.TrimPrefix(key, "overlay:connected:")
+		overlayID := strings.TrimPrefix(iter.Val(), "overlay:connected:")
 		if overlayID != "" {
 			overlayIDs = append(overlayIDs, overlayID)
 		}
 	}
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
 
+	demand := make(map[string][]DemandSource)
 	if len(overlayIDs) == 0 {
-		return nil
+		return demand, nil
 	}
 
 	sources, err := s.repo.GetSourcesForOverlays(ctx, overlayIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, src := range sources {
+		demand[src.OverlayID] = append(demand[src.OverlayID], DemandSource{
+			SourceID:  src.ID,
+			ChannelID: src.ChannelID,
+			Platform:  src.Platform,
+			OverlayID: src.OverlayID,
+		})
+	}
+	return demand, nil
+}
+
+// hydrate rebuilds the demand map from the source-of-truth keys (used at startup).
+func (s *OverlayDemandSubscriber) hydrate(ctx context.Context) error {
+	demand, err := s.buildDemandFromKeys(ctx)
 	if err != nil {
 		return err
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.demand = demand
+	s.mu.Unlock()
 
-	for _, src := range sources {
-		ds := DemandSource{
-			SourceID:  src.ID,
-			ChannelID: src.ChannelID,
-			Platform:  src.Platform,
-			OverlayID: src.OverlayID,
-		}
-		s.demand[src.OverlayID] = append(s.demand[src.OverlayID], ds)
+	s.logger.Info("Startup hydration complete", zap.Int("overlay_count", len(demand)))
+	return nil
+}
+
+// reconcile rebuilds the demand map from the source-of-truth keys and republishes if the demanded
+// set changed (publishDemandUpdate is fingerprint-gated). This both self-heals a diverged replica
+// and converges peers toward an identical snapshot, eliminating the flapping/stuck behaviour that
+// conflicting full-replacement snapshots cause for demand-gated listeners (twitch-eventsub chat,
+// youtube, …).
+func (s *OverlayDemandSubscriber) reconcile(ctx context.Context) {
+	demand, err := s.buildDemandFromKeys(ctx)
+	if err != nil {
+		s.logger.Warn("Demand reconcile failed; keeping current demand", zap.Error(err))
+		return
 	}
 
-	s.logger.Info("Startup hydration complete",
-		zap.Int("overlay_count", len(overlayIDs)),
-		zap.Int("source_count", len(sources)),
-	)
-	return nil
+	s.mu.Lock()
+	s.demand = demand
+	s.mu.Unlock()
+
+	s.publishDemandUpdate(ctx)
+}
+
+// reconcileLoop runs reconcile every reconcileInterval until the context is cancelled.
+func (s *OverlayDemandSubscriber) reconcileLoop(ctx context.Context) {
+	ticker := time.NewTicker(reconcileInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.reconcile(ctx)
+		}
+	}
 }
 
 // subscribeLoop runs the Redis Pub/Sub subscriber with exponential backoff retry.
@@ -507,4 +560,9 @@ func (s *OverlayDemandSubscriber) HandleSourceChangeForTest(ctx context.Context,
 // HydrateForTest exposes hydrate for unit testing.
 func (s *OverlayDemandSubscriber) HydrateForTest(ctx context.Context) error {
 	return s.hydrate(ctx)
+}
+
+// ReconcileForTest exposes reconcile for unit testing.
+func (s *OverlayDemandSubscriber) ReconcileForTest(ctx context.Context) {
+	s.reconcile(ctx)
 }

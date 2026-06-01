@@ -416,3 +416,59 @@ func TestSourceDeleteRefreshesDemand(t *testing.T) {
 	require.Len(t, sources, 1)
 	assert.Equal(t, "source-yt", sources[0].SourceID)
 }
+
+// TestReconcile_RecoversFromMissedConnect verifies that if a replica's in-memory demand has
+// diverged (e.g. it missed a "connected" Pub/Sub event), the periodic reconcile rebuilds demand
+// from the overlay:connected:* keys (source of truth) and recovers the missing source.
+func TestReconcile_RecoversFromMissedConnect(t *testing.T) {
+	mr, client := newTestRedis(t)
+
+	repo := &mockRepository{
+		sources: map[string][]*models.ActiveSource{
+			"overlay-abc": {
+				{ID: "source-1", OverlayID: "overlay-abc", Platform: "twitch", ChannelID: "caesarlp"},
+			},
+		},
+	}
+
+	sub := demand.NewOverlayDemandSubscriber(client, repo, zap.NewNop())
+
+	// Overlay IS connected per the source-of-truth key, but the subscriber's in-memory map is
+	// empty (it missed the connect event) — the divergence that strands demand-gated listeners.
+	require.NoError(t, mr.Set("overlay:connected:overlay-abc", "1"))
+	require.Empty(t, sub.GetDemandedSources())
+
+	sub.ReconcileForTest(context.Background())
+
+	sources := sub.GetDemandedSources()
+	require.Len(t, sources, 1)
+	assert.Equal(t, "source-1", sources[0].SourceID)
+	assert.Equal(t, "caesarlp", sources[0].ChannelID)
+}
+
+// TestReconcile_DropsStaleDemand verifies reconcile removes demand for an overlay whose
+// connection key is gone (e.g. a missed "disconnected" event left stale demand).
+func TestReconcile_DropsStaleDemand(t *testing.T) {
+	mr, client := newTestRedis(t)
+
+	repo := &mockRepository{
+		sources: map[string][]*models.ActiveSource{
+			"overlay-abc": {
+				{ID: "source-1", OverlayID: "overlay-abc", Platform: "twitch", ChannelID: "caesarlp"},
+			},
+		},
+	}
+
+	sub := demand.NewOverlayDemandSubscriber(client, repo, zap.NewNop())
+
+	// Seed in-memory demand via a connect event, then remove the key (overlay actually gone).
+	connect, _ := json.Marshal(map[string]interface{}{"type": "connected", "overlay_id": "overlay-abc"})
+	require.NoError(t, sub.HandleConnectionEventForTest(context.Background(), string(connect)))
+	require.Len(t, sub.GetDemandedSources(), 1)
+
+	// No overlay:connected:* key set in miniredis → source of truth says nothing is connected.
+	_ = mr
+	sub.ReconcileForTest(context.Background())
+
+	assert.Empty(t, sub.GetDemandedSources(), "reconcile should drop demand with no connection key")
+}

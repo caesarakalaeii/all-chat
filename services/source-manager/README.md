@@ -192,6 +192,23 @@ leader:stream:<video_id>  → "youtube-listener-pod-abc123"  (TTL: 60s)
 leader:stream:<video_id>  → "youtube-listener-pod-def456"  (another stream)
 ```
 
+### Demand Publishing (overlay → listeners)
+
+Demand-gated listeners (twitch-eventsub chat, youtube, …) only do work for sources whose overlay
+has a live WebSocket. source-manager computes that demand and publishes a full-replacement snapshot
+to the `source:demand` Pub/Sub channel.
+
+- **Source of truth:** the `overlay:connected:{overlay_id}` keys api-gateway sets (with a TTL) for
+  every live overlay WebSocket. The demanded set = sources of every overlay whose key exists.
+- **Triggers:** overlay connect/disconnect events (`overlay:connections`), source-config changes
+  (PostgreSQL `LISTEN`), and a **periodic reconcile every 15s**.
+- **Periodic reconcile is required for correctness.** source-manager runs on multiple replicas and
+  Redis Pub/Sub has no replay, so a replica that briefly drops its `overlay:connections`
+  subscription misses events and its in-memory demand diverges. Two replicas would then publish
+  conflicting snapshots and demand-gated listeners flap or get stuck on the wrong channel set. The
+  reconcile rebuilds demand from the `overlay:connected:*` keys (via SCAN) so every replica
+  converges to the same set; publishes are fingerprint-gated, so an unchanged set is not re-sent.
+
 ### Active Source Registry
 
 **Syncs from database every 30 seconds**:
