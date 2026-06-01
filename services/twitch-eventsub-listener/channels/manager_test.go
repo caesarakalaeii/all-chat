@@ -18,13 +18,128 @@ package channels
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/caesar/all-chat/services/twitch-eventsub-listener/status"
+	"github.com/caesar/all-chat/shared/listener"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// recordingCallback records the (broadcasterID, action) pairs the manager invokes, in order.
+type recordingCallback struct {
+	mu      sync.Mutex
+	actions []string // "action:broadcasterID"
+}
+
+func (r *recordingCallback) fn(broadcasterID, _ string, action string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.actions = append(r.actions, action+":"+broadcasterID)
+	return nil
+}
+
+func (r *recordingCallback) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, len(r.actions))
+	copy(out, r.actions)
+	return out
+}
+
+func demandFor(sourceIDs ...string) map[string]listener.DemandedSource {
+	d := make(map[string]listener.DemandedSource, len(sourceIDs))
+	for _, s := range sourceIDs {
+		d[s] = listener.DemandedSource{SourceID: s}
+	}
+	return d
+}
+
+// TestReconcileChat_SubscribesWhenScopedAndDemanded verifies a chat subscription is created
+// only when the channel has the chat scope AND live-overlay demand.
+func TestReconcileChat_SubscribesWhenScopedAndDemanded(t *testing.T) {
+	cb := &recordingCallback{}
+	m := NewManager(nil, zap.NewNop(), &countingResolver{}, nil, time.Minute)
+	m.SetSubscriptionCallback(cb.fn)
+
+	m.channels["111"] = &Channel{BroadcasterID: "111", BroadcasterName: "scoped", SourceIDs: []string{"s1"}, HasChatScope: true}
+	m.channels["222"] = &Channel{BroadcasterID: "222", BroadcasterName: "noscope", SourceIDs: []string{"s2"}, HasChatScope: false}
+
+	m.mu.Lock()
+	m.reconcileChatLocked(demandFor("s1", "s2"))
+	m.mu.Unlock()
+
+	got := cb.snapshot()
+	if len(got) != 1 || got[0] != "subscribe_chat:111" {
+		t.Fatalf("want exactly [subscribe_chat:111], got %v", got)
+	}
+	if !m.channels["111"].ChatActive {
+		t.Fatal("scoped+demanded channel should be marked ChatActive")
+	}
+	if m.channels["222"].ChatActive {
+		t.Fatal("unscoped channel must not become ChatActive")
+	}
+}
+
+// TestReconcileChat_UnsubscribesAndPublishesOffline verifies that when demand drops, the chat
+// subscription is torn down AND an "offline" platform:status is published keyed by the
+// lowercased login, so the overlay indicator clears.
+func TestReconcileChat_UnsubscribesAndPublishesOffline(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mr.Close()
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rc.Close()
+
+	// Subscribe before triggering so we don't miss the message.
+	sub := rc.Subscribe(context.Background(), status.PlatformStatusChannel)
+	defer sub.Close()
+	if _, err := sub.Receive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	msgs := sub.Channel()
+
+	cb := &recordingCallback{}
+	m := NewManager(nil, zap.NewNop(), &countingResolver{}, nil, time.Minute)
+	m.SetSubscriptionCallback(cb.fn)
+	m.SetStatusPublisher(status.NewPublisher(rc, zap.NewNop()))
+
+	// Channel currently reading chat ("CaesarLP" mixed-case to prove lowercasing) but demand gone.
+	m.channels["111"] = &Channel{BroadcasterID: "111", BroadcasterName: "CaesarLP", SourceIDs: []string{"s1"}, HasChatScope: true, ChatActive: true}
+
+	// An explicit empty (non-nil) demand map means "no demand" (nil would fail open).
+	m.mu.Lock()
+	m.reconcileChatLocked(map[string]listener.DemandedSource{})
+	m.mu.Unlock()
+
+	if got := cb.snapshot(); len(got) != 1 || got[0] != "unsubscribe_chat:111" {
+		t.Fatalf("want exactly [unsubscribe_chat:111], got %v", got)
+	}
+	if m.channels["111"].ChatActive {
+		t.Fatal("channel should no longer be ChatActive after teardown")
+	}
+
+	select {
+	case msg := <-msgs:
+		var sm status.Message
+		if err := json.Unmarshal([]byte(msg.Payload), &sm); err != nil {
+			t.Fatalf("bad status payload: %v", err)
+		}
+		if sm.Platform != "twitch" || sm.ChannelID != "caesarlp" || sm.Status != "offline" {
+			t.Fatalf("unexpected status: %+v", sm)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected an offline platform:status publish, got none")
+	}
+}
 
 // countingResolver counts GetUserIDByLogin calls to verify caching.
 type countingResolver struct {

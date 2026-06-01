@@ -19,9 +19,11 @@ package channels
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/twitch-eventsub-listener/status"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,6 +63,12 @@ type Manager struct {
 	resolver UserIDResolver
 	callback SubscriptionCallback
 	cipher   *encryption.MultiKeyEncryptor
+
+	// statusPublisher emits platform:status "offline" when a channel's chat subscription is
+	// torn down (demand lost or channel removed). The matching "connected" is published by the
+	// webhook handler when Twitch verifies the chat subscription (it is actually enabled by
+	// then). nil disables status publishing.
+	statusPublisher *status.Publisher
 
 	mu       sync.RWMutex
 	channels map[string]*Channel // broadcaster_id -> Channel
@@ -143,6 +151,34 @@ func (m *Manager) resolveBroadcasterID(ctx context.Context, login string) (strin
 // SetSubscriptionCallback sets the callback for channel changes
 func (m *Manager) SetSubscriptionCallback(callback SubscriptionCallback) {
 	m.callback = callback
+}
+
+// SetStatusPublisher injects the platform-status publisher used to emit "offline" on chat
+// teardown. Safe to leave unset (publishing becomes a no-op).
+func (m *Manager) SetStatusPublisher(pub *status.Publisher) {
+	m.statusPublisher = pub
+}
+
+// publishChatOffline emits a platform:status "offline" for the channel's chat indicator,
+// keyed by the lowercased login (channel_id in overlay_chat_sources) so the api-gateway
+// status subscriber routes it to the right overlays — matching the IRC listener's convention.
+//
+// It publishes on a background goroutine with its own timeout: callers hold m.mu (it is invoked
+// from reconcileChatLocked / SyncChannels), and the publisher retries with backoff on Redis
+// failure, so a synchronous call would hold the manager lock across that retry window.
+func (m *Manager) publishChatOffline(login string) {
+	if m.statusPublisher == nil || login == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		m.statusPublisher.Publish(ctx, status.Message{
+			Platform:  "twitch",
+			ChannelID: strings.ToLower(login),
+			Status:    "offline",
+		})
+	}()
 }
 
 // SetAssignedSourceIDs sets the assigned source IDs for filtering (coordinator integration)
@@ -246,6 +282,8 @@ func (m *Manager) reconcileChatLocked(demanded map[string]listener.DemandedSourc
 				continue
 			}
 			ch.ChatActive = false
+			// Chat reading stopped for this channel — clear its overlay indicator.
+			m.publishChatOffline(ch.BroadcasterName)
 		}
 	}
 }
@@ -439,6 +477,21 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 				zap.Bool("has_chat_scope", fresh.HasChatScope),
 			)
 			if m.callback != nil {
+				// Create the chat subscription FIRST when the channel already has demand: it is
+				// the latency-sensitive, overlay-visible path, so we don't make it wait behind
+				// the (slower, sequential) always-on event-subscription setup. The chat callback
+				// is idempotent, so a later reconcileChatLocked pass is a no-op.
+				if fresh.HasChatScope && isChatDemanded(fresh.SourceIDs, demanded) {
+					if err := m.callback(broadcasterID, fresh.AccessToken, "subscribe_chat"); err != nil {
+						m.logger.Warn("Failed to subscribe chat for new channel",
+							zap.String("broadcaster_id", broadcasterID),
+							zap.Error(err),
+						)
+					} else {
+						fresh.ChatActive = true
+					}
+				}
+
 				if err := m.callback(broadcasterID, fresh.AccessToken, "subscribe"); err != nil {
 					m.logger.Error("Failed to subscribe to channel",
 						zap.String("broadcaster_id", broadcasterID),
@@ -457,7 +510,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	}
 
 	// Find removed channels (delete ALL their subscriptions)
-	for broadcasterID := range m.channels {
+	for broadcasterID, ch := range m.channels {
 		if _, exists := activeChannels[broadcasterID]; !exists {
 			m.logger.Info("Channel removed",
 				zap.String("broadcaster_id", broadcasterID),
@@ -471,6 +524,11 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 					)
 					continue
 				}
+			}
+
+			// Removing the channel deletes its chat subscription too — clear the indicator.
+			if ch.ChatActive {
+				m.publishChatOffline(ch.BroadcasterName)
 			}
 
 			delete(m.channels, broadcasterID)
