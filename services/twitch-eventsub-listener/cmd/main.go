@@ -30,6 +30,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/channels"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
+	"github.com/caesar/all-chat/services/twitch-eventsub-listener/status"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/webhooks"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
@@ -154,8 +155,10 @@ func main() {
 
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
+	statusPublisher := status.NewPublisher(redisClient, log)
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
 	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher, ChannelSyncInterval)
+	channelManager.SetStatusPublisher(statusPublisher)
 
 	// Start LeadershipListener — runs demand subscriber; channel manager started after leadership
 	if err := ll.Start(ctx, channelManager); err != nil {
@@ -163,7 +166,7 @@ func main() {
 	}
 
 	// Create webhook handler
-	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, log)
+	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, statusPublisher, log)
 
 	// isLeader tracks whether this pod currently holds EventSub leadership.
 	// Protected by mu; read by subscription callback and HTTP handlers.

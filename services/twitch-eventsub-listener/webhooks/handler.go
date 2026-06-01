@@ -32,6 +32,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/models"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
+	"github.com/caesar/all-chat/services/twitch-eventsub-listener/status"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -52,20 +53,22 @@ type StreamEndEvent struct {
 type Handler struct {
 	secret          []byte
 	redis           *redis.Client
-	db              *pgxpool.Pool // for twitch_id -> user_id lookup
+	db              *pgxpool.Pool // for twitch_id -> user_id / login lookup
 	publisher       *publisher.StreamPublisher
 	listenerMetrics *metrics.ListenerMetrics
+	statusPublisher *status.Publisher // emits platform:status for the chat indicator (nil-safe)
 	logger          *zap.Logger
 }
 
 // NewHandler creates a new webhook handler
-func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher *publisher.StreamPublisher, listenerMetrics *metrics.ListenerMetrics, logger *zap.Logger) *Handler {
+func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher *publisher.StreamPublisher, listenerMetrics *metrics.ListenerMetrics, statusPublisher *status.Publisher, logger *zap.Logger) *Handler {
 	return &Handler{
 		secret:          []byte(secret),
 		redis:           redis,
 		db:              db,
 		publisher:       publisher,
 		listenerMetrics: listenerMetrics,
+		statusPublisher: statusPublisher,
 		logger:          logger,
 	}
 }
@@ -172,8 +175,17 @@ func (h *Handler) handleChallenge(c *gin.Context, body []byte) {
 		h.listenerMetrics.RecordConnection("twitch-eventsub", "twitch-eventsub-listener", "webhook", true)
 	}
 
-	// Respond with challenge string
+	// Respond with challenge string FIRST — Twitch enforces a short verification timeout, so we
+	// must not block the response on the status publish below.
 	c.String(http.StatusOK, challenge.Challenge)
+
+	// A verified channel.chat.message subscription is now enabled and will deliver chat, so the
+	// channel's chat is "connected". Publish in the background to keep the challenge response fast.
+	if challenge.Subscription.Type == "channel.chat.message" {
+		if bid := conditionBroadcasterID(challenge.Subscription.Condition); bid != "" {
+			go h.publishChatStatus(bid, "connected")
+		}
+	}
 }
 
 // handleNotification processes an event notification
@@ -250,7 +262,56 @@ func (h *Handler) handleRevocation(c *gin.Context, body []byte) {
 		zap.String("status", revocation.Subscription.Status),
 	)
 
+	// A revoked chat subscription stops delivering chat — clear the channel's indicator.
+	if revocation.Subscription.Type == "channel.chat.message" {
+		if bid := conditionBroadcasterID(revocation.Subscription.Condition); bid != "" {
+			go h.publishChatStatus(bid, "offline")
+		}
+	}
+
 	c.Status(http.StatusNoContent)
+}
+
+// conditionBroadcasterID extracts broadcaster_user_id from an EventSub subscription condition
+// (typed as map[string]interface{}). Returns "" when absent or not a string.
+func conditionBroadcasterID(condition map[string]interface{}) string {
+	if condition == nil {
+		return ""
+	}
+	if v, ok := condition["broadcaster_user_id"].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// publishChatStatus emits a platform:status update for a Twitch channel's chat indicator.
+// It resolves the broadcaster's login (the key api-gateway matches against
+// overlay_chat_sources.channel_id) from the users table, since the webhook may land on any
+// pod — including a non-leader whose channel manager has no in-memory mapping. Best-effort:
+// a missing user or publish failure is logged and dropped.
+func (h *Handler) publishChatStatus(broadcasterID, state string) {
+	if h.statusPublisher == nil || broadcasterID == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var login string
+	err := h.db.QueryRow(ctx,
+		"SELECT username FROM users WHERE twitch_id = $1 AND auth_provider = 'twitch'", broadcasterID).Scan(&login)
+	if err != nil || login == "" {
+		h.logger.Debug("Could not resolve login for chat status",
+			zap.String("broadcaster_id", broadcasterID),
+			zap.Error(err))
+		return
+	}
+
+	h.statusPublisher.Publish(ctx, status.Message{
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(login),
+		Status:    state,
+	})
 }
 
 // routeEvent routes events to appropriate handlers based on subscription type

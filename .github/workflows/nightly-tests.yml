@@ -27,6 +27,7 @@ jobs:
           - emote-service
           - api-gateway
           - twitch-listener
+          - twitch-eventsub-listener
           - youtube-listener
           - message-processor
           - share-service

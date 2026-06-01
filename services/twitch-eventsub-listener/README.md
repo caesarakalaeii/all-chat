@@ -27,10 +27,37 @@ The Twitch EventSub Listener connects to Twitch's EventSub WebSocket API to rece
 
 ### Currently Implemented
 - ✅ `channel.channel_points_custom_reward_redemption.add` - Channel point redemptions
+- ✅ `channel.subscribe` / `channel.subscription.gift` / `channel.subscription.message` - Subscriptions, gifts, resubs
+- ✅ `channel.cheer`, `channel.raid`, `channel.follow` - Bits, raids, follows
+- ✅ `stream.online` / `stream.offline` - Stream lifecycle (cross-platform discovery + credits)
+- ✅ `channel.chat.message` - **Chat reading** (demand-gated; see below)
 
-### Optional (Already Handled via IRC)
-- ⏸️ `channel.subscribe` - Subscriptions (IRC USERNOTICE is sufficient)
-- ⏸️ `channel.subscription.gift` - Gift subs (IRC USERNOTICE is sufficient)
+> Transport note: subscriptions use **webhook** transport (HTTP callback at `EVENTSUB_CALLBACK_URL`), not the EventSub WebSocket. Twitch verifies each subscription via a `webhook_callback_verification` challenge before it becomes `enabled`.
+
+### Chat Reading (channel.chat.message)
+
+To relieve the IRC bot's ~100-channel cap, channels whose owner granted the chat scopes
+(`user:read:chat` + `user:bot`) are read via EventSub instead of IRC. The IRC listener and the
+EventSub listener use a byte-identical `granted_scopes` predicate so each channel lands on exactly
+one path (no double-read, no gap).
+
+The chat subscription is **demand-gated**: it exists only while an overlay using the channel has a
+live WebSocket. When demand arrives, the chat subscription is created *before* the always-on event
+subscriptions so chat starts flowing with minimal latency.
+
+### Platform Status Indicators
+
+The listener publishes the chat channel's connection state to the `platform:status` Redis Pub/Sub
+channel (consumed by api-gateway → overlay indicators), keyed by the lowercased login to match
+`overlay_chat_sources.channel_id`:
+
+- **`connected`** — published by the webhook handler when Twitch verifies the `channel.chat.message`
+  subscription (it is then `enabled` and will deliver). The login is resolved from `users.twitch_id`,
+  so any pod receiving the verification can publish it.
+- **`offline`** — published by the channel manager when the chat subscription is torn down (demand
+  lost or channel removed), and by the webhook handler on subscription revocation.
+
+Without this, channels moved off IRC to EventSub would show no Twitch indicator.
 
 ## Architecture
 
