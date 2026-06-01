@@ -99,15 +99,21 @@ Without this, channels moved off IRC to EventSub would show no Twitch indicator.
 
 ## Leader Election
 
-Uses Redis-based distributed lock:
+A single leader manages all EventSub subscriptions (one webhook callback serves the cluster), so
+only one pod may create/delete subscriptions at a time. Leadership is a single `shard:0` lease
+acquired through the shared `LeadershipCoordinator` (source-manager), per ADR-0007.
 
-- **Leader:** Connects to EventSub, creates subscriptions, processes events
-- **Follower:** Standby, ready to take over if leader fails
-- **Lock TTL:** 10 seconds
-- **Renewal Interval:** 5 seconds
-- **Key:** `leader:twitch-eventsub`
+- **Leader:** Its subscription callback creates/deletes subscriptions and reads chat.
+- **Standby:** The channel manager still runs (started by `LeadershipListener.Start`) but its
+  callback is a no-op; it keeps trying to acquire leadership.
+- **Acquisition:** `EnsureLeadership` is called **repeatedly** (every ~10s) until acquired, and
+  re-acquired after loss. A one-shot attempt is wrong — after a rolling deploy the new pods race
+  the outgoing leader's still-held lease, and without retry no pod ever becomes leader.
+- **On acquire:** the manager's tracking map is reset (`ResetTracking`) and a sync is triggered,
+  so a freshly promoted pod (re)creates every subscription rather than skipping stale entries.
 
-Only the leader maintains the EventSub WebSocket connection to prevent duplicate event notifications.
+The webhook handler runs on every pod (any pod may receive Twitch's callback); only subscription
+*management* is leader-gated.
 
 ## Event Flow
 

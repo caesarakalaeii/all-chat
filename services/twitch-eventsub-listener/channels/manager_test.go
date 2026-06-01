@@ -185,3 +185,43 @@ func TestResolveBroadcasterID_NegativeCache(t *testing.T) {
 		t.Fatalf("resolver called %d times, want 1 (negative cache)", got)
 	}
 }
+
+// TestResetTracking_ClearsChannels verifies ResetTracking drops tracked channels so a freshly
+// promoted leader rebuilds subscriptions instead of skipping "already tracked" entries.
+func TestResetTracking_ClearsChannels(t *testing.T) {
+	m := NewManager(nil, zap.NewNop(), &countingResolver{}, nil, time.Minute)
+	m.channels["111"] = &Channel{BroadcasterID: "111", ChatActive: true}
+	m.channels["222"] = &Channel{BroadcasterID: "222"}
+
+	m.ResetTracking()
+
+	if got := m.GetActiveChannelCount(); got != 0 {
+		t.Fatalf("after ResetTracking, active channels = %d, want 0", got)
+	}
+}
+
+// TestTriggerSync_NonBlocking verifies TriggerSync enqueues a coalesced sync signal without
+// blocking, and that a second call coalesces (does not block on the size-1 channel).
+func TestTriggerSync_NonBlocking(t *testing.T) {
+	m := NewManager(nil, zap.NewNop(), &countingResolver{}, nil, time.Minute)
+
+	done := make(chan struct{})
+	go func() {
+		m.TriggerSync() // fills the buffer
+		m.TriggerSync() // must not block (coalesces)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("TriggerSync blocked")
+	}
+
+	// One signal should be queued and drainable.
+	select {
+	case <-m.syncSignal:
+	default:
+		t.Fatal("expected a queued sync signal")
+	}
+}
