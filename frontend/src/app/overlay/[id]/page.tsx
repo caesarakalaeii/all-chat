@@ -48,6 +48,7 @@ import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import { isDisplayVisible } from '@/lib/utils/displayVisibility'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { shouldFilterMessage } from '@/lib/utils/filterMessage'
 import type { FilterSettings } from '@/lib/types/overlay'
@@ -118,6 +119,13 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
   const [showPlatformIndicators, setShowPlatformIndicators] = useState(true)
+  // Visibility toggles whose CSS rules are scoped to `.overlay-preview-body`
+  // (preview/embed only). The live OBS overlay lacks that scope hook, so it
+  // must honor these in React — otherwise disabled elements still render here.
+  const [showAvatars, setShowAvatars] = useState(true)
+  const [showBadges, setShowBadges] = useState(true)
+  const [showTimestamps, setShowTimestamps] = useState(true)
+  const [showUsername, setShowUsername] = useState(true)
   const [invertMessageOrder, setInvertMessageOrder] = useState(false)
   const [showPronouns, setShowPronouns] = useState(true) // D-07: default on
   const [pronounPosition, setPronounPosition] = useState<'before' | 'after'>('after') // default after
@@ -320,6 +328,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       }
       if (vs.showPlatformIndicators !== undefined) {
         setShowPlatformIndicators(vs.showPlatformIndicators !== 'none')
+      }
+      // Visibility toggles the live overlay must interpret itself (see state decls)
+      if (vs.showAvatars !== undefined) {
+        setShowAvatars(isDisplayVisible(vs.showAvatars))
+      }
+      if (vs.showBadges !== undefined) {
+        setShowBadges(isDisplayVisible(vs.showBadges))
+      }
+      if (vs.showTimestamps !== undefined) {
+        setShowTimestamps(isDisplayVisible(vs.showTimestamps))
+      }
+      if (vs.showUsername !== undefined) {
+        setShowUsername(isDisplayVisible(vs.showUsername))
       }
       // Phase 9: Pronoun visual_settings overrides
       if (vs.showPronouns !== undefined) {
@@ -740,15 +761,17 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             >
               <div className="flex items-start gap-3">
                 {/* Avatar */}
-                <div className="flex-shrink-0" style={{ overflow: 'visible' }}>
-                  <UserAvatar
-                    avatarUrl={message.user?.avatar_url}
-                    frameUrl={message.user?.avatar_frame_url}
-                    flairUrl={message.user?.avatar_flair_url}
-                    size={40}
-                    displayName={message.user?.display_name}
-                  />
-                </div>
+                {showAvatars && (
+                  <div className="flex-shrink-0" style={{ overflow: 'visible' }}>
+                    <UserAvatar
+                      avatarUrl={message.user?.avatar_url}
+                      frameUrl={message.user?.avatar_frame_url}
+                      flairUrl={message.user?.avatar_flair_url}
+                      size={40}
+                      displayName={message.user?.display_name}
+                    />
+                  </div>
+                )}
 
                 {/* Message Content */}
                 <div className="min-w-0 flex-1">
@@ -776,7 +799,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       ))}
 
                     {/* Regular Badges (before username when position is 'before') */}
-                    {platformBadgePosition === 'before' &&
+                    {showBadges &&
+                      platformBadgePosition === 'before' &&
                       message.user?.badges &&
                       message.user.badges.length > 0 && (
                         <div className="flex items-center gap-1">
@@ -819,41 +843,42 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                     )}
 
                     {/* Username */}
-                    {message.user?.name_gradient ? (
-                      <span
-                        ref={(el) => {
-                          if (el) {
-                            el.style.setProperty('text-shadow', 'none', 'important')
-                            el.style.setProperty(
-                              '-webkit-text-stroke',
-                              '0.5px rgba(0,0,0,0.5)',
-                              'important'
-                            )
-                            el.style.setProperty('color', 'transparent', 'important')
-                            el.style.setProperty(
-                              '-webkit-text-fill-color',
-                              'transparent',
-                              'important'
-                            )
-                            el.style.setProperty('background-clip', 'text', 'important')
-                            el.style.setProperty('-webkit-background-clip', 'text', 'important')
-                          }
-                        }}
-                        className="username-gradient bg-clip-text text-sm font-semibold text-transparent"
-                        style={{ backgroundImage: buildGradientCSS(message.user.name_gradient) }}
-                      >
-                        {message.user?.display_name || message.user?.username}
-                      </span>
-                    ) : (
-                      <span
-                        className="text-sm font-semibold"
-                        style={{
-                          color: message.user?.color || 'var(--chat-username-color, #FFFFFF)',
-                        }}
-                      >
-                        {message.user?.display_name || message.user?.username}
-                      </span>
-                    )}
+                    {showUsername &&
+                      (message.user?.name_gradient ? (
+                        <span
+                          ref={(el) => {
+                            if (el) {
+                              el.style.setProperty('text-shadow', 'none', 'important')
+                              el.style.setProperty(
+                                '-webkit-text-stroke',
+                                '0.5px rgba(0,0,0,0.5)',
+                                'important'
+                              )
+                              el.style.setProperty('color', 'transparent', 'important')
+                              el.style.setProperty(
+                                '-webkit-text-fill-color',
+                                'transparent',
+                                'important'
+                              )
+                              el.style.setProperty('background-clip', 'text', 'important')
+                              el.style.setProperty('-webkit-background-clip', 'text', 'important')
+                            }
+                          }}
+                          className="username-gradient bg-clip-text text-sm font-semibold text-transparent"
+                          style={{ backgroundImage: buildGradientCSS(message.user.name_gradient) }}
+                        >
+                          {message.user?.display_name || message.user?.username}
+                        </span>
+                      ) : (
+                        <span
+                          className="text-sm font-semibold"
+                          style={{
+                            color: message.user?.color || 'var(--chat-username-color, #FFFFFF)',
+                          }}
+                        >
+                          {message.user?.display_name || message.user?.username}
+                        </span>
+                      ))}
 
                     {/* Phase 9: Pronoun pill - after username */}
                     {showPronouns && message.user?.pronouns && pronounPosition === 'after' && (
@@ -894,7 +919,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                     )}
 
                     {/* Regular Badges (after username when position is 'after') */}
-                    {platformBadgePosition === 'after' &&
+                    {showBadges &&
+                      platformBadgePosition === 'after' &&
                       message.user?.badges &&
                       message.user.badges.length > 0 && (
                         <div className="flex items-center gap-1">
@@ -955,9 +981,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   </div>
 
                   {/* Timestamp */}
-                  <div className="mt-1 text-xs text-slate-500">
-                    {new Date(message.timestamp).toLocaleTimeString()}
-                  </div>
+                  {showTimestamps && (
+                    <div className="mt-1 text-xs text-slate-500">
+                      {new Date(message.timestamp).toLocaleTimeString()}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
