@@ -159,6 +159,29 @@ func (m *Manager) SetStatusPublisher(pub *status.Publisher) {
 	m.statusPublisher = pub
 }
 
+// ResetTracking drops the in-memory channel map so the next SyncChannels treats every active
+// channel as new and (re)creates its subscriptions. Called when this pod ACQUIRES leadership:
+// the manager runs on every pod (started by LeadershipListener.Start), so a standby may have
+// populated the map while its subscription callback was a no-op; clearing it ensures a freshly
+// promoted leader actually creates the subscriptions instead of seeing stale "already tracked"
+// entries and skipping them. Real Twitch subscriptions are not deleted here — re-creation is
+// idempotent (Twitch returns "already exists").
+func (m *Manager) ResetTracking() {
+	m.mu.Lock()
+	m.channels = make(map[string]*Channel)
+	m.mu.Unlock()
+}
+
+// TriggerSync requests an immediate (coalesced) SyncChannels via the periodic sync goroutine,
+// without blocking. Used right after acquiring leadership so subscriptions are rebuilt promptly
+// instead of waiting for the next periodic tick.
+func (m *Manager) TriggerSync() {
+	select {
+	case m.syncSignal <- struct{}{}:
+	default:
+	}
+}
+
 // publishChatOffline emits a platform:status "offline" for the channel's chat indicator,
 // keyed by the lowercased login (channel_id in overlay_chat_sources) so the api-gateway
 // status subscriber routes it to the right overlays — matching the IRC listener's convention.
