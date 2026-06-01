@@ -68,17 +68,24 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
 		return fmt.Errorf("failed to encrypt refresh token: %w", err)
 	}
 
+	// granted_scopes is NOT NULL DEFAULT '{}'; passing an explicit value bypasses
+	// the DEFAULT, so coalesce nil to an empty (non-nil) slice to avoid a NULL.
+	grantedScopes := user.GrantedScopes
+	if grantedScopes == nil {
+		grantedScopes = []string{}
+	}
+
 	query := `
 INSERT INTO users (
 id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
-is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+is_admin, access_token, refresh_token, token_expires_at, created_at, updated_at, granted_scopes
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 `
 
 	_, err = r.db.Exec(ctx, query,
 		user.ID, user.TwitchID, user.GoogleID, user.KickID, user.AuthProvider, user.Username, user.DisplayName,
 		user.ProfileImageURL, user.IsAdmin, accessToken, refreshToken,
-		user.TokenExpiresAt, user.CreatedAt, user.UpdatedAt,
+		user.TokenExpiresAt, user.CreatedAt, user.UpdatedAt, grantedScopes,
 	)
 
 	if err != nil {
@@ -251,6 +258,44 @@ WHERE id = $1
 	}
 
 	return nil
+}
+
+// UpdateGrantedScopes overwrites the OAuth scopes granted at the most recent consent.
+//
+// Kept separate from Update so that general user updates (which load the user via
+// scanUser, where granted_scopes is intentionally not populated) can never clobber
+// the stored scope set. Only the OAuth callback paths, which have the fresh token in
+// hand, call this. nil is coalesced to an empty slice so the NOT NULL column is honoured.
+func (r *UserRepository) UpdateGrantedScopes(ctx context.Context, userID string, scopes []string) error {
+	if scopes == nil {
+		scopes = []string{}
+	}
+	result, err := r.db.Exec(ctx,
+		`UPDATE users SET granted_scopes = $2, updated_at = NOW() WHERE id = $1`,
+		userID, scopes,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update granted scopes: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// GetGrantedScopes returns the OAuth scopes granted at the most recent consent for a user.
+// Used to decide whether a Twitch channel is eligible for EventSub chat reading without
+// threading the column through the shared scanUser read paths.
+func (r *UserRepository) GetGrantedScopes(ctx context.Context, userID string) ([]string, error) {
+	var scopes []string
+	err := r.db.QueryRow(ctx, `SELECT granted_scopes FROM users WHERE id = $1`, userID).Scan(&scopes)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get granted scopes: %w", err)
+	}
+	return scopes, nil
 }
 
 // GetByKickID retrieves a user by Kick ID

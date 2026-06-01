@@ -143,6 +143,49 @@ func TestDemandFiltering(t *testing.T) {
 	ll.Stop()
 }
 
+// TestDemandPlatformOverride verifies that DemandPlatform overrides the platform used to
+// filter demand updates, independently of the leadership Platform. This is the
+// twitch-eventsub case: it coordinates as "twitch-eventsub" but must match "twitch" sources.
+func TestDemandPlatformOverride(t *testing.T) {
+	mr, rc := redisutil.StartTestRedisWithClient(t)
+	defer func() {
+		rc.Close()
+		mr.Close()
+		time.Sleep(10 * time.Millisecond)
+		goleak.VerifyNone(t)
+	}()
+
+	ll, err := listener.NewLeadershipListener(listener.LeadershipConfig{
+		Platform:       "twitch-eventsub",
+		DemandPlatform: "twitch",
+	}, rc, zap.NewNop())
+	require.NoError(t, err)
+
+	mgr := &demandCapturingManager{}
+	ctx, cancel := context.WithCancel(context.Background())
+	require.NoError(t, ll.Start(ctx, mgr))
+	time.Sleep(50 * time.Millisecond)
+
+	// A "twitch" source must match (via DemandPlatform); a literal "twitch-eventsub" source must not.
+	payload := demandUpdateJSON([]map[string]string{
+		{"source_id": "T", "channel_id": "chan-t", "platform": "twitch", "overlay_id": "ov-1"},
+		{"source_id": "E", "channel_id": "chan-e", "platform": "twitch-eventsub", "overlay_id": "ov-2"},
+	})
+	require.NoError(t, rc.Publish(ctx, "source:demand", payload).Err())
+
+	require.Eventually(t, func() bool {
+		return mgr.demandCallCount.Load() >= 1
+	}, 3*time.Second, 20*time.Millisecond, "UpdateDemandedSourceIDs should have been called")
+
+	got, ok := mgr.getLastDemandCall()
+	require.True(t, ok)
+	assert.Contains(t, got, "T", "twitch source must match the DemandPlatform override")
+	assert.NotContains(t, got, "E", "twitch-eventsub source must NOT match when DemandPlatform=twitch")
+
+	cancel()
+	ll.Stop()
+}
+
 // TestDemandWithDisableFiltering verifies that when DisableDemandFiltering=true,
 // the demand loop exits early without subscribing to Redis.
 // The manager's UpdateDemandedSourceIDs must not be called via the demand loop.

@@ -193,6 +193,9 @@ export interface ChatSource {
   updated_at: string
   is_active: boolean
   share_status?: 'accepted' | 'revoked' | 'expired' // Only present for shared_overlay sources
+  /** Twitch only: true when the channel owner granted user:read:chat, so chat is read via
+   *  EventSub instead of IRC. Computed server-side on the overlay source list. */
+  chat_via_eventsub?: boolean
 }
 
 export type StreamSelectionStrategy =

@@ -143,6 +143,10 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to initialize leadership listener", zap.Error(err))
 	}
+	// We coordinate leadership as "twitch-eventsub" but read "twitch" sources, so match
+	// demand updates against the source platform "twitch" (chat subscriptions are gated on
+	// live-overlay demand; see channels.Manager.reconcileChatLocked).
+	ll.SetDemandPlatform("twitch")
 
 	// Initialize metrics (available via /metrics endpoint)
 	listenerMetrics := metrics.NewListenerMetrics("twitch-eventsub", "twitch-eventsub-listener")
@@ -171,7 +175,10 @@ func main() {
 		return isLeader
 	}
 
-	// Set up channel manager callback (creates/deletes subscriptions for all event types)
+	// Set up channel manager callback. Actions: "subscribe" creates the event subscriptions
+	// for every active channel; "subscribe_chat"/"unsubscribe_chat" manage the
+	// channel.chat.message subscription, which the manager gates on chat scope AND live-overlay
+	// demand; "unsubscribe" deletes all subscriptions for a removed channel.
 	channelManager.SetSubscriptionCallback(func(broadcasterID string, accessToken string, action string) error {
 		if !isLeaderFn() {
 			// Only leader creates/deletes subscriptions
@@ -181,12 +188,6 @@ func main() {
 		if action == "subscribe" {
 			// Subscribe to all supported EventSub event types
 			var successCount, failCount, scopeErrorCount int
-
-			// Helper function to check if error is due to missing OAuth scopes
-			isScopeError := func(err error) bool {
-				return strings.Contains(err.Error(), "missing proper authorization") ||
-					strings.Contains(err.Error(), "403")
-			}
 
 			// Channel points - uses app access token
 			if _, err := subscriptionMgr.SubscribeChannelPoints(ctx, broadcasterID); err != nil {
@@ -308,6 +309,11 @@ func main() {
 				successCount++
 			}
 
+			// Chat (channel.chat.message) is NOT created here — it is managed separately via
+			// the subscribe_chat/unsubscribe_chat actions, gated on chat scope AND live-overlay
+			// demand. Keeping it out of "subscribe" ensures the event subscriptions above are
+			// created for every active channel regardless of chat scope or demand.
+
 			log.Info("EventSub subscription sync complete",
 				zap.String("broadcaster_id", broadcasterID),
 				zap.Int("success", successCount),
@@ -321,6 +327,27 @@ func main() {
 				return nil
 			}
 			return fmt.Errorf("all subscriptions failed for broadcaster %s", broadcasterID)
+
+		} else if action == "subscribe_chat" {
+			// Create the chat subscription. A scope error is non-fatal: return nil so the
+			// manager marks chat active and doesn't retry-spam; that channel just won't get
+			// EventSub chat (it stays on IRC unless/until the owner grants the missing scope).
+			if _, err := subscriptionMgr.SubscribeToChatMessages(ctx, broadcasterID); err != nil {
+				if strings.Contains(err.Error(), "subscription already exists") {
+					return nil
+				}
+				if isScopeError(err) {
+					log.Info("Chat message subscription requires user:read:chat + user:bot scopes",
+						zap.String("broadcaster_id", broadcasterID))
+					return nil
+				}
+				return err
+			}
+			log.Info("Subscribed to chat messages", zap.String("broadcaster_id", broadcasterID))
+			return nil
+
+		} else if action == "unsubscribe_chat" {
+			return subscriptionMgr.UnsubscribeType(ctx, broadcasterID, "channel.chat.message")
 
 		} else if action == "unsubscribe" {
 			return subscriptionMgr.Unsubscribe(ctx, broadcasterID)
@@ -386,6 +413,13 @@ func main() {
 
 // startHTTPServer starts the HTTP server for health checks and webhook endpoint.
 // isLeaderFn is a nil-safe function returning the current leadership state.
+// isScopeError reports whether a subscription error is due to the broadcaster not having
+// granted the required OAuth scopes (Twitch returns 403 / "missing proper authorization").
+func isScopeError(err error) bool {
+	return strings.Contains(err.Error(), "missing proper authorization") ||
+		strings.Contains(err.Error(), "403")
+}
+
 func startHTTPServer(log *zap.Logger, port string, isLeaderFn func() bool, webhookHandler *webhooks.Handler, db *pgxpool.Pool, redis *redis.Client, tracingEnabled bool) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()

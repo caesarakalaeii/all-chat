@@ -33,8 +33,13 @@ type ChatSource struct {
 	Config        map[string]interface{} `json:"config"`
 	IsActive      bool                   `json:"is_active"`
 	ShareStatus   *string                `json:"share_status,omitempty"` // Only set for platform='shared_overlay'
-	CreatedAt     time.Time              `json:"created_at"`
-	UpdatedAt     time.Time              `json:"updated_at"`
+	// ChatViaEventSub is true for a Twitch source whose channel owner granted the chat
+	// scope (user:read:chat) and has a valid token — i.e. its chat is read via the
+	// EventSub listener rather than IRC. Computed (not stored); only populated by
+	// ListByOverlayID. The frontend uses it to show a badge / reconnect CTA.
+	ChatViaEventSub bool      `json:"chat_via_eventsub"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // Valid platforms

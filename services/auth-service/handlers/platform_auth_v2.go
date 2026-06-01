@@ -122,7 +122,8 @@ func (h *PlatformAuthHandlerV2) HandleLogin(platform oauth.Platform) gin.Handler
 			return
 		}
 
-		authURL, err := h.generateAuthURL(c.Request.Context(), provider, platform, stateStr, csrfToken)
+		// Login keeps the minimal scope set (withChatScopes=false).
+		authURL, err := h.generateAuthURL(c.Request.Context(), provider, platform, stateStr, csrfToken, false)
 		if err != nil {
 			h.logger.Error("Failed to generate auth URL", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -170,8 +171,11 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			return
 		}
 
-		// Short-circuit Twitch add-source when the user already authenticated via Twitch.
-		// TODO: remove this workaround once the Twitch add-source OAuth regression is fixed.
+		// Short-circuit Twitch add-source when the user already authenticated via Twitch
+		// AND already granted the EventSub chat scopes. When the chat scope is missing we
+		// intentionally fall through to the full OAuth flow below (withChatScopes=true) so
+		// the streamer is prompted to grant it — that is what moves their channel from the
+		// IRC listener to the EventSub listener.
 		if platform == oauth.PlatformTwitch {
 			user, err := h.userRepo.GetByID(c.Request.Context(), userIDStr)
 			if err != nil {
@@ -184,7 +188,16 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 				return
 			}
 
-			if user.TwitchID != nil && *user.TwitchID != "" && user.AuthProvider == string(oauth.PlatformTwitch) {
+			// granted_scopes is not populated by GetByID (scanUser), so read it directly.
+			// On error, treat as "no chat scope" and fall through to the OAuth flow.
+			grantedScopes, scopeErr := h.userRepo.GetGrantedScopes(c.Request.Context(), userIDStr)
+			if scopeErr != nil {
+				h.logger.Warn("Failed to read granted scopes for Twitch add-source short-circuit",
+					zap.String("user_id", userIDStr), zap.Error(scopeErr))
+			}
+			hasChatScope := containsScope(grantedScopes, "user:read:chat")
+
+			if user.TwitchID != nil && *user.TwitchID != "" && user.AuthProvider == string(oauth.PlatformTwitch) && hasChatScope {
 				// Check if token is expired and refresh if needed
 				if time.Now().After(user.TokenExpiresAt) {
 					h.logger.Info("Token expired, refreshing before adding source",
@@ -293,7 +306,9 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			return
 		}
 
-		authURL, err := h.generateAuthURL(c.Request.Context(), provider, platform, stateStr, csrfToken)
+		// Add-source requests the EventSub chat scopes (withChatScopes=true) so a
+		// streamer authorizing their own channel can be read via EventSub.
+		authURL, err := h.generateAuthURL(c.Request.Context(), provider, platform, stateStr, csrfToken, true)
 		if err != nil {
 			h.logger.Error("Failed to generate auth URL", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -318,13 +333,18 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 	}
 }
 
-// generateAuthURL generates the OAuth authorization URL with PKCE support for Kick
+// generateAuthURL generates the OAuth authorization URL with PKCE support for Kick.
+//
+// withChatScopes is set by the Twitch add-source flow to additionally request the
+// EventSub chat scopes (TwitchChatScopes); the login flow passes false so logins
+// keep the minimal scope set.
 func (h *PlatformAuthHandlerV2) generateAuthURL(
 	ctx context.Context,
 	provider oauth.OAuthProvider,
 	platform oauth.Platform,
 	stateStr string,
 	csrfToken string,
+	withChatScopes bool,
 ) (string, error) {
 	var authURL string
 
@@ -345,11 +365,27 @@ func (h *PlatformAuthHandlerV2) generateAuthURL(
 		if err != nil {
 			return "", fmt.Errorf("failed to store code verifier: %w", err)
 		}
+	} else if platform == oauth.PlatformTwitch && withChatScopes {
+		twitchProvider, ok := provider.(*oauth.TwitchOAuth)
+		if !ok {
+			return "", fmt.Errorf("twitch provider type assertion failed")
+		}
+		authURL = twitchProvider.GetAuthURLWithChatScopes(stateStr)
 	} else {
 		authURL = provider.GetAuthURL(stateStr)
 	}
 
 	return authURL, nil
+}
+
+// containsScope reports whether scopes contains want.
+func containsScope(scopes []string, want string) bool {
+	for _, s := range scopes {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleCallback handles the OAuth callback for any platform
@@ -751,6 +787,7 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			AccessToken:     token.AccessToken,
 			RefreshToken:    token.RefreshToken,
 			TokenExpiresAt:  token.Expiry,
+			GrantedScopes:   oauth.ExtractGrantedScopes(token),
 		}
 
 		// Set the appropriate platform ID
@@ -782,15 +819,39 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			return nil, fmt.Errorf("user account is banned")
 		}
 
-		// Update existing user
+		// Update existing user profile fields.
 		user.DisplayName = platformUser.GetDisplayName()
 		user.ProfileImageURL = platformUser.GetProfileImageURL()
-		user.AccessToken = token.AccessToken
-		user.RefreshToken = token.RefreshToken
-		user.TokenExpiresAt = token.Expiry
+
+		// Decide whether this login would downgrade the stored OAuth scopes. A plain
+		// Twitch login only requests the login scopes (withChatScopes=false); if the
+		// streamer previously granted the EventSub chat scopes via add-source, replacing
+		// their token here would knock their channel back to the IRC listener on every
+		// login. So when the stored credentials already carry user:read:chat and this
+		// token does not, keep the existing token + granted_scopes and refresh only the
+		// profile fields. The user is still authenticated and issued a JWT.
+		newScopes := oauth.ExtractGrantedScopes(token)
+		existingScopes, _ := h.userRepo.GetGrantedScopes(ctx, user.ID)
+		preserveScopes := containsScope(existingScopes, "user:read:chat") && !containsScope(newScopes, "user:read:chat")
+
+		if !preserveScopes {
+			user.AccessToken = token.AccessToken
+			user.RefreshToken = token.RefreshToken
+			user.TokenExpiresAt = token.Expiry
+		}
 
 		if err := h.userRepo.Update(ctx, user); err != nil {
 			return nil, fmt.Errorf("failed to update user: %w", err)
+		}
+
+		// Keep granted_scopes in sync with the freshly issued token (unless we deliberately
+		// preserved a broader stored grant above). Kept separate from Update so unrelated
+		// user updates can never clobber the scope set.
+		if !preserveScopes {
+			if err := h.userRepo.UpdateGrantedScopes(ctx, user.ID, newScopes); err != nil {
+				h.logger.Warn("Failed to update granted scopes on login",
+					zap.String("user_id", user.ID), zap.Error(err))
+			}
 		}
 	}
 
@@ -858,6 +919,15 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 	// Update user in database
 	if err := h.userRepo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to update user: %w", err)
+	}
+
+	// Persist the granted scopes. This is the Twitch add-source reflow path, so the
+	// token carries the chat scopes (user:read:chat, user:bot, channel:bot) — recording
+	// them here is what flips the channel from the IRC listener to the EventSub listener
+	// on the next sync. Kept separate from Update (see UpdateGrantedScopes).
+	if err := h.userRepo.UpdateGrantedScopes(ctx, user.ID, oauth.ExtractGrantedScopes(token)); err != nil {
+		h.logger.Warn("Failed to persist granted scopes after platform link",
+			zap.String("user_id", user.ID), zap.Error(err))
 	}
 
 	return user, nil
