@@ -80,6 +80,47 @@ func (r *SourceRepository) Create(ctx context.Context, source *models.ChatSource
 	return nil
 }
 
+// CreateOrUpdateAuto inserts a chat source or, if one already exists for the same
+// (overlay_id, platform, channel_id), updates its display fields and re-activates it —
+// returning the canonical row either way. Used by the internal add-source-auto endpoint so
+// the OAuth flow is idempotent: re-connecting an already-configured channel (e.g. to grant
+// the EventSub chat scopes) succeeds instead of failing on the UNIQUE constraint. The
+// existing config (e.g. TTS/relay settings) is intentionally preserved.
+func (r *SourceRepository) CreateOrUpdateAuto(ctx context.Context, source *models.ChatSource) error {
+	if source.ID == "" {
+		source.ID = uuid.New().String()
+	}
+
+	query := `
+		INSERT INTO overlay_chat_sources (id, overlay_id, platform, channel_id, channel_name, channel_handle, auth_required, config, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+		ON CONFLICT (overlay_id, platform, channel_id) DO UPDATE SET
+			channel_name   = EXCLUDED.channel_name,
+			channel_handle = EXCLUDED.channel_handle,
+			is_active      = true,
+			updated_at     = NOW()
+		RETURNING id, created_at, updated_at
+	`
+
+	err := r.pool.QueryRow(ctx, query,
+		source.ID,
+		source.OverlayID,
+		source.Platform,
+		source.ChannelID,
+		source.ChannelName,
+		source.ChannelHandle,
+		source.AuthRequired,
+		source.Config,
+		source.IsActive,
+	).Scan(&source.ID, &source.CreatedAt, &source.UpdatedAt)
+
+	if err != nil {
+		return fmt.Errorf("failed to upsert source: %w", err)
+	}
+
+	return nil
+}
+
 // ListByOverlayID retrieves all sources for an overlay.
 // For shared_overlay sources, it JOINs share_requests to populate ShareStatus.
 // Non-shared_overlay sources have ShareStatus == nil (omitted from JSON).

@@ -35,6 +35,7 @@ import (
 // SourceRepository defines the interface for source persistence
 type SourceRepository interface {
 	Create(ctx context.Context, source *models.ChatSource) error
+	CreateOrUpdateAuto(ctx context.Context, source *models.ChatSource) error
 	ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error)
 	GetByID(ctx context.Context, id string) (*models.ChatSource, error)
 	Delete(ctx context.Context, id string) error
@@ -754,13 +755,20 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		return
 	}
 
-	// Create in database
-	if err := h.sourceRepo.Create(c.Request.Context(), source); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create source"})
+	// Idempotent create-or-update: re-connecting an already-configured channel (e.g. to grant
+	// the EventSub chat scopes) must succeed, not fail on the UNIQUE(overlay_id, platform,
+	// channel_id) constraint. Otherwise the OAuth flow stores the new scopes but the frontend
+	// shows a spurious "failed to add source" error.
+	if err := h.sourceRepo.CreateOrUpdateAuto(c.Request.Context(), source); err != nil {
+		h.logger.Error("Failed to upsert source (auto)",
+			zap.String("overlay_id", overlayID),
+			zap.String("platform", source.Platform),
+			zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add source"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, source)
+	c.JSON(http.StatusOK, source)
 }
 
 // RegisterRoutes registers source routes

@@ -1101,6 +1101,9 @@ func (s *stubOverlayRepo) UnsetAllPublicForUser(_ context.Context, _, _ string) 
 type stubSourceRepo struct{}
 
 func (s *stubSourceRepo) Create(_ context.Context, _ *models.ChatSource) error { return nil }
+func (s *stubSourceRepo) CreateOrUpdateAuto(_ context.Context, _ *models.ChatSource) error {
+	return nil
+}
 func (s *stubSourceRepo) ListByOverlayID(_ context.Context, _ string) ([]*models.ChatSource, error) {
 	return nil, nil
 }

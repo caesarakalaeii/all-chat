@@ -49,6 +49,13 @@ func (m *mockSourceRepositoryWithConfig) Create(ctx context.Context, source *mod
 	return nil
 }
 
+func (m *mockSourceRepositoryWithConfig) CreateOrUpdateAuto(ctx context.Context, source *models.ChatSource) error {
+	if m.createFunc != nil {
+		return m.createFunc(ctx, source)
+	}
+	return nil
+}
+
 func (m *mockSourceRepositoryWithConfig) ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error) {
 	if m.listByOverlayFunc != nil {
 		return m.listByOverlayFunc(ctx, overlayID)

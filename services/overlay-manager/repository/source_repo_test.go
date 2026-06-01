@@ -86,7 +86,8 @@ func setupSourceTestDatabase(t *testing.T) (*SourceRepository, func()) {
 			config JSONB DEFAULT '{}'::jsonb,
 			is_active BOOLEAN DEFAULT TRUE,
 			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(overlay_id, platform, channel_id)
 		);
 
 		-- Minimal users table (owned by auth-service; shared DB in prod). Required so the
@@ -123,6 +124,48 @@ func createTestOverlay(t *testing.T, repo *SourceRepository) string {
 	)
 	require.NoError(t, err)
 	return overlayID
+}
+
+// TestCreateOrUpdateAuto_Idempotent verifies that re-adding the same (overlay, platform,
+// channel_id) via the auto path does not error or duplicate — it returns the existing row,
+// refreshes display fields, and re-activates. This is what makes the OAuth re-consent flow
+// (e.g. enabling EventSub chat on an already-configured channel) succeed instead of failing.
+func TestCreateOrUpdateAuto_Idempotent(t *testing.T) {
+	repo, cleanup := setupSourceTestDatabase(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	overlayID := createTestOverlay(t, repo)
+
+	src := &models.ChatSource{
+		OverlayID:   overlayID,
+		Platform:    "twitch",
+		ChannelID:   "caesarlp",
+		ChannelName: "CaesarLP",
+		Config:      map[string]interface{}{},
+		IsActive:    true,
+	}
+	require.NoError(t, repo.CreateOrUpdateAuto(ctx, src))
+	firstID := src.ID
+	require.NotEmpty(t, firstID)
+
+	// Re-consent: same overlay/platform/channel, different display name.
+	dup := &models.ChatSource{
+		OverlayID:   overlayID,
+		Platform:    "twitch",
+		ChannelID:   "caesarlp",
+		ChannelName: "CaesarLP Updated",
+		Config:      map[string]interface{}{},
+		IsActive:    true,
+	}
+	require.NoError(t, repo.CreateOrUpdateAuto(ctx, dup), "re-consent must not error on the UNIQUE constraint")
+	require.Equal(t, firstID, dup.ID, "must return the existing source id, not create a new row")
+
+	sources, err := repo.ListByOverlayID(ctx, overlayID)
+	require.NoError(t, err)
+	require.Len(t, sources, 1, "must remain exactly one source row")
+	require.Equal(t, "CaesarLP Updated", sources[0].ChannelName, "display fields refreshed on re-consent")
+	require.True(t, sources[0].IsActive)
 }
 
 // TestListByOverlayID_NonSharedSource verifies that a regular (non-shared_overlay) source
