@@ -184,3 +184,23 @@ func TestBuildChatTags_SharedChat(t *testing.T) {
 		}
 	}
 }
+
+func TestConditionBroadcasterID(t *testing.T) {
+	tests := []struct {
+		name      string
+		condition map[string]interface{}
+		want      string
+	}{
+		{"nil condition", nil, ""},
+		{"missing key", map[string]interface{}{"user_id": "5"}, ""},
+		{"non-string value", map[string]interface{}{"broadcaster_user_id": 67241623}, ""},
+		{"present", map[string]interface{}{"broadcaster_user_id": "67241623", "user_id": "67241623"}, "67241623"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := conditionBroadcasterID(tt.condition); got != tt.want {
+				t.Errorf("conditionBroadcasterID(%v) = %q, want %q", tt.condition, got, tt.want)
+			}
+		})
+	}
+}
