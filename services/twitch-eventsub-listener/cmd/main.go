@@ -359,38 +359,73 @@ func main() {
 		return nil
 	})
 
-	// Leadership acquisition goroutine — replaces old Redis SETNX loop
+	setLeader := func(v bool) {
+		isLeaderMu.Lock()
+		isLeader = v
+		isLeaderMu.Unlock()
+	}
+
+	// Leadership acquisition goroutine. The channel manager itself is already running on every
+	// pod (LeadershipListener.Start started it); leadership only gates whether this pod's
+	// subscription callback does real work. We therefore RETRY acquisition forever and
+	// re-acquire after loss — a one-shot attempt (the previous behaviour) left no pod as leader
+	// after a rolling deploy, because the new pods raced the outgoing leader's still-held lease,
+	// got a "claim skipped", and never tried again. See ADR-0007: EnsureLeadership is meant to
+	// be called repeatedly, not once.
 	go func() {
 		lc := ll.LeadershipCoordinator()
 		if lc == nil {
 			log.Info("Leadership coordination disabled — acting as standalone leader")
-			isLeaderMu.Lock()
-			isLeader = true
-			isLeaderMu.Unlock()
-			if err := channelManager.Start(ctx); err != nil {
-				log.Error("Channel manager start failed", zap.Error(err))
-			}
+			channelManager.ResetTracking()
+			setLeader(true)
+			channelManager.TriggerSync()
 			return
 		}
 
-		acquired, err := lc.EnsureLeadership(ctx, "shard:0", func() {
-			log.Warn("Lost EventSub leadership — stopping subscription management")
-			isLeaderMu.Lock()
-			isLeader = false
-			isLeaderMu.Unlock()
-			channelManager.Stop()
-		})
-		if err != nil {
-			log.Error("Leadership acquisition failed", zap.Error(err))
-			return
+		const reacquireInterval = 10 * time.Second
+		lostCh := make(chan struct{}, 1)
+		onLost := func() {
+			log.Warn("Lost EventSub leadership — will re-acquire")
+			setLeader(false)
+			select {
+			case lostCh <- struct{}{}:
+			default:
+			}
 		}
-		if acquired {
-			log.Info("Acquired EventSub leadership")
-			isLeaderMu.Lock()
-			isLeader = true
-			isLeaderMu.Unlock()
-			if err := channelManager.Start(ctx); err != nil {
-				log.Error("Channel manager start failed", zap.Error(err))
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			acquired, err := lc.EnsureLeadership(ctx, "shard:0", onLost)
+			if err != nil {
+				log.Error("Leadership acquisition failed — retrying", zap.Error(err))
+			} else if acquired {
+				log.Info("Acquired EventSub leadership")
+				// Rebuild from a clean slate: as a standby this pod may have tracked channels
+				// with a no-op callback, so clear that state before (re)creating subscriptions.
+				channelManager.ResetTracking()
+				setLeader(true)
+				channelManager.TriggerSync()
+
+				// Hold leadership until it is lost or the service shuts down.
+				select {
+				case <-ctx.Done():
+					return
+				case <-lostCh:
+					continue // re-acquire immediately
+				}
+			}
+
+			// Not acquired (another pod holds it) or transient error — wait and retry so this
+			// standby takes over promptly once the lease frees.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(reacquireInterval):
 			}
 		}
 	}()
