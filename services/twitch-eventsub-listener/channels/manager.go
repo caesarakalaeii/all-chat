@@ -71,6 +71,18 @@ type Manager struct {
 	podName           string
 	assignmentMu      sync.RWMutex
 
+	// Resolve cache: login → broadcaster_id. A Twitch user ID is immutable, so positive
+	// results are cached for the process lifetime; unresolvable logins (deleted/invalid
+	// accounts) are negatively cached for resolveNegativeTTL. This avoids hitting the Twitch
+	// API for every source on every sync.
+	resolveMu    sync.Mutex
+	resolveCache map[string]string
+	resolveNeg   map[string]time.Time
+
+	// syncSignal triggers an immediate (coalesced) SyncChannels when demand changes, so a
+	// newly-connected overlay's channel is subscribed without waiting for the periodic tick.
+	syncSignal chan struct{}
+
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
 	syncInterval time.Duration
@@ -87,9 +99,45 @@ func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, c
 		logger:       logger,
 		resolver:     resolver,
 		channels:     make(map[string]*Channel),
+		resolveCache: make(map[string]string),
+		resolveNeg:   make(map[string]time.Time),
+		syncSignal:   make(chan struct{}, 1),
 		stopChan:     make(chan struct{}),
 		syncInterval: syncInterval,
 	}
+}
+
+// resolveNegativeTTL bounds how long an unresolvable login (deleted/invalid account) stays
+// negatively cached before being retried.
+const resolveNegativeTTL = time.Hour
+
+// resolveBroadcasterID resolves a Twitch login to its (immutable) broadcaster user ID,
+// caching results so the listener does not call the Twitch API for every channel on every
+// sync. Failures are negatively cached for resolveNegativeTTL so deleted accounts are not
+// re-resolved each cycle.
+func (m *Manager) resolveBroadcasterID(ctx context.Context, login string) (string, error) {
+	m.resolveMu.Lock()
+	if id, ok := m.resolveCache[login]; ok {
+		m.resolveMu.Unlock()
+		return id, nil
+	}
+	if failedAt, ok := m.resolveNeg[login]; ok && time.Since(failedAt) < resolveNegativeTTL {
+		m.resolveMu.Unlock()
+		return "", fmt.Errorf("login %q unresolved (negative-cached)", login)
+	}
+	m.resolveMu.Unlock()
+
+	id, err := m.resolver.GetUserIDByLogin(ctx, login)
+
+	m.resolveMu.Lock()
+	if err != nil {
+		m.resolveNeg[login] = time.Now()
+	} else {
+		m.resolveCache[login] = id
+		delete(m.resolveNeg, login)
+	}
+	m.resolveMu.Unlock()
+	return id, err
 }
 
 // SetSubscriptionCallback sets the callback for channel changes
@@ -125,10 +173,9 @@ func (m *Manager) UpdateAssignedSourceIDs(assignedSourceIDs map[string]bool) {
 }
 
 // UpdateDemandedSourceIDs stores the demanded source set (sources whose overlay has a live
-// WebSocket) and immediately reconciles chat subscriptions: chat is read only while an
-// overlay using the channel is connected. Event subscriptions are NOT demand-gated — they
-// exist for every active channel regardless. Called by the SDK demand loop (already filtered
-// to the twitch platform via DemandPlatform).
+// WebSocket). EventSub work is demand-gated: SyncChannels only resolves/subscribes channels
+// that are demanded, so a channel with no connected overlay carries no subscriptions at all.
+// Called by the SDK demand loop (already filtered to the twitch platform via DemandPlatform).
 func (m *Manager) UpdateDemandedSourceIDs(demanded map[string]listener.DemandedSource) {
 	m.assignmentMu.Lock()
 	m.demandedSourceIDs = demanded
@@ -138,11 +185,18 @@ func (m *Manager) UpdateDemandedSourceIDs(demanded map[string]listener.DemandedS
 		zap.Int("demanded_sources", len(demanded)),
 	)
 
-	// Reconcile chat subscriptions now so a connecting overlay gets chat promptly and a
-	// disconnecting one stops it promptly (rather than waiting for the next sync tick).
+	// Immediately unsubscribe chat for already-tracked channels that just lost demand (stops
+	// webhook traffic promptly without waiting for the sync to remove the channel).
 	m.mu.Lock()
 	m.reconcileChatLocked(demanded)
 	m.mu.Unlock()
+
+	// Trigger a sync (coalesced) to pick up channels that just gained demand and drop ones
+	// that lost it. Non-blocking: a pending signal already covers this update.
+	select {
+	case m.syncSignal <- struct{}{}:
+	default:
+	}
 }
 
 // snapshotDemand returns the current demanded-source map (replaced wholesale by
@@ -221,6 +275,10 @@ func (m *Manager) Start(ctx context.Context) error {
 				return
 			case <-m.stopChan:
 				return
+			case <-m.syncSignal:
+				if err := m.SyncChannels(ctx); err != nil {
+					m.logger.Error("Channel sync failed (demand-triggered)", zap.Error(err))
+				}
 			case <-ticker.C:
 				if err := m.SyncChannels(ctx); err != nil {
 					m.logger.Error("Channel sync failed", zap.Error(err))
@@ -240,17 +298,17 @@ func (m *Manager) Stop() {
 
 // SyncChannels queries the database for active Twitch channels and creates/removes subscriptions
 func (m *Manager) SyncChannels(ctx context.Context) error {
-	// Query active Twitch sources and join with users table to get OAuth tokens.
-	// This selects ALL active Twitch sources with a connected owner (LEFT JOIN; rows without
-	// a token are skipped below) so the existing event subscriptions (points, subs, raids, …)
-	// are created for every connected channel — unchanged by the chat feature.
-	//
-	// has_chat_scope marks whether the owner additionally granted user:read:chat. It gates
-	// ONLY the channel.chat.message subscription (see the leader callback in cmd/main.go).
-	// It is the EventSub side of the IRC↔EventSub partition: twitch-listener (IRC) excludes
-	// exactly the channels where this predicate is true, via a byte-identical NOT EXISTS in
-	// services/twitch-listener/channels/repository.go — so a chat-scoped channel is read by
-	// EventSub and a non-scoped one by IRC, never both, never neither.
+	// Demand snapshot: when non-nil we process only sources whose overlay is currently
+	// connected (see the skip in the scan loop), so an idle channel costs no resolve and no
+	// subscriptions. nil means "no demand info yet" and fails open (process everything).
+	demanded := m.snapshotDemand()
+
+	// Query active Twitch sources joined with users for OAuth tokens. has_chat_scope marks
+	// whether the owner granted user:read:chat — it gates the channel.chat.message
+	// subscription and is the EventSub side of the IRC↔EventSub partition: twitch-listener
+	// (IRC) excludes exactly the channels where this predicate is true (byte-identical
+	// NOT EXISTS in services/twitch-listener/channels/repository.go), so a chat-scoped channel
+	// is read by EventSub and a non-scoped one by IRC — never both.
 	query := `
 		SELECT DISTINCT
 			ocs.id,
@@ -288,18 +346,21 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			continue
 		}
 
-		// Note: EventSub uses leader election - only the leader creates subscriptions for ALL Twitch sources
-		// We don't filter by coordinator assignments because:
-		// 1. Webhooks are stateless - all pods can receive events
-		// 2. Only the leader manages subscriptions (checked in callback)
-		// 3. This ensures consistent subscription coverage across all active channels
-		// The coordinator integration is used for pod health monitoring and migration notifications only
+		// Demand gate: skip sources whose overlay isn't currently connected. Done BEFORE the
+		// (cached) resolve so idle channels cost nothing — no Twitch API call, no subscription.
+		// nil demand fails open (process everything). Only the leader actually creates subs
+		// (the callback is a no-op on non-leaders).
+		if demanded != nil {
+			if _, ok := demanded[sourceID]; !ok {
+				continue
+			}
+		}
 
-		// channelID from database is the Twitch username (login)
-		// We need to resolve it to broadcaster_user_id via Twitch API
-		broadcasterID, err := m.resolver.GetUserIDByLogin(ctx, channelID)
+		// channelID from the database is the Twitch login; resolve it (cached) to the
+		// broadcaster_user_id needed by the EventSub subscription condition.
+		broadcasterID, err := m.resolveBroadcasterID(ctx, channelID)
 		if err != nil {
-			m.logger.Warn("Failed to resolve username to user ID",
+			m.logger.Debug("Skipping channel: failed to resolve username to user ID",
 				zap.String("username", channelID),
 				zap.Error(err),
 			)
@@ -315,9 +376,10 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			continue
 		}
 
-		// Check if token is expired
+		// Check if token is expired (debug-level: with demand gating this only concerns
+		// channels someone is actively watching, but it can still be noisy on rollover).
 		if tokenExpiresAt != nil && time.Now().After(*tokenExpiresAt) {
-			m.logger.Warn("Skipping channel with expired OAuth token",
+			m.logger.Debug("Skipping channel with expired OAuth token",
 				zap.String("broadcaster_id", broadcasterID),
 				zap.String("username", channelID),
 				zap.Time("expired_at", *tokenExpiresAt),
@@ -359,11 +421,8 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		zap.Int("active_channels", len(activeChannels)),
 	)
 
-	// Snapshot demand before taking m.mu so chat reconciliation uses a consistent view
-	// without nesting locks.
-	demanded := m.snapshotDemand()
-
-	// Compare with current channels and create/remove subscriptions
+	// Compare with current channels and create/remove subscriptions. Uses the demand snapshot
+	// taken at the top of this sync.
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
