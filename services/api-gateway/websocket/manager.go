@@ -58,6 +58,17 @@ type Manager struct {
 	stopHeartbeat     chan struct{}
 	heartbeatWg       sync.WaitGroup
 
+	// disconnectLingerTTL is how long the overlay:connected key is kept (with a
+	// shortened TTL) after the last WebSocket disconnects, instead of being deleted
+	// immediately. The key is the source of truth for demand (source-manager rebuilds
+	// the demanded set from overlay:connected:* keys), so lingering it keeps the
+	// upstream capture (eventsub chat / youtube polling) alive across brief overlay
+	// reconnects. It is set symmetric with the downstream pubsub linger
+	// (PUBSUB_LINGER_SECONDS) so any reconnect the gateway can replay buffered messages
+	// for is also a reconnect the upstream listener actually captured. 0 disables the
+	// linger and reverts to immediate deletion on disconnect.
+	disconnectLingerTTL time.Duration
+
 	// Session management for credit roll
 	sessionManager *sessions.SessionManager
 }
@@ -89,10 +100,24 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		}
 	}
 
+	// Disconnect linger TTL: keep the overlay:connected key alive this long after the
+	// last WebSocket disconnects (instead of deleting it immediately) so upstream
+	// capture survives brief overlay reconnects. Kept symmetric with the downstream
+	// pubsub linger (same PUBSUB_LINGER_SECONDS env var, same 5-minute default, same
+	// "0 disables" semantics) so the windows the gateway buffers/replays for are the
+	// windows the upstream listener actually captured.
+	disconnectLingerTTL := 5 * time.Minute
+	if envLinger := os.Getenv("PUBSUB_LINGER_SECONDS"); envLinger != "" {
+		if seconds, err := strconv.Atoi(envLinger); err == nil && seconds >= 0 {
+			disconnectLingerTTL = time.Duration(seconds) * time.Second
+		}
+	}
+
 	logger.Info("WebSocket manager initialized",
 		zap.Duration("disconnect_grace_period", gracePeriod),
 		zap.Duration("connection_ttl", connectionTTL),
 		zap.Duration("heartbeat_interval", heartbeatInterval),
+		zap.Duration("disconnect_linger_ttl", disconnectLingerTTL),
 	)
 
 	mgr := &Manager{
@@ -105,6 +130,7 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		disconnectGracePeriod: gracePeriod,
 		heartbeatInterval:     heartbeatInterval,
 		connectionTTL:         connectionTTL,
+		disconnectLingerTTL:   disconnectLingerTTL,
 		stopHeartbeat:         make(chan struct{}),
 		sessionManager:        sessions.NewSessionManager(redisClient, db, logger, gracePeriod),
 	}
@@ -236,8 +262,23 @@ func (m *Manager) publishConnectionEvent(ctx context.Context, overlayID, eventTy
 			)
 		}
 	} else if eventType == "disconnected" {
-		// Immediately delete connection key
-		if err := m.redisClient.Del(ctx, key).Err(); err != nil {
+		// Do NOT delete the key immediately. It is the source of truth for demand, and
+		// deleting it tears down the upstream capture (eventsub chat / youtube polling)
+		// after only the disconnect grace period — even though the downstream pubsub
+		// subscriber lingers for PUBSUB_LINGER_SECONDS and replays buffered messages on
+		// reconnect. That asymmetry permanently loses chat on any reconnect gap longer
+		// than the grace period. Instead, shorten the key's TTL to the linger window so a
+		// brief reconnect keeps capture alive (and replay works end to end), while a
+		// genuinely-gone overlay still releases demand once the linger expires.
+		if m.disconnectLingerTTL > 0 {
+			if err := m.redisClient.SetEx(ctx, key, "1", m.disconnectLingerTTL).Err(); err != nil {
+				m.logger.Error("Failed to set overlay connection linger TTL",
+					zap.String("overlay_id", overlayID),
+					zap.Error(err),
+				)
+			}
+		} else if err := m.redisClient.Del(ctx, key).Err(); err != nil {
+			// Linger disabled (PUBSUB_LINGER_SECONDS=0): revert to immediate deletion.
 			m.logger.Error("Failed to delete overlay connection key",
 				zap.String("overlay_id", overlayID),
 				zap.Error(err),
