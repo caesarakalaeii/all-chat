@@ -242,6 +242,7 @@ Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README
 - **ADR-0007**: Leadership rebalancing for auto-scaling listeners
 - **ADR-0008**: Feature gate infrastructure for premium capabilities
 - **ADR-0013**: Public overlay observability view + shared `useOverlayStream` hook
+- **ADR-0014**: Linger upstream capture demand symmetric with the downstream pub/sub linger
 
 ### Documentation
 
