@@ -247,6 +247,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0014: Linger Upstream Capture Demand Symmetric with the Downstream Pub/Sub Linger
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-02
+**Problem**: On overlay disconnect the `overlay:connected` key was deleted after ~60s, tearing down upstream chat capture, while the downstream pub/sub subscriber lingers 5 min and replays — so reconnect gaps beyond the grace period lost chat permanently
+**Decision**: On disconnect, linger the `overlay:connected` key for `PUBSUB_LINGER_SECONDS` (default 5 min) instead of deleting it, and let source-manager release demand via the periodic reconcile when the key expires (no eager drop)
+**Impact**: Brief overlay reconnects no longer lose chat; capture and replay are symmetric end to end; bounded idle cost; `PUBSUB_LINGER_SECONDS=0` reverts to immediate teardown
+**→ Read**: [0014-demand-linger-symmetric-with-pubsub-linger.md](./0014-demand-linger-symmetric-with-pubsub-linger.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -368,13 +379,13 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 13
+**Total ADRs**: 14
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-05-31
+**Last Updated**: 2026-06-02

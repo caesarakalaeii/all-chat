@@ -310,13 +310,17 @@ func (s *OverlayDemandSubscriber) handleConnectionEvent(ctx context.Context, pay
 		)
 
 	case "disconnected":
-		s.mu.Lock()
-		delete(s.demand, event.OverlayID)
-		s.mu.Unlock()
-
-		s.logger.Info("Overlay disconnected, demand updated",
+		// Do NOT eagerly drop demand here. api-gateway keeps the overlay:connected key
+		// alive for a linger window after disconnect (it shortens the TTL instead of
+		// deleting), so the upstream capture survives brief overlay reconnects. The key
+		// is the source of truth; removing demand now would only be re-added by the next
+		// reconcile (the key is still present during the linger) — a flap that tears the
+		// upstream subscription down and back up, losing chat. Let demand fall away when
+		// the key actually expires, detected by reconcileLoop.
+		s.logger.Debug("Overlay disconnected; demand retained until connection key expires (reconcile-driven)",
 			zap.String("overlay_id", event.OverlayID),
 		)
+		return nil
 
 	default:
 		s.logger.Warn("Unknown connection event type",

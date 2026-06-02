@@ -200,8 +200,16 @@ to the `source:demand` Pub/Sub channel.
 
 - **Source of truth:** the `overlay:connected:{overlay_id}` keys api-gateway sets (with a TTL) for
   every live overlay WebSocket. The demanded set = sources of every overlay whose key exists.
-- **Triggers:** overlay connect/disconnect events (`overlay:connections`), source-config changes
+- **Triggers:** overlay connect events (`overlay:connections`), source-config changes
   (PostgreSQL `LISTEN`), and a **periodic reconcile every 15s**.
+- **Disconnect is reconcile-driven, not eager (ADR-0014).** A `disconnected` event does *not* drop
+  demand. api-gateway keeps the `overlay:connected` key alive for a linger window after the last
+  WebSocket drops (it shortens the TTL to `PUBSUB_LINGER_SECONDS`, default 5 min, instead of deleting
+  it), symmetric with the downstream pub/sub buffer/replay window. Demand is released only when the
+  key actually expires, detected by the reconcile. This keeps upstream capture (eventsub chat /
+  youtube polling) alive across brief overlay reconnects so messages during the gap are captured and
+  replayed end to end, instead of being lost. Eagerly dropping on disconnect would just be re-added
+  by the next reconcile (the key still lingers) — a flap that tears the subscription down and back up.
 - **Periodic reconcile is required for correctness.** source-manager runs on multiple replicas and
   Redis Pub/Sub has no replay, so a replica that briefly drops its `overlay:connections`
   subscription misses events and its in-memory demand diverges. Two replicas would then publish

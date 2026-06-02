@@ -99,10 +99,12 @@ func TestOverlayDemandSubscriber_Connected(t *testing.T) {
 	assert.Equal(t, "creator123", sources[0].ChannelID)
 }
 
-// TestOverlayDemandSubscriber_Disconnected tests that disconnecting removes overlay sources from demand
+// TestOverlayDemandSubscriber_Disconnected verifies that a "disconnected" event alone does
+// NOT drop demand. api-gateway lingers the overlay:connected key after disconnect so upstream
+// capture survives brief overlay reconnects; demand is only released when the key actually
+// expires (detected by reconcile). Eagerly dropping here would flap the upstream subscription.
 func TestOverlayDemandSubscriber_Disconnected(t *testing.T) {
 	mr, client := newTestRedis(t)
-	_ = mr
 
 	repo := &mockRepository{
 		sources: map[string][]*models.ActiveSource{
@@ -119,7 +121,8 @@ func TestOverlayDemandSubscriber_Disconnected(t *testing.T) {
 
 	sub := demand.NewOverlayDemandSubscriber(client, repo, zap.NewNop())
 
-	// First connect
+	// Connect: api-gateway sets the source-of-truth key and the event seeds demand.
+	require.NoError(t, mr.Set("overlay:connected:overlay-abc", "1"))
 	connectEvent := map[string]interface{}{
 		"type":       "connected",
 		"overlay_id": "overlay-abc",
@@ -129,12 +132,10 @@ func TestOverlayDemandSubscriber_Disconnected(t *testing.T) {
 	require.NoError(t, err)
 	err = sub.HandleConnectionEventForTest(context.Background(), string(connectPayload))
 	require.NoError(t, err)
+	require.Len(t, sub.GetDemandedSources(), 1)
 
-	// Verify connected
-	sources := sub.GetDemandedSources()
-	require.Len(t, sources, 1)
-
-	// Now disconnect
+	// Disconnect event arrives. The key is still present (lingering); demand must be retained
+	// so the upstream listener keeps capturing across the brief gap.
 	disconnectEvent := map[string]interface{}{
 		"type":       "disconnected",
 		"overlay_id": "overlay-abc",
@@ -145,9 +146,16 @@ func TestOverlayDemandSubscriber_Disconnected(t *testing.T) {
 	err = sub.HandleConnectionEventForTest(context.Background(), string(disconnectPayload))
 	require.NoError(t, err)
 
-	// Verify removed
-	sources = sub.GetDemandedSources()
-	assert.Empty(t, sources)
+	assert.Len(t, sub.GetDemandedSources(), 1, "disconnect event must not drop demand while the connection key lingers")
+
+	// A reconcile while the key still lingers keeps demand alive (the brief-reconnect window).
+	sub.ReconcileForTest(context.Background())
+	assert.Len(t, sub.GetDemandedSources(), 1, "demand must survive reconcile while the lingering key is present")
+
+	// Once the linger key expires, the next reconcile releases demand.
+	mr.Del("overlay:connected:overlay-abc")
+	sub.ReconcileForTest(context.Background())
+	assert.Empty(t, sub.GetDemandedSources(), "demand must be released after the connection key expires")
 }
 
 // TestStartupHydration tests that Start() hydrates demand from existing overlay:connected:* keys
