@@ -3,6 +3,7 @@ module github.com/caesar/all-chat/services/twitch-listener
 go 1.25.6
 
 require (
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/caesar/all-chat/services/message-processor v0.0.0-00010101000000-000000000000
 	github.com/caesar/all-chat/shared v0.0.0-00010101000000-000000000000
 	github.com/gempir/go-twitch-irc/v4 v4.4.1
@@ -60,6 +61,7 @@ require (
 	github.com/redis/go-redis/extra/redisotel/v9 v9.19.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect

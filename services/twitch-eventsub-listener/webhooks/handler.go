@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
@@ -34,6 +35,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/status"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/caesar/all-chat/shared/twitchchat"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -56,20 +58,29 @@ type Handler struct {
 	db              *pgxpool.Pool // for twitch_id -> user_id / login lookup
 	publisher       *publisher.StreamPublisher
 	listenerMetrics *metrics.ListenerMetrics
-	statusPublisher *status.Publisher // emits platform:status for the chat indicator (nil-safe)
+	statusPublisher *status.Publisher      // emits platform:status for the chat indicator (nil-safe)
+	claims          *twitchchat.ClaimStore // chat-ownership claims for the IRC↔EventSub partition (nil-safe, ADR-0015)
 	logger          *zap.Logger
+
+	// claimRefreshedAt throttles per-channel claim refreshes (one Redis write per channel per
+	// twitchchat.ClaimRefreshInterval) so high chat volume does not amplify into Redis writes.
+	claimMu          sync.Mutex
+	claimRefreshedAt map[string]time.Time
 }
 
-// NewHandler creates a new webhook handler
-func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher *publisher.StreamPublisher, listenerMetrics *metrics.ListenerMetrics, statusPublisher *status.Publisher, logger *zap.Logger) *Handler {
+// NewHandler creates a new webhook handler. claims may be nil to disable chat-ownership claims
+// (the IRC listener then never sees this listener's channels as claimed).
+func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher *publisher.StreamPublisher, listenerMetrics *metrics.ListenerMetrics, statusPublisher *status.Publisher, claims *twitchchat.ClaimStore, logger *zap.Logger) *Handler {
 	return &Handler{
-		secret:          []byte(secret),
-		redis:           redis,
-		db:              db,
-		publisher:       publisher,
-		listenerMetrics: listenerMetrics,
-		statusPublisher: statusPublisher,
-		logger:          logger,
+		secret:           []byte(secret),
+		redis:            redis,
+		db:               db,
+		publisher:        publisher,
+		listenerMetrics:  listenerMetrics,
+		statusPublisher:  statusPublisher,
+		claims:           claims,
+		logger:           logger,
+		claimRefreshedAt: make(map[string]time.Time),
 	}
 }
 
@@ -155,7 +166,7 @@ func (h *Handler) verifySignature(c *gin.Context, body []byte) bool {
 // handleChallenge responds to subscription verification challenge
 func (h *Handler) handleChallenge(c *gin.Context, body []byte) {
 	var challenge struct {
-		Challenge    string                   `json:"challenge"`
+		Challenge    string                    `json:"challenge"`
 		Subscription eventsub.SubscriptionInfo `json:"subscription"`
 	}
 
@@ -231,14 +242,22 @@ func (h *Handler) handleNotification(c *gin.Context, body []byte, messageID stri
 			h.listenerMetrics.RecordPublish("twitch-eventsub", "twitch-eventsub-listener", "error")
 			h.listenerMetrics.RecordError("twitch-eventsub", "twitch-eventsub-listener", "publish", "error")
 		}
-		// Still return 204 to acknowledge receipt
-	} else if h.listenerMetrics != nil {
-		h.listenerMetrics.RecordPublish("twitch-eventsub", "twitch-eventsub-listener", "success")
-	}
-
-	// Mark as processed (TTL: 24 hours)
-	if err := h.redis.SetEx(ctx, cacheKey, "1", 24*time.Hour).Err(); err != nil {
-		h.logger.Warn("Failed to cache message ID", zap.Error(err))
+		// Deliberately do NOT mark this message processed. The previous code marked it as
+		// processed even on failure, so a Twitch redelivery (same Twitch-Eventsub-Message-Id)
+		// would be silently deduped away and the message lost forever. Leaving the dedup key
+		// unset lets a redelivery reprocess. Chat publishes are ring-buffered (ADR-0009), so a
+		// transient Redis blip never surfaces here as an error; the errors that do reach here are
+		// deterministic parse failures where a retry would not help — hence we still ack 204
+		// rather than 5xx (a 5xx storm risks notification_failures_exceeded revocation).
+	} else {
+		if h.listenerMetrics != nil {
+			h.listenerMetrics.RecordPublish("twitch-eventsub", "twitch-eventsub-listener", "success")
+		}
+		// Mark as processed (TTL: 24 hours) only after a successful handoff so a failed message
+		// is never recorded as done.
+		if err := h.redis.SetEx(ctx, cacheKey, "1", 24*time.Hour).Err(); err != nil {
+			h.logger.Warn("Failed to cache message ID", zap.Error(err))
+		}
 	}
 
 	c.Status(http.StatusNoContent)
@@ -262,10 +281,12 @@ func (h *Handler) handleRevocation(c *gin.Context, body []byte) {
 		zap.String("status", revocation.Subscription.Status),
 	)
 
-	// A revoked chat subscription stops delivering chat — clear the channel's indicator.
+	// A revoked chat subscription stops delivering chat. Release the ownership claim so the IRC
+	// listener resumes this channel immediately (ADR-0015) instead of waiting for the claim TTL,
+	// and clear the channel's indicator.
 	if revocation.Subscription.Type == "channel.chat.message" {
 		if bid := conditionBroadcasterID(revocation.Subscription.Condition); bid != "" {
-			go h.publishChatStatus(bid, "offline")
+			go h.handleChatSubRevoked(bid)
 		}
 	}
 
@@ -284,34 +305,95 @@ func conditionBroadcasterID(condition map[string]interface{}) string {
 	return ""
 }
 
-// publishChatStatus emits a platform:status update for a Twitch channel's chat indicator.
-// It resolves the broadcaster's login (the key api-gateway matches against
-// overlay_chat_sources.channel_id) from the users table, since the webhook may land on any
-// pod — including a non-leader whose channel manager has no in-memory mapping. Best-effort:
-// a missing user or publish failure is logged and dropped.
-func (h *Handler) publishChatStatus(broadcasterID, state string) {
-	if h.statusPublisher == nil || broadcasterID == "" {
-		return
+// resolveLogin maps a Twitch broadcaster id to its login (the key api-gateway matches against
+// overlay_chat_sources.channel_id, and the key chat-ownership claims use). Returns "" when the
+// broadcaster is not a registered all-chat Twitch user. The webhook may land on any pod, so this
+// always reads the DB rather than an in-memory channel map.
+func (h *Handler) resolveLogin(broadcasterID string) string {
+	if broadcasterID == "" {
+		return ""
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var login string
-	err := h.db.QueryRow(ctx,
-		"SELECT username FROM users WHERE twitch_id = $1 AND auth_provider = 'twitch'", broadcasterID).Scan(&login)
-	if err != nil || login == "" {
-		h.logger.Debug("Could not resolve login for chat status",
-			zap.String("broadcaster_id", broadcasterID),
-			zap.Error(err))
+	if err := h.db.QueryRow(ctx,
+		"SELECT username FROM users WHERE twitch_id = $1 AND auth_provider = 'twitch'", broadcasterID).Scan(&login); err != nil {
+		h.logger.Debug("Could not resolve login for broadcaster",
+			zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+		return ""
+	}
+	return login
+}
+
+// publishChatStatus resolves the broadcaster login and emits a platform:status update for the
+// channel's chat indicator. Best-effort: a missing user or publish failure is logged and dropped.
+func (h *Handler) publishChatStatus(broadcasterID, state string) {
+	h.publishChatStatusForLogin(h.resolveLogin(broadcasterID), state)
+}
+
+// publishChatStatusForLogin emits the platform:status update for an already-resolved login.
+func (h *Handler) publishChatStatusForLogin(login, state string) {
+	if h.statusPublisher == nil || login == "" {
 		return
 	}
-
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	h.statusPublisher.Publish(ctx, status.Message{
 		Platform:  "twitch",
 		ChannelID: strings.ToLower(login),
 		Status:    state,
 	})
+}
+
+// handleChatSubRevoked reacts to a revoked channel.chat.message subscription: it releases the
+// chat-ownership claim so the IRC listener resumes the channel immediately (rather than after the
+// claim TTL), then clears the chat indicator. Runs on a background goroutine (resolves the login
+// from the DB; the webhook may land on any pod).
+func (h *Handler) handleChatSubRevoked(broadcasterID string) {
+	login := h.resolveLogin(broadcasterID)
+	if h.claims != nil && login != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := h.claims.Release(ctx, login); err != nil {
+			h.logger.Warn("Failed to release chat-ownership claim on revocation",
+				zap.String("login", login), zap.Error(err))
+		}
+		cancel()
+	}
+	h.publishChatStatusForLogin(login, "offline")
+}
+
+// refreshChatClaim renews the EventSub chat-ownership claim for a channel that just delivered a
+// chat message, throttled to one Redis write per channel per twitchchat.ClaimRefreshInterval. The
+// live claim is what keeps this channel on the EventSub path and excluded from IRC (ADR-0015);
+// letting it lapse hands the channel back to the always-on IRC listener. The login comes straight
+// from the event, so no DB lookup is needed on the hot path.
+func (h *Handler) refreshChatClaim(login, broadcasterID string) {
+	if h.claims == nil || login == "" {
+		return
+	}
+	login = strings.ToLower(login)
+
+	now := time.Now()
+	h.claimMu.Lock()
+	if last, ok := h.claimRefreshedAt[login]; ok && now.Sub(last) < twitchchat.ClaimRefreshInterval {
+		h.claimMu.Unlock()
+		return
+	}
+	h.claimRefreshedAt[login] = now
+	h.claimMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.claims.Claim(ctx, login, broadcasterID); err != nil {
+		h.logger.Warn("Failed to refresh chat-ownership claim",
+			zap.String("login", login), zap.Error(err))
+		// Roll back the throttle stamp so the next message retries promptly rather than waiting a
+		// full interval after a transient Redis error.
+		h.claimMu.Lock()
+		delete(h.claimRefreshedAt, login)
+		h.claimMu.Unlock()
+	}
 }
 
 // routeEvent routes events to appropriate handlers based on subscription type
@@ -470,14 +552,14 @@ func (h *Handler) handleChannelPointsRedemption(ctx context.Context, eventData j
 
 	// Create raw message for Message Processor
 	rawMsg := &models.RawChatMessage{
-		MessageID:   uuid.New().String(),
-		Platform:    "twitch",
-		ChannelID:   event.BroadcasterUserLogin,
-		UserID:      event.UserID,
-		Username:    event.UserLogin,
-		Text:        text, // User input if available, otherwise system message
-		Timestamp:   event.RedeemedAt,
-		EventType:   "channel_points",
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: event.BroadcasterUserLogin,
+		UserID:    event.UserID,
+		Username:  event.UserLogin,
+		Text:      text, // User input if available, otherwise system message
+		Timestamp: event.RedeemedAt,
+		EventType: "channel_points",
 		EventData: map[string]interface{}{
 			"reward_id":     event.Reward.ID,
 			"reward_title":  event.Reward.Title,
@@ -500,14 +582,14 @@ func (h *Handler) handleSubscribe(ctx context.Context, eventData json.RawMessage
 	}
 
 	rawMsg := &models.RawChatMessage{
-		MessageID:   uuid.New().String(),
-		Platform:    "twitch",
-		ChannelID:   event.BroadcasterUserLogin,
-		UserID:      event.UserID,
-		Username:    event.UserLogin,
-		Text:        fmt.Sprintf("Subscribed at %s", event.Tier),
-		Timestamp:   time.Now(),
-		EventType:   "subscription",
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: event.BroadcasterUserLogin,
+		UserID:    event.UserID,
+		Username:  event.UserLogin,
+		Text:      fmt.Sprintf("Subscribed at %s", event.Tier),
+		Timestamp: time.Now(),
+		EventType: "subscription",
 		EventData: map[string]interface{}{
 			"tier":      event.Tier,
 			"is_gift":   event.IsGift,
@@ -526,19 +608,19 @@ func (h *Handler) handleSubscriptionGift(ctx context.Context, eventData json.Raw
 	}
 
 	rawMsg := &models.RawChatMessage{
-		MessageID:   uuid.New().String(),
-		Platform:    "twitch",
-		ChannelID:   event.BroadcasterUserLogin,
-		UserID:      event.UserID,
-		Username:    event.UserLogin,
-		Text:        fmt.Sprintf("Gifted %d subs", event.Total),
-		Timestamp:   time.Now(),
-		EventType:   "mystery_gift",
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: event.BroadcasterUserLogin,
+		UserID:    event.UserID,
+		Username:  event.UserLogin,
+		Text:      fmt.Sprintf("Gifted %d subs", event.Total),
+		Timestamp: time.Now(),
+		EventType: "mystery_gift",
 		EventData: map[string]interface{}{
-			"tier":              event.Tier,
-			"total":             event.Total,
-			"cumulative_total":  event.CumulativeTotal,
-			"is_anonymous":      event.IsAnonymous,
+			"tier":             event.Tier,
+			"total":            event.Total,
+			"cumulative_total": event.CumulativeTotal,
+			"is_anonymous":     event.IsAnonymous,
 		},
 	}
 
@@ -553,19 +635,19 @@ func (h *Handler) handleResubscription(ctx context.Context, eventData json.RawMe
 	}
 
 	rawMsg := &models.RawChatMessage{
-		MessageID:   uuid.New().String(),
-		Platform:    "twitch",
-		ChannelID:   event.BroadcasterUserLogin,
-		UserID:      event.UserID,
-		Username:    event.UserLogin,
-		Text:        event.Message.Text,
-		Timestamp:   time.Now(),
-		EventType:   "resubscription",
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: event.BroadcasterUserLogin,
+		UserID:    event.UserID,
+		Username:  event.UserLogin,
+		Text:      event.Message.Text,
+		Timestamp: time.Now(),
+		EventType: "resubscription",
 		EventData: map[string]interface{}{
-			"tier":              event.Tier,
-			"months":            event.CumulativeMonths,
-			"streak":            event.StreakMonths,
-			"duration_months":   event.DurationMonths,
+			"tier":            event.Tier,
+			"months":          event.CumulativeMonths,
+			"streak":          event.StreakMonths,
+			"duration_months": event.DurationMonths,
 		},
 	}
 
@@ -580,14 +662,14 @@ func (h *Handler) handleRaid(ctx context.Context, eventData json.RawMessage) err
 	}
 
 	rawMsg := &models.RawChatMessage{
-		MessageID:   uuid.New().String(),
-		Platform:    "twitch",
-		ChannelID:   event.ToBroadcasterUserLogin,
-		UserID:      event.FromBroadcasterUserID,
-		Username:    event.FromBroadcasterUserLogin,
-		Text:        fmt.Sprintf("Raiding with %d viewers", event.Viewers),
-		Timestamp:   time.Now(),
-		EventType:   "raid",
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: event.ToBroadcasterUserLogin,
+		UserID:    event.FromBroadcasterUserID,
+		Username:  event.FromBroadcasterUserLogin,
+		Text:      fmt.Sprintf("Raiding with %d viewers", event.Viewers),
+		Timestamp: time.Now(),
+		EventType: "raid",
 		EventData: map[string]interface{}{
 			"viewer_count": event.Viewers,
 			"from_id":      event.FromBroadcasterUserID,
@@ -606,14 +688,14 @@ func (h *Handler) handleCheer(ctx context.Context, eventData json.RawMessage) er
 	}
 
 	rawMsg := &models.RawChatMessage{
-		MessageID:   uuid.New().String(),
-		Platform:    "twitch",
-		ChannelID:   event.BroadcasterUserLogin,
-		UserID:      event.UserID,
-		Username:    event.UserLogin,
-		Text:        event.Message,
-		Timestamp:   time.Now(),
-		EventType:   "bits",
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: event.BroadcasterUserLogin,
+		UserID:    event.UserID,
+		Username:  event.UserLogin,
+		Text:      event.Message,
+		Timestamp: time.Now(),
+		EventType: "bits",
 		EventData: map[string]interface{}{
 			"bits":         event.Bits,
 			"is_anonymous": event.IsAnonymous,
@@ -631,15 +713,15 @@ func (h *Handler) handleFollow(ctx context.Context, eventData json.RawMessage) e
 	}
 
 	rawMsg := &models.RawChatMessage{
-		MessageID:   uuid.New().String(),
-		Platform:    "twitch",
-		ChannelID:   event.BroadcasterUserLogin,
-		UserID:      event.UserID,
-		Username:    event.UserLogin,
-		Text:        "Followed",
-		Timestamp:   event.FollowedAt,
-		EventType:   "follow",
-		EventData:   map[string]interface{}{},
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: event.BroadcasterUserLogin,
+		UserID:    event.UserID,
+		Username:  event.UserLogin,
+		Text:      "Followed",
+		Timestamp: event.FollowedAt,
+		EventType: "follow",
+		EventData: map[string]interface{}{},
 	}
 
 	return h.publisher.Publish(ctx, rawMsg)
@@ -671,6 +753,10 @@ func (h *Handler) handleChatMessage(ctx context.Context, eventData json.RawMessa
 		Tags:      buildChatTags(&event),
 		EventType: "", // regular chat → message-processor uses Normalize()
 	}
+
+	// A delivered chat message proves EventSub currently owns this channel's chat — refresh the
+	// ownership claim (throttled) so it stays excluded from IRC (ADR-0015).
+	h.refreshChatClaim(event.BroadcasterUserLogin, event.BroadcasterUserID)
 
 	return h.publisher.Publish(ctx, rawMsg)
 }

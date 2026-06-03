@@ -31,22 +31,15 @@ import (
 // IRC-PARTed on the next sync. Configurable via IDLE_OVERLAY_THRESHOLD env var.
 const DefaultIdleOverlayThreshold = 7 * 24 * time.Hour
 
-// eventSubOwnedExclusion excludes Twitch sources that the EventSub chat listener owns —
-// channels whose owner granted the chat scope (user:read:chat) and still has a valid
-// token. It is the exact complement of the scope/token predicate in
-// services/twitch-eventsub-listener/channels/manager.go SyncChannels; the two MUST stay
-// byte-identical so every Twitch source is read by exactly one listener — no double-read,
-// no gap. Keyed on ocs.channel_id (the Twitch login, matching the EventSub join), NOT
-// ocs.channel_name (the display name, which may differ in case/Unicode and would silently
-// fail to match). Used by both GetUniqueChannels and GetActiveChannels so they cannot drift.
-const eventSubOwnedExclusion = `
-		  AND NOT EXISTS (
-		      SELECT 1 FROM users u
-		      WHERE LOWER(u.username) = LOWER(ocs.channel_id)
-		        AND u.auth_provider = 'twitch'
-		        AND 'user:read:chat' = ANY(u.granted_scopes)
-		        AND u.token_expires_at > NOW()
-		  )`
+// EventSub chat-ownership partition (ADR-0015): the IRC↔EventSub split is NO LONGER a static SQL
+// scope predicate. The previous `NOT EXISTS (... 'user:read:chat' = ANY(granted_scopes) ...)`
+// excluded a channel from IRC whenever its owner *could* be read via EventSub — even when EventSub
+// was not actually delivering (revoked sub, partial scopes, verification failure, demand/leader
+// gap), leaving the channel read by neither listener and silently losing chat. The exclusion now
+// lives in channels.Manager.excludeEventSubOwnedChannels, which drops only channels that hold a
+// LIVE chat-ownership claim (refreshed by the EventSub handler on delivered chat). Any channel
+// EventSub is not currently serving falls through to IRC here. These queries therefore return ALL
+// active Twitch channels; the claim filter is applied in the manager.
 
 // RepositoryInterface defines the interface for channel repository
 type RepositoryInterface interface {
@@ -97,7 +90,7 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]models.ChannelSou
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
-		  AND ocs.platform = 'twitch'` + eventSubOwnedExclusion + r.freshnessClause() + `
+		  AND ocs.platform = 'twitch'` + r.freshnessClause() + `
 		ORDER BY ocs.channel_name
 	`
 
@@ -136,7 +129,7 @@ func (r *Repository) GetUniqueChannels(ctx context.Context) ([]string, error) {
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
-		  AND ocs.platform = 'twitch'` + eventSubOwnedExclusion + r.freshnessClause() + `
+		  AND ocs.platform = 'twitch'` + r.freshnessClause() + `
 		ORDER BY ocs.channel_name
 	`
 

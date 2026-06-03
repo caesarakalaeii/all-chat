@@ -30,6 +30,7 @@ import (
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/sourcemanager"
+	"github.com/caesar/all-chat/shared/twitchchat"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -65,34 +66,35 @@ type JoinParterInterface interface {
 
 // Manager manages which Twitch channels to monitor
 type Manager struct {
-	repo             RepositoryInterface
-	joinParter       JoinParterInterface
-	logger           *zap.Logger
-	metrics          *metrics.ListenerMetrics
-	rateLimiter      *rate.Limiter
-	activeChans      map[string]bool              // Currently joined channels
-	mu               sync.RWMutex
-	syncTicker       *time.Ticker
-	stopChan         chan struct{}
-	wg               sync.WaitGroup
-	dbConn           DBConnInterface              // For PostgreSQL LISTEN
-	leader                *sourcemanager.LeadershipCoordinator
-	assignedSourceIDs     map[string]bool             // From coordinator
-	filteredAssignmentCount int                         // Number of assigned sources that have database channels
-	ircClients            []JoinParterInterface        // Multiple IRC connections for >100 channels
-	migrationMu      sync.RWMutex                 // Protects migration state
-	firstMessageChan map[string]chan struct{}     // Per-channel first message signal
-	redisClient      *redis.Client                // Redis client for migration confirmations
-	podID            string                       // Pod ID for migration confirmations
-	statusPublisher  *status.Publisher            // Publishes platform status to Redis Pub/Sub
-	initialSyncDone  bool                         // Set to true after the first SyncChannels completes (legacy, kept for vet)
+	repo                    RepositoryInterface
+	joinParter              JoinParterInterface
+	logger                  *zap.Logger
+	metrics                 *metrics.ListenerMetrics
+	rateLimiter             *rate.Limiter
+	activeChans             map[string]bool // Currently joined channels
+	mu                      sync.RWMutex
+	syncTicker              *time.Ticker
+	stopChan                chan struct{}
+	wg                      sync.WaitGroup
+	dbConn                  DBConnInterface // For PostgreSQL LISTEN
+	leader                  *sourcemanager.LeadershipCoordinator
+	assignedSourceIDs       map[string]bool          // From coordinator
+	filteredAssignmentCount int                      // Number of assigned sources that have database channels
+	ircClients              []JoinParterInterface    // Multiple IRC connections for >100 channels
+	migrationMu             sync.RWMutex             // Protects migration state
+	firstMessageChan        map[string]chan struct{} // Per-channel first message signal
+	redisClient             *redis.Client            // Redis client for migration confirmations
+	chatClaims              *twitchchat.ClaimStore   // EventSub chat-ownership claims; excludes EventSub-served channels from IRC (ADR-0015, nil disables)
+	podID                   string                   // Pod ID for migration confirmations
+	statusPublisher         *status.Publisher        // Publishes platform status to Redis Pub/Sub
+	initialSyncDone         bool                     // Set to true after the first SyncChannels completes (legacy, kept for vet)
 
 	// Atomic fields for lock-free health probe reads (F-01).
 	// These shadow the mutex-protected values so that liveness/readiness probe
 	// HTTP handlers can read them without competing for m.mu.
-	initialSyncDoneAtomic          atomic.Bool
-	activeChannelCountAtomic       atomic.Int64
-	filteredAssignmentCountAtomic  atomic.Int64
+	initialSyncDoneAtomic         atomic.Bool
+	activeChannelCountAtomic      atomic.Int64
+	filteredAssignmentCountAtomic atomic.Int64
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -109,6 +111,7 @@ func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn
 		leader:            leader,
 		assignedSourceIDs: assignedSourceIDs,
 		redisClient:       redisClient,
+		chatClaims:        newChatClaimStore(redisClient),
 		podID:             podID,
 		logger:            logger,
 		metrics:           m,
@@ -119,6 +122,59 @@ func NewManager(repo RepositoryInterface, joinParter JoinParterInterface, dbConn
 		syncTicker:        time.NewTicker(SyncInterval),
 		stopChan:          make(chan struct{}),
 	}
+}
+
+// newChatClaimStore builds the EventSub chat-ownership claim store, or returns nil when no Redis
+// client is available (e.g. in tests) so the claim filter is simply skipped — IRC then reads every
+// channel, which is the safe (no-loss) default.
+func newChatClaimStore(rc *redis.Client) *twitchchat.ClaimStore {
+	if rc == nil {
+		return nil
+	}
+	return twitchchat.NewClaimStore(rc)
+}
+
+// SetChatClaimStore overrides the chat-ownership claim store (used by tests to inject an in-memory
+// Redis-backed store).
+func (m *Manager) SetChatClaimStore(s *twitchchat.ClaimStore) {
+	m.chatClaims = s
+}
+
+// excludeEventSubOwnedChannels removes channels the EventSub listener is currently delivering chat
+// for (ADR-0015). A channel is excluded only while it holds a live ownership claim, so any channel
+// EventSub is NOT actively serving — revoked, verification-failed, partially-scoped, outage, or
+// never claimed — is read here by IRC, the always-on fallback. Fails OPEN on a Redis error (reads
+// every channel) so a Redis blip can never cause silent chat loss; message-processor dedupes the
+// brief handoff overlap on the native Twitch message id.
+func (m *Manager) excludeEventSubOwnedChannels(ctx context.Context, desired []string) []string {
+	if m.chatClaims == nil || len(desired) == 0 {
+		return desired
+	}
+	claimed, err := m.chatClaims.ClaimedLogins(ctx)
+	if err != nil {
+		m.logger.Warn("Failed to read EventSub chat-ownership claims; reading all channels (fail-open)",
+			zap.Error(err))
+		return desired
+	}
+	if len(claimed) == 0 {
+		return desired
+	}
+	kept := desired[:0]
+	excluded := 0
+	for _, ch := range desired {
+		if _, owned := claimed[strings.ToLower(ch)]; owned {
+			excluded++
+			continue
+		}
+		kept = append(kept, ch)
+	}
+	if excluded > 0 {
+		m.logger.Debug("Excluded EventSub-owned channels from IRC desired set",
+			zap.Int("excluded", excluded),
+			zap.Int("remaining", len(kept)),
+		)
+	}
+	return kept
 }
 
 // SetStatusPublisher injects the status publisher after construction
@@ -420,6 +476,12 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			}
 		}
 	}
+
+	// EventSub chat-ownership partition (ADR-0015): drop channels EventSub is currently serving
+	// before any cap/rebalance math, so they neither occupy an IRC slot nor count toward the
+	// per-pod share. Channels EventSub is not actively serving fall through to IRC. Done here (not
+	// in SQL) so the partition tracks live delivery, not a static scope predicate.
+	desiredChannels = m.excludeEventSubOwnedChannels(ctx, desiredChannels)
 
 	// Rebalance leadership leases before acquiring new ones.
 	// This ensures that when pods scale up/down, excess leases are shed so
@@ -1025,4 +1087,3 @@ func (m *Manager) joinChannelsMultipleConnectionsUnlocked(ctx context.Context, c
 
 	return joined
 }
-

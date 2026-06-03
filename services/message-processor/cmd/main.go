@@ -437,7 +437,6 @@ func main() {
 					}
 				}
 
-
 				// Enrich with viewer identity (name_color from All-Chat account, all platforms)
 				startViewer := time.Now()
 				if err := viewerBadgeEnricher.Enrich(ctx, unified); err != nil {
@@ -651,6 +650,9 @@ func main() {
 
 	// Create and start stream consumer
 	streamConsumer := consumer.NewStreamConsumer(redisClient, log, processorMetrics, messageHandler, msgIDRegistry, deletionBuffer, hostname)
+	// Collapse the IRC↔EventSub Twitch handoff overlap (and Twitch webhook retries) by the native
+	// message id before enrichment, so viewers never see doubled chat (ADR-0015).
+	streamConsumer.SetNativeDeduplicator(deduplicator)
 	if err := streamConsumer.Start(ctx); err != nil {
 		log.Fatal("Failed to start stream consumer", zap.Error(err))
 	}

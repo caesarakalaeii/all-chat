@@ -258,6 +258,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0015: Dynamic EventSub Chat-Ownership Claim for the IRC↔EventSub Partition
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-03
+**Problem**: The IRC↔EventSub chat split used a static scope predicate, so a scope-eligible channel was dropped by IRC even when EventSub was not actually delivering (revocation, partial scope, verification failure, demand/leader gaps) — chat lost with no fallback
+**Decision**: Make the partition dynamic — EventSub writes a per-channel `eventsub:chat:owner:{login}` claim (TTL, refreshed on delivered chat); IRC excludes only channels with a live claim and serves everything else; message-processor dedupes the handoff overlap on the native Twitch message id
+**Impact**: IRC is the universal fallback — every gap where EventSub is not delivering is covered with no silent loss; cap relief preserved for active channels; self-healing within the claim TTL
+**→ Read**: [0015-eventsub-chat-ownership-claim.md](./0015-eventsub-chat-ownership-claim.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -379,13 +390,13 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 14
+**Total ADRs**: 15
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-06-02
+**Last Updated**: 2026-06-03
