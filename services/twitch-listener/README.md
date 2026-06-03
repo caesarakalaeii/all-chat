@@ -6,6 +6,12 @@ The Twitch Listener service connects to Twitch IRC, monitors configured channels
 
 - **Twitch IRC Connection**: Connects to Twitch IRC using go-twitch-irc library
 - **Dynamic Channel Management**: Automatically syncs with database to JOIN/PART channels
+- **EventSub fallback partition (ADR-0015)**: excludes channels the EventSub listener is *currently*
+  delivering chat for, identified by a live `eventsub:chat:owner:{login}` claim in Redis. Any
+  scope-eligible channel EventSub is not actively serving (never subscribed, revoked, verification
+  failed, partial scope, outage) has no claim and is read here — IRC is the always-on safety net.
+  Fails open: a Redis error reading claims excludes nothing (message-processor dedupes the overlap on
+  native id), so the partition can never silently drop chat.
 - **Rate Limiting**: Respects Twitch rate limits (20 JOIN/10s)
 - **Message Parsing**: Extracts user info, badges, emotes, colors from IRC tags
 - **Redis Streams**: Publishes raw messages to `chat:raw` stream

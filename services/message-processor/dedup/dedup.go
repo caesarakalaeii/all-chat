@@ -33,6 +33,14 @@ const (
 
 	// Key prefix for deduplication
 	dedupPrefix = "dedup:message"
+
+	// nativeDedupPrefix namespaces deduplication by platform-native message id.
+	nativeDedupPrefix = "dedup:native"
+
+	// nativeDedupTTL bounds how long a native message id is remembered. It only needs to cover
+	// the windows where the same native message can be ingested twice: the brief IRC↔EventSub
+	// handoff overlap (≤ one IRC sync) and Twitch webhook retries (seconds). 2 minutes is ample.
+	nativeDedupTTL = 2 * time.Minute
 )
 
 // Deduplicator provides message deduplication using Redis
@@ -77,6 +85,25 @@ func (d *Deduplicator) IsDuplicate(ctx context.Context, platform, channelID, use
 		)
 	}
 
+	return !wasSet, nil
+}
+
+// IsDuplicateNativeID reports whether a message with this platform-native message id has already
+// been seen within nativeDedupTTL, atomically recording it if not (SETNX). Both the IRC parser and
+// the EventSub webhook handler stamp the identical native Twitch message id into Tags["id"], so this
+// collapses the unavoidable IRC↔EventSub handoff overlap (and Twitch webhook retries) to a single
+// delivered message. An empty id is never a duplicate. Fails OPEN on a Redis error (treats the
+// message as new) so a Redis blip can never drop a real message — at worst a duplicate slips through.
+func (d *Deduplicator) IsDuplicateNativeID(ctx context.Context, platform, nativeID string) (bool, error) {
+	if nativeID == "" {
+		return false, nil
+	}
+	key := fmt.Sprintf("%s:%s:%s", nativeDedupPrefix, platform, nativeID)
+	wasSet, err := d.client.SetNX(ctx, key, "1", nativeDedupTTL).Result()
+	if err != nil {
+		d.logger.Error("native-id dedup SetNX failed, failing open", zap.Error(err))
+		return false, err
+	}
 	return !wasSet, nil
 }
 
