@@ -47,6 +47,13 @@ const (
 // MessageHandler is called for each consumed message
 type MessageHandler func(ctx context.Context, msg *models.RawChatMessage) error
 
+// NativeDeduplicator drops messages whose platform-native id has already been processed. Both the
+// IRC and EventSub Twitch chat paths stamp the same native id into Tags["id"], so this makes the
+// brief IRC↔EventSub handoff overlap (and Twitch webhook retries) idempotent (ADR-0015).
+type NativeDeduplicator interface {
+	IsDuplicateNativeID(ctx context.Context, platform, nativeID string) (bool, error)
+}
+
 // StreamConsumer consumes messages from Redis Streams
 type StreamConsumer struct {
 	client         *redis.Client
@@ -56,6 +63,7 @@ type StreamConsumer struct {
 	stopCh         chan struct{}
 	msgIDRegistry  registry.MessageIDRegistry
 	deletionBuffer registry.DeletionBuffer
+	nativeDedup    NativeDeduplicator // nil disables native-id dedup
 	consumerName   string
 }
 
@@ -72,6 +80,12 @@ func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.Proc
 		deletionBuffer: deletionBuffer,
 		consumerName:   consumerName,
 	}
+}
+
+// SetNativeDeduplicator injects the native-id deduplicator used to collapse the IRC↔EventSub
+// handoff overlap. Safe to leave unset (dedup disabled).
+func (c *StreamConsumer) SetNativeDeduplicator(d NativeDeduplicator) {
+	c.nativeDedup = d
 }
 
 // Start begins consuming messages from the stream
@@ -265,6 +279,27 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 				}
 
 				c.metrics.BufferedDeletionsApplied.Inc()
+			}
+		}
+	}
+
+	// Native-id dedup (ADR-0015): the IRC and EventSub Twitch paths both stamp the identical
+	// native Twitch message id into Tags["id"], so a channel handed off between them (or a Twitch
+	// webhook retry) can present the same message twice. Drop the second copy before enrichment so
+	// viewers never see doubled chat. Scoped to Twitch regular chat, where Tags["id"] is the native,
+	// globally-unique message id; deletion events and other platforms are unaffected.
+	if c.nativeDedup != nil && rawMsg.Platform == "twitch" &&
+		(rawMsg.EventType == "" || rawMsg.EventType == "chat_message") {
+		if nativeID := rawMsg.Tags["id"]; nativeID != "" {
+			if dup, derr := c.nativeDedup.IsDuplicateNativeID(ctx, rawMsg.Platform, nativeID); derr == nil && dup {
+				c.logger.Debug("Dropping duplicate Twitch message by native id",
+					zap.String("native_id", nativeID),
+					zap.String("channel", rawMsg.ChannelID),
+				)
+				if c.metrics != nil {
+					c.metrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "native_dedup", "duplicate")
+				}
+				return nil // ACK + drop the duplicate
 			}
 		}
 	}

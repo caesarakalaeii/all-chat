@@ -37,9 +37,18 @@ The Twitch EventSub Listener connects to Twitch's EventSub WebSocket API to rece
 ### Chat Reading (channel.chat.message)
 
 To relieve the IRC bot's ~100-channel cap, channels whose owner granted the chat scopes
-(`user:read:chat` + `user:bot`) are read via EventSub instead of IRC. The IRC listener and the
-EventSub listener use a byte-identical `granted_scopes` predicate so each channel lands on exactly
-one path (no double-read, no gap).
+(`user:read:chat` + `user:bot` + `channel:bot`) are read via EventSub instead of IRC.
+
+**Dynamic ownership claim (ADR-0015).** The IRC↔EventSub split is NOT a static scope predicate — it
+tracks *actual delivery*. On every delivered `channel.chat.message`, the webhook handler writes a
+per-channel claim key `eventsub:chat:owner:{login}` (TTL `EVENTSUB_CHAT_CLAIM_TTL`, default 5m,
+throttled to one write per channel per 60s) and releases it on revocation. The IRC listener excludes
+only channels that hold a **live claim** (`SCAN eventsub:chat:owner:*`). Any channel EventSub is not
+currently serving — never subscribed, verification failed, partial scope, revoked, or during an
+outage — has no claim and is read by IRC, the always-on fallback. The brief handoff overlap is made
+idempotent by message-processor deduplicating on the native Twitch message id (`tags["id"]`, set
+identically by both paths). This eliminated the previous permanent-loss modes where a scope-gated
+channel was dropped by IRC yet not delivered by EventSub.
 
 The chat subscription is **demand-gated**: it exists only while an overlay using the channel has a
 live WebSocket. When demand arrives, the chat subscription is created *before* the always-on event

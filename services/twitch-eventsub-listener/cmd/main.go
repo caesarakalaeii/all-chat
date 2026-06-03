@@ -38,6 +38,7 @@ import (
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/tracing"
+	"github.com/caesar/all-chat/shared/twitchchat"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -156,6 +157,22 @@ func main() {
 	// Initialize components
 	streamPublisher := publisher.NewStreamPublisher(redisClient, log)
 	statusPublisher := status.NewPublisher(redisClient, log)
+
+	// Chat-ownership claim store (ADR-0015): the webhook handler writes a per-channel claim on
+	// delivered chat so the IRC listener excludes only channels EventSub is actually serving. TTL
+	// bounds the IRC fallback delay in a total-outage case; overridable via EVENTSUB_CHAT_CLAIM_TTL.
+	claimTTL := twitchchat.DefaultClaimTTL
+	if v := listener.Env("EVENTSUB_CHAT_CLAIM_TTL", ""); v != "" {
+		if parsed, perr := time.ParseDuration(v); perr == nil && parsed > 0 {
+			claimTTL = parsed
+		} else {
+			log.Warn("Invalid EVENTSUB_CHAT_CLAIM_TTL, using default",
+				zap.String("value", v), zap.Duration("default", claimTTL))
+		}
+	}
+	chatClaims := twitchchat.NewClaimStoreWithTTL(redisClient, claimTTL)
+	log.Info("Chat-ownership claim store initialized", zap.Duration("claim_ttl", claimTTL))
+
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
 	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher, ChannelSyncInterval)
 	channelManager.SetStatusPublisher(statusPublisher)
@@ -166,7 +183,7 @@ func main() {
 	}
 
 	// Create webhook handler
-	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, statusPublisher, log)
+	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, statusPublisher, chatClaims, log)
 
 	// isLeader tracks whether this pod currently holds EventSub leadership.
 	// Protected by mu; read by subscription callback and HTTP handlers.
