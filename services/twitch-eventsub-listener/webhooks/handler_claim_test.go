@@ -20,8 +20,10 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
 	"github.com/caesar/all-chat/shared/twitchchat"
@@ -44,7 +46,8 @@ func newClaimTestHandler(t *testing.T) (*miniredis.Miniredis, *Handler) {
 	pub := publisher.NewStreamPublisher(rc, zap.NewNop())
 	t.Cleanup(pub.Stop)
 
-	h := NewHandler("secret", rc, nil, pub, nil, nil, twitchchat.NewClaimStore(rc), zap.NewNop())
+	reg := registry.NewRedisRegistry(rc, time.Hour)
+	h := NewHandler("secret", rc, nil, pub, nil, nil, twitchchat.NewClaimStore(rc), reg, zap.NewNop())
 	return mr, h
 }
 
@@ -116,7 +119,7 @@ func TestHandleChatMessage_NilClaimStoreIsSafe(t *testing.T) {
 	pub := publisher.NewStreamPublisher(rc, zap.NewNop())
 	t.Cleanup(pub.Stop)
 
-	h := NewHandler("secret", rc, nil, pub, nil, nil, nil /* no claim store */, zap.NewNop())
+	h := NewHandler("secret", rc, nil, pub, nil, nil, nil /* no claim store */, nil /* no registry */, zap.NewNop())
 	if err := h.handleChatMessage(context.Background(), chatEventJSON(t, "chan", "1", "m1")); err != nil {
 		t.Fatalf("handleChatMessage with nil claim store: %v", err)
 	}

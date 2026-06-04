@@ -276,6 +276,45 @@ type ChatReply struct {
 	ThreadUserName    string `json:"thread_user_name"`
 }
 
+// ChatMessageDeleteEvent represents a single-message deletion (a moderator removed one message).
+// subscription type: channel.chat.message_delete (v1)
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#channelchatmessage_delete
+// MessageID is the native Twitch id of the removed message — the same value the chat path stamps
+// into Tags["id"], so it resolves to the displayed message via the message-ID registry.
+type ChatMessageDeleteEvent struct {
+	BroadcasterUserID    string `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string `json:"broadcaster_user_login"`
+	BroadcasterUserName  string `json:"broadcaster_user_name"`
+	TargetUserID         string `json:"target_user_id"`
+	TargetUserLogin      string `json:"target_user_login"`
+	TargetUserName       string `json:"target_user_name"`
+	MessageID            string `json:"message_id"`
+}
+
+// ChatClearUserMessagesEvent represents removing all of one user's messages (a timeout or ban).
+// subscription type: channel.chat.clear_user_messages (v1)
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#channelchatclear_user_messages
+// NOTE: Twitch does not include a duration here, so a timeout cannot be distinguished from a
+// permanent ban from this event (unlike IRC's CLEARCHAT @ban-duration tag). Downstream treats the
+// absence of a duration as a ban; either way every message from the user is removed.
+type ChatClearUserMessagesEvent struct {
+	BroadcasterUserID    string `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string `json:"broadcaster_user_login"`
+	BroadcasterUserName  string `json:"broadcaster_user_name"`
+	TargetUserID         string `json:"target_user_id"`
+	TargetUserLogin      string `json:"target_user_login"`
+	TargetUserName       string `json:"target_user_name"`
+}
+
+// ChatClearEvent represents clearing the entire chat.
+// subscription type: channel.chat.clear (v1)
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#channelchatclear
+type ChatClearEvent struct {
+	BroadcasterUserID    string `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string `json:"broadcaster_user_login"`
+	BroadcasterUserName  string `json:"broadcaster_user_name"`
+}
+
 // SubscriptionInfo contains subscription metadata (used in webhook callbacks)
 type SubscriptionInfo struct {
 	ID        string                 `json:"id"`

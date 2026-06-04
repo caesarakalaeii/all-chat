@@ -27,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/channels"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
@@ -173,6 +174,12 @@ func main() {
 	chatClaims := twitchchat.NewClaimStoreWithTTL(redisClient, claimTTL)
 	log.Info("Chat-ownership claim store initialized", zap.Duration("claim_ttl", claimTTL))
 
+	// Message-ID registry (native Twitch id → internal UUID), shared format with twitch-listener
+	// and read by message-processor to resolve single-message deletions. Same 1h TTL as IRC so the
+	// two writers behave identically. The webhook handler populates it on each delivered chat
+	// message; chat-scoped channels are EventSub-only (ADR-0015), so EventSub is their sole writer.
+	msgRegistry := registry.NewRedisRegistry(redisClient, 1*time.Hour)
+
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
 	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher, ChannelSyncInterval)
 	channelManager.SetStatusPublisher(statusPublisher)
@@ -183,7 +190,7 @@ func main() {
 	}
 
 	// Create webhook handler
-	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, statusPublisher, chatClaims, log)
+	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, statusPublisher, chatClaims, msgRegistry, log)
 
 	// isLeader tracks whether this pod currently holds EventSub leadership.
 	// Protected by mu; read by subscription callback and HTTP handlers.
@@ -354,20 +361,61 @@ func main() {
 			// EventSub chat (it stays on IRC unless/until the owner grants the missing scope).
 			if _, err := subscriptionMgr.SubscribeToChatMessages(ctx, broadcasterID); err != nil {
 				if strings.Contains(err.Error(), "subscription already exists") {
-					return nil
-				}
-				if isScopeError(err) {
+					// Already subscribed — fall through to ensure deletion subs also exist.
+				} else if isScopeError(err) {
 					log.Info("Chat message subscription requires user:read:chat + user:bot scopes",
 						zap.String("broadcaster_id", broadcasterID))
+					// No chat sub → the deletion subs (same scope) would fail too. The channel
+					// stays on IRC, which still handles its deletions.
 					return nil
+				} else {
+					return err
 				}
-				return err
+			} else {
+				log.Info("Subscribed to chat messages", zap.String("broadcaster_id", broadcasterID))
 			}
-			log.Info("Subscribed to chat messages", zap.String("broadcaster_id", broadcasterID))
+
+			// Chat-moderation subscriptions: deletions of a single message, of a user's messages
+			// (timeout/ban), and full chat clears. They share user:read:chat and the chat
+			// condition, so they live with the chat subscription. Best-effort — a failure here
+			// doesn't undo the chat subscription (the channel still reads chat, just may miss a
+			// deletion type until the next sync re-attempts).
+			for _, sub := range []struct {
+				name string
+				fn   func(context.Context, string) (string, error)
+			}{
+				{"channel.chat.message_delete", subscriptionMgr.SubscribeToChatMessageDelete},
+				{"channel.chat.clear_user_messages", subscriptionMgr.SubscribeToChatClearUserMessages},
+				{"channel.chat.clear", subscriptionMgr.SubscribeToChatClear},
+			} {
+				if _, err := sub.fn(ctx, broadcasterID); err != nil {
+					if strings.Contains(err.Error(), "subscription already exists") || isScopeError(err) {
+						continue
+					}
+					log.Warn("Failed to subscribe to chat moderation event",
+						zap.String("broadcaster_id", broadcasterID),
+						zap.String("type", sub.name),
+						zap.Error(err))
+				}
+			}
 			return nil
 
 		} else if action == "unsubscribe_chat" {
-			return subscriptionMgr.UnsubscribeType(ctx, broadcasterID, "channel.chat.message")
+			// Tear down the chat subscription and its moderation subscriptions together — they
+			// share the same lifecycle (chat scope + live-overlay demand). Returns the first error
+			// but attempts every deletion.
+			var firstErr error
+			for _, subType := range []string{
+				"channel.chat.message",
+				"channel.chat.message_delete",
+				"channel.chat.clear_user_messages",
+				"channel.chat.clear",
+			} {
+				if err := subscriptionMgr.UnsubscribeType(ctx, broadcasterID, subType); err != nil && firstErr == nil {
+					firstErr = err
+				}
+			}
+			return firstErr
 
 		} else if action == "unsubscribe" {
 			return subscriptionMgr.Unsubscribe(ctx, broadcasterID)

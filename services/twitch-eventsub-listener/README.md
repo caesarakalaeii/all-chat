@@ -31,6 +31,7 @@ The Twitch EventSub Listener connects to Twitch's EventSub WebSocket API to rece
 - ✅ `channel.cheer`, `channel.raid`, `channel.follow` - Bits, raids, follows
 - ✅ `stream.online` / `stream.offline` - Stream lifecycle (cross-platform discovery + credits)
 - ✅ `channel.chat.message` - **Chat reading** (demand-gated; see below)
+- ✅ `channel.chat.message_delete` / `channel.chat.clear_user_messages` / `channel.chat.clear` - **Chat moderation** (single delete, user timeout/ban, full clear; see below)
 
 > Transport note: subscriptions use **webhook** transport (HTTP callback at `EVENTSUB_CALLBACK_URL`), not the EventSub WebSocket. Twitch verifies each subscription via a `webhook_callback_verification` challenge before it becomes `enabled`.
 
@@ -53,6 +54,31 @@ channel was dropped by IRC yet not delivered by EventSub.
 The chat subscription is **demand-gated**: it exists only while an overlay using the channel has a
 live WebSocket. When demand arrives, the chat subscription is created *before* the always-on event
 subscriptions so chat starts flowing with minimal latency.
+
+### Chat Moderation (deletions)
+
+A claimed channel is read *only* by EventSub, so IRC's `CLEARMSG`/`CLEARCHAT` handling no longer
+runs for it. To keep moderation working, the listener subscribes to the three chat-deletion events
+**alongside** `channel.chat.message` (same `user:read:chat` scope, same condition, same demand-gated
+lifecycle — created on `subscribe_chat`, removed on `unsubscribe_chat`):
+
+| EventSub event | `deletion_type` | Overlay effect |
+|----------------|-----------------|----------------|
+| `channel.chat.message_delete` | `single` | removes one message (resolved via the message-ID registry) |
+| `channel.chat.clear_user_messages` | `batch` | removes all messages from a user (timeout/ban) |
+| `channel.chat.clear` | `clear` | removes all messages for the channel |
+
+These are normalized into the same `message_deletion` raw-event shape `twitch-listener` emits, so the
+message-processor and overlay handle EventSub- and IRC-sourced deletions identically.
+
+**Message-ID registry.** Single-message deletes carry only the *native* Twitch message id, so the
+listener registers `native id → internal UUID` for every delivered chat message (shared
+`message-processor/registry`, 1h TTL — identical to IRC's capture-point registration). For
+chat-scoped channels EventSub is the sole writer; without this the message-processor can't resolve
+which displayed message to remove and buffers the deletion until it expires.
+
+> **Limitation:** `channel.chat.clear_user_messages` carries no duration, so a timeout is reported as
+> a ban (the messages are removed either way; only the moderation-log label differs). See ADR-0015.
 
 ### Platform Status Indicators
 
