@@ -22,11 +22,13 @@
  * Umami Analytics
  *
  * Privacy-friendly, cookieless web analytics, self-hosted at analytics.allch.at.
- * All-Chat has its own Website ID; the analytics backend keeps its data isolated.
+ * The Website ID and script host are pinned here directly — they aren't secrets
+ * (the ID is sent in every tracking request), and hardcoding them avoids the
+ * Next.js build-time-inlining gotcha that comes with NEXT_PUBLIC_* env vars in
+ * client components (a runtime/manifest env would never reach the browser).
  *
- * The tracker is loaded only when NEXT_PUBLIC_UMAMI_WEBSITE_ID is set (baked in
- * at build time, see Dockerfile + the build-and-push workflow), so local dev
- * and any build without the variable ship without analytics.
+ * The tracker is only rendered in production builds, so local dev (`next dev`,
+ * NODE_ENV=development) ships without analytics.
  *
  * Public overlay views (/overlay/...) are OBS browser sources, not real
  * visitors, so we skip them to keep the stats meaningful.
@@ -35,26 +37,17 @@
 import Script from 'next/script'
 import { usePathname } from 'next/navigation'
 
-const DEFAULT_SRC = 'https://analytics.allch.at/script.js'
+const WEBSITE_ID = 'c7a2e7ad-be45-4de3-954f-f15fd8e7dc97'
+const SRC = 'https://analytics.allch.at/script.js'
 
 export default function Analytics() {
   const pathname = usePathname()
 
-  const websiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID
-  const src = process.env.NEXT_PUBLIC_UMAMI_SRC || DEFAULT_SRC
-
-  // No website configured (local dev / builds without the variable) → no-op.
-  if (!websiteId) return null
+  // Local dev / non-production builds → no-op, so dev traffic stays out of stats.
+  if (process.env.NODE_ENV !== 'production') return null
 
   // Don't count OBS browser-source loads of public overlays as page views.
   if (pathname === '/overlay' || pathname.startsWith('/overlay/')) return null
 
-  return (
-    <Script
-      src={src}
-      data-website-id={websiteId}
-      strategy="afterInteractive"
-      defer
-    />
-  )
+  return <Script src={SRC} data-website-id={WEBSITE_ID} strategy="afterInteractive" defer />
 }
