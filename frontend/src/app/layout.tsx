@@ -32,6 +32,7 @@ import type { Metadata } from 'next'
 import { Barlow, DM_Mono } from 'next/font/google'
 import './globals.css'
 import '@/styles/events.css'
+import Analytics from '@/components/Analytics'
 import CookieBanner from '@/components/CookieBanner'
 import ImpersonationBanner from '@/components/ImpersonationBanner'
 import { ToastProvider } from '@/components/ui/toast'
@@ -103,6 +104,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={cn(barlow.variable, dmMono.variable)}>
       <body>
+        <Analytics />
         <ToastProvider>
           <ImpersonationBanner />
           {children}

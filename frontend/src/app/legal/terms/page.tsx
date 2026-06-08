@@ -28,7 +28,7 @@ const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
 
 export default function TermsOfServicePage() {
   return (
-    <LegalLayout title="Terms of Service (Nutzungsbedingungen)" lastUpdated="April 1, 2026">
+    <LegalLayout title="Terms of Service (Nutzungsbedingungen)" lastUpdated="June 8, 2026">
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">1. Acceptance of Terms</h2>
         <p>
@@ -123,7 +123,11 @@ export default function TermsOfServicePage() {
           >
             Privacy Policy
           </Link>
-          , which explains what we collect, how it is used, and your rights under the DSGVO.
+          , which explains what we collect, how it is used, and your rights under the DSGVO. For
+          transparency: All-Chat measures aggregate usage with{' '}
+          <strong className="text-text">self-hosted, cookieless analytics</strong> (Umami) that set
+          nothing on your device and store no personal identifier &ndash; see Section&nbsp;5.6 of the
+          Privacy Policy.
         </p>
       </section>
 
