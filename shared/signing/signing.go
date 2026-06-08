@@ -17,6 +17,7 @@
 package signing
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -85,7 +86,7 @@ func (s *Signer) SignRequest(req *http.Request) error {
 			return fmt.Errorf("read request body: %w", err)
 		}
 		// Reset body for actual request
-		req.Body = io.NopCloser(io.Reader(io.MultiReader(io.Reader(io.NopCloser(io.Reader(body))))))
+		req.Body = io.NopCloser(bytes.NewReader(body))
 	}
 
 	// Create signature
@@ -160,7 +161,7 @@ func (s *Signer) VerifyMiddleware() gin.HandlerFunc {
 				return
 			}
 			// Reset body for handlers
-			c.Request.Body = io.NopCloser(io.Reader(body))
+			c.Request.Body = io.NopCloser(bytes.NewReader(body))
 		}
 
 		// Compute expected signature

@@ -19,7 +19,6 @@ package signing
 import (
 	"bytes"
 	"io"
-	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
