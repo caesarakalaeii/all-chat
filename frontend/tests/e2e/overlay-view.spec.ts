@@ -84,3 +84,90 @@ test.describe('Overlay Observability View', () => {
     expect(ratio).not.toBeNull()
   })
 })
+
+/**
+ * Connection resilience (the reported "/view keeps losing connection" bug).
+ *
+ * These drive the page's real WebSocket via Playwright's routeWebSocket, acting
+ * as the gateway: deliver frames, drop the socket, or — for the half-open case —
+ * hold it open and go silent. That last one is the actual bug: a connection
+ * that stops delivering frames without ever firing onclose. The only way the
+ * page recovers is its own liveness watchdog.
+ */
+const WS_GLOB = '**/ws/overlay/**'
+
+const connectedFrame = JSON.stringify({ type: 'connected', data: { overlay_id: OVERLAY_ID } })
+const chatFrame = (id: string, text: string) =>
+  JSON.stringify({
+    type: 'chat_message',
+    data: {
+      id,
+      overlay_id: OVERLAY_ID,
+      platform: 'kick',
+      channel_id: 'c1',
+      channel_name: 'chan',
+      user: { id: 'u1', username: 'tester', display_name: 'Tester', badges: [] },
+      message: { text, emotes: [] },
+      timestamp: new Date().toISOString(),
+      metadata: {},
+    },
+  })
+
+test.describe('Overlay Observability View — connection resilience', () => {
+  test('shows Live and renders a message delivered over the socket', async ({ page }) => {
+    await page.routeWebSocket(WS_GLOB, (ws) => {
+      ws.send(connectedFrame)
+      ws.send(chatFrame('m1', 'hello-over-socket'))
+    })
+
+    await page.goto(VIEW_URL)
+    await expect(page.locator('.connection-status')).toContainText('Live')
+    await expect(page.getByText('hello-over-socket')).toBeVisible()
+  })
+
+  test('flips off "Live" and reconnects after the socket is dropped', async ({ page }) => {
+    let connections = 0
+    await page.routeWebSocket(WS_GLOB, (ws) => {
+      connections += 1
+      const n = connections
+      ws.send(connectedFrame)
+      ws.send(chatFrame(`msg-${n}`, `delivery-${n}`))
+      // Drop the first socket cleanly; the client must reconnect on its own.
+      if (n === 1) setTimeout(() => ws.close(), 300)
+    })
+
+    await page.goto(VIEW_URL)
+    await expect(page.getByText('delivery-1')).toBeVisible()
+    // delivery-2 can only arrive over a brand-new connection ⇒ proves reconnect.
+    await expect(page.getByText('delivery-2')).toBeVisible({ timeout: 15000 })
+    expect(connections).toBeGreaterThanOrEqual(2)
+    // Indicator is honest again once the healthy socket is back.
+    await expect(page.locator('.connection-status')).toContainText('Live')
+  })
+
+  test('recovers from a silent half-open socket via the watchdog', async ({ page, browserName }) => {
+    // The watchdog's real-timer window is ~45s; run it only on the engines that
+    // matter most (Chromium + Firefox — Firefox being LibreWolf's engine) to
+    // keep the slow path off the mobile/webkit matrix.
+    test.skip(
+      !['chromium', 'firefox'].includes(browserName),
+      'slow real-timer watchdog test runs on chromium/firefox only'
+    )
+    test.setTimeout(90_000)
+
+    let connections = 0
+    await page.routeWebSocket(WS_GLOB, (ws) => {
+      connections += 1
+      ws.send(connectedFrame)
+      ws.send(chatFrame(`live-${connections}`, `live-${connections}`))
+      // First socket goes silent forever: no further frames, no close. Without a
+      // client watchdog this hangs indefinitely (exactly the reported symptom).
+    })
+
+    await page.goto(VIEW_URL)
+    await expect(page.getByText('live-1')).toBeVisible()
+    // The watchdog must notice the silence and force a fresh connection.
+    await expect.poll(() => connections, { timeout: 75_000 }).toBeGreaterThanOrEqual(2)
+    await expect(page.getByText('live-2')).toBeVisible()
+  })
+})

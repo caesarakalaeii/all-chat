@@ -238,6 +238,16 @@ func (c *Connection) handleMessage(data []byte) {
 
 	// Handle different message types
 	switch msg.Type {
+	case models.WSMessageTypePing:
+		// Client liveness probe. Echo a pong so the client can detect a
+		// half-open connection even when no chat is flowing — browsers never
+		// surface the protocol-level ping/pong to JS, so this app-level
+		// round-trip is the client's only way to confirm the path is alive.
+		pong, err := json.Marshal(models.NewPong())
+		if err == nil {
+			c.Send(pong)
+		}
+
 	case models.WSMessageTypePong:
 		c.logger.Debug("Received pong",
 			zap.String("overlay_id", c.overlayID),

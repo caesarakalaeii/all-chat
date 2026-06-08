@@ -92,14 +92,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     )
   }, [])
 
-  const { config, sources, activeChannels, channelStatuses, connectionStatus } = useOverlayStream(
-    id,
-    {
+  const { config, sources, activeChannels, channelStatuses, connectionStatus, reconnectAttempts } =
+    useOverlayStream(id, {
       onChat,
       onMessageUpdate,
       onDeletion,
-    }
-  )
+    })
 
   // Fetch per-overlay event toggles (public route; degrades gracefully if the
   // gateway hasn't enabled it — setState happens in a promise callback, so this
@@ -152,7 +150,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           <h1 className="min-w-0 truncate text-sm font-semibold text-text" title={title}>
             {title}
           </h1>
-          <ConnectionBadge status={connectionStatus} />
+          <ConnectionBadge status={connectionStatus} attempts={reconnectAttempts} />
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
