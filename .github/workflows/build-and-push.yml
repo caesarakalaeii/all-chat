@@ -230,8 +230,6 @@ jobs:
           build-args: |
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             GIT_COMMIT=${{ github.sha }}
-            NEXT_PUBLIC_UMAMI_WEBSITE_ID=${{ vars.UMAMI_WEBSITE_ID }}
-            NEXT_PUBLIC_UMAMI_SRC=${{ vars.UMAMI_SRC }}
 
       - name: Output image details
         if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event_name == 'workflow_dispatch'
