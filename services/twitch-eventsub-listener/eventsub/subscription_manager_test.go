@@ -38,3 +38,25 @@ func TestSubscribeToStreamOffline(t *testing.T) {
 	// We expect an error (no real Twitch API in test), but the call must exist.
 	_ = err
 }
+
+// TestSubscribeToChatDeletionEvents verifies the chat-moderation subscription methods exist and are
+// callable. Each shares channel.chat.message's own-channel condition + user:read:chat scope, so the
+// listener can honor deletions (single message, user timeout/ban, full clear) on EventSub-owned
+// channels. No real Twitch API in tests, so getAccessToken errors out before the POST — we only
+// assert the methods exist and surface that error rather than panicking.
+func TestSubscribeToChatDeletionEvents(t *testing.T) {
+	log, _ := zap.NewDevelopment()
+	sm := NewSubscriptionManager("client-id", "client-secret", "webhook-secret", "https://example.com/callback", log)
+	require.NotNil(t, sm)
+
+	ctx := context.Background()
+	if _, err := sm.SubscribeToChatMessageDelete(ctx, "broadcaster-123"); err == nil {
+		t.Error("expected an error without a real Twitch token endpoint")
+	}
+	if _, err := sm.SubscribeToChatClearUserMessages(ctx, "broadcaster-123"); err == nil {
+		t.Error("expected an error without a real Twitch token endpoint")
+	}
+	if _, err := sm.SubscribeToChatClear(ctx, "broadcaster-123"); err == nil {
+		t.Error("expected an error without a real Twitch token endpoint")
+	}
+}

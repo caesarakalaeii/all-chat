@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/models"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
@@ -58,8 +59,9 @@ type Handler struct {
 	db              *pgxpool.Pool // for twitch_id -> user_id / login lookup
 	publisher       *publisher.StreamPublisher
 	listenerMetrics *metrics.ListenerMetrics
-	statusPublisher *status.Publisher      // emits platform:status for the chat indicator (nil-safe)
-	claims          *twitchchat.ClaimStore // chat-ownership claims for the IRC↔EventSub partition (nil-safe, ADR-0015)
+	statusPublisher *status.Publisher          // emits platform:status for the chat indicator (nil-safe)
+	claims          *twitchchat.ClaimStore     // chat-ownership claims for the IRC↔EventSub partition (nil-safe, ADR-0015)
+	registry        registry.MessageIDRegistry // native→internal-UUID map for single-message deletions (nil-safe)
 	logger          *zap.Logger
 
 	// claimRefreshedAt throttles per-channel claim refreshes (one Redis write per channel per
@@ -69,8 +71,10 @@ type Handler struct {
 }
 
 // NewHandler creates a new webhook handler. claims may be nil to disable chat-ownership claims
-// (the IRC listener then never sees this listener's channels as claimed).
-func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher *publisher.StreamPublisher, listenerMetrics *metrics.ListenerMetrics, statusPublisher *status.Publisher, claims *twitchchat.ClaimStore, logger *zap.Logger) *Handler {
+// (the IRC listener then never sees this listener's channels as claimed). reg may be nil to disable
+// native→UUID registration (single-message deletions then can't resolve their target and are
+// buffered until they expire).
+func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher *publisher.StreamPublisher, listenerMetrics *metrics.ListenerMetrics, statusPublisher *status.Publisher, claims *twitchchat.ClaimStore, reg registry.MessageIDRegistry, logger *zap.Logger) *Handler {
 	return &Handler{
 		secret:           []byte(secret),
 		redis:            redis,
@@ -79,6 +83,7 @@ func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher 
 		listenerMetrics:  listenerMetrics,
 		statusPublisher:  statusPublisher,
 		claims:           claims,
+		registry:         reg,
 		logger:           logger,
 		claimRefreshedAt: make(map[string]time.Time),
 	}
@@ -401,6 +406,12 @@ func (h *Handler) routeEvent(ctx context.Context, subscriptionType string, event
 	switch subscriptionType {
 	case "channel.chat.message":
 		return h.handleChatMessage(ctx, eventData)
+	case "channel.chat.message_delete":
+		return h.handleChatMessageDelete(ctx, eventData)
+	case "channel.chat.clear_user_messages":
+		return h.handleChatClearUserMessages(ctx, eventData)
+	case "channel.chat.clear":
+		return h.handleChatClear(ctx, eventData)
 	case "channel.channel_points_custom_reward_redemption.add":
 		return h.handleChannelPointsRedemption(ctx, eventData)
 	case "channel.subscribe":
@@ -754,11 +765,146 @@ func (h *Handler) handleChatMessage(ctx context.Context, eventData json.RawMessa
 		EventType: "", // regular chat → message-processor uses Normalize()
 	}
 
+	// Register the native→internal-UUID mapping BEFORE publishing (best-effort), mirroring the IRC
+	// listener's capture-point registration. This is what lets a later channel.chat.message_delete
+	// resolve its native message id to the internal UUID the overlay tracks (message-processor's
+	// registry lookup). For chat-scoped channels IRC no longer runs, so EventSub is the only writer
+	// of this mapping (ADR-0015); without it single-message deletes would buffer until they expire.
+	if h.registry != nil {
+		if nativeID := rawMsg.Tags["id"]; nativeID != "" {
+			if err := h.registry.Add(ctx, rawMsg.Platform, rawMsg.ChannelID, nativeID, rawMsg.MessageID); err != nil {
+				h.logger.Error("Failed to add message to registry",
+					zap.String("native_id", nativeID),
+					zap.String("internal_uuid", rawMsg.MessageID),
+					zap.Error(err))
+				// Continue — registration is best-effort; the chat message must still be delivered.
+			}
+		}
+	}
+
 	// A delivered chat message proves EventSub currently owns this channel's chat — refresh the
 	// ownership claim (throttled) so it stays excluded from IRC (ADR-0015).
 	h.refreshChatClaim(event.BroadcasterUserLogin, event.BroadcasterUserID)
 
 	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// handleChatMessageDelete processes a channel.chat.message_delete event (a moderator removed a
+// single message) into a "single" message_deletion RawChatMessage, shaped identically to
+// twitch-listener's ParseClearMessage so the message-processor resolves and applies it the same way.
+func (h *Handler) handleChatMessageDelete(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.ChatMessageDeleteEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal channel.chat.message_delete: %w", err)
+	}
+	rawMsg := buildSingleDeletion(&event)
+	if rawMsg == nil {
+		h.logger.Warn("channel.chat.message_delete missing required fields",
+			zap.String("broadcaster", event.BroadcasterUserLogin),
+			zap.String("message_id", event.MessageID))
+		return nil
+	}
+	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// handleChatClearUserMessages processes a channel.chat.clear_user_messages event (a user's messages
+// were removed via timeout or ban) into a "batch" message_deletion. Twitch omits the duration, so
+// no ban_duration is set; the frontend filters by target_user_id either way.
+func (h *Handler) handleChatClearUserMessages(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.ChatClearUserMessagesEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal channel.chat.clear_user_messages: %w", err)
+	}
+	rawMsg := buildBatchDeletion(&event)
+	if rawMsg == nil {
+		h.logger.Warn("channel.chat.clear_user_messages missing required fields",
+			zap.String("broadcaster", event.BroadcasterUserLogin),
+			zap.String("target_user_id", event.TargetUserID))
+		return nil
+	}
+	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// handleChatClear processes a channel.chat.clear event (the entire chat was cleared) into a "clear"
+// message_deletion; the frontend drops all messages for the channel.
+func (h *Handler) handleChatClear(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.ChatClearEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal channel.chat.clear: %w", err)
+	}
+	rawMsg := buildClearDeletion(&event)
+	if rawMsg == nil {
+		h.logger.Warn("channel.chat.clear missing broadcaster_user_login")
+		return nil
+	}
+	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// buildSingleDeletion converts a channel.chat.message_delete event into the message_deletion
+// RawChatMessage the pipeline expects: EventType "message_deletion", deletion_type "single",
+// target_msg_id = the native message id (looked up against the registry to find the internal UUID).
+// ChannelID is the lower-cased broadcaster login, matching the chat path and the registry key.
+// Returns nil when the event lacks the fields needed to act on it.
+func buildSingleDeletion(e *eventsub.ChatMessageDeleteEvent) *models.RawChatMessage {
+	if e.MessageID == "" || e.BroadcasterUserLogin == "" {
+		return nil
+	}
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(), // UUID for the deletion event itself
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(e.BroadcasterUserLogin),
+		Username:  strings.ToLower(e.TargetUserLogin), // author of the removed message, if provided
+		Timestamp: time.Now().UTC(),
+		EventType: "message_deletion",
+		EventData: map[string]interface{}{
+			"deletion_type": "single",
+			"target_msg_id": e.MessageID,
+		},
+	}
+}
+
+// buildBatchDeletion converts a channel.chat.clear_user_messages event into a "batch"
+// message_deletion (all of a user's messages removed). target_user_id is what the frontend filters
+// on. No ban_duration is set — Twitch does not provide it on this event, so a timeout is
+// indistinguishable from a ban here and is treated as a ban downstream. Returns nil when the event
+// lacks the fields needed to act on it.
+func buildBatchDeletion(e *eventsub.ChatClearUserMessagesEvent) *models.RawChatMessage {
+	if e.TargetUserID == "" || e.BroadcasterUserLogin == "" {
+		return nil
+	}
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(e.BroadcasterUserLogin),
+		UserID:    e.TargetUserID,
+		Username:  strings.ToLower(e.TargetUserLogin),
+		Timestamp: time.Now().UTC(),
+		EventType: "message_deletion",
+		EventData: map[string]interface{}{
+			"deletion_type":   "batch",
+			"target_user_id":  e.TargetUserID,
+			"target_username": strings.ToLower(e.TargetUserLogin),
+		},
+	}
+}
+
+// buildClearDeletion converts a channel.chat.clear event into a "clear" message_deletion (the whole
+// chat was cleared). No target fields — the frontend drops every message for the channel. Returns
+// nil when the broadcaster login is absent (without it the deletion can't be routed to overlays).
+func buildClearDeletion(e *eventsub.ChatClearEvent) *models.RawChatMessage {
+	if e.BroadcasterUserLogin == "" {
+		return nil
+	}
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(e.BroadcasterUserLogin),
+		Timestamp: time.Now().UTC(),
+		EventType: "message_deletion",
+		EventData: map[string]interface{}{
+			"deletion_type": "clear",
+		},
+	}
 }
 
 // buildChatTags reconstructs the IRC-style tag map (see twitch-listener/irc/parser.go and
