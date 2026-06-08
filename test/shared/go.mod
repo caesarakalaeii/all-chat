@@ -3,7 +3,7 @@ module github.com/caesar/all-chat/test/shared
 go 1.23
 
 require (
-	github.com/nsf/jsondiff v0.0.0-20210926074059-1e845ec5d249
+	github.com/nsf/jsondiff v0.0.0-20260207060731-8e8d90c4c0ac
 	github.com/stretchr/testify v1.8.4
 )
 
