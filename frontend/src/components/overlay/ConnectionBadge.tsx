@@ -26,11 +26,38 @@ const STATUS_META: Record<ConnectionStatus, { label: string; dot: string }> = {
   reconnecting: { label: 'Reconnecting', dot: 'bg-amber-400' },
 }
 
-/** Static (no-animation) connection-state pill for the view header. */
-export function ConnectionBadge({ status }: { status: ConnectionStatus }) {
-  const meta = STATUS_META[status]
+// After this many consecutive failed reconnects the link is treated as a real
+// outage ("Offline", red) rather than a transient blip ("Reconnecting", amber),
+// so the streamer can tell a momentary hiccup from a connection that's actually
+// down. With the exponential backoff this is roughly ~13s of failing retries.
+const OFFLINE_THRESHOLD = 4
+
+/**
+ * Static (no-animation) connection-state pill for the view header. Reflects the
+ * live socket state from useOverlayStream; `attempts` lets a sustained
+ * reconnect loop surface as a distinct "Offline" state.
+ */
+export function ConnectionBadge({
+  status,
+  attempts = 0,
+}: {
+  status: ConnectionStatus
+  attempts?: number
+}) {
+  const offline = status === 'reconnecting' && attempts >= OFFLINE_THRESHOLD
+  const meta = offline ? { label: 'Offline', dot: 'bg-red-500' } : STATUS_META[status]
+  const title =
+    status === 'reconnecting' && attempts > 0
+      ? `${meta.label} — ${attempts} failed attempt${attempts === 1 ? '' : 's'}`
+      : meta.label
+
   return (
-    <span className="connection-status flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub">
+    <span
+      className="connection-status flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub"
+      role="status"
+      aria-live="polite"
+      title={title}
+    >
       <span className={clsx('h-2 w-2 rounded-full', meta.dot)} aria-hidden />
       {meta.label}
     </span>

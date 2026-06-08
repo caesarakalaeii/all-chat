@@ -50,6 +50,45 @@ export function computeBackoffDelay(attempts: number, rng: () => number = Math.r
 }
 
 // ---------------------------------------------------------------------------
+// Liveness / heartbeat
+// ---------------------------------------------------------------------------
+//
+// Browsers never surface the WebSocket's protocol-level ping/pong to JS, so a
+// half-open connection (Wi-Fi blip, NAT/proxy idle timeout, sleep/wake) leaves
+// `readyState === OPEN` with `onclose` never firing — messages silently stop
+// and the UI keeps claiming "connected". To detect that, the client sends its
+// own app-level `ping` and watches for ANY inbound traffic; prolonged silence
+// means the path is dead and we must force a reconnect.
+
+/** How often the client sends an app-level `ping` liveness probe. */
+export const HEARTBEAT_INTERVAL_MS = 20000
+
+/**
+ * How long the client tolerates total inbound silence before declaring the
+ * socket dead. Must exceed HEARTBEAT_INTERVAL_MS (so a single missed probe
+ * doesn't trip it) and stay under the gateway's 60s PongWait read deadline so
+ * the client, not the server, drives recovery (and the `?since=` chat replay).
+ */
+export const LIVENESS_TIMEOUT_MS = 40000
+
+/** How often the watchdog re-evaluates staleness (bounds detection latency). */
+export const WATCHDOG_INTERVAL_MS = 5000
+
+/**
+ * True when the connection has gone silent for longer than `timeoutMs`. A
+ * non-positive `lastActivityMs` means "no inbound traffic recorded yet" (the
+ * socket is still opening), which is never stale.
+ */
+export function isConnectionStale(
+  lastActivityMs: number,
+  nowMs: number,
+  timeoutMs: number = LIVENESS_TIMEOUT_MS,
+): boolean {
+  if (lastActivityMs <= 0) return false
+  return nowMs - lastActivityMs > timeoutMs
+}
+
+// ---------------------------------------------------------------------------
 // Replay watermark (?since=)
 // ---------------------------------------------------------------------------
 

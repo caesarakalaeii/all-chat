@@ -17,11 +17,16 @@
  */
 
 // @vitest-environment jsdom
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ChatMessage } from '@/lib/types/message'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
+import {
+  HEARTBEAT_INTERVAL_MS,
+  LIVENESS_TIMEOUT_MS,
+  WATCHDOG_INTERVAL_MS,
+} from '@/lib/utils/overlayStreamCore'
 
 vi.mock('@/lib/twitchBadges', () => ({ resolveTwitchBadgeIcons: vi.fn(async (m: ChatMessage) => m) }))
 vi.mock('@/lib/badgeOrder', () => ({ sortMessageBadges: vi.fn((m: ChatMessage) => m) }))
@@ -37,6 +42,7 @@ class MockWebSocket {
   url: string
   readyState = MockWebSocket.CONNECTING
   closed = false
+  sent: string[] = []
   onopen: (() => void) | null = null
   onmessage: ((ev: { data: string }) => void) | null = null
   onerror: ((ev?: unknown) => void) | null = null
@@ -46,7 +52,9 @@ class MockWebSocket {
     this.url = url
     MockWebSocket.instances.push(this)
   }
-  send() {}
+  send(data: string) {
+    this.sent.push(data)
+  }
   close() {
     this.closed = true
     this.readyState = MockWebSocket.CLOSED
@@ -114,8 +122,11 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  vi.unstubAllGlobals()
+  // Unmount any rendered hooks first so their heartbeat/watchdog intervals are
+  // cleared before we tear down the fake timers and stubbed globals.
+  cleanup()
   vi.useRealTimers()
+  vi.unstubAllGlobals()
 })
 
 describe('useOverlayStream — connection', () => {
@@ -279,5 +290,148 @@ describe('useOverlayStream — message routing', () => {
     })
     await waitFor(() => expect(second).toHaveBeenCalledTimes(1))
     expect(first).not.toHaveBeenCalled()
+  })
+})
+
+describe('useOverlayStream — liveness / heartbeat', () => {
+  const sentTypes = (ws: MockWebSocket) =>
+    ws.sent.map((s) => (JSON.parse(s) as { type?: string }).type)
+
+  it('sends an app-level ping heartbeat while the socket is open', async () => {
+    vi.useFakeTimers()
+    renderHook(() => useOverlayStream('o1', {}))
+    await act(async () => {
+      latest().simulateOpen()
+    })
+    const ws = latest()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS + 100)
+    })
+    expect(sentTypes(ws).filter((t) => t === 'ping').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('stays open as long as inbound frames keep arriving (pong replies)', async () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() => useOverlayStream('o1', {}))
+    await act(async () => {
+      latest().simulateOpen()
+    })
+    const ws = latest()
+    // Server answers the heartbeat well within the timeout, repeatedly, for far
+    // longer than LIVENESS_TIMEOUT_MS. The watchdog must never trip.
+    for (let i = 0; i < 6; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LIVENESS_TIMEOUT_MS - 5000)
+      })
+      await act(async () => {
+        ws.simulateMessage({ type: 'pong' })
+      })
+    }
+    expect(result.current.connectionStatus).toBe('open')
+    expect(MockWebSocket.instances).toHaveLength(1)
+  })
+
+  it('detects a silent half-open socket (no onclose) and reconnects', async () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() => useOverlayStream('o1', {}))
+    await act(async () => {
+      latest().simulateOpen()
+    })
+    const first = latest()
+    expect(result.current.connectionStatus).toBe('open')
+
+    // Connection silently dies: no frames, no onclose. Past the timeout the
+    // watchdog must notice and flip the status — without waiting on onclose.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LIVENESS_TIMEOUT_MS + WATCHDOG_INTERVAL_MS + 100)
+    })
+    expect(result.current.connectionStatus).toBe('reconnecting')
+    expect(first.closed).toBe(true)
+    const detectedCount = MockWebSocket.instances.length
+
+    // The scheduled reconnect then fires and opens a fresh socket.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000)
+    })
+    expect(MockWebSocket.instances.length).toBeGreaterThan(detectedCount)
+  })
+
+  it('reconnects immediately (skipping backoff) when the network comes back online', async () => {
+    vi.useFakeTimers()
+    renderHook(() => useOverlayStream('o1', {}))
+    await act(async () => {
+      latest().simulateOpen()
+    })
+    await act(async () => {
+      latest().simulateServerClose() // schedules a ~1.5s backoff reconnect
+    })
+    const before = MockWebSocket.instances.length
+    await act(async () => {
+      window.dispatchEvent(new Event('online'))
+      await vi.advanceTimersByTimeAsync(50) // far less than the backoff delay
+    })
+    expect(MockWebSocket.instances.length).toBe(before + 1)
+  })
+
+  it('reconnects when the tab becomes visible again on a dead socket', async () => {
+    vi.useFakeTimers()
+    renderHook(() => useOverlayStream('o1', {}))
+    await act(async () => {
+      latest().simulateOpen()
+    })
+    await act(async () => {
+      latest().simulateServerClose()
+    })
+    const before = MockWebSocket.instances.length
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(50)
+    })
+    expect(MockWebSocket.instances.length).toBe(before + 1)
+  })
+
+  it('resets the attempt counter after a successful reconnect (no escalation)', async () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() => useOverlayStream('o1', {}))
+    await act(async () => {
+      latest().simulateOpen()
+    })
+    // First drop → after the reconnect fires the counter is 1.
+    await act(async () => {
+      latest().simulateServerClose()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500)
+    })
+    expect(result.current.reconnectAttempts).toBe(1)
+    // Reconnect succeeds → counter resets to 0.
+    await act(async () => {
+      latest().simulateOpen()
+    })
+    expect(result.current.reconnectAttempts).toBe(0)
+    // A fresh drop starts back at 1, not escalated from the previous burst.
+    await act(async () => {
+      latest().simulateServerClose()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500)
+    })
+    expect(result.current.reconnectAttempts).toBe(1)
+  })
+
+  it('does not tear down a healthy socket on online/visibility events', async () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() => useOverlayStream('o1', {}))
+    await act(async () => {
+      latest().simulateOpen()
+    })
+    const before = MockWebSocket.instances.length
+    await act(async () => {
+      window.dispatchEvent(new Event('online'))
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(50)
+    })
+    expect(MockWebSocket.instances.length).toBe(before)
+    expect(result.current.connectionStatus).toBe('open')
   })
 })

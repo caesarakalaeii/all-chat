@@ -22,6 +22,9 @@ import {
   advanceWatermark,
   classifyEnvelope,
   computeBackoffDelay,
+  HEARTBEAT_INTERVAL_MS,
+  isConnectionStale,
+  LIVENESS_TIMEOUT_MS,
   makeSeenIdCache,
   parseNameGradientGuard,
   platformStatusReducer,
@@ -245,5 +248,34 @@ describe('classifyEnvelope', () => {
   it('ignores unknown types and empty data', () => {
     expect(classifyEnvelope({ type: 'pong' }).kind).toBe('ignore')
     expect(classifyEnvelope({ type: 'chat_message', data: null }).kind).toBe('ignore')
+  })
+})
+
+describe('isConnectionStale / heartbeat constants', () => {
+  it('exposes sane heartbeat timings (probe faster than the timeout, both < server 60s PongWait)', () => {
+    expect(HEARTBEAT_INTERVAL_MS).toBeGreaterThan(0)
+    // Must tolerate at least one missed probe before declaring death.
+    expect(LIVENESS_TIMEOUT_MS).toBeGreaterThan(HEARTBEAT_INTERVAL_MS)
+    // Detect before the gateway's own 60s read deadline so the client drives recovery.
+    expect(LIVENESS_TIMEOUT_MS).toBeLessThan(60000)
+  })
+
+  it('is not stale before any activity has been recorded (lastActivity <= 0)', () => {
+    expect(isConnectionStale(0, 999999)).toBe(false)
+  })
+
+  it('is not stale while inbound traffic is recent', () => {
+    const now = 1_000_000
+    expect(isConnectionStale(now - (LIVENESS_TIMEOUT_MS - 1), now)).toBe(false)
+  })
+
+  it('is stale once inbound silence exceeds the timeout', () => {
+    const now = 1_000_000
+    expect(isConnectionStale(now - (LIVENESS_TIMEOUT_MS + 1), now)).toBe(true)
+  })
+
+  it('honors an explicit timeout override', () => {
+    expect(isConnectionStale(100, 100 + 5001, 5000)).toBe(true)
+    expect(isConnectionStale(100, 100 + 4999, 5000)).toBe(false)
   })
 })

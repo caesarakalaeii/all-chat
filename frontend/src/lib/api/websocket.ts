@@ -36,6 +36,12 @@
  */
 
 import type { ChatMessage, WebSocketMessage } from '../types/message'
+import {
+  computeBackoffDelay,
+  HEARTBEAT_INTERVAL_MS,
+  isConnectionStale,
+  WATCHDOG_INTERVAL_MS,
+} from '../utils/overlayStreamCore'
 
 // Automatically detect WebSocket URL based on page protocol
 // In production: wss://domain.com proxied to backend via Nginx
@@ -59,10 +65,18 @@ export class WebSocketClient {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   private messageCallbacks: ((message: ChatMessage) => void)[] = []
   private reconnectAttempts = 0
-  private maxReconnectAttempts = 10
   private overlayId: string = ''
   private token: string = ''
   private lastSeenTimestamp: number = 0
+  // Liveness: browsers never surface protocol ping/pong to JS, so a half-open
+  // socket sits in readyState OPEN with onclose never firing. We send our own
+  // app-level ping, treat any inbound frame as proof of life, and a watchdog
+  // forces a reconnect after prolonged silence. `stopped` latches on
+  // disconnect() so nothing re-opens the socket afterwards.
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null
+  private lastActivity = 0
+  private stopped = false
   // Bounded recent-id cache for client-side dedup. Same FIFO eviction as the
   // overlay page. Catches race-window duplicates the server can't fully
   // suppress (broadcast-to-closing-conn followed by replay-buffer write).
@@ -87,6 +101,9 @@ export class WebSocketClient {
   connect(overlayId: string, token: string) {
     this.overlayId = overlayId
     this.token = token
+    this.stopped = false
+    this.clearLivenessTimers()
+    this.lastActivity = 0 // no inbound frame yet on this socket
 
     // Load last seen timestamp from localStorage (survives page reload)
     const storageKey = `ws_last_seen_${overlayId}`
@@ -108,11 +125,14 @@ export class WebSocketClient {
     this.ws.onopen = () => {
       console.log('[WebSocket] Connected')
       this.reconnectAttempts = 0
+      this.lastActivity = Date.now()
+      this.startLiveness()
       // No in-band replay_request: server handles replay via ?since= during
       // the connect handshake.
     }
 
     this.ws.onmessage = (event) => {
+      this.lastActivity = Date.now() // any inbound frame proves the path is alive
       try {
         const wsMessage: WebSocketMessage = JSON.parse(event.data)
 
@@ -152,22 +172,74 @@ export class WebSocketClient {
 
     this.ws.onclose = (event) => {
       console.log('[WebSocket] Closed:', event.code, event.reason)
+      this.scheduleReconnect()
+    }
+  }
 
-      // Attempt to reconnect with exponential backoff
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
-        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000)
-        console.log(
-          `[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1})`
-        )
+  /** Start the heartbeat sender and the silence watchdog (called on open). */
+  private startLiveness() {
+    this.clearLivenessTimers()
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        try {
+          this.ws.send(JSON.stringify({ type: 'ping', timestamp: new Date().toISOString() }))
+        } catch {
+          /* a failed send means the socket is gone; the watchdog will catch it */
+        }
+      }
+    }, HEARTBEAT_INTERVAL_MS)
+    this.watchdogTimer = setInterval(() => {
+      if (isConnectionStale(this.lastActivity, Date.now())) {
+        console.warn('[WebSocket] No traffic — connection looks dead, reconnecting')
+        this.forceReconnect()
+      }
+    }, WATCHDOG_INTERVAL_MS)
+  }
 
-        this.reconnectTimeout = setTimeout(() => {
-          this.reconnectAttempts++
-          this.connect(this.overlayId, this.token)
-        }, delay)
-      } else {
-        console.error('[WebSocket] Max reconnection attempts reached')
+  private clearLivenessTimers() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer)
+      this.watchdogTimer = null
+    }
+  }
+
+  /** Tear down a half-open socket and reconnect (the watchdog's response). */
+  private forceReconnect() {
+    if (this.ws) {
+      // Detach first so the browser's async onclose can't double-schedule.
+      this.ws.onopen = null
+      this.ws.onmessage = null
+      this.ws.onerror = null
+      this.ws.onclose = null
+      try {
+        this.ws.close()
+      } catch {
+        /* already closing */
       }
     }
+    this.scheduleReconnect()
+  }
+
+  /**
+   * Schedule a reconnect with capped exponential backoff. Unlike the old
+   * client this NEVER permanently gives up — an overlay left running for hours
+   * must survive any number of network blips. `reconnectTimeout` guards against
+   * double-scheduling when onclose and the watchdog both fire for one socket.
+   */
+  private scheduleReconnect() {
+    if (this.stopped || this.reconnectTimeout) return
+    this.clearLivenessTimers()
+    const delay = computeBackoffDelay(this.reconnectAttempts)
+    console.log(`[WebSocket] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts + 1})`)
+    this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null
+      this.reconnectAttempts++
+      this.connect(this.overlayId, this.token)
+    }, delay)
   }
 
   /**
@@ -185,11 +257,20 @@ export class WebSocketClient {
    * Disconnect WebSocket and clear reconnection attempts
    */
   disconnect() {
+    this.stopped = true
+    this.clearLivenessTimers()
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout)
       this.reconnectTimeout = null
     }
-    this.ws?.close()
+    if (this.ws) {
+      // Detach handlers so the close we trigger here can't schedule a reconnect.
+      this.ws.onopen = null
+      this.ws.onmessage = null
+      this.ws.onerror = null
+      this.ws.onclose = null
+      this.ws.close()
+    }
     this.ws = null
     this.messageCallbacks = []
     this.reconnectAttempts = 0
@@ -197,9 +278,11 @@ export class WebSocketClient {
   }
 
   /**
-   * Check if WebSocket is currently connected
+   * Check if the WebSocket is currently connected AND live. A half-open socket
+   * sits in readyState OPEN with no traffic; treating that as "connected" is
+   * exactly the stale-indicator bug, so prolonged silence reads as disconnected.
    */
   isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN
+    return this.ws?.readyState === WebSocket.OPEN && !isConnectionStale(this.lastActivity, Date.now())
   }
 }
