@@ -29,6 +29,14 @@ ARG GIT_COMMIT
 ENV NEXT_PUBLIC_BUILD_DATE=$BUILD_DATE
 ENV NEXT_PUBLIC_GIT_COMMIT=$GIT_COMMIT
 
+# Umami analytics (cookieless). Baked in at build time; when unset the tracker
+# is not rendered (see src/components/Analytics.tsx). The Website ID is created
+# in the shared Umami dashboard and passed via the build-and-push workflow.
+ARG NEXT_PUBLIC_UMAMI_WEBSITE_ID
+ARG NEXT_PUBLIC_UMAMI_SRC
+ENV NEXT_PUBLIC_UMAMI_WEBSITE_ID=$NEXT_PUBLIC_UMAMI_WEBSITE_ID
+ENV NEXT_PUBLIC_UMAMI_SRC=$NEXT_PUBLIC_UMAMI_SRC
+
 # Clean Next.js cache before build to prevent stale Server Actions
 RUN rm -rf .next
 

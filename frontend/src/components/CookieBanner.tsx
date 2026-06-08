@@ -26,7 +26,7 @@
  *
  * Current Cookie Usage in All-Chat:
  * - Essential: localStorage items for authentication (jwt_token, refresh_token)
- * - Analytics: None (no tracking scripts currently installed)
+ * - Analytics: Self-hosted Umami — cookieless, sets nothing on the device, stores no personal data
  * - Functional: None (no additional functional cookies)
  * - Third-party: None (no third-party cookies)
  *
@@ -86,7 +86,8 @@ export default function CookieBanner() {
               </p>
               <p className="mb-3 text-sm text-text-sub">
                 <strong className="text-text">
-                  We do not use cookies for tracking or analytics.
+                  We use no tracking cookies, and our usage analytics are cookieless and store no
+                  personal data.
                 </strong>{' '}
                 We do not share your data with third parties for advertising purposes.
               </p>
@@ -124,6 +125,14 @@ export default function CookieBanner() {
                     <div>
                       <strong className="text-text">No advertising cookies</strong> - We don&apos;t
                       serve ads or share data with advertisers
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 text-kick">&#10003;</span>
+                    <div>
+                      <strong className="text-text">Cookieless analytics</strong> - We measure
+                      aggregate usage with self-hosted Umami. It sets no cookies, stores no personal
+                      identifier, and does not track public overlays
                     </div>
                   </div>
                   <div className="mt-3 border-t border-border pt-2">
