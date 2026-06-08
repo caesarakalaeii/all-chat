@@ -225,7 +225,41 @@ func (sm *SubscriptionManager) SubscribeToStreamOnline(ctx context.Context, broa
 // subscription-creation time; a 4xx scope error means the streamer must re-auth with the
 // chat scopes (handled non-fatally by the caller).
 func (sm *SubscriptionManager) SubscribeToChatMessages(ctx context.Context, broadcasterID string) (string, error) {
-	cacheKey := broadcasterID + ":channel.chat.message"
+	return sm.subscribeChatScoped(ctx, "channel.chat.message", broadcasterID)
+}
+
+// SubscribeToChatMessageDelete creates a channel.chat.message_delete subscription — fired when a
+// moderator removes a single message. It honors the same own-channel authorization as
+// channel.chat.message (user:read:chat + user:bot, broadcaster == chatter), so it is created and
+// torn down together with the chat subscription. Without it, single-message deletions on
+// EventSub-owned channels never reach the overlay, because IRC (which handled CLEARMSG) no longer
+// sees these channels (ADR-0015).
+func (sm *SubscriptionManager) SubscribeToChatMessageDelete(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.subscribeChatScoped(ctx, "channel.chat.message_delete", broadcasterID)
+}
+
+// SubscribeToChatClearUserMessages creates a channel.chat.clear_user_messages subscription — fired
+// when all of a user's messages are removed (timeout or ban). Same authorization/lifecycle as
+// channel.chat.message. Replaces, for EventSub-owned channels, the user-targeted CLEARCHAT that IRC
+// no longer receives.
+func (sm *SubscriptionManager) SubscribeToChatClearUserMessages(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.subscribeChatScoped(ctx, "channel.chat.clear_user_messages", broadcasterID)
+}
+
+// SubscribeToChatClear creates a channel.chat.clear subscription — fired when the entire chat is
+// cleared. Same authorization/lifecycle as channel.chat.message. Replaces, for EventSub-owned
+// channels, the full CLEARCHAT that IRC no longer receives.
+func (sm *SubscriptionManager) SubscribeToChatClear(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.subscribeChatScoped(ctx, "channel.chat.clear", broadcasterID)
+}
+
+// subscribeChatScoped creates a channel.chat.* EventSub subscription whose condition is the
+// own-channel reading pair broadcaster_user_id == user_id == broadcasterID. Every channel.chat.*
+// type (message, message_delete, clear_user_messages, clear) shares this exact condition, version,
+// scope (user:read:chat) and webhook transport, so they are created and cached identically and gated
+// together on chat scope + live-overlay demand. Cached under "broadcasterID:subType".
+func (sm *SubscriptionManager) subscribeChatScoped(ctx context.Context, subType, broadcasterID string) (string, error) {
+	cacheKey := broadcasterID + ":" + subType
 	sm.mu.RLock()
 	if subID, exists := sm.subscriptions[cacheKey]; exists {
 		sm.mu.RUnlock()
@@ -244,7 +278,7 @@ func (sm *SubscriptionManager) SubscribeToChatMessages(ctx context.Context, broa
 		"user_id":             broadcasterID,
 	}
 
-	return sm.subscribeWithCondition(ctx, "channel.chat.message", broadcasterID, token, "1", condition, cacheKey)
+	return sm.subscribeWithCondition(ctx, subType, broadcasterID, token, "1", condition, cacheKey)
 }
 
 // Unsubscribe deletes ALL EventSub subscriptions for a broadcaster.

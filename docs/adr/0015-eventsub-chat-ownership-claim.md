@@ -101,6 +101,11 @@ discipline the previous byte-identical SQL predicate aimed for.
   channels it owns, and message-processor dedupes any overlap.
 - Introduces a dependency on message-processor native-id dedup to hide the handoff overlap; without
   it, viewers would briefly see duplicated Twitch chat during a handoff.
+- **Timeout vs. ban is not distinguishable on EventSub-owned channels.** `channel.chat.clear_user_messages`
+  carries no duration (unlike IRC's `CLEARCHAT` `@ban-duration`), so a timeout is reported downstream
+  as a permanent ban. The messages are removed identically either way; only the moderation-log label
+  differs. Restoring the distinction would require an additional `channel.moderate`/`channel.ban`
+  subscription (broader scope) and is deliberately out of scope here.
 - `SCAN eventsub:chat:owner:*` per IRC sync (cheap at current channel counts; bounded by channel
   count, runs on the existing 30s-ish sync cadence).
 
@@ -120,6 +125,17 @@ discipline the previous byte-identical SQL predicate aimed for.
 - **twitch-eventsub-listener**: `webhooks/handler.go` refreshes the claim on `channel.chat.message`
   delivery (throttled) and releases it on revocation; `cmd/main.go` constructs the `ClaimStore` and
   injects it into the handler.
+- **twitch-eventsub-listener (deletion parity)**: because a claimed channel is read *only* by
+  EventSub, IRC's `CLEARMSG`/`CLEARCHAT` handling and its message-ID registry population no longer
+  run for it — so EventSub must reproduce both, or moderation silently fails to reach the overlay.
+  The listener therefore also subscribes to `channel.chat.message_delete`,
+  `channel.chat.clear_user_messages`, and `channel.chat.clear` (created/torn down together with the
+  `channel.chat.message` subscription — same scope + condition), maps them to the existing
+  `message_deletion` raw-event shape (`single` / `batch` / `clear`, identical to
+  `twitch-listener`'s parser), and populates the shared `message-processor/registry`
+  (native id → internal UUID) on each delivered chat message so single-message deletes resolve to
+  the displayed message. See `webhooks/handler.go` (`handleChatMessageDelete` /
+  `handleChatClearUserMessages` / `handleChatClear`) and `eventsub/subscription_manager.go`.
 - **twitch-listener**: `channels/repository.go` drops the static `eventSubOwnedExclusion` SQL;
   `channels/manager.go` filters the desired-channel set against live claims via `ClaimedLogins`
   (fail-open on Redis error → IRC reads everything, deduped).

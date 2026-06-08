@@ -9,6 +9,11 @@ WORKDIR /build
 # Copy shared module first
 COPY shared /build/shared
 
+# Copy the message-processor module — the listener imports its message-ID registry
+# (deletion handling, ADR-0015) via a local replace directive, so its source must be in
+# the build context for `go mod download`/build to resolve it.
+COPY services/message-processor /build/services/message-processor
+
 # Copy service files
 COPY services/twitch-eventsub-listener /build/services/twitch-eventsub-listener
 
