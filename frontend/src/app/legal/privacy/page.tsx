@@ -28,13 +28,14 @@ const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalLayout title="Privacy Policy (Datenschutzerkl&auml;rung)" lastUpdated="April 22, 2026">
+    <LegalLayout title="Privacy Policy (Datenschutzerkl&auml;rung)" lastUpdated="June 8, 2026">
       <div className="space-y-4">
         <div className="rounded-xl border border-twitch/20 bg-twitch/5 p-5 text-text-sub">
           <strong className="text-text">TL;DR:</strong> All-Chat only collects the information we
           need to authenticate with your streaming platforms and render chat in your overlays. Tokens
           are encrypted, chat messages are automatically deleted after one hour, and we never sell
-          your data.
+          your data. We use cookieless, self-hosted analytics (no tracking cookies; see
+          Section&nbsp;5.6).
         </div>
         <div className="rounded-xl border border-tiktok/20 bg-tiktok/5 p-5 text-text-sub">
           <strong className="text-text">Open Source Transparency:</strong> All-Chat is licensed
@@ -279,6 +280,48 @@ export default function PrivacyPolicyPage() {
           We never sell or rent your data. We may disclose information when required by law or to
           respond to legitimate security incidents.
         </p>
+
+        <h3 className="text-lg font-semibold text-text">
+          5.6 Usage Analytics (Self-Hosted, Cookieless)
+        </h3>
+        <p>
+          To understand how the site is used and where to improve it, we run{' '}
+          <a
+            href="https://umami.is"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-twitch underline decoration-twitch/30 underline-offset-4"
+          >
+            Umami
+          </a>
+          , an open-source analytics tool that we{' '}
+          <strong className="text-text">host ourselves</strong>. It is{' '}
+          <strong className="text-text">cookieless</strong>: it sets no cookies, creates no
+          persistent identifier, and performs no cross-site or cross-device tracking. The data is
+          processed on our own infrastructure and is{' '}
+          <strong className="text-text">not shared with any third party</strong> (unlike Google
+          Analytics or similar services).
+        </p>
+        <p>For each page view it records aggregate, non-identifying information:</p>
+        <ul className={listClasses}>
+          <li>The page you visited and the referring URL</li>
+          <li>Browser, operating system, device type, and screen size</li>
+          <li>Approximate country, derived from your IP address at request time</li>
+        </ul>
+        <p className="text-sm text-text-dim">
+          Your <strong className="text-text">IP address is not stored</strong>: it is used only
+          momentarily to derive the country and to generate a daily, salted hash for counting unique
+          visits, after which it is discarded. We do{' '}
+          <strong className="text-text">not</strong> track public overlay views (the pages OBS loads
+          as a browser source). You can block the analytics script with any browser content blocker
+          without affecting the site.
+        </p>
+        <p className="text-sm text-text-dim">
+          Because the tracker stores no information on, and reads none from, your device, it does not
+          require consent under &sect;&nbsp;25 TTDSG; the processing of the resulting data rests on
+          Art.&nbsp;6(1)(f) DSGVO &ndash; our legitimate interest in measuring and improving the
+          service.
+        </p>
       </section>
 
       {/* --- Data Retention --- */}
@@ -373,7 +416,9 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Cookies & Browser Storage --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">8. Cookies &amp; Browser Storage</h2>
+        <h2 className="text-2xl font-semibold text-text">
+          8. Cookies, Browser Storage &amp; Analytics
+        </h2>
         <p>
           All-Chat uses <strong className="text-text">browser localStorage</strong> (not cookies)
           for essential functionality:
@@ -383,10 +428,13 @@ export default function PrivacyPolicyPage() {
           <li>User preferences and last-visited state</li>
         </ul>
         <p>
-          We do not use advertising cookies, cross-site tracking, or analytics pixels. Fonts are
-          self-hosted (Section&nbsp;5.2) and do not set cookies. The third-party resources listed
-          in Section&nbsp;5.3 (UI Avatars, GitHub API) may cause the respective providers to set
-          their own cookies when loaded.
+          We do not use advertising cookies or cross-site tracking. We do use{' '}
+          <strong className="text-text">privacy-friendly, cookieless usage analytics</strong>{' '}
+          (self-hosted Umami) &ndash; it sets nothing on your device and stores no personal
+          identifier; see Section&nbsp;5.6 for the full description. Fonts are self-hosted
+          (Section&nbsp;5.2) and do not set cookies. The third-party resources listed in
+          Section&nbsp;5.3 (UI Avatars, GitHub API) may cause the respective providers to set their
+          own cookies when loaded.
         </p>
       </section>
 
@@ -427,7 +475,10 @@ export default function PrivacyPolicyPage() {
         <h2 className="text-2xl font-semibold text-text">12. Transparency &amp; Open Source</h2>
         <ul className={listClasses}>
           <li>All source code is publicly auditable under AGPL-3.0</li>
-          <li>No hidden tracking &mdash; verify yourself on GitHub</li>
+          <li>
+            No hidden tracking &mdash; our analytics are cookieless and documented (Section&nbsp;5.6),
+            and the whole stack is verifiable on GitHub
+          </li>
           <li>Privacy practices are open to community scrutiny</li>
         </ul>
         <p>
