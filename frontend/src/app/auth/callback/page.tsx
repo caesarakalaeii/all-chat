@@ -42,6 +42,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { authApi } from '@/lib/api/auth'
+import { trackEvent } from '@/lib/analytics'
 import { InfinityLogo } from '@/components/InfinityLogo'
 
 function AuthCallbackContent() {
@@ -61,6 +62,7 @@ function AuthCallbackContent() {
       const refreshToken = params.get('refresh_token')
 
       if (!token) {
+        trackEvent('signin_failed', { reason: 'no_token' })
         setError('No authentication token received')
         setLoading(false)
         return
@@ -81,6 +83,14 @@ function AuthCallbackContent() {
         const redirectTo = params.get('redirect_to')
         const sourceAdded = params.get('source_added')
 
+        // A `source_added` callback means an OAuth source-add completed rather than
+        // a fresh sign-in; track them as distinct funnel steps.
+        if (sourceAdded) {
+          trackEvent('source_added', { via: 'oauth' })
+        } else {
+          trackEvent('signin_completed', { platform: user.auth_provider ?? 'unknown' })
+        }
+
         if (redirectTo) {
           // Redirect to specific page (e.g., overlay page after adding source)
           const redirectURL = sourceAdded ? `${redirectTo}?source_added=${sourceAdded}` : redirectTo
@@ -91,6 +101,7 @@ function AuthCallbackContent() {
         }
       } catch (err) {
         console.error('Authentication failed:', err)
+        trackEvent('signin_failed', { reason: 'me_fetch_failed' })
         setError('Authentication failed. Please try again.')
         setLoading(false)
       }

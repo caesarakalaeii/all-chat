@@ -22,6 +22,7 @@ import LegalLayout from '@/components/legal/LegalLayout'
 export const metadata = {
   title: 'Privacy Policy | All-Chat',
   description: 'Learn how All-Chat collects, processes, and protects your information.',
+  alternates: { canonical: '/legal/privacy' },
 }
 
 const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
