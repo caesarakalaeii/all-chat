@@ -28,6 +28,7 @@ import { useState, useEffect } from 'react'
 import { overlaysApi } from '@/lib/api/overlays'
 import { Button } from '@/components/ui/button'
 import type { Overlay } from '@/lib/types/overlay'
+import { trackEvent } from '@/lib/analytics'
 import toast from 'react-hot-toast'
 
 interface AddSourceModalProps {
@@ -81,6 +82,7 @@ export function AddSourceModal({
         channel_id: senderOverlayId,
         channel_name: `${senderName}'s overlay`,
       })
+      trackEvent('source_added', { platform: 'shared_overlay' })
 
       toast.success(`Added ${senderName}'s overlay!`)
 
@@ -90,6 +92,7 @@ export function AddSourceModal({
       onClose()
     } catch (err: any) {
       console.error('Failed to add shared overlay:', err)
+      trackEvent('source_add_failed', { platform: 'shared_overlay' })
       toast.error(err?.message || 'Failed to add shared overlay')
     } finally {
       setLoading(false)

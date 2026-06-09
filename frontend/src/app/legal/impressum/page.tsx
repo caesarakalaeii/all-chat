@@ -24,6 +24,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = {
   title: 'Impressum | All-Chat',
   description: 'Legal notice (Impressum) as required by TMG 5.',
+  alternates: { canonical: '/legal/impressum' },
 }
 
 const IMPRESSUM_PATH = process.env.IMPRESSUM_FILE_PATH || '/etc/allchat/impressum.html'

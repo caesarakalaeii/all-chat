@@ -18,24 +18,22 @@
 
 import type { MetadataRoute } from 'next'
 
-export default function robots(): MetadataRoute.Robots {
+export default function manifest(): MetadataRoute.Manifest {
   return {
-    rules: [
+    name: 'All-Chat',
+    short_name: 'All-Chat',
+    description: 'Every chat. One overlay.',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#0f0f13',
+    theme_color: '#0f0f13',
+    icons: [
       {
-        userAgent: '*',
-        allow: ['/', '/legal/'],
-        disallow: [
-          '/dashboard/',
-          '/admin/',
-          '/auth/',
-          '/settings/',
-          '/overlays/',
-          '/overlay/',
-          '/chat/',
-          '/api/',
-        ],
+        src: '/icon.svg',
+        sizes: 'any',
+        type: 'image/svg+xml',
+        purpose: 'any',
       },
     ],
-    sitemap: 'https://allch.at/sitemap.xml',
   }
 }

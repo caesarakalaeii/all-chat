@@ -16,26 +16,15 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import type { MetadataRoute } from 'next'
-
-export default function robots(): MetadataRoute.Robots {
-  return {
-    rules: [
-      {
-        userAgent: '*',
-        allow: ['/', '/legal/'],
-        disallow: [
-          '/dashboard/',
-          '/admin/',
-          '/auth/',
-          '/settings/',
-          '/overlays/',
-          '/overlay/',
-          '/chat/',
-          '/api/',
-        ],
-      },
-    ],
-    sitemap: 'https://allch.at/sitemap.xml',
-  }
+/**
+ * JsonLd — renders a schema.org JSON-LD structured-data `<script>`.
+ *
+ * Server-safe (no client hooks), so it can be rendered from layouts and server
+ * pages and ends up in the initial HTML for crawlers. Pass a plain object; it is
+ * serialised with JSON.stringify.
+ */
+export function JsonLd({ data }: { data: Record<string, unknown> }) {
+  return (
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />
+  )
 }

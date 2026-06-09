@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { toastManager } from '@/lib/toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useOverlayStore } from '@/lib/stores/overlay-store'
+import { trackEvent } from '@/lib/analytics'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 function NewOverlayContent() {
@@ -49,6 +50,7 @@ function NewOverlayContent() {
     setIsSubmitting(true)
     try {
       const overlay = await createOverlay({ name: name.trim() })
+      trackEvent('overlay_created')
       toastManager.add({ title: `"${overlay.name}" created`, type: 'success' })
       router.push(`/overlays/${overlay.id}`)
     } catch (err) {

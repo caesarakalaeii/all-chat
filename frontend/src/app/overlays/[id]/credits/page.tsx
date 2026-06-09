@@ -39,6 +39,7 @@ import clsx from 'clsx'
 import dynamic from 'next/dynamic'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { overlaysApi } from '@/lib/api/overlays'
+import { trackEvent } from '@/lib/analytics'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -276,6 +277,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
               onClick={() => {
                 const url = `${window.location.origin}/overlay/${id}/credits`
                 navigator.clipboard.writeText(url).then(() => {
+                  trackEvent('obs_url_copied', { surface: 'credits' })
                   setCopiedCreditsUrl(true)
                   setTimeout(() => setCopiedCreditsUrl(false), 2000)
                 })

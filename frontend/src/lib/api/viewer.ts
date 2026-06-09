@@ -23,15 +23,7 @@
  * Viewers authenticate with their own platform accounts to send messages.
  */
 
-import { apiClient } from './client'
-import type {
-  ViewerLoginResponse,
-  ViewerInfo,
-  StreamerInfo,
-  SendMessageRequest,
-  SendMessageResponse,
-  StreamerSendMessageRequest,
-} from '../types/viewer'
+import type { ViewerInfo } from '../types/viewer'
 
 /**
  * Custom API client for viewer requests
@@ -100,16 +92,6 @@ const viewerApiClient = new ViewerApiClient()
 
 export const viewerApi = {
   /**
-   * Get the OAuth login URL for a viewer to authenticate
-   */
-  async getLoginUrl(platform: 'twitch' | 'youtube', streamer: string): Promise<string> {
-    const response = await apiClient.get<ViewerLoginResponse>(
-      `/api/v1/auth/viewer/${platform}/login?streamer=${encodeURIComponent(streamer)}`
-    )
-    return response.auth_url
-  },
-
-  /**
    * Get current viewer information using stored JWT token
    */
   async getMe(): Promise<ViewerInfo> {
@@ -121,27 +103,5 @@ export const viewerApi = {
    */
   async logout(): Promise<void> {
     await viewerApiClient.post('/api/v1/auth/viewer/logout', {})
-  },
-
-  /**
-   * Get streamer information (platforms, channels)
-   */
-  async getStreamerInfo(username: string): Promise<StreamerInfo> {
-    return apiClient.get<StreamerInfo>(`/api/v1/auth/streamers/${encodeURIComponent(username)}`)
-  },
-
-  /**
-   * Send a message to the streamer's chat (as a viewer)
-   */
-  async sendMessage(request: SendMessageRequest): Promise<SendMessageResponse> {
-    return viewerApiClient.post<SendMessageResponse>('/api/v1/auth/viewer/chat/send', request)
-  },
-
-  /**
-   * Send a message as the streamer using their own stored OAuth tokens.
-   * Uses the streamer JWT (not the viewer JWT).
-   */
-  async sendStreamerMessage(request: StreamerSendMessageRequest): Promise<SendMessageResponse> {
-    return apiClient.post<SendMessageResponse>('/api/v1/auth/chat/send', request)
   },
 }
