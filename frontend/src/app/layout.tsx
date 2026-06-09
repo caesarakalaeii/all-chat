@@ -28,11 +28,12 @@
  * - Font optimization
  */
 
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Barlow, DM_Mono } from 'next/font/google'
 import './globals.css'
 import '@/styles/events.css'
 import Analytics from '@/components/Analytics'
+import { JsonLd } from '@/components/JsonLd'
 import CookieBanner from '@/components/CookieBanner'
 import ImpersonationBanner from '@/components/ImpersonationBanner'
 import { ToastProvider } from '@/components/ui/toast'
@@ -100,10 +101,34 @@ export const metadata: Metadata = {
   },
 }
 
+export const viewport: Viewport = {
+  themeColor: '#0f0f13',
+}
+
+// Site-wide structured data. Emitted from the (server) root layout so it lands in
+// the initial HTML on every page. `sameAs` mirrors the links in the landing footer.
+const organizationLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'All-Chat',
+  url: 'https://allch.at',
+  logo: 'https://allch.at/icon.svg',
+  sameAs: ['https://github.com/caesarakalaeii/all-chat', 'https://discord.gg/xCGBSuz39P'],
+}
+
+const webSiteLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'All-Chat',
+  url: 'https://allch.at',
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={cn(barlow.variable, dmMono.variable)}>
       <body>
+        <JsonLd data={organizationLd} />
+        <JsonLd data={webSiteLd} />
         <Analytics />
         <ToastProvider>
           <ImpersonationBanner />

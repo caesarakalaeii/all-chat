@@ -23,7 +23,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/legal/', '/chat/'],
+        allow: ['/', '/legal/'],
         disallow: [
           '/dashboard/',
           '/admin/',
@@ -31,6 +31,7 @@ export default function robots(): MetadataRoute.Robots {
           '/settings/',
           '/overlays/',
           '/overlay/',
+          '/chat/',
           '/api/',
         ],
       },

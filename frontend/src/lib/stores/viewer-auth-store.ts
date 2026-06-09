@@ -19,11 +19,12 @@
 /**
  * Viewer Authentication Store (Zustand)
  *
- * Global state management for viewer (chat participant) authentication.
- * Stores viewer info and JWT token separately from streamer auth.
+ * Global state for viewer (chat participant) authentication — viewer info + JWT,
+ * stored separately from streamer auth. (The streamer-facing viewer chat UI was
+ * retired; the viewer session still backs OAuth linking and nav login state.)
  *
  * Usage in components:
- *   const { viewerInfo, viewerToken, viewerLogin, viewerLogout } = useViewerAuthStore();
+ *   const { viewerInfo, viewerToken, viewerLogout } = useViewerAuthStore();
  */
 
 import { create } from 'zustand'
@@ -34,21 +35,18 @@ interface ViewerAuthStore {
   viewerInfo: ViewerInfo | null
   viewerToken: string | null
   loading: boolean
-  streamer: string | null
 
   // Actions
   setViewerToken: (token: string) => void
   setViewerInfo: (info: ViewerInfo) => void
-  setStreamer: (streamer: string) => void
   viewerLogout: () => void
   init: () => Promise<void>
 }
 
-export const useViewerAuthStore = create<ViewerAuthStore>((set, get) => ({
+export const useViewerAuthStore = create<ViewerAuthStore>((set) => ({
   viewerInfo: null,
   viewerToken: null,
   loading: true,
-  streamer: null,
 
   setViewerToken: (token: string) => {
     if (typeof window !== 'undefined') {
@@ -61,16 +59,11 @@ export const useViewerAuthStore = create<ViewerAuthStore>((set, get) => ({
     set({ viewerInfo: info, loading: false })
   },
 
-  setStreamer: (streamer: string) => {
-    set({ streamer })
-  },
-
   viewerLogout: () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('viewer_jwt_token')
-      localStorage.removeItem('viewer_streamer')
     }
-    set({ viewerInfo: null, viewerToken: null, streamer: null, loading: false })
+    set({ viewerInfo: null, viewerToken: null, loading: false })
   },
 
   init: async () => {
@@ -80,19 +73,18 @@ export const useViewerAuthStore = create<ViewerAuthStore>((set, get) => ({
     }
 
     const token = localStorage.getItem('viewer_jwt_token')
-    const streamer = localStorage.getItem('viewer_streamer')
 
     if (!token) {
-      set({ loading: false, streamer: streamer || null })
+      set({ loading: false })
       return
     }
 
-    set({ viewerToken: token, streamer: streamer || null })
+    set({ viewerToken: token })
 
     try {
       const viewerInfo = await viewerApi.getMe()
       set({ viewerInfo, loading: false })
-    } catch (error) {
+    } catch {
       // Token invalid, clear it
       localStorage.removeItem('viewer_jwt_token')
       set({ viewerInfo: null, viewerToken: null, loading: false })

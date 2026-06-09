@@ -25,6 +25,7 @@ import { SliderControl } from './SliderControl'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { PRESET_NAMES } from '@/lib/utils/soundPlayer'
 import type { DisplaySettings } from '@/lib/types/overlay'
+import { trackEvent } from '@/lib/analytics'
 
 export const SOUND_PRESETS = PRESET_NAMES
 
@@ -51,7 +52,10 @@ export function SoundGroup({ displaySettings, onChange, isPremium, onPreview }: 
       <ToggleSwitch
         label="Enable notification sounds"
         checked={enabled}
-        onChange={(checked) => onChange({ notification_sound_enabled: checked })}
+        onChange={(checked) => {
+          if (checked) trackEvent('sound_enabled')
+          onChange({ notification_sound_enabled: checked })
+        }}
       />
 
       {enabled && (

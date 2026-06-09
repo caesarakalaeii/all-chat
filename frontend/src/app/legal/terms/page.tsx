@@ -22,6 +22,7 @@ import LegalLayout from '@/components/legal/LegalLayout'
 export const metadata = {
   title: 'Terms of Service | All-Chat',
   description: 'Understand the rules and responsibilities for using All-Chat.',
+  alternates: { canonical: '/legal/terms' },
 }
 
 const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'

@@ -127,13 +127,8 @@ function AuthSuccessContent() {
           return
         }
 
-        // Fall back to streamer chat page
-        const redirectStreamer = streamer || localStorage.getItem('viewer_streamer')
-        if (redirectStreamer) {
-          router.push(`/chat/${redirectStreamer}`)
-        } else {
-          router.push('/')
-        }
+        // No explicit target → land on the home page.
+        router.push('/')
       } catch (err) {
         console.error('Failed to fetch viewer info:', err)
         setError('Failed to complete authentication. Please try again.')

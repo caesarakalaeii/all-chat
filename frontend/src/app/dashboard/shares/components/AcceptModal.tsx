@@ -32,6 +32,7 @@ import { PlatformBadge } from './PlatformBadge'
 import { Button } from '@/components/ui/button'
 import type { ShareRequest } from '@/lib/types/share'
 import type { Overlay } from '@/lib/types/overlay'
+import { trackEvent } from '@/lib/analytics'
 import toast from 'react-hot-toast'
 
 interface AcceptModalProps {
@@ -108,6 +109,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
         expiryHours
       )
 
+      trackEvent('share_accepted')
       toast.success(`Share accepted from ${request.sender?.display_name || 'user'}!`)
       onAccepted(response.sender_overlay_id)
       onClose()

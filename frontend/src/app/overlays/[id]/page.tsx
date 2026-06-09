@@ -56,6 +56,7 @@ import type { VisualSettings } from '@/lib/types/visual-settings'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { parseCssToVisualSettings } from '@/lib/utils/theme-css-parser'
 import { toastManager } from '@/lib/toast'
+import { trackEvent } from '@/lib/analytics'
 import { AppNav } from '@/components/AppNav'
 import { SplitView } from '@/components/SplitView'
 import { Card } from '@/components/ui/card'
@@ -456,6 +457,7 @@ function StreamSelectionPanel({
       // Clean undefined keys
       Object.keys(config).forEach((k) => config[k] === undefined && delete config[k])
       await overlaysApi.updateSourceConfig(overlayId, source.id, config)
+      trackEvent('yt_stream_strategy_set', { strategy })
       toastManager.add({ title: 'Stream selection saved', type: 'success' })
       onSaved()
     } catch {
@@ -1825,6 +1827,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   function handleCopyObsUrl() {
     const url = `${window.location.origin}/overlay/${id}`
     navigator.clipboard.writeText(url).then(() => {
+      trackEvent('obs_url_copied', { surface: 'editor' })
       setCopiedObs(true)
       setTimeout(() => setCopiedObs(false), 2000)
     })

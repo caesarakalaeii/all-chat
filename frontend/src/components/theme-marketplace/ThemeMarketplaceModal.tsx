@@ -32,6 +32,7 @@ import { useCreditRollThemeMarketplace } from '@/hooks/useCreditRollThemeMarketp
 import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { clearCache } from '@/lib/theme-marketplace/cache'
+import { trackEvent } from '@/lib/analytics'
 
 interface ThemeMarketplaceModalProps {
   isOpen: boolean
@@ -146,6 +147,7 @@ export default function ThemeMarketplaceModal({
   if (!isOpen) return null
 
   const handleApply = (css: string) => {
+    trackEvent('theme_applied', { source: 'marketplace' })
     onApplyTheme(css)
     onClose()
   }

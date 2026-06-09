@@ -20,6 +20,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { trackEvent } from '@/lib/analytics'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
 import { PremiumBadge } from '@/components/PremiumBadge'
@@ -788,6 +789,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
         checked={enabled && supportsSpeech}
         onChange={(checked) => {
           if (!supportsSpeech) return
+          if (checked) trackEvent('tts_enabled', { engine: d.tts_provider ?? 'browser' })
           onChange({ tts_enabled: checked })
         }}
       />
