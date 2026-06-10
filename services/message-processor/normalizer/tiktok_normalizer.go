@@ -123,7 +123,11 @@ func (n *TikTokNormalizer) extractUserInfo(raw *models.RawChatMessage) models.Us
 		DisplayName: displayName,
 		AvatarURL:   profilePictureURL,
 		Badges:      badges,
-		Color:       "#FE2C55", // TikTok brand color as default
+		// No platform-native color: TikTok's unofficial library exposes no
+		// per-user color, and the old hardcoded brand pink (#FE2C55) made every
+		// TikTok viewer identical. Leaving this empty lets the viewer-badge
+		// enricher assign each viewer a deterministic auto-color instead.
+		Color: "",
 	}
 }
 
