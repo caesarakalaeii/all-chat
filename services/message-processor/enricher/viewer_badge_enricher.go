@@ -98,6 +98,23 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		return nil
 	}
 
+	// Auto-color fallback: if the message reaches the end of enrichment with no
+	// platform-native color, no All-Chat cosmetic color, and no gradient, assign
+	// a deterministic palette color so the viewer stays visually distinct instead
+	// of collapsing to the overlay's CSS fallback. The key starts as
+	// "platform:userID" (per-platform stable) and is upgraded to the All-Chat
+	// viewer UUID at the cache-hit and DB-hit paths below, so a viewer linked
+	// across platforms gets the same fallback color everywhere. Runs on every
+	// return path via defer; the priority ordering (cosmetic > platform >
+	// auto-color) holds because both higher-priority sources set Color before
+	// this fires.
+	autoColorKey := fmt.Sprintf("%s:%s", msg.Platform, msg.User.ID)
+	defer func() {
+		if msg.User.Color == "" && msg.User.NameGradient == "" {
+			msg.User.Color = AutoColor(autoColorKey)
+		}
+	}()
+
 	cacheKey := fmt.Sprintf("%s%s:%s", viewerIdentityCachePrefix, msg.Platform, msg.User.ID)
 
 	// 1. Check Redis cache
@@ -108,6 +125,10 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		}
 		var identity viewerIdentityCache
 		if jsonErr := json.Unmarshal([]byte(cached), &identity); jsonErr == nil {
+			// Cross-platform stable fallback: key auto-color off the viewer UUID.
+			if identity.ViewerID != "" {
+				autoColorKey = identity.ViewerID
+			}
 			if identity.NameColor != nil {
 				msg.User.Color = *identity.NameColor
 			}
@@ -184,6 +205,11 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 			zap.Error(scanErr),
 		)
 		return nil // soft failure
+	}
+
+	// Cross-platform stable fallback: key auto-color off the viewer UUID.
+	if viewerID != "" {
+		autoColorKey = viewerID
 	}
 
 	// 3. Cache the result
