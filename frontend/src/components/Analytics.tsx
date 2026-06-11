@@ -30,8 +30,10 @@
  * The tracker is only rendered in production builds, so local dev (`next dev`,
  * NODE_ENV=development) ships without analytics.
  *
- * Public overlay views (/overlay/...) are OBS browser sources, not real
- * visitors, so we skip them to keep the stats meaningful.
+ * Public overlay loads (/overlay/...) are mostly OBS browser sources. We track
+ * them for usage data but tag them `overlay`, so they can be filtered out of
+ * human-visitor stats in Umami; sanitised paths collapse to /overlay/:id, which
+ * yields an aggregate load count without per-overlay cardinality.
  *
  * URLs are sanitised before they leave the browser (see `lib/umami-sanitize`):
  * path UUIDs collapse to `:id`, token-bearing query params are dropped, and the
@@ -62,8 +64,9 @@ export default function Analytics() {
   // Local dev / non-production builds → no-op, so dev traffic stays out of stats.
   if (process.env.NODE_ENV !== 'production') return null
 
-  // Don't count OBS browser-source loads of public overlays as page views.
-  if (pathname === '/overlay' || pathname.startsWith('/overlay/')) return null
+  // Tag public overlay loads so OBS browser-source traffic stays filterable
+  // against real visitors (the path itself collapses to /overlay/:id).
+  const isOverlay = pathname === '/overlay' || pathname.startsWith('/overlay/')
 
   return (
     <Script
@@ -71,6 +74,7 @@ export default function Analytics() {
       data-website-id={WEBSITE_ID}
       data-before-send="__umamiBeforeSend"
       data-exclude-hash="true"
+      data-tag={isOverlay ? 'overlay' : undefined}
       strategy="afterInteractive"
       defer
     />
