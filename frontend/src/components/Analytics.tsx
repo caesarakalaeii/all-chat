@@ -32,13 +32,29 @@
  *
  * Public overlay views (/overlay/...) are OBS browser sources, not real
  * visitors, so we skip them to keep the stats meaningful.
+ *
+ * URLs are sanitised before they leave the browser (see `lib/umami-sanitize`):
+ * path UUIDs collapse to `:id`, token-bearing query params are dropped, and the
+ * hash is excluded entirely (`data-exclude-hash`) — so high-cardinality overlay
+ * IDs and OAuth tokens (e.g. `/auth/callback#access_token=...`) never reach
+ * analytics. The sanitiser is installed before the tracker renders, so even a
+ * fresh OAuth-callback page load is covered on its very first page view.
  */
 
 import Script from 'next/script'
 import { usePathname } from 'next/navigation'
+import { umamiBeforeSend } from '@/lib/umami-sanitize'
 
 const WEBSITE_ID = 'c7a2e7ad-be45-4de3-954f-f15fd8e7dc97'
 const SRC = 'https://analytics.allch.at/script.js'
+
+// Install the URL sanitiser at module-eval time — this runs during the client
+// bundle bootstrap, before the tracker's `afterInteractive` script can fire its
+// first page view. Umami resolves `data-before-send` as `window[name]` at send
+// time, so registering it up front guarantees even that first view is sanitised.
+if (typeof window !== 'undefined') {
+  window.__umamiBeforeSend = umamiBeforeSend
+}
 
 export default function Analytics() {
   const pathname = usePathname()
@@ -49,5 +65,14 @@ export default function Analytics() {
   // Don't count OBS browser-source loads of public overlays as page views.
   if (pathname === '/overlay' || pathname.startsWith('/overlay/')) return null
 
-  return <Script src={SRC} data-website-id={WEBSITE_ID} strategy="afterInteractive" defer />
+  return (
+    <Script
+      src={SRC}
+      data-website-id={WEBSITE_ID}
+      data-before-send="__umamiBeforeSend"
+      data-exclude-hash="true"
+      strategy="afterInteractive"
+      defer
+    />
+  )
 }
