@@ -40,16 +40,19 @@ type TokenRepo interface {
 	GetExpiringUserTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
 	GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
 	GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
+	GetExpiringTwitchLinkTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
 
 	UpdateUserTokens(ctx context.Context, userID string, token *oauth2Lib.Token) error
 	UpdateViewerTokens(ctx context.Context, sessionID string, token *oauth2Lib.Token) error
 	UpdateYouTubeTokens(ctx context.Context, userID, channelID string, token *oauth2Lib.Token) error
+	UpdateTwitchLinkTokens(ctx context.Context, userID, twitchLogin string, token *oauth2Lib.Token) error
 
 	GetUserOverlays(ctx context.Context, userID string) ([]string, error)
 
 	MarkUserTokenPermanentlyFailed(ctx context.Context, userID string, suppressDuration time.Duration) error
 	MarkViewerTokenPermanentlyFailed(ctx context.Context, sessionID string, suppressDuration time.Duration) error
 	MarkYouTubeTokenPermanentlyFailed(ctx context.Context, userID, channelID string, suppressDuration time.Duration) error
+	MarkTwitchLinkTokenPermanentlyFailed(ctx context.Context, userID, twitchLogin string, suppressDuration time.Duration) error
 }
 
 // permanentFailSuppress is the duration pushed onto token_expires_at after a
@@ -208,14 +211,21 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 		return fmt.Errorf("failed to get expiring YouTube tokens: %w", err)
 	}
 
+	twitchLinkTokens, err := m.repo.GetExpiringTwitchLinkTokens(ctx, m.expiryBuffer)
+	if err != nil {
+		return fmt.Errorf("failed to get expiring linked Twitch tokens: %w", err)
+	}
+
 	// Combine all tokens
 	allTokens := append(userTokens, viewerTokens...)
 	allTokens = append(allTokens, youtubeTokens...)
+	allTokens = append(allTokens, twitchLinkTokens...)
 
 	m.logger.Info("Found expiring tokens",
 		zap.Int("user_tokens", len(userTokens)),
 		zap.Int("viewer_tokens", len(viewerTokens)),
 		zap.Int("youtube_tokens", len(youtubeTokens)),
+		zap.Int("twitch_link_tokens", len(twitchLinkTokens)),
 		zap.Int("total", len(allTokens)),
 	)
 
@@ -259,7 +269,7 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 }
 
 // groupByPlatform groups tokens by platform
-func (m *Manager) groupByPlatform(tokens []*repository.ExpiringToken) map[oauth.Platform][] *repository.ExpiringToken {
+func (m *Manager) groupByPlatform(tokens []*repository.ExpiringToken) map[oauth.Platform][]*repository.ExpiringToken {
 	grouped := make(map[oauth.Platform][]*repository.ExpiringToken)
 
 	for _, token := range tokens {
@@ -323,6 +333,8 @@ func (m *Manager) refreshPlatform(ctx context.Context, platform oauth.Platform, 
 			updateErr = m.repo.UpdateViewerTokens(ctx, token.SessionID, newToken)
 		case "youtube_channel":
 			updateErr = m.repo.UpdateYouTubeTokens(ctx, token.ID, token.ChannelID, newToken)
+		case "twitch_link":
+			updateErr = m.repo.UpdateTwitchLinkTokens(ctx, token.ID, token.ChannelID, newToken)
 		default:
 			updateErr = fmt.Errorf("unknown token type: %s", token.TokenType)
 		}
@@ -449,6 +461,8 @@ func (m *Manager) markTokenPermanentlyFailed(ctx context.Context, token *reposit
 		markErr = m.repo.MarkViewerTokenPermanentlyFailed(ctx, token.SessionID, permanentFailSuppress)
 	case "youtube_channel":
 		markErr = m.repo.MarkYouTubeTokenPermanentlyFailed(ctx, token.ID, token.ChannelID, permanentFailSuppress)
+	case "twitch_link":
+		markErr = m.repo.MarkTwitchLinkTokenPermanentlyFailed(ctx, token.ID, token.ChannelID, permanentFailSuppress)
 	default:
 		m.logger.Warn("Unknown token type for permanent-failure marking",
 			zap.String("token_type", token.TokenType),

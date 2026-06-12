@@ -165,6 +165,20 @@ func setupLinkTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 	}
 
 	schema := `
+		CREATE TABLE IF NOT EXISTS twitch_oauth_tokens (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL,
+			twitch_user_id VARCHAR(50) NOT NULL,
+			twitch_login VARCHAR(100) NOT NULL,
+			access_token TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			token_expires_at TIMESTAMP NOT NULL,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			encryption_version INT NOT NULL DEFAULT 1,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			UNIQUE(user_id, twitch_login)
+		);
 		CREATE TABLE IF NOT EXISTS users (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			twitch_id VARCHAR(50) UNIQUE,
@@ -353,5 +367,105 @@ func TestLinkPlatformToUser_TwitchReflowRecordsChatScopes(t *testing.T) {
 	}
 	if got.AccessToken != "twitch-chat-token" {
 		t.Errorf("twitch reflow did not update the primary access token: %q", got.AccessToken)
+	}
+}
+
+// --- linked Twitch credentials (ADR-0016) ---
+
+func TestShouldStoreLinkedTwitchCredentials(t *testing.T) {
+	tests := []struct {
+		name         string
+		authProvider string
+		platform     oauth.Platform
+		isAddSource  bool
+		want         bool
+	}{
+		{"youtube account links twitch via add-source", "youtube", oauth.PlatformTwitch, true, true},
+		{"kick account links twitch via add-source", "kick", oauth.PlatformTwitch, true, true},
+		{"twitch account reflow stores on users row instead", "twitch", oauth.PlatformTwitch, true, false},
+		{"youtube account links youtube", "youtube", oauth.PlatformYouTube, true, false},
+		{"login flow never stores linked credentials", "youtube", oauth.PlatformTwitch, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldStoreLinkedTwitchCredentials(tt.authProvider, tt.platform, tt.isAddSource)
+			if got != tt.want {
+				t.Errorf("shouldStoreLinkedTwitchCredentials(%q, %q, %v) = %v, want %v",
+					tt.authProvider, tt.platform, tt.isAddSource, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStoreTwitchToken_PersistsLinkedCredentials(t *testing.T) {
+	pool, cleanup := setupLinkTestDB(t)
+	defer cleanup()
+
+	_, repo := newLinkTestHandler(t, pool)
+	ctx := context.Background()
+
+	// A YouTube-login account (the Group B case).
+	googleID := "g-987"
+	ytUser := &models.User{
+		GoogleID:       &googleID,
+		AuthProvider:   "youtube",
+		Username:       "youtube_987",
+		DisplayName:    "Tumi",
+		AccessToken:    "google-access",
+		RefreshToken:   "google-refresh",
+		TokenExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := repo.Create(ctx, ytUser); err != nil {
+		t.Fatalf("failed to create youtube user: %v", err)
+	}
+
+	chatScopes := []string{"user:read:chat", "user:bot", "channel:bot"}
+	twitchToken := tokenWithScopes("twitch-linked-token", chatScopes)
+
+	if err := repo.StoreTwitchToken(ctx, ytUser.ID, "tw-555", "BLVTumi", twitchToken, chatScopes); err != nil {
+		t.Fatalf("StoreTwitchToken failed: %v", err)
+	}
+
+	// The partition predicate matches case-insensitively on login with a valid
+	// expiry and the chat scope — exactly what the other services will query.
+	var matches bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM twitch_oauth_tokens t
+			WHERE LOWER(t.twitch_login) = LOWER($1)
+			  AND 'user:read:chat' = ANY(t.granted_scopes)
+			  AND t.token_expires_at > NOW()
+		)`, "blvtumi").Scan(&matches)
+	if err != nil {
+		t.Fatalf("predicate query failed: %v", err)
+	}
+	if !matches {
+		t.Error("stored linked credentials do not satisfy the EventSub partition predicate")
+	}
+
+	// Tokens must be encrypted at rest.
+	var storedAccess string
+	if err := pool.QueryRow(ctx,
+		`SELECT access_token FROM twitch_oauth_tokens WHERE user_id = $1`, ytUser.ID,
+	).Scan(&storedAccess); err != nil {
+		t.Fatalf("failed to read stored token: %v", err)
+	}
+	if storedAccess == "twitch-linked-token" {
+		t.Error("access token stored in plaintext")
+	}
+
+	// Re-linking upserts rather than erroring.
+	newToken := tokenWithScopes("twitch-linked-token-2", chatScopes)
+	if err := repo.StoreTwitchToken(ctx, ytUser.ID, "tw-555", "BLVTumi", newToken, chatScopes); err != nil {
+		t.Fatalf("StoreTwitchToken upsert failed: %v", err)
+	}
+	var rowCount int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM twitch_oauth_tokens WHERE user_id = $1`, ytUser.ID,
+	).Scan(&rowCount); err != nil {
+		t.Fatalf("failed to count rows: %v", err)
+	}
+	if rowCount != 1 {
+		t.Errorf("expected 1 row after upsert, got %d", rowCount)
 	}
 }

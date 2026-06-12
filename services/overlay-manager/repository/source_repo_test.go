@@ -91,14 +91,30 @@ func setupSourceTestDatabase(t *testing.T) (*SourceRepository, func()) {
 		);
 
 		-- Minimal users table (owned by auth-service; shared DB in prod). Required so the
-		-- chat_via_eventsub subquery in ListByOverlayID resolves. No rows are inserted by
-		-- these tests, so chat_via_eventsub is false for every source here.
+		-- chat_via_eventsub subquery in ListByOverlayID resolves.
 		CREATE TABLE IF NOT EXISTS users (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			username VARCHAR(50) NOT NULL,
 			auth_provider VARCHAR(20) NOT NULL DEFAULT 'twitch',
 			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
 			token_expires_at TIMESTAMP NOT NULL DEFAULT NOW()
+		);
+
+		-- Linked Twitch credentials (ADR-0016, migration 056): lets non-Twitch-login
+		-- accounts satisfy the chat_via_eventsub predicate for their channel.
+		CREATE TABLE IF NOT EXISTS twitch_oauth_tokens (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL,
+			twitch_user_id VARCHAR(50) NOT NULL,
+			twitch_login VARCHAR(100) NOT NULL,
+			access_token TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			token_expires_at TIMESTAMP NOT NULL,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			encryption_version INT NOT NULL DEFAULT 1,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			UNIQUE(user_id, twitch_login)
 		);
 	`)
 	require.NoError(t, err)
@@ -311,4 +327,53 @@ func TestListByOverlayID_MixedSources(t *testing.T) {
 			assert.Equal(t, "expired", *s.ShareStatus)
 		}
 	}
+}
+
+// TestListByOverlayID_ChatViaEventSub_LinkedCredentials covers the ADR-0016
+// path: a YouTube/Kick-login account has no users row matching its Twitch
+// channel, but a twitch_oauth_tokens row (written by the Twitch add-source
+// link flow) must flip chat_via_eventsub to true — and the frontend badge
+// with it.
+func TestListByOverlayID_ChatViaEventSub_LinkedCredentials(t *testing.T) {
+	repo, cleanup := setupSourceTestDatabase(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	overlayID := createTestOverlay(t, repo)
+	source := &models.ChatSource{
+		OverlayID:   overlayID,
+		Platform:    "twitch",
+		ChannelID:   "blvtumi",
+		ChannelName: "BLVTumi",
+		Config:      map[string]interface{}{},
+	}
+	require.NoError(t, repo.Create(ctx, source))
+
+	// No users row, no linked credentials: stays on IRC.
+	sources, err := repo.ListByOverlayID(ctx, overlayID)
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	require.False(t, sources[0].ChatViaEventSub, "no credentials anywhere — must not claim EventSub")
+
+	// Linked credentials with chat scope and valid expiry (login case differs).
+	_, err = repo.pool.Exec(ctx, `
+		INSERT INTO twitch_oauth_tokens
+			(user_id, twitch_user_id, twitch_login, access_token, refresh_token, token_expires_at, granted_scopes)
+		VALUES (gen_random_uuid(), '555', 'BLVTumi', 'enc-access', 'enc-refresh',
+		        NOW() + INTERVAL '2 hours', ARRAY['user:read:chat','user:bot','channel:bot'])
+	`)
+	require.NoError(t, err)
+
+	sources, err = repo.ListByOverlayID(ctx, overlayID)
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	require.True(t, sources[0].ChatViaEventSub, "linked twitch_oauth_tokens row must satisfy the predicate")
+
+	// Expired linked credentials must NOT satisfy the predicate.
+	_, err = repo.pool.Exec(ctx, `UPDATE twitch_oauth_tokens SET token_expires_at = NOW() - INTERVAL '1 hour'`)
+	require.NoError(t, err)
+
+	sources, err = repo.ListByOverlayID(ctx, overlayID)
+	require.NoError(t, err)
+	require.False(t, sources[0].ChatViaEventSub, "expired linked credentials must not claim EventSub")
 }

@@ -80,6 +80,23 @@ const QueryGetExpiringYouTubeTokens = `
 	LIMIT 100
 `
 
+// QueryGetExpiringTwitchLinkTokens selects expiring linked Twitch credentials
+// (twitch_oauth_tokens, ADR-0016) — the chat grants of accounts whose login
+// provider is not Twitch. Same bounded 48-hour recovery window as the other
+// token sources. Exported for test assertions.
+const QueryGetExpiringTwitchLinkTokens = `
+	SELECT user_id, twitch_login, access_token, refresh_token, token_expires_at
+	FROM twitch_oauth_tokens
+	WHERE (
+	    (token_expires_at < $1 AND token_expires_at > NOW())
+	    OR (token_expires_at BETWEEN NOW() - INTERVAL '48 hours' AND NOW())
+	  )
+	  AND refresh_token IS NOT NULL
+	  AND refresh_token != ''
+	ORDER BY token_expires_at ASC
+	LIMIT 100
+`
+
 // ExpiringToken represents a token that needs to be refreshed
 type ExpiringToken struct {
 	// Common fields
@@ -92,9 +109,9 @@ type ExpiringToken struct {
 	ExpiresAt    time.Time
 
 	// Type-specific fields
-	TokenType    string // "user", "viewer", "youtube_channel"
-	ChannelID    string // For YouTube channel tokens
-	SessionID    string // For viewer sessions
+	TokenType string // "user", "viewer", "youtube_channel", "twitch_link"
+	ChannelID string // For YouTube channel tokens (channel_id) and linked Twitch credentials (twitch_login)
+	SessionID string // For viewer sessions
 }
 
 // TokenRepository handles database operations for OAuth tokens
@@ -489,6 +506,122 @@ func (r *TokenRepository) MarkYouTubeTokenPermanentlyFailed(ctx context.Context,
 	}
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("YouTube token not found: user_id=%s, channel_id=%s", userID, channelID)
+	}
+	return nil
+}
+
+// GetExpiringTwitchLinkTokens returns linked Twitch credentials (ADR-0016,
+// twitch_oauth_tokens) expiring within the specified duration. These rows
+// carry the EventSub chat grant of accounts whose login provider is not
+// Twitch; letting them lapse silently demotes the channel to the IRC listener.
+func (r *TokenRepository) GetExpiringTwitchLinkTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
+	expiryThreshold := time.Now().Add(expiresWithin)
+	rows, err := r.db.Query(ctx, QueryGetExpiringTwitchLinkTokens, expiryThreshold)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query expiring linked Twitch tokens: %w", err)
+	}
+	defer rows.Close()
+
+	var tokens []*ExpiringToken
+	for rows.Next() {
+		var token ExpiringToken
+		var encAccessToken, encRefreshToken string
+
+		err := rows.Scan(
+			&token.ID,        // user_id
+			&token.ChannelID, // twitch_login
+			&encAccessToken,
+			&encRefreshToken,
+			&token.ExpiresAt,
+		)
+		if err != nil {
+			r.logger.Warn("Failed to scan linked Twitch token row", zap.Error(err))
+			continue
+		}
+
+		token.AccessToken, err = r.decryptToken(encAccessToken)
+		if err != nil {
+			r.logger.Warn("Failed to decrypt linked Twitch access token",
+				zap.String("user_id", token.ID),
+				zap.String("twitch_login", token.ChannelID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		token.RefreshToken, err = r.decryptToken(encRefreshToken)
+		if err != nil {
+			r.logger.Warn("Failed to decrypt linked Twitch refresh token",
+				zap.String("user_id", token.ID),
+				zap.String("twitch_login", token.ChannelID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		token.Username = token.ChannelID
+		token.TokenType = "twitch_link"
+		token.Platform = "twitch"
+		tokens = append(tokens, &token)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating linked Twitch token rows: %w", err)
+	}
+
+	return tokens, nil
+}
+
+// UpdateTwitchLinkTokens updates a linked Twitch credential after refresh.
+func (r *TokenRepository) UpdateTwitchLinkTokens(ctx context.Context, userID, twitchLogin string, token *oauth2.Token) error {
+	encAccessToken, err := r.encryptToken(token.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+
+	encRefreshToken, err := r.encryptToken(token.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt refresh token: %w", err)
+	}
+
+	query := `
+		UPDATE twitch_oauth_tokens
+		SET access_token = $3,
+		    refresh_token = $4,
+		    token_expires_at = $5,
+		    updated_at = $6
+		WHERE user_id = $1 AND twitch_login = $2
+	`
+
+	result, err := r.db.Exec(ctx, query, userID, twitchLogin, encAccessToken, encRefreshToken, token.Expiry, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to update linked Twitch tokens: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("linked Twitch token not found: user_id=%s, twitch_login=%s", userID, twitchLogin)
+	}
+
+	return nil
+}
+
+// MarkTwitchLinkTokenPermanentlyFailed pushes the linked Twitch credential's
+// expiry forward by suppressDuration, removing it from future refresh batches.
+// The channel then falls back to the IRC listener until the user re-consents.
+func (r *TokenRepository) MarkTwitchLinkTokenPermanentlyFailed(ctx context.Context, userID, twitchLogin string, suppressDuration time.Duration) error {
+	query := `
+		UPDATE twitch_oauth_tokens
+		SET token_expires_at = NOW() + $3::interval,
+		    updated_at = NOW()
+		WHERE user_id = $1 AND twitch_login = $2
+	`
+	interval := fmt.Sprintf("%d seconds", int(suppressDuration.Seconds()))
+	result, err := r.db.Exec(ctx, query, userID, twitchLogin, interval)
+	if err != nil {
+		return fmt.Errorf("failed to mark linked Twitch token permanently failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("linked Twitch token not found: user_id=%s, twitch_login=%s", userID, twitchLogin)
 	}
 	return nil
 }

@@ -128,18 +128,29 @@ func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string
 	// chat_via_eventsub mirrors the IRC/EventSub partition predicate (see
 	// twitch-eventsub-listener/channels/manager.go and twitch-listener/channels/repository.go):
 	// a Twitch source is read via EventSub when its channel owner granted user:read:chat
-	// and still has a valid token. The frontend uses it to show a badge / reconnect CTA.
+	// and still has a valid token — either on their Twitch-login users row, or via
+	// linked Twitch credentials in twitch_oauth_tokens (ADR-0016: YouTube/Kick-login
+	// accounts that completed the Twitch add-source consent). The frontend uses it to
+	// show a badge / reconnect CTA.
 	query := `
 		SELECT ocs.id, ocs.overlay_id, ocs.platform, ocs.channel_id, ocs.channel_name,
 		       ocs.channel_handle, ocs.auth_required, ocs.config, ocs.is_active,
 		       ocs.created_at, ocs.updated_at,
 		       sr.status AS share_status,
-		       (ocs.platform = 'twitch' AND EXISTS (
-		           SELECT 1 FROM users u
-		           WHERE LOWER(u.username) = LOWER(ocs.channel_id)
-		             AND u.auth_provider = 'twitch'
-		             AND 'user:read:chat' = ANY(u.granted_scopes)
-		             AND u.token_expires_at > NOW()
+		       (ocs.platform = 'twitch' AND (
+		           EXISTS (
+		               SELECT 1 FROM users u
+		               WHERE LOWER(u.username) = LOWER(ocs.channel_id)
+		                 AND u.auth_provider = 'twitch'
+		                 AND 'user:read:chat' = ANY(u.granted_scopes)
+		                 AND u.token_expires_at > NOW()
+		           )
+		           OR EXISTS (
+		               SELECT 1 FROM twitch_oauth_tokens t
+		               WHERE LOWER(t.twitch_login) = LOWER(ocs.channel_id)
+		                 AND 'user:read:chat' = ANY(t.granted_scopes)
+		                 AND t.token_expires_at > NOW()
+		           )
 		       )) AS chat_via_eventsub
 		FROM overlay_chat_sources ocs
 		LEFT JOIN share_requests sr
