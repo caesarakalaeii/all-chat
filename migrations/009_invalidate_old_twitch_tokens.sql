@@ -5,16 +5,21 @@
 --   - bits:read (for cheer events)
 --   - moderator:read:followers (for follow events)
 --
--- Old tokens don't have these scopes, so we expire them to force users to re-authenticate
--- with the updated scope list from auth-service.
-
--- Expire all Twitch tokens that were created before this migration
--- This forces users to re-authenticate and get tokens with the new scopes
-UPDATE users
-SET token_expires_at = NOW()
-WHERE auth_provider = 'twitch'
-  AND token_expires_at > NOW();  -- Only expire tokens that are currently valid
-
--- Log the number of tokens expired
--- (PostgreSQL doesn't have a built-in way to return this in a migration,
---  but the application logs will show users needing to re-auth)
+-- NEUTERED 2026-06-13: this migration originally ran
+--
+--     UPDATE users SET token_expires_at = NOW()
+--     WHERE auth_provider = 'twitch' AND token_expires_at > NOW();
+--
+-- as a ONE-TIME forced re-auth. But the migration runner
+-- (scripts/run-migrations.sh) re-executes every migration on every pod
+-- start, so this statement mass-expired ALL valid Twitch tokens on EVERY
+-- deploy. Each deploy knocked every EventSub-partitioned channel back to
+-- the IRC listener until token-refresh-service re-validated the tokens
+-- (LIMIT 100 per 5-minute sweep), and any user whose refresh failed during
+-- the churn was marked permanently failed and forced to re-authenticate.
+--
+-- The one-time re-auth this was written for completed in January 2026.
+-- The statement must never run again. Guarded by
+-- services/auth-service/repository/migrations_rerun_test.go, which applies
+-- the full migration set twice and asserts a valid Twitch token survives.
+SELECT 1;
