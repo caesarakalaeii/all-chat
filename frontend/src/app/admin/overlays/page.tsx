@@ -80,6 +80,18 @@ export default function OverlaysPage() {
         const data = await response.json()
         setOverlays(data)
         setLoading(false)
+
+        // Deep-link: auto-select an overlay passed via ?overlay=<id>
+        // (e.g. from the Sources page "View" action).
+        const targetId = new URLSearchParams(window.location.search).get('overlay')
+        if (targetId) {
+          const match = (data as Overlay[]).find((o) => o.id === targetId)
+          if (match) {
+            setSelectedOverlay(match)
+            // Surface the target in the (potentially long) list.
+            setSearchTerm(match.name)
+          }
+        }
       } catch (err) {
         console.error('Failed to load overlays:', err)
         setError('Failed to load overlays')

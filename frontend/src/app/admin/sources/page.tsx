@@ -284,7 +284,7 @@ export default function SourcesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <Link
-                        href="/admin/overlays"
+                        href={`/admin/overlays?overlay=${source.overlay_id}`}
                         className="text-sm text-text-sub transition-colors hover:text-text"
                       >
                         {source.overlay_name}
@@ -306,7 +306,7 @@ export default function SourcesPage() {
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <Link
-                        href="/admin/overlays"
+                        href={`/admin/overlays?overlay=${source.overlay_id}`}
                         className="font-medium text-text-sub transition-colors hover:text-text"
                       >
                         View
@@ -339,7 +339,7 @@ export default function SourcesPage() {
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-sub">
                   <Link
-                    href="/admin/overlays"
+                    href={`/admin/overlays?overlay=${source.overlay_id}`}
                     className="truncate transition-colors hover:text-text"
                   >
                     {source.overlay_name}
