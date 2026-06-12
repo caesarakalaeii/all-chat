@@ -269,6 +269,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0016: Per-Link Twitch Credentials for Non-Twitch-Login Accounts
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-13
+**Problem**: The EventSub partition predicate only matched chat grants stored on Twitch-login users rows, so YouTube/Kick-login streamers who completed the Twitch add-source consent had their grant silently discarded — their channels were stuck on the IRC listener with no self-service fix
+**Decision**: Persist add-source Twitch credentials per link in `twitch_oauth_tokens` (keyed by twitch_login, encrypted, scope-recorded); extend the partition predicate (overlay-manager), the EventSub credential lookup (LATERAL union preferring valid+scoped), and token-refresh (token type `twitch_link`)
+**Impact**: "Connect Twitch" works identically for every account type; linked credentials fail back to IRC with ADR-0015 semantics; no double-refresh for Twitch-login accounts
+**→ Read**: [0016-linked-twitch-credentials.md](./0016-linked-twitch-credentials.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

@@ -374,6 +374,58 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelI
 	return nil
 }
 
+// StoreTwitchToken persists Twitch credentials obtained via the add-source
+// link flow into twitch_oauth_tokens, keyed by Twitch login (ADR-0016). This
+// is how a non-Twitch-login account (YouTube/Kick signup) gets its channel's
+// EventSub chat grant into a place the partition predicate can see.
+func (r *UserRepository) StoreTwitchToken(ctx context.Context, userID, twitchUserID, twitchLogin string, token *oauth2.Token, grantedScopes []string) error {
+	if twitchLogin == "" {
+		return fmt.Errorf("twitch_login is required for storing linked Twitch tokens")
+	}
+
+	if !token.Expiry.IsZero() && token.Expiry.Before(time.Now().Add(-5*time.Minute)) {
+		return fmt.Errorf("refusing to store expired Twitch token (expiry: %s)", token.Expiry.Format(time.RFC3339))
+	}
+
+	accessToken, err := r.encryptToken(token.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+	refreshToken, err := r.encryptToken(token.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt refresh token: %w", err)
+	}
+
+	if grantedScopes == nil {
+		grantedScopes = []string{}
+	}
+
+	query := `
+		INSERT INTO twitch_oauth_tokens (
+			user_id, twitch_user_id, twitch_login, access_token, refresh_token,
+			token_expires_at, granted_scopes, encryption_version, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, NOW(), NOW())
+		ON CONFLICT (user_id, twitch_login)
+		DO UPDATE SET
+			twitch_user_id = EXCLUDED.twitch_user_id,
+			access_token = EXCLUDED.access_token,
+			refresh_token = EXCLUDED.refresh_token,
+			token_expires_at = EXCLUDED.token_expires_at,
+			granted_scopes = EXCLUDED.granted_scopes,
+			encryption_version = EXCLUDED.encryption_version,
+			updated_at = NOW()
+	`
+
+	if _, err := r.db.Exec(ctx, query,
+		userID, twitchUserID, twitchLogin, accessToken, refreshToken,
+		token.Expiry, grantedScopes,
+	); err != nil {
+		return fmt.Errorf("failed to store linked Twitch token: %w", err)
+	}
+
+	return nil
+}
+
 func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 	user := &models.User{}
 	var encryptedAccessToken, encryptedRefreshToken string

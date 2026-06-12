@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/token-refresh-service/repository"
+	"golang.org/x/oauth2"
 )
 
 // TestRecoveryWindowSQL verifies that the SQL constant used in GetExpiring* queries
@@ -119,4 +120,26 @@ func containsHelper(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// --- linked Twitch credentials (ADR-0016, twitch_oauth_tokens) ---
+
+func TestGetExpiringTwitchLinkTokens_QueryHasBoundedRecoveryWindow(t *testing.T) {
+	q := repository.QueryGetExpiringTwitchLinkTokens
+	assertNoBoundedExpiredClause(t, "GetExpiringTwitchLinkTokens", q)
+	assertBoundedRecoveryWindow(t, "GetExpiringTwitchLinkTokens", q)
+}
+
+func TestUpdateTwitchLinkTokens_MethodExists(t *testing.T) {
+	type updater interface {
+		UpdateTwitchLinkTokens(ctx context.Context, userID, twitchLogin string, token *oauth2.Token) error
+	}
+	var _ updater = (*repository.TokenRepository)(nil)
+}
+
+func TestMarkTwitchLinkTokenPermanentlyFailed_MethodExists(t *testing.T) {
+	type permanentFailMarker interface {
+		MarkTwitchLinkTokenPermanentlyFailed(ctx context.Context, userID, twitchLogin string, suppressDuration time.Duration) error
+	}
+	var _ permanentFailMarker = (*repository.TokenRepository)(nil)
 }

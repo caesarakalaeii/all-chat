@@ -357,6 +357,52 @@ func (m *Manager) Stop() {
 	m.logger.Info("Channel manager stopped")
 }
 
+// QueryActiveTwitchChannelCredentials selects every active Twitch source with the best
+// available OAuth credential for its channel. has_chat_scope marks whether the owner
+// granted user:read:chat — it gates the channel.chat.message subscription and is the
+// EventSub side of the IRC↔EventSub partition (see ADR-0015; the IRC exclusion is
+// claim-based in twitch-listener).
+//
+// Credentials come from two places (ADR-0016): the channel owner's Twitch-login users
+// row, or linked Twitch credentials in twitch_oauth_tokens (YouTube/Kick-login accounts
+// that completed the Twitch add-source consent). The LATERAL picks ONE credential per
+// channel, preferring whichever is chat-scoped AND unexpired, with the users row
+// breaking ties. Exported for test assertions.
+const QueryActiveTwitchChannelCredentials = `
+	SELECT
+		ocs.id,
+		ocs.channel_id,
+		ocs.overlay_id,
+		cred.access_token,
+		cred.token_expires_at,
+		COALESCE(cred.has_chat_scope, false) AS has_chat_scope
+	FROM overlay_chat_sources ocs
+	JOIN overlays o ON ocs.overlay_id = o.id
+	LEFT JOIN LATERAL (
+		SELECT c.access_token, c.token_expires_at, c.has_chat_scope
+		FROM (
+			SELECT u.access_token, u.token_expires_at,
+			       COALESCE('user:read:chat' = ANY(u.granted_scopes), false) AS has_chat_scope,
+			       1 AS pri
+			FROM users u
+			WHERE LOWER(u.username) = LOWER(ocs.channel_id)
+			  AND u.auth_provider = 'twitch'
+			UNION ALL
+			SELECT t.access_token, t.token_expires_at,
+			       'user:read:chat' = ANY(t.granted_scopes) AS has_chat_scope,
+			       2 AS pri
+			FROM twitch_oauth_tokens t
+			WHERE LOWER(t.twitch_login) = LOWER(ocs.channel_id)
+		) c
+		ORDER BY (c.has_chat_scope AND c.token_expires_at > NOW()) DESC, c.pri ASC
+		LIMIT 1
+	) cred ON TRUE
+	WHERE ocs.platform = 'twitch'
+	  AND ocs.is_active = true
+	  AND o.is_active = true
+	ORDER BY ocs.channel_id
+`
+
 // SyncChannels queries the database for active Twitch channels and creates/removes subscriptions
 func (m *Manager) SyncChannels(ctx context.Context) error {
 	// Demand snapshot: when non-nil we process only sources whose overlay is currently
@@ -364,30 +410,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	// subscriptions. nil means "no demand info yet" and fails open (process everything).
 	demanded := m.snapshotDemand()
 
-	// Query active Twitch sources joined with users for OAuth tokens. has_chat_scope marks
-	// whether the owner granted user:read:chat — it gates the channel.chat.message
-	// subscription and is the EventSub side of the IRC↔EventSub partition: twitch-listener
-	// (IRC) excludes exactly the channels where this predicate is true (byte-identical
-	// NOT EXISTS in services/twitch-listener/channels/repository.go), so a chat-scoped channel
-	// is read by EventSub and a non-scoped one by IRC — never both.
-	query := `
-		SELECT DISTINCT
-			ocs.id,
-			ocs.channel_id,
-			ocs.overlay_id,
-			u.access_token,
-			u.token_expires_at,
-			COALESCE('user:read:chat' = ANY(u.granted_scopes), false) AS has_chat_scope
-		FROM overlay_chat_sources ocs
-		JOIN overlays o ON ocs.overlay_id = o.id
-		LEFT JOIN users u ON LOWER(u.username) = LOWER(ocs.channel_id) AND u.auth_provider = 'twitch'
-		WHERE ocs.platform = 'twitch'
-		  AND ocs.is_active = true
-		  AND o.is_active = true
-		ORDER BY ocs.channel_id
-	`
-
-	rows, err := m.db.Query(ctx, query)
+	rows, err := m.db.Query(ctx, QueryActiveTwitchChannelCredentials)
 	if err != nil {
 		return fmt.Errorf("failed to query active channels: %w", err)
 	}

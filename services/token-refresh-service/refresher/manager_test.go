@@ -58,9 +58,12 @@ func (f *fakeProvider) GetPlatform() authOAuth.Platform { return f.platform }
 type fakeRepo struct {
 	mu sync.Mutex
 
-	markedUsers   []markedUserCall
-	markedViewers []markedViewerCall
-	markedYT      []markedYTCall
+	markedUsers       []markedUserCall
+	markedViewers     []markedViewerCall
+	markedYT          []markedYTCall
+	markedTwitchLinks []markedTwitchLinkCall
+
+	updatedTwitchLinks []updatedTwitchLinkCall
 
 	// If non-nil, UpdateUserTokens / UpdateViewerTokens / UpdateYouTubeTokens return this.
 	updateErr error
@@ -78,6 +81,15 @@ type markedYTCall struct {
 	userID           string
 	channelID        string
 	suppressDuration time.Duration
+}
+type markedTwitchLinkCall struct {
+	userID           string
+	twitchLogin      string
+	suppressDuration time.Duration
+}
+type updatedTwitchLinkCall struct {
+	userID      string
+	twitchLogin string
 }
 
 func (r *fakeRepo) GetExpiringUserTokens(_ context.Context, _ time.Duration) ([]*repository.ExpiringToken, error) {
@@ -118,6 +130,21 @@ func (r *fakeRepo) MarkYouTubeTokenPermanentlyFailed(_ context.Context, userID, 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.markedYT = append(r.markedYT, markedYTCall{userID: userID, channelID: channelID, suppressDuration: d})
+	return nil
+}
+func (r *fakeRepo) GetExpiringTwitchLinkTokens(_ context.Context, _ time.Duration) ([]*repository.ExpiringToken, error) {
+	return nil, nil
+}
+func (r *fakeRepo) UpdateTwitchLinkTokens(_ context.Context, userID, twitchLogin string, _ *oauth2.Token) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.updatedTwitchLinks = append(r.updatedTwitchLinks, updatedTwitchLinkCall{userID: userID, twitchLogin: twitchLogin})
+	return r.updateErr
+}
+func (r *fakeRepo) MarkTwitchLinkTokenPermanentlyFailed(_ context.Context, userID, twitchLogin string, d time.Duration) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.markedTwitchLinks = append(r.markedTwitchLinks, markedTwitchLinkCall{userID: userID, twitchLogin: twitchLogin, suppressDuration: d})
 	return nil
 }
 
@@ -371,5 +398,86 @@ func TestRefreshPlatform_SuccessfulRefresh_DoesNotMarkToken(t *testing.T) {
 
 	if markedUsers > 0 {
 		t.Errorf("expected no permanent-failure marks for successful refresh, got %d", markedUsers)
+	}
+}
+
+// --- linked Twitch credentials (ADR-0016, token_type "twitch_link") ---
+
+// TestRefreshPlatform_TwitchLinkToken_UpdatesLinkedTable verifies the success
+// path: a twitch_oauth_tokens row flows through the standard refresh loop and
+// lands in UpdateTwitchLinkTokens, keyed by (user_id, twitch_login).
+func TestRefreshPlatform_TwitchLinkToken_UpdatesLinkedTable(t *testing.T) {
+	repo := &fakeRepo{}
+	provider := &fakeProvider{
+		platform: authOAuth.PlatformTwitch,
+		token:    &oauth2.Token{AccessToken: "fresh", RefreshToken: "fresh-refresh", Expiry: time.Now().Add(4 * time.Hour)},
+	}
+	providers := map[authOAuth.Platform]authOAuth.OAuthProvider{
+		authOAuth.PlatformTwitch: provider,
+	}
+	mgr := newTestManager(repo, providers)
+
+	token := &repository.ExpiringToken{
+		ID:           "user-yt-1",
+		Platform:     "twitch",
+		Username:     "blvtumi",
+		ChannelID:    "blvtumi",
+		TokenType:    "twitch_link",
+		RefreshToken: "old-refresh",
+		ExpiresAt:    time.Now().Add(10 * time.Minute),
+	}
+
+	mgr.ExposedRefreshPlatform(context.Background(), authOAuth.PlatformTwitch, []*repository.ExpiringToken{token})
+
+	repo.mu.Lock()
+	updated := repo.updatedTwitchLinks
+	repo.mu.Unlock()
+
+	if len(updated) != 1 {
+		t.Fatalf("expected 1 UpdateTwitchLinkTokens call, got %d", len(updated))
+	}
+	if updated[0].userID != "user-yt-1" || updated[0].twitchLogin != "blvtumi" {
+		t.Errorf("expected (user-yt-1, blvtumi), got (%s, %s)", updated[0].userID, updated[0].twitchLogin)
+	}
+}
+
+// TestRefreshPlatform_NonRetryableError_MarksTwitchLinkToken verifies a dead
+// refresh token suppresses the twitch_oauth_tokens row instead of retrying
+// forever — the channel then falls back to the IRC listener.
+func TestRefreshPlatform_NonRetryableError_MarksTwitchLinkToken(t *testing.T) {
+	repo := &fakeRepo{}
+	provider := &fakeProvider{
+		platform: authOAuth.PlatformTwitch,
+		err:      errors.New("invalid_grant: token has been revoked"),
+	}
+	providers := map[authOAuth.Platform]authOAuth.OAuthProvider{
+		authOAuth.PlatformTwitch: provider,
+	}
+	mgr := newTestManager(repo, providers)
+
+	token := &repository.ExpiringToken{
+		ID:           "user-yt-2",
+		Platform:     "twitch",
+		Username:     "k72gd",
+		ChannelID:    "k72gd",
+		TokenType:    "twitch_link",
+		RefreshToken: "dead-refresh",
+		ExpiresAt:    time.Now().Add(-1 * time.Hour),
+	}
+
+	mgr.ExposedRefreshPlatform(context.Background(), authOAuth.PlatformTwitch, []*repository.ExpiringToken{token})
+
+	repo.mu.Lock()
+	marked := repo.markedTwitchLinks
+	repo.mu.Unlock()
+
+	if len(marked) != 1 {
+		t.Fatalf("expected 1 MarkTwitchLinkTokenPermanentlyFailed call, got %d", len(marked))
+	}
+	if marked[0].userID != "user-yt-2" || marked[0].twitchLogin != "k72gd" {
+		t.Errorf("expected (user-yt-2, k72gd), got (%s, %s)", marked[0].userID, marked[0].twitchLogin)
+	}
+	if marked[0].suppressDuration <= 0 {
+		t.Errorf("expected positive suppress duration, got %v", marked[0].suppressDuration)
 	}
 }

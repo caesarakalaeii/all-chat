@@ -669,6 +669,28 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				)
 			}
 		}
+
+		// Persist linked Twitch credentials for non-Twitch-login accounts so
+		// their channel can flip to the EventSub listener (ADR-0016). The
+		// partition predicate and the EventSub listener match this table by
+		// twitch_login; token-refresh-service keeps it fresh.
+		if shouldStoreLinkedTwitchCredentials(user.AuthProvider, platform, oauthState.IsAddSource()) {
+			scopes := oauth.ExtractGrantedScopes(token)
+			if err := h.userRepo.StoreTwitchToken(c.Request.Context(),
+				user.ID, platformUser.GetID(), platformUser.GetUsername(), token, scopes); err != nil {
+				h.logger.Warn("Failed to store linked Twitch credentials",
+					zap.String("user_id", user.ID),
+					zap.String("twitch_login", platformUser.GetUsername()),
+					zap.Error(err),
+				)
+			} else {
+				h.logger.Info("Stored linked Twitch credentials",
+					zap.String("user_id", user.ID),
+					zap.String("twitch_login", platformUser.GetUsername()),
+					zap.Strings("scopes", scopes),
+				)
+			}
+		}
 	}
 }
 
@@ -901,6 +923,18 @@ func linkMayReplacePrimaryCredentials(authProvider string, platform oauth.Platfo
 		return false
 	}
 	return true
+}
+
+// shouldStoreLinkedTwitchCredentials decides whether a Twitch consent must be
+// persisted to twitch_oauth_tokens (ADR-0016). That table exists for accounts
+// whose login provider is NOT Twitch (YouTube/Kick signups): their users row
+// can never satisfy the IRC↔EventSub partition predicate (it matches
+// username + auth_provider='twitch'), so the per-link table is the only place
+// their channel's chat grant can live. Twitch-login accounts keep their grant
+// on the users row (linkPlatformToUser reflow) — storing it twice would have
+// token-refresh racing two copies of the same refresh token.
+func shouldStoreLinkedTwitchCredentials(authProvider string, platform oauth.Platform, isAddSource bool) bool {
+	return platform == oauth.PlatformTwitch && isAddSource && authProvider != "twitch"
 }
 
 // linkPlatformToUser links a new platform to an existing user account
