@@ -41,7 +41,6 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toastManager } from '@/lib/toast';
-import { AdminNav } from '@/components/AdminNav';
 
 interface CatalogEntry {
   id: string;
@@ -162,7 +161,6 @@ export default function AdminCosmeticsPage() {
 
   return (
     <div className="min-h-screen bg-bg">
-      <AdminNav />
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-text">Cosmetics Catalog</h1>

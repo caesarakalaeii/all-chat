@@ -252,7 +252,9 @@ export default function SourcesPage() {
           ))}
         </Card>
       ) : (
-        <Card className="overflow-hidden">
+        <>
+          {/* Desktop table */}
+          <Card className="hidden overflow-hidden md:block">
           <div className="border-b border-border px-4 py-5">
             <h3 className="text-base font-medium text-text">
               All Sources ({filteredSources.length})
@@ -315,7 +317,48 @@ export default function SourcesPage() {
               </tbody>
             </table>
           </div>
-        </Card>
+          </Card>
+
+          {/* Mobile card list */}
+          <div className="space-y-3 md:hidden">
+            <h3 className="text-sm font-medium text-text-sub">
+              All Sources ({filteredSources.length})
+            </h3>
+            {filteredSources.map((source) => (
+              <Card key={source.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-text">
+                      {source.channel_name}
+                    </div>
+                    <div className="truncate font-mono text-xs text-text-sub">
+                      {source.channel_id}
+                    </div>
+                  </div>
+                  <PlatformBadge platform={source.platform as Platform} size="sm" />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-sub">
+                  <Link
+                    href="/admin/overlays"
+                    className="truncate transition-colors hover:text-text"
+                  >
+                    {source.overlay_name}
+                  </Link>
+                  <span>{new Date(source.created_at).toLocaleDateString()}</span>
+                  {source.is_active ? (
+                    <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 font-medium text-kick">
+                      Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-badge-bg px-2 py-0.5 font-medium text-text-dim">
+                      Inactive
+                    </span>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

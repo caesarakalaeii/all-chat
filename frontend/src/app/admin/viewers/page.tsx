@@ -165,6 +165,52 @@ export default function AdminViewersPage() {
   const activeCount = viewers.filter((v) => !v.is_banned).length
   const premiumCount = viewers.filter((v) => v.is_premium).length
 
+  // Interactive controls shared between the desktop table and the mobile card list.
+  // These render only triggers; the dialogs themselves are hosted once at page level
+  // (below) so they aren't duplicated across the table/card breakpoints.
+  function renderPremiumControl(viewer: ViewerSession) {
+    if (!viewer.viewer_id) {
+      return <span className="text-xs text-text-dim">—</span>
+    }
+    return (
+      <button
+        className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+          viewer.is_premium
+            ? 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+            : 'bg-surface-2 text-text-dim hover:bg-surface-2/80'
+        }`}
+        onClick={() => setPremiumDialogViewer(viewer)}
+      >
+        {viewer.is_premium ? 'Premium' : 'Free'}
+      </button>
+    )
+  }
+
+  function renderActionControl(viewer: ViewerSession) {
+    if (viewer.is_banned) {
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={banningId === viewer.id}
+          onClick={() => setUnbanDialogViewer(viewer)}
+        >
+          {banningId === viewer.id ? 'Unbanning...' : 'Unban'}
+        </Button>
+      )
+    }
+    return (
+      <Button
+        variant="destructive"
+        size="sm"
+        disabled={banningId === viewer.id}
+        onClick={() => handleBanClick(viewer)}
+      >
+        Ban
+      </Button>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
@@ -176,7 +222,7 @@ export default function AdminViewersPage() {
       </div>
 
       {/* Stats */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card className="p-4">
           <div className="text-xs text-text-sub">Total Viewers</div>
           <div className="text-2xl font-bold text-text">{viewers.length}</div>
@@ -203,7 +249,7 @@ export default function AdminViewersPage() {
           ))}
         </Card>
       ) : (
-        <Card className="overflow-hidden">
+        <Card className="hidden overflow-hidden md:block">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-surface-2">
@@ -246,58 +292,7 @@ export default function AdminViewersPage() {
                       <td className="px-4 py-3 text-sm text-text-sub">
                         {viewer.message_count_1min}/{viewer.message_count_1hour}
                       </td>
-                      <td className="px-4 py-3">
-                        {viewer.viewer_id ? (
-                          <Dialog.Root
-                            open={premiumDialogViewer?.id === viewer.id}
-                            onOpenChange={(open) => {
-                              if (!open) setPremiumDialogViewer(null)
-                            }}
-                          >
-                            <Dialog.Trigger
-                              render={
-                                <button
-                                  className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors ${
-                                    viewer.is_premium
-                                      ? 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
-                                      : 'bg-surface-2 text-text-dim hover:bg-surface-2/80'
-                                  }`}
-                                  onClick={() => setPremiumDialogViewer(viewer)}
-                                >
-                                  {viewer.is_premium ? 'Premium' : 'Free'}
-                                </button>
-                              }
-                            />
-                            <Dialog.Content showCloseButton={false}>
-                              <Dialog.Title>
-                                {viewer.is_premium ? 'Revoke' : 'Grant'} premium for &ldquo;
-                                {viewer.username}&rdquo;?
-                              </Dialog.Title>
-                              <Dialog.Description>
-                                {viewer.is_premium
-                                  ? 'They will lose access to gradients, avatar frames, and flairs.'
-                                  : 'They will be able to use gradients, avatar frames, and flairs.'}
-                              </Dialog.Description>
-                              <div className="mt-6 flex justify-end gap-3">
-                                <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
-                                <Button
-                                  variant="default"
-                                  disabled={premiumLoading}
-                                  onClick={() => handleTogglePremium(viewer)}
-                                >
-                                  {premiumLoading
-                                    ? 'Updating...'
-                                    : viewer.is_premium
-                                      ? 'Revoke Premium'
-                                      : 'Grant Premium'}
-                                </Button>
-                              </div>
-                            </Dialog.Content>
-                          </Dialog.Root>
-                        ) : (
-                          <span className="text-xs text-text-dim">—</span>
-                        )}
-                      </td>
+                      <td className="px-4 py-3">{renderPremiumControl(viewer)}</td>
                       <td className="px-4 py-3">
                         {viewer.is_banned ? (
                           <div>
@@ -316,54 +311,7 @@ export default function AdminViewersPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
-                        {viewer.is_banned ? (
-                          <Dialog.Root
-                            open={unbanDialogViewer?.id === viewer.id}
-                            onOpenChange={(open) => {
-                              if (!open) setUnbanDialogViewer(null)
-                            }}
-                          >
-                            <Dialog.Trigger
-                              render={
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={banningId === viewer.id}
-                                  onClick={() => setUnbanDialogViewer(viewer)}
-                                >
-                                  {banningId === viewer.id ? 'Unbanning...' : 'Unban'}
-                                </Button>
-                              }
-                            />
-                            <Dialog.Content showCloseButton={false}>
-                              <Dialog.Title>Unban &ldquo;{viewer.username}&rdquo;?</Dialog.Title>
-                              <Dialog.Description>
-                                This will restore their ability to send messages.
-                              </Dialog.Description>
-                              <div className="mt-6 flex justify-end gap-3">
-                                <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
-                                <Button
-                                  variant="default"
-                                  disabled={banningId === viewer.id}
-                                  onClick={() => handleUnban(viewer.id, viewer.username)}
-                                >
-                                  Unban Viewer
-                                </Button>
-                              </div>
-                            </Dialog.Content>
-                          </Dialog.Root>
-                        ) : (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={banningId === viewer.id}
-                            onClick={() => handleBanClick(viewer)}
-                          >
-                            Ban
-                          </Button>
-                        )}
-                      </td>
+                      <td className="px-4 py-3">{renderActionControl(viewer)}</td>
                     </tr>
                   ))
                 )}
@@ -372,6 +320,116 @@ export default function AdminViewersPage() {
           </div>
         </Card>
       )}
+
+      {/* Mobile card list */}
+      {!loading && (
+        <div className="space-y-3 md:hidden">
+          {viewers.length === 0 ? (
+            <Card className="p-6 text-center text-text-dim">No viewer sessions found</Card>
+          ) : (
+            viewers.map((viewer) => (
+              <Card key={viewer.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-text">{viewer.username}</div>
+                    <div className="truncate text-xs text-text-sub">{viewer.display_name}</div>
+                  </div>
+                  {viewer.is_banned ? (
+                    <span className="bg-destructive/10 text-destructive inline-flex shrink-0 items-center rounded px-2 py-0.5 text-xs font-medium">
+                      BANNED
+                    </span>
+                  ) : (
+                    <span className="inline-flex shrink-0 items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-sub">
+                  <span className="capitalize">{viewer.platform}</span>
+                  <span>
+                    {viewer.last_message_at
+                      ? formatDistanceToNow(new Date(viewer.last_message_at), { addSuffix: true })
+                      : 'Never'}
+                  </span>
+                  <span>
+                    {viewer.message_count_1min}/{viewer.message_count_1hour} msgs
+                  </span>
+                </div>
+                {viewer.is_banned && viewer.banned_reason && (
+                  <div className="mt-2 text-xs text-text-dim">Reason: {viewer.banned_reason}</div>
+                )}
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  {renderPremiumControl(viewer)}
+                  {renderActionControl(viewer)}
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Premium toggle confirmation — single instance shared by table + cards */}
+      <Dialog.Root
+        open={!!premiumDialogViewer}
+        onOpenChange={(open) => {
+          if (!open) setPremiumDialogViewer(null)
+        }}
+      >
+        {premiumDialogViewer && (
+          <Dialog.Content showCloseButton={false}>
+            <Dialog.Title>
+              {premiumDialogViewer.is_premium ? 'Revoke' : 'Grant'} premium for &ldquo;
+              {premiumDialogViewer.username}&rdquo;?
+            </Dialog.Title>
+            <Dialog.Description>
+              {premiumDialogViewer.is_premium
+                ? 'They will lose access to gradients, avatar frames, and flairs.'
+                : 'They will be able to use gradients, avatar frames, and flairs.'}
+            </Dialog.Description>
+            <div className="mt-6 flex justify-end gap-3">
+              <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+              <Button
+                variant="default"
+                disabled={premiumLoading}
+                onClick={() => handleTogglePremium(premiumDialogViewer)}
+              >
+                {premiumLoading
+                  ? 'Updating...'
+                  : premiumDialogViewer.is_premium
+                    ? 'Revoke Premium'
+                    : 'Grant Premium'}
+              </Button>
+            </div>
+          </Dialog.Content>
+        )}
+      </Dialog.Root>
+
+      {/* Unban confirmation — single instance shared by table + cards */}
+      <Dialog.Root
+        open={!!unbanDialogViewer}
+        onOpenChange={(open) => {
+          if (!open) setUnbanDialogViewer(null)
+        }}
+      >
+        {unbanDialogViewer && (
+          <Dialog.Content showCloseButton={false}>
+            <Dialog.Title>Unban &ldquo;{unbanDialogViewer.username}&rdquo;?</Dialog.Title>
+            <Dialog.Description>
+              This will restore their ability to send messages.
+            </Dialog.Description>
+            <div className="mt-6 flex justify-end gap-3">
+              <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+              <Button
+                variant="default"
+                disabled={banningId === unbanDialogViewer.id}
+                onClick={() => handleUnban(unbanDialogViewer.id, unbanDialogViewer.username)}
+              >
+                Unban Viewer
+              </Button>
+            </div>
+          </Dialog.Content>
+        )}
+      </Dialog.Root>
 
       {/* Ban Modal — Dialog with reason textarea */}
       <Dialog.Root

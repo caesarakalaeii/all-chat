@@ -19,14 +19,17 @@
 import { ReactNode } from 'react'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { ToastProvider } from '@/components/admin/ToastProvider'
-import { AdminNav } from '@/components/AdminNav'
+import { AdminSidebar } from '@/components/AdminSidebar'
 
 function AdminLayoutContent({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-bg">
       <ToastProvider />
-      <AdminNav />
-      <main>{children}</main>
+      <AdminSidebar />
+      {/* Offset for the fixed desktop sidebar; full width below the lg breakpoint. */}
+      <div className="lg:pl-60">
+        <main>{children}</main>
+      </div>
     </div>
   )
 }
