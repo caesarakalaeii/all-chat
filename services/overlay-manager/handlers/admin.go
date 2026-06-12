@@ -43,7 +43,7 @@ func NewAdminHandler(overlayRepo *repository.OverlayRepository, sourceRepo *repo
 // ListOverlays returns all overlays in the system (admin only)
 // GET /api/v1/admin/overlays
 func (h *AdminHandler) ListOverlays(c *gin.Context) {
-	overlays, err := h.overlayRepo.GetAllOverlays(c.Request.Context())
+	overlays, err := h.overlayRepo.GetAllOverlaysWithSourceCount(c.Request.Context())
 	if err != nil {
 		h.logger.Error("Failed to fetch overlays", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -52,7 +52,6 @@ func (h *AdminHandler) ListOverlays(c *gin.Context) {
 		return
 	}
 
-	// For each overlay, get source count
 	type OverlayResponse struct {
 		ID           string `json:"id"`
 		Name         string `json:"name"`
@@ -64,14 +63,13 @@ func (h *AdminHandler) ListOverlays(c *gin.Context) {
 
 	response := make([]OverlayResponse, len(overlays))
 	for i, overlay := range overlays {
-		sources, _ := h.sourceRepo.ListByOverlayID(c.Request.Context(), overlay.ID)
 		response[i] = OverlayResponse{
 			ID:           overlay.ID,
 			Name:         overlay.Name,
 			UserID:       overlay.UserID,
 			CreatedAt:    overlay.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt:    overlay.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			SourcesCount: len(sources),
+			SourcesCount: overlay.SourcesCount,
 		}
 	}
 

@@ -275,3 +275,43 @@ func (r *OverlayRepository) GetAllOverlays(ctx context.Context) ([]*models.Overl
 
 	return overlays, nil
 }
+
+// OverlayWithSourceCount is an overlay paired with its number of chat sources.
+type OverlayWithSourceCount struct {
+	models.Overlay
+	SourcesCount int
+}
+
+// GetAllOverlaysWithSourceCount returns every overlay together with its source
+// count in a single aggregated query. This replaces an N+1 that ran one
+// ListByOverlayID per overlay just to count rows.
+func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) ([]*OverlayWithSourceCount, error) {
+	query := `
+		SELECT o.id, o.user_id, o.name, o.created_at, o.updated_at, COUNT(s.id) AS sources_count
+		FROM overlays o
+		LEFT JOIN overlay_chat_sources s ON s.overlay_id = o.id
+		GROUP BY o.id
+		ORDER BY o.created_at DESC
+	`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query overlays: %w", err)
+	}
+	defer rows.Close()
+
+	var overlays []*OverlayWithSourceCount
+	for rows.Next() {
+		var o OverlayWithSourceCount
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount); err != nil {
+			return nil, fmt.Errorf("failed to scan overlay: %w", err)
+		}
+		overlays = append(overlays, &o)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating overlays: %w", err)
+	}
+
+	return overlays, nil
+}
