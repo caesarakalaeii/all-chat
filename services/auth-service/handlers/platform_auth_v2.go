@@ -878,6 +878,31 @@ func (h *PlatformAuthHandlerV2) getSourceChannelID(platform oauth.Platform, user
 	}
 }
 
+// linkMayReplacePrimaryCredentials decides whether a platform-link callback may
+// overwrite the user's primary OAuth credentials (users.access_token /
+// refresh_token / token_expires_at) and the granted_scopes record.
+//
+// The primary credentials always belong to the user's auth_provider. Linking a
+// DIFFERENT platform (e.g. a Twitch-login streamer connecting YouTube or Kick
+// as an additional source) must never touch them: those platforms persist their
+// tokens in their own tables (youtube_oauth_tokens / kick_oauth_tokens), and
+// overwriting granted_scopes here erased the user:read:chat grant — silently
+// demoting the streamer's channel from the EventSub listener back to IRC.
+//
+// For a same-platform reflow (the Twitch add-source consent that upgrades a
+// login-scoped token to one carrying the chat scopes) the replacement is the
+// whole point. The downgrade guard mirrors the login path: a token WITHOUT
+// user:read:chat must not replace a stored grant that has it.
+func linkMayReplacePrimaryCredentials(authProvider string, platform oauth.Platform, existingScopes, newScopes []string) bool {
+	if string(platform) != authProvider {
+		return false
+	}
+	if containsScope(existingScopes, "user:read:chat") && !containsScope(newScopes, "user:read:chat") {
+		return false
+	}
+	return true
+}
+
 // linkPlatformToUser links a new platform to an existing user account
 func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 	ctx context.Context,
@@ -897,7 +922,7 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 		return nil, fmt.Errorf("user account is banned")
 	}
 
-	// Update the user with the new platform ID and tokens
+	// Update the user with the new platform ID
 	platformID := platformUser.GetID()
 
 	switch platform {
@@ -911,7 +936,26 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
 
-	// Update tokens (in case they're linking a platform they previously used)
+	newScopes := oauth.ExtractGrantedScopes(token)
+	existingScopes, err := h.userRepo.GetGrantedScopes(ctx, user.ID)
+	if err != nil {
+		// Without the stored scopes we cannot prove the replacement is safe;
+		// keep the existing credentials rather than risk wiping a chat grant.
+		h.logger.Warn("Failed to read granted scopes during platform link; preserving credentials",
+			zap.String("user_id", user.ID), zap.Error(err))
+		return user, nil
+	}
+
+	if !linkMayReplacePrimaryCredentials(user.AuthProvider, platform, existingScopes, newScopes) {
+		h.logger.Info("Platform link kept primary credentials and granted scopes",
+			zap.String("user_id", user.ID),
+			zap.String("auth_provider", user.AuthProvider),
+			zap.String("linked_platform", string(platform)))
+		return user, nil
+	}
+
+	// Same-platform reflow: replace the primary token (it carries at least the
+	// scopes of the old one, see linkMayReplacePrimaryCredentials).
 	user.AccessToken = token.AccessToken
 	user.RefreshToken = token.RefreshToken
 	user.TokenExpiresAt = token.Expiry
@@ -921,11 +965,11 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
-	// Persist the granted scopes. This is the Twitch add-source reflow path, so the
-	// token carries the chat scopes (user:read:chat, user:bot, channel:bot) — recording
-	// them here is what flips the channel from the IRC listener to the EventSub listener
-	// on the next sync. Kept separate from Update (see UpdateGrantedScopes).
-	if err := h.userRepo.UpdateGrantedScopes(ctx, user.ID, oauth.ExtractGrantedScopes(token)); err != nil {
+	// Persist the granted scopes. For the Twitch add-source reflow the token
+	// carries the chat scopes (user:read:chat, user:bot, channel:bot) — recording
+	// them here is what flips the channel from the IRC listener to the EventSub
+	// listener on the next sync. Kept separate from Update (see UpdateGrantedScopes).
+	if err := h.userRepo.UpdateGrantedScopes(ctx, user.ID, newScopes); err != nil {
 		h.logger.Warn("Failed to persist granted scopes after platform link",
 			zap.String("user_id", user.ID), zap.Error(err))
 	}
