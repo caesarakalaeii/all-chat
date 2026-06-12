@@ -82,7 +82,7 @@ func (h *AdminHandler) ListOverlays(c *gin.Context) {
 // ListAllSources returns all sources across all overlays (admin only)
 // GET /api/v1/admin/sources
 func (h *AdminHandler) ListAllSources(c *gin.Context) {
-	sources, err := h.sourceRepo.GetAllSources(c.Request.Context())
+	sources, err := h.sourceRepo.GetAllSourcesWithOverlay(c.Request.Context())
 	if err != nil {
 		h.logger.Error("Failed to fetch sources", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -104,28 +104,18 @@ func (h *AdminHandler) ListAllSources(c *gin.Context) {
 		UserID      string `json:"user_id"`
 	}
 
-	response := make([]SourceResponse, 0)
+	response := make([]SourceResponse, 0, len(sources))
 	for _, source := range sources {
-		overlay, err := h.overlayRepo.GetByID(c.Request.Context(), source.OverlayID)
-		if err != nil {
-			// Skip if overlay not found
-			h.logger.Warn("Overlay not found for source",
-				zap.String("source_id", source.ID),
-				zap.String("overlay_id", source.OverlayID),
-			)
-			continue
-		}
-
 		response = append(response, SourceResponse{
 			ID:          source.ID,
 			OverlayID:   source.OverlayID,
-			OverlayName: overlay.Name,
+			OverlayName: source.OverlayName,
 			Platform:    source.Platform,
 			ChannelID:   source.ChannelID,
 			ChannelName: source.ChannelName,
 			IsActive:    source.IsActive,
 			CreatedAt:   source.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			UserID:      overlay.UserID,
+			UserID:      source.UserID,
 		})
 	}
 

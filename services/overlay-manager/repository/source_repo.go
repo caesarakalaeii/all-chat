@@ -271,3 +271,46 @@ func (r *SourceRepository) GetAllSources(ctx context.Context) ([]*models.ChatSou
 
 	return sources, nil
 }
+
+// SourceWithOverlay is a chat source joined with metadata from its owning overlay.
+type SourceWithOverlay struct {
+	models.ChatSource
+	OverlayName string
+	UserID      string
+}
+
+// GetAllSourcesWithOverlay returns every source joined with its overlay's name and
+// owner in a single query. Sources whose overlay has been deleted are excluded
+// (INNER JOIN), matching the previous per-source "skip if overlay not found" behavior.
+// This replaces an N+1 lookup that fetched each source's overlay individually.
+func (r *SourceRepository) GetAllSourcesWithOverlay(ctx context.Context) ([]*SourceWithOverlay, error) {
+	query := `
+		SELECT s.id, s.overlay_id, s.platform, s.channel_id, s.channel_name, s.channel_handle,
+		       s.is_active, s.created_at, s.updated_at,
+		       o.name, o.user_id
+		FROM overlay_chat_sources s
+		JOIN overlays o ON o.id = s.overlay_id
+		ORDER BY s.created_at DESC
+	`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sources: %w", err)
+	}
+	defer rows.Close()
+
+	var sources []*SourceWithOverlay
+	for rows.Next() {
+		var sw SourceWithOverlay
+		if err := rows.Scan(&sw.ID, &sw.OverlayID, &sw.Platform, &sw.ChannelID, &sw.ChannelName, &sw.ChannelHandle, &sw.IsActive, &sw.CreatedAt, &sw.UpdatedAt, &sw.OverlayName, &sw.UserID); err != nil {
+			return nil, fmt.Errorf("failed to scan source: %w", err)
+		}
+		sources = append(sources, &sw)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating sources: %w", err)
+	}
+
+	return sources, nil
+}
