@@ -315,3 +315,37 @@ func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) (
 
 	return overlays, nil
 }
+
+// ListByUserIDWithSourceCount returns a single user's overlays with their source
+// counts in one aggregated query, replacing a per-overlay ListByOverlayID loop.
+func (r *OverlayRepository) ListByUserIDWithSourceCount(ctx context.Context, userID string) ([]*OverlayWithSourceCount, error) {
+	query := `
+		SELECT o.id, o.user_id, o.name, o.created_at, o.updated_at, COUNT(s.id) AS sources_count
+		FROM overlays o
+		LEFT JOIN overlay_chat_sources s ON s.overlay_id = o.id
+		WHERE o.user_id = $1
+		GROUP BY o.id
+		ORDER BY o.created_at DESC
+	`
+
+	rows, err := r.pool.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list overlays: %w", err)
+	}
+	defer rows.Close()
+
+	overlays := []*OverlayWithSourceCount{}
+	for rows.Next() {
+		var o OverlayWithSourceCount
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount); err != nil {
+			return nil, fmt.Errorf("failed to scan overlay: %w", err)
+		}
+		overlays = append(overlays, &o)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating overlays: %w", err)
+	}
+
+	return overlays, nil
+}

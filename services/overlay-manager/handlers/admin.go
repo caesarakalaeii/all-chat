@@ -126,7 +126,7 @@ func (h *AdminHandler) ListAllSources(c *gin.Context) {
 func (h *AdminHandler) GetUserOverlays(c *gin.Context) {
 	userID := c.Param("id")
 
-	overlays, err := h.overlayRepo.ListByUserID(c.Request.Context(), userID)
+	overlays, err := h.overlayRepo.ListByUserIDWithSourceCount(c.Request.Context(), userID)
 	if err != nil {
 		h.logger.Error("Failed to fetch user overlays", zap.String("user_id", userID), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -146,14 +146,13 @@ func (h *AdminHandler) GetUserOverlays(c *gin.Context) {
 
 	response := make([]OverlayResponse, len(overlays))
 	for i, overlay := range overlays {
-		sources, _ := h.sourceRepo.ListByOverlayID(c.Request.Context(), overlay.ID)
 		response[i] = OverlayResponse{
 			ID:           overlay.ID,
 			Name:         overlay.Name,
 			UserID:       overlay.UserID,
 			CreatedAt:    overlay.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt:    overlay.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			SourcesCount: len(sources),
+			SourcesCount: overlay.SourcesCount,
 		}
 	}
 
