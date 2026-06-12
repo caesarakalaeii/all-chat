@@ -19,7 +19,7 @@
  */
 
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import clsx from 'clsx'
 import { Card } from '@/components/ui/card'
@@ -55,6 +55,7 @@ export default function OverlaysPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [showConnectedOnly, setShowConnectedOnly] = useState(false)
+  const detailRef = useRef<HTMLDivElement>(null)
 
   // Fetch all overlays
   useEffect(() => {
@@ -157,6 +158,16 @@ export default function OverlaysPage() {
     fetchSources()
   }, [selectedOverlay])
 
+  // On narrow screens the detail panel sits below the (long) list, so bring it
+  // into view when an overlay is selected. On desktop the panel is sticky and
+  // already visible, so leave the scroll position alone.
+  useEffect(() => {
+    if (!selectedOverlay) return
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [selectedOverlay])
+
   // Filter overlays by search term and connected status
   const connectedCount = overlays.filter((o) => activeOverlayIds.has(o.id)).length
   const filteredOverlays = overlays.filter((o) => {
@@ -202,7 +213,8 @@ export default function OverlaysPage() {
             <Card className="overflow-hidden">
               <div className="border-b border-border px-4 py-5">
                 <h3 className="text-base font-medium text-text">
-                  All Overlays ({overlays.length})
+                  All Overlays ({filteredOverlays.length}
+                  {filteredOverlays.length !== overlays.length ? ` of ${overlays.length}` : ''})
                 </h3>
 
                 {/* Search Input */}
@@ -228,7 +240,7 @@ export default function OverlaysPage() {
                   </button>
                 </div>
               </div>
-              <ul className="divide-y divide-border">
+              <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
                 {filteredOverlays.map((overlay) => (
                   <li
                     key={overlay.id}
@@ -298,7 +310,7 @@ export default function OverlaysPage() {
         </div>
 
         {/* Overlay Details & Sources */}
-        <div className="lg:col-span-1">
+        <div ref={detailRef} className="lg:sticky lg:top-8 lg:col-span-1 lg:self-start">
           {selectedOverlay ? (
             <div className="space-y-4">
               {/* Overlay Details */}
