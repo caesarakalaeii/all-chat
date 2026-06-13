@@ -48,6 +48,7 @@ import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { shouldFilterMessage } from '@/lib/utils/filterMessage'
@@ -120,6 +121,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // `font_size` (number, applied as px). Applied inline rather than via CSS var
   // so it doesn't get clobbered by the layered visual-customizer rules.
   const [messageFontSizeCss, setMessageFontSizeCss] = useState('')
+  // Background fills (overlay container + chat bubbles), shadow and max-width.
+  // Applied inline ONLY when set so they don't clobber the per-variant Tailwind
+  // defaults (slate/purple bubbles, transparent overlay) — see visual-inline-styles.
+  const [containerStyle, setContainerStyle] = useState<React.CSSProperties>({})
+  const [bubbleStyle, setBubbleStyle] = useState<React.CSSProperties>({})
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
@@ -320,6 +326,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       setVisualSettingsCss(visualSettingsToCss(vs))
       // Body font-size override from the visual customizer (see state decl).
       setMessageFontSizeCss(typeof vs.fontSize === 'string' && vs.fontSize ? vs.fontSize : '')
+      // Background fills / shadow / max-width (see state decl).
+      setContainerStyle(overlayContainerStyle(vs))
+      setBubbleStyle(chatBubbleStyle(vs))
       for (const key of ['fontFamily', 'usernameFontFamily', 'timestampFontFamily'] as const) {
         if (typeof vs[key] === 'string') ensureGoogleFontLoaded(vs[key]!)
       }
@@ -740,7 +749,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         />
       )}
 
-      <div className="overlay-live-body space-y-3">
+      <div className="overlay-live-body space-y-3" style={containerStyle}>
         {invertMessageOrder && <div ref={messagesEndRef} className="scroll-anchor" />}
         {(invertMessageOrder ? [...messages].reverse() : messages).map((message, index) => {
           const isSharedChat = message.metadata?.is_shared_chat === true
@@ -765,6 +774,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         : 'bg-slate-900/90',
                     ]
               )}
+              style={isEvent ? undefined : bubbleStyle}
             >
               <div className="flex items-start gap-3">
                 {/* Avatar */}
