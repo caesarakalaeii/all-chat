@@ -44,6 +44,7 @@ import { renderMessageContent } from '@/lib/renderMessage'
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { shouldFilterMessage } from '@/lib/utils/filterMessage'
@@ -199,6 +200,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [customCss, setCustomCss] = useState('')
   const [useCustomCss, setUseCustomCss] = useState(false)
   const [visualSettingsCss, setVisualSettingsCss] = useState('')
+  // Background fills / shadow / max-width applied inline only when set (see
+  // visual-inline-styles); keeps this preview in sync with the live overlay.
+  const [containerStyle, setContainerStyle] = useState<React.CSSProperties>({})
+  const [bubbleStyle, setBubbleStyle] = useState<React.CSSProperties>({})
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
@@ -418,6 +423,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         const vs = config.visual_settings ?? {}
         const vcCss = visualSettingsToCss(vs)
         setVisualSettingsCss(vcCss)
+        setContainerStyle(overlayContainerStyle(vs))
+        setBubbleStyle(chatBubbleStyle(vs))
         // Apply non-CSS visual settings
         if (vs.showPlatformBadge !== undefined) {
           setShowPlatformBadge(vs.showPlatformBadge !== 'none')
@@ -760,6 +767,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           style={{
             scrollbarWidth: 'thin',
             scrollbarColor: '#374151 transparent',
+            ...containerStyle,
           }}
         >
           {messages.length === 0 ? (
@@ -799,6 +807,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                         ? clsx('event-message', eventTierClass, eventTypeClass)
                         : 'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm'
                     }
+                    style={isEvent ? undefined : bubbleStyle}
                   >
                     <div className="flex items-start gap-3">
                       {/* Avatar */}
