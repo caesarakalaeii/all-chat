@@ -889,14 +889,14 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                                   el.style.setProperty('-webkit-background-clip', 'text', 'important')
                                 }
                               }}
-                              className="text-sm font-semibold bg-clip-text text-transparent username-gradient"
+                              className="chat-username text-sm font-semibold bg-clip-text text-transparent username-gradient"
                               style={{ backgroundImage: buildGradientCSS(message.user.name_gradient) }}
                             >
                               {message.user.display_name}
                             </span>
                           ) : (
                             <span
-                              className="text-sm font-semibold"
+                              className="chat-username text-sm font-semibold"
                               style={{ color: message.user.color || '#FFFFFF' }}
                             >
                               {message.user.display_name}
@@ -964,7 +964,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                         </div>
 
                         {/* Timestamp */}
-                        <div className="mt-1 text-xs text-gray-500">
+                        <div className="mt-1 text-xs text-slate-500">
                           {new Date(message.timestamp).toLocaleTimeString()}
                         </div>
                       </div>

@@ -369,6 +369,11 @@
   .overlay-preview-body .font-semibold {
     display: var(--chat-show-username, inline) !important;
   }
+  .overlay-preview-body .chat-username {
+    font-family: var(--chat-username-font-family, inherit) !important;
+    font-weight: var(--chat-username-font-weight, 600) !important;
+    font-size: var(--chat-username-font-size, 0.875rem) !important;
+  }
 
   /* ── Message text ──────────────────────────────────────────────────── */
   .overlay-preview-body .break-words {
@@ -381,7 +386,7 @@
   }
 
   /* ── Timestamp ─────────────────────────────────────────────────────── */
-  .overlay-preview-body .text-xs.text-gray-500 {
+  .overlay-preview-body .text-xs.text-slate-500 {
     display: var(--chat-show-timestamps, block) !important;
     font-size: var(--chat-timestamp-font-size, 0.75rem) !important;
     font-family: var(--chat-timestamp-font-family, inherit) !important;
@@ -457,6 +462,13 @@
   .overlay-live-body .platform-badge-icon img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
+  }
+
+  /* ── Username ──────────────────────────────────────────────────────── */
+  .overlay-live-body .chat-username {
+    font-family: var(--chat-username-font-family, inherit) !important;
+    font-weight: var(--chat-username-font-weight, 600) !important;
+    font-size: var(--chat-username-font-size, 0.875rem) !important;
   }
 
   /* ── Message text ──────────────────────────────────────────────────── */
