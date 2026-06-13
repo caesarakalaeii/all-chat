@@ -1174,7 +1174,7 @@ export default function OverlayPreviewPage({ params }: { params: Promise<{ id: s
 
                                 {/* Username */}
                                 <span
-                                  className="text-sm font-semibold"
+                                  className="chat-username text-sm font-semibold"
                                   style={{
                                     color: message.user.color || '#FFFFFF',
                                   }}

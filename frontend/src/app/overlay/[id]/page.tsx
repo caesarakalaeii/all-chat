@@ -871,14 +871,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                               el.style.setProperty('-webkit-background-clip', 'text', 'important')
                             }
                           }}
-                          className="username-gradient bg-clip-text text-sm font-semibold text-transparent"
+                          className="chat-username username-gradient bg-clip-text text-sm font-semibold text-transparent"
                           style={{ backgroundImage: buildGradientCSS(message.user.name_gradient) }}
                         >
                           {message.user?.display_name || message.user?.username}
                         </span>
                       ) : (
                         <span
-                          className="text-sm font-semibold"
+                          className="chat-username text-sm font-semibold"
                           style={{
                             color: message.user?.color || 'var(--chat-username-color, #FFFFFF)',
                           }}
