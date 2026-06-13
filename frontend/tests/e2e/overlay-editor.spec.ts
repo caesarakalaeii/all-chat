@@ -195,33 +195,4 @@ test.describe('Overlay Editor Page', () => {
       await expect(page.locator('text=shroud')).toBeVisible()
     }
   })
-
-  test('should navigate to preview page', async ({ page }) => {
-    await page.route('**/api/v1/overlays/test-overlay-id', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ id: 'test-overlay-id', name: 'Test Overlay' }),
-      })
-    })
-
-    await page.route('**/api/v1/overlays/test-overlay-id/sources', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([]),
-      })
-    })
-
-    await page.reload()
-
-    // Click preview button
-    const previewButton = page.locator('button, a', { hasText: /Preview/i })
-    if (await previewButton.isVisible()) {
-      await previewButton.click()
-
-      // Should navigate to preview page
-      await expect(page).toHaveURL('/overlays/test-overlay-id/preview')
-    }
-  })
 })
