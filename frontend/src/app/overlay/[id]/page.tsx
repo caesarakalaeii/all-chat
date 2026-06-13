@@ -115,6 +115,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [disableMessageFade, setDisableMessageFade] = useState(false)
   const [customCss, setCustomCss] = useState('')
   const [visualSettingsCss, setVisualSettingsCss] = useState('')
+  // Body font-size for message text. Prefer the visual-customizer `fontSize`
+  // (e.g. "18px") when set, otherwise fall back to the legacy display-settings
+  // `font_size` (number, applied as px). Applied inline rather than via CSS var
+  // so it doesn't get clobbered by the layered visual-customizer rules.
+  const [messageFontSizeCss, setMessageFontSizeCss] = useState('')
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
@@ -313,6 +318,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     if (config.visual_settings && typeof config.visual_settings === 'object') {
       const vs = config.visual_settings as Partial<VisualSettings>
       setVisualSettingsCss(visualSettingsToCss(vs))
+      // Body font-size override from the visual customizer (see state decl).
+      setMessageFontSizeCss(typeof vs.fontSize === 'string' && vs.fontSize ? vs.fontSize : '')
       for (const key of ['fontFamily', 'usernameFontFamily', 'timestampFontFamily'] as const) {
         if (typeof vs[key] === 'string') ensureGoogleFontLoaded(vs[key]!)
       }
@@ -733,7 +740,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         />
       )}
 
-      <div className="space-y-3">
+      <div className="overlay-live-body space-y-3">
         {invertMessageOrder && <div ref={messagesEndRef} className="scroll-anchor" />}
         {(invertMessageOrder ? [...messages].reverse() : messages).map((message, index) => {
           const isSharedChat = message.metadata?.is_shared_chat === true
@@ -976,7 +983,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   </div>
 
                   {/* Message Text with Emotes (or Event Content) */}
-                  <div className="break-words text-white" style={{ fontSize: `${fontSize}px` }}>
+                  <div
+                    className="break-words text-white"
+                    style={{ fontSize: messageFontSizeCss || `${fontSize}px` }}
+                  >
                     {message.event ? renderEventContent(message) : renderMessageContent(message)}
                   </div>
 

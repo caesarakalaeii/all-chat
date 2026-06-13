@@ -396,6 +396,93 @@
   }
 }
 
+/*
+ * Live OBS overlay (`/overlay/[id]`) counterpart of the block above.
+ *
+ * The rules above are scoped to `.overlay-preview-body`, which exists only on
+ * the preview/embed pages. The live overlay injects the same `--chat-*` custom
+ * properties on `:root` but lacks that scope hook, so without these rules the
+ * entire visual customizer (typography, colors, sizing, bubbles, emote scale)
+ * silently did nothing on the actual overlay — it only ever changed the preview.
+ *
+ * Mirror of the preview block, scoped to `.overlay-live-body`. Fallbacks are
+ * deliberately the live overlay's own hardcoded defaults (white text, 18px
+ * badges, slate-500 timestamps, backdrop-blur-sm) rather than the preview's, so
+ * an *unset* control produces no visible change; a *set* control now applies and
+ * matches the preview. Body font-size is intentionally absent here — the live
+ * overlay applies it inline in React (visual `fontSize` ?? legacy `font_size`)
+ * to avoid clobbering the legacy display-settings font-size path.
+ *
+ * NOTE: keep in sync with the `.overlay-preview-body` rules above when adding
+ * new customizer properties.
+ */
+@layer visual-customizer {
+  /* ── Message spacing (space-y-3 → message gap) ─────────────────────── */
+  .overlay-live-body > * + * {
+    margin-top: var(--chat-message-gap, 0.75rem) !important;
+  }
+
+  /* ── Message bubble ────────────────────────────────────────────────── */
+  .overlay-live-body > div {
+    border-radius: var(--chat-bubble-border-radius, 0.5rem) !important;
+    border-width: var(--chat-bubble-border-width, 0px) !important;
+    border-color: var(--chat-bubble-border-color, transparent) !important;
+    border-style: solid !important;
+    padding: var(--chat-bubble-padding, 0.75rem) !important;
+    backdrop-filter: blur(var(--chat-backdrop-blur, 4px)) !important;
+  }
+
+  /* ── Avatar ────────────────────────────────────────────────────────── */
+  .overlay-live-body .flex-shrink-0 img,
+  .overlay-live-body .flex-shrink-0 > div {
+    width: var(--chat-avatar-size, 2.5rem) !important;
+    height: var(--chat-avatar-size, 2.5rem) !important;
+    min-width: var(--chat-avatar-size, 2.5rem) !important;
+    min-height: var(--chat-avatar-size, 2.5rem) !important;
+    max-width: 4rem !important;
+    max-height: 4rem !important;
+  }
+
+  /* ── User badges (subscriber/mod/bits icons) ───────────────────────── */
+  .overlay-live-body .flex.gap-1 img {
+    width: var(--chat-badge-size, 1rem) !important;
+    height: var(--chat-badge-size, 1rem) !important;
+  }
+
+  /* ── Platform badge (TWITCH/YOUTUBE pill or icon) ──────────────────── */
+  .overlay-live-body .platform-badge-text {
+    font-size: var(--chat-badge-size, 0.75rem) !important;
+  }
+  .overlay-live-body .platform-badge-icon svg,
+  .overlay-live-body .platform-badge-icon img {
+    width: var(--chat-badge-size, 1rem) !important;
+    height: var(--chat-badge-size, 1rem) !important;
+  }
+
+  /* ── Message text ──────────────────────────────────────────────────── */
+  .overlay-live-body .break-words {
+    font-family: var(--chat-font-family, inherit) !important;
+    font-weight: var(--chat-font-weight, inherit) !important;
+    line-height: var(--chat-line-height, 1.5) !important;
+    letter-spacing: var(--chat-letter-spacing, normal) !important;
+    color: var(--chat-message-color, #ffffff) !important;
+  }
+
+  /* ── Timestamp ─────────────────────────────────────────────────────── */
+  .overlay-live-body .text-xs.text-slate-500 {
+    font-size: var(--chat-timestamp-font-size, 0.75rem) !important;
+    font-family: var(--chat-timestamp-font-family, inherit) !important;
+    color: var(--chat-timestamp-color, #64748b) !important;
+  }
+
+  /* ── Emotes (inline images inside message text) ────────────────────── */
+  .overlay-live-body .break-words img {
+    display: var(--chat-show-emotes, inline) !important;
+    transform: scale(var(--chat-emote-scale, 1)) !important;
+    vertical-align: middle !important;
+  }
+}
+
 @layer visual-customizer {
   .event-message[class*='super_chat'],
   .event-message[class*='super_sticker'] {
