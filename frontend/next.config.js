@@ -35,6 +35,19 @@ const nextConfig = {
     ],
   },
 
+  // Redirects for paths without a real page. /legal has no index route
+  // (only /legal/privacy|terms|impressum), so /legal and /legal/ otherwise
+  // dead-end on a 404. Send them to the privacy page.
+  async redirects() {
+    return [
+      {
+        source: '/legal',
+        destination: '/legal/privacy',
+        permanent: true,
+      },
+    ]
+  },
+
   // API rewrites - proxy to API Gateway
   // In development: localhost:8080
   // In production: api-gateway service (Docker/K8s networking)
