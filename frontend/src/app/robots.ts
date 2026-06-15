@@ -33,6 +33,11 @@ export default function robots(): MetadataRoute.Robots {
           '/overlay/',
           '/chat/',
           '/api/',
+          // Build-hashed font/image assets. Their filenames change every deploy,
+          // so Google keeps re-crawling stale URLs and reporting 404s. Blocking
+          // only media/ (not the JS/CSS chunks Googlebot needs to render) stops
+          // the noise without harming rendering.
+          '/_next/static/media/',
         ],
       },
     ],
