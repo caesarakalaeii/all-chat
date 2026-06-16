@@ -182,6 +182,11 @@ export default function PlatformStatusIndicators({
           } else if (status.status === 'quota_exceeded') {
             statusClass = 'bg-red-500/20 opacity-100'
             tooltipText = `${platformLabel} - ${source.channelName} - Quota exceeded`
+          } else if (status.status === 'error') {
+            statusClass = 'bg-red-500/20 opacity-100 border border-red-500/50'
+            tooltipText = status.error_message
+              ? `${platformLabel} - ${source.channelName} - ${status.error_message}`
+              : `${platformLabel} - ${source.channelName} - Error`
           } else if (status.status === 'offline') {
             // Check if offline is due to auth error
             const isAuthError =
