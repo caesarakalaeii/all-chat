@@ -32,7 +32,7 @@ type Message struct {
 	Platform     string     `json:"platform"`
 	ChannelID    string     `json:"channel_id"`
 	ChannelName  string     `json:"channel_name,omitempty"`
-	Status       string     `json:"status"` // "connected", "reconnecting", "offline"
+	Status       string     `json:"status"` // "connected", "reconnecting", "offline", "error"
 	NextRetryAt  *time.Time `json:"next_retry_at,omitempty"`
 	ErrorMessage string     `json:"error_message,omitempty"`
 }

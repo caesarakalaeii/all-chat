@@ -355,3 +355,42 @@ func TestManager_OnOverlayDisconnected_StopsPoller(t *testing.T) {
 	// Note: Actual poller stop happens after 5s debounce
 	// We don't test the full debounce flow here to avoid long test runtime
 }
+
+// TestManager_DiscoveryGiveUp_RefreshOnDemandChange verifies the give-up /
+// "wait for a refresh" behaviour added to bound discovery polling:
+//   - markDiscoveryGaveUp parks a channel,
+//   - a demand change (newly demanded OR demand lost) clears the marker,
+//   - a channel that stays continuously demanded keeps its marker.
+// Pure in-memory logic — no Redis required.
+func TestManager_DiscoveryGiveUp_RefreshOnDemandChange(t *testing.T) {
+	manager := &Manager{
+		logger:          zap.NewNop(),
+		gaveUpDiscovery: make(map[string]bool),
+	}
+
+	const parked = "UCparked"
+	const reconnected = "UCreconnected"
+
+	manager.markDiscoveryGaveUp(parked)
+	manager.markDiscoveryGaveUp(reconnected)
+	assert.True(t, manager.hasDiscoveryGivenUp(parked))
+	assert.True(t, manager.hasDiscoveryGivenUp(reconnected))
+
+	// prev: both demanded. new: `reconnected` dropped (overlay disconnected),
+	// `parked` still demanded (streamer simply offline). Only the channel whose
+	// demand changed should be cleared.
+	prev := map[string]bool{parked: true, reconnected: true}
+	demanded := map[string]bool{parked: true}
+	manager.clearGaveUpForDemandChanges(prev, demanded)
+
+	assert.True(t, manager.hasDiscoveryGivenUp(parked),
+		"continuously-demanded channel keeps its give-up marker (waits for a real refresh)")
+	assert.False(t, manager.hasDiscoveryGivenUp(reconnected),
+		"channel whose demand changed is treated as refreshed and cleared")
+
+	// A subsequent re-assertion of demand for `parked` (overlay reconnect) is a
+	// change false->true and must clear it.
+	manager.clearGaveUpForDemandChanges(map[string]bool{}, map[string]bool{parked: true})
+	assert.False(t, manager.hasDiscoveryGivenUp(parked),
+		"re-asserted demand clears the give-up marker so discovery can resume")
+}

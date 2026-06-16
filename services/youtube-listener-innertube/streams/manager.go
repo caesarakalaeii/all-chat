@@ -101,6 +101,12 @@ type Manager struct {
 	demandMu        sync.RWMutex
 	demandedChannels map[string]bool // channelID -> has demand; nil = no filtering (backward compat)
 
+	// Discovery give-up tracking: channels whose discovery loop stopped after
+	// maxDiscoveryDuration of fruitless polling. Periodic sync skips these until a
+	// refresh (demand re-assertion) clears the marker. Guarded by gaveUpMu.
+	gaveUpMu        sync.Mutex
+	gaveUpDiscovery map[string]bool
+
 	// Per-channel debounce timers for demand-loss. Cancelled if demand is restored
 	// before the timer fires, preventing brief WebSocket disconnects from killing
 	// the poller and losing messages that the api-gateway replay buffer captured.
@@ -143,6 +149,7 @@ func NewManager(
 		discovering:              make(map[string]*DiscoveryState),
 		connectedOverlays:        make(map[string]time.Time),
 		channelConnectedOverlays: make(map[string]map[string]struct{}),
+		gaveUpDiscovery:          make(map[string]bool),
 		demandStopTimers:         make(map[string]*time.Timer),
 		stopChan:                 make(chan struct{}),
 	}
@@ -223,15 +230,36 @@ type DiscoveryOpts struct {
 func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts DiscoveryOpts) {
 	streamSelect := opts.StreamSelect
 	streamMatch := opts.StreamMatch
+
+	// Build the discovery state up front so we can reserve the m.discovering slot
+	// synchronously, before any slow work. Previously the slot was only written
+	// *after* a 0-5s jitter sleep and a Redis round-trip, leaving a multi-second
+	// TOCTOU window in which concurrent callers (periodic sync, overlay-connect,
+	// demand updates) each passed the guard and spawned a duplicate discovery
+	// loop. Those loops leaked and hammered YouTube independently — observed as
+	// 8+ concurrent loops scraping the same offline channel.
+	discoveryCtx, cancel := context.WithCancel(context.Background())
+	state := &DiscoveryState{
+		ChannelID:        channelID,
+		OverlayID:        overlayID,
+		StreamSelect:     streamSelect,
+		StreamMatch:      streamMatch,
+		StartedAt:        time.Now(),
+		Attempts:         0,
+		CancelFunc:       cancel,
+		ResetBackoffChan: make(chan struct{}, 1), // Buffered to prevent blocking
+	}
+
 	m.mu.Lock()
 
 	// Check if already discovering
-	if state, exists := m.discovering[channelID]; exists {
+	if existing, exists := m.discovering[channelID]; exists {
 		m.logger.Debug("Discovery already in progress",
 			zap.String("channel_id", channelID),
-			zap.String("existing_overlay_id", state.OverlayID),
+			zap.String("existing_overlay_id", existing.OverlayID),
 		)
 		m.mu.Unlock()
+		cancel()
 		return
 	}
 
@@ -240,6 +268,10 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts Discover
 		m.channelConnectedOverlays[channelID] = make(map[string]struct{})
 	}
 	m.channelConnectedOverlays[channelID][overlayID] = struct{}{}
+
+	// Reserve the discovery slot now, before the jitter/Redis work below, so a
+	// concurrent caller observes it as in-progress and bails out.
+	m.discovering[channelID] = state
 
 	m.mu.Unlock()
 
@@ -271,6 +303,10 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts Discover
 			}
 			// Fall through to async discovery below (covers both real errors and leadership contention)
 		} else {
+			// Poller started from cache — release the discovery reservation we
+			// took above and stop, no discovery loop needed.
+			m.cleanupDiscoveryState(channelID)
+			cancel()
 			return
 		}
 	}
@@ -281,23 +317,6 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts Discover
 		zap.String("overlay_id", overlayID),
 	)
 
-	// Create discovery state with cancellable context
-	discoveryCtx, cancel := context.WithCancel(context.Background())
-	state := &DiscoveryState{
-		ChannelID:        channelID,
-		OverlayID:        overlayID,
-		StreamSelect:     streamSelect,
-		StreamMatch:      streamMatch,
-		StartedAt:        time.Now(),
-		Attempts:         0,
-		CancelFunc:       cancel,
-		ResetBackoffChan: make(chan struct{}, 1), // Buffered to prevent blocking
-	}
-
-	m.mu.Lock()
-	m.discovering[channelID] = state
-	m.mu.Unlock()
-
 	// Subscribe to cross-platform events for this overlay
 	m.wg.Add(1)
 	go m.subscribeToPlatformEvents(discoveryCtx, state)
@@ -307,11 +326,23 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts Discover
 	go m.discoveryLoop(discoveryCtx, state)
 }
 
+// maxDiscoveryDuration caps how long discovery will poll YouTube for a single
+// channel before giving up. A channel that is simply offline (streamer not
+// live) would otherwise be scraped from YouTube every ~60s forever; across many
+// such channels that is an unacceptable, near-DDoS request volume against
+// YouTube's InnerTube endpoints. After this much wall-clock time of fruitless
+// polling the loop stops, surfaces an error on the platform indicator, and waits
+// for a refresh — a demand re-assertion (overlay reconnect/page refresh), see
+// clearGaveUpForDemandChanges — before polling again.
+const maxDiscoveryDuration = 1 * time.Hour
+
 // discoveryLoop attempts discovery with exponential backoff.
 // Backoff sequence: 10s, 20s, 30s, 60s — aggressive detection capped at 1 minute so a
-// channel going live is picked up within ~1m. Discovery only runs for demanded channels
-// (an overlay is connected, see isChannelDemanded), so the 1m cap stays well within
-// YouTube's tolerance for the InnerTube channel-page scrape.
+// channel going live is picked up within ~1m. The loop gives up after
+// maxDiscoveryDuration of fruitless polling (see giveUpDiscovery) so we never hammer
+// YouTube indefinitely for an offline channel. Discovery only runs for demanded
+// channels (an overlay is connected), so the 1m cap stays well within YouTube's
+// tolerance for the InnerTube channel-page scrape.
 func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 	defer m.wg.Done()
 
@@ -337,8 +368,19 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 		default:
 		}
 
+		// Hard wall-clock cap: stop polling YouTube once we've spent
+		// maxDiscoveryDuration looking for a stream that never appeared. Surface
+		// an error and park until a refresh, rather than scraping forever.
+		if time.Since(state.StartedAt) >= maxDiscoveryDuration {
+			m.giveUpDiscovery(state)
+			return
+		}
+
 		// Attempt discovery
 		state.Attempts++
+		if m.metrics != nil {
+			m.metrics.DiscoveryAttempts.WithLabelValues(metrics.ServiceLabel, state.ChannelID).Inc()
+		}
 		m.logger.Info("Attempting discovery",
 			zap.String("channel_id", state.ChannelID),
 			zap.Int("attempt", state.Attempts),
@@ -463,8 +505,12 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			m.cleanupDiscoveryState(state.ChannelID)
 			return
 		case <-state.ResetBackoffChan:
-			// Cross-platform trigger: another platform went live, retry immediately
+			// Cross-platform trigger: another platform went live, retry immediately.
+			// Reset the attempt counter so a dormant channel returns to aggressive
+			// discovery — a sibling platform going live is a strong signal this
+			// streamer is about to be live too.
 			timer.Stop()
+			state.Attempts = 0
 			m.logger.Info("Backoff reset by cross-platform event, retrying discovery immediately",
 				zap.String("channel_id", state.ChannelID),
 				zap.String("overlay_id", state.OverlayID),
@@ -472,6 +518,78 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			// Continue to next attempt immediately
 		case <-timer.C:
 			// Backoff elapsed, continue to next attempt
+		}
+	}
+}
+
+// giveUpDiscovery stops discovery for a channel that has been polled for
+// maxDiscoveryDuration without finding a live stream. It surfaces an error on
+// the platform indicator and removes the channel from the in-progress set so a
+// refresh (overlay reconnect → demand re-assertion) can restart discovery. The
+// gave-up marker prevents the periodic source sync from immediately restarting
+// the loop — the channel stays parked until that refresh arrives.
+func (m *Manager) giveUpDiscovery(state *DiscoveryState) {
+	m.logger.Warn("Discovery gave up after max duration, awaiting refresh to avoid hammering YouTube",
+		zap.String("channel_id", state.ChannelID),
+		zap.Int("attempts", state.Attempts),
+		zap.Duration("max_duration", maxDiscoveryDuration),
+	)
+
+	if m.metrics != nil {
+		m.metrics.DiscoveryGaveUp.WithLabelValues(metrics.ServiceLabel, state.ChannelID).Inc()
+	}
+
+	ctx := context.Background()
+
+	// Surface an error on the platform indicator.
+	m.statusPublisher.Publish(ctx, status.Message{
+		Platform:     "youtube",
+		ChannelID:    state.ChannelID,
+		Status:       "error",
+		ErrorMessage: "No live stream found after 1h — refresh your overlay to retry",
+	})
+
+	// Mark gave-up first, then drop the in-progress reservation, so there is no
+	// window in which the channel looks idle to a concurrent periodic sync.
+	m.markDiscoveryGaveUp(state.ChannelID)
+	m.cleanupDiscoveryState(state.ChannelID)
+
+	// Stop the cross-platform subscription goroutine for this discovery.
+	if state.CancelFunc != nil {
+		state.CancelFunc()
+	}
+}
+
+// markDiscoveryGaveUp records that discovery for a channel has stopped and is
+// awaiting a refresh.
+func (m *Manager) markDiscoveryGaveUp(channelID string) {
+	m.gaveUpMu.Lock()
+	m.gaveUpDiscovery[channelID] = true
+	m.gaveUpMu.Unlock()
+}
+
+// hasDiscoveryGivenUp reports whether discovery for a channel is parked awaiting
+// a refresh.
+func (m *Manager) hasDiscoveryGivenUp(channelID string) bool {
+	m.gaveUpMu.Lock()
+	defer m.gaveUpMu.Unlock()
+	return m.gaveUpDiscovery[channelID]
+}
+
+// clearGaveUpForDemandChanges treats any change in a channel's demand status
+// (newly demanded, or demand lost) as the refresh that re-enables discovery: it
+// drops the gave-up marker so the next sync can poll YouTube again. A channel
+// that stays continuously demanded keeps its marker — that is the "wait for a
+// refresh" behaviour for a streamer who is simply offline for a long time.
+func (m *Manager) clearGaveUpForDemandChanges(prev, demanded map[string]bool) {
+	m.gaveUpMu.Lock()
+	defer m.gaveUpMu.Unlock()
+	for ch := range m.gaveUpDiscovery {
+		// Indexing a nil map yields false, so this is safe when either side is nil.
+		if prev[ch] != demanded[ch] {
+			delete(m.gaveUpDiscovery, ch)
+			m.logger.Info("Demand change detected, clearing discovery give-up marker",
+				zap.String("channel_id", ch))
 		}
 	}
 }
@@ -961,6 +1079,12 @@ func (m *Manager) syncSources(ctx context.Context) {
 			continue
 		}
 
+		// Skip channels whose discovery gave up after maxDiscoveryDuration. They
+		// stay parked until a refresh (demand re-assertion) clears the marker.
+		if m.hasDiscoveryGivenUp(channelID) {
+			continue
+		}
+
 		if !isDiscovering {
 			// Before starting discovery, check if another pod already holds leadership
 			// for a known video ID. If so, skip — we don't need to discover or publish
@@ -1014,6 +1138,10 @@ func (m *Manager) UpdateDemandedChannels(demanded map[string]bool) {
 
 	m.logger.Info("Demanded channels updated",
 		zap.Int("demanded_count", len(demanded)))
+
+	// A change in demand (overlay reconnect/refresh) is the "refresh" that
+	// re-enables discovery for channels parked after maxDiscoveryDuration.
+	m.clearGaveUpForDemandChanges(prev, demanded)
 
 	// Cancel any pending stop timers for channels whose demand has been restored.
 	// This is the key reconnect path: if a brief disconnect scheduled a stop and

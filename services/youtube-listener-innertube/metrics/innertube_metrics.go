@@ -47,6 +47,14 @@ type InnerTubeMetrics struct {
 	// Deletion buffer tracking - for monitoring buffer overflow
 	// High overflow rate indicates message deletion storm or buffer too small
 	DeletionBufferOverflows *prometheus.CounterVec // labels: service, channel_id
+
+	// Discovery attempt tracking - for abuse / runaway-loop detection.
+	// A high rate(...) per channel means we are scraping YouTube far more often
+	// than the intended ~1/min cadence (duplicate loops, reset storms, etc.) and
+	// is the signal to alert on. DiscoveryGaveUp counts channels parked after
+	// maxDiscoveryDuration so we can see chronically-offline sources.
+	DiscoveryAttempts *prometheus.CounterVec // labels: service, channel_id
+	DiscoveryGaveUp   *prometheus.CounterVec // labels: service, channel_id
 }
 
 // NewInnerTubeMetrics creates and registers InnerTube Prometheus metrics
@@ -116,6 +124,22 @@ func NewInnerTubeMetrics() *InnerTubeMetrics {
 			prometheus.CounterOpts{
 				Name: "youtube_listener_deletion_buffer_overflows_total",
 				Help: "Total deletion buffer overflows (oldest events dropped)",
+			},
+			[]string{"service", "channel_id"},
+		),
+
+		// Discovery attempt metrics
+		DiscoveryAttempts: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_listener_discovery_attempts_total",
+				Help: "Total stream-discovery attempts (YouTube scrapes) by channel. Alert on high rate per channel to catch runaway/abusive polling.",
+			},
+			[]string{"service", "channel_id"},
+		),
+		DiscoveryGaveUp: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_listener_discovery_gave_up_total",
+				Help: "Total times discovery gave up on a channel after the max polling duration and parked awaiting a refresh.",
 			},
 			[]string{"service", "channel_id"},
 		),
