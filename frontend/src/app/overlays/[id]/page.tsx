@@ -54,6 +54,7 @@ import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import { useNotificationSocket } from '@/hooks/useNotificationSocket'
 import { parseCssToVisualSettings } from '@/lib/utils/theme-css-parser'
 import { toastManager } from '@/lib/toast'
 import { trackEvent } from '@/lib/analytics'
@@ -1665,41 +1666,23 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
   }, [id, token]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // WebSocket listener for share_revoked notifications (real-time update)
-  useEffect(() => {
-    if (!token || !id) return
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws/overlay/${id}?token=${token}`
-    const ws = new WebSocket(wsUrl)
-
-    ws.onmessage = (event) => {
-      try {
-        const envelope = JSON.parse(event.data)
-        if (envelope.type === 'share_revoked') {
-          const revoker = envelope.data?.revoked_by_username || 'someone'
-          toastManager.add({
-            title: 'Share revoked',
-            description: `Your share with ${revoker} was revoked`,
-            type: 'error',
-          })
-          overlaysApi.getSources(id).then(setSources).catch(console.error)
-        }
-      } catch {
-        // Ignore parse errors
-      }
+  // Real-time owner notifications (e.g. share_revoked) over a self-healing
+  // authenticated socket. The previous inline socket had no reconnect and no
+  // liveness detection, so a single drop — clean or half-open — silently killed
+  // these notifications for the rest of the session; useNotificationSocket
+  // reconnects with backoff and detects half-open paths via a heartbeat watchdog.
+  useNotificationSocket(id, token, (envelope) => {
+    if (envelope.type === 'share_revoked') {
+      const data = envelope.data as { revoked_by_username?: string } | undefined
+      const revoker = data?.revoked_by_username || 'someone'
+      toastManager.add({
+        title: 'Share revoked',
+        description: `Your share with ${revoker} was revoked`,
+        type: 'error',
+      })
+      overlaysApi.getSources(id).then(setSources).catch(console.error)
     }
-
-    ws.onerror = () => {
-      console.warn('[OverlayEditor] Notification WS error')
-    }
-
-    return () => {
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close()
-      }
-    }
-  }, [id, token])
+  })
 
   // Handle OAuth callback query params (source_added / error)
   useEffect(() => {
