@@ -26,6 +26,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/status"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/listener"
+	"github.com/caesar/all-chat/shared/twitchchat"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -69,6 +70,21 @@ type Manager struct {
 	// webhook handler when Twitch verifies the chat subscription (it is actually enabled by
 	// then). nil disables status publishing.
 	statusPublisher *status.Publisher
+
+	// claims keeps the EventSub chat-ownership claim (ADR-0015) alive for every channel that
+	// currently holds a live channel.chat.message subscription, independent of chat volume. The
+	// webhook handler also refreshes on delivered chat, but a low-traffic channel can go many
+	// minutes between messages and let its claim (5-min TTL) lapse, which hands the channel back
+	// to IRC and produces the IRC↔EventSub flapping seen for quiet streams. Refreshing on the
+	// sync tick (ClaimRefreshInterval ≪ TTL) ties liveness to subscription existence instead. nil
+	// disables claim management.
+	claims *twitchchat.ClaimStore
+
+	// isLeader reports whether this pod currently owns the EventSub subscriptions. The manager
+	// runs on every pod, but only the leader holds real subscriptions, so only the leader may
+	// write/release claims — a standby refreshing would keep a channel off IRC even though no pod
+	// is actually delivering its chat. nil means "always leader" (single-pod / tests).
+	isLeader func() bool
 
 	mu       sync.RWMutex
 	channels map[string]*Channel // broadcaster_id -> Channel
@@ -157,6 +173,25 @@ func (m *Manager) SetSubscriptionCallback(callback SubscriptionCallback) {
 // teardown. Safe to leave unset (publishing becomes a no-op).
 func (m *Manager) SetStatusPublisher(pub *status.Publisher) {
 	m.statusPublisher = pub
+}
+
+// SetClaimStore injects the EventSub chat-ownership claim store (ADR-0015). With it set, the
+// manager keeps a live claim for every channel holding an active chat subscription, refreshed on
+// each sync tick so a low-traffic channel never lets its claim lapse and flap to IRC. Safe to
+// leave unset (claim management becomes a no-op).
+func (m *Manager) SetClaimStore(claims *twitchchat.ClaimStore) {
+	m.claims = claims
+}
+
+// SetLeaderFunc injects the leadership predicate. Only the leader writes/releases claims, mirroring
+// the subscription callback which is a no-op on standbys. nil (the default) is treated as leader.
+func (m *Manager) SetLeaderFunc(isLeader func() bool) {
+	m.isLeader = isLeader
+}
+
+// leads reports whether this pod may manage claims (it owns the real subscriptions).
+func (m *Manager) leads() bool {
+	return m.isLeader == nil || m.isLeader()
 }
 
 // ResetTracking drops the in-memory channel map so the next SyncChannels treats every active
@@ -282,6 +317,52 @@ func isChatDemanded(sourceIDs []string, demanded map[string]listener.DemandedSou
 	return false
 }
 
+// refreshClaims renews the chat-ownership claim for every channel that currently holds a live chat
+// subscription, keeping it off IRC regardless of how sparse its chat is (ADR-0015). Called once per
+// sync tick (ClaimRefreshInterval ≪ claim TTL). Only the leader writes claims. Channels are
+// snapshotted under the read lock and the (per-channel, bounded) Redis writes happen outside it so
+// a slow Redis never blocks syncing.
+func (m *Manager) refreshClaims(ctx context.Context) {
+	if m.claims == nil || !m.leads() {
+		return
+	}
+
+	type claim struct{ login, broadcasterID string }
+	m.mu.RLock()
+	pending := make([]claim, 0, len(m.channels))
+	for broadcasterID, ch := range m.channels {
+		if ch.ChatActive {
+			pending = append(pending, claim{ch.BroadcasterName, broadcasterID})
+		}
+	}
+	m.mu.RUnlock()
+
+	for _, c := range pending {
+		wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if err := m.claims.Claim(wctx, c.login, c.broadcasterID); err != nil {
+			m.logger.Warn("Failed to refresh EventSub chat-ownership claim",
+				zap.String("login", c.login), zap.Error(err))
+		}
+		cancel()
+	}
+}
+
+// releaseClaim drops a channel's chat-ownership claim so IRC resumes it promptly instead of waiting
+// out the TTL. Called when a chat subscription is torn down (demand lost or channel removed). Only
+// the leader releases; a standby releasing would yank a channel the leader is still serving back to
+// IRC. nil-safe and leader-gated.
+func (m *Manager) releaseClaim(login string) {
+	if m.claims == nil || login == "" || !m.leads() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := m.claims.Release(ctx, login); err != nil {
+		m.logger.Warn("Failed to release EventSub chat-ownership claim",
+			zap.String("login", login), zap.Error(err))
+	}
+}
+
 // reconcileChatLocked creates or deletes channel.chat.message subscriptions so that a chat
 // subscription exists exactly for channels that (a) have the chat scope and (b) have live
 // overlay demand. Must be called with m.mu held. Only the leader's callback performs real
@@ -305,7 +386,9 @@ func (m *Manager) reconcileChatLocked(demanded map[string]listener.DemandedSourc
 				continue
 			}
 			ch.ChatActive = false
-			// Chat reading stopped for this channel — clear its overlay indicator.
+			// EventSub stopped serving this channel — drop the claim so IRC can resume it without
+			// waiting out the TTL, and clear its overlay indicator.
+			m.releaseClaim(ch.BroadcasterName)
 			m.publishChatOffline(ch.BroadcasterName)
 		}
 	}
@@ -321,6 +404,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	if err := m.SyncChannels(ctx); err != nil {
 		m.logger.Error("Initial channel sync failed", zap.Error(err))
 	}
+	m.refreshClaims(ctx)
 
 	// Periodic sync
 	m.wg.Add(1)
@@ -340,10 +424,12 @@ func (m *Manager) Start(ctx context.Context) error {
 				if err := m.SyncChannels(ctx); err != nil {
 					m.logger.Error("Channel sync failed (demand-triggered)", zap.Error(err))
 				}
+				m.refreshClaims(ctx)
 			case <-ticker.C:
 				if err := m.SyncChannels(ctx); err != nil {
 					m.logger.Error("Channel sync failed", zap.Error(err))
 				}
+				m.refreshClaims(ctx)
 			}
 		}
 	}()
@@ -572,8 +658,10 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 				}
 			}
 
-			// Removing the channel deletes its chat subscription too — clear the indicator.
+			// Removing the channel deletes its chat subscription too — drop the claim and clear
+			// the indicator.
 			if ch.ChatActive {
+				m.releaseClaim(ch.BroadcasterName)
 				m.publishChatOffline(ch.BroadcasterName)
 			}
 
