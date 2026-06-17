@@ -30,6 +30,10 @@ type OverlayConfig struct {
 	CustomCSS          string         `json:"custom_css"`
 	VisualSettings     map[string]any `json:"visual_settings"`
 	SevenTVEmoteSetID  string         `json:"seventv_emote_set_id"`
+	// ThemeID is the bundled marketplace theme applied to this overlay. The
+	// renderer resolves its CSS fresh from the frontend bundle so theme fixes
+	// propagate on deploy. Empty = no bundled theme (raw custom_css / legacy).
+	ThemeID            string         `json:"theme_id"`
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
 }

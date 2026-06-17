@@ -112,6 +112,7 @@ func (h *ConfigHandler) HandleUpdateConfig(c *gin.Context) {
 		CustomCSS         *string        `json:"custom_css"`
 		VisualSettings    map[string]any `json:"visual_settings"`
 		SevenTVEmoteSetID *string        `json:"seventv_emote_set_id"`
+		ThemeID           *string        `json:"theme_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -139,6 +140,9 @@ func (h *ConfigHandler) HandleUpdateConfig(c *gin.Context) {
 	}
 	if req.VisualSettings != nil {
 		config.VisualSettings = req.VisualSettings
+	}
+	if req.ThemeID != nil {
+		config.ThemeID = *req.ThemeID
 	}
 	if req.SevenTVEmoteSetID != nil {
 		if h.seventvResolver == nil {
@@ -229,6 +233,7 @@ func (h *ConfigHandler) HandleGetPublicConfig(c *gin.Context) {
 		"custom_css":           config.CustomCSS,
 		"visual_settings":      config.VisualSettings,
 		"seventv_emote_set_id": config.SevenTVEmoteSetID,
+		"theme_id":             config.ThemeID,
 		"sources":              sourceStatus,
 	})
 }

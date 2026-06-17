@@ -50,11 +50,11 @@ vi.mock('../ThemeCard', () => ({
     onApply,
   }: {
     theme: { id: string; name: string; css: string }
-    onApply: (css: string) => void
+    onApply: (theme: { id: string; name: string; css: string }) => void
   }) => (
     <div data-testid={`theme-card-${theme.id}`}>
       <span>{theme.name}</span>
-      <button onClick={() => onApply(theme.css)}>Apply {theme.name}</button>
+      <button onClick={() => onApply(theme)}>Apply {theme.name}</button>
     </div>
   ),
 }))
@@ -119,7 +119,7 @@ describe('ThemeContent', () => {
     expect(screen.getByTestId('theme-filters')).toBeDefined()
   })
 
-  it('calls onApply with CSS string when a theme card apply button is clicked', () => {
+  it('calls onApply with the theme when a theme card apply button is clicked', () => {
     const testTheme = {
       id: 'theme-1',
       filename: 'dark-theme.css',
@@ -143,7 +143,7 @@ describe('ThemeContent', () => {
     const applyButton = screen.getByRole('button', { name: /Apply Dark Theme/i })
     fireEvent.click(applyButton)
 
-    expect(onApply).toHaveBeenCalledWith('.chat { color: white; }')
+    expect(onApply).toHaveBeenCalledWith(testTheme)
     expect(onApply).toHaveBeenCalledTimes(1)
   })
 })
