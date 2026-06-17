@@ -49,6 +49,12 @@ export interface OverlayConfig {
   visual_settings?: Partial<VisualSettings>
   /** Optional 7TV emote-set ID override; lets users attach a 7TV set independent of source platforms. */
   seventv_emote_set_id?: string
+  /**
+   * Bundled marketplace theme id (e.g. "modern-dark-theme"). The renderer
+   * resolves the theme CSS fresh from the build bundle so theme fixes
+   * propagate on deploy; custom_css is only the user's raw overrides.
+   */
+  theme_id?: string
   created_at: string
   updated_at: string
 }
@@ -78,6 +84,8 @@ export interface PublicOverlayConfig {
   custom_css?: string
   visual_settings?: Partial<VisualSettings>
   seventv_emote_set_id?: string
+  /** Bundled theme id; renderer resolves its CSS from the build bundle. */
+  theme_id?: string
   sources?: PublicSourceStatus[]
 }
 
