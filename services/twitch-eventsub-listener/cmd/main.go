@@ -183,6 +183,22 @@ func main() {
 	subscriptionMgr := eventsub.NewSubscriptionManager(twitchClientID, twitchClientSecret, webhookSecret, callbackURL, log)
 	channelManager := channels.NewManager(db, log, subscriptionMgr, tokenCipher, ChannelSyncInterval)
 	channelManager.SetStatusPublisher(statusPublisher)
+	channelManager.SetClaimStore(chatClaims)
+
+	// isLeader tracks whether this pod currently holds EventSub leadership.
+	// Protected by mu; read by subscription callback and HTTP handlers.
+	//
+	// Defined BEFORE ll.Start because that call synchronously starts the channel manager's sync
+	// loop (and its initial sync), which refreshes chat-ownership claims. Wiring the leader gate
+	// first ensures a standby never writes claims (a nil gate would be treated as "always leader").
+	var isLeaderMu sync.RWMutex
+	isLeader := false
+	isLeaderFn := func() bool {
+		isLeaderMu.RLock()
+		defer isLeaderMu.RUnlock()
+		return isLeader
+	}
+	channelManager.SetLeaderFunc(isLeaderFn)
 
 	// Start LeadershipListener — runs demand subscriber; channel manager started after leadership
 	if err := ll.Start(ctx, channelManager); err != nil {
@@ -191,16 +207,6 @@ func main() {
 
 	// Create webhook handler
 	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, statusPublisher, chatClaims, msgRegistry, log)
-
-	// isLeader tracks whether this pod currently holds EventSub leadership.
-	// Protected by mu; read by subscription callback and HTTP handlers.
-	var isLeaderMu sync.RWMutex
-	isLeader := false
-	isLeaderFn := func() bool {
-		isLeaderMu.RLock()
-		defer isLeaderMu.RUnlock()
-		return isLeader
-	}
 
 	// Set up channel manager callback. Actions: "subscribe" creates the event subscriptions
 	// for every active channel; "subscribe_chat"/"unsubscribe_chat" manage the
