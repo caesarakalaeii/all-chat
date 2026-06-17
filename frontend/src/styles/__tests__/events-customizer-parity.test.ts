@@ -101,4 +101,27 @@ describe('events.css visual-customizer scope parity', () => {
     const live = varsConsumedUnderScope('.overlay-live-body')
     expect(live.has('--chat-emote-scale')).toBe(true)
   })
+
+  /**
+   * Regression guard for #438 (emotes overlap at larger sizes). Emote scale must
+   * grow the layout box (height), NOT `transform: scale()` — a transform grows
+   * the emote visually without reserving space, so scaled emotes overlap text and
+   * wrap-lines. And the line box must be floored at the emote height so a tall
+   * emote can't bleed into adjacent lines.
+   */
+  it('scales emotes via the layout box, never transform: scale()', () => {
+    expect(CSS).not.toMatch(/transform:\s*scale\(var\(--chat-emote-scale/)
+    // both scopes size the emote height by the scale factor
+    const heightScaleRules = CSS.match(
+      /height:\s*calc\(1\.4em \* var\(--chat-emote-scale, 1\)\)/g
+    )
+    expect(heightScaleRules?.length).toBe(2)
+  })
+
+  it('floors the message line-height at the scaled emote height', () => {
+    const floorRules = CSS.match(
+      /line-height:\s*max\(\s*calc\(var\(--chat-line-height, 1\.5\) \* 1em\),\s*calc\(1\.4em \* var\(--chat-emote-scale, 1\)\)\s*\)/g
+    )
+    expect(floorRules?.length).toBe(2)
+  })
 })

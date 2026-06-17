@@ -380,7 +380,13 @@
     font-size: var(--chat-font-size, 1rem) !important;
     font-family: var(--chat-font-family, inherit) !important;
     font-weight: var(--chat-font-weight, inherit) !important;
-    line-height: var(--chat-line-height, 1.5) !important;
+    /* Floor the line box at the (scaled) emote height so a scaled-up emote can't
+       bleed into the wrap-line above/below. At emote-scale 1 this is exactly the
+       user's line-height (1.4 < 1.5). See #438. */
+    line-height: max(
+      calc(var(--chat-line-height, 1.5) * 1em),
+      calc(1.4em * var(--chat-emote-scale, 1))
+    ) !important;
     letter-spacing: var(--chat-letter-spacing, normal) !important;
     color: var(--chat-message-color, inherit) !important;
   }
@@ -396,7 +402,13 @@
   /* ── Emotes (inline images inside message text) ────────────────────── */
   .overlay-preview-body .break-words img {
     display: var(--chat-show-emotes, inline) !important;
-    transform: scale(var(--chat-emote-scale, 1)) !important;
+    /* Scale via the box, not `transform`. `transform: scale()` grows the emote
+       visually without reserving layout space, so a scaled-up emote overlaps the
+       neighbouring text and the wrap-lines above/below. Sizing `height` (× the
+       emote scale) keeps the layout box in sync, so margins and line-height
+       absorb the growth instead of colliding. See issue #438. */
+    height: calc(1.4em * var(--chat-emote-scale, 1)) !important;
+    width: auto !important;
     vertical-align: middle !important;
   }
 }
@@ -475,7 +487,13 @@
   .overlay-live-body .break-words {
     font-family: var(--chat-font-family, inherit) !important;
     font-weight: var(--chat-font-weight, inherit) !important;
-    line-height: var(--chat-line-height, 1.5) !important;
+    /* Floor the line box at the (scaled) emote height so a scaled-up emote can't
+       bleed into the wrap-line above/below. At emote-scale 1 this is exactly the
+       user's line-height (1.4 < 1.5). See #438. */
+    line-height: max(
+      calc(var(--chat-line-height, 1.5) * 1em),
+      calc(1.4em * var(--chat-emote-scale, 1))
+    ) !important;
     letter-spacing: var(--chat-letter-spacing, normal) !important;
     color: var(--chat-message-color, #ffffff) !important;
   }
@@ -490,7 +508,10 @@
   /* ── Emotes (inline images inside message text) ────────────────────── */
   .overlay-live-body .break-words img {
     display: var(--chat-show-emotes, inline) !important;
-    transform: scale(var(--chat-emote-scale, 1)) !important;
+    /* Scale via the box, not `transform` — keeps the layout box in sync with the
+       visual size so scaled emotes don't overlap text or wrap-lines. See #438. */
+    height: calc(1.4em * var(--chat-emote-scale, 1)) !important;
+    width: auto !important;
     vertical-align: middle !important;
   }
 }
