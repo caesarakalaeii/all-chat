@@ -48,6 +48,7 @@ import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
 import type { VisualSettings } from '@/lib/types/visual-settings'
@@ -115,6 +116,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [messageDuration, setMessageDuration] = useState(15)
   const [disableMessageFade, setDisableMessageFade] = useState(false)
   const [customCss, setCustomCss] = useState('')
+  // Theme CSS resolved from the build bundle by config.theme_id, so a theme fix
+  // ships with a deploy instead of being frozen per-overlay. Legacy overlays
+  // (no theme_id) leave this empty and still render via custom_css.
+  const [themeCss, setThemeCss] = useState('')
   const [visualSettingsCss, setVisualSettingsCss] = useState('')
   // Body font-size for message text. Prefer the visual-customizer `fontSize`
   // (e.g. "18px") when set, otherwise fall back to the legacy display-settings
@@ -320,6 +325,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     }
 
     setCustomCss(typeof config.custom_css === 'string' ? config.custom_css : '')
+    setThemeCss(
+      typeof config.theme_id === 'string' && config.theme_id
+        ? (getBundledTheme(config.theme_id)?.css ?? '')
+        : ''
+    )
 
     if (config.visual_settings && typeof config.visual_settings === 'object') {
       const vs = config.visual_settings as Partial<VisualSettings>
@@ -738,6 +748,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       {visualSettingsCss.length > 0 && (
         <style dangerouslySetInnerHTML={{ __html: visualSettingsCss }} />
       )}
+      {/* Bundled theme CSS first, then the user's raw custom_css overrides it. */}
+      {themeCss.length > 0 && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
       {customCss.trim().length > 0 && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
 
       {/* Platform Status Indicators */}

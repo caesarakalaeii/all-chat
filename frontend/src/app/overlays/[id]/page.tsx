@@ -56,6 +56,7 @@ import type { VisualSettings } from '@/lib/types/visual-settings'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { useNotificationSocket } from '@/hooks/useNotificationSocket'
 import { parseCssToVisualSettings } from '@/lib/utils/theme-css-parser'
+import type { Theme } from '@/lib/theme-marketplace/types'
 import { toastManager } from '@/lib/toast'
 import { trackEvent } from '@/lib/analytics'
 import { AppNav } from '@/components/AppNav'
@@ -1151,15 +1152,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [mockForm, setMockForm] = useState<MockMessageFormState>(DEFAULT_MOCK_FORM)
 
   // --- Custom CSS state ---
+  // customCss/useCustomCss are the user's RAW override CSS only. The applied
+  // marketplace theme is referenced by themeId (resolved from the build bundle
+  // at render) rather than copied here, so theme fixes propagate on deploy.
   const [customCss, setCustomCss] = useState('')
   const [useCustomCss, setUseCustomCss] = useState(false)
+  const [themeId, setThemeId] = useState('')
 
   // --- Visual appearance settings state ---
   const [visualSettings, setVisualSettings] = useState<Partial<VisualSettings>>({})
   const [iframeVisibilityDefaults, setIframeVisibilityDefaults] = useState<Partial<VisualSettings>>({})
   const [parsedThemeSettings, setParsedThemeSettings] = useState<Partial<VisualSettings>>({})
   const [showThemeConfirm, setShowThemeConfirm] = useState(false)
-  const [pendingTheme, setPendingTheme] = useState<{ css: string; parsed: Partial<VisualSettings> } | null>(null)
+  const [pendingTheme, setPendingTheme] = useState<Theme | null>(null)
 
   // --- Iframe ref for live preview communication ---
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -1391,15 +1396,21 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     )
   }, [])
 
-  // --- applyThemeImmediately: atomically apply CSS + parsed settings ---
+  // --- applyThemeImmediately: reference the theme by id + apply its parsed
+  // settings. The theme CSS is NOT copied into custom_css — it's resolved from
+  // the bundle at render (and pushed to the preview iframe here). Raw custom CSS
+  // is cleared so a freshly applied theme is exactly the bundled theme; users
+  // re-add overrides in the Custom CSS box afterwards. ---
   const applyThemeImmediately = useCallback(
-    (css: string, parsed: Partial<VisualSettings>) => {
-      setCustomCss(css)
-      setUseCustomCss(true)
+    (theme: Theme) => {
+      const parsed = parseCssToVisualSettings(theme.css)
+      setThemeId(theme.id)
+      setCustomCss('')
+      setUseCustomCss(false)
       setVisualSettings(parsed)
       setParsedThemeSettings(parsed)
       sendCssToIframe(parsed)
-      sendCustomCssToIframe(css)
+      sendCustomCssToIframe(theme.css)
     },
     [sendCssToIframe, sendCustomCssToIframe]
   )
@@ -1410,16 +1421,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     sendCssToIframe(parsedThemeSettings)
   }, [parsedThemeSettings, sendCssToIframe])
 
-  // --- handleThemeApply: apply a theme CSS string from ThemeContent ---
+  // --- handleThemeApply: apply a marketplace theme from ThemeContent ---
   // Prompts for confirmation if visual settings are already customized.
-  function handleThemeApply(css: string): void {
-    const parsed = parseCssToVisualSettings(css)
+  function handleThemeApply(theme: Theme): void {
     const hasExisting = Object.keys(visualSettings).length > 0
     if (hasExisting) {
-      setPendingTheme({ css, parsed })
+      setPendingTheme(theme)
       setShowThemeConfirm(true)
     } else {
-      applyThemeImmediately(css, parsed)
+      applyThemeImmediately(theme)
     }
   }
 
@@ -1549,6 +1559,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           const css = config.custom_css || ''
           setCustomCss(css)
           setUseCustomCss(Boolean(css.trim().length))
+          setThemeId(typeof config.theme_id === 'string' ? config.theme_id : '')
 
           // Parse theme CSS — always set parsedThemeSettings so "Reset to theme defaults" works
           // after save+reload (when visual_settings is non-empty, theme defaults are still needed)
@@ -1999,6 +2010,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         enable_bttv: enableBttv,
         enable_ffz: enableFfz,
         custom_css: useCustomCss ? customCss : '',
+        theme_id: themeId,
         visual_settings: visualSettings,
         filter_settings: filterSettings,
         // Send the (already-resolved) override only when the user touched it.
@@ -2959,7 +2971,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               size="sm"
               onClick={() => {
                 if (pendingTheme) {
-                  applyThemeImmediately(pendingTheme.css, pendingTheme.parsed)
+                  applyThemeImmediately(pendingTheme)
                   setPendingTheme(null)
                 }
                 setShowThemeConfirm(false)

@@ -34,7 +34,7 @@ interface ThemeCardProps {
   isFavorite: boolean
   messages: ChatMessagePreview[]
   onToggleFavorite: (themeId: string) => void
-  onApply: (css: string) => void
+  onApply: (theme: Theme) => void
   themeType?: 'overlay' | 'creditroll'
 }
 
@@ -104,7 +104,7 @@ export default function ThemeCard({
 
         {/* Apply Button */}
         <button
-          onClick={() => onApply(theme.css)}
+          onClick={() => onApply(theme)}
           className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-twitch px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-twitch/90"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

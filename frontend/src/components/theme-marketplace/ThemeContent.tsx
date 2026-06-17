@@ -25,9 +25,10 @@ import ThemeFilters from './ThemeFilters'
 import { useThemeMarketplace } from '@/hooks/useThemeMarketplace'
 import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
 import { clearCache } from '@/lib/theme-marketplace/cache'
+import type { Theme } from '@/lib/theme-marketplace/types'
 
 interface ThemeContentProps {
-  onApply: (css: string) => void
+  onApply: (theme: Theme) => void
   isAdmin?: boolean
 }
 

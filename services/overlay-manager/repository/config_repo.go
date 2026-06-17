@@ -52,7 +52,7 @@ func (r *OverlayConfigRepository) GetByOverlayID(ctx context.Context, overlayID 
 	query := `
 		SELECT id, overlay_id, display_settings, filter_settings,
 		       enable_7tv, enable_bttv, enable_ffz, custom_css, visual_settings,
-		       seventv_emote_set_id, created_at, updated_at
+		       seventv_emote_set_id, theme_id, created_at, updated_at
 		FROM overlay_configs
 		WHERE overlay_id = $1
 	`
@@ -84,6 +84,12 @@ func (r *OverlayConfigRepository) Update(ctx context.Context, config *models.Ove
 		seventvSetID = config.SevenTVEmoteSetID
 	}
 
+	// NULL when empty: "no bundled theme" is distinct from any theme id.
+	var themeID any
+	if config.ThemeID != "" {
+		themeID = config.ThemeID
+	}
+
 	query := `
 		UPDATE overlay_configs
 		SET display_settings = $1,
@@ -94,11 +100,12 @@ func (r *OverlayConfigRepository) Update(ctx context.Context, config *models.Ove
 		    custom_css = $6,
 		    visual_settings = $7,
 		    seventv_emote_set_id = $8,
+		    theme_id = $9,
 		    updated_at = NOW()
-		WHERE overlay_id = $9
+		WHERE overlay_id = $10
 		RETURNING id, overlay_id, display_settings, filter_settings,
 		          enable_7tv, enable_bttv, enable_ffz, custom_css, visual_settings,
-		          seventv_emote_set_id, created_at, updated_at
+		          seventv_emote_set_id, theme_id, created_at, updated_at
 	`
 
 	row := r.pool.QueryRow(ctx, query,
@@ -110,6 +117,7 @@ func (r *OverlayConfigRepository) Update(ctx context.Context, config *models.Ove
 		config.CustomCSS,
 		visualSettings,
 		seventvSetID,
+		themeID,
 		config.OverlayID,
 	)
 
@@ -126,6 +134,7 @@ func scanOverlayConfig(row pgx.Row) (*models.OverlayConfig, error) {
 	config := &models.OverlayConfig{}
 	var displaySettingsJSON, filterSettingsJSON, visualSettingsJSON []byte
 	var seventvSetID *string
+	var themeID *string
 
 	err := row.Scan(
 		&config.ID,
@@ -138,6 +147,7 @@ func scanOverlayConfig(row pgx.Row) (*models.OverlayConfig, error) {
 		&config.CustomCSS,
 		&visualSettingsJSON,
 		&seventvSetID,
+		&themeID,
 		&config.CreatedAt,
 		&config.UpdatedAt,
 	)
@@ -150,6 +160,9 @@ func scanOverlayConfig(row pgx.Row) (*models.OverlayConfig, error) {
 
 	if seventvSetID != nil {
 		config.SevenTVEmoteSetID = *seventvSetID
+	}
+	if themeID != nil {
+		config.ThemeID = *themeID
 	}
 
 	if err := json.Unmarshal(displaySettingsJSON, &config.DisplaySettings); err != nil {

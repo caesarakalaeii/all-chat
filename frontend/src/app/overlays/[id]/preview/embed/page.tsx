@@ -44,6 +44,7 @@ import { renderMessageContent } from '@/lib/renderMessage'
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
@@ -415,7 +416,14 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           setShowPlatformBadge(display.show_platform_badge)
         }
 
-        const css = config.custom_css || ''
+        // Bundled theme CSS (resolved fresh from the build by theme_id) + the
+        // user's raw custom_css overrides. Both are scoped to the preview root
+        // by scopedPreviewCss, mirroring the live overlay's theme→custom order.
+        const themeCss =
+          typeof config.theme_id === 'string' && config.theme_id
+            ? (getBundledTheme(config.theme_id)?.css ?? '')
+            : ''
+        const css = [themeCss, config.custom_css || ''].filter((s) => s.trim().length).join('\n')
         setCustomCss(css)
         setUseCustomCss(Boolean(css.trim().length))
 
