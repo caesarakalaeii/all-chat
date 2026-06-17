@@ -278,7 +278,7 @@ body {
 .text-white.break-words img {
   display: inline-block !important;
   vertical-align: middle !important;
-  max-height: 28px !important;
+  max-height: calc(28px * var(--chat-emote-scale, 1)) !important;
   margin: 0 2px !important;
   filter: drop-shadow(0 0 2px rgba(212, 175, 55, 0.3));
   image-rendering: -webkit-optimize-contrast !important;

@@ -177,7 +177,7 @@ body {
 }
 
 .text-white.break-words img {
-  max-height: 24px !important;
+  max-height: calc(24px * var(--chat-emote-scale, 1)) !important;
   image-rendering: pixelated !important;
   image-rendering: crisp-edges !important;
   filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.8)) !important;
