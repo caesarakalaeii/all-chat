@@ -210,7 +210,7 @@ body {
 }
 
 .text-white.break-words img {
-  max-height: 24px !important;
+  max-height: calc(24px * var(--chat-emote-scale, 1)) !important;
   filter:
     grayscale(100%)
     brightness(1.5)

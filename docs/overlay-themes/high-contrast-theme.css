@@ -251,7 +251,7 @@ body {
 .text-white.break-words img,
 .message-content img,
 .emote {
-  max-height: 36px !important;
+  max-height: calc(36px * var(--chat-emote-scale, 1)) !important;
   filter: contrast(1.2) brightness(1.1) !important;
   margin: 0 4px !important;
   vertical-align: middle !important;

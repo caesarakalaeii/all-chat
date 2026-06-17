@@ -163,7 +163,7 @@ body {
 }
 
 .text-white.break-words img {
-  max-height: 32px !important;
+  max-height: calc(32px * var(--chat-emote-scale, 1)) !important;
   filter: drop-shadow(0 2px 4px rgba(255, 182, 193, 0.3)) !important;
   margin: 0 4px !important;
 }
