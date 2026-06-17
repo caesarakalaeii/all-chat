@@ -394,9 +394,17 @@
   }
 
   /* ── Emotes (inline images inside message text) ────────────────────── */
+  /* Scale via `height` (layout-affecting) rather than `transform: scale`.
+     A transform is visual-only: it leaves the emote's layout box pinned at the
+     base 1.4em, so scaled emotes overflow it — colliding with adjacent emotes
+     and bleeding into neighbouring lines — while never actually reserving the
+     larger size. Sizing the height (in em, so it still tracks message
+     font-size) reflows the line box to fit: emotes grow without a cap and lines
+     space out to match. `width: auto` preserves aspect ratio. */
   .overlay-preview-body .break-words img {
     display: var(--chat-show-emotes, inline) !important;
-    transform: scale(var(--chat-emote-scale, 1)) !important;
+    height: calc(1.4em * var(--chat-emote-scale, 1)) !important;
+    width: auto !important;
     vertical-align: middle !important;
   }
 }
@@ -488,9 +496,13 @@
   }
 
   /* ── Emotes (inline images inside message text) ────────────────────── */
+  /* See the matching .overlay-preview-body rule above: scale via `height`
+     (layout-affecting) instead of `transform: scale` so the line box reflows to
+     fit, emotes grow without a cap, and adjacent emotes/lines never overlap. */
   .overlay-live-body .break-words img {
     display: var(--chat-show-emotes, inline) !important;
-    transform: scale(var(--chat-emote-scale, 1)) !important;
+    height: calc(1.4em * var(--chat-emote-scale, 1)) !important;
+    width: auto !important;
     vertical-align: middle !important;
   }
 }
