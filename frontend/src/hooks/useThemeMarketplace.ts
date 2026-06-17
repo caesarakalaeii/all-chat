@@ -26,15 +26,8 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { Theme } from '@/lib/theme-marketplace/types'
-import { fetchAllThemes } from '@/lib/theme-marketplace/github-api'
-import {
-  getCachedThemes,
-  isCacheExpired,
-  cacheThemes,
-  getFavorites,
-  toggleFavorite as toggleFavoriteCache,
-} from '@/lib/theme-marketplace/cache'
-import { EMBEDDED_FALLBACK_THEMES } from '@/lib/theme-marketplace/constants'
+import { getBundledThemes } from '@/lib/theme-marketplace/bundled-themes'
+import { getFavorites, toggleFavorite as toggleFavoriteCache } from '@/lib/theme-marketplace/cache'
 
 /**
  * Debounce hook
@@ -93,32 +86,13 @@ export function useThemeMarketplace() {
   // Debounce search query
   const debouncedSearch = useDebounce(searchQuery, 300)
 
-  const loadThemes = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      // Check cache first
-      const cached = getCachedThemes()
-      if (cached && !isCacheExpired(cached)) {
-        setThemes(cached.themes)
-        setLoading(false)
-        return
-      }
-
-      // Fetch from GitHub
-      const fetchedThemes = await fetchAllThemes()
-      setThemes(fetchedThemes)
-      cacheThemes(fetchedThemes)
-      setLoading(false)
-    } catch (err) {
-      console.error('Failed to load themes:', err)
-      setError('Failed to load themes from GitHub. Using fallback themes.')
-
-      // Use fallback themes
-      setThemes(EMBEDDED_FALLBACK_THEMES)
-      setLoading(false)
-    }
+  const loadThemes = useCallback(() => {
+    // Themes are bundled into the build (generated from docs/overlay-themes),
+    // so loading is synchronous and offline — no GitHub fetch, no cache, and a
+    // theme fix propagates to every overlay on the next deploy.
+    setError(null)
+    setThemes(getBundledThemes())
+    setLoading(false)
   }, [])
 
   // Load themes on mount — setState calls here are intentional on mount only

@@ -19,62 +19,17 @@
 /**
  * Theme Marketplace Cache Manager
  *
- * Manages localStorage caching of theme data.
+ * Manages localStorage of theme favorites. (Theme CSS itself is bundled into
+ * the build — see bundled-themes.ts — so there is no theme-list cache anymore.)
  */
-
-import type { Theme, ThemeCacheData } from './types'
 
 const CACHE_KEY = 'theme_marketplace_cache'
 const FAVORITES_KEY = 'theme_marketplace_favorites'
-const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
 
 /**
- * Get cached themes from localStorage
- */
-export function getCachedThemes(): ThemeCacheData | null {
-  if (typeof window === 'undefined') return null
-
-  try {
-    const cached = localStorage.getItem(CACHE_KEY)
-    if (!cached) return null
-
-    const data: ThemeCacheData = JSON.parse(cached)
-    return data
-  } catch (error) {
-    console.error('Failed to read theme cache:', error)
-    return null
-  }
-}
-
-/**
- * Check if cache is expired
- */
-export function isCacheExpired(cache: ThemeCacheData): boolean {
-  const now = Date.now()
-  return now - cache.timestamp > cache.ttl
-}
-
-/**
- * Save themes to cache
- */
-export function cacheThemes(themes: Theme[]): void {
-  if (typeof window === 'undefined') return
-
-  try {
-    const cacheData: ThemeCacheData = {
-      timestamp: Date.now(),
-      ttl: CACHE_TTL,
-      themes,
-    }
-
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-  } catch (error) {
-    console.error('Failed to cache themes:', error)
-  }
-}
-
-/**
- * Clear theme cache
+ * Clear any legacy theme-list cache left over from the old GitHub-fetch path.
+ * Kept so the marketplace "refresh" control can evict stale cached entries from
+ * clients that ran the pre-bundle build.
  */
 export function clearCache(): void {
   if (typeof window === 'undefined') return
