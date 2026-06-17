@@ -86,7 +86,7 @@ export function renderMessageContent(message: ChatMessage): React.ReactNode {
 
     if (!emote.url) {
       nodes.push(
-        <span key={`${emote.key}-text`} className="mx-0.5">
+        <span key={`${emote.key}-text`} className="mx-[0.2em]">
           {text.slice(emote.start, emote.end + 1)}
         </span>
       )
@@ -99,7 +99,7 @@ export function renderMessageContent(message: ChatMessage): React.ReactNode {
           title={`${emote.code} (${emote.provider})`}
           width={28}
           height={28}
-          className="mx-0.5 inline-block h-[1.4em] w-auto align-text-bottom"
+          className="mx-[0.2em] inline-block h-[1.4em] w-auto align-text-bottom"
         />
       )
     }
