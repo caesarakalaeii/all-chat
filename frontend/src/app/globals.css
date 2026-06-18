@@ -280,6 +280,49 @@ span.font-semibold.text-sm.username-gradient {
 }
 
 /* ============================================================
+   DOCS CODE HIGHLIGHTING — /docs
+   highlight.js emits .hljs-* token spans (rendered server-side).
+   Colours are tuned to read on the code surface (bg-surface-2);
+   the code keeps its own background from the <pre> wrapper.
+   ============================================================ */
+.legal-prose code.hljs {
+  background: transparent;
+  color: var(--color-text-sub);
+}
+.legal-prose .hljs-comment,
+.legal-prose .hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+.legal-prose .hljs-keyword,
+.legal-prose .hljs-literal,
+.legal-prose .hljs-selector-tag,
+.legal-prose .hljs-type {
+  color: #ff7b72;
+}
+.legal-prose .hljs-string,
+.legal-prose .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+.legal-prose .hljs-number,
+.legal-prose .hljs-symbol {
+  color: #79c0ff;
+}
+.legal-prose .hljs-attr,
+.legal-prose .hljs-attribute,
+.legal-prose .hljs-name {
+  color: #7ee787;
+}
+.legal-prose .hljs-title,
+.legal-prose .hljs-title.function_,
+.legal-prose .hljs-built_in {
+  color: #d2a8ff;
+}
+.legal-prose .hljs-punctuation {
+  color: var(--color-text-dim);
+}
+
+/* ============================================================
    OVERLAY OBSERVABILITY VIEW — /overlay/[id]/view
    Self-contained light/dark surface. Intentionally IGNORES the
    overlay marketplace themes (custom_css / visual_settings): the

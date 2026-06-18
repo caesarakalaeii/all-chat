@@ -18,7 +18,17 @@
 
 import Link from 'next/link'
 import type { ReactNode } from 'react'
+import hljs from 'highlight.js/lib/core'
+import javascript from 'highlight.js/lib/languages/javascript'
+import python from 'highlight.js/lib/languages/python'
+import json from 'highlight.js/lib/languages/json'
 import { AppNav } from '@/components/AppNav'
+
+// Register only the languages used below. Highlighting runs server-side (this is
+// a server component), so nothing ships to the client except the rendered HTML.
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('json', json)
 
 export const metadata = {
   title: 'Documentation | All-Chat',
@@ -37,10 +47,20 @@ function Code({ children }: { children: ReactNode }) {
   )
 }
 
-function Pre({ children }: { children: string }) {
+function Pre({ children, lang }: { children: string; lang?: 'javascript' | 'python' | 'json' }) {
+  const className =
+    'my-4 overflow-x-auto rounded-lg border border-border bg-surface-2 p-4 text-sm leading-relaxed text-text-sub'
+  if (!lang) {
+    return (
+      <pre className={className}>
+        <code className="font-mono">{children}</code>
+      </pre>
+    )
+  }
+  const highlighted = hljs.highlight(children, { language: lang, ignoreIllegals: true }).value
   return (
-    <pre className="my-4 overflow-x-auto rounded-lg border border-border bg-surface-2 p-4 text-sm leading-relaxed text-text-sub">
-      <code className="font-mono">{children}</code>
+    <pre className={className}>
+      <code className="hljs font-mono" dangerouslySetInnerHTML={{ __html: highlighted }} />
     </pre>
   )
 }
@@ -196,7 +216,7 @@ export default function DocsPage() {
               />
 
               <h3>Minimal example (JavaScript)</h3>
-              <Pre>{`const ws = new WebSocket(
+              <Pre lang="javascript">{`const ws = new WebSocket(
   "wss://allch.at/ws/overlay/${TEST_OVERLAY_ID}"
 )
 
@@ -223,7 +243,7 @@ ws.onmessage = (e) => {
 }`}</Pre>
 
               <h3>Minimal example (Python)</h3>
-              <Pre>{`# pip install websocket-client
+              <Pre lang="python">{`# pip install websocket-client
 import json, websocket
 
 def on_message(ws, raw):
@@ -248,7 +268,7 @@ ws.run_forever()`}</Pre>
             <section id="message-format">
               <h2>Message format</h2>
               <p>Every frame is JSON with the same envelope:</p>
-              <Pre>{`{
+              <Pre lang="json">{`{
   "type": "chat_message",
   "data": { ... },          // shape depends on "type" (omitted for ping/pong)
   "timestamp": "2026-06-18T14:30:00Z"
@@ -332,7 +352,7 @@ ws.run_forever()`}</Pre>
               </p>
 
               <h3>Example</h3>
-              <Pre>{`{
+              <Pre lang="json">{`{
   "type": "chat_message",
   "data": {
     "id": "abc123",
@@ -399,7 +419,7 @@ ws.run_forever()`}</Pre>
                 </li>
               </ul>
               <h3>Example (Twitch subscription)</h3>
-              <Pre>{`{
+              <Pre lang="json">{`{
   "type": "chat_message",
   "data": {
     "id": "evt-sub-1",
