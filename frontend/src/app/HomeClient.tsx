@@ -34,7 +34,7 @@ import { FaqSection } from '@/components/FaqSection'
 import { PlatformBadge } from '@/components/ui/badge'
 import { PLATFORM_COLORS } from '@/lib/platform-colors'
 import { toastManager } from '@/lib/toast'
-import { LayoutGrid, Zap, Palette, Puzzle, LogIn, Plus, MonitorPlay } from 'lucide-react'
+import { LayoutGrid, Zap, Palette, Puzzle, LogIn, Plus, MonitorPlay, Code2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { trackEvent } from '@/lib/analytics'
 
@@ -516,6 +516,35 @@ export default function HomeClient() {
               </a>
             </div>
             <p className="mt-2 text-xs text-text-sub">GitHub Releases get updates first — store versions follow shortly after.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Developer docs promo                                                */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="mx-auto max-w-3xl px-4 pb-16">
+        <div className="flex flex-col items-center gap-6 rounded-xl border border-border bg-surface p-8 text-center sm:flex-row sm:text-left">
+          <div className="flex-shrink-0 rounded-xl bg-surface-2 p-4">
+            <Code2 className="h-10 w-10 text-twitch" aria-hidden="true" />
+          </div>
+          <div className="flex-1">
+            <h2 className="mb-1 text-xl font-bold text-text">Build on All-Chat</h2>
+            <p className="mb-4 text-sm text-text-sub">
+              Connect bots, overlays, vote counters, and analytics to one unified chat WebSocket —
+              every platform, one message format. There&apos;s a public test stream you can hook up
+              in seconds, no account needed.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+              <Link
+                href="/docs"
+                onClick={() => trackEvent('cta_click', { cta: 'docs', location: 'promo' })}
+                className="inline-flex items-center gap-2 rounded-lg bg-linear-to-r from-twitch to-tiktok px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+              >
+                <Code2 className="h-4 w-4" aria-hidden="true" />
+                Read the docs
+              </Link>
+            </div>
           </div>
         </div>
       </section>
