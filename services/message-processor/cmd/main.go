@@ -214,6 +214,17 @@ func main() {
 	publicWSBaseURL := getEnvOrDefault("PUBLIC_WS_BASE_URL", "")
 	testStreamGenerator := testgen.NewGenerator(testStreamOverlayID, pubsubPublisher, emoteEnricher, cheermoteEnricher, log)
 
+	// Auto-start the generator while a WebSocket client is connected to the test
+	// overlay (reuses the api-gateway connection-presence signal), so external
+	// tools just connect and see traffic — no manual trigger needed. The HTTP
+	// endpoints below remain for explicit/dev control (e.g. no gateway present).
+	testStreamWatcherCtx, testStreamWatcherCancel := context.WithCancel(context.Background())
+	defer testStreamWatcherCancel()
+	if testStreamEnabled && getEnvOrDefault("TEST_STREAM_AUTOSTART", "true") == "true" {
+		watcher := testgen.NewDemandWatcher(testStreamOverlayID, redisClient, testStreamGenerator, testgen.ConfigFromEnv(), log)
+		go watcher.Run(testStreamWatcherCtx)
+	}
+
 	// Create event capture for credit roll sessions
 	eventCapture := sessions.NewEventCapture(redisClient, log)
 

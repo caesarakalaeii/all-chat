@@ -30,6 +30,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// testProcessorMetrics is registered once for the whole package: a second
+// NewProcessorMetrics() would panic on duplicate Prometheus registration.
+var testProcessorMetrics = metrics.NewProcessorMetrics()
+
 // TestEndToEndPublishesToRedis verifies the full publish path: a real
 // PubSubPublisher writes generator output to overlay:{id} and a subscriber
 // receives correctly-shaped UnifiedChatMessage payloads. Set REDIS_ADDR to run
@@ -55,7 +59,7 @@ func TestEndToEndPublishesToRedis(t *testing.T) {
 	}
 	ch := sub.Channel()
 
-	pub := publisher.NewPubSubPublisher(rdb, zap.NewNop(), metrics.NewProcessorMetrics())
+	pub := publisher.NewPubSubPublisher(rdb, zap.NewNop(), testProcessorMetrics)
 	g := NewGenerator(testOverlayID, pub, nil, nil, zap.NewNop())
 
 	if _, err := g.Start(Config{DurationSeconds: 3, RatePerSecond: 20, VoteRatio: 0.5, EventEveryN: 4}); err != nil {
