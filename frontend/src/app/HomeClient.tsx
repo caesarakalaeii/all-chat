@@ -554,6 +554,10 @@ export default function HomeClient() {
             Discord
           </a>
           <span aria-hidden="true">&bull;</span>
+          <Link href="/docs" className="underline-offset-4 hover:text-text hover:underline">
+            Docs
+          </Link>
+          <span aria-hidden="true">&bull;</span>
           <Link
             href="/legal/privacy"
             className="underline-offset-4 hover:text-text hover:underline"
