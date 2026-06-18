@@ -278,6 +278,40 @@ func TestUserRepository_NullProfileImageURL(t *testing.T) {
 	})
 }
 
+// TestUserRepository_GetAllUsers_UndecryptableToken verifies that the admin
+// user listing does not fail when an account has a corrupt or legacy-plaintext
+// access/refresh token that cannot be decrypted. GetAllUsers is a metadata-only
+// listing and must not depend on token decryption. Regression test for the
+// admin "failed to load users" HTTP 500 ("illegal base64 data" decrypt error).
+func TestUserRepository_GetAllUsers_UndecryptableToken(t *testing.T) {
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := newTestUserRepository(t, pool)
+	ctx := context.Background()
+
+	// Insert a user whose stored token is not valid encrypted/base64 data,
+	// mimicking a legacy plaintext token in production.
+	_, err := pool.Exec(ctx, `
+		INSERT INTO users (twitch_id, auth_provider, username, display_name, profile_image_url, access_token, refresh_token, token_expires_at)
+		VALUES ($1, 'twitch', 'legacytoken', 'LegacyToken', 'https://example.com/a.png', 'oauth:not-base64!', 'oauth:also-bad!', $2)
+	`, "555111", time.Now().Add(24*time.Hour))
+	if err != nil {
+		t.Fatalf("Failed to insert user with corrupt token: %v", err)
+	}
+
+	users, err := repo.GetAllUsers(ctx)
+	if err != nil {
+		t.Fatalf("GetAllUsers() error = %v, want nil", err)
+	}
+	if len(users) != 1 {
+		t.Fatalf("GetAllUsers() returned %d users, want 1", len(users))
+	}
+	if users[0].Username != "legacytoken" {
+		t.Errorf("GetAllUsers() Username = %q, want %q", users[0].Username, "legacytoken")
+	}
+}
+
 func TestUserRepository_GetByID(t *testing.T) {
 	pool, cleanup := setupTestDB(t)
 	defer cleanup()

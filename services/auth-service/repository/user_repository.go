@@ -473,7 +473,12 @@ func (r *UserRepository) decryptToken(token string) (string, error) {
 	return r.cipher.Decrypt(token)
 }
 
-// GetAllUsers retrieves all users (admin only)
+// GetAllUsers retrieves all users (admin only).
+//
+// This is a metadata-only listing: it deliberately does NOT select or decrypt
+// the OAuth access/refresh tokens. The admin user list never uses them, and
+// coupling the listing to token decryption meant a single account with a
+// corrupt or legacy-plaintext token broke the entire endpoint with a 500.
 func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) {
 	query := `
 SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u.display_name, u.profile_image_url,
@@ -482,7 +487,7 @@ SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u
        COALESCE(u.banned_at, bpi.banned_at) AS banned_at,
        COALESCE(u.banned_reason, bpi.reason) AS banned_reason,
        COALESCE(u.banned_by, bpi.banned_by) AS banned_by,
-       u.access_token, u.refresh_token, u.token_expires_at, u.created_at, u.updated_at
+       u.created_at, u.updated_at
 FROM users u
 LEFT JOIN LATERAL (
   SELECT bpi.platform_id, bpi.banned_at, bpi.reason, bpi.banned_by
@@ -505,11 +510,24 @@ ORDER BY u.created_at DESC
 
 	var users []*models.User
 	for rows.Next() {
-		user, err := r.scanUserFromRows(rows)
+		var user models.User
+		// profile_image_url is a nullable TEXT column; scan into a pointer so a
+		// NULL (e.g. accounts created without an avatar) does not fail the scan.
+		var profileImageURL *string
+
+		err := rows.Scan(
+			&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider,
+			&user.Username, &user.DisplayName, &profileImageURL,
+			&user.IsAdmin, &user.IsPremium, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
+			&user.CreatedAt, &user.UpdatedAt,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
 		}
-		users = append(users, user)
+		if profileImageURL != nil {
+			user.ProfileImageURL = *profileImageURL
+		}
+		users = append(users, &user)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -552,43 +570,6 @@ WHERE u.id = $1
 	}
 
 	return user, nil
-}
-
-// scanUserFromRows scans a user from pgx.Rows
-func (r *UserRepository) scanUserFromRows(rows pgx.Rows) (*models.User, error) {
-	var user models.User
-	var encryptedAccessToken, encryptedRefreshToken string
-	// profile_image_url is a nullable TEXT column; scan into a pointer so a
-	// NULL (e.g. accounts created without an avatar) does not fail the scan.
-	var profileImageURL *string
-
-	err := rows.Scan(
-		&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider,
-		&user.Username, &user.DisplayName, &profileImageURL,
-		&user.IsAdmin, &user.IsPremium, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
-		&encryptedAccessToken, &encryptedRefreshToken,
-		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if profileImageURL != nil {
-		user.ProfileImageURL = *profileImageURL
-	}
-
-	accessToken, err := r.decryptToken(encryptedAccessToken)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt access token: %w", err)
-	}
-	user.AccessToken = accessToken
-
-	refreshToken, err := r.decryptToken(encryptedRefreshToken)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt refresh token: %w", err)
-	}
-	user.RefreshToken = refreshToken
-
-	return &user, nil
 }
 
 // BanUser bans a user account and deactivates their overlays/sources
