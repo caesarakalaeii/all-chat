@@ -78,9 +78,19 @@ func (c *Config) applyDefaults() {
 	}
 }
 
+// Run modes. "demand" runs are driven by WebSocket connection presence (see
+// DemandWatcher) and run continuously until the client disconnects; "manual"
+// runs are started via the HTTP endpoint and are duration-bounded.
+const (
+	modeManual = "manual"
+	modeDemand = "demand"
+)
+
 // Status is a snapshot of the generator state, safe to serialize as JSON.
 type Status struct {
 	Running      bool   `json:"running"`
+	Mode         string `json:"mode,omitempty"` // "demand" or "manual"
+	Continuous   bool   `json:"continuous"`
 	OverlayID    string `json:"overlay_id"`
 	StartedUnix  int64  `json:"started_unix,omitempty"`
 	EndsUnix     int64  `json:"ends_unix,omitempty"`
@@ -98,14 +108,16 @@ type Generator struct {
 	cheermote *enricher.CheermoteEnricher
 	logger    *zap.Logger
 
-	mu       sync.Mutex
-	running  bool
-	cancel   context.CancelFunc
-	cfg      Config
-	started  time.Time
-	ends     time.Time
-	msgCount int64
-	evtCount int64
+	mu         sync.Mutex
+	running    bool
+	mode       string
+	continuous bool
+	cancel     context.CancelFunc
+	cfg        Config
+	started    time.Time
+	ends       time.Time
+	msgCount   int64
+	evtCount   int64
 }
 
 // NewGenerator wires a generator to the shared publisher/enrichers.
@@ -122,10 +134,21 @@ func NewGenerator(overlayID string, pub *publisher.PubSubPublisher, emote *enric
 // OverlayID returns the fixed overlay this generator targets.
 func (g *Generator) OverlayID() string { return g.overlayID }
 
-// Start kicks off a run. It returns an error if a run is already active.
+// Start kicks off a duration-bounded manual run (HTTP trigger). It returns an
+// error if a run is already active.
 func (g *Generator) Start(cfg Config) (Status, error) {
 	cfg.applyDefaults()
+	return g.start(cfg, false, modeManual)
+}
 
+// StartDemand kicks off a continuous run that streams until StopDemand is
+// called. Used by the DemandWatcher while a client is connected.
+func (g *Generator) StartDemand(cfg Config) (Status, error) {
+	cfg.applyDefaults()
+	return g.start(cfg, true, modeDemand)
+}
+
+func (g *Generator) start(cfg Config, continuous bool, mode string) (Status, error) {
 	g.mu.Lock()
 	if g.running {
 		st := g.statusLocked()
@@ -135,10 +158,16 @@ func (g *Generator) Start(cfg Config) (Status, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	g.running = true
+	g.mode = mode
+	g.continuous = continuous
 	g.cancel = cancel
 	g.cfg = cfg
 	g.started = time.Now()
-	g.ends = g.started.Add(time.Duration(cfg.DurationSeconds) * time.Second)
+	if continuous {
+		g.ends = time.Time{}
+	} else {
+		g.ends = g.started.Add(time.Duration(cfg.DurationSeconds) * time.Second)
+	}
 	g.msgCount = 0
 	g.evtCount = 0
 	st := g.statusLocked()
@@ -146,16 +175,18 @@ func (g *Generator) Start(cfg Config) (Status, error) {
 
 	g.logger.Info("Test stream started",
 		zap.String("overlay_id", g.overlayID),
+		zap.String("mode", mode),
+		zap.Bool("continuous", continuous),
 		zap.Int("duration_seconds", cfg.DurationSeconds),
 		zap.Float64("rate_per_second", cfg.RatePerSecond),
 		zap.Float64("vote_ratio", cfg.VoteRatio),
 	)
 
-	go g.run(ctx, cfg)
+	go g.run(ctx, cfg, continuous)
 	return st, nil
 }
 
-// Stop cancels an active run. Safe to call when nothing is running.
+// Stop cancels any active run. Safe to call when nothing is running.
 func (g *Generator) Stop() Status {
 	g.mu.Lock()
 	if g.running && g.cancel != nil {
@@ -164,6 +195,25 @@ func (g *Generator) Stop() Status {
 	st := g.statusLocked()
 	g.mu.Unlock()
 	return st
+}
+
+// StopDemand cancels an active run only if it was started by the DemandWatcher,
+// so it never tears down a manual run.
+func (g *Generator) StopDemand() Status {
+	g.mu.Lock()
+	if g.running && g.mode == modeDemand && g.cancel != nil {
+		g.cancel()
+	}
+	st := g.statusLocked()
+	g.mu.Unlock()
+	return st
+}
+
+// State returns whether a run is active and which mode it is in.
+func (g *Generator) State() (running bool, mode string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.running, g.mode
 }
 
 // Status returns a snapshot of the current state.
@@ -176,6 +226,8 @@ func (g *Generator) Status() Status {
 func (g *Generator) statusLocked() Status {
 	st := Status{
 		Running:      g.running,
+		Mode:         g.mode,
+		Continuous:   g.continuous,
 		OverlayID:    g.overlayID,
 		MessagesSent: g.msgCount,
 		EventsSent:   g.evtCount,
@@ -183,12 +235,14 @@ func (g *Generator) statusLocked() Status {
 	}
 	if !g.started.IsZero() {
 		st.StartedUnix = g.started.Unix()
+	}
+	if !g.ends.IsZero() {
 		st.EndsUnix = g.ends.Unix()
 	}
 	return st
 }
 
-func (g *Generator) run(ctx context.Context, cfg Config) {
+func (g *Generator) run(ctx context.Context, cfg Config, continuous bool) {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	interval := time.Duration(float64(time.Second) / cfg.RatePerSecond)
 	if interval <= 0 {
@@ -197,8 +251,13 @@ func (g *Generator) run(ctx context.Context, cfg Config) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	timeout := time.NewTimer(time.Duration(cfg.DurationSeconds) * time.Second)
-	defer timeout.Stop()
+	// A nil channel blocks forever in select, so continuous runs never time out.
+	var timeoutC <-chan time.Time
+	if !continuous {
+		timeout := time.NewTimer(time.Duration(cfg.DurationSeconds) * time.Second)
+		defer timeout.Stop()
+		timeoutC = timeout.C
+	}
 
 	var n int64
 	for {
@@ -206,7 +265,7 @@ func (g *Generator) run(ctx context.Context, cfg Config) {
 		case <-ctx.Done():
 			g.finish("cancelled")
 			return
-		case <-timeout.C:
+		case <-timeoutC:
 			g.finish("duration_elapsed")
 			return
 		case <-ticker.C:

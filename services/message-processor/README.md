@@ -172,27 +172,40 @@ GET /status
 
 Drives fake chat, poll votes (`1`/`2`/`3`/`4`) and platform events onto a single
 fixed test overlay so external tools can be tested against the WebSocket feed
-without any real streaming platform. The endpoints are **unauthenticated** but
-can only ever target the fixed test overlay (`TEST_STREAM_OVERLAY_ID`, seeded by
-migration `058`), so there is no overlay to spoof. Disable with
+without any real streaming platform. It only ever targets the fixed test overlay
+(`TEST_STREAM_OVERLAY_ID`, seeded by migration `058`). Disable with
 `TEST_STREAM_ENABLED=false`.
 
+**Just connect — no trigger needed.** A `DemandWatcher` reuses the api-gateway
+connection-presence signal (`overlay:connected:{id}` / the `overlay:connections`
+channel — the same demand signal the youtube-listener uses). The moment a client
+connects the WebSocket to the test overlay, the generator starts; when the last
+client disconnects, it stops. So an external tool only has to:
+
+```
+connect:  wss://allch.at/ws/overlay/00000000-0000-4000-8000-000000000a11
+```
+
+and traffic flows. Auto-start is on by default; disable with
+`TEST_STREAM_AUTOSTART=false`. Tune the demand run with `TEST_STREAM_RATE`,
+`TEST_STREAM_VOTE_RATIO`, `TEST_STREAM_EVENT_EVERY_N`.
+
+**Manual control (optional)** — unauthenticated HTTP endpoints, proxied by the
+api-gateway at `/api/v1/test-stream/*`. Useful for local dev where no gateway
+writes the presence signal, or to force a bounded run:
+
 ```bash
-# Start a run (all body fields optional; defaults: 60s, 5 msg/s, 40% votes, event every 12)
+# Bounded run (all body fields optional; defaults: 60s, 5 msg/s, 40% votes, event every 12)
 POST /public/test-stream/start
 { "duration_seconds": 120, "rate_per_second": 8, "vote_ratio": 0.5, "event_every_n": 10 }
 
-# Current state + the WebSocket URL to connect to
-GET /public/test-stream/status
-
-# Stop an active run early
+GET  /public/test-stream/status   # state + ws_url
 POST /public/test-stream/stop
 ```
 
-`start`/`status` return the connectable `ws_url`
-(`{PUBLIC_WS_BASE_URL}/ws/overlay/{TEST_STREAM_OVERLAY_ID}`). Connect any
-WebSocket client there (OBS mode, no token) to observe the stream. Helper:
-`make test-stream` / `scripts/start-test-stream.sh`.
+Helper: `make test-stream` / `scripts/start-test-stream.sh`. Note: while a client
+is connected, the watcher keeps the stream alive, so a manual `stop` is
+re-asserted on the next reconcile (~10s).
 
 ### Metrics
 
