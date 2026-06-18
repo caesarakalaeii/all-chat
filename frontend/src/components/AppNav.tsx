@@ -80,6 +80,9 @@ export function AppNav() {
         >
           Settings
         </Link>
+        <Link href="/docs" className={isActive('/docs') ? activeClass : inactiveClass}>
+          Docs
+        </Link>
       </div>
       {isLoggedIn && (
         <button
