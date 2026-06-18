@@ -31,6 +31,7 @@ import (
 func newTestConnection() *Connection {
 	return &Connection{
 		send:   make(chan []byte, 8),
+		done:   make(chan struct{}),
 		logger: zap.NewNop(),
 	}
 }

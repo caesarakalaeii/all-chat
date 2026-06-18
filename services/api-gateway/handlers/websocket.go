@@ -218,10 +218,21 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// Use background context here too since connection lives beyond HTTP request
 	h.wsManager.AddConnection(context.Background(), wsConn)
 
-	// Send connected message
+	// Start the read/write pumps BEFORE the initial burst below. The writePump
+	// is what drains the send channel; if we enqueue the connect burst
+	// (connected frame + status snapshot + replay, up to ~500 messages) before
+	// it runs, the burst overflows the 256-slot channel and self-closes the
+	// socket mid-replay — which made busy overlays flap.
+	// Use background context, not the HTTP request context (which is cancelled
+	// when this handler returns).
+	wsCtx := context.Background()
+	wsConn.Start(wsCtx)
+
+	// Send connected message. The burst uses SendBlocking (backpressure) rather
+	// than Send (drop-and-close) so a large replay can't tear down the socket.
 	connectedMsg := models.NewConnected(overlayID)
 	connectedJSON, _ := connectedMsg.ToJSON()
-	wsConn.Send(connectedJSON)
+	wsConn.SendBlocking(connectedJSON)
 
 	// Send status snapshot for all configured sources so indicators are populated immediately.
 	// Without this, indicators remain blank until the next status-change event fires.
@@ -237,7 +248,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 				if statusData, ok := h.statusSubscriber.GetPlatformStatus(src.Platform, src.ChannelID); ok {
 					wsMsg := models.NewPlatformStatus(*statusData)
 					if msgJSON, err := wsMsg.ToJSON(); err == nil {
-						wsConn.Send(msgJSON)
+						wsConn.SendBlocking(msgJSON)
 					}
 				}
 			}
@@ -263,7 +274,9 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 				zap.Int64("since_ms", sinceMs),
 			)
 			for _, payload := range replayed {
-				wsConn.Send(payload)
+				if !wsConn.SendBlocking(payload) {
+					break // client gone or too slow; stop replaying
+				}
 			}
 		}
 	}
@@ -273,14 +286,6 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		zap.String("user_id", userID),
 		zap.String("username", username),
 	)
-
-	// Create background context for WebSocket connection
-	// Don't use the HTTP request context - it gets cancelled when handler returns!
-	wsCtx := context.Background()
-
-	// Start connection pumps (runs in goroutines)
-	// This will handle read/write until the connection closes
-	wsConn.Start(wsCtx)
 
 	// Set up cleanup callback when connection closes
 	go func() {
