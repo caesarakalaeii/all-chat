@@ -285,9 +285,7 @@ func (g *Generator) run(ctx context.Context, cfg Config, continuous bool) {
 func (g *Generator) publish(ctx context.Context, msg *models.UnifiedChatMessage, isEvent bool) {
 	// Best-effort enrichment so the stream looks like real traffic.
 	if g.emote != nil {
-		if err := g.emote.Enrich(ctx, msg); err != nil {
-			g.logger.Debug("test stream emote enrich failed", zap.Error(err))
-		}
+		g.enrichEmotes(ctx, msg)
 	}
 	if g.cheermote != nil && msg.Platform == "twitch" {
 		if err := g.cheermote.Enrich(ctx, msg); err != nil {
@@ -304,6 +302,37 @@ func (g *Generator) publish(ctx context.Context, msg *models.UnifiedChatMessage,
 		g.evtCount++
 	}
 	g.mu.Unlock()
+}
+
+// enrichEmotes resolves third-party emotes for a generated message. The
+// synthetic test channel doesn't exist on any emote provider, so we redirect the
+// lookup to a real fallback channel (emoteFallbackChannel) and restore the
+// message's own channel identity afterwards — external tools still see the test
+// channel, but the stream carries realistic, resolvable emotes. The twitch
+// channel hint covers non-Twitch platforms, which resolve 7TV channel emotes via
+// a sibling Twitch channel.
+func (g *Generator) enrichEmotes(ctx context.Context, msg *models.UnifiedChatMessage) {
+	origChannelID := msg.ChannelID
+	msg.ChannelID = emoteFallbackChannel
+
+	if msg.Metadata == nil {
+		msg.Metadata = map[string]interface{}{}
+	}
+	origHint, hadHint := msg.Metadata["twitch_channel_hint"]
+	msg.Metadata["twitch_channel_hint"] = emoteFallbackChannel
+
+	defer func() {
+		msg.ChannelID = origChannelID
+		if hadHint {
+			msg.Metadata["twitch_channel_hint"] = origHint
+		} else {
+			delete(msg.Metadata, "twitch_channel_hint")
+		}
+	}()
+
+	if err := g.emote.Enrich(ctx, msg); err != nil {
+		g.logger.Debug("test stream emote enrich failed", zap.Error(err))
+	}
 }
 
 func (g *Generator) finish(reason string) {

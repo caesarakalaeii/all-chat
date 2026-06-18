@@ -27,6 +27,20 @@ import (
 // are platform-specific and pick their own platform from the event template.
 var chatPlatforms = []string{"twitch", "youtube", "kick", "tiktok", "discord"}
 
+const (
+	// testChannelID/testChannelName are the synthetic channel identity carried by
+	// every generated message. They don't correspond to any real platform channel,
+	// so external tools can recognize the test stream.
+	testChannelID   = "test-channel"
+	testChannelName = "Test Channel"
+
+	// emoteFallbackChannel is a real channel whose emotes stand in for the
+	// synthetic test channel during enrichment. The test channel doesn't exist on
+	// any emote provider (7TV/BTTV/FFZ/Twitch), so resolving against it returns
+	// nothing; caesarlp gives the stream realistic, resolvable emotes.
+	emoteFallbackChannel = "caesarlp"
+)
+
 var fakeUsers = []string{
 	"pixelpenguin", "noscope_nancy", "lurkmaster3000", "captain_clutch", "soggy_waffles",
 	"emote_enjoyer", "ratio_andy", "midnight_owl", "gigachad_gary", "copium_addict",
@@ -93,8 +107,8 @@ func (g *Generator) newMessage(rng *rand.Rand, platform, text string) *models.Un
 		ID:          fmt.Sprintf("testgen-%d", rng.Int63()),
 		OverlayID:   g.overlayID,
 		Platform:    platform,
-		ChannelID:   "test-channel",
-		ChannelName: "Test Channel",
+		ChannelID:   testChannelID,
+		ChannelName: testChannelName,
 		User:        g.baseUser(rng),
 		Message:     models.MessageInfo{Text: text},
 		Metadata:    map[string]interface{}{"test_stream": true},
