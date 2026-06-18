@@ -92,7 +92,7 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			is_banned BOOLEAN NOT NULL DEFAULT FALSE,
 			banned_at TIMESTAMP,
 			banned_reason TEXT,
-			banned_by VARCHAR(255),
+			banned_by UUID,
 			access_token TEXT NOT NULL,
 			refresh_token TEXT NOT NULL,
 			token_expires_at TIMESTAMP NOT NULL,
@@ -109,6 +109,17 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 		CREATE INDEX idx_users_twitch_id ON users(twitch_id);
 		CREATE INDEX idx_users_google_id ON users(google_id);
 		CREATE INDEX idx_users_username ON users(username);
+
+		CREATE TABLE IF NOT EXISTS banned_platform_ids (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			platform VARCHAR(50) NOT NULL,
+			platform_id VARCHAR(100) NOT NULL,
+			banned_by UUID,
+			reason TEXT NOT NULL,
+			banned_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			unbanned_at TIMESTAMP NULL,
+			is_active BOOLEAN NOT NULL DEFAULT TRUE
+		);
 	`
 
 	_, err = pool.Exec(ctx, schema)
@@ -217,6 +228,54 @@ func TestUserRepository_Create(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestUserRepository_NullProfileImageURL verifies that users whose
+// profile_image_url column is NULL (the column is nullable, e.g. accounts
+// created without an avatar) can still be scanned. Regression test for the
+// admin "failed to load users" HTTP 500 caused by scanning NULL into a
+// non-nullable string destination.
+func TestUserRepository_NullProfileImageURL(t *testing.T) {
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := newTestUserRepository(t, pool)
+	ctx := context.Background()
+
+	// Insert a user with a NULL profile_image_url directly, bypassing Create
+	// (which would supply a non-NULL value).
+	var userID string
+	err := pool.QueryRow(ctx, `
+		INSERT INTO users (twitch_id, auth_provider, username, display_name, profile_image_url, access_token, refresh_token, token_expires_at)
+		VALUES ($1, 'twitch', 'noavatar', 'NoAvatar', NULL, '', '', $2)
+		RETURNING id
+	`, "555000", time.Now().Add(24*time.Hour)).Scan(&userID)
+	if err != nil {
+		t.Fatalf("Failed to insert user with NULL profile_image_url: %v", err)
+	}
+
+	t.Run("GetAllUsers tolerates NULL profile_image_url", func(t *testing.T) {
+		users, err := repo.GetAllUsers(ctx)
+		if err != nil {
+			t.Fatalf("GetAllUsers() error = %v, want nil", err)
+		}
+		if len(users) != 1 {
+			t.Fatalf("GetAllUsers() returned %d users, want 1", len(users))
+		}
+		if users[0].ProfileImageURL != "" {
+			t.Errorf("GetAllUsers() ProfileImageURL = %q, want empty string", users[0].ProfileImageURL)
+		}
+	})
+
+	t.Run("GetByID tolerates NULL profile_image_url", func(t *testing.T) {
+		user, err := repo.GetByID(ctx, userID)
+		if err != nil {
+			t.Fatalf("GetByID() error = %v, want nil", err)
+		}
+		if user.ProfileImageURL != "" {
+			t.Errorf("GetByID() ProfileImageURL = %q, want empty string", user.ProfileImageURL)
+		}
+	})
 }
 
 func TestUserRepository_GetByID(t *testing.T) {

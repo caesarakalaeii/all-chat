@@ -429,15 +429,21 @@ func (r *UserRepository) StoreTwitchToken(ctx context.Context, userID, twitchUse
 func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 	user := &models.User{}
 	var encryptedAccessToken, encryptedRefreshToken string
+	// profile_image_url is a nullable TEXT column; scan into a pointer so a
+	// NULL (e.g. accounts created without an avatar) does not fail the scan.
+	var profileImageURL *string
 
 	err := row.Scan(
 		&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName,
-		&user.ProfileImageURL, &user.IsAdmin, &user.IsPremium, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
+		&profileImageURL, &user.IsAdmin, &user.IsPremium, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
 		&encryptedAccessToken, &encryptedRefreshToken,
 		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if profileImageURL != nil {
+		user.ProfileImageURL = *profileImageURL
 	}
 
 	user.AccessToken, err = r.decryptToken(encryptedAccessToken)
@@ -552,16 +558,22 @@ WHERE u.id = $1
 func (r *UserRepository) scanUserFromRows(rows pgx.Rows) (*models.User, error) {
 	var user models.User
 	var encryptedAccessToken, encryptedRefreshToken string
+	// profile_image_url is a nullable TEXT column; scan into a pointer so a
+	// NULL (e.g. accounts created without an avatar) does not fail the scan.
+	var profileImageURL *string
 
 	err := rows.Scan(
 		&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider,
-		&user.Username, &user.DisplayName, &user.ProfileImageURL,
+		&user.Username, &user.DisplayName, &profileImageURL,
 		&user.IsAdmin, &user.IsPremium, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
 		&encryptedAccessToken, &encryptedRefreshToken,
 		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if profileImageURL != nil {
+		user.ProfileImageURL = *profileImageURL
 	}
 
 	accessToken, err := r.decryptToken(encryptedAccessToken)
