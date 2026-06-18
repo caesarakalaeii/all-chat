@@ -39,6 +39,7 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/router"
 	"github.com/caesar/all-chat/services/message-processor/sessions"
 	"github.com/caesar/all-chat/services/message-processor/seventv"
+	"github.com/caesar/all-chat/services/message-processor/testgen"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
@@ -203,6 +204,15 @@ func main() {
 
 	// Create event filter to check if event types are enabled per overlay
 	eventFilter := filter.NewEventFilter(db, log)
+
+	// Public test-stream generator: drives fake chat/events onto a single fixed
+	// overlay (migration 058) so external tools can be tested against the
+	// WebSocket feed without any real platform. Targeting one fixed overlay
+	// bounds the blast radius of the unauthenticated trigger endpoint.
+	testStreamOverlayID := getEnvOrDefault("TEST_STREAM_OVERLAY_ID", "00000000-0000-4000-8000-000000000a11")
+	testStreamEnabled := getEnvOrDefault("TEST_STREAM_ENABLED", "true") == "true"
+	publicWSBaseURL := getEnvOrDefault("PUBLIC_WS_BASE_URL", "")
+	testStreamGenerator := testgen.NewGenerator(testStreamOverlayID, pubsubPublisher, emoteEnricher, cheermoteEnricher, log)
 
 	// Create event capture for credit roll sessions
 	eventCapture := sessions.NewEventCapture(redisClient, log)
@@ -794,6 +804,64 @@ func main() {
 		c.JSON(http.StatusAccepted, gin.H{
 			"status":     "queued",
 			"message_id": msg.ID,
+		})
+	})
+
+	// Public, unauthenticated test-stream control endpoints. They only ever
+	// target the fixed test overlay, so there is no overlay_id to spoof.
+	// wsURL builds the connectable WebSocket URL for the test overlay.
+	wsURL := func() string {
+		if publicWSBaseURL == "" {
+			return fmt.Sprintf("/ws/overlay/%s", testStreamOverlayID)
+		}
+		return fmt.Sprintf("%s/ws/overlay/%s", strings.TrimRight(publicWSBaseURL, "/"), testStreamOverlayID)
+	}
+
+	requireTestStream := func(c *gin.Context) bool {
+		if !testStreamEnabled {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "test stream disabled"})
+			return false
+		}
+		return true
+	}
+
+	router.POST("/public/test-stream/start", func(c *gin.Context) {
+		if !requireTestStream(c) {
+			return
+		}
+		var cfg testgen.Config
+		// Empty/invalid body is fine — the generator falls back to sensible defaults.
+		_ = c.ShouldBindJSON(&cfg)
+
+		status, err := testStreamGenerator.Start(cfg)
+		if err != nil {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":  err.Error(),
+				"status": status,
+				"ws_url": wsURL(),
+			})
+			return
+		}
+		c.JSON(http.StatusAccepted, gin.H{
+			"status": status,
+			"ws_url": wsURL(),
+		})
+	})
+
+	router.POST("/public/test-stream/stop", func(c *gin.Context) {
+		if !requireTestStream(c) {
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": testStreamGenerator.Stop()})
+	})
+
+	router.GET("/public/test-stream/status", func(c *gin.Context) {
+		if !requireTestStream(c) {
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"status": testStreamGenerator.Status(),
+			"ws_url": wsURL(),
 		})
 	})
 

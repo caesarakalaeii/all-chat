@@ -89,7 +89,7 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		BaseURL:       authURL,
 		HealthPath:    "/health/live",
 		PathPrefix:    "/api/v1/admin/users",
-		StripPrefix:   true,     // Strip /api/v1/admin/users
+		StripPrefix:   true,           // Strip /api/v1/admin/users
 		RewritePrefix: "/admin/users", // Rewrite to /admin/users/* for auth-service
 	}
 
@@ -99,7 +99,7 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		BaseURL:       overlayURL,
 		HealthPath:    "/health/live",
 		PathPrefix:    "/api/v1/admin/overlays",
-		StripPrefix:   true,     // Strip /api/v1/admin/overlays
+		StripPrefix:   true,              // Strip /api/v1/admin/overlays
 		RewritePrefix: "/admin/overlays", // Rewrite to /admin/overlays/* for overlay-manager
 	}
 
@@ -109,7 +109,7 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		BaseURL:       overlayURL,
 		HealthPath:    "/health/live",
 		PathPrefix:    "/api/v1/admin/sources",
-		StripPrefix:   true,     // Strip /api/v1/admin/sources
+		StripPrefix:   true,             // Strip /api/v1/admin/sources
 		RewritePrefix: "/admin/sources", // Rewrite to /admin/sources for overlay-manager
 	}
 
@@ -194,6 +194,20 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		PathPrefix:    "/api/v1/maintenance/upcoming",
 		StripPrefix:   true,
 		RewritePrefix: "/maintenance/upcoming",
+	}
+
+	// Public test-stream generator → message-processor.
+	// /api/v1/test-stream/* is rewritten to the message-processor's
+	// /public/test-stream/* endpoints, keeping message-processor internal while
+	// exposing the trigger through the already-public gateway.
+	messageProcessorURL := getEnvOrDefault("MESSAGE_PROCESSOR_URL", "http://localhost:8087")
+	registry.Services["message-processor-test-stream"] = &ServiceConfig{
+		Name:          "message-processor-test-stream",
+		BaseURL:       messageProcessorURL,
+		HealthPath:    "/health/live",
+		PathPrefix:    "/api/v1/test-stream",
+		StripPrefix:   true,
+		RewritePrefix: "/public/test-stream",
 	}
 
 	// Validate all service URLs are set

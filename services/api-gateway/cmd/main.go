@@ -34,13 +34,13 @@ import (
 	localmiddleware "github.com/caesar/all-chat/services/api-gateway/middleware"
 	"github.com/caesar/all-chat/services/api-gateway/models"
 	"github.com/caesar/all-chat/services/api-gateway/replay"
-	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/ratelimit"
 	sharedredis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
@@ -476,6 +476,14 @@ func main() {
 		// Viewer cosmetics catalog (public — no auth required)
 		publicAPI.GET("/auth/viewer/catalog/frames", proxyHandler.ForwardRequest) // -> auth-service
 		publicAPI.GET("/auth/viewer/catalog/flairs", proxyHandler.ForwardRequest) // -> auth-service
+
+		// Public test-stream generator (proxied to message-processor). Drives fake
+		// chat/votes/events onto the fixed test overlay so external tools can be
+		// tested against the WebSocket feed. Gated by TEST_STREAM_ENABLED on the
+		// message-processor side; only ever targets the fixed test overlay.
+		publicAPI.POST("/test-stream/start", proxyHandler.ForwardRequest)
+		publicAPI.POST("/test-stream/stop", proxyHandler.ForwardRequest)
+		publicAPI.GET("/test-stream/status", proxyHandler.ForwardRequest)
 	}
 
 	// Twitch badge proxy endpoints (public, but not part of /api/v1 service registry)
@@ -552,15 +560,15 @@ func main() {
 		protectedAPI.POST("/internal/overlays/:id/sources/auto", proxyHandler.ForwardRequest)
 
 		// Share service routes (all protected - require JWT auth)
-		protectedAPI.GET("/users/search", proxyHandler.ForwardRequest)                    // -> share-service
-		protectedAPI.GET("/shares/incoming", proxyHandler.ForwardRequest)                 // -> share-service
-		protectedAPI.GET("/shares/accepted", proxyHandler.ForwardRequest)                 // -> share-service (Phase 16)
-		protectedAPI.GET("/shares/unseen-acceptances", proxyHandler.ForwardRequest)       // -> share-service
-		protectedAPI.POST("/shares", proxyHandler.ForwardRequest)                         // -> share-service
-		protectedAPI.POST("/shares/:id/accept", proxyHandler.ForwardRequest)              // -> share-service
-		protectedAPI.POST("/shares/:id/reject", proxyHandler.ForwardRequest)              // -> share-service
-		protectedAPI.POST("/shares/:id/revoke", proxyHandler.ForwardRequest)              // -> share-service
-		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)           // -> share-service
+		protectedAPI.GET("/users/search", proxyHandler.ForwardRequest)              // -> share-service
+		protectedAPI.GET("/shares/incoming", proxyHandler.ForwardRequest)           // -> share-service
+		protectedAPI.GET("/shares/accepted", proxyHandler.ForwardRequest)           // -> share-service (Phase 16)
+		protectedAPI.GET("/shares/unseen-acceptances", proxyHandler.ForwardRequest) // -> share-service
+		protectedAPI.POST("/shares", proxyHandler.ForwardRequest)                   // -> share-service
+		protectedAPI.POST("/shares/:id/accept", proxyHandler.ForwardRequest)        // -> share-service
+		protectedAPI.POST("/shares/:id/reject", proxyHandler.ForwardRequest)        // -> share-service
+		protectedAPI.POST("/shares/:id/revoke", proxyHandler.ForwardRequest)        // -> share-service
+		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)     // -> share-service
 		// User-facing upcoming maintenance (-> overlay-manager)
 		protectedAPI.GET("/maintenance/upcoming", proxyHandler.ForwardRequest)
 	}

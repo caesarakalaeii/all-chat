@@ -168,6 +168,32 @@ GET /status
 }
 ```
 
+### Public Test-Stream Generator
+
+Drives fake chat, poll votes (`1`/`2`/`3`/`4`) and platform events onto a single
+fixed test overlay so external tools can be tested against the WebSocket feed
+without any real streaming platform. The endpoints are **unauthenticated** but
+can only ever target the fixed test overlay (`TEST_STREAM_OVERLAY_ID`, seeded by
+migration `058`), so there is no overlay to spoof. Disable with
+`TEST_STREAM_ENABLED=false`.
+
+```bash
+# Start a run (all body fields optional; defaults: 60s, 5 msg/s, 40% votes, event every 12)
+POST /public/test-stream/start
+{ "duration_seconds": 120, "rate_per_second": 8, "vote_ratio": 0.5, "event_every_n": 10 }
+
+# Current state + the WebSocket URL to connect to
+GET /public/test-stream/status
+
+# Stop an active run early
+POST /public/test-stream/stop
+```
+
+`start`/`status` return the connectable `ws_url`
+(`{PUBLIC_WS_BASE_URL}/ws/overlay/{TEST_STREAM_OVERLAY_ID}`). Connect any
+WebSocket client there (OBS mode, no token) to observe the stream. Helper:
+`make test-stream` / `scripts/start-test-stream.sh`.
+
 ### Metrics
 
 ```bash

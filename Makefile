@@ -1,4 +1,4 @@
-.PHONY: help build build-all test clean docker-up docker-down migrate deps frontend-dev
+.PHONY: help build build-all test clean docker-up docker-down migrate deps frontend-dev test-stream test-stream-stop
 
 # Default target
 help:
@@ -221,6 +221,14 @@ frontend-messages:
 	@echo "Starting message generator..."
 	@echo "Press Ctrl+C to stop"
 	@./scripts/generate-test-messages.sh
+
+test-stream:
+	@echo "Starting public test-stream generator..."
+	@./scripts/start-test-stream.sh start
+
+test-stream-stop:
+	@echo "Stopping public test-stream generator..."
+	@./scripts/start-test-stream.sh stop
 
 frontend-verify:
 	@echo "Verifying frontend development environment..."
