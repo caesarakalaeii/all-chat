@@ -52,6 +52,7 @@ type Connection struct {
 	overlayID       string
 	userID          string
 	send            chan []byte
+	done            chan struct{} // closed exactly once by close(); signals shutdown
 	replayBuffer    replay.DeletionReplayBuffer
 	logger          *zap.Logger
 	mu              sync.Mutex
@@ -68,6 +69,7 @@ func NewConnection(conn *websocket.Conn, overlayID, userID string, replayBuffer 
 		overlayID:    overlayID,
 		userID:       userID,
 		send:         make(chan []byte, 256),
+		done:         make(chan struct{}),
 		replayBuffer: replayBuffer,
 		logger:       logger,
 		isViewer:     false,
@@ -82,6 +84,7 @@ func NewViewerConnection(conn *websocket.Conn, overlayID, userID string, replayB
 		overlayID:    overlayID,
 		userID:       userID,
 		send:         make(chan []byte, 256),
+		done:         make(chan struct{}),
 		replayBuffer: replayBuffer,
 		logger:       logger,
 		isViewer:     true,
@@ -122,6 +125,44 @@ func (c *Connection) Send(message []byte) bool {
 	}
 }
 
+// SendBlocking enqueues a message, blocking until the writer drains a slot or
+// the write deadline elapses. Unlike Send — which drops and closes a slow
+// consumer to protect the live broadcast fan-out — this applies backpressure.
+// It is used for the initial connect burst (connected frame, status snapshot
+// and ?since= replay), where every message matters and the burst can exceed the
+// send buffer (replay holds up to 500 entries, the buffer is 256). With Send,
+// such a burst overflowed the channel and self-closed the socket mid-replay,
+// flapping busy overlays. Returns false if the connection is (or becomes)
+// closed, or the client is too slow to drain within WriteWait.
+//
+// Safe against a concurrent close because close() never closes c.send (only
+// c.done), so the send case can never panic on a closed channel.
+func (c *Connection) SendBlocking(message []byte) bool {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return false
+	}
+	c.mu.Unlock()
+
+	timer := time.NewTimer(WriteWait)
+	defer timer.Stop()
+
+	select {
+	case c.send <- message:
+		return true
+	case <-c.done:
+		return false
+	case <-timer.C:
+		c.logger.Warn("Send blocked past write deadline, closing connection",
+			zap.String("overlay_id", c.overlayID),
+			zap.String("user_id", c.userID),
+		)
+		c.Close()
+		return false
+	}
+}
+
 // Close closes the WebSocket connection
 func (c *Connection) Close() {
 	c.mu.Lock()
@@ -136,8 +177,13 @@ func (c *Connection) close() {
 	}
 
 	c.closed = true
-	close(c.send)
-	c.conn.Close()
+	// Signal shutdown via c.done rather than closing c.send: a blocked
+	// SendBlocking selects on c.done, and never closing c.send means a send can
+	// never panic on a closed channel (Send/SendBlocking may race with close()).
+	close(c.done)
+	if c.conn != nil {
+		c.conn.Close()
+	}
 
 	c.logger.Info("WebSocket connection closed",
 		zap.String("overlay_id", c.overlayID),
@@ -190,14 +236,14 @@ func (c *Connection) writePump(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case message, ok := <-c.send:
+		case <-c.done:
+			// Connection closing: best-effort clean close frame, then stop.
 			c.conn.SetWriteDeadline(time.Now().Add(WriteWait))
-			if !ok {
-				// Channel closed
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
+			c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+			return
 
+		case message := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(WriteWait))
 			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
 				c.logger.Warn("WebSocket write error",
 					zap.String("overlay_id", c.overlayID),

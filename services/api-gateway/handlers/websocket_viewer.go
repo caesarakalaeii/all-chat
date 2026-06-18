@@ -184,10 +184,19 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 	// Add connection to manager (but mark it as viewer connection)
 	h.wsManager.AddConnection(context.Background(), wsConn)
 
-	// Send connected message (without overlay_id for security)
+	// Start the pumps BEFORE the connect burst so writePump drains the send
+	// channel as we enqueue. Enqueuing the burst (connected frame + replay)
+	// first would overflow the 256-slot channel on a large replay and self-close
+	// the socket mid-replay, flapping busy overlays. Background context: the HTTP
+	// request context is cancelled when this handler returns.
+	wsCtx := context.Background()
+	wsConn.Start(wsCtx)
+
+	// Send connected message (without overlay_id for security). The burst uses
+	// SendBlocking (backpressure) rather than Send (drop-and-close).
 	connectedMsg := models.NewViewerConnected()
 	connectedJSON, _ := connectedMsg.ToJSON()
-	wsConn.Send(connectedJSON)
+	wsConn.SendBlocking(connectedJSON)
 
 	// Replay messages buffered since the viewer's last-seen timestamp.
 	// For viewers we *require* an explicit ?since= — first-time viewers should
@@ -211,7 +220,9 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 					zap.Int64("since_ms", sinceMs),
 				)
 				for _, payload := range replayed {
-					wsConn.Send(payload)
+					if !wsConn.SendBlocking(payload) {
+						break // viewer gone or too slow; stop replaying
+					}
 				}
 			}
 		}
@@ -224,12 +235,6 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 		zap.String("viewer", viewerUsername),
 		zap.Bool("authenticated", isAuthenticated),
 	)
-
-	// Create background context for WebSocket connection
-	wsCtx := context.Background()
-
-	// Start connection pumps (runs in goroutines)
-	wsConn.Start(wsCtx)
 
 	// Set up cleanup callback when connection closes
 	go func() {

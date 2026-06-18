@@ -172,6 +172,13 @@ func main() {
 		zap.Duration("ttl", chatReplayTTL),
 		zap.Int("max_entries", chatReplayMax))
 
+	// The seeded public test-stream overlay is fed a continuous flood of
+	// synthetic chat by the test-stream generator. Replaying it on reconnect has
+	// no value (the data is throwaway and regenerated constantly), so skip
+	// buffering it — pure Redis-write savings. Same overlay id as
+	// message-processor's TEST_STREAM_OVERLAY_ID.
+	testStreamOverlayID := getEnvOrDefault("TEST_STREAM_OVERLAY_ID", "00000000-0000-4000-8000-000000000a11")
+
 	// Create WebSocket health checker for state reconciliation
 	healthChecker := wsconn.NewHealthChecker(wsManager, redisClient, log, gatewayMetrics)
 	healthChecker.Start()
@@ -274,7 +281,7 @@ func main() {
 		// messages keep flowing into the buffer while the client reconnects.
 		// AddOnce uses a stable per-message SETNX marker so multi-pod writes
 		// converge on a single buffer entry — no cross-pod duplicates.
-		if count == 0 {
+		if count == 0 && overlayID != testStreamOverlayID {
 			added, err := chatReplayBuffer.AddOnce(context.Background(), overlayID, unifiedMsg.ID, wsJSON, wsMsg.Timestamp)
 			if err != nil {
 				log.Warn("Failed to add message to chat replay buffer",
