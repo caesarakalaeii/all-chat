@@ -18,7 +18,9 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/caesar/all-chat/services/moderation-service/clients"
 	"github.com/caesar/all-chat/services/moderation-service/models"
@@ -28,41 +30,118 @@ import (
 )
 
 type fakeDiscordAPI struct {
-	err                  error
-	calls                int
-	channelID, messageID string
+	err               error
+	deleteCalls       int
+	timeoutCalls      int
+	banCalls          int
+	unbanCalls        int
+	channelID, msgID  string
+	guildID, targetID string
+	until             time.Time
 }
 
 func (f *fakeDiscordAPI) DeleteMessage(_ context.Context, channelID, messageID string) error {
-	f.calls++
-	f.channelID, f.messageID = channelID, messageID
+	f.deleteCalls++
+	f.channelID, f.msgID = channelID, messageID
 	return f.err
+}
+
+func (f *fakeDiscordAPI) TimeoutMember(_ context.Context, guildID, userID string, until time.Time) error {
+	f.timeoutCalls++
+	f.guildID, f.targetID, f.until = guildID, userID, until
+	return f.err
+}
+
+func (f *fakeDiscordAPI) BanMember(_ context.Context, guildID, userID string) error {
+	f.banCalls++
+	f.guildID, f.targetID = guildID, userID
+	return f.err
+}
+
+func (f *fakeDiscordAPI) UnbanMember(_ context.Context, guildID, userID string) error {
+	f.unbanCalls++
+	f.guildID, f.targetID = guildID, userID
+	return f.err
+}
+
+// fakeGuildResolver maps any channel to guildID (or returns err).
+type fakeGuildResolver struct {
+	guildID string
+	err     error
+	calls   int
+}
+
+func (f *fakeGuildResolver) GuildID(_ context.Context, _ string) (string, error) {
+	f.calls++
+	return f.guildID, f.err
+}
+
+func newDiscordDispatcher(api *fakeDiscordAPI, guilds *fakeGuildResolver) *Discord {
+	return NewDiscord(api, guilds, zap.NewNop())
 }
 
 func TestDiscordDispatch_NonDiscordIsDryRun(t *testing.T) {
 	api := &fakeDiscordAPI{}
-	d := NewDiscord(api, zap.NewNop())
+	d := newDiscordDispatcher(api, &fakeGuildResolver{})
 	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchDryRun, res.Outcome)
-	assert.Zero(t, api.calls)
+	assert.Zero(t, api.deleteCalls)
 }
 
 func TestDiscordDispatch_DeletePerformed(t *testing.T) {
 	api := &fakeDiscordAPI{}
-	d := NewDiscord(api, zap.NewNop())
+	guilds := &fakeGuildResolver{guildID: "g"}
+	d := newDiscordDispatcher(api, guilds)
 	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete,
 		models.DispatchRequest{Platform: "discord", ChannelID: "chan-1", NativeMessageID: "msg-1"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
-	assert.Equal(t, 1, api.calls)
+	assert.Equal(t, 1, api.deleteCalls)
 	assert.Equal(t, "chan-1", api.channelID)
-	assert.Equal(t, "msg-1", api.messageID, "the Discord native message id (snowflake) is the delete target")
+	assert.Equal(t, "msg-1", api.msgID, "the Discord native message id (snowflake) is the delete target")
+	assert.Zero(t, guilds.calls, "delete is channel-scoped and needs no guild resolution")
+}
+
+func TestDiscordDispatch_BanResolvesGuildAndPerforms(t *testing.T) {
+	api := &fakeDiscordAPI{}
+	guilds := &fakeGuildResolver{guildID: "guild-42"}
+	d := newDiscordDispatcher(api, guilds)
+	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan,
+		models.DispatchRequest{Platform: "discord", ChannelID: "chan-1", TargetUserID: "member-7"})
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchPerformed, res.Outcome)
+	assert.Equal(t, 1, api.banCalls)
+	assert.Equal(t, "guild-42", api.guildID, "ban is guild-scoped; the guild is resolved from the channel")
+	assert.Equal(t, "member-7", api.targetID)
+}
+
+func TestDiscordDispatch_TimeoutSetsFutureUntil(t *testing.T) {
+	api := &fakeDiscordAPI{}
+	guilds := &fakeGuildResolver{guildID: "g"}
+	d := newDiscordDispatcher(api, guilds)
+	res, err := d.Dispatch(context.Background(), "u1", models.ActionTimeout,
+		models.DispatchRequest{Platform: "discord", ChannelID: "c", TargetUserID: "u", DurationSeconds: 600})
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchPerformed, res.Outcome)
+	assert.Equal(t, 1, api.timeoutCalls)
+	assert.True(t, api.until.After(time.Now()), "timeout until must be in the future")
+}
+
+func TestDiscordDispatch_UnbanPerformed(t *testing.T) {
+	api := &fakeDiscordAPI{}
+	guilds := &fakeGuildResolver{guildID: "g"}
+	d := newDiscordDispatcher(api, guilds)
+	res, err := d.Dispatch(context.Background(), "u1", models.ActionUnban,
+		models.DispatchRequest{Platform: "discord", ChannelID: "c", TargetUserID: "u"})
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchPerformed, res.Outcome)
+	assert.Equal(t, 1, api.unbanCalls)
 }
 
 func TestDiscordDispatch_ForbiddenIsError(t *testing.T) {
 	api := &fakeDiscordAPI{err: clients.ErrDiscordForbidden}
-	d := NewDiscord(api, zap.NewNop())
+	d := newDiscordDispatcher(api, &fakeGuildResolver{guildID: "g"})
 	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete,
 		models.DispatchRequest{Platform: "discord", ChannelID: "c", NativeMessageID: "m"})
 	require.Error(t, err, "a missing bot permission must fail the dispatch so no reflect-back fires")
@@ -70,21 +149,22 @@ func TestDiscordDispatch_ForbiddenIsError(t *testing.T) {
 	assert.ErrorIs(t, err, clients.ErrDiscordForbidden)
 }
 
-func TestDiscordDispatch_OtherErrorIsError(t *testing.T) {
-	api := &fakeDiscordAPI{err: clients.ErrDiscordUnauthorized}
-	d := NewDiscord(api, zap.NewNop())
-	_, err := d.Dispatch(context.Background(), "u1", models.ActionDelete,
-		models.DispatchRequest{Platform: "discord", ChannelID: "c", NativeMessageID: "m"})
-	require.Error(t, err)
-	assert.ErrorIs(t, err, clients.ErrDiscordUnauthorized)
-}
-
-func TestDiscordDispatch_NonDeleteActionIsError(t *testing.T) {
-	api := &fakeDiscordAPI{}
-	d := NewDiscord(api, zap.NewNop())
-	// Discord supports only delete; the handler gates this, but the dispatcher is defensive.
+func TestDiscordDispatch_BanForbiddenSurfacesReinvite(t *testing.T) {
+	api := &fakeDiscordAPI{err: clients.ErrDiscordForbidden}
+	d := newDiscordDispatcher(api, &fakeGuildResolver{guildID: "g"})
 	_, err := d.Dispatch(context.Background(), "u1", models.ActionBan,
 		models.DispatchRequest{Platform: "discord", ChannelID: "c", TargetUserID: "u"})
 	require.Error(t, err)
-	assert.Zero(t, api.calls)
+	assert.ErrorIs(t, err, clients.ErrDiscordForbidden)
+	assert.Contains(t, err.Error(), "re-invite", "a 403 on a member op points the owner at the re-invite path")
+}
+
+func TestDiscordDispatch_GuildResolutionFailureIsError(t *testing.T) {
+	api := &fakeDiscordAPI{}
+	guilds := &fakeGuildResolver{err: errors.New("channel gone")}
+	d := newDiscordDispatcher(api, guilds)
+	_, err := d.Dispatch(context.Background(), "u1", models.ActionBan,
+		models.DispatchRequest{Platform: "discord", ChannelID: "c", TargetUserID: "u"})
+	require.Error(t, err)
+	assert.Zero(t, api.banCalls, "no ban is attempted when the guild cannot be resolved")
 }

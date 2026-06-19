@@ -47,6 +47,7 @@ import { OverlayViewThemeToggle } from '@/components/overlay/OverlayViewThemeTog
 import { ViewSettingsBar } from '@/components/overlay/ViewSettingsBar'
 import { ResizableSplit } from '@/components/ResizableSplit'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
+import { startDiscordModerationReinvite } from '@/lib/api/discord'
 import {
   buildBanRequest,
   buildDeleteRequest,
@@ -184,13 +185,19 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     saveViewPrefs(next)
   }, [])
 
-  // Start the opt-in moderation re-consent (ADR-0017): fetch the platform consent URL
-  // (auth-service requests only the minimal moderation scopes for the actions the
-  // platform supports) and redirect the browser to it. Twitch grants all four actions;
-  // Kick supports timeout/ban/unban (no single-message delete).
+  // Start the opt-in moderation setup (ADR-0017). For the OAuth platforms this fetches a
+  // consent URL (auth-service requests only the minimal moderation scopes for the actions
+  // the platform supports) and redirects to it: Twitch grants all four actions; Kick
+  // supports timeout/ban/unban (no single-message delete); YouTube is ban-only. Discord
+  // is different — its moderation authority is a guild-level BOT permission, so "enabling"
+  // it is a bot RE-INVITE with the elevated permissions, not an OAuth re-consent.
   const enableModeration = useCallback(
     async (platform: string) => {
       try {
+        if (platform === 'discord') {
+          await startDiscordModerationReinvite()
+          return
+        }
         let url: string | null = null
         if (platform === 'twitch') {
           url = await moderationApi.getTwitchConsentUrl(id, ['delete', 'timeout', 'ban', 'unban'])
@@ -440,16 +447,21 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           >
             <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
             <span>
-              Grant moderation permissions to enable mod actions for {s.platform}
+              {s.platform === 'discord'
+                ? `Re-invite the bot with moderation permissions to enable mod actions for ${s.platform}`
+                : `Grant moderation permissions to enable mod actions for ${s.platform}`}
               {s.channel_name ? ` (${s.channel_name})` : ''}.
             </span>
-            {s.platform === 'twitch' || s.platform === 'kick' || s.platform === 'youtube' ? (
+            {s.platform === 'twitch' ||
+            s.platform === 'kick' ||
+            s.platform === 'youtube' ||
+            s.platform === 'discord' ? (
               <button
                 type="button"
                 onClick={() => enableModeration(s.platform)}
                 className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
-                Enable moderation
+                {s.platform === 'discord' ? 'Re-invite the bot' : 'Enable moderation'}
               </button>
             ) : (
               <span className="text-text-dim">(coming soon for {s.platform})</span>

@@ -37,6 +37,7 @@ import (
 // DiscordOAuthProvider is the interface DiscordHandler depends on (allows mocking in tests).
 type DiscordOAuthProvider interface {
 	GetAuthURL(state string) string
+	GetModerationAuthURL(state string) string
 	ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error)
 	CheckBotPermissions(ctx context.Context, guildID string) ([]string, error)
 	GetGuildInfo(ctx context.Context, guildID string) (*oauth.GuildInfo, error)
@@ -159,7 +160,9 @@ func (m *memStateStore) Del(_ context.Context, state string) error {
 }
 
 // HandleConnect generates a CSRF state token, stores it in Redis (state -> userID), and
-// returns the Discord bot invite URL for the authenticated user.
+// returns the Discord bot invite URL for the authenticated user. When ?moderation=true,
+// it returns the elevated moderation re-invite URL (ADR-0017): re-authorizing on an
+// existing guild upgrades the bot's permissions in place so the streamer can moderate.
 // Route: GET /discord/connect (JWT required)
 func (h *DiscordHandler) HandleConnect(c *gin.Context) {
 	userIDRaw, exists := c.Get("user_id")
@@ -183,6 +186,9 @@ func (h *DiscordHandler) HandleConnect(c *gin.Context) {
 	}
 
 	inviteURL := h.oauth.GetAuthURL(state)
+	if c.Query("moderation") == "true" {
+		inviteURL = h.oauth.GetModerationAuthURL(state)
+	}
 	c.JSON(http.StatusOK, gin.H{"bot_invite_url": inviteURL})
 }
 

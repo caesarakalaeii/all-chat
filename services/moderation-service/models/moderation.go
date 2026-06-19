@@ -47,9 +47,14 @@ const (
 // shared_overlay is absent by design: a recipient must not moderate the original
 // streamer's channel (least-privilege / owner-only authorization).
 var PlatformActions = map[string][]Action{
-	"twitch":  {ActionDelete, ActionTimeout, ActionBan, ActionUnban},
-	"kick":    {ActionTimeout, ActionBan, ActionUnban},
-	"discord": {ActionDelete},
+	"twitch": {ActionDelete, ActionTimeout, ActionBan, ActionUnban},
+	"kick":   {ActionTimeout, ActionBan, ActionUnban},
+	// Discord supports the full set via guild-level bot permissions (MANAGE_MESSAGES
+	// for delete, MODERATE_MEMBERS for timeout, BAN_MEMBERS for ban/unban). Which of
+	// these a given source can actually use depends on the bot's effective permissions
+	// in that guild (see ActionsForDiscordPermissions) — granted at invite time, so a
+	// bot invited without the elevated permissions reports only what it holds.
+	"discord": {ActionDelete, ActionTimeout, ActionBan, ActionUnban},
 	// YouTube is ban-only for v1: liveChatBans.delete (unban) keys on the ban resource
 	// id returned by insert, which All-Chat does not persist, so unban is deferred.
 	"youtube": {ActionBan},
@@ -165,6 +170,63 @@ func RequiredYouTubeScope(a Action) string {
 		return ScopeYouTubeModeration
 	}
 	return ""
+}
+
+// Discord moderation permission bits. Unlike Twitch/Kick/YouTube, Discord moderation
+// authority is a GUILD-level bot permission (granted at invite time), not a per-user
+// OAuth scope — so the "opt-in" is choosing the elevated invite. These bit values are
+// from the Discord permissions reference (https://discord.com/developers/docs/topics/permissions).
+const (
+	// DiscordPermAdministrator implicitly grants every permission.
+	DiscordPermAdministrator uint64 = 1 << 3
+	// DiscordPermBanMembers permits ban + unban.
+	DiscordPermBanMembers uint64 = 1 << 2
+	// DiscordPermManageMessages permits deleting other users' messages.
+	DiscordPermManageMessages uint64 = 1 << 13
+	// DiscordPermModerateMembers permits timeout (communication_disabled_until).
+	DiscordPermModerateMembers uint64 = 1 << 40
+)
+
+// ModerationBotPermissions is the set of permissions the bot needs to perform every
+// supported Discord moderation action. The opt-in re-invite URL requests exactly these
+// (on top of the base listener permissions).
+const ModerationBotPermissions = DiscordPermManageMessages | DiscordPermModerateMembers | DiscordPermBanMembers
+
+// ActionsForDiscordPermissions maps the bot's EFFECTIVE guild permission bits to the
+// moderation actions it can perform. ADMINISTRATOR short-circuits to the full set. The
+// result is a subset of PlatformActions["discord"], so the UI only enables what the
+// bot's invite actually granted (a bot invited with the legacy listener-only permission
+// reports nothing → the source shows the re-invite prompt).
+func ActionsForDiscordPermissions(perms uint64) []Action {
+	if perms&DiscordPermAdministrator != 0 {
+		return []Action{ActionDelete, ActionTimeout, ActionBan, ActionUnban}
+	}
+	var out []Action
+	if perms&DiscordPermManageMessages != 0 {
+		out = append(out, ActionDelete)
+	}
+	if perms&DiscordPermModerateMembers != 0 {
+		out = append(out, ActionTimeout)
+	}
+	if perms&DiscordPermBanMembers != 0 {
+		out = append(out, ActionBan, ActionUnban)
+	}
+	return out
+}
+
+// RequiredDiscordPermission returns the permission bit an action needs, or 0 if the
+// action is not a Discord moderation action.
+func RequiredDiscordPermission(a Action) uint64 {
+	switch a {
+	case ActionDelete:
+		return DiscordPermManageMessages
+	case ActionTimeout:
+		return DiscordPermModerateMembers
+	case ActionBan, ActionUnban:
+		return DiscordPermBanMembers
+	default:
+		return 0
+	}
 }
 
 // DispatchRequest carries the identifiers a platform moderation call needs. It is

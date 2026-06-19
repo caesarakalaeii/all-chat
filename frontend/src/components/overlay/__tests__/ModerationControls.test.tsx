@@ -153,7 +153,7 @@ describe('ModerationControls', () => {
     expect(screen.getByLabelText('Moderate user')).toBeDisabled()
   })
 
-  it('Discord: delete is available but the per-user menu is hidden (delete-only platform)', () => {
+  it('Discord: a bot with only the delete permission shows delete but no per-user menu', () => {
     const item: ViewItem = { ...makeItem('discord'), id: 'discord-snowflake-1', metadata: {} }
     const cap: SourceCapability = {
       platform: 'discord',
@@ -189,6 +189,36 @@ describe('ModerationControls', () => {
       native_message_id: 'discord-snowflake-1',
       target_uuid: 'discord-snowflake-1',
     })
+  })
+
+  it('Discord: a fully-permissioned bot exposes delete AND the per-user ban/timeout menu', () => {
+    const item: ViewItem = { ...makeItem('discord'), id: 'discord-snowflake-2', metadata: {} }
+    const cap: SourceCapability = {
+      platform: 'discord',
+      channel_id: 'chan-1',
+      channel_name: 'chan',
+      moderatable: true,
+      actions: ['delete', 'timeout', 'ban', 'unban'],
+    }
+    let banned: ViewItem | null = null
+    render(
+      <ModerationControls
+        item={item}
+        capability={cap}
+        onDelete={noop}
+        onTimeout={noop}
+        onBan={(it) => {
+          banned = it
+        }}
+        onUnban={noop}
+      />
+    )
+
+    expect(screen.getByLabelText('Delete message')).toBeEnabled()
+    // With ban/timeout/unban granted, the per-user trigger renders and opens.
+    fireEvent.click(screen.getByLabelText('Moderate user'))
+    fireEvent.click(screen.getByText('Ban user'))
+    expect(banned).not.toBeNull()
   })
 
   it('Kick: no single-message delete; the per-user menu offers timeout/ban/unban', () => {

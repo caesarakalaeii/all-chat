@@ -90,3 +90,45 @@ func TestRequiredKickScope(t *testing.T) {
 	assert.Equal(t, ScopeKickModeration, RequiredKickScope(ActionUnban))
 	assert.Equal(t, "", RequiredKickScope(ActionDelete), "Kick does not support single-message delete")
 }
+
+func TestActionsForDiscordPermissions(t *testing.T) {
+	tests := []struct {
+		name  string
+		perms uint64
+		want  []Action
+	}{
+		{"none", 0, nil},
+		{"manage messages only", DiscordPermManageMessages, []Action{ActionDelete}},
+		{"moderate members only", DiscordPermModerateMembers, []Action{ActionTimeout}},
+		{"ban members grants ban+unban", DiscordPermBanMembers, []Action{ActionBan, ActionUnban}},
+		{
+			"full moderation set",
+			ModerationBotPermissions,
+			[]Action{ActionDelete, ActionTimeout, ActionBan, ActionUnban},
+		},
+		{
+			"administrator implies everything",
+			DiscordPermAdministrator,
+			[]Action{ActionDelete, ActionTimeout, ActionBan, ActionUnban},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.ElementsMatch(t, tt.want, ActionsForDiscordPermissions(tt.perms))
+		})
+	}
+}
+
+func TestActionsForDiscordPermissions_NeverExceedsPlatformSupport(t *testing.T) {
+	for _, a := range ActionsForDiscordPermissions(ModerationBotPermissions | DiscordPermAdministrator) {
+		assert.True(t, SupportsAction("discord", a), "permission-derived action %q must be a supported discord action", a)
+	}
+}
+
+func TestRequiredDiscordPermission(t *testing.T) {
+	assert.Equal(t, DiscordPermManageMessages, RequiredDiscordPermission(ActionDelete))
+	assert.Equal(t, DiscordPermModerateMembers, RequiredDiscordPermission(ActionTimeout))
+	assert.Equal(t, DiscordPermBanMembers, RequiredDiscordPermission(ActionBan))
+	assert.Equal(t, DiscordPermBanMembers, RequiredDiscordPermission(ActionUnban))
+	assert.Equal(t, uint64(0), RequiredDiscordPermission(Action("bogus")))
+}
