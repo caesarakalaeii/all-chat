@@ -52,6 +52,11 @@ type TwitchClient struct {
 	httpClient   *http.Client
 	logger       *zap.Logger
 
+	// API endpoints, overridable in tests.
+	tokenURL string
+	apiBase  string
+	usersURL string
+
 	tokenMu     sync.Mutex
 	accessToken string
 	tokenExpiry time.Time
@@ -68,8 +73,11 @@ func NewTwitchClient(clientID, clientSecret string, logger *zap.Logger) *TwitchC
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
-		logger: logger.With(zap.String("component", "twitch-client")),
-		cache:  make(map[string]cachedTwitchUser),
+		logger:   logger.With(zap.String("component", "twitch-client")),
+		cache:    make(map[string]cachedTwitchUser),
+		tokenURL: twitchTokenURL,
+		apiBase:  twitchAPIBase,
+		usersURL: twitchUsersURL,
 	}
 }
 
@@ -84,20 +92,7 @@ func (c *TwitchClient) GetUserID(ctx context.Context, login string) (string, err
 		return id, nil
 	}
 
-	token, err := c.getAccessToken(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get twitch access token: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s?login=%s", twitchUsersURL, url.QueryEscape(login)), nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create twitch request: %w", err)
-	}
-
-	req.Header.Set("Client-Id", c.clientID)
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doAuthedGet(ctx, fmt.Sprintf("%s?login=%s", c.usersURL, url.QueryEscape(login)))
 	if err != nil {
 		return "", fmt.Errorf("failed to query twitch users: %w", err)
 	}
@@ -138,7 +133,7 @@ func (c *TwitchClient) getAccessToken(ctx context.Context) (string, error) {
 	form.Set("client_secret", c.clientSecret)
 	form.Set("grant_type", "client_credentials")
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, twitchTokenURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("failed to create twitch token request: %w", err)
 	}
@@ -171,6 +166,55 @@ func (c *TwitchClient) getAccessToken(ctx context.Context) (string, error) {
 	return c.accessToken, nil
 }
 
+// invalidateToken clears the cached app token if it still matches the one that
+// just failed. Twitch can invalidate an app token before its nominal expiry
+// (e.g. on client-secret rotation); without this the client would keep sending
+// the dead token until the process restarts. Guarding on the failed value avoids
+// discarding a token another goroutine may have already refreshed.
+func (c *TwitchClient) invalidateToken(failed string) {
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+	if c.accessToken == failed {
+		c.accessToken = ""
+		c.tokenExpiry = time.Time{}
+	}
+}
+
+// doAuthedGet performs an authenticated GET against the Twitch API. On a 401 it
+// refreshes the app token once and retries, so a token invalidated by Twitch
+// mid-life recovers on the next call instead of wedging the pod until restart.
+// The caller owns the returned response body.
+func (c *TwitchClient) doAuthedGet(ctx context.Context, endpoint string) (*http.Response, error) {
+	for attempt := 0; ; attempt++ {
+		token, err := c.getAccessToken(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get twitch access token: %w", err)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create twitch request: %w", err)
+		}
+		req.Header.Set("Client-Id", c.clientID)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to call twitch api: %w", err)
+		}
+
+		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 {
+			resp.Body.Close()
+			c.logger.Warn("Twitch API returned 401, refreshing app token and retrying",
+				zap.String("endpoint", endpoint))
+			c.invalidateToken(token)
+			continue
+		}
+
+		return resp, nil
+	}
+}
+
 func (c *TwitchClient) getCached(login string) (string, bool) {
 	c.cacheMu.RLock()
 	defer c.cacheMu.RUnlock()
@@ -194,27 +238,14 @@ func (c *TwitchClient) setCached(login, id string) {
 }
 
 func (c *TwitchClient) apiGet(ctx context.Context, path string, query url.Values, v interface{}) error {
-	token, err := c.getAccessToken(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get twitch access token: %w", err)
-	}
-
-	endpoint := twitchAPIBase + path
+	endpoint := c.apiBase + path
 	if len(query) > 0 {
 		endpoint = endpoint + "?" + query.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	resp, err := c.doAuthedGet(ctx, endpoint)
 	if err != nil {
-		return fmt.Errorf("failed to create twitch request: %w", err)
-	}
-
-	req.Header.Set("Client-Id", c.clientID)
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to call twitch api: %w", err)
+		return err
 	}
 	defer resp.Body.Close()
 
