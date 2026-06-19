@@ -34,6 +34,7 @@ import (
 const (
 	ytUserY     = "77777777-1111-7777-7777-777777777777" // youtube-login streamer
 	ytStrangerF = "88888888-2222-8888-8888-888888888888"
+	ytLinkedT   = "99999999-3333-9999-9999-999999999999" // twitch-login streamer who linked YouTube
 )
 
 const ytForceSSL = "https://www.googleapis.com/auth/youtube.force-ssl"
@@ -85,6 +86,62 @@ func TestYouTubeRefresh_PersistsAndKeepsScopes(t *testing.T) {
 	assert.Contains(t, reread.GrantedScopes, ytForceSSL, "a refresh must not clobber granted_scopes")
 }
 
+func TestYouTubeResolve_PerChannelPreferredOverUsersRow(t *testing.T) {
+	src, _, cleanup := setupYouTubeSource(t)
+	defer cleanup()
+
+	// The youtube-login user resolving their exact channel gets the per-channel token,
+	// not the channel-agnostic users-row credential.
+	cred, err := src.Resolve(context.Background(), ytUserY, "UCself")
+	require.NoError(t, err)
+	assert.Equal(t, "yaccSelf", cred.AccessToken, "exact per-channel token wins over the users row")
+	assert.Contains(t, cred.GrantedScopes, ytForceSSL)
+}
+
+func TestYouTubeResolve_LinkedChannelCredential(t *testing.T) {
+	src, _, cleanup := setupYouTubeSource(t)
+	defer cleanup()
+
+	// A non-YouTube-login streamer resolves the moderation credential from
+	// youtube_oauth_tokens by exact channel id.
+	cred, err := src.Resolve(context.Background(), ytLinkedT, "UClinked")
+	require.NoError(t, err)
+	assert.Equal(t, "laccLinked", cred.AccessToken, "linked access token is decrypted")
+	assert.Equal(t, "lrefLinked", cred.RefreshToken)
+	assert.Contains(t, cred.GrantedScopes, ytForceSSL)
+}
+
+func TestYouTubeResolve_LinkedWrongChannelIsNoCredential(t *testing.T) {
+	src, _, cleanup := setupYouTubeSource(t)
+	defer cleanup()
+
+	// The linked credential is keyed by channel id; a different channel finds nothing
+	// (the user has no users-row youtube credential to fall back to).
+	_, err := src.Resolve(context.Background(), ytLinkedT, "UCnotmine")
+	assert.ErrorIs(t, err, ErrNoCredential)
+}
+
+func TestYouTubeRefresh_LinkedPersistsToLinkedRow(t *testing.T) {
+	src, _, cleanup := setupYouTubeSource(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"linkedYNewAcc","expires_in":3599}`))
+	}))
+	defer srv.Close()
+	src.tokenURL = srv.URL
+
+	cred, err := src.Resolve(context.Background(), ytLinkedT, "UClinked")
+	require.NoError(t, err)
+	require.NoError(t, src.Refresh(context.Background(), cred))
+
+	reread, err := src.Resolve(context.Background(), ytLinkedT, "UClinked")
+	require.NoError(t, err)
+	assert.Equal(t, "linkedYNewAcc", reread.AccessToken, "refresh wrote back to youtube_oauth_tokens")
+	assert.Contains(t, reread.GrantedScopes, ytForceSSL, "a refresh must not clobber linked granted_scopes")
+}
+
 func setupYouTubeSource(t *testing.T) (*YouTubeSource, Cipher, func()) {
 	t.Helper()
 	ctx := context.Background()
@@ -128,6 +185,20 @@ func setupYouTubeSource(t *testing.T) (*YouTubeSource, Cipher, func()) {
 			token_expires_at TIMESTAMP NOT NULL,
 			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
 			updated_at TIMESTAMP DEFAULT NOW()
+		);
+		CREATE TABLE youtube_oauth_tokens (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL,
+			channel_id VARCHAR(255) NOT NULL,
+			access_token TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			token_type VARCHAR(50) DEFAULT 'Bearer',
+			expiry TIMESTAMP NOT NULL,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			encryption_version INT NOT NULL DEFAULT 1,
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(user_id, channel_id)
 		);`
 	_, err = pool.Exec(ctx, schema)
 	require.NoError(t, err)
@@ -142,6 +213,25 @@ func setupYouTubeSource(t *testing.T) (*YouTubeSource, Cipher, func()) {
 	_, err = pool.Exec(ctx, `INSERT INTO users (id, username, auth_provider, access_token, refresh_token, token_expires_at, granted_scopes)
 		VALUES ($1,'ytstreamer','youtube',$2,$3,$4,$5)`,
 		ytUserY, enc("yaccY"), enc("yrefY"), exp, []string{"https://www.googleapis.com/auth/youtube.readonly", ytForceSSL})
+	require.NoError(t, err)
+
+	// ytUserY also has an exact per-channel token for "UCself" — the moderation service
+	// must prefer it over the channel-agnostic users-row credential.
+	_, err = pool.Exec(ctx, `INSERT INTO youtube_oauth_tokens (user_id, channel_id, access_token, refresh_token, expiry, granted_scopes, encryption_version)
+		VALUES ($1,'UCself',$2,$3,$4,$5,1)`,
+		ytUserY, enc("yaccSelf"), enc("yrefSelf"), exp, []string{"https://www.googleapis.com/auth/youtube.readonly", ytForceSSL})
+	require.NoError(t, err)
+
+	// ytLinkedT: a twitch-login streamer who LINKED a YouTube channel. There is no
+	// users row with auth_provider='youtube' for them; their moderation credential lives
+	// only in youtube_oauth_tokens, keyed by the channel id (UC...).
+	_, err = pool.Exec(ctx, `INSERT INTO users (id, username, auth_provider, access_token, refresh_token, token_expires_at, granted_scopes)
+		VALUES ($1,'twitchnativeyt','twitch',$2,$3,$4,$5)`,
+		ytLinkedT, enc("tacc"), enc("tref"), exp, []string{"user:read:chat"})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO youtube_oauth_tokens (user_id, channel_id, access_token, refresh_token, expiry, granted_scopes, encryption_version)
+		VALUES ($1,'UClinked',$2,$3,$4,$5,1)`,
+		ytLinkedT, enc("laccLinked"), enc("lrefLinked"), exp, []string{"https://www.googleapis.com/auth/youtube.readonly", ytForceSSL})
 	require.NoError(t, err)
 
 	src := NewYouTubeSource(pool, cipher, "test-client-id", "test-client-secret")

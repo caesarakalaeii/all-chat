@@ -386,12 +386,16 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 			return
 		}
 
-		// Union with the already-granted scopes so the new token is a SUPERSET; the
-		// downgrade guard then preserves (never clobbers) the chat / prior-mod grants.
-		existingScopes, scopeErr := h.userRepo.GetGrantedScopes(c.Request.Context(), userIDStr)
+		// Union with the scopes already granted FOR THIS PLATFORM so the new token is a
+		// SUPERSET; the downgrade guard then preserves (never clobbers) the chat /
+		// prior-mod grants. Reading platform-scoped (not the cross-platform users row) is
+		// essential for LINKED accounts: a YouTube-login streamer enabling Twitch
+		// moderation must not get their YouTube scopes injected into the Twitch consent
+		// URL (the provider would reject the unknown scopes).
+		existingScopes, scopeErr := h.userRepo.GetPlatformGrantedScopes(c.Request.Context(), userIDStr, string(platform))
 		if scopeErr != nil {
-			h.logger.Warn("Failed to read granted scopes for moderation re-consent; requesting action scopes only",
-				zap.String("user_id", userIDStr), zap.Error(scopeErr))
+			h.logger.Warn("Failed to read platform granted scopes for moderation re-consent; requesting action scopes only",
+				zap.String("user_id", userIDStr), zap.String("platform", string(platform)), zap.Error(scopeErr))
 		}
 		extra := unionScopes(existingScopes, modScopes)
 
@@ -806,11 +810,38 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 		}
 
 		if platform == oauth.PlatformYouTube && youtubeChannel != nil {
-			if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, youtubeChannel.ChannelID, token); err != nil {
+			// granted_scopes carries the opt-in youtube.force-ssl grant (ADR-0017) for
+			// the moderation service; merged (not replaced) so a plain add-source never
+			// drops a prior moderation grant.
+			if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, youtubeChannel.ChannelID, token, oauth.ExtractGrantedScopes(token)); err != nil {
 				h.logger.Warn("Failed to store YouTube tokens for listener",
 					zap.String("user_id", user.ID),
 					zap.String("channel_id", youtubeChannel.ChannelID),
 					zap.Error(err),
+				)
+			}
+		}
+
+		// Persist linked Kick credentials for non-Kick-login accounts so they can
+		// moderate their connected Kick channel (ADR-0017). Mirrors the linked Twitch
+		// path: a Kick-login account keeps its grant on the users row (linkPlatformToUser
+		// reflow), so storing it here too would have token-refresh racing two copies of
+		// the same rotating refresh token. The row carries the numeric broadcaster id
+		// (platformUser.GetID()) the Kick moderation API keys on, keyed by the slug.
+		if shouldStoreLinkedKickCredentials(user.AuthProvider, platform, oauthState.IsAddSource()) {
+			scopes := oauth.ExtractGrantedScopes(token)
+			if err := h.userRepo.StoreKickToken(c.Request.Context(),
+				user.ID, platformUser.GetUsername(), platformUser.GetID(), token, scopes); err != nil {
+				h.logger.Warn("Failed to store linked Kick credentials",
+					zap.String("user_id", user.ID),
+					zap.String("kick_slug", platformUser.GetUsername()),
+					zap.Error(err),
+				)
+			} else {
+				h.logger.Info("Stored linked Kick credentials",
+					zap.String("user_id", user.ID),
+					zap.String("kick_slug", platformUser.GetUsername()),
+					zap.Strings("scopes", scopes),
 				)
 			}
 		}
@@ -1107,6 +1138,17 @@ func wouldDowngradeScopes(existing, incoming []string) bool {
 // token-refresh racing two copies of the same refresh token.
 func shouldStoreLinkedTwitchCredentials(authProvider string, platform oauth.Platform, isAddSource bool) bool {
 	return platform == oauth.PlatformTwitch && isAddSource && authProvider != "twitch"
+}
+
+// shouldStoreLinkedKickCredentials decides whether a Kick consent must be persisted to
+// kick_oauth_tokens with its moderation columns (kick_user_id + granted_scopes,
+// migration 062). Like the Twitch sibling this is for accounts whose login provider is
+// NOT Kick: a Kick-login account keeps its grant on the users row (the
+// linkPlatformToUser same-platform reflow), and the moderation service prefers that
+// users row — storing a second copy here would have token-refresh racing two copies of
+// the same rotating Kick refresh token.
+func shouldStoreLinkedKickCredentials(authProvider string, platform oauth.Platform, isAddSource bool) bool {
+	return platform == oauth.PlatformKick && isAddSource && authProvider != "kick"
 }
 
 // linkPlatformToUser links a new platform to an existing user account

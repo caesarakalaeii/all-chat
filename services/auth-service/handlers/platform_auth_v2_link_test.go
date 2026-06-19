@@ -201,6 +201,35 @@ func setupLinkTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW()
 		);
+		CREATE TABLE IF NOT EXISTS kick_oauth_tokens (
+			id SERIAL PRIMARY KEY,
+			user_id UUID NOT NULL,
+			channel_id VARCHAR(255) NOT NULL,
+			kick_user_id VARCHAR(255),
+			access_token TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			token_type VARCHAR(50) DEFAULT 'Bearer',
+			expiry TIMESTAMP NOT NULL,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			encryption_version INT NOT NULL DEFAULT 1,
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(user_id, channel_id)
+		);
+		CREATE TABLE IF NOT EXISTS youtube_oauth_tokens (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL,
+			channel_id VARCHAR(255) NOT NULL,
+			access_token TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			token_type VARCHAR(50) DEFAULT 'Bearer',
+			expiry TIMESTAMP NOT NULL,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			encryption_version INT NOT NULL DEFAULT 1,
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(user_id, channel_id)
+		);
 	`
 	if _, err := pool.Exec(ctx, schema); err != nil {
 		t.Fatalf("Failed to create schema: %v", err)
@@ -467,5 +496,174 @@ func TestStoreTwitchToken_PersistsLinkedCredentials(t *testing.T) {
 	}
 	if rowCount != 1 {
 		t.Errorf("expected 1 row after upsert, got %d", rowCount)
+	}
+}
+
+// --- linked Kick + per-platform scope resolution (ADR-0017, migration 062) ---
+
+func TestShouldStoreLinkedKickCredentials(t *testing.T) {
+	tests := []struct {
+		name         string
+		authProvider string
+		platform     oauth.Platform
+		isAddSource  bool
+		want         bool
+	}{
+		{"twitch account links kick via add-source", "twitch", oauth.PlatformKick, true, true},
+		{"youtube account links kick via add-source", "youtube", oauth.PlatformKick, true, true},
+		{"kick account reflow stores on users row instead", "kick", oauth.PlatformKick, true, false},
+		{"twitch account links twitch", "twitch", oauth.PlatformTwitch, true, false},
+		{"login flow never stores linked credentials", "twitch", oauth.PlatformKick, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldStoreLinkedKickCredentials(tt.authProvider, tt.platform, tt.isAddSource)
+			if got != tt.want {
+				t.Errorf("shouldStoreLinkedKickCredentials(%q, %q, %v) = %v, want %v",
+					tt.authProvider, tt.platform, tt.isAddSource, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStoreKickToken_PersistsLinkedCredentials(t *testing.T) {
+	pool, cleanup := setupLinkTestDB(t)
+	defer cleanup()
+
+	_, repo := newLinkTestHandler(t, pool)
+	ctx := context.Background()
+
+	// A Twitch-login account that linked Kick for moderation.
+	user := createTwitchTestUser(t, repo, []string{"user:read:chat"})
+
+	kickToken := tokenWithScopes("kick-mod-token", []string{"user:read", "moderation:ban"})
+	if err := repo.StoreKickToken(ctx, user.ID, "MyKickSlug", "9001", kickToken, []string{"user:read", "moderation:ban"}); err != nil {
+		t.Fatalf("StoreKickToken failed: %v", err)
+	}
+
+	var (
+		kickUserID   string
+		scopes       []string
+		storedAccess string
+	)
+	if err := pool.QueryRow(ctx,
+		`SELECT kick_user_id, granted_scopes, access_token FROM kick_oauth_tokens WHERE user_id = $1 AND channel_id = $2`,
+		user.ID, "MyKickSlug",
+	).Scan(&kickUserID, &scopes, &storedAccess); err != nil {
+		t.Fatalf("failed to read stored kick token: %v", err)
+	}
+	if kickUserID != "9001" {
+		t.Errorf("kick_user_id = %q, want 9001", kickUserID)
+	}
+	if !containsScope(scopes, "moderation:ban") {
+		t.Errorf("granted_scopes missing moderation:ban: %v", scopes)
+	}
+	if storedAccess == "kick-mod-token" {
+		t.Error("access token stored in plaintext")
+	}
+
+	// Re-storing with a NARROWER scope set must merge (union), not drop moderation:ban,
+	// and must upsert (one row).
+	narrower := tokenWithScopes("kick-mod-token-2", []string{"user:read"})
+	if err := repo.StoreKickToken(ctx, user.ID, "MyKickSlug", "9001", narrower, []string{"user:read"}); err != nil {
+		t.Fatalf("StoreKickToken upsert failed: %v", err)
+	}
+	var (
+		rowCount int
+		scopes2  []string
+	)
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*), (SELECT granted_scopes FROM kick_oauth_tokens WHERE user_id = $1 AND channel_id = $2)
+		 FROM kick_oauth_tokens WHERE user_id = $1 AND channel_id = $2`,
+		user.ID, "MyKickSlug",
+	).Scan(&rowCount, &scopes2); err != nil {
+		t.Fatalf("failed to count rows: %v", err)
+	}
+	if rowCount != 1 {
+		t.Errorf("expected 1 row after upsert, got %d", rowCount)
+	}
+	if !containsScope(scopes2, "moderation:ban") {
+		t.Errorf("upsert dropped moderation:ban (should union): %v", scopes2)
+	}
+}
+
+func TestStoreYouTubeToken_MergesModerationScope(t *testing.T) {
+	pool, cleanup := setupLinkTestDB(t)
+	defer cleanup()
+
+	_, repo := newLinkTestHandler(t, pool)
+	ctx := context.Background()
+
+	user := createTwitchTestUser(t, repo, []string{"user:read:chat"})
+	const forceSSL = "https://www.googleapis.com/auth/youtube.force-ssl"
+	const readonly = "https://www.googleapis.com/auth/youtube.readonly"
+
+	// Moderation re-consent stores the force-ssl grant.
+	modToken := tokenWithScopes("yt-mod-token", []string{readonly, forceSSL})
+	if err := repo.StoreYouTubeToken(ctx, user.ID, "UCabc", modToken, []string{readonly, forceSSL}); err != nil {
+		t.Fatalf("StoreYouTubeToken (mod) failed: %v", err)
+	}
+
+	// A later plain add-source (login scopes only) must NOT drop the force-ssl grant.
+	plainToken := tokenWithScopes("yt-plain-token", []string{readonly})
+	if err := repo.StoreYouTubeToken(ctx, user.ID, "UCabc", plainToken, []string{readonly}); err != nil {
+		t.Fatalf("StoreYouTubeToken (plain) failed: %v", err)
+	}
+
+	var scopes []string
+	if err := pool.QueryRow(ctx,
+		`SELECT granted_scopes FROM youtube_oauth_tokens WHERE user_id = $1 AND channel_id = $2`,
+		user.ID, "UCabc",
+	).Scan(&scopes); err != nil {
+		t.Fatalf("failed to read youtube scopes: %v", err)
+	}
+	if !containsScope(scopes, forceSSL) {
+		t.Errorf("plain add-source clobbered the force-ssl moderation grant: %v", scopes)
+	}
+}
+
+func TestGetPlatformGrantedScopes(t *testing.T) {
+	pool, cleanup := setupLinkTestDB(t)
+	defer cleanup()
+
+	_, repo := newLinkTestHandler(t, pool)
+	ctx := context.Background()
+
+	// A Twitch-login streamer who linked both Kick and YouTube for moderation.
+	user := createTwitchTestUser(t, repo, []string{"user:read:chat", "moderator:manage:chat_messages"})
+
+	// Primary platform (login provider) reads the users row.
+	twScopes, err := repo.GetPlatformGrantedScopes(ctx, user.ID, "twitch")
+	if err != nil {
+		t.Fatalf("GetPlatformGrantedScopes(twitch) failed: %v", err)
+	}
+	if !containsScope(twScopes, "moderator:manage:chat_messages") {
+		t.Errorf("twitch (primary) scopes missing the users-row grant: %v", twScopes)
+	}
+
+	// A linked platform with no credential yet returns empty (not the users-row scopes).
+	kickScopes, err := repo.GetPlatformGrantedScopes(ctx, user.ID, "kick")
+	if err != nil {
+		t.Fatalf("GetPlatformGrantedScopes(kick, empty) failed: %v", err)
+	}
+	if len(kickScopes) != 0 {
+		t.Errorf("kick scopes should be empty before any Kick link, got %v", kickScopes)
+	}
+
+	// After linking Kick, it returns the per-link scopes — and NOT the cross-platform
+	// Twitch login scopes (the bug: a Twitch scope must never leak into a Kick consent).
+	kickToken := tokenWithScopes("k", []string{"user:read", "moderation:ban"})
+	if err := repo.StoreKickToken(ctx, user.ID, "slug", "1", kickToken, []string{"user:read", "moderation:ban"}); err != nil {
+		t.Fatalf("StoreKickToken failed: %v", err)
+	}
+	kickScopes, err = repo.GetPlatformGrantedScopes(ctx, user.ID, "kick")
+	if err != nil {
+		t.Fatalf("GetPlatformGrantedScopes(kick) failed: %v", err)
+	}
+	if !containsScope(kickScopes, "moderation:ban") {
+		t.Errorf("kick scopes missing moderation:ban: %v", kickScopes)
+	}
+	if containsScope(kickScopes, "user:read:chat") || containsScope(kickScopes, "moderator:manage:chat_messages") {
+		t.Errorf("cross-platform Twitch scopes leaked into kick scopes: %v", kickScopes)
 	}
 }

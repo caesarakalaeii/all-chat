@@ -125,21 +125,20 @@ moderation-service env (configmap/secret) — each platform independently falls 
 
 ## NEXT — continuation (CORE, requested by user 2026-06-19)
 
-### 6. Connected (non-primary / linked) account moderation  — **CORE, not a nice-to-have**
-v1 only resolves PRIMARY-login broadcasters (Twitch handles linked already; Kick/YouTube are users-row only). A streamer whose All-Chat login is platform A but who also linked platform B must be able to moderate B. **Root blocker: the per-platform token tables lack the columns moderation needs.**
+### 6. Connected (non-primary / linked) account moderation  ✅ DONE (all green: mod-svc tokens testcontainers, auth-service handlers+repository testcontainers incl. migrations_rerun)
+A streamer whose All-Chat login is platform A but who linked platform B can now moderate B. Capability scope-checkers + dispatchers already call `Resolve`/`GetPlatformGrantedScopes`, so they inherited the linked path once the sources/queries were widened — no handler/dispatch changes needed.
 
-- **Twitch**: `tokens/source.go` ALREADY UNIONs `users` + `twitch_oauth_tokens` (has `granted_scopes` + `twitch_user_id`, ADR-0016). ✅ linked likely works — **verify** with a testcontainer case (linked twitch mod scope) and the re-consent linked path.
-- **Kick** (`tokens/kick.go`, users-row only): linked tokens are in `kick_oauth_tokens` which has **NO numeric broadcaster id and NO `granted_scopes`** (schema migration 005/050). Needed:
-  1. Migration: add `kick_user_id VARCHAR` (numeric broadcaster id) + `granted_scopes TEXT[]` to `kick_oauth_tokens`.
-  2. Populate `kick_user_id` at link time (`platform_auth_v2.go` link callback → `kickProvider.GetUserInfoKick` returns numeric `UserID`) and on re-consent.
-  3. Populate `granted_scopes` on the linked re-consent callback (the moderation flow stores to users today; must also write the per-link table for linked accounts).
-  4. `KickSource.Resolve` → UNION users-row (auth_provider=kick) + `kick_oauth_tokens` (by user_id + LOWER(channel_id slug)); decide precedence (users-row first, like Twitch).
-- **YouTube** (`tokens/youtube.go`, users-row only): linked tokens are in `youtube_oauth_tokens` keyed by `channel_id` (UC...) — which actually **matches the overlay source channel_id directly** (cleaner than the users-row match). But it has **NO `granted_scopes`** (migration 003/006). Needed:
-  1. Migration: add `granted_scopes TEXT[]` to `youtube_oauth_tokens`.
-  2. Populate on the linked re-consent callback + token-refresh preserve.
-  3. `YouTubeSource.Resolve` → prefer `youtube_oauth_tokens` WHERE user_id + channel_id=UC when present (exact per-channel token), else users-row.
-- **Cross-cutting**: the re-consent callback (`platform_auth_v2.go` `linkPlatformToUser` / the linked-credential store path) must persist moderation `granted_scopes` to the PER-PLATFORM tables for non-primary accounts (today it only writes `users.granted_scopes`). token-refresh-service must preserve those per-link `granted_scopes` (it currently touches neither — add UPDATEs that leave granted_scopes alone, same as users). Capability scope-checkers already call `Resolve`, so they inherit the linked path once the sources UNION.
-- E2E: extend `tokens/{kick,youtube}_test.go` with a linked-row case; verify capabilities report moderatable for a linked-but-opted-in account.
+- **Migration `062_linked_moderation_scopes.sql` (+down)** — `kick_oauth_tokens += kick_user_id VARCHAR(255), granted_scopes TEXT[]`; `youtube_oauth_tokens += granted_scopes TEXT[]`. Idempotent (`ADD COLUMN IF NOT EXISTS`), GRANT guarded. (twitch_oauth_tokens already had twitch_user_id + granted_scopes from 056 — Twitch linked already worked.)
+- **moderation-service**:
+  - `tokens/kick.go` — `KickSource.Resolve` now UNIONs users-row (auth_provider=kick, by username slug) + `kick_oauth_tokens` (by user_id + LOWER(channel_id), `kick_user_id IS NOT NULL` so legacy listener rows are skipped); users-row preferred. `KickCredential` carries `origin`; `Refresh` writes back to the origin row (users `token_expires_at` vs kick_oauth_tokens `expiry`, keeps encryption_version=1), granted_scopes untouched.
+  - `tokens/youtube.go` — `YouTubeSource.Resolve` now prefers the EXACT per-channel `youtube_oauth_tokens` row (by user_id + channel_id=UC…) over the channel-agnostic users row; `origin`-aware `Refresh` write-back.
+  - testcontainer tests extended (`kick_test.go`, `youtube_test.go`): linked credential, per-channel preference, scoping to requesting user, legacy-row skip, linked-refresh-persists-to-linked-row + scopes preserved. All green.
+- **auth-service**:
+  - `repository/user_repository.go` — `StoreYouTubeToken` gained a `grantedScopes` param and now MERGES (union) granted_scopes on conflict (a plain add-source can't clobber a prior force-ssl grant); new `StoreKickToken` (writes kick_oauth_tokens with kick_user_id + merged granted_scopes, encrypted); new `GetPlatformGrantedScopes(userID, platform)` reads the AUTHORITATIVE source per platform (users row if login provider, else the per-link table).
+  - `handlers/platform_auth_v2.go` — `HandleEnableModeration` now unions with `GetPlatformGrantedScopes` (was `GetGrantedScopes`). **This fixes a latent cross-platform bug**: `getOrCreateUser` writes `users.granted_scopes` for ALL providers, so the old code injected e.g. a YouTube login's scopes into a Twitch consent URL for a linked account (provider rejects). Callback persists linked Kick grant via new `shouldStoreLinkedKickCredentials` (non-kick-login + add-source, mirrors the Twitch sibling) and passes scopes to `StoreYouTubeToken`. Legacy `StoreYouTubeToken` callers (auth_handler.go, platform_auth.go) updated.
+  - testcontainer tests added (`platform_auth_v2_link_test.go`, schema extended with kick/youtube oauth tables): `TestShouldStoreLinkedKickCredentials`, `TestStoreKickToken_PersistsLinkedCredentials` (incl. union-on-upsert), `TestStoreYouTubeToken_MergesModerationScope`, `TestGetPlatformGrantedScopes` (primary vs linked vs cross-platform-isolation vs empty).
+- **token-refresh-service**: NO change needed (verified). YouTube linked refresh (`youtube_oauth_tokens`) already leaves granted_scopes untouched; linked Kick uses the moderation dispatcher's on-demand refresh (proactive <5min + 401-retry, writes back to kick_oauth_tokens). Kick-login still refreshed via the users row.
+- **Deferred (documented)**: proactive token-refresh of linked `kick_oauth_tokens` rows (on-demand refresh covers active moderation use; a long-idle linked Kick credential refreshes on next action or prompts re-consent if its refresh token lapsed).
 
 ### 7. Discord ban + timeout, opt-in invite toggle, clear reinvite path  — **expand beyond delete-only**
 Discord moderation is GUILD-level bot permissions (NOT per-user OAuth), so "opt-in" happens at **invite time**.
