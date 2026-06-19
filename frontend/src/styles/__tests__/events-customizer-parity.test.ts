@@ -124,4 +124,23 @@ describe('events.css visual-customizer scope parity', () => {
     )
     expect(floorRules?.length).toBe(2)
   })
+
+  /**
+   * The emote-height floor must apply ONLY to messages that actually contain an
+   * emote. Flooring every `.break-words` inflated plain-text line spacing and
+   * pinned it above the line-height slider's minimum even with no emote present.
+   * The floor lives on `:has(img)`; the base rule uses the unfloored line-height.
+   */
+  it('scopes the emote-height line floor to messages containing an emote', () => {
+    const scopedFloor = CSS.match(/\.break-words:has\(img\)\s*\{[^}]*line-height:\s*max\(/g)
+    expect(scopedFloor?.length).toBe(2)
+  })
+
+  it('lets plain-text messages use the unfloored line-height', () => {
+    const baseLineHeight = CSS.match(
+      /line-height:\s*calc\(var\(--chat-line-height, 1\.5\) \* 1em\)\s*!important/g
+    )
+    // one per scope (preview + live), in the base `.break-words` rule
+    expect(baseLineHeight?.length).toBe(2)
+  })
 })
