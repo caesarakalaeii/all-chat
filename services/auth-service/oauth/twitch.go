@@ -82,6 +82,58 @@ func (t *TwitchOAuth) GetAuthURLWithChatScopes(state string) string {
 	)
 }
 
+// twitchModerationScopeByAction maps a moderation action to the single Twitch OAuth
+// scope it requires. These scopes are requested ONLY through the dedicated opt-in
+// moderation re-consent flow and are never bundled into login or add-source
+// (ADR-0017, least privilege).
+var twitchModerationScopeByAction = map[string]string{
+	"delete":  "moderator:manage:chat_messages",
+	"timeout": "moderator:manage:banned_users",
+	"ban":     "moderator:manage:banned_users",
+	"unban":   "moderator:manage:banned_users",
+}
+
+// ModerationScopesForActions returns the deduped, minimal set of Twitch scopes the
+// given moderation actions require. Unknown actions are ignored, so an empty/garbage
+// query yields no scopes (the caller then rejects the request).
+func ModerationScopesForActions(actions []string) []string {
+	seen := make(map[string]bool)
+	out := make([]string, 0, 2)
+	for _, a := range actions {
+		if scope, ok := twitchModerationScopeByAction[a]; ok && !seen[scope] {
+			seen[scope] = true
+			out = append(out, scope)
+		}
+	}
+	return out
+}
+
+// GetAuthURLWithScopes builds a consent URL requesting the base login scopes plus
+// `extra` (deduped). force_verify=true is REQUIRED so an already-connected streamer
+// is actually re-prompted — without it Twitch may silently reissue the prior, narrower
+// grant, so the new moderation scopes would never be requested. The moderation
+// re-consent flow passes extra = (existing granted scopes ∪ minimal action scopes), so
+// the resulting token is always a SUPERSET of the stored grant and never trips the
+// scope-downgrade guard.
+func (t *TwitchOAuth) GetAuthURLWithScopes(state string, extra []string) string {
+	seen := make(map[string]bool)
+	scopes := make([]string, 0, len(t.config.Scopes)+len(extra))
+	add := func(list []string) {
+		for _, s := range list {
+			if s != "" && !seen[s] {
+				seen[s] = true
+				scopes = append(scopes, s)
+			}
+		}
+	}
+	add(t.config.Scopes)
+	add(extra)
+	return t.config.AuthCodeURL(state,
+		oauth2.SetAuthURLParam("scope", strings.Join(scopes, " ")),
+		oauth2.SetAuthURLParam("force_verify", "true"),
+	)
+}
+
 // ExtractGrantedScopes pulls the granted scope list out of a Twitch token exchange
 // or refresh response. Twitch returns "scope" as a JSON array, which oauth2 surfaces
 // via Extra("scope") as []interface{}. Returns nil when absent. The string case is

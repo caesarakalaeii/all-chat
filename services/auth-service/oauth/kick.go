@@ -88,6 +88,65 @@ func (k *KickOAuth) GetAuthURL(state string) string {
 	return kickAuthURL + "?" + params.Encode()
 }
 
+// kickModerationScopeByAction maps a moderation action to the Kick OAuth scope it
+// requires. Kick gates ban/timeout/unban behind a single scope and has no
+// single-message delete, so delete maps to nothing. Requested ONLY through the opt-in
+// moderation re-consent flow, never bundled into login/add-source (ADR-0017).
+var kickModerationScopeByAction = map[string]string{
+	"timeout": "moderation:ban",
+	"ban":     "moderation:ban",
+	"unban":   "moderation:ban",
+}
+
+// KickModerationScopesForActions returns the deduped, minimal set of Kick scopes the
+// given moderation actions require. Unknown actions (incl. "delete", unsupported on
+// Kick) are ignored, so an empty/garbage query yields no scopes (the caller rejects it).
+func KickModerationScopesForActions(actions []string) []string {
+	seen := make(map[string]bool)
+	out := make([]string, 0, 1)
+	for _, a := range actions {
+		if scope, ok := kickModerationScopeByAction[a]; ok && !seen[scope] {
+			seen[scope] = true
+			out = append(out, scope)
+		}
+	}
+	return out
+}
+
+// GetAuthURLWithScopesPKCE builds a Kick consent URL (PKCE) requesting the base login
+// scope plus `extra` (deduped), and returns the code verifier the caller must store for
+// the token exchange. The moderation re-consent passes extra = (existing granted scopes
+// ∪ moderation:ban), so the issued token is a SUPERSET of the stored grant and never
+// trips the scope-downgrade guard.
+func (k *KickOAuth) GetAuthURLWithScopesPKCE(state string, extra []string) (authURL string, codeVerifier string) {
+	codeVerifier = generateCodeVerifier()
+	codeChallenge := generateCodeChallenge(codeVerifier)
+
+	seen := make(map[string]bool)
+	scopes := make([]string, 0, len(extra)+1)
+	add := func(list []string) {
+		for _, s := range list {
+			if s != "" && !seen[s] {
+				seen[s] = true
+				scopes = append(scopes, s)
+			}
+		}
+	}
+	add([]string{"user:read"}) // base identity scope (resolve the streamer's own channel)
+	add(extra)
+
+	params := url.Values{}
+	params.Set("client_id", k.clientID)
+	params.Set("response_type", "code")
+	params.Set("redirect_uri", k.redirectURL)
+	params.Set("state", state)
+	params.Set("scope", strings.Join(scopes, " "))
+	params.Set("code_challenge", codeChallenge)
+	params.Set("code_challenge_method", "S256")
+
+	return kickAuthURL + "?" + params.Encode(), codeVerifier
+}
+
 // GetAuthURLWithPKCE generates the OAuth authorization URL and returns both URL and code verifier
 // The caller must store the code verifier to use it during token exchange
 func (k *KickOAuth) GetAuthURLWithPKCE(state string) (authURL string, codeVerifier string) {
