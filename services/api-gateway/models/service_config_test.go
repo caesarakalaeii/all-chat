@@ -69,7 +69,7 @@ func TestNewServiceRegistry(t *testing.T) {
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, sr *ServiceRegistry) {
-				assert.Len(t, sr.Services, 17) // 4 base + 6 admin + 4 share-service + 2 maintenance routes + 1 test-stream
+				assert.Len(t, sr.Services, 18) // 4 base + 7 admin + 4 share-service + 2 maintenance routes + 1 test-stream
 				assert.NotNil(t, sr.Services["auth-service"])
 				assert.NotNil(t, sr.Services["overlay-manager"])
 				assert.NotNil(t, sr.Services["youtube-resolver"])
@@ -77,6 +77,7 @@ func TestNewServiceRegistry(t *testing.T) {
 				assert.NotNil(t, sr.Services["message-processor-test-stream"])
 				assert.NotNil(t, sr.Services["admin-users"])
 				assert.NotNil(t, sr.Services["admin-overlays"])
+				assert.NotNil(t, sr.Services["admin-user-overlays"])
 				assert.NotNil(t, sr.Services["admin-sources"])
 				assert.NotNil(t, sr.Services["admin-stats"])
 				assert.NotNil(t, sr.Services["admin-viewers"])
@@ -206,6 +207,60 @@ func TestServiceRegistry_GetServiceForPath(t *testing.T) {
 				require.NotNil(t, service)
 				assert.Equal(t, tt.expectedService, service.Name)
 			}
+		})
+	}
+}
+
+// TestServiceRegistry_AdminUserOverlaysRouting guards against a routing
+// regression where the admin "overlays for a user" endpoint was reachable only
+// via /api/v1/admin/users/:id/overlays. Because the gateway matches by longest
+// static prefix and the variable :id precedes the distinguishing /overlays
+// suffix, that path always matched the /api/v1/admin/users prefix and was
+// proxied to auth-service (which has no such route -> 404), while
+// /api/v1/admin/users/:id/impersonate must still reach auth-service.
+func TestServiceRegistry_AdminUserOverlaysRouting(t *testing.T) {
+	for _, key := range []string{"AUTH_SERVICE_URL", "OVERLAY_SERVICE_URL", "EMOTE_SERVICE_URL"} {
+		os.Setenv(key, "http://"+key)
+		defer os.Unsetenv(key)
+	}
+	os.Setenv("AUTH_SERVICE_URL", "http://auth:8081")
+	os.Setenv("OVERLAY_SERVICE_URL", "http://overlay:8082")
+
+	registry, err := NewServiceRegistry()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name            string
+		path            string
+		expectedService string
+		expectedBaseURL string
+	}{
+		{
+			name:            "user overlays goes to overlay-manager",
+			path:            "/api/v1/admin/user-overlays/524af57c-d33b-44f3-a14d-b1e58792ce3f",
+			expectedService: "admin-user-overlays",
+			expectedBaseURL: "http://overlay:8082",
+		},
+		{
+			name:            "impersonate still goes to auth-service",
+			path:            "/api/v1/admin/users/524af57c-d33b-44f3-a14d-b1e58792ce3f/impersonate",
+			expectedService: "admin-users",
+			expectedBaseURL: "http://auth:8081",
+		},
+		{
+			name:            "user list still goes to auth-service",
+			path:            "/api/v1/admin/users",
+			expectedService: "admin-users",
+			expectedBaseURL: "http://auth:8081",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := registry.GetServiceForPath(tt.path)
+			require.NotNil(t, service)
+			assert.Equal(t, tt.expectedService, service.Name)
+			assert.Equal(t, tt.expectedBaseURL, service.BaseURL)
 		})
 	}
 }

@@ -103,6 +103,20 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		RewritePrefix: "/admin/overlays", // Rewrite to /admin/overlays/* for overlay-manager
 	}
 
+	// Admin routes - Overlay Manager (overlays for a specific user)
+	// Uses a dedicated prefix instead of /api/v1/admin/users/:id/overlays because
+	// the gateway matches by longest static prefix: with the variable :id ahead of
+	// the /overlays suffix, that path would always match /api/v1/admin/users and be
+	// proxied to auth-service (which has no such route -> 404).
+	registry.Services["admin-user-overlays"] = &ServiceConfig{
+		Name:          "admin-user-overlays",
+		BaseURL:       overlayURL,
+		HealthPath:    "/health/live",
+		PathPrefix:    "/api/v1/admin/user-overlays",
+		StripPrefix:   true,                   // Strip /api/v1/admin/user-overlays
+		RewritePrefix: "/admin/user-overlays", // Rewrite to /admin/user-overlays/:id for overlay-manager
+	}
+
 	// Admin routes - Overlay Manager (sources)
 	registry.Services["admin-sources"] = &ServiceConfig{
 		Name:          "admin-sources",
