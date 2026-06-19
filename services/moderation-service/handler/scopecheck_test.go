@@ -18,11 +18,13 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/caesar/all-chat/services/moderation-service/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 // fakeScopeChecker records the platform it was asked about and returns a fixed result.
@@ -63,4 +65,54 @@ func TestStaticScopeChecker_ReturnsFixedActions(t *testing.T) {
 	got, err := s.GrantedActions(context.Background(), "anyone", "discord", "anychan")
 	require.NoError(t, err)
 	assert.Equal(t, []models.Action{models.ActionDelete}, got)
+}
+
+type fakeDiscordGuilds struct {
+	guildID string
+	err     error
+}
+
+func (f fakeDiscordGuilds) GuildID(context.Context, string) (string, error) {
+	return f.guildID, f.err
+}
+
+type fakeDiscordPerms struct {
+	bits uint64
+	err  error
+}
+
+func (f fakeDiscordPerms) GuildBotPermissions(context.Context, string) (uint64, error) {
+	return f.bits, f.err
+}
+
+func TestDiscordScopeChecker_MapsEffectivePermissions(t *testing.T) {
+	c := NewDiscordScopeChecker(
+		fakeDiscordGuilds{guildID: "g"},
+		fakeDiscordPerms{bits: models.DiscordPermManageMessages | models.DiscordPermBanMembers},
+		zap.NewNop(),
+	)
+	got, err := c.GrantedActions(context.Background(), "owner", "discord", "chan")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []models.Action{models.ActionDelete, models.ActionBan, models.ActionUnban}, got)
+}
+
+func TestDiscordScopeChecker_NonDiscordIsNil(t *testing.T) {
+	c := NewDiscordScopeChecker(fakeDiscordGuilds{guildID: "g"}, fakeDiscordPerms{}, zap.NewNop())
+	got, err := c.GrantedActions(context.Background(), "owner", "twitch", "chan")
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+func TestDiscordScopeChecker_ResolutionFailureReportsNoActions(t *testing.T) {
+	// A bot that can't be resolved/permissions-read degrades to no actions (re-invite
+	// prompt), never an error that would fail the whole capabilities response.
+	c := NewDiscordScopeChecker(fakeDiscordGuilds{err: errors.New("forbidden")}, fakeDiscordPerms{}, zap.NewNop())
+	got, err := c.GrantedActions(context.Background(), "owner", "discord", "chan")
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	c = NewDiscordScopeChecker(fakeDiscordGuilds{guildID: "g"}, fakeDiscordPerms{err: errors.New("api down")}, zap.NewNop())
+	got, err = c.GrantedActions(context.Background(), "owner", "discord", "chan")
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }

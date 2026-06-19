@@ -79,9 +79,10 @@ export function ModerationControls({
 
   // When a source can't be moderated at all, keep a disabled affordance (carrying the
   // reason tooltip) for hover feedback. When it can, render only the controls whose
-  // actions are actually granted — so a delete-only platform (Discord) shows no
-  // per-user menu, and a ban-only platform (Kick/YouTube) shows no delete button,
-  // rather than a dead control.
+  // actions are actually granted — so a ban-only platform (Kick/YouTube) shows no delete
+  // button, and a platform whose bot/credential lacks per-user permissions shows no
+  // per-user menu, rather than a dead control. (Discord reports whatever its bot's guild
+  // permissions allow — delete and/or timeout/ban/unban.)
   const showDelete = disabled || can('delete')
   const showUserActions = disabled || hasUserActions
 
@@ -126,7 +127,7 @@ export function ModerationControls({
       )}
 
       {/* Per-user actions trigger. Hidden for moderatable sources with no per-user
-          action (Discord is delete-only). */}
+          action granted (e.g. a Discord bot invited without ban/timeout permissions). */}
       {showUserActions && (
         <button
           type="button"

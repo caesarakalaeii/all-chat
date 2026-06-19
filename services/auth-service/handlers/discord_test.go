@@ -48,6 +48,10 @@ func (m *mockDiscordOAuth) GetAuthURL(state string) string {
 	return "https://discord.com/oauth2/authorize?client_id=test&scope=bot&permissions=68608&state=" + state
 }
 
+func (m *mockDiscordOAuth) GetModerationAuthURL(state string) string {
+	return "https://discord.com/oauth2/authorize?client_id=test&scope=bot&permissions=1099511704580&state=" + state
+}
+
 func (m *mockDiscordOAuth) ExchangeCode(_ context.Context, _ string) (*oauth2.Token, error) {
 	return m.exchangeToken, m.exchangeErr
 }
@@ -138,6 +142,37 @@ func TestHandleDiscordConnect(t *testing.T) {
 	// Must contain scope=bot
 	if !containsString(inviteURL, "scope=bot") {
 		t.Errorf("bot_invite_url %q does not contain scope=bot", inviteURL)
+	}
+}
+
+// TestHandleDiscordConnect_ModerationReinvite verifies that ?moderation=true returns the
+// elevated invite URL (the moderation permission bitfield), so the dashboard's re-invite
+// CTA upgrades the bot's permissions in place (ADR-0017).
+func TestHandleDiscordConnect_ModerationReinvite(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	handler := newTestDiscordHandlerNoRedis(&mockDiscordOAuth{}, &mockDiscordRepo{}, "http://localhost:3000")
+
+	router := gin.New()
+	router.GET("/discord/connect", func(c *gin.Context) {
+		c.Set("user_id", "user-123")
+		handler.HandleConnect(c)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/discord/connect?moderation=true", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	// The moderation re-invite uses the elevated permission bitfield, not the base 68608.
+	if !containsString(resp["bot_invite_url"], "permissions=1099511704580") {
+		t.Errorf("moderation re-invite URL %q does not request the elevated permissions", resp["bot_invite_url"])
 	}
 }
 

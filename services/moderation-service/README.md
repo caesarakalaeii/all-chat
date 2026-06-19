@@ -40,9 +40,13 @@ Admin **impersonation** is allowed but always attributed: the action runs as the
 |---|---|---|
 | Twitch | delete, timeout, ban, unban | **live** — real Helix calls via the broadcaster's own token (scope-gated) |
 | Kick | timeout, ban, unban | **live** — real Kick API via the broadcaster's own token (`moderation:ban` scope-gated); no single-message delete |
-| Discord | delete | **live** — bot REST `DELETE /channels/{c}/messages/{m}`; needs the bot in the guild with **Manage Messages** |
+| Discord | delete, timeout, ban, unban | **live** — bot REST (delete `messages`, member `communication_disabled_until`/`bans`); each action gated by the bot's effective guild permission |
 | YouTube | ban | **live** — `liveChatBans.insert` via the broadcaster's own token (`force-ssl` scope-gated); ban-only (unban needs the ban resource id, deferred); liveChatId from the listener's Redis cache; quota-accounted (ADR-0006) |
 | TikTok | — | unsupported (no moderation API) — reported `unsupported_platform` |
+
+The broadcaster credential is resolved for both primary-login and **linked** (non-primary-login) accounts:
+Twitch/Kick/YouTube each UNION the users row with their per-link token table (`*_oauth_tokens`, which
+carry `granted_scopes` + the broadcaster id needed by moderation, migration 062 for Kick/YouTube).
 
 Dispatch is a per-platform router (`dispatch.Multi`); a platform whose credentials aren't configured for
 the deployment falls back to **dry-run** (reflect-back only, no platform call) so nothing breaks.
@@ -56,9 +60,11 @@ YouTube re-adds `youtube.force-ssl` (dropped at login per ADR-0012) for ban.
 `granted_scopes` is the source of truth; the capabilities endpoint reports `missing_scope` until they
 are granted, and the dispatcher pre-checks scopes before any platform call. **Discord is the
 exception**: its authority is a shared bot token (a service credential), not a per-user OAuth grant, so
-it has no re-consent — capability is `delete` whenever the bot is configured, and the bot's
-`MANAGE_MESSAGES` permission is enforced by Discord at call time (a 403 fails the action, never a false
-reflect-back).
+the "opt-in" is the bot **re-invite** (`GET /api/v1/auth/discord/connect?moderation=true` returns the
+elevated invite URL). Capability is computed from the bot's effective guild permissions (delete⇐
+`MANAGE_MESSAGES`, timeout⇐`MODERATE_MEMBERS`, ban/unban⇐`BAN_MEMBERS`), so a bot invited without the
+moderation permissions reports no actions and the dashboard shows the re-invite CTA. A dispatch 403
+(e.g. a channel-level permission overwrite) fails the action — never a false reflect-back.
 
 ## Rollout (feature gate, ADR-0008)
 
@@ -79,7 +85,7 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   behind the `moderation` feature gate (see Rollout above).
 - **Phase 2 (done): Kick + Discord.** Kick mirrors the Twitch pattern (broadcaster's own token,
   `moderation:ban` scope, opt-in re-consent; ban/timeout/unban — Kick has no single-message delete).
-  Discord is delete-only via a shared bot token (no per-user OAuth). To make deletions reflect on the
+  Discord shipped delete-only via a shared bot token (no per-user OAuth). To make deletions reflect on the
   OBS overlay for non-Twitch platforms (whose listeners don't populate the msgid registry), the delete
   command now threads the internal `target_uuid` through the `message_deletion` event and the
   message-processor trusts it, skipping the Twitch-only registry lookup.
@@ -89,6 +95,16 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   50-unit ban against the shared `youtube_quota_usage` counter (ADR-0006, reserve→confirm/rollback). The
   opt-in re-consent re-adds `youtube.force-ssl`. Unban is deferred (the YouTube API deletes a ban by its
   resource id, which All-Chat does not persist).
+- **Phase 4 (done): linked accounts.** `tokens/{kick,youtube}.go` now resolve the broadcaster credential
+  for non-primary-login accounts by UNIONing the users row with the per-link `*_oauth_tokens` table
+  (migration 062 added the Kick numeric id + `granted_scopes` and the YouTube `granted_scopes`). The
+  auth-service re-consent callback persists the grant to those tables, and `GetPlatformGrantedScopes`
+  reads platform-scoped existing scopes for the consent URL (no cross-platform scope injection).
+- **Phase 5 (done): Discord full moderation.** `clients/discord.go` added timeout/ban/unban + guild
+  resolution (`GET /channels/{id}`, Redis-cached) + effective-permission computation; `dispatch/discord.go`
+  resolves the guild from the channel and performs member ops; `handler.DiscordScopeChecker` reports the
+  actions the bot's guild permissions allow; the auth-service `GetModerationAuthURL` (elevated invite) +
+  `HandleConnect?moderation=true` give an opt-in re-invite that upgrades existing bots in place.
 
 ## Layout
 
@@ -115,8 +131,10 @@ back to dry-run if its credentials are absent:
   `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` (Client-Id header + refresh grant).
 - **Kick** (timeout/ban/unban): `TOKEN_ENCRYPTION_KEY_V*` **and** `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET`
   (refresh grant).
-- **Discord** (delete): `DISCORD_BOT_TOKEN` (the same bot token discord-listener uses; the bot must be
-  in the guild with the **Manage Messages** permission). No cipher needed — Discord uses no per-user OAuth.
+- **Discord** (delete/timeout/ban/unban): `DISCORD_BOT_TOKEN` (the same bot token discord-listener uses).
+  No cipher needed — Discord uses no per-user OAuth. Each action is gated by the bot's effective guild
+  permission (MANAGE_MESSAGES / MODERATE_MEMBERS / BAN_MEMBERS); owners grant these via the opt-in bot
+  re-invite (`/api/v1/auth/discord/connect?moderation=true`).
 - **YouTube** (ban): `TOKEN_ENCRYPTION_KEY_V*` **and** `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`
   (Google refresh grant). Optional `YOUTUBE_QUOTA_LIMIT_DAILY` (default 1009000, match the listener).
   Uses the shared Redis (liveChatId cache) and DB (quota functions, migration 008) already configured.

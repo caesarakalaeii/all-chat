@@ -63,6 +63,19 @@ export async function startDiscordOAuth(): Promise<void> {
   }
 }
 
+// startDiscordModerationReinvite fetches the elevated bot invite URL (ADR-0017) and
+// redirects to it. Re-authorizing on an existing guild upgrades the bot's permissions in
+// place (MANAGE_MESSAGES / MODERATE_MEMBERS / BAN_MEMBERS) so the streamer can moderate.
+// Unlike Twitch/Kick/YouTube this is a bot RE-INVITE, not an OAuth re-consent.
+export async function startDiscordModerationReinvite(): Promise<void> {
+  const data = await apiClient.get<{ bot_invite_url: string }>(
+    '/api/v1/auth/discord/connect?moderation=true',
+  )
+  if (data.bot_invite_url) {
+    window.location.href = data.bot_invite_url
+  }
+}
+
 export async function updateSourceConfig(
   overlayId: string,
   sourceId: string,

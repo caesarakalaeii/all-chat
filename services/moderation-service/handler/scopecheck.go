@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/caesar/all-chat/services/moderation-service/models"
+	"go.uber.org/zap"
 )
 
 // MultiScopeChecker routes a capability scope check to the checker registered for the
@@ -49,4 +50,54 @@ type StaticScopeChecker struct {
 // GrantedActions returns the fixed action set.
 func (s StaticScopeChecker) GrantedActions(context.Context, string, string, string) ([]models.Action, error) {
 	return s.Actions, nil
+}
+
+// discordGuildResolver maps a channel id to its guild id (clients.DiscordGuildResolver).
+type discordGuildResolver interface {
+	GuildID(ctx context.Context, channelID string) (string, error)
+}
+
+// discordPermissions reads the bot's effective guild permission bits (clients.DiscordClient).
+type discordPermissions interface {
+	GuildBotPermissions(ctx context.Context, guildID string) (uint64, error)
+}
+
+// DiscordScopeChecker reports the moderation actions the BOT can perform in a source's
+// guild, computed from its effective permissions there (delete needs MANAGE_MESSAGES,
+// timeout MODERATE_MEMBERS, ban/unban BAN_MEMBERS). Unlike the OAuth platforms, Discord's
+// "opt-in" is the bot invite: a bot invited without the elevated permissions reports no
+// actions, so the dashboard shows the re-invite prompt. Any resolution/permission lookup
+// failure degrades to "no actions" (never errors the whole capabilities response) so a
+// transient Discord API hiccup just shows the re-invite affordance.
+type DiscordScopeChecker struct {
+	guilds discordGuildResolver
+	perms  discordPermissions
+	logger *zap.Logger
+}
+
+// NewDiscordScopeChecker wires the checker over a channel→guild resolver and the bot
+// permission reader.
+func NewDiscordScopeChecker(guilds discordGuildResolver, perms discordPermissions, logger *zap.Logger) *DiscordScopeChecker {
+	return &DiscordScopeChecker{guilds: guilds, perms: perms, logger: logger}
+}
+
+// GrantedActions resolves the guild for the channel, reads the bot's effective
+// permissions, and maps them to actions.
+func (c *DiscordScopeChecker) GrantedActions(ctx context.Context, _ string, platform, channelID string) ([]models.Action, error) {
+	if platform != "discord" {
+		return nil, nil
+	}
+	guildID, err := c.guilds.GuildID(ctx, channelID)
+	if err != nil {
+		c.logger.Warn("discord capability: could not resolve guild; reporting no actions (re-invite prompt)",
+			zap.String("channel_id", channelID), zap.Error(err))
+		return nil, nil
+	}
+	bits, err := c.perms.GuildBotPermissions(ctx, guildID)
+	if err != nil {
+		c.logger.Warn("discord capability: could not read bot permissions; reporting no actions (re-invite prompt)",
+			zap.String("guild_id", guildID), zap.Error(err))
+		return nil, nil
+	}
+	return models.ActionsForDiscordPermissions(bits), nil
 }

@@ -19,6 +19,7 @@ package oauth_test
 import (
 	"context"
 	"net/url"
+	"strconv"
 	"testing"
 
 	"github.com/caesar/all-chat/services/auth-service/oauth"
@@ -43,6 +44,26 @@ func TestDiscordOAuth_GetAuthURL(t *testing.T) {
 	assert.Equal(t, "csrf-state-token", q.Get("state"))
 	assert.Equal(t, "https://example.com/callback", q.Get("redirect_uri"))
 	assert.Equal(t, "code", q.Get("response_type"))
+}
+
+func TestDiscordOAuth_GetModerationAuthURL(t *testing.T) {
+	d := oauth.NewDiscordOAuth("client123", "secret456", "https://example.com/callback")
+	authURL := d.GetModerationAuthURL("csrf-state-token")
+
+	parsed, err := url.Parse(authURL)
+	require.NoError(t, err)
+	q := parsed.Query()
+
+	assert.Equal(t, "bot", q.Get("scope"))
+	// The moderation re-invite requests the base permissions PLUS MANAGE_MESSAGES (delete),
+	// MODERATE_MEMBERS (timeout) and BAN_MEMBERS (ban/unban).
+	perms, perr := strconv.ParseUint(q.Get("permissions"), 10, 64)
+	require.NoError(t, perr)
+	assert.Equal(t, oauth.ModerationBotPermissions, perms)
+	assert.NotZero(t, perms&oauth.PermManageMessages, "must request MANAGE_MESSAGES")
+	assert.NotZero(t, perms&oauth.PermModerateMembers, "must request MODERATE_MEMBERS")
+	assert.NotZero(t, perms&oauth.PermBanMembers, "must request BAN_MEMBERS")
+	assert.NotZero(t, perms&oauth.RequiredBotPermissions, "must keep the base listener permissions")
 }
 
 func TestDiscordOAuth_GetPlatform(t *testing.T) {

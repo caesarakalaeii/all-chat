@@ -42,7 +42,6 @@ import (
 	"github.com/caesar/all-chat/services/moderation-service/clients"
 	"github.com/caesar/all-chat/services/moderation-service/dispatch"
 	"github.com/caesar/all-chat/services/moderation-service/handler"
-	"github.com/caesar/all-chat/services/moderation-service/models"
 	"github.com/caesar/all-chat/services/moderation-service/publisher"
 	"github.com/caesar/all-chat/services/moderation-service/quota"
 	"github.com/caesar/all-chat/services/moderation-service/repository"
@@ -163,14 +162,20 @@ func main() {
 		log.Info("YouTube moderation enabled (ban-only, real Data API calls)")
 	}
 
-	// Discord (delete-only) authenticates with the shared bot token — no per-user
-	// OAuth, so no cipher or re-consent. The bot must hold MANAGE_MESSAGES in the guild
-	// (granted at invite time); without it Discord returns 403 and the delete fails
-	// loudly rather than emitting a false reflect-back.
+	// Discord (delete/timeout/ban/unban) authenticates with the shared bot token — no
+	// per-user OAuth, so no cipher or re-consent. The bot's authority is its GUILD
+	// permissions (granted at invite time): capabilities report exactly what the bot can
+	// do there, and a missing permission surfaces as a 403 → "re-invite the bot" rather
+	// than a false reflect-back. The guild for a channel is resolved (and Redis-cached)
+	// from the channel id, since member ops (ban/timeout) are guild-scoped.
 	if cfg.DiscordBotToken != "" {
-		dispatchers["discord"] = dispatch.NewDiscord(clients.NewDiscordClient(cfg.DiscordBotToken), log)
-		scopeCheckers["discord"] = handler.StaticScopeChecker{Actions: []models.Action{models.ActionDelete}}
-		log.Info("Discord moderation enabled (delete-only, bot REST)")
+		discordClient := clients.NewDiscordClient(cfg.DiscordBotToken)
+		discordGuilds := clients.NewDiscordGuildResolver(discordClient, redisClient)
+		dispatchers["discord"] = dispatch.NewDiscord(discordClient, discordGuilds, log)
+		// The resolver caches both the channel→guild map AND the per-guild effective
+		// permissions, so the capability endpoint stays cheap on dashboard load.
+		scopeCheckers["discord"] = handler.NewDiscordScopeChecker(discordGuilds, discordGuilds, log)
+		log.Info("Discord moderation enabled (delete/timeout/ban/unban, bot REST)")
 	} else {
 		log.Warn("DISCORD_BOT_TOKEN not set; Discord moderation runs in dry-run")
 	}
