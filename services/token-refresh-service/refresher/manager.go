@@ -401,6 +401,40 @@ func (m *Manager) refreshWithRetry(ctx context.Context, provider oauth.OAuthProv
 	return nil, fmt.Errorf("refresh failed after %d attempts", m.retryAttempts)
 }
 
+// Non-retryable error classification. These substrings (matched case-insensitively)
+// indicate a permanently invalid token: retrying cannot help, the user must
+// re-authenticate. They are grouped by metric category so the retry decision
+// (isNonRetryableErrorString) and the error_type metric label (categorizeRefreshError)
+// are derived from a SINGLE source of truth and cannot drift apart — a past drift
+// silently filed every revoked Twitch token under "other" instead of "token_revoked".
+var (
+	// revokedTokenPatterns mean the user's grant is gone (revoked / expired / denied).
+	// Twitch signals this with the literal "invalid refresh token"; the OAuth2 spec
+	// uses "invalid_grant" / "access_denied".
+	revokedTokenPatterns = []string{
+		"invalid_grant",
+		"token_revoked",
+		"access_denied",
+		"invalid refresh token",
+	}
+	// invalidClientPatterns mean OUR client credentials/config are wrong, not the
+	// user's token. Still non-retryable, but operationally distinct.
+	invalidClientPatterns = []string{
+		"unauthorized_client",
+		"invalid_client",
+	}
+)
+
+// containsAny reports whether s contains any of the substrings in patterns.
+func containsAny(s string, patterns []string) bool {
+	for _, p := range patterns {
+		if strings.Contains(s, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // categorizeRefreshError classifies a refresh error into a label-safe category string
 func categorizeRefreshError(err error) string {
 	if err == nil {
@@ -408,9 +442,9 @@ func categorizeRefreshError(err error) string {
 	}
 	errStr := strings.ToLower(err.Error())
 	switch {
-	case strings.Contains(errStr, "invalid_grant") || strings.Contains(errStr, "token_revoked"):
+	case containsAny(errStr, revokedTokenPatterns):
 		return "token_revoked"
-	case strings.Contains(errStr, "unauthorized_client") || strings.Contains(errStr, "invalid_client"):
+	case containsAny(errStr, invalidClientPatterns):
 		return "invalid_client"
 	case strings.Contains(errStr, "network") || strings.Contains(errStr, "connection") || strings.Contains(errStr, "timeout"):
 		return "network_error"
@@ -428,25 +462,12 @@ func (m *Manager) isNonRetryableError(err error) bool {
 }
 
 // isNonRetryableErrorString is the pure-string form used both by isNonRetryableError
-// and by the permanent-failure marking path.
+// and by the permanent-failure marking path. An error is non-retryable when it
+// indicates either a revoked user grant or an invalid client — exactly the patterns
+// categorizeRefreshError reports as "token_revoked" / "invalid_client".
 func isNonRetryableErrorString(errStr string) bool {
 	lower := strings.ToLower(errStr)
-	// OAuth errors that indicate revoked/invalid tokens — these cannot be resolved
-	// by retrying; the user must re-authenticate.
-	nonRetryable := []string{
-		"invalid_grant",
-		"unauthorized_client",
-		"invalid_client",
-		"token_revoked",
-		"access_denied",
-		"invalid refresh token",
-	}
-	for _, pattern := range nonRetryable {
-		if strings.Contains(lower, pattern) {
-			return true
-		}
-	}
-	return false
+	return containsAny(lower, revokedTokenPatterns) || containsAny(lower, invalidClientPatterns)
 }
 
 // markTokenPermanentlyFailed pushes the token's expiry far into the future so
