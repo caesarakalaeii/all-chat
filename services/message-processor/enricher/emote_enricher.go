@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/cache"
@@ -157,10 +158,13 @@ func (c *HTTPEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, chann
 
 // Enricher enriches messages with third-party emotes
 type Enricher struct {
-	client          EmoteServiceClient
-	cache           cache.Store
+	client           EmoteServiceClient
+	cache            cache.Store
 	processorMetrics *metrics.ProcessorMetrics
-	logger          *zap.Logger
+	logger           *zap.Logger
+	// refreshing tracks cache keys with an in-flight background refresh so a burst
+	// of messages on a channel with a stale entry only triggers one re-fetch.
+	refreshing sync.Map
 }
 
 // NewEnricher creates a new emote enricher
@@ -274,50 +278,55 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 	// caches at its own layer.
 	useCache := seventvSetID == "" && e.cache != nil
 
-	// If user ID is provided, use user-specific cache
-	if userID != "" && useCache {
-		if cached, err := e.cache.GetWithUser(ctx, channel, userID); err == nil {
-			e.logger.Debug("Emote cache hit (with user)",
-				zap.String("channel", channel),
-				zap.String("user_id", userID),
-				zap.Int("count", len(cached)),
-			)
-			if e.processorMetrics != nil {
-				e.processorMetrics.RecordEmoteCacheOperation("message-processor", "hit", "all")
-			}
-			return cached, nil
-		} else if !errors.Is(err, cache.ErrCacheMiss) {
-			e.logger.Warn("Emote cache error",
-				zap.String("channel", channel),
-				zap.String("user_id", userID),
-				zap.Error(err),
-			)
+	if useCache {
+		var entry cache.Entry
+		var err error
+		if userID != "" {
+			entry, err = e.cache.GetEntryWithUser(ctx, channel, userID)
+		} else {
+			entry, err = e.cache.GetEntry(ctx, channel)
 		}
-	} else if useCache {
-		// No user ID, use regular cache
-		if cached, err := e.cache.Get(ctx, channel); err == nil {
+
+		switch {
+		case err == nil:
+			// Cache hit. Serve the entry immediately; if it's past its freshness
+			// window, refresh it in the background so the next message is fresh
+			// without ever blocking this one on the emote service.
 			e.logger.Debug("Emote cache hit",
 				zap.String("channel", channel),
-				zap.Int("count", len(cached)),
+				zap.String("user_id", userID),
+				zap.Int("count", len(entry.Emotes)),
+				zap.Bool("stale", entry.Stale),
 			)
 			if e.processorMetrics != nil {
 				e.processorMetrics.RecordEmoteCacheOperation("message-processor", "hit", "all")
 			}
-			return cached, nil
-		} else if !errors.Is(err, cache.ErrCacheMiss) {
+			if entry.Stale {
+				e.refreshAsync(channel, platform, userID, twitchChannel)
+			}
+			return entry.Emotes, nil
+		case !errors.Is(err, cache.ErrCacheMiss):
 			e.logger.Warn("Emote cache error",
 				zap.String("channel", channel),
+				zap.String("user_id", userID),
 				zap.Error(err),
 			)
 		}
 	}
 
-	// Cache miss — record and fetch from emote service
+	// True cache miss (no entry at all) — record and fetch from the emote service
+	// synchronously, since we have nothing to serve yet.
 	if e.processorMetrics != nil {
 		e.processorMetrics.RecordEmoteCacheOperation("message-processor", "miss", "all")
 	}
 
-	// Fetch from emote service
+	return e.fetchFromService(ctx, channel, platform, userID, twitchChannel, seventvSetID, useCache)
+}
+
+// fetchFromService fetches emotes from the emote service, records lookup metrics,
+// and (when writeCache is set) populates the cache. It is shared by the blocking
+// cache-miss path and the background stale-refresh path.
+func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string, writeCache bool) ([]cache.CachedEmote, error) {
 	var thirdPartyEmotes []EmoteServiceEmote
 	var err error
 
@@ -353,7 +362,7 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 	converted := convertToCached(thirdPartyEmotes)
 
 	// Store in cache (skip when an override is in play to avoid poisoning shared keys)
-	if useCache {
+	if writeCache {
 		if userID != "" {
 			if err := e.cache.SetWithUser(ctx, channel, userID, converted); err != nil {
 				e.logger.Warn("Failed to populate emote cache",
@@ -384,6 +393,40 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 	}
 
 	return converted, nil
+}
+
+// refreshAsync re-fetches emotes for a stale cache entry in the background and
+// repopulates the cache. It is rate-limited to one in-flight refresh per cache
+// key so a burst of messages doesn't stampede the emote service. The refresh
+// runs on a fresh context independent of any message so it can't be cancelled
+// by the message that triggered it returning.
+func (e *Enricher) refreshAsync(channel, platform, userID, twitchChannel string) {
+	key := channel + "\x00" + userID
+	if _, inFlight := e.refreshing.LoadOrStore(key, struct{}{}); inFlight {
+		return
+	}
+
+	go func() {
+		defer e.refreshing.Delete(key)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// seventvSetID is always empty here: stale-while-revalidate only runs for
+		// cacheable lookups, and per-overlay overrides bypass the cache entirely.
+		if _, err := e.fetchFromService(ctx, channel, platform, userID, twitchChannel, "", true); err != nil {
+			e.logger.Warn("Background emote cache refresh failed",
+				zap.String("channel", channel),
+				zap.String("user_id", userID),
+				zap.Error(err),
+			)
+		} else {
+			e.logger.Debug("Background emote cache refresh complete",
+				zap.String("channel", channel),
+				zap.String("user_id", userID),
+			)
+		}
+	}()
 }
 
 func convertToCached(emotes []EmoteServiceEmote) []cache.CachedEmote {
