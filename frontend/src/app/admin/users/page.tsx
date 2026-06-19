@@ -117,7 +117,7 @@ export default function UsersPage() {
 
       try {
         const token = localStorage.getItem('jwt_token')
-        const response = await fetch(`/api/v1/admin/users/${selectedUser.id}/overlays`, {
+        const response = await fetch(`/api/v1/admin/user-overlays/${selectedUser.id}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

@@ -327,7 +327,7 @@ func main() {
 		admin.GET("/overlays", adminHandler.ListOverlays)
 		admin.GET("/overlays/:id/sources", adminHandler.GetOverlaySources)
 		admin.GET("/sources", adminHandler.ListAllSources)
-		admin.GET("/users/:id/overlays", adminHandler.GetUserOverlays)
+		admin.GET("/user-overlays/:id", adminHandler.GetUserOverlays)
 
 		// Maintenance window management
 		admin.POST("/maintenance", maintenanceHandler.HandleCreateMaintenance)
