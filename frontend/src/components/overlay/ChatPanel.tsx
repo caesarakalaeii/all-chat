@@ -21,15 +21,30 @@
 import { ArrowDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { ChatRow } from '@/components/overlay/ChatRow'
+import { ChatRow, type ChatRowModeration } from '@/components/overlay/ChatRow'
+import type { MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
+import type { SourceCapability } from '@/lib/types/moderation'
 import { shouldAutoScroll, type ViewItem } from '@/lib/utils/overlayViewModel'
+
+/** Moderation wiring forwarded to each row, minus the per-row capability. */
+export type ChatPanelModeration = Omit<ChatRowModeration, 'capability'>
+
+interface ChatPanelProps {
+  items: ViewItem[]
+  /** View-local display prefs; omitted = all-on (existing callers stay unchanged). */
+  prefs?: MonitorViewPrefs
+  /** Per-source moderation capability, keyed by channel_id. */
+  capabilities?: Map<string, SourceCapability>
+  /** Moderation action callbacks; omit to render rows without mod controls. */
+  moderation?: ChatPanelModeration
+}
 
 /**
  * Scrollable live-chat panel with Twitch-style pin-to-bottom: auto-scrolls to
  * the newest message unless the user has scrolled up to read history, in which
  * case a "Jump to latest" affordance appears. No smooth-scroll (instant, professional).
  */
-export function ChatPanel({ items }: { items: ViewItem[] }) {
+export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const pinnedRef = useRef(true)
   const [showJump, setShowJump] = useState(false)
@@ -69,7 +84,18 @@ export function ChatPanel({ items }: { items: ViewItem[] }) {
         {items.length === 0 ? (
           <p className="px-3 py-6 text-center text-sm text-text-dim">No chat messages yet.</p>
         ) : (
-          items.map((item, i) => <ChatRow key={`${item.id}-${i}`} item={item} />)
+          items.map((item, i) => (
+            <ChatRow
+              key={`${item.id}-${i}`}
+              item={item}
+              prefs={prefs}
+              moderation={
+                moderation
+                  ? { ...moderation, capability: capabilities?.get(item.channel_id) }
+                  : undefined
+              }
+            />
+          ))
         )}
       </div>
       {showJump && (
