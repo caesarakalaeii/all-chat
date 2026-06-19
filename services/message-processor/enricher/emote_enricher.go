@@ -361,8 +361,14 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 
 	converted := convertToCached(thirdPartyEmotes)
 
-	// Store in cache (skip when an override is in play to avoid poisoning shared keys)
-	if writeCache {
+	// Never cache an empty result. A cold or transient upstream failure (e.g. an
+	// expired Twitch app token) can make the emote service briefly return no
+	// emotes; caching that would suppress emotes for this channel/user for the
+	// full stale-while-revalidate lifetime (softTTL + stale grace) and serve it
+	// without revalidating through the freshness window. Leaving it uncached lets
+	// the next message re-fetch and pick up emotes as soon as the upstream
+	// recovers. The emote service has its own cache, so the retry is cheap.
+	if writeCache && len(converted) > 0 {
 		if userID != "" {
 			if err := e.cache.SetWithUser(ctx, channel, userID, converted); err != nil {
 				e.logger.Warn("Failed to populate emote cache",

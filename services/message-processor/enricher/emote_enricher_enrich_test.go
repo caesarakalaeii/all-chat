@@ -204,6 +204,40 @@ func TestFetchEmotesUsesCache(t *testing.T) {
 	}
 }
 
+// TestFetchEmotesDoesNotCacheEmptyResult guards against a transient/cold empty
+// response from the emote service poisoning the cache. The stale-while-revalidate
+// envelope keeps entries alive for softTTL + 12h grace and serves them through
+// their freshness window without revalidating, so caching an empty result here
+// would suppress emotes for that channel/user for hours after the upstream
+// recovered (the "no emotes render in the preview" regression). Empty results
+// must be left uncached so the next message re-fetches.
+func TestFetchEmotesDoesNotCacheEmptyResult(t *testing.T) {
+	client := &mockEmoteServiceClient{emotes: nil} // upstream returns no emotes
+	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+
+	enricher := NewEnricher(client, store, zap.NewNop())
+
+	// Channel-level lookup (no user id).
+	got, err := enricher.fetchEmotes(context.Background(), "caesarlp", "twitch", "", "", "")
+	if err != nil {
+		t.Fatalf("fetchEmotes returned error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty result, got %#v", got)
+	}
+	if store.setCallCount() != 0 {
+		t.Fatalf("empty result must not be cached, got %d set calls", store.setCallCount())
+	}
+
+	// User-specific lookup (the mock-message path that triggered the regression).
+	if _, err := enricher.fetchEmotes(context.Background(), "caesarlp", "twitch", "mock-user", "", ""); err != nil {
+		t.Fatalf("fetchEmotes (with user) returned error: %v", err)
+	}
+	if store.setCallCount() != 0 {
+		t.Fatalf("empty user-specific result must not be cached, got %d set calls", store.setCallCount())
+	}
+}
+
 func TestFetchEmotesStaleServesImmediatelyAndRefreshes(t *testing.T) {
 	client := &mockEmoteServiceClient{
 		emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example/fresh"}},
