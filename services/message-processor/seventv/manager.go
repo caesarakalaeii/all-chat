@@ -47,10 +47,10 @@ type UserResponse struct {
 
 // Manager manages 7TV event subscriptions and cache invalidation
 type Manager struct {
-	client      *Client
-	cache       cache.Store
-	logger      *zap.Logger
-	httpClient  *http.Client
+	client     *Client
+	cache      cache.Store
+	logger     *zap.Logger
+	httpClient *http.Client
 
 	// Map of channel ID -> emote set ID
 	channelEmoteSets map[string]string
@@ -316,7 +316,7 @@ func (m *Manager) handleEmoteSetUpdate(ctx context.Context, update *EmoteSetUpda
 	// Invalidate cache for all affected users
 	// Use pattern matching to delete all cache entries for this user (across all channels)
 	for _, userID := range usersToInvalidate {
-		pattern := fmt.Sprintf("mp:emotes:v2:*:%s", userID)
+		pattern := fmt.Sprintf("%s*:%s", cache.Namespace, userID)
 		if err := m.cache.DeletePattern(ctx, pattern); err != nil {
 			m.logger.Error("Failed to invalidate user emote cache",
 				zap.String("user_id", userID),
