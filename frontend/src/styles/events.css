@@ -380,15 +380,21 @@
     font-size: var(--chat-font-size, 1rem) !important;
     font-family: var(--chat-font-family, inherit) !important;
     font-weight: var(--chat-font-weight, inherit) !important;
-    /* Floor the line box at the (scaled) emote height so a scaled-up emote can't
-       bleed into the wrap-line above/below. At emote-scale 1 this is exactly the
-       user's line-height (1.4 < 1.5). See #438. */
+    line-height: calc(var(--chat-line-height, 1.5) * 1em) !important;
+    letter-spacing: var(--chat-letter-spacing, normal) !important;
+    color: var(--chat-message-color, inherit) !important;
+  }
+  /* Floor the line box at the (scaled) emote height so a scaled-up emote can't
+     bleed into the wrap-line above/below — but ONLY for messages that actually
+     contain an emote (the sole `img` inside `.break-words`; avatars/badges live
+     in sibling nodes). Applying the floor to every message inflated the line
+     spacing of plain-text messages and pinned it above the line-height slider's
+     minimum even when no emote was present. See #438 (floor) + the follow-up. */
+  .overlay-preview-body .break-words:has(img) {
     line-height: max(
       calc(var(--chat-line-height, 1.5) * 1em),
       calc(1.4em * var(--chat-emote-scale, 1))
     ) !important;
-    letter-spacing: var(--chat-letter-spacing, normal) !important;
-    color: var(--chat-message-color, inherit) !important;
   }
 
   /* ── Timestamp ─────────────────────────────────────────────────────── */
@@ -487,15 +493,21 @@
   .overlay-live-body .break-words {
     font-family: var(--chat-font-family, inherit) !important;
     font-weight: var(--chat-font-weight, inherit) !important;
-    /* Floor the line box at the (scaled) emote height so a scaled-up emote can't
-       bleed into the wrap-line above/below. At emote-scale 1 this is exactly the
-       user's line-height (1.4 < 1.5). See #438. */
+    line-height: calc(var(--chat-line-height, 1.5) * 1em) !important;
+    letter-spacing: var(--chat-letter-spacing, normal) !important;
+    color: var(--chat-message-color, #ffffff) !important;
+  }
+  /* Floor the line box at the (scaled) emote height so a scaled-up emote can't
+     bleed into the wrap-line above/below — but ONLY for messages that actually
+     contain an emote (the sole `img` inside `.break-words`; avatars/badges live
+     in sibling nodes). Applying the floor to every message inflated the line
+     spacing of plain-text messages and pinned it above the line-height slider's
+     minimum even when no emote was present. See #438 (floor) + the follow-up. */
+  .overlay-live-body .break-words:has(img) {
     line-height: max(
       calc(var(--chat-line-height, 1.5) * 1em),
       calc(1.4em * var(--chat-emote-scale, 1))
     ) !important;
-    letter-spacing: var(--chat-letter-spacing, normal) !important;
-    color: var(--chat-message-color, #ffffff) !important;
   }
 
   /* ── Timestamp ─────────────────────────────────────────────────────── */
