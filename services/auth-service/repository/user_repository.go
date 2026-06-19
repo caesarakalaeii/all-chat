@@ -319,8 +319,14 @@ WHERE kick_id = $1
 	return user, nil
 }
 
-// StoreYouTubeToken stores YouTube OAuth token in youtube_oauth_tokens table keyed by channel ID
-func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error {
+// StoreYouTubeToken stores a YouTube OAuth token in youtube_oauth_tokens keyed by
+// channel ID. grantedScopes records the scopes granted at this consent so the
+// moderation service (ADR-0017) can tell whether the channel has the opt-in
+// youtube.force-ssl grant. On conflict, granted_scopes is MERGED (union) rather than
+// replaced: a plain add-source (login scopes only) must never silently drop a
+// previously granted force-ssl moderation scope. The access/refresh tokens are always
+// replaced with the freshest values.
+func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelID string, token *oauth2.Token, grantedScopes []string) error {
 	if channelID == "" {
 		return fmt.Errorf("channel_id is required for storing YouTube tokens")
 	}
@@ -335,8 +341,8 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelI
 
 	query := `
 		INSERT INTO youtube_oauth_tokens (
-			user_id, channel_id, access_token, refresh_token, token_type, expiry, encryption_version, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			user_id, channel_id, access_token, refresh_token, token_type, expiry, encryption_version, granted_scopes, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (user_id, channel_id)
 		DO UPDATE SET
 			access_token = EXCLUDED.access_token,
@@ -344,6 +350,7 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelI
 			token_type = EXCLUDED.token_type,
 			expiry = EXCLUDED.expiry,
 			encryption_version = EXCLUDED.encryption_version,
+			granted_scopes = ARRAY(SELECT DISTINCT unnest(youtube_oauth_tokens.granted_scopes || EXCLUDED.granted_scopes)),
 			updated_at = EXCLUDED.updated_at
 	`
 
@@ -351,6 +358,9 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelI
 	tokenType := token.TokenType
 	if tokenType == "" {
 		tokenType = "Bearer"
+	}
+	if grantedScopes == nil {
+		grantedScopes = []string{}
 	}
 
 	accessToken, err := r.encryptToken(token.AccessToken)
@@ -364,7 +374,7 @@ func (r *UserRepository) StoreYouTubeToken(ctx context.Context, userID, channelI
 
 	_, err = r.db.Exec(ctx, query,
 		userID, channelID, accessToken, refreshToken, tokenType,
-		token.Expiry, 1, now, now,
+		token.Expiry, 1, grantedScopes, now, now,
 	)
 
 	if err != nil {
@@ -424,6 +434,122 @@ func (r *UserRepository) StoreTwitchToken(ctx context.Context, userID, twitchUse
 	}
 
 	return nil
+}
+
+// StoreKickToken persists Kick credentials obtained via the opt-in moderation
+// re-consent flow into kick_oauth_tokens, keyed by the channel slug (ADR-0017). This is
+// how a non-Kick-login account (Twitch/YouTube signup) that linked Kick gets a
+// moderation credential into a place the moderation service can resolve: the row carries
+// the NUMERIC broadcaster id (kick_user_id) the Kick moderation API keys on, and the
+// granted_scopes (moderation:ban). On conflict, granted_scopes is MERGED (union) so a
+// later listener-token write or narrower consent never drops the moderation grant; the
+// access/refresh tokens and kick_user_id are replaced with the freshest values.
+func (r *UserRepository) StoreKickToken(ctx context.Context, userID, channelSlug, kickUserID string, token *oauth2.Token, grantedScopes []string) error {
+	if channelSlug == "" {
+		return fmt.Errorf("channel_slug is required for storing linked Kick tokens")
+	}
+
+	if !token.Expiry.IsZero() && token.Expiry.Before(time.Now().Add(-5*time.Minute)) {
+		return fmt.Errorf("refusing to store expired Kick token (expiry: %s)", token.Expiry.Format(time.RFC3339))
+	}
+
+	accessToken, err := r.encryptToken(token.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+	refreshToken, err := r.encryptToken(token.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt refresh token: %w", err)
+	}
+	if grantedScopes == nil {
+		grantedScopes = []string{}
+	}
+
+	query := `
+		INSERT INTO kick_oauth_tokens (
+			user_id, channel_id, kick_user_id, access_token, refresh_token,
+			token_type, expiry, granted_scopes, encryption_version, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, 'Bearer', $6, $7, 1, NOW(), NOW())
+		ON CONFLICT (user_id, channel_id)
+		DO UPDATE SET
+			kick_user_id = EXCLUDED.kick_user_id,
+			access_token = EXCLUDED.access_token,
+			refresh_token = EXCLUDED.refresh_token,
+			token_type = EXCLUDED.token_type,
+			expiry = EXCLUDED.expiry,
+			granted_scopes = ARRAY(SELECT DISTINCT unnest(kick_oauth_tokens.granted_scopes || EXCLUDED.granted_scopes)),
+			encryption_version = EXCLUDED.encryption_version,
+			updated_at = NOW()
+	`
+
+	if _, err := r.db.Exec(ctx, query,
+		userID, channelSlug, kickUserID, accessToken, refreshToken, token.Expiry, grantedScopes,
+	); err != nil {
+		return fmt.Errorf("failed to store linked Kick token: %w", err)
+	}
+
+	return nil
+}
+
+// GetPlatformGrantedScopes returns the OAuth scopes the user currently holds FOR a
+// specific platform, reading the authoritative source for that platform: the users row
+// when the platform is the user's login provider, otherwise the per-link token table
+// (twitch_oauth_tokens / kick_oauth_tokens / youtube_oauth_tokens). The opt-in
+// moderation re-consent flow unions these with the requested moderation scopes so the
+// consent URL asks for a SUPERSET — without injecting an UNRELATED platform's scopes
+// (reading users.granted_scopes for a linked account would put, e.g., a YouTube login's
+// scopes into a Twitch consent URL, which the provider rejects). Returns an empty slice
+// (never an error) when the user holds no credential for the platform yet.
+func (r *UserRepository) GetPlatformGrantedScopes(ctx context.Context, userID, platform string) ([]string, error) {
+	var authProvider string
+	if err := r.db.QueryRow(ctx, `SELECT auth_provider FROM users WHERE id = $1`, userID).Scan(&authProvider); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to look up auth provider: %w", err)
+	}
+	if authProvider == platform {
+		return r.GetGrantedScopes(ctx, userID)
+	}
+
+	// Linked account: the platform's grant lives in its per-link table. The table name
+	// comes from a fixed allow-list (never user input), so the interpolation is safe.
+	var table string
+	switch platform {
+	case "twitch":
+		table = "twitch_oauth_tokens"
+	case "kick":
+		table = "kick_oauth_tokens"
+	case "youtube":
+		table = "youtube_oauth_tokens"
+	default:
+		return []string{}, nil
+	}
+
+	rows, err := r.db.Query(ctx, fmt.Sprintf(`SELECT granted_scopes FROM %s WHERE user_id = $1`, table), userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s granted scopes: %w", table, err)
+	}
+	defer rows.Close()
+
+	seen := map[string]bool{}
+	out := []string{}
+	for rows.Next() {
+		var scopes []string
+		if err := rows.Scan(&scopes); err != nil {
+			return nil, fmt.Errorf("failed to scan %s granted scopes: %w", table, err)
+		}
+		for _, s := range scopes {
+			if s != "" && !seen[s] {
+				seen[s] = true
+				out = append(out, s)
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate %s granted scopes: %w", table, err)
+	}
+	return out, nil
 }
 
 func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {

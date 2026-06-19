@@ -45,16 +45,20 @@ type YouTubeCredential struct {
 	GrantedScopes []string
 	ExpiresAt     time.Time
 
-	userRowID string // users.id, the write-back target on refresh
+	origin credOrigin // write-back target on refresh
+	rowID  string     // users.id or youtube_oauth_tokens.id
 }
 
-// YouTubeSource resolves and refreshes a YouTube broadcaster's own credential. Scope: a
-// YouTube-login account (auth_provider='youtube') moderating its own channel — the
-// primary credential lives on the users row (mirrors the Kick path). Channel ownership
-// is enforced by the handler's source-membership check and by YouTube itself (a ban in
-// a channel you don't own/moderate returns 403), so the channel id is not matched here.
-// A linked YouTube account (youtube_oauth_tokens) is out of scope for v1: that table has
-// no granted_scopes column, so the force-ssl opt-in cannot be tracked there.
+// YouTubeSource resolves and refreshes a YouTube broadcaster's own credential. It
+// supports both a YouTube-login account moderating its own channel (the primary
+// credential on the users row, mirroring the Kick path) AND a linked YouTube channel —
+// a streamer whose All-Chat login is a different platform but who connected a YouTube
+// channel as a source. The linked (and per-channel) credential lives in
+// youtube_oauth_tokens, keyed by the channel id (UC...), carrying the opt-in
+// granted_scopes (migration 062). The exact per-channel token is preferred over the
+// channel-agnostic users row when both exist. Channel ownership is also enforced by the
+// handler's source-membership check and by YouTube itself (a ban in a channel you do not
+// own/moderate returns 403).
 type YouTubeSource struct {
 	db           *pgxpool.Pool
 	cipher       Cipher
@@ -77,24 +81,39 @@ func NewYouTubeSource(db *pgxpool.Pool, cipher Cipher, clientID, clientSecret st
 	}
 }
 
+// youtubeResolveQuery selects the requesting user's own YouTube credential for a
+// channel, scoped to identities the user owns. channelID from the overlay is the
+// channel id (UC...): the exact per-channel token in youtube_oauth_tokens is preferred
+// (pri ASC), falling back to the channel-agnostic users row of a YouTube-login account.
 const youtubeResolveQuery = `
-	SELECT access_token, refresh_token, token_expires_at, granted_scopes, id::text
-	FROM users
-	WHERE id = $1
-	  AND auth_provider = 'youtube'
+	SELECT access_token, refresh_token, token_expires_at, granted_scopes, origin, row_id
+	FROM (
+		SELECT y.access_token, y.refresh_token, y.expiry AS token_expires_at, y.granted_scopes,
+		       2 AS origin, y.id::text AS row_id, 1 AS pri
+		FROM youtube_oauth_tokens y
+		WHERE y.user_id = $1
+		  AND y.channel_id = $2
+		UNION ALL
+		SELECT u.access_token, u.refresh_token, u.token_expires_at, u.granted_scopes,
+		       1 AS origin, u.id::text AS row_id, 2 AS pri
+		FROM users u
+		WHERE u.id = $1
+		  AND u.auth_provider = 'youtube'
+	) c
+	ORDER BY c.pri ASC
 	LIMIT 1`
 
-// Resolve returns the requesting user's decrypted YouTube credential. channelID is
-// accepted for interface symmetry but not used in the query (see the type doc).
-// Returns ErrNoCredential when the user holds none.
-func (s *YouTubeSource) Resolve(ctx context.Context, userID, _ string) (*YouTubeCredential, error) {
+// Resolve returns the requesting user's decrypted YouTube credential for channelID (a
+// YouTube channel id, UC...). Returns ErrNoCredential when the user holds none.
+func (s *YouTubeSource) Resolve(ctx context.Context, userID, channelID string) (*YouTubeCredential, error) {
 	var (
 		encAccess, encRefresh string
 		expiresAt             time.Time
 		scopes                []string
+		origin                int
 		rowID                 string
 	)
-	err := s.db.QueryRow(ctx, youtubeResolveQuery, userID).Scan(&encAccess, &encRefresh, &expiresAt, &scopes, &rowID)
+	err := s.db.QueryRow(ctx, youtubeResolveQuery, userID, channelID).Scan(&encAccess, &encRefresh, &expiresAt, &scopes, &origin, &rowID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNoCredential
 	}
@@ -116,7 +135,8 @@ func (s *YouTubeSource) Resolve(ctx context.Context, userID, _ string) (*YouTube
 		RefreshToken:  refresh,
 		GrantedScopes: scopes,
 		ExpiresAt:     expiresAt,
-		userRowID:     rowID,
+		origin:        credOrigin(origin),
+		rowID:         rowID,
 	}, nil
 }
 
@@ -178,8 +198,19 @@ func (s *YouTubeSource) Refresh(ctx context.Context, cred *YouTubeCredential) er
 		return fmt.Errorf("encrypt refreshed refresh token: %w", err)
 	}
 
-	const writeBack = `UPDATE users SET access_token=$1, refresh_token=$2, token_expires_at=$3, updated_at=NOW() WHERE id=$4`
-	if _, err := s.db.Exec(ctx, writeBack, encAccess, encRefresh, newExpiry, cred.userRowID); err != nil {
+	// Write the re-encrypted tokens back to the origin row. granted_scopes is left
+	// untouched (owned by the consent flow). The linked row uses the `expiry` column and
+	// keeps encryption_version=1 (we always write encrypted).
+	var query string
+	switch cred.origin {
+	case originUsers:
+		query = `UPDATE users SET access_token=$1, refresh_token=$2, token_expires_at=$3, updated_at=NOW() WHERE id=$4`
+	case originLinked:
+		query = `UPDATE youtube_oauth_tokens SET access_token=$1, refresh_token=$2, expiry=$3, encryption_version=1, updated_at=NOW() WHERE id=$4::uuid`
+	default:
+		return fmt.Errorf("tokens: unknown youtube credential origin %d", cred.origin)
+	}
+	if _, err := s.db.Exec(ctx, query, encAccess, encRefresh, newExpiry, cred.rowID); err != nil {
 		return fmt.Errorf("persist refreshed youtube token: %w", err)
 	}
 
