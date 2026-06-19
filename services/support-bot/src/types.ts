@@ -4,6 +4,14 @@ export interface IssueProposal {
   body: string;
 }
 
+export interface CommentProposal {
+  repo: 'all-chat' | 'all-chat-extension';
+  /** Numeric issue or PR number to comment on. GitHub treats PR comments as
+   *  issue comments, so the same number works for both. */
+  issueNumber: number;
+  body: string;
+}
+
 export interface InfraVerdict {
   type: 'infrastructure' | 'code';
   summary: string;
@@ -12,6 +20,7 @@ export interface InfraVerdict {
 export interface QueryResult {
   answer: string;
   issueProposal: IssueProposal | null;
+  commentProposal: CommentProposal | null;
   infraVerdict: InfraVerdict | null;
   memoryMarker: ParsedMemoryMarker | null;
   updateMemoryMarker: ParsedUpdateMemoryMarker | null;
