@@ -31,7 +31,20 @@ import (
 // ErrCacheMiss indicates no cached emote entry was found for a channel.
 var ErrCacheMiss = errors.New("emote cache miss")
 
-const cacheNamespace = "mp:emotes:v2:"
+// Namespace is the Redis key prefix for cached emote entries. It is exported so
+// callers that build key patterns (e.g. for invalidation) stay in sync with the
+// cache implementation. The version suffix is bumped whenever the stored value
+// format changes; v3 introduced the freshness envelope (stale-while-revalidate).
+const Namespace = "mp:emotes:v3:"
+
+// userTTL is the freshness window for user-specific cache entries. User emote
+// sets change more often than channel sets, so they go stale sooner.
+const userTTL = 1 * time.Hour
+
+// defaultStaleGrace is how long an entry remains servable as "stale" past its
+// freshness window. During this window reads return the stale value immediately
+// and trigger a background refresh instead of blocking on the emote service.
+const defaultStaleGrace = 12 * time.Hour
 
 // CachedEmote stores the minimum metadata needed to reconstruct emote markup.
 type CachedEmote struct {
@@ -40,21 +53,37 @@ type CachedEmote struct {
 	Provider string `json:"provider"`
 }
 
+// Entry is the result of a cache lookup: the cached emotes plus whether the
+// entry is past its freshness window and should be refreshed in the background.
+type Entry struct {
+	Emotes []CachedEmote
+	Stale  bool
+}
+
+// envelope is the on-disk representation of a cache entry. The soft expiry lets
+// reads distinguish a fresh entry from a stale-but-servable one even though the
+// Redis key itself lives longer (soft TTL + stale grace).
+type envelope struct {
+	Emotes      []CachedEmote `json:"emotes"`
+	SoftExpires int64         `json:"soft_expires_unix"`
+}
+
 // Store defines the emote cache behaviour expected by consumers.
 type Store interface {
-	Get(ctx context.Context, channel string) ([]CachedEmote, error)
+	GetEntry(ctx context.Context, channel string) (Entry, error)
 	Set(ctx context.Context, channel string, emotes []CachedEmote) error
 	Delete(ctx context.Context, channel string) error
-	GetWithUser(ctx context.Context, channel, userID string) ([]CachedEmote, error)
+	GetEntryWithUser(ctx context.Context, channel, userID string) (Entry, error)
 	SetWithUser(ctx context.Context, channel, userID string, emotes []CachedEmote) error
 	DeletePattern(ctx context.Context, pattern string) error
 }
 
 type EmoteCache struct {
-	client *redis.Client
-	logger *zap.Logger
-	ttl    time.Duration
-	prefix string
+	client     *redis.Client
+	logger     *zap.Logger
+	ttl        time.Duration
+	staleGrace time.Duration
+	prefix     string
 }
 
 func NewEmoteCache(client *redis.Client, logger *zap.Logger, ttl time.Duration) *EmoteCache {
@@ -62,10 +91,11 @@ func NewEmoteCache(client *redis.Client, logger *zap.Logger, ttl time.Duration) 
 		ttl = 6 * time.Hour
 	}
 	return &EmoteCache{
-		client: client,
-		logger: logger.With(zap.String("component", "emote-cache")),
-		ttl:    ttl,
-		prefix: cacheNamespace,
+		client:     client,
+		logger:     logger.With(zap.String("component", "emote-cache")),
+		ttl:        ttl,
+		staleGrace: defaultStaleGrace,
+		prefix:     Namespace,
 	}
 }
 
@@ -76,7 +106,7 @@ func (c *EmoteCache) key(channel string) string {
 	}
 	prefix := c.prefix
 	if prefix == "" {
-		prefix = cacheNamespace
+		prefix = Namespace
 	}
 	return prefix + channel
 }
@@ -92,35 +122,53 @@ func (c *EmoteCache) keyWithUser(channel, userID string) string {
 	}
 	prefix := c.prefix
 	if prefix == "" {
-		prefix = cacheNamespace
+		prefix = Namespace
 	}
 	return fmt.Sprintf("%s%s:%s", prefix, channel, userID)
 }
 
-func (c *EmoteCache) Get(ctx context.Context, channel string) ([]CachedEmote, error) {
-	raw, err := c.client.Get(ctx, c.key(channel)).Bytes()
+// getEntry reads and decodes an entry for an already-built key, flagging it
+// stale when it has passed its soft expiry.
+func (c *EmoteCache) getEntry(ctx context.Context, key string) (Entry, error) {
+	raw, err := c.client.Get(ctx, key).Bytes()
 	if err != nil {
 		if err == redis.Nil {
-			return nil, ErrCacheMiss
+			return Entry{}, ErrCacheMiss
 		}
-		return nil, err
+		return Entry{}, err
 	}
-	var emotes []CachedEmote
-	if err := json.Unmarshal(raw, &emotes); err != nil {
-		return nil, fmt.Errorf("failed to decode cached emotes: %w", err)
+	var env envelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return Entry{}, fmt.Errorf("failed to decode cached emotes: %w", err)
 	}
-	return emotes, nil
+	stale := env.SoftExpires > 0 && time.Now().Unix() > env.SoftExpires
+	return Entry{Emotes: env.Emotes, Stale: stale}, nil
 }
 
-func (c *EmoteCache) Set(ctx context.Context, channel string, emotes []CachedEmote) error {
-	data, err := json.Marshal(emotes)
+// setEntry marshals emotes into an envelope with the given freshness window and
+// stores it under key with a hard TTL of softTTL + staleGrace, so the value
+// survives long enough to be served stale while a background refresh runs.
+func (c *EmoteCache) setEntry(ctx context.Context, key string, emotes []CachedEmote, softTTL time.Duration) error {
+	env := envelope{
+		Emotes:      emotes,
+		SoftExpires: time.Now().Add(softTTL).Unix(),
+	}
+	data, err := json.Marshal(env)
 	if err != nil {
 		return fmt.Errorf("failed to marshal emotes: %w", err)
 	}
-	if err := c.client.Set(ctx, c.key(channel), data, c.ttl).Err(); err != nil {
+	if err := c.client.Set(ctx, key, data, softTTL+c.staleGrace).Err(); err != nil {
 		return fmt.Errorf("failed to store emotes: %w", err)
 	}
 	return nil
+}
+
+func (c *EmoteCache) GetEntry(ctx context.Context, channel string) (Entry, error) {
+	return c.getEntry(ctx, c.key(channel))
+}
+
+func (c *EmoteCache) Set(ctx context.Context, channel string, emotes []CachedEmote) error {
+	return c.setEntry(ctx, c.key(channel), emotes, c.ttl)
 }
 
 func (c *EmoteCache) Delete(ctx context.Context, channel string) error {
@@ -130,32 +178,13 @@ func (c *EmoteCache) Delete(ctx context.Context, channel string) error {
 	return nil
 }
 
-func (c *EmoteCache) GetWithUser(ctx context.Context, channel, userID string) ([]CachedEmote, error) {
-	raw, err := c.client.Get(ctx, c.keyWithUser(channel, userID)).Bytes()
-	if err != nil {
-		if err == redis.Nil {
-			return nil, ErrCacheMiss
-		}
-		return nil, err
-	}
-	var emotes []CachedEmote
-	if err := json.Unmarshal(raw, &emotes); err != nil {
-		return nil, fmt.Errorf("failed to decode cached emotes: %w", err)
-	}
-	return emotes, nil
+func (c *EmoteCache) GetEntryWithUser(ctx context.Context, channel, userID string) (Entry, error) {
+	return c.getEntry(ctx, c.keyWithUser(channel, userID))
 }
 
 func (c *EmoteCache) SetWithUser(ctx context.Context, channel, userID string, emotes []CachedEmote) error {
-	data, err := json.Marshal(emotes)
-	if err != nil {
-		return fmt.Errorf("failed to marshal emotes: %w", err)
-	}
-	// Use shorter TTL for user-specific caches (1 hour instead of 6)
-	ttl := 1 * time.Hour
-	if err := c.client.Set(ctx, c.keyWithUser(channel, userID), data, ttl).Err(); err != nil {
-		return fmt.Errorf("failed to store emotes: %w", err)
-	}
-	return nil
+	// User-specific entries use a shorter freshness window than channel entries.
+	return c.setEntry(ctx, c.keyWithUser(channel, userID), emotes, userTTL)
 }
 
 func (c *EmoteCache) DeletePattern(ctx context.Context, pattern string) error {

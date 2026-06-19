@@ -18,7 +18,9 @@ package enricher
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/cache"
 	"github.com/caesar/all-chat/services/message-processor/models"
@@ -26,6 +28,7 @@ import (
 )
 
 type mockEmoteServiceClient struct {
+	mu          sync.Mutex
 	emotes      []EmoteServiceEmote
 	err         error
 	lastChannel string
@@ -33,8 +36,10 @@ type mockEmoteServiceClient struct {
 }
 
 func (m *mockEmoteServiceClient) GetEmotesForChannel(ctx context.Context, channelID string) ([]EmoteServiceEmote, error) {
+	m.mu.Lock()
 	m.lastChannel = channelID
 	m.calls++
+	m.mu.Unlock()
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -42,26 +47,41 @@ func (m *mockEmoteServiceClient) GetEmotesForChannel(ctx context.Context, channe
 }
 
 func (m *mockEmoteServiceClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string) ([]EmoteServiceEmote, error) {
+	m.mu.Lock()
 	m.lastChannel = channel
 	m.calls++
+	m.mu.Unlock()
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.emotes, nil
 }
 
+func (m *mockEmoteServiceClient) callCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
+}
+
 type mockEmoteCacheStore struct {
+	mu       sync.Mutex
 	getData  []cache.CachedEmote
 	getErr   error
+	getStale bool
 	setCalls int
 	setData  []cache.CachedEmote
 }
 
-func (m *mockEmoteCacheStore) Get(ctx context.Context, channel string) ([]cache.CachedEmote, error) {
-	return m.getData, m.getErr
+func (m *mockEmoteCacheStore) GetEntry(ctx context.Context, channel string) (cache.Entry, error) {
+	if m.getErr != nil {
+		return cache.Entry{}, m.getErr
+	}
+	return cache.Entry{Emotes: m.getData, Stale: m.getStale}, nil
 }
 
 func (m *mockEmoteCacheStore) Set(ctx context.Context, channel string, emotes []cache.CachedEmote) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.setCalls++
 	m.setData = emotes
 	return nil
@@ -71,11 +91,16 @@ func (m *mockEmoteCacheStore) Delete(ctx context.Context, channel string) error 
 	return nil
 }
 
-func (m *mockEmoteCacheStore) GetWithUser(ctx context.Context, channel, userID string) ([]cache.CachedEmote, error) {
-	return m.getData, m.getErr
+func (m *mockEmoteCacheStore) GetEntryWithUser(ctx context.Context, channel, userID string) (cache.Entry, error) {
+	if m.getErr != nil {
+		return cache.Entry{}, m.getErr
+	}
+	return cache.Entry{Emotes: m.getData, Stale: m.getStale}, nil
 }
 
 func (m *mockEmoteCacheStore) SetWithUser(ctx context.Context, channel, userID string, emotes []cache.CachedEmote) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.setCalls++
 	m.setData = emotes
 	return nil
@@ -83,6 +108,12 @@ func (m *mockEmoteCacheStore) SetWithUser(ctx context.Context, channel, userID s
 
 func (m *mockEmoteCacheStore) DeletePattern(ctx context.Context, pattern string) error {
 	return nil
+}
+
+func (m *mockEmoteCacheStore) setCallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.setCalls
 }
 
 func TestEnrichAddsEmotesForLaterOccurrences(t *testing.T) {
@@ -165,12 +196,77 @@ func TestFetchEmotesUsesCache(t *testing.T) {
 	if len(got) != 1 || got[0].Code != "LUL" {
 		t.Fatalf("unexpected cached result: %#v", got)
 	}
-	if client.calls != 0 {
-		t.Fatalf("expected cache hit to skip client call, got %d", client.calls)
+	if client.callCount() != 0 {
+		t.Fatalf("expected cache hit to skip client call, got %d", client.callCount())
 	}
-	if store.setCalls != 0 {
-		t.Fatalf("expected cache hit to skip set, got %d", store.setCalls)
+	if store.setCallCount() != 0 {
+		t.Fatalf("expected cache hit to skip set, got %d", store.setCallCount())
 	}
+}
+
+func TestFetchEmotesStaleServesImmediatelyAndRefreshes(t *testing.T) {
+	client := &mockEmoteServiceClient{
+		emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example/fresh"}},
+	}
+	store := &mockEmoteCacheStore{
+		getData:  []cache.CachedEmote{{Code: "LUL", Provider: "twitch", URL: "https://example/stale"}},
+		getStale: true,
+	}
+
+	enricher := NewEnricher(client, store, zap.NewNop())
+	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", "")
+	if err != nil {
+		t.Fatalf("fetchEmotes returned error: %v", err)
+	}
+
+	// The stale entry is served immediately, without blocking on the client.
+	if len(got) != 1 || got[0].Code != "LUL" {
+		t.Fatalf("expected stale entry served immediately, got %#v", got)
+	}
+
+	// A background refresh should re-fetch from the service and repopulate the cache.
+	if !waitFor(func() bool { return client.callCount() == 1 && store.setCallCount() == 1 }) {
+		t.Fatalf("expected one background refresh fetch+set, got calls=%d sets=%d",
+			client.callCount(), store.setCallCount())
+	}
+}
+
+func TestFetchEmotesStaleRefreshIsRateLimited(t *testing.T) {
+	client := &mockEmoteServiceClient{
+		emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example/fresh"}},
+	}
+	store := &mockEmoteCacheStore{
+		getData:  []cache.CachedEmote{{Code: "LUL", Provider: "twitch", URL: "https://example/stale"}},
+		getStale: true,
+	}
+
+	enricher := NewEnricher(client, store, zap.NewNop())
+
+	// Mark a refresh as already in flight for this key; a concurrent stale read
+	// must not kick off a second one.
+	enricher.refreshing.Store("123\x00", struct{}{})
+
+	if _, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", ""); err != nil {
+		t.Fatalf("fetchEmotes returned error: %v", err)
+	}
+
+	// Give any (incorrectly) spawned goroutine a chance to run.
+	time.Sleep(50 * time.Millisecond)
+	if client.callCount() != 0 {
+		t.Fatalf("expected in-flight refresh to suppress duplicate fetch, got %d", client.callCount())
+	}
+}
+
+// waitFor polls cond for up to a second, returning true once it holds.
+func waitFor(cond func() bool) bool {
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return true
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return cond()
 }
 
 func TestFetchEmotesCachesAfterMiss(t *testing.T) {
@@ -189,11 +285,11 @@ func TestFetchEmotesCachesAfterMiss(t *testing.T) {
 	if len(got) != 1 || got[0].Code != "KEKW" {
 		t.Fatalf("unexpected fetched result: %#v", got)
 	}
-	if client.calls != 1 {
-		t.Fatalf("expected single client call, got %d", client.calls)
+	if client.callCount() != 1 {
+		t.Fatalf("expected single client call, got %d", client.callCount())
 	}
-	if store.setCalls != 1 {
-		t.Fatalf("expected cache set to be invoked once, got %d", store.setCalls)
+	if store.setCallCount() != 1 {
+		t.Fatalf("expected cache set to be invoked once, got %d", store.setCallCount())
 	}
 	if len(store.setData) != 1 || store.setData[0].Code != "KEKW" {
 		t.Fatalf("cache stored wrong data: %#v", store.setData)

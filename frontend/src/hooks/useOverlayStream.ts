@@ -39,6 +39,7 @@ import { sortMessageBadges } from '@/lib/badgeOrder'
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import type { ChatMessage, DeletionMetadata, PlatformStatus } from '@/lib/types/message'
 import type { PublicOverlayConfig } from '@/lib/types/overlay'
+import { preloadOverlayEmotes } from '@/lib/utils/preloadEmotes'
 import {
   advanceWatermark,
   classifyEnvelope,
@@ -113,6 +114,10 @@ export function useOverlayStream(
   // drop instead of escalating from wherever the last burst left off.
   const attemptsRef = useRef(0)
 
+  // Whether we've already warmed the browser emote cache for this mount. Gated
+  // so the 30s config refresh doesn't re-trigger the preload burst.
+  const emotesPreloadedRef = useRef(false)
+
   // Keep callbacks fresh without re-subscribing the socket (mirrors the
   // filterSettingsRef/maxMessagesRef trick the overlay page used inline).
   const optsRef = useRef(options)
@@ -142,6 +147,20 @@ export function useOverlayStream(
             })
           })
           setSources(next)
+
+          // Warm the browser image cache with this overlay's emotes before the
+          // first chat message arrives, so emotes render instead of briefly
+          // flashing their text fallback. Fire-and-forget, once per mount.
+          if (!emotesPreloadedRef.current && data.sources.length > 0) {
+            emotesPreloadedRef.current = true
+            void preloadOverlayEmotes(
+              data.sources.map((source) => ({
+                platform: source.platform,
+                channelId: source.channel_id,
+              })),
+              { seventvSetId: data.seventv_emote_set_id }
+            )
+          }
         }
       } catch (error) {
         console.warn('[useOverlayStream] Failed to load config', error)
