@@ -33,6 +33,7 @@ jobs:
           - share-service
           - source-manager
           - token-refresh-service
+          - moderation-service
           - discord-listener
     steps:
       - uses: actions/checkout@v6
