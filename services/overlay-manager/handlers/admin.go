@@ -122,7 +122,7 @@ func (h *AdminHandler) ListAllSources(c *gin.Context) {
 }
 
 // GetUserOverlays returns all overlays for a specific user (admin only)
-// GET /admin/users/:id/overlays
+// GET /admin/user-overlays/:id
 func (h *AdminHandler) GetUserOverlays(c *gin.Context) {
 	userID := c.Param("id")
 
