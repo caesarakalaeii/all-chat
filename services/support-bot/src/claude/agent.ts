@@ -1,5 +1,5 @@
 import { execa } from 'execa';
-import type { QueryResult, IssueProposal, InfraVerdict, StoredMemory, ParsedMemoryMarker, ParsedUpdateMemoryMarker, MemoryType } from '../types.js';
+import type { QueryResult, IssueProposal, CommentProposal, InfraVerdict, StoredMemory, ParsedMemoryMarker, ParsedUpdateMemoryMarker, MemoryType } from '../types.js';
 
 export async function queryCodebase(
   question: string,
@@ -14,8 +14,14 @@ export async function queryCodebase(
     `You can read the project source at: ${repoPaths.join(', ')}`,
     'When asked about UI/UX, read the relevant frontend source files, identify concrete usability or visual issues, and propose specific improvements.',
     'Keep answers concise and actionable. Use step-by-step instructions when guiding users through setup or troubleshooting.',
-    "If a code change or improvement is needed, end your response with exactly: PROPOSE_ISSUE:repo_name|||title|||body",
-    "repo_name must be 'all-chat' or 'all-chat-extension'",
+    '',
+    'GitHub actions -- you can file a new issue or comment on an existing issue/PR. These are posted automatically when you emit the marker; do NOT ask the user for approval and do NOT claim you need permission. You cannot browse GitHub, run git, or call the gh CLI -- the only way you affect GitHub is by emitting one of the markers below.',
+    "- To open a NEW issue for a code change or improvement, end your response with exactly: PROPOSE_ISSUE:repo_name|||title|||body",
+    "- To COMMENT on an EXISTING issue or pull request (for example, the user references one by number or asks you to follow up on it), end your response with exactly: PROPOSE_COMMENT:repo_name|||issue_number|||body",
+    "repo_name must be 'all-chat' or 'all-chat-extension'.",
+    'issue_number is the numeric issue or PR number (GitHub treats PR comments as issue comments, so the same number works for either). body is the full Markdown comment.',
+    'Only emit PROPOSE_COMMENT when you have an explicit issue or PR number from the user or the conversation -- never guess or invent a number, and never claim you commented if you did not emit the marker.',
+    'Emit at most one of PROPOSE_ISSUE or PROPOSE_COMMENT per response.',
     '',
     'IMPORTANT -- Infrastructure data handling rules:',
     '1. NEVER include raw log lines, stack traces, or raw error messages in your response.',
@@ -49,7 +55,7 @@ export async function queryCodebase(
     'Tags should be service names (e.g. kick-listener), error types (e.g. OOMKill), or concepts (e.g. quota).',
     'Memory content must be concise -- one to two sentences maximum.',
     'If you need to update an existing memory you can see above, append: UPDATE_MEMORY:id|||updated content',
-    'Emit STORE_MEMORY or UPDATE_MEMORY at most once per response, after INFRA_VERDICT and PROPOSE_ISSUE.',
+    'Emit STORE_MEMORY or UPDATE_MEMORY at most once per response, after INFRA_VERDICT, PROPOSE_ISSUE, and PROPOSE_COMMENT.',
   ].join('\n');
 
   let memoriesBlock = '';
@@ -156,6 +162,24 @@ export async function queryCodebase(
     cleanAnswer = cleanAnswer.slice(0, proposeIndex).trimEnd();
   }
 
+  // Parse and strip PROPOSE_COMMENT marker
+  let commentProposal: CommentProposal | null = null;
+  const commentMarker = 'PROPOSE_COMMENT:';
+  const commentIndex = cleanAnswer.indexOf(commentMarker);
+  if (commentIndex !== -1) {
+    const commentString = cleanAnswer.slice(commentIndex + commentMarker.length);
+    const parts = commentString.split('|||');
+    if (parts.length >= 3) {
+      const repoName = parts[0].trim();
+      const issueNumber = parseInt(parts[1].trim(), 10);
+      const body = parts.slice(2).join('|||').trim();
+      if ((repoName === 'all-chat' || repoName === 'all-chat-extension') && !isNaN(issueNumber)) {
+        commentProposal = { repo: repoName, issueNumber, body };
+      }
+    }
+    cleanAnswer = cleanAnswer.slice(0, commentIndex).trimEnd();
+  }
+
   // Parse and strip STORE_MEMORY marker
   const storeMarker = 'STORE_MEMORY:';
   const storeIndex = cleanAnswer.indexOf(storeMarker);
@@ -191,5 +215,5 @@ export async function queryCodebase(
     cleanAnswer = cleanAnswer.slice(0, updateIndex).trimEnd();
   }
 
-  return { answer: cleanAnswer, issueProposal, infraVerdict, memoryMarker, updateMemoryMarker };
+  return { answer: cleanAnswer, issueProposal, commentProposal, infraVerdict, memoryMarker, updateMemoryMarker };
 }

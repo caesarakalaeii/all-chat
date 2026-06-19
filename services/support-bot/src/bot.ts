@@ -10,7 +10,7 @@ import {
 } from 'discord.js';
 import type { Octokit } from '@octokit/rest';
 import { queryCodebase } from './claude/agent.js';
-import { createIssue, createOctokitClient } from './github/issues.js';
+import { createComment, createIssue, createOctokitClient } from './github/issues.js';
 import { MemoryRepository, extractTagsFromQuestion } from './memory/repository.js';
 import { CrossChannelSpamDetector } from './moderation/cross-channel-spam.js';
 import type { BotConfig } from './types.js';
@@ -87,9 +87,21 @@ async function handleQuestion(
     answer = `${answer}\n\nI've created a GitHub issue for this proposed change: ${issueUrl}`;
   }
 
+  if (result.commentProposal !== null) {
+    const commentUrl = await createComment(
+      octokit,
+      config.githubOwner,
+      result.commentProposal.repo,
+      result.commentProposal.issueNumber,
+      result.commentProposal.body,
+    );
+    answer = `${answer}\n\nI've posted a comment on ${result.commentProposal.repo} #${result.commentProposal.issueNumber}: ${commentUrl}`;
+  }
+
   const shouldPingLeadDev =
     result.infraVerdict?.type === 'infrastructure' ||
-    result.issueProposal !== null;
+    result.issueProposal !== null ||
+    result.commentProposal !== null;
 
   if (shouldPingLeadDev && config.leadDeveloperDiscordId) {
     answer = `<@${config.leadDeveloperDiscordId}> ${answer}`;

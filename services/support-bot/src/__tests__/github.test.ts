@@ -10,13 +10,18 @@ vi.mock('@octokit/rest', () => ({
             html_url: 'https://github.com/moersener/all-chat/issues/42',
           },
         }),
+        createComment: vi.fn().mockResolvedValue({
+          data: {
+            html_url: 'https://github.com/moersener/all-chat/issues/42#issuecomment-1',
+          },
+        }),
       },
     },
   })),
 }));
 
 import { Octokit } from '@octokit/rest';
-import { createOctokitClient, createIssue } from '../github/issues.js';
+import { createOctokitClient, createIssue, createComment } from '../github/issues.js';
 
 describe('createOctokitClient', () => {
   it('returns an Octokit instance', () => {
@@ -72,5 +77,53 @@ describe('createIssue', () => {
     );
 
     expect(url).toBe('https://github.com/moersener/all-chat/issues/42');
+  });
+});
+
+describe('createComment', () => {
+  let mockOctokit: InstanceType<typeof Octokit>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockOctokit = {
+      rest: {
+        issues: {
+          createComment: vi.fn().mockResolvedValue({
+            data: {
+              html_url: 'https://github.com/moersener/all-chat/issues/447#issuecomment-99',
+            },
+          }),
+        },
+      },
+    } as unknown as InstanceType<typeof Octokit>;
+  });
+
+  it('calls octokit.rest.issues.createComment with owner, repo, issue_number, and body', async () => {
+    await createComment(
+      mockOctokit,
+      'moersener',
+      'all-chat',
+      447,
+      'Here is the follow-up.',
+    );
+
+    expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith({
+      owner: 'moersener',
+      repo: 'all-chat',
+      issue_number: 447,
+      body: 'Here is the follow-up.',
+    });
+  });
+
+  it('returns the html_url of the created comment', async () => {
+    const url = await createComment(
+      mockOctokit,
+      'moersener',
+      'all-chat',
+      447,
+      'A comment.',
+    );
+
+    expect(url).toBe('https://github.com/moersener/all-chat/issues/447#issuecomment-99');
   });
 });

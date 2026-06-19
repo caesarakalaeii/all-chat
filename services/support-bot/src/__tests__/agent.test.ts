@@ -233,6 +233,58 @@ describe('queryCodebase', () => {
     expect(result.answer).toContain('The fix is straightforward.');
   });
 
+  it('parses PROPOSE_COMMENT in the response into a CommentProposal', async () => {
+    const responseText =
+      'Good question -- I\'ll follow up on the issue.\n\nPROPOSE_COMMENT:all-chat|||447|||## Update\nThis is now fixed in main.';
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({ result: responseText }),
+    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+
+    const result = await queryCodebase('any update on 447?', ['/repos/all-chat']);
+
+    expect(result.commentProposal).not.toBeNull();
+    expect(result.commentProposal?.repo).toBe('all-chat');
+    expect(result.commentProposal?.issueNumber).toBe(447);
+    expect(result.commentProposal?.body).toBe('## Update\nThis is now fixed in main.');
+    expect(result.answer).toContain('I\'ll follow up on the issue.');
+    expect(result.answer).not.toContain('PROPOSE_COMMENT:');
+  });
+
+  it('returns commentProposal: null when no PROPOSE_COMMENT marker is present', async () => {
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({ result: 'Just a normal answer.' }),
+    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+
+    const result = await queryCodebase('some question', ['/repos/all-chat']);
+
+    expect(result.commentProposal).toBeNull();
+  });
+
+  it('ignores PROPOSE_COMMENT with a non-numeric issue number', async () => {
+    const responseText =
+      'Sure.\n\nPROPOSE_COMMENT:all-chat|||not-a-number|||body';
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({ result: responseText }),
+    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+
+    const result = await queryCodebase('comment please', ['/repos/all-chat']);
+
+    expect(result.commentProposal).toBeNull();
+  });
+
+  it('system prompt contains PROPOSE_COMMENT: instruction text', async () => {
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({ result: 'answer' }),
+    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+
+    await queryCodebase('question', ['/repos/all-chat']);
+
+    const [, args] = mockExeca.mock.calls[0];
+    const prompt = (args as string[])[1];
+    expect(prompt).toContain('PROPOSE_COMMENT:');
+    expect(prompt).toContain('do NOT ask the user for approval');
+  });
+
   it('passes CLAUDE_CODE_OAUTH_TOKEN in the env option', async () => {
     mockExeca.mockResolvedValueOnce({
       stdout: JSON.stringify({ result: 'answer' }),

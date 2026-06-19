@@ -105,6 +105,7 @@ vi.mock('../claude/agent.js', () => ({
 vi.mock('../github/issues.js', () => ({
   createOctokitClient: vi.fn().mockReturnValue({ mock: 'octokit' }),
   createIssue: vi.fn().mockResolvedValue('https://github.com/owner/repo/issues/123'),
+  createComment: vi.fn().mockResolvedValue('https://github.com/owner/repo/issues/447#issuecomment-1'),
 }));
 
 // Mock the memory repository module
@@ -119,12 +120,13 @@ vi.mock('../memory/repository.js', () => ({
 
 import { Client, GatewayIntentBits, Events, EmbedBuilder } from 'discord.js';
 import { queryCodebase } from '../claude/agent.js';
-import { createIssue, createOctokitClient } from '../github/issues.js';
+import { createComment, createIssue, createOctokitClient } from '../github/issues.js';
 import { MemoryRepository } from '../memory/repository.js';
 import { startBot } from '../bot.js';
 
 const mockQueryCodebase = vi.mocked(queryCodebase);
 const mockCreateIssue = vi.mocked(createIssue);
+const mockCreateComment = vi.mocked(createComment);
 const mockCreateOctokitClient = vi.mocked(createOctokitClient);
 
 const testConfig = {
@@ -162,6 +164,7 @@ describe('startBot', () => {
       answer: 'Twitch uses IRC protocol for chat.',
       issueProposal: null,
       infraVerdict: null,
+      commentProposal: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });
@@ -269,6 +272,7 @@ describe('MessageCreate handler', () => {
       answer: 'Twitch uses IRC.',
       issueProposal: null,
       infraVerdict: null,
+      commentProposal: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });
@@ -403,6 +407,7 @@ describe('MessageCreate handler', () => {
         body: 'Bug body',
       },
       infraVerdict: null,
+      commentProposal: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });
@@ -430,6 +435,53 @@ describe('MessageCreate handler', () => {
     const allSentContent = sendCalls.map(([arg]) => typeof arg === 'string' ? arg : JSON.stringify(arg)).join(' ');
     expect(allSentContent).toContain('https://github.com/testowner/all-chat/issues/42');
   });
+
+  it('calls createComment when queryCodebase returns a commentProposal and includes URL in reply', async () => {
+    mockQueryCodebase.mockResolvedValueOnce({
+      answer: 'Following up on the issue.',
+      issueProposal: null,
+      commentProposal: {
+        repo: 'all-chat',
+        issueNumber: 447,
+        body: 'This is fixed in main.',
+      },
+      infraVerdict: null,
+      memoryMarker: null,
+      updateMemoryMarker: null,
+    });
+    mockCreateComment.mockResolvedValueOnce('https://github.com/testowner/all-chat/issues/447#issuecomment-7');
+
+    await startBot(testConfig, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const threadSend = vi.fn().mockResolvedValue({});
+    const msg = buildMessage({
+      content: '<@123456789> any update on issue 447?',
+      startThread: vi.fn().mockResolvedValue({ id: 'comment-thread', send: threadSend }),
+    });
+    await handler!(msg);
+
+    expect(mockCreateComment).toHaveBeenCalledWith(
+      expect.anything(),
+      testConfig.githubOwner,
+      'all-chat',
+      447,
+      'This is fixed in main.',
+    );
+    const sendCalls = threadSend.mock.calls;
+    const allSentContent = sendCalls.map(([arg]) => typeof arg === 'string' ? arg : JSON.stringify(arg)).join(' ');
+    expect(allSentContent).toContain('https://github.com/testowner/all-chat/issues/447#issuecomment-7');
+  });
+
+  it('does NOT call createComment when commentProposal is null', async () => {
+    await startBot(testConfig, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const msg = buildMessage({ content: '<@123456789> how does twitch work?' });
+    await handler!(msg);
+
+    expect(mockCreateComment).not.toHaveBeenCalled();
+  });
 });
 
 describe('Lead developer @mention', () => {
@@ -454,6 +506,7 @@ describe('Lead developer @mention', () => {
       answer: 'There is a memory leak in the pod.',
       issueProposal: null,
       infraVerdict: { type: 'infrastructure', summary: 'Memory leak' },
+      commentProposal: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });
@@ -470,6 +523,24 @@ describe('Lead developer @mention', () => {
       answer: 'Here is a proposal.',
       issueProposal: { repo: 'all-chat', title: 'New issue', body: 'Body text' },
       infraVerdict: null,
+      commentProposal: null,
+      memoryMarker: null,
+      updateMemoryMarker: null,
+    });
+
+    await startBot(testConfig, createMockMemoryRepo());
+    const content = await getSentContent();
+
+    expect(content).toMatch(/^<@198569499228766208>/);
+  });
+
+  it('prepends lead dev @mention when commentProposal is not null', async () => {
+    mockCreateComment.mockResolvedValueOnce('https://github.com/testowner/all-chat/issues/447#issuecomment-9');
+    mockQueryCodebase.mockResolvedValueOnce({
+      answer: 'Posted a follow-up.',
+      issueProposal: null,
+      commentProposal: { repo: 'all-chat', issueNumber: 447, body: 'Follow-up body' },
+      infraVerdict: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });
@@ -485,6 +556,7 @@ describe('Lead developer @mention', () => {
       answer: 'Here is a code-level answer.',
       issueProposal: null,
       infraVerdict: null,
+      commentProposal: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });
@@ -500,6 +572,7 @@ describe('Lead developer @mention', () => {
       answer: 'The issue is in the frontend code.',
       issueProposal: null,
       infraVerdict: { type: 'code', summary: 'Frontend code issue' },
+      commentProposal: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });
@@ -516,6 +589,7 @@ describe('Lead developer @mention', () => {
       answer: 'Infrastructure problem with a proposal.',
       issueProposal: { repo: 'all-chat', title: 'Fix infra', body: 'Body' },
       infraVerdict: { type: 'infrastructure', summary: 'Critical infra issue' },
+      commentProposal: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });
@@ -535,7 +609,7 @@ describe('Response formatting', () => {
 
   it('sends response <= 2000 chars as plain text', async () => {
     const shortAnswer = 'Short answer.';
-    mockQueryCodebase.mockResolvedValueOnce({ answer: shortAnswer, issueProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null });
+    mockQueryCodebase.mockResolvedValueOnce({ answer: shortAnswer, issueProposal: null, commentProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null });
 
     await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
@@ -553,7 +627,7 @@ describe('Response formatting', () => {
 
   it('sends response 2001-4096 chars as an embed', async () => {
     const mediumAnswer = 'A'.repeat(2001);
-    mockQueryCodebase.mockResolvedValueOnce({ answer: mediumAnswer, issueProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null });
+    mockQueryCodebase.mockResolvedValueOnce({ answer: mediumAnswer, issueProposal: null, commentProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null });
 
     await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
@@ -573,7 +647,7 @@ describe('Response formatting', () => {
 
   it('splits response > 4096 chars into 2000-char chunks', async () => {
     const longAnswer = 'B'.repeat(5000);
-    mockQueryCodebase.mockResolvedValueOnce({ answer: longAnswer, issueProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null });
+    mockQueryCodebase.mockResolvedValueOnce({ answer: longAnswer, issueProposal: null, commentProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null });
 
     await startBot(testConfig, createMockMemoryRepo());
     const handler = getEventHandler(Events.MessageCreate);
@@ -603,6 +677,7 @@ describe('InteractionCreate handler (/support slash command)', () => {
       answer: 'Slash command answer.',
       issueProposal: null,
       infraVerdict: null,
+      commentProposal: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });
@@ -655,7 +730,7 @@ describe('InteractionCreate handler (/support slash command)', () => {
     mockQueryCodebase.mockImplementationOnce(async () => {
       queryCalled = true;
       expect(deferCalled).toBe(true);
-      return { answer: 'answer', issueProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null };
+      return { answer: 'answer', issueProposal: null, commentProposal: null, infraVerdict: null, memoryMarker: null, updateMemoryMarker: null };
     });
 
     await startBot(testConfig, createMockMemoryRepo());
@@ -774,6 +849,7 @@ describe('Cross-channel spam moderation', () => {
       answer: 'irrelevant',
       issueProposal: null,
       infraVerdict: null,
+      commentProposal: null,
       memoryMarker: null,
       updateMemoryMarker: null,
     });

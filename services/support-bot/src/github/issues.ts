@@ -20,3 +20,24 @@ export async function createIssue(
   });
   return response.data.html_url;
 }
+
+/**
+ * Posts a comment on an existing issue or pull request. GitHub's REST API
+ * treats PR comments as issue comments, so `issueNumber` may be either an
+ * issue or a PR number. Returns the html_url of the created comment.
+ */
+export async function createComment(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  body: string,
+): Promise<string> {
+  const response = await octokit.rest.issues.createComment({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    body,
+  });
+  return response.data.html_url;
+}
