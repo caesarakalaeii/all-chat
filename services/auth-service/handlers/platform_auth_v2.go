@@ -333,6 +333,151 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 	}
 }
 
+// HandleEnableModeration initiates the opt-in moderation re-consent flow (ADR-0017).
+// Unlike login/add-source it requests the platform moderation scopes for exactly the
+// actions the streamer is enabling (?actions=delete,ban) — minimized to those actions —
+// on TOP of the scopes already granted, so the issued token is a SUPERSET of the stored
+// grant and never trips the downgrade guard. It reuses the add-source state + callback,
+// so overlay linking and token/scope persistence (incl. the linked-token path for
+// YouTube/Kick-login accounts) need no changes. Supports Twitch and Kick; Kick uses
+// PKCE, so its consent URL also stashes a code verifier for the shared callback.
+func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		provider, exists := h.providers[platform]
+		if !exists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Platform %s not supported", platform)})
+			return
+		}
+		overlayID := c.Param("overlay_id")
+		if overlayID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "overlay_id is required"})
+			return
+		}
+
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized - please log in first"})
+			return
+		}
+		userIDStr, ok := userID.(string)
+		if !ok || userIDStr == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user context"})
+			return
+		}
+
+		// Minimal scopes for exactly the actions being enabled, mapped per platform.
+		// Twitch splits delete vs ban/timeout/unban; Kick gates ban/timeout/unban behind
+		// one scope and has no single-message delete. Unsupported platforms are rejected.
+		actions := splitActions(c.Query("actions"))
+		var modScopes []string
+		switch provider.(type) {
+		case *oauth.TwitchOAuth:
+			modScopes = oauth.ModerationScopesForActions(actions)
+		case *oauth.KickOAuth:
+			modScopes = oauth.KickModerationScopesForActions(actions)
+		case *oauth.YouTubeOAuth:
+			modScopes = oauth.YouTubeModerationScopesForActions(actions)
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("moderation is not supported for %s", platform)})
+			return
+		}
+		if len(modScopes) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban"})
+			return
+		}
+
+		// Union with the already-granted scopes so the new token is a SUPERSET; the
+		// downgrade guard then preserves (never clobbers) the chat / prior-mod grants.
+		existingScopes, scopeErr := h.userRepo.GetGrantedScopes(c.Request.Context(), userIDStr)
+		if scopeErr != nil {
+			h.logger.Warn("Failed to read granted scopes for moderation re-consent; requesting action scopes only",
+				zap.String("user_id", userIDStr), zap.Error(scopeErr))
+		}
+		extra := unionScopes(existingScopes, modScopes)
+
+		csrfToken, err := generateRandomString(32)
+		if err != nil {
+			h.logger.Error("Failed to generate CSRF token", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+
+		oauthState := oauth.NewAddSourceState(csrfToken, overlayID, userIDStr)
+		if err := oauthState.Validate(); err != nil {
+			h.logger.Error("Invalid OAuth state", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+		stateStr, err := oauthState.Encode()
+		if err != nil {
+			h.logger.Error("Failed to encode state", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+
+		// Build the consent URL per platform. Kick uses PKCE, so its verifier is stored
+		// in Redis under the same key the add-source callback reads — the re-consent
+		// reuses the add-source state + callback for token/scope persistence.
+		var authURL string
+		switch p := provider.(type) {
+		case *oauth.TwitchOAuth:
+			authURL = p.GetAuthURLWithScopes(stateStr, extra)
+		case *oauth.YouTubeOAuth:
+			authURL = p.GetAuthURLWithScopes(stateStr, extra)
+		case *oauth.KickOAuth:
+			var codeVerifier string
+			authURL, codeVerifier = p.GetAuthURLWithScopesPKCE(stateStr, extra)
+			verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
+			if err := h.redis.Set(c.Request.Context(), verifierKey, codeVerifier, 10*time.Minute).Err(); err != nil {
+				h.logger.Error("Failed to store PKCE verifier", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
+		}
+
+		stateKey := fmt.Sprintf("oauth_state:%s:%s", platform, csrfToken)
+		if err := h.redis.Set(c.Request.Context(), stateKey, stateStr, 30*time.Minute).Err(); err != nil {
+			h.logger.Error("Failed to store state", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+
+		h.logger.Info("Generated moderation re-consent OAuth URL",
+			zap.String("platform", string(platform)),
+			zap.String("overlay_id", overlayID),
+			zap.Strings("mod_scopes", modScopes),
+		)
+		c.JSON(http.StatusOK, gin.H{"auth_url": authURL})
+	}
+}
+
+// splitActions parses a comma-separated ?actions= value into trimmed, non-empty items.
+func splitActions(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// unionScopes returns the deduped union of two scope lists, preserving order (a, then b).
+func unionScopes(a, b []string) []string {
+	seen := make(map[string]bool, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, list := range [][]string{a, b} {
+		for _, s := range list {
+			if s != "" && !seen[s] {
+				seen[s] = true
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
 // generateAuthURL generates the OAuth authorization URL with PKCE support for Kick.
 //
 // withChatScopes is set by the Twitch add-source flow to additionally request the
@@ -854,7 +999,7 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 		// profile fields. The user is still authenticated and issued a JWT.
 		newScopes := oauth.ExtractGrantedScopes(token)
 		existingScopes, _ := h.userRepo.GetGrantedScopes(ctx, user.ID)
-		preserveScopes := containsScope(existingScopes, "user:read:chat") && !containsScope(newScopes, "user:read:chat")
+		preserveScopes := wouldDowngradeScopes(existingScopes, newScopes)
 
 		if !preserveScopes {
 			user.AccessToken = token.AccessToken
@@ -919,10 +1064,37 @@ func linkMayReplacePrimaryCredentials(authProvider string, platform oauth.Platfo
 	if string(platform) != authProvider {
 		return false
 	}
-	if containsScope(existingScopes, "user:read:chat") && !containsScope(newScopes, "user:read:chat") {
+	if wouldDowngradeScopes(existingScopes, newScopes) {
 		return false
 	}
 	return true
+}
+
+// preservableScopes are grants obtained ONLY through an explicit opt-in consent flow:
+// the EventSub chat scope (add-source) and the moderation scopes (moderation
+// re-consent, ADR-0017). A narrower token from a plain login or an unrelated platform
+// link must never drop them — doing so silently demotes the streamer's channel to the
+// IRC listener (chat scope) or disables their moderation controls until they
+// re-authorize. The opt-in flows always request a SUPERSET, so a genuine upgrade is
+// never blocked by this guard.
+var preservableScopes = []string{
+	"user:read:chat",
+	"moderator:manage:chat_messages",
+	"moderator:manage:banned_users",
+	"moderation:ban",                                    // Kick moderation grant (opt-in re-consent, ADR-0017)
+	"https://www.googleapis.com/auth/youtube.force-ssl", // YouTube moderation grant (ADR-0017)
+}
+
+// wouldDowngradeScopes reports whether replacing existing with incoming would drop any
+// preservable (opt-in) scope. When true, callers keep the stored token + granted_scopes
+// and refresh only non-credential profile fields.
+func wouldDowngradeScopes(existing, incoming []string) bool {
+	for _, s := range preservableScopes {
+		if containsScope(existing, s) && !containsScope(incoming, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // shouldStoreLinkedTwitchCredentials decides whether a Twitch consent must be

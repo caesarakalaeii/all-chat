@@ -17,11 +17,62 @@
 package oauth
 
 import (
+	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
+
+func TestModerationScopesForActions(t *testing.T) {
+	tests := []struct {
+		name    string
+		actions []string
+		want    []string
+	}{
+		{"delete only", []string{"delete"}, []string{"moderator:manage:chat_messages"}},
+		{"ban only", []string{"ban"}, []string{"moderator:manage:banned_users"}},
+		{"timeout/ban/unban share one scope", []string{"timeout", "ban", "unban"}, []string{"moderator:manage:banned_users"}},
+		{"delete + ban requests both", []string{"delete", "ban"}, []string{"moderator:manage:chat_messages", "moderator:manage:banned_users"}},
+		{"unknown actions are ignored", []string{"nuke", "delete"}, []string{"moderator:manage:chat_messages"}},
+		{"empty input yields nothing", nil, []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.ElementsMatch(t, tt.want, ModerationScopesForActions(tt.actions))
+		})
+	}
+}
+
+func TestGetAuthURLWithScopes(t *testing.T) {
+	o := NewTwitchOAuth("cid", "secret", "http://localhost/cb")
+	// channel:read:redemptions duplicates a base login scope — it must be deduped.
+	extra := []string{"user:read:chat", "moderator:manage:banned_users", "channel:read:redemptions"}
+
+	raw := o.GetAuthURLWithScopes("state123", extra)
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	q := u.Query()
+
+	assert.Equal(t, "true", q.Get("force_verify"), "force_verify is required to actually re-prompt")
+	assert.Equal(t, "state123", q.Get("state"))
+
+	scopes := strings.Fields(q.Get("scope"))
+	assert.Contains(t, scopes, "moderator:read:followers", "base login scopes are still requested")
+	assert.Contains(t, scopes, "user:read:chat", "extra scopes are requested")
+	assert.Contains(t, scopes, "moderator:manage:banned_users")
+
+	count := 0
+	for _, s := range scopes {
+		if s == "channel:read:redemptions" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "a scope present in both base and extra must appear once")
+}
 
 func TestExtractGrantedScopes(t *testing.T) {
 	withScope := func(v interface{}) *oauth2.Token {
