@@ -362,7 +362,17 @@ func (c *StreamConsumer) processDeletionEvent(ctx context.Context, raw *models.R
 
 	switch deletionType {
 	case "single":
-		// Lookup internal UUID from platform message ID
+		// A moderation-originated deletion already carries the internal UUID (the
+		// dashboard knows the id of the rendered message it moderated), so trust it and
+		// skip the registry lookup. This is the only resolution path for platforms whose
+		// listener does not populate the msgid registry — only twitch-listener does — so
+		// it is what makes moderation reflect-back work for Discord/Kick/YouTube.
+		if internalUUID, ok := raw.EventData["target_uuid"].(string); ok && internalUUID != "" {
+			break
+		}
+
+		// Otherwise (a native platform deletion, e.g. Twitch EventSub, which carries only
+		// the platform message id) reverse-resolve it to our internal UUID via the registry.
 		platformMsgID, ok := raw.EventData["target_msg_id"].(string)
 		if !ok {
 			return fmt.Errorf("missing target_msg_id for single deletion")

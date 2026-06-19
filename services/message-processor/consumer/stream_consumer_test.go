@@ -212,6 +212,88 @@ func TestStreamConsumer_ProcessAndAckSendsToCorrectGroup(t *testing.T) {
 	_ = msgID
 }
 
+// newDeletionTestConsumer builds a consumer wired with a miniredis-backed msgid
+// registry and deletion buffer, plus a handler that captures the raw message it
+// receives (nil if the handler was never called, e.g. the deletion was buffered).
+func newDeletionTestConsumer(t *testing.T, mr *miniredis.Miniredis, captured **models.RawChatMessage) *StreamConsumer {
+	t.Helper()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { client.Close() })
+	return &StreamConsumer{
+		client:  client,
+		logger:  zaptest.NewLogger(t),
+		metrics: sharedTestMetrics,
+		handler: func(_ context.Context, msg *models.RawChatMessage) error {
+			*captured = msg
+			return nil
+		},
+		consumerName:   "test-consumer",
+		stopCh:         make(chan struct{}),
+		msgIDRegistry:  registry.NewRedisRegistry(client, time.Hour),
+		deletionBuffer: registry.NewRedisDeletionBuffer(client, time.Hour),
+	}
+}
+
+// A moderation-originated single deletion carries target_uuid, so it is processed
+// immediately without consulting the (twitch-only) registry — the path that makes
+// reflect-back work for Discord/Kick/YouTube.
+func TestProcessDeletionEvent_SingleTrustsSuppliedTargetUUID(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	var got *models.RawChatMessage
+	c := newDeletionTestConsumer(t, mr, &got)
+
+	raw := &models.RawChatMessage{
+		Platform: "discord", ChannelID: "chan-snowflake", EventType: "message_deletion",
+		EventData: map[string]interface{}{
+			"deletion_type": "single",
+			"target_msg_id": "discord-snowflake",
+			"target_uuid":   "discord-snowflake", // discord: native id == internal id
+		},
+	}
+	require.NoError(t, c.processDeletionEvent(context.Background(), raw))
+	require.NotNil(t, got, "the deletion must be handled (not buffered) when target_uuid is supplied")
+	assert.Equal(t, "discord-snowflake", got.EventData["target_uuid"], "the supplied uuid is preserved for the frontend match")
+}
+
+// A native deletion (no target_uuid) still resolves the internal UUID via the registry.
+func TestProcessDeletionEvent_SingleFallsBackToRegistry(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	var got *models.RawChatMessage
+	c := newDeletionTestConsumer(t, mr, &got)
+	require.NoError(t, c.msgIDRegistry.Add(context.Background(), "twitch", "ch1", "native-1", "internal-uuid-1"))
+
+	raw := &models.RawChatMessage{
+		Platform: "twitch", ChannelID: "ch1", EventType: "message_deletion",
+		EventData: map[string]interface{}{"deletion_type": "single", "target_msg_id": "native-1"},
+	}
+	require.NoError(t, c.processDeletionEvent(context.Background(), raw))
+	require.NotNil(t, got)
+	assert.Equal(t, "internal-uuid-1", got.EventData["target_uuid"], "the registry resolves the native id to our internal uuid")
+}
+
+// A native deletion for a message not yet in the registry is buffered, not handled.
+func TestProcessDeletionEvent_SingleBuffersWhenUnknown(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	var got *models.RawChatMessage
+	c := newDeletionTestConsumer(t, mr, &got)
+
+	raw := &models.RawChatMessage{
+		Platform: "twitch", ChannelID: "ch1", EventType: "message_deletion",
+		EventData: map[string]interface{}{"deletion_type": "single", "target_msg_id": "unregistered"},
+	}
+	require.NoError(t, c.processDeletionEvent(context.Background(), raw))
+	assert.Nil(t, got, "an unresolved native deletion is buffered, not handled")
+}
+
 func TestStreamConsumer_ProcessAndAckRoutesDLQOnPermanentFailure(t *testing.T) {
 	mr, err := miniredis.Run()
 	require.NoError(t, err)
