@@ -598,7 +598,6 @@ func main() {
 		adminAPI.POST("/users/:id/ban", proxyHandler.ForwardRequest)
 		adminAPI.POST("/users/:id/unban", proxyHandler.ForwardRequest)
 		adminAPI.GET("/users/banned", proxyHandler.ForwardRequest)
-		adminAPI.GET("/users/:id/overlays", proxyHandler.ForwardRequest) // -> overlay-manager
 
 		// Stats (-> auth-service)
 		adminAPI.GET("/stats", proxyHandler.ForwardRequest)
@@ -613,6 +612,7 @@ func main() {
 		adminAPI.GET("/overlays", proxyHandler.ForwardRequest)
 		adminAPI.GET("/overlays/active", statsHandler.GetActiveOverlays) // local: Redis scan
 		adminAPI.GET("/overlays/:id/sources", proxyHandler.ForwardRequest)
+		adminAPI.GET("/user-overlays/:id", proxyHandler.ForwardRequest) // overlays for a specific user
 		adminAPI.GET("/sources", proxyHandler.ForwardRequest)
 
 		// Maintenance windows (-> overlay-manager)
