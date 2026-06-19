@@ -225,6 +225,10 @@ func classifySystemEvent(eventType string, value *models.EventValue) (tier strin
 		// Permission errors are critical - high priority, long duration
 		return "high", 60
 
+	case "listener_deprecation_notice":
+		// Migration nudge - high priority so users notice, long duration
+		return "high", 60
+
 	default:
 		return "medium", 15
 	}

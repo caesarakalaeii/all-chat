@@ -280,6 +280,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0017: Two-Phase Deprecation of the Twitch IRC Listener
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: The IRC listener is being retired for EventSub, but a streamer's source only moves when they re-add their Twitch source — killing IRC silently would lose chat for IRC-only channels with no warning and no obvious fix
+**Decision**: A two-phase env-var gate `TWITCH_IRC_DEPRECATION_MODE` (`off`→`warn`→`enforce`): `warn` keeps serving chat and publishes a `listener_deprecation_notice` system event to every connected source every 5m (reusing the system-event pipeline); `enforce` empties the desired set so the listener joins no channels
+**Impact**: Reversible, no-code rollout; users warned in-overlay with a re-add CTA before chat stops; notice fan-out is duplicate-free across replicas via leadership-by-join; fail-safe default (unknown value = off)
+**→ Read**: [0017-twitch-irc-listener-deprecation.md](./0017-twitch-irc-listener-deprecation.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

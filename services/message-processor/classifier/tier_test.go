@@ -260,3 +260,9 @@ func TestClassifyUnknownEventType(t *testing.T) {
 	assert.Equal(t, "medium", tier)
 	assert.Equal(t, 15, duration)
 }
+
+func TestClassifyListenerDeprecationNotice(t *testing.T) {
+	tier, duration := ClassifyEvent("system", "listener_deprecation_notice", nil)
+	assert.Equal(t, "high", tier)
+	assert.Equal(t, 60, duration)
+}

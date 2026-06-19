@@ -89,6 +89,11 @@ type Manager struct {
 	statusPublisher         *status.Publisher        // Publishes platform status to Redis Pub/Sub
 	initialSyncDone         bool                     // Set to true after the first SyncChannels completes (legacy, kept for vet)
 
+	// IRC listener deprecation gate (ADR-0017). Configured once at startup via
+	// SetDeprecationConfig before Start(); read-only thereafter.
+	deprecation     DeprecationConfig
+	noticePublisher DeprecationNoticePublisher // nil unless deprecation warn mode is active
+
 	// Atomic fields for lock-free health probe reads (F-01).
 	// These shadow the mutex-protected values so that liveness/readiness probe
 	// HTTP handlers can read them without competing for m.mu.
@@ -177,6 +182,20 @@ func (m *Manager) excludeEventSubOwnedChannels(ctx context.Context, desired []st
 	return kept
 }
 
+// SetDeprecationConfig configures the IRC-listener deprecation gate (ADR-0017).
+// Must be called before Start(). publisher may be nil when no notices are sent
+// (off or enforce mode); a non-positive NoticeInterval defaults to
+// DefaultDeprecationNoticeInterval.
+func (m *Manager) SetDeprecationConfig(cfg DeprecationConfig, publisher DeprecationNoticePublisher) {
+	if cfg.NoticeInterval <= 0 {
+		cfg.NoticeInterval = DefaultDeprecationNoticeInterval
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deprecation = cfg
+	m.noticePublisher = publisher
+}
+
 // SetStatusPublisher injects the status publisher after construction
 func (m *Manager) SetStatusPublisher(pub *status.Publisher) {
 	m.mu.Lock()
@@ -208,6 +227,17 @@ func (m *Manager) Start(ctx context.Context) error {
 		go m.listenForChanges(ctx)
 	} else {
 		m.logger.Warn("Database connection not configured, skipping LISTEN/NOTIFY watcher")
+	}
+
+	// IRC deprecation WARN phase (ADR-0017): periodically nudge every connected
+	// source to migrate. Only runs when a notice publisher is wired; enforce mode
+	// has no connected sources to notify, off mode has nothing to say.
+	if m.deprecation.Mode == DeprecationWarn && m.noticePublisher != nil {
+		m.wg.Add(1)
+		go m.deprecationNoticeLoop(ctx)
+		m.logger.Warn("IRC listener DEPRECATED (warn): publishing migration notices to connected sources",
+			zap.Duration("notice_interval", m.deprecation.NoticeInterval),
+		)
 	}
 
 	m.logger.Info("Channel manager started",
@@ -279,6 +309,70 @@ func (m *Manager) syncLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// deprecationNoticeLoop periodically reminds every connected source that the IRC
+// listener is being retired (ADR-0017). It runs only during the warn phase.
+func (m *Manager) deprecationNoticeLoop(ctx context.Context) {
+	defer m.wg.Done()
+
+	ticker := time.NewTicker(m.deprecation.NoticeInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.publishDeprecationNotices(ctx)
+		case <-m.stopChan:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// publishDeprecationNotices emits one migration notice per (overlay, channel) for
+// every currently-connected channel. Iterating connected channels (rather than the
+// full desired set) is what scopes notices to "connected sources" and naturally
+// deduplicates across listener replicas: a channel is only in this pod's
+// activeChans if this pod won its leadership lease and joined it.
+func (m *Manager) publishDeprecationNotices(ctx context.Context) {
+	if m.noticePublisher == nil {
+		return
+	}
+
+	channels := m.GetActiveChannels()
+	var sent, failed int
+	for _, ch := range channels {
+		overlayIDs, err := m.repo.GetOverlayIDsForChannel(ctx, ch)
+		if err != nil {
+			m.logger.Warn("Deprecation notice: failed to resolve overlays for channel",
+				zap.String("channel", ch),
+				zap.Error(err),
+			)
+			continue
+		}
+		for _, overlayID := range overlayIDs {
+			if err := m.noticePublisher.PublishDeprecationNotice(ctx, overlayID, ch); err != nil {
+				failed++
+				m.logger.Warn("Deprecation notice: failed to publish",
+					zap.String("channel", ch),
+					zap.String("overlay_id", overlayID),
+					zap.Error(err),
+				)
+				continue
+			}
+			sent++
+		}
+	}
+
+	if sent > 0 || failed > 0 {
+		m.logger.Info("Published IRC deprecation migration notices",
+			zap.Int("sent", sent),
+			zap.Int("failed", failed),
+			zap.Int("channels", len(channels)),
+		)
 	}
 }
 
@@ -441,6 +535,19 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 	desiredChannels, err := m.repo.GetUniqueChannels(ctx)
 	if err != nil {
 		return err
+	}
+
+	// IRC deprecation ENFORCE phase (ADR-0017): the listener is retired and must
+	// not join any Twitch channel. Empty the desired set so the normal PART path
+	// disconnects anything still joined and no new JOINs are issued. Users keep
+	// chat by re-adding their source, which routes them to the EventSub listener.
+	if m.deprecation.Mode == DeprecationEnforce {
+		if len(desiredChannels) > 0 {
+			m.logger.Warn("IRC deprecation ENFORCE: refusing to join Twitch channels; users must re-add their source to migrate to EventSub",
+				zap.Int("suppressed_sources", len(desiredChannels)),
+			)
+		}
+		desiredChannels = nil
 	}
 
 	// Drop syntactically-invalid Twitch logins before they reach the IRC layer.

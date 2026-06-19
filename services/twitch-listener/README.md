@@ -1,5 +1,11 @@
 # Twitch Listener
 
+> **⚠️ DEPRECATED — being retired in favour of the EventSub listener.** See
+> [ADR-0017](../../docs/adr/0017-twitch-irc-listener-deprecation.md). This service is in a
+> two-phase shutdown controlled by `TWITCH_IRC_DEPRECATION_MODE` (see
+> [Deprecation](#deprecation-adr-0017) below). Build new Twitch chat features on
+> `services/twitch-eventsub-listener`, not here.
+
 The Twitch Listener service connects to Twitch IRC, monitors configured channels, parses chat messages, and publishes them to Redis Streams for processing by the Message Processor.
 
 ## Features
@@ -63,7 +69,30 @@ SOURCE_MANAGER_SECRET=dev-service-secret
 # Server configuration
 PORT=8085
 LOG_LEVEL=info  # debug, info, warn, error
+
+# Deprecation gate (ADR-0017) — see "Deprecation" section below
+TWITCH_IRC_DEPRECATION_MODE=off          # off | warn | enforce
+TWITCH_IRC_DEPRECATION_NOTICE_INTERVAL=5m # Go duration; how often warn-phase notices are sent
 ```
+
+## Deprecation (ADR-0017)
+
+The IRC listener is being retired in favour of the EventSub listener. Cutover is a two-phase,
+env-var-driven rollout (a pod restart applies each change):
+
+| `TWITCH_IRC_DEPRECATION_MODE` | Behaviour |
+|---|---|
+| `off` (default) | Normal operation. |
+| `warn` | Still joins channels and serves chat, **and** publishes a `listener_deprecation_notice` system event to every **connected** source every `TWITCH_IRC_DEPRECATION_NOTICE_INTERVAL` (default 5m). The notice renders in the overlay activity feed asking the streamer to re-add their Twitch source (which migrates them to EventSub). |
+| `enforce` | Joins **no** channels (`SyncChannels` empties the desired set, parting anything still joined). IRC chat stops; users restore it by re-adding their Twitch source. |
+
+Notices are scoped to channels this pod has actually joined (`activeChans`), so across a scaled
+replica set each connected source is notified exactly once (leadership-by-join, ADR-0007). Unknown or
+empty mode values resolve to `off` (fail-safe — a typo can never stop the listener serving chat).
+
+**Rollout runbook**: set `warn` and leave it for a grace period so streamers see the notice and
+migrate, then set `enforce`, then remove the service. Do not jump straight to `enforce` — that skips
+the user-facing warning.
 
 ## Getting Twitch OAuth Token
 

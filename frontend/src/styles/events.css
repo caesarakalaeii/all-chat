@@ -287,6 +287,23 @@
     margin-top: 0.5rem;
   }
 
+  /* Listener deprecation (IRC retirement) migration notice — ADR-0017 */
+  .event-type-listener_deprecation_notice {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(217, 119, 6, 0.14) 100%);
+    border: 3px solid #f59e0b;
+    border-left: 8px solid #d97706;
+    box-shadow:
+      0 0 24px rgba(245, 158, 11, 0.4),
+      0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .event-type-listener_deprecation_notice .event-warning-message {
+    padding: 0.5rem;
+    background: rgba(217, 119, 6, 0.18);
+    border-radius: 0.375rem;
+    margin-top: 0.5rem;
+  }
+
   /* Customization helpers */
   .event-message .event-content {
     transition: all 0.3s ease-in-out;

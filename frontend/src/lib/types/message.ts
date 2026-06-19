@@ -40,6 +40,7 @@ export type EventType =
   // System
   | 'token_expiration_warning'
   | 'source_permission_error'
+  | 'listener_deprecation_notice'
   // Deletion events
   | 'message_deletion';
 
