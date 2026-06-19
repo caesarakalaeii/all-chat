@@ -280,6 +280,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0017: Chat Moderation Write-Path
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-19
+**Problem**: All-Chat is read-only end-to-end; streamers want to delete/timeout/ban from the dashboard, requiring the first authenticated write to platform moderation APIs
+**Decision**: New `moderation-service` reached via the gateway proxy; broadcaster's-own-token identity; owner-only authz (+ no shared_overlay); reuse the existing `message_deletion` reflect-back pipeline; least-privilege opt-in re-consent minimised to enabled actions; impersonated moderation allowed but attributed to the admin; Twitch full, Kick/Discord new clients, YouTube gated, TikTok unsupported
+**Impact**: Isolates a high-blast-radius capability with its own authz/audit/rate-limits; zero new event types; amends ADR-0012 (force-ssl re-added only for opt-in YouTube moderators)
+**→ Read**: [0017-chat-moderation-write-path.md](./0017-chat-moderation-write-path.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -401,13 +412,13 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 15
+**Total ADRs**: 17
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-06-03
+**Last Updated**: 2026-06-19
