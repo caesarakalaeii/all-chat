@@ -246,6 +246,18 @@ LISTEN source_changes;
 NOTIFY source_changes, '{"action": "added", "overlay_id": "...", "platform": "youtube"}'
 ```
 
+**Heartbeat writes do not notify.** Listeners keep their active sources fresh by
+calling `POST /sources/activate` (`ActivateSource`) once per poll cycle (~30s),
+which bumps `is_active = true, updated_at = NOW()` so the cleanup job doesn't mark
+the source stale. Because `is_active` is already `true`, the only real change is
+`updated_at`. Migration `059_scope_source_change_notify.sql` scopes the
+`chat_source_changes` UPDATE trigger to listener-relevant columns
+(`is_active`, `channel_id`, `channel_name`, `channel_handle`, `platform`,
+`overlay_id`, `auth_required`, `config`), so these heartbeat writes do **not** emit
+a notification. Without this, every heartbeat re-published demand to every
+listener once per cycle per overlay, churning listeners ("source flapping").
+INSERT and DELETE always notify.
+
 ---
 
 ## Testing
