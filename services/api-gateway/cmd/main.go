@@ -439,12 +439,18 @@ func main() {
 		publicAPI.GET("/auth/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/twitch/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/twitch/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
+		publicAPI.GET("/auth/twitch/moderation/:overlay_id", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
+		publicAPI.GET("/auth/youtube/moderation/:overlay_id", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
+		publicAPI.GET("/auth/kick/moderation/:overlay_id", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/add-source/:overlay_id", proxyHandler.ForwardRequest)
@@ -565,6 +571,14 @@ func main() {
 
 		// Internal API routes (protected - used by other services)
 		protectedAPI.POST("/internal/overlays/:id/sources/auto", proxyHandler.ForwardRequest)
+
+		// Moderation service routes (ADR-0017) — owner-only chat moderation.
+		// Ownership/source authorization is enforced again in moderation-service.
+		protectedAPI.GET("/moderation/overlays/:id/capabilities", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/overlays/:id/delete", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/overlays/:id/timeout", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/overlays/:id/ban", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/overlays/:id/unban", proxyHandler.ForwardRequest)
 
 		// Share service routes (all protected - require JWT auth)
 		protectedAPI.GET("/users/search", proxyHandler.ForwardRequest)              // -> share-service
