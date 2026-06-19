@@ -48,6 +48,11 @@ const (
 	// Allows premium users to choose how the innertube listener picks among
 	// multiple concurrent live streams (most viewers, title match, etc.).
 	GateStreamSelection = "stream_selection"
+
+	// GateModeration is the feature key for cross-platform chat moderation
+	// (ADR-0017). Seeded premium-only so the write-path rolls out to a small
+	// cohort first; flip to is_premium=false to graduate to all users.
+	GateModeration = "moderation"
 )
 
 // FeatureGate represents a single row from the feature_gates table.
