@@ -185,6 +185,53 @@ func TestBuildChatTags_SharedChat(t *testing.T) {
 	}
 }
 
+// TestBuildChatTags_PredictionBadgeIndexTranslatedToColor verifies that the
+// EventSub-only "predictions" badge id (a numeric outcome index) is translated
+// into the color-coded version Twitch's badge image API uses (e.g. "blue-1",
+// "pink-2"). Without this, the badge enricher cannot resolve an icon URL and the
+// prediction badge silently disappears from overlays.
+func TestBuildChatTags_PredictionBadgeIndexTranslatedToColor(t *testing.T) {
+	cases := []struct {
+		id   string
+		want string
+	}{
+		{"0", "blue-1"},  // first outcome (Blue) in the common two-outcome prediction
+		{"1", "pink-2"},  // second outcome (Pink) in the common two-outcome prediction
+		{"2", "blue-3"},  // additional multi-outcome outcomes use blue-N
+		{"9", "blue-10"}, // tenth (max) outcome
+	}
+	for _, tc := range cases {
+		event := &eventsub.ChatMessageEvent{
+			BroadcasterUserID: "12345",
+			MessageID:         "msg-pred",
+			ChatterUserLogin:  "viewer",
+			Message:           eventsub.ChatMessageBody{Text: "hi"},
+			Badges:            []eventsub.ChatBadge{{SetID: "predictions", ID: tc.id, Info: "outcome title"}},
+		}
+		want := "predictions/" + tc.want
+		if got := buildChatTags(event)["badges"]; got != want {
+			t.Errorf("prediction id %q: badges tag = %q, want %q", tc.id, got, want)
+		}
+	}
+}
+
+// TestBuildChatTags_PredictionBadgeInSharedChat verifies the same translation is
+// applied to source badges on shared-chat messages.
+func TestBuildChatTags_PredictionBadgeInSharedChat(t *testing.T) {
+	tags := buildChatTags(&eventsub.ChatMessageEvent{
+		BroadcasterUserID:       "1",
+		MessageID:               "m",
+		ChatterUserLogin:        "v",
+		Message:                 eventsub.ChatMessageBody{Text: "hi"},
+		SourceBroadcasterUserID: "999",
+		SourceMessageID:         "src-msg",
+		SourceBadges:            []eventsub.ChatBadge{{SetID: "predictions", ID: "1", Info: "outcome title"}},
+	})
+	if got := tags["source-badges"]; got != "predictions/pink-2" {
+		t.Errorf("source-badges = %q, want %q", got, "predictions/pink-2")
+	}
+}
+
 func TestConditionBroadcasterID(t *testing.T) {
 	tests := []struct {
 		name      string
