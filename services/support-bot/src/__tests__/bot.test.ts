@@ -212,6 +212,8 @@ function buildMessage(overrides: Partial<{
   isThread: boolean;
   isBotThread: boolean;
   mentionsBot: boolean;
+  mentionsEveryone: boolean;
+  mentionsViaRole: boolean;
   channelSend: ReturnType<typeof vi.fn>;
   startThread: ReturnType<typeof vi.fn>;
 }> = {}) {
@@ -221,6 +223,8 @@ function buildMessage(overrides: Partial<{
     isThread: false,
     isBotThread: false,
     mentionsBot: true,
+    mentionsEveryone: false,
+    mentionsViaRole: false,
     channelSend: vi.fn().mockResolvedValue({}),
     startThread: vi.fn().mockResolvedValue({ id: 'new-thread', send: vi.fn().mockResolvedValue({}) }),
   };
@@ -258,7 +262,19 @@ function buildMessage(overrides: Partial<{
     channelId: 'channel1',
     attachments: new Map(),
     mentions: {
-      has: vi.fn().mockReturnValue(opts.mentionsBot),
+      // Faithful model of discord.js MessageMentions.has(userId, options):
+      // a direct user mention lives in `users`, @here/@everyone is `everyone`,
+      // and a role ping is `roles`. The options let callers exclude categories.
+      has: vi.fn().mockImplementation((id: string, options: {
+        ignoreDirect?: boolean;
+        ignoreRoles?: boolean;
+        ignoreEveryone?: boolean;
+      } = {}) => {
+        if (!options.ignoreDirect && opts.mentionsBot && id === '123456789') return true;
+        if (!options.ignoreEveryone && opts.mentionsEveryone) return true;
+        if (!options.ignoreRoles && opts.mentionsViaRole) return true;
+        return false;
+      }),
     },
     reply: vi.fn().mockResolvedValue({ id: 'reply1', startThread: vi.fn().mockResolvedValue({ id: 'r-thread', send: vi.fn().mockResolvedValue({}) }) }),
     startThread: opts.startThread,
@@ -297,6 +313,48 @@ describe('MessageCreate handler', () => {
     await handler!(msg);
 
     expect(mockQueryCodebase).not.toHaveBeenCalled();
+  });
+
+  it('ignores @everyone/@here even though the bot is technically mentioned', async () => {
+    await startBot(testConfig, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const msg = buildMessage({
+      content: '@everyone please read this',
+      mentionsBot: false,
+      mentionsEveryone: true,
+    });
+    await handler!(msg);
+
+    expect(mockQueryCodebase).not.toHaveBeenCalled();
+  });
+
+  it('ignores role pings that include the bot', async () => {
+    await startBot(testConfig, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const msg = buildMessage({
+      content: '<@&999> heads up team',
+      mentionsBot: false,
+      mentionsViaRole: true,
+    });
+    await handler!(msg);
+
+    expect(mockQueryCodebase).not.toHaveBeenCalled();
+  });
+
+  it('still responds to a direct @mention sent alongside @everyone', async () => {
+    await startBot(testConfig, createMockMemoryRepo());
+    const handler = getEventHandler(Events.MessageCreate);
+
+    const msg = buildMessage({
+      content: '<@123456789> @everyone how does twitch work?',
+      mentionsBot: true,
+      mentionsEveryone: true,
+    });
+    await handler!(msg);
+
+    expect(mockQueryCodebase).toHaveBeenCalled();
   });
 
   it('strips mention tags from content before calling queryCodebase', async () => {
