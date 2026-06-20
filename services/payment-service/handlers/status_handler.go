@@ -26,7 +26,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// StatusHandler serves the user's premium/Patreon status and disconnect.
+// StatusHandler serves a subject's premium/Patreon status and disconnect, for both
+// streamer users (ADR-0018) and viewers (ADR-0019).
 type StatusHandler struct {
 	subRepo    *repository.SubscriptionRepository
 	tokenRepo  *repository.TokenRepository
@@ -39,7 +40,23 @@ func NewStatusHandler(subRepo *repository.SubscriptionRepository, tokenRepo *rep
 	return &StatusHandler{subRepo: subRepo, tokenRepo: tokenRepo, recomputer: recomputer, logger: logger}
 }
 
-// Status returns the caller's Patreon connection / subscription state.
+// statusResponse renders a subscription as the JSON status contract.
+func statusResponse(c *gin.Context, sub *repository.Subscription, found bool) {
+	if !found {
+		c.JSON(http.StatusOK, gin.H{"connected": false})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"connected":  true,
+		"status":     sub.Status,
+		"tier_id":    sub.TierID,
+		"cents":      sub.Cents,
+		"renews_at":  sub.CurrentPeriodEnd,
+		"is_premium": sub.Status == patreon.StatusActive,
+	})
+}
+
+// Status returns the caller's (streamer) Patreon connection / subscription state.
 func (h *StatusHandler) Status(c *gin.Context) {
 	userID := c.GetString("user_id")
 	if userID == "" {
@@ -53,24 +70,29 @@ func (h *StatusHandler) Status(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load subscription"})
 		return
 	}
-	if !found {
-		c.JSON(http.StatusOK, gin.H{"connected": false})
+	statusResponse(c, sub, found)
+}
+
+// ViewerStatus returns the caller's (viewer) Patreon connection / subscription state.
+func (h *StatusHandler) ViewerStatus(c *gin.Context) {
+	viewerID := c.GetString("viewer_id")
+	if viewerID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"connected":  true,
-		"status":     sub.Status,
-		"tier_id":    sub.TierID,
-		"cents":      sub.Cents,
-		"renews_at":  sub.CurrentPeriodEnd,
-		"is_premium": sub.Status == patreon.StatusActive,
-	})
+	sub, found, err := h.subRepo.GetByViewerID(c.Request.Context(), viewerID)
+	if err != nil {
+		h.logger.Error("Failed to load viewer subscription", zap.String("viewer_id", viewerID), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load subscription"})
+		return
+	}
+	statusResponse(c, sub, found)
 }
 
-// Disconnect unlinks the caller's Patreon account, marks their subscriptions former,
-// and recomputes premium (which revokes the subscription-derived grant; an admin
-// override, if any, is preserved).
+// Disconnect unlinks the caller's (streamer) Patreon account, marks their
+// subscriptions former, and recomputes premium (which revokes the
+// subscription-derived grant; an admin override, if any, is preserved).
 func (h *StatusHandler) Disconnect(c *gin.Context) {
 	userID := c.GetString("user_id")
 	if userID == "" {
@@ -79,7 +101,7 @@ func (h *StatusHandler) Disconnect(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 
-	if err := h.tokenRepo.Delete(ctx, userID); err != nil {
+	if err := h.tokenRepo.DeleteByUserID(ctx, userID); err != nil {
 		h.logger.Error("Failed to delete Patreon token", zap.String("user_id", userID), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disconnect"})
 		return
@@ -91,6 +113,37 @@ func (h *StatusHandler) Disconnect(c *gin.Context) {
 	}
 	if _, err := h.recomputer.Recompute(ctx, userID); err != nil {
 		h.logger.Error("Failed to recompute premium after disconnect", zap.String("user_id", userID), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disconnect"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Patreon disconnected"})
+}
+
+// ViewerDisconnect unlinks the caller's (viewer) Patreon account, marks their
+// subscriptions former, and recomputes viewer premium (which revokes the
+// subscription-derived grant; an admin override or streamer inheritance, if any,
+// is preserved by RecomputeViewer).
+func (h *StatusHandler) ViewerDisconnect(c *gin.Context) {
+	viewerID := c.GetString("viewer_id")
+	if viewerID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+	ctx := c.Request.Context()
+
+	if err := h.tokenRepo.DeleteByViewerID(ctx, viewerID); err != nil {
+		h.logger.Error("Failed to delete viewer Patreon token", zap.String("viewer_id", viewerID), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disconnect"})
+		return
+	}
+	if err := h.subRepo.MarkFormerByViewerID(ctx, viewerID); err != nil {
+		h.logger.Error("Failed to mark viewer subscriptions former", zap.String("viewer_id", viewerID), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disconnect"})
+		return
+	}
+	if _, err := h.recomputer.RecomputeViewer(ctx, viewerID); err != nil {
+		h.logger.Error("Failed to recompute viewer premium after disconnect", zap.String("viewer_id", viewerID), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disconnect"})
 		return
 	}

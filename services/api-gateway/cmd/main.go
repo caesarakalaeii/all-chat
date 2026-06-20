@@ -601,6 +601,11 @@ func main() {
 		protectedAPI.GET("/payment/patreon/connect", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/payment/status", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/payment/patreon/connection", proxyHandler.ForwardRequest)
+		// Viewer premium (ADR-0019) — viewer-JWT authenticated (JWTAuth accepts both
+		// user and viewer tokens; payment-service reads viewer_id).
+		protectedAPI.GET("/payment/viewer/patreon/connect", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/payment/viewer/status", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/payment/viewer/patreon/connection", proxyHandler.ForwardRequest)
 		// User-facing upcoming maintenance (-> overlay-manager)
 		protectedAPI.GET("/maintenance/upcoming", proxyHandler.ForwardRequest)
 	}

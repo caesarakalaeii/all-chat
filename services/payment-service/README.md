@@ -8,6 +8,15 @@ active patron of all-chat's campaign at or above a configurable tier, they recei
 premium. Webhooks plus a reconcile job keep entitlement current and revoke it when a
 subscription lapses.
 
+**Viewer split (ADR-0019).** The same service/webhook/reconcile pipeline also grants a
+cheaper **viewer** product — `viewers.is_premium`, the cosmetic chat badge — to a
+**pure viewer** who has no streamer account. A Patreon connection is a polymorphic
+**subject** (a streamer `users` account *or* a viewer identity), chosen by which
+connect flow is used; the product follows the subject, gated by a per-product cents
+threshold (`PATREON_VIEWER_MIN_TIER_CENTS` for viewers, cheaper than the streamer
+`PATREON_MIN_TIER_CENTS`). One Patreon account maps to exactly one subject. Everything
+below applies to both products unless noted.
+
 ## Role in the system: a second writer of `users.is_premium`
 
 `users.is_premium` is a **derived column** with two independent inputs (ADR-0018):
@@ -27,6 +36,22 @@ is_premium = (users.premium_admin_override IS TRUE)
 All existing readers (`shared/middleware/premium.go`, `moderation-service`) are
 unchanged — they keep reading `users.is_premium`.
 
+### Viewer premium (`viewers.is_premium`, ADR-0019)
+
+`viewers.is_premium` is derived the same way by `shared/premium.RecomputeViewer`, and
+is the single writer of that column:
+
+```
+viewers.is_premium = (viewers.premium_admin_override IS TRUE)
+                     OR (override IS NULL AND (<active 'viewer'-product subscription>
+                                               OR <linked streamer users.is_premium>))
+```
+
+The inheritance term preserves the badge a streamer's own viewer identity already got
+via `viewer_sessions.user_id`, so the message-processor `ViewerBadgeEnricher` and the
+viewer JWT readers stay unchanged. `auth-service` (admin override, viewer↔streamer
+link) and `payment-service` (viewer subscription) both call `RecomputeViewer`.
+
 ## Endpoints
 
 | Method | Path | Auth | Purpose |
@@ -35,7 +60,10 @@ unchanged — they keep reading `users.is_premium`.
 | `GET`  | `/api/v1/payment/patreon/callback` | one-time Redis state | OAuth callback; links account, grants premium |
 | `GET`  | `/api/v1/payment/status` | user JWT | `{connected, status, tier_id, cents, renews_at, is_premium}` |
 | `DELETE` | `/api/v1/payment/patreon/connection` | user JWT | Unlink Patreon; revoke subscription-derived premium |
-| `POST` | `/api/v1/webhooks/patreon` | Patreon HMAC | `members:create/update/delete` |
+| `GET`  | `/api/v1/payment/viewer/patreon/connect` | viewer JWT | Start viewer OAuth; returns `{auth_url}` (ADR-0019) |
+| `GET`  | `/api/v1/payment/viewer/status` | viewer JWT | Viewer subscription status |
+| `DELETE` | `/api/v1/payment/viewer/patreon/connection` | viewer JWT | Unlink viewer Patreon; revoke viewer premium |
+| `POST` | `/api/v1/webhooks/patreon` | Patreon HMAC | `members:create/update/delete` (resolves to either subject) |
 | `GET`  | `/health/live`, `/health/ready`, `/metrics` | none | Ops |
 
 ## Webhook signature (the one deviation from the Twitch template)
@@ -69,7 +97,8 @@ keep no separate grace timer.
 | `PATREON_CAMPAIGN_ID` | yes | – | all-chat's campaign id |
 | `PATREON_REDIRECT_URL` | yes | – | `https://<host>/api/v1/payment/patreon/callback` |
 | `PATREON_WEBHOOK_SECRET` | yes | – | webhook HMAC key (secret) |
-| `PATREON_MIN_TIER_CENTS` | no | `500` | qualifying threshold |
+| `PATREON_MIN_TIER_CENTS` | no | `500` | streamer-product qualifying threshold |
+| `PATREON_VIEWER_MIN_TIER_CENTS` | no | `200` | viewer-product qualifying threshold (ADR-0019) |
 | `PAYMENT_RECONCILE_INTERVAL` | no | `6h` | reconcile cadence |
 | `PATREON_TOKEN_REFRESH_BUFFER` | no | `24h` | refresh tokens expiring within this window |
 | `PAYMENT_RECONCILE_BATCH_SIZE` | no | `500` | connections re-queried per pass |

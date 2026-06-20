@@ -184,7 +184,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `source-manager` | Leader election, active source tracking, demand coordination |
 | `share-service` | Shareable overlay link generation |
 | `moderation-service` | Cross-platform chat moderation write-path: delete / timeout / ban (ADR-0017) |
-| `payment-service` | Patreon premium entitlements: grants `users.is_premium` from subscriptions (ADR-0018) |
+| `payment-service` | Patreon premium entitlements: grants `users.is_premium` (streamer, ADR-0018) and `viewers.is_premium` (viewer split, ADR-0019) from subscriptions |
 | `token-refresh-service` | OAuth token refresh on schedule |
 
 ### Tech Stack

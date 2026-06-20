@@ -113,7 +113,7 @@ Each service has a detailed README:
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
 - share-service — Shareable overlay links (`services/share-service/`, no README yet)
 - [moderation-service](./services/moderation-service/README.md) - Cross-platform chat moderation write-path (delete/timeout/ban, ADR-0017)
-- [payment-service](./services/payment-service/README.md) - Patreon premium entitlements; second writer of users.is_premium (ADR-0018)
+- [payment-service](./services/payment-service/README.md) - Patreon premium entitlements; writes users.is_premium (streamer, ADR-0018) + viewers.is_premium (viewer split, ADR-0019)
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 - [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
 
