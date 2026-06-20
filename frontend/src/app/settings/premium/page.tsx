@@ -135,13 +135,27 @@ function PremiumContent() {
           {loading ? (
             <Skeleton className="h-10 w-full" />
           ) : !status?.connected ? (
-            <div className="flex items-center justify-between gap-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm text-text-sub">
+                  Back All-Chat on Patreon to unlock premium features automatically.
+                </p>
+                <Button onClick={handleConnect} disabled={connecting}>
+                  {connecting ? 'Redirecting…' : 'Connect Patreon'}
+                </Button>
+              </div>
               <p className="text-sm text-text-sub">
-                Back All-Chat on Patreon to unlock premium features automatically.
+                Not a patron yet?{' '}
+                <a
+                  href="https://patreon.com/all_chat"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-twitch hover:underline"
+                >
+                  Subscribe on Patreon
+                </a>
+                , then connect.
               </p>
-              <Button onClick={handleConnect} disabled={connecting}>
-                {connecting ? 'Redirecting…' : 'Connect Patreon'}
-              </Button>
             </div>
           ) : (
             <div className="space-y-4">
