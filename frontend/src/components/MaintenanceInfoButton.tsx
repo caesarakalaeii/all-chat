@@ -105,7 +105,7 @@ export function MaintenanceInfoButton() {
                   <p className={clsx('font-semibold', active ? 'text-amber-300' : 'text-blue-300')}>
                     {active ? 'Maintenance in progress' : 'Scheduled maintenance'}
                   </p>
-                  <p className="mt-0.5 text-text">{mw.title}</p>
+                  <p className="mt-0.5 font-medium text-text">{mw.title}</p>
                   <p className="mt-0.5 text-text-sub">
                     {active
                       ? `Expected completion: ${DATE_FORMAT.format(new Date(mw.ends_at))}`
@@ -113,7 +113,9 @@ export function MaintenanceInfoButton() {
                           new Date(mw.ends_at)
                         )}`}
                   </p>
-                  {mw.description && <p className="mt-1 text-text-dim">{mw.description}</p>}
+                  {mw.description && (
+                    <p className="mt-1 leading-relaxed text-text-sub">{mw.description}</p>
+                  )}
                 </div>
               )
             })}
