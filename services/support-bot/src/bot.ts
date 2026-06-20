@@ -189,7 +189,12 @@ export async function startBot(config: BotConfig, memoryRepo: MemoryRepository):
         botThreadIds.has(message.channelId)
       );
 
-    const isMentioned = message.mentions.has(client.user!.id);
+    // Only treat a direct user ping as a summon. @here/@everyone and role pings
+    // (which would otherwise satisfy mentions.has) must not trigger the bot.
+    const isMentioned = message.mentions.has(client.user!.id, {
+      ignoreEveryone: true,
+      ignoreRoles: true,
+    });
 
     if (!inBotThread && !isMentioned) return;
 
