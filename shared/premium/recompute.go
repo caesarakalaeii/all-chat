@@ -18,8 +18,9 @@
 // independent inputs, so existing readers stay unchanged and the multiple writers
 // never clobber each other.
 //
-//   - users.is_premium (ADR-0018): admin override + active Patreon subscription.
-//     Recompute. Readers: shared/middleware/premium.go, moderation-service.
+//   - users.is_premium (ADR-0018, ADR-0020): admin override + (active Patreon
+//     subscription OR beta-tester). Recompute. Readers: shared/middleware/premium.go,
+//     moderation-service.
 //   - viewers.is_premium (ADR-0019): viewer admin override + active viewer-product
 //     subscription + inheritance from a linked premium streamer. RecomputeViewer.
 //     Readers: message-processor ViewerBadgeEnricher, viewer JWT.
@@ -64,14 +65,22 @@ func NewRecomputer(db *pgxpool.Pool, logger *zap.Logger) *Recomputer {
 	return &Recomputer{db: db, logger: logger}
 }
 
-// Recompute derives users.is_premium for userID from premium_admin_override and
-// the user's premium_subscriptions, writes it, and returns the new value.
+// Recompute derives users.is_premium for userID from premium_admin_override, the
+// user's premium_subscriptions, and the beta-tester flag, writes it, and returns
+// the new value.
+//
+// The "premium half" (the non-override input to Effective) is the OR of an active
+// subscription and is_beta_tester (ADR-0020): a beta-tester is premium, the same
+// clobber-free way an admin force-grant is, while ALSO unlocking early-access gates
+// that plain premium does not (see shared/middleware.RequireEarlyAccess). An admin
+// force-deny (override FALSE) still wins over both.
 //
 // It is convergent and idempotent: the value is a pure function (Effective) of
 // the user's current rows, so calling it any number of times in any order — after
-// a webhook, a reconcile pass, or an admin write — yields the same result. The
-// read and write run in one transaction with SELECT ... FOR UPDATE so concurrent
-// recomputes for the same user are serialized (no lost-update race).
+// a webhook, a reconcile pass, or an admin write (premium override OR beta-tester)
+// — yields the same result. The read and write run in one transaction with
+// SELECT ... FOR UPDATE so concurrent recomputes for the same user are serialized
+// (no lost-update race).
 func (r *Recomputer) Recompute(ctx context.Context, userID string) (bool, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -81,15 +90,17 @@ func (r *Recomputer) Recompute(ctx context.Context, userID string) (bool, error)
 
 	var adminOverride *bool
 	var hasActiveSub bool
+	var isBetaTester bool
 	err = tx.QueryRow(ctx, `
 		SELECT u.premium_admin_override,
 		       EXISTS (
 		           SELECT 1 FROM premium_subscriptions s
 		           WHERE s.user_id = u.id AND s.status = 'active'
-		       )
+		       ),
+		       u.is_beta_tester
 		FROM users u
 		WHERE u.id = $1
-		FOR UPDATE`, userID).Scan(&adminOverride, &hasActiveSub)
+		FOR UPDATE`, userID).Scan(&adminOverride, &hasActiveSub, &isBetaTester)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("user not found: %s", userID)
 	}
@@ -97,7 +108,7 @@ func (r *Recomputer) Recompute(ctx context.Context, userID string) (bool, error)
 		return false, fmt.Errorf("failed to read premium inputs: %w", err)
 	}
 
-	effective := Effective(adminOverride, hasActiveSub)
+	effective := Effective(adminOverride, hasActiveSub || isBetaTester)
 
 	if _, err := tx.Exec(ctx,
 		"UPDATE users SET is_premium = $1 WHERE id = $2", effective, userID); err != nil {
@@ -113,6 +124,7 @@ func (r *Recomputer) Recompute(ctx context.Context, userID string) (bool, error)
 			zap.String("user_id", userID),
 			zap.Boolp("admin_override", adminOverride),
 			zap.Bool("has_active_sub", hasActiveSub),
+			zap.Bool("is_beta_tester", isBetaTester),
 			zap.Bool("is_premium", effective))
 	}
 	return effective, nil

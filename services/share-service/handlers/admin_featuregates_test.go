@@ -34,17 +34,23 @@ import (
 
 // mockFeatureGateDB satisfies featureGateDB interface for testing
 type mockFeatureGateDB struct {
-	queryRows    []FeatureGateResponse
-	queryErr     error
-	execRowsAff  int64
-	execErr      error
+	queryRows   []FeatureGateResponse
+	queryErr    error
+	execRowsAff int64
+	execErr     error
+
+	// captured args from the last UpdateFeatureGate call
+	gotIsPremium   *bool
+	gotEarlyAccess *bool
 }
 
 func (m *mockFeatureGateDB) QueryFeatureGates(_ context.Context) ([]FeatureGateResponse, error) {
 	return m.queryRows, m.queryErr
 }
 
-func (m *mockFeatureGateDB) UpdateFeatureGate(_ context.Context, key string, isPremium bool) (int64, error) {
+func (m *mockFeatureGateDB) UpdateFeatureGate(_ context.Context, key string, isPremium, earlyAccess *bool) (int64, error) {
+	m.gotIsPremium = isPremium
+	m.gotEarlyAccess = earlyAccess
 	return m.execRowsAff, m.execErr
 }
 
@@ -223,7 +229,54 @@ func TestUpdateGate_Returns400WhenBodyMissing(t *testing.T) {
 	h.UpdateGate(c)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "is_premium field required")
+	assert.Contains(t, w.Body.String(), "is_premium or early_access field required")
+}
+
+func TestUpdateGate_SetEarlyAccessTrue(t *testing.T) {
+	mockDB := &mockFeatureGateDB{execRowsAff: 1}
+	mockRedis := &mockFeatureGateRedis{}
+	h := newTestFeatureGatesHandler(mockDB, mockRedis)
+
+	body, _ := json.Marshal(map[string]interface{}{"early_access": true})
+	c, w := setupTestContext(http.MethodPatch, "/api/v1/admin/feature-gates/beta-feature", body)
+	c.Params = gin.Params{{Key: "key", Value: "beta-feature"}}
+	h.UpdateGate(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "beta-feature", resp["feature_key"])
+	assert.Equal(t, true, resp["early_access"])
+	_, hasPremium := resp["is_premium"]
+	assert.False(t, hasPremium, "is_premium should be absent when only early_access was sent")
+
+	// The handler passed early_access through and left is_premium untouched.
+	require.NotNil(t, mockDB.gotEarlyAccess)
+	assert.True(t, *mockDB.gotEarlyAccess)
+	assert.Nil(t, mockDB.gotIsPremium)
+
+	require.Len(t, mockRedis.publishedCalls, 1)
+	assert.Equal(t, "beta-feature", mockRedis.publishedCalls[0].payload)
+}
+
+func TestUpdateGate_SetEarlyAccessFalseGraduates(t *testing.T) {
+	mockDB := &mockFeatureGateDB{execRowsAff: 1}
+	mockRedis := &mockFeatureGateRedis{}
+	h := newTestFeatureGatesHandler(mockDB, mockRedis)
+
+	body, _ := json.Marshal(map[string]interface{}{"early_access": false})
+	c, w := setupTestContext(http.MethodPatch, "/api/v1/admin/feature-gates/beta-feature", body)
+	c.Params = gin.Params{{Key: "key", Value: "beta-feature"}}
+	h.UpdateGate(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, false, resp["early_access"])
+	require.NotNil(t, mockDB.gotEarlyAccess)
+	assert.False(t, *mockDB.gotEarlyAccess, "early_access=false must reach the DB (graduation), not be dropped")
 }
 
 func TestUpdateGate_Returns400WhenBodyInvalid(t *testing.T) {

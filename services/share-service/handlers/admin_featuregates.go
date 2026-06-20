@@ -18,7 +18,9 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/gin-gonic/gin"
@@ -31,6 +33,7 @@ import (
 type FeatureGateResponse struct {
 	FeatureKey  string `json:"feature_key"`
 	IsPremium   bool   `json:"is_premium"`
+	EarlyAccess bool   `json:"early_access"`
 	Description string `json:"description"`
 }
 
@@ -38,7 +41,9 @@ type FeatureGateResponse struct {
 // This allows mock injection in tests without pgxmock.
 type featureGateDB interface {
 	QueryFeatureGates(ctx context.Context) ([]FeatureGateResponse, error)
-	UpdateFeatureGate(ctx context.Context, key string, isPremium bool) (int64, error)
+	// UpdateFeatureGate updates whichever of is_premium / early_access is non-nil
+	// (ADR-0020 added early_access). Returns rows affected.
+	UpdateFeatureGate(ctx context.Context, key string, isPremium, earlyAccess *bool) (int64, error)
 }
 
 // featureGateRedis is a narrow interface over redis.Client for the feature gate handler.
@@ -53,7 +58,7 @@ type pgxFeatureGateDB struct {
 
 func (p *pgxFeatureGateDB) QueryFeatureGates(ctx context.Context) ([]FeatureGateResponse, error) {
 	rows, err := p.pool.Query(ctx,
-		"SELECT feature_key, is_premium, description FROM feature_gates ORDER BY feature_key")
+		"SELECT feature_key, is_premium, early_access, description FROM feature_gates ORDER BY feature_key")
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +67,7 @@ func (p *pgxFeatureGateDB) QueryFeatureGates(ctx context.Context) ([]FeatureGate
 	gates := make([]FeatureGateResponse, 0)
 	for rows.Next() {
 		var g FeatureGateResponse
-		if err := rows.Scan(&g.FeatureKey, &g.IsPremium, &g.Description); err != nil {
+		if err := rows.Scan(&g.FeatureKey, &g.IsPremium, &g.EarlyAccess, &g.Description); err != nil {
 			return nil, err
 		}
 		gates = append(gates, g)
@@ -70,10 +75,26 @@ func (p *pgxFeatureGateDB) QueryFeatureGates(ctx context.Context) ([]FeatureGate
 	return gates, rows.Err()
 }
 
-func (p *pgxFeatureGateDB) UpdateFeatureGate(ctx context.Context, key string, isPremium bool) (int64, error) {
-	tag, err := p.pool.Exec(ctx,
-		"UPDATE feature_gates SET is_premium = $1 WHERE feature_key = $2",
-		isPremium, key)
+func (p *pgxFeatureGateDB) UpdateFeatureGate(ctx context.Context, key string, isPremium, earlyAccess *bool) (int64, error) {
+	// Build a dynamic UPDATE over only the provided columns. Column names are
+	// hardcoded; only values are parameterized.
+	sets := make([]string, 0, 2)
+	args := make([]any, 0, 3)
+	if isPremium != nil {
+		sets = append(sets, fmt.Sprintf("is_premium = $%d", len(args)+1))
+		args = append(args, *isPremium)
+	}
+	if earlyAccess != nil {
+		sets = append(sets, fmt.Sprintf("early_access = $%d", len(args)+1))
+		args = append(args, *earlyAccess)
+	}
+	if len(sets) == 0 {
+		return 0, nil // nothing to update; handler guards against this
+	}
+	args = append(args, key)
+	query := "UPDATE feature_gates SET " + strings.Join(sets, ", ") +
+		fmt.Sprintf(" WHERE feature_key = $%d", len(args))
+	tag, err := p.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -121,15 +142,18 @@ func (h *AdminFeatureGatesHandler) ListGates(c *gin.Context) {
 }
 
 // UpdateGate handles PATCH /api/v1/admin/feature-gates/:key.
-// Updates is_premium in DB and publishes a Redis invalidation event.
+// Updates is_premium and/or early_access (ADR-0020) in DB and publishes a Redis
+// invalidation event.
 //
-// Uses *bool for is_premium to avoid Gin's binding:"required" rejecting false
+// Uses *bool for each field to avoid Gin's binding:"required" rejecting false
 // (Gin treats the zero value of bool as "not provided" for required validation).
+// At least one field must be present.
 func (h *AdminFeatureGatesHandler) UpdateGate(c *gin.Context) {
 	key := c.Param("key")
 
 	type updateFeatureGateRequest struct {
-		IsPremium *bool `json:"is_premium"`
+		IsPremium   *bool `json:"is_premium"`
+		EarlyAccess *bool `json:"early_access"`
 	}
 
 	var req updateFeatureGateRequest
@@ -140,15 +164,15 @@ func (h *AdminFeatureGatesHandler) UpdateGate(c *gin.Context) {
 		return
 	}
 
-	// Validate: nil means the field was absent in the request body
-	if req.IsPremium == nil {
+	// Validate: nil means the field was absent. Require at least one.
+	if req.IsPremium == nil && req.EarlyAccess == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "is_premium field required",
+			"error": "is_premium or early_access field required",
 		})
 		return
 	}
 
-	rowsAffected, err := h.db.UpdateFeatureGate(c.Request.Context(), key, *req.IsPremium)
+	rowsAffected, err := h.db.UpdateFeatureGate(c.Request.Context(), key, req.IsPremium, req.EarlyAccess)
 	if err != nil {
 		h.logger.Error("Failed to update feature gate",
 			zap.String("key", key),
@@ -176,12 +200,17 @@ func (h *AdminFeatureGatesHandler) UpdateGate(c *gin.Context) {
 		// Do NOT return error — DB already updated, TTL will catch up.
 	}
 
-	h.logger.Info("Feature gate updated",
-		zap.String("key", key),
-		zap.Bool("is_premium", *req.IsPremium))
+	resp := gin.H{"feature_key": key}
+	logFields := []zap.Field{zap.String("key", key)}
+	if req.IsPremium != nil {
+		resp["is_premium"] = *req.IsPremium
+		logFields = append(logFields, zap.Bool("is_premium", *req.IsPremium))
+	}
+	if req.EarlyAccess != nil {
+		resp["early_access"] = *req.EarlyAccess
+		logFields = append(logFields, zap.Bool("early_access", *req.EarlyAccess))
+	}
+	h.logger.Info("Feature gate updated", logFields...)
 
-	c.JSON(http.StatusOK, gin.H{
-		"feature_key": key,
-		"is_premium":  *req.IsPremium,
-	})
+	c.JSON(http.StatusOK, resp)
 }

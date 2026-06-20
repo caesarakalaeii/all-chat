@@ -19,19 +19,24 @@ below applies to both products unless noted.
 
 ## Role in the system: a second writer of `users.is_premium`
 
-`users.is_premium` is a **derived column** with two independent inputs (ADR-0018):
+`users.is_premium` is a **derived column** with independent inputs (ADR-0018, ADR-0020):
 
 ```
 is_premium = (users.premium_admin_override IS TRUE)
-             OR (users.premium_admin_override IS NULL AND <active premium_subscriptions row>)
+             OR (users.premium_admin_override IS NULL
+                 AND (<active premium_subscriptions row> OR users.is_beta_tester))
 ```
 
 - The **admin** endpoint (`share-service`, `POST /api/v1/admin/premium/users/:id`)
   writes `users.premium_admin_override` (tri-state).
 - **payment-service** writes `premium_subscriptions` (Patreon state).
-- Both call `shared/premium.RecomputePremium(userID)`, which re-derives and writes
+- The **beta-tester** admin endpoint (`share-service`, `POST /api/v1/admin/beta-tester/users/:id`)
+  writes `users.is_beta_tester` (ADR-0020): a beta-tester is premium and additionally passes
+  early-access feature gates (`shared/middleware.RequireEarlyAccess`). An admin force-deny
+  (`premium_admin_override = FALSE`) still beats it.
+- All call `shared/premium.Recompute(userID)`, which re-derives and writes
   `users.is_premium`. Recompute is a pure function of current rows, so admin comps
-  survive subscription lapses and payment never clobbers an admin decision.
+  survive subscription lapses and no writer clobbers another's decision.
 
 All existing readers (`shared/middleware/premium.go`, `moderation-service`) are
 unchanged — they keep reading `users.is_premium`.

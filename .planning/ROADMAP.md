@@ -443,24 +443,39 @@ tsc/eslint/487 vitest green (branch `worktree-payment-service`). Remaining: in-a
 discoverability link from `/settings/viewer` (deferred — that page carries pre-existing
 lint debt that would block the commit); deploy (config var + go-live verify).
 
-### Phase 17: "Beta-Testers" role — grandfather existing premium users — PLANNED
+### Phase 17: "Beta-Testers" role — grandfather existing premium users — CODE COMPLETE (ADR-0020)
 
 **Goal:** Introduce a **Beta-Testers** role that receives **all premium features plus
 early-access** ones, and move the users who held premium *before* paid monetization into it
 as a thank-you / grandfathering.
 
-**Scope sketch (revisit at planning time):**
-- Role mechanism for `beta_tester` (e.g. `users.is_beta_tester BOOLEAN`, surfaced in JWT
-  `claims.Roles` alongside `admin`; or generalize roles into a table). A new
-  `RequireRole`/early-access gate honors beta_tester.
-- Early-access feature gates: extend `feature_gates` with a tier (`free|premium|beta`) or an
-  `early_access` flag; beta testers pass both premium and early-access gates.
-- **Grandfathering = manual, not an auto migration** (product decision 2026-06-20): there are
-  only ~5 premium users today, so migrate them by hand. Add a **"Grant Beta Tester" button in
-  the admin dashboard** (an admin action, like the existing premium toggle) as the ongoing
-  mechanism. This deliberately avoids a blanket `UPDATE … WHERE is_premium=TRUE` data migration,
-  which the re-running migration runner would re-apply on every pod start (the 009-incident class
-  of bug). No data migration; an admin endpoint + button instead.
+**Delivered (ADR-0020):** beta-tester modeled as "premium-plus", reusing ADR-0018's
+derived-column model and ADR-0008's feature gates:
+- `migrations/065`: `users.is_beta_tester BOOLEAN` + `feature_gates.early_access BOOLEAN`
+  (idempotent, no entitlement-value writes — so a re-run can't grandfather anyone).
+- `shared/premium.Recompute` ORs `is_beta_tester` into the `is_premium` derivation, so a
+  beta-tester *is* premium (an admin force-deny still wins) and passes every existing
+  `RequirePremium` gate. `Effective` unchanged.
+- `feature_gates.early_access` is an orthogonal dimension; `shared/middleware.RequireEarlyAccess`
+  enforces it by reading `is_beta_tester` from the DB — mirroring `RequirePremium`, so a grant is
+  **fresh** (no stale-JWT wait). `FeatureGateCache` caches both flags (`IsEarlyAccess`).
+- share-service admin `POST /api/v1/admin/beta-tester/users/:id` (`SetUserBetaTester` = write +
+  recompute) mirrors the premium toggle; the feature-gates admin endpoint now also manages
+  `early_access`. auth-service surfaces `users.is_beta_tester` on the user object + admin list.
+- Frontend: admin users page "Grant/Revoke Beta Tester" control + BETA badge; admin features
+  page `early_access` toggle.
+- **Grandfathering = manual, not an auto migration** (product decision 2026-06-20): the ~5 users
+  are moved by hand via the admin button. Deliberately avoids a blanket `UPDATE … WHERE
+  is_premium=TRUE` (the re-running runner would re-apply it every pod start — the 009-incident
+  class — and it would also sweep in paid premium users).
+- **Decision note:** the original sketch floated surfacing `beta_tester` into JWT `claims.Roles`;
+  ADR-0020 instead enforces via a DB read (mirrors `RequirePremium`, fresh on grant, avoids
+  churning the JWT generators). The frontend reads `is_beta_tester` from the user object.
 
-**Depends on:** Phase 15 (payment-service), ideally Phase 16
-**Status:** Planned (added 2026-06-20 per product decision)
+**Depends on:** Phase 15 (payment-service), Phase 16 (admin override + Recompute templates)
+**Status:** Code complete + verified — `go build`/`vet`/unit + testcontainers E2E (beta grants
+premium via Recompute; admin force-deny beats it; real `RequireEarlyAccess` admits a beta-tester
+and denies others; graduation opens it) + migration-065 rerun idempotency green; frontend
+tsc/eslint/487 vitest green (branch `worktree-payment-service`). Remaining: deploy (no new config
+var — `early_access`/`is_beta_tester` default FALSE); grandfather the ~5 users via the admin button
+at go-live.
