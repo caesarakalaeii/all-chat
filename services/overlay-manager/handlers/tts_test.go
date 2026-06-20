@@ -1107,6 +1107,9 @@ func (s *stubSourceRepo) CreateOrUpdateAuto(_ context.Context, _ *models.ChatSou
 func (s *stubSourceRepo) ListByOverlayID(_ context.Context, _ string) ([]*models.ChatSource, error) {
 	return nil, nil
 }
+func (s *stubSourceRepo) ListByOverlayIDForUser(_ context.Context, _, _ string) ([]*models.ChatSource, error) {
+	return nil, nil
+}
 func (s *stubSourceRepo) GetByID(_ context.Context, _ string) (*models.ChatSource, error) {
 	return nil, errors.New("not impl")
 }

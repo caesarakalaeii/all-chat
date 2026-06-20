@@ -377,3 +377,83 @@ func TestListByOverlayID_ChatViaEventSub_LinkedCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, sources[0].ChatViaEventSub, "expired linked credentials must not claim EventSub")
 }
+
+// TestListByOverlayIDForUser_IsOwnChannel covers the per-requesting-user ownership flag
+// that drives the IRC→EventSub re-consent nudge. Ownership is independent of whether the
+// channel already reads via EventSub or whether tokens are valid — it only means "the
+// requester can re-consent for this channel". Two ownership paths must both work: a
+// Twitch-login users row, and a linked twitch_oauth_tokens row (ADR-0016, the case the
+// old frontend isOwnChannel heuristic missed).
+func TestListByOverlayIDForUser_IsOwnChannel(t *testing.T) {
+	repo, cleanup := setupSourceTestDatabase(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	overlayID := createTestOverlay(t, repo)
+	source := &models.ChatSource{
+		OverlayID:   overlayID,
+		Platform:    "twitch",
+		ChannelID:   "caesarlp",
+		ChannelName: "CaesarLP",
+		Config:      map[string]interface{}{},
+	}
+	require.NoError(t, repo.Create(ctx, source))
+
+	// No identity passed: never owned (public/admin callers).
+	sources, err := repo.ListByOverlayIDForUser(ctx, overlayID, "")
+	require.NoError(t, err)
+	require.False(t, sources[0].IsOwnChannel, "empty requesting user must never own a channel")
+
+	// A different user does not own this channel.
+	stranger := uuid.New().String()
+	_, err = repo.pool.Exec(ctx,
+		`INSERT INTO users (id, username, auth_provider) VALUES ($1, 'someoneelse', 'twitch')`, stranger)
+	require.NoError(t, err)
+	sources, err = repo.ListByOverlayIDForUser(ctx, overlayID, stranger)
+	require.NoError(t, err)
+	require.False(t, sources[0].IsOwnChannel, "unrelated user must not own the channel")
+
+	// Twitch-login path: a users row whose username matches the channel id.
+	twitchOwner := uuid.New().String()
+	_, err = repo.pool.Exec(ctx,
+		`INSERT INTO users (id, username, auth_provider) VALUES ($1, 'CaesarLP', 'twitch')`, twitchOwner)
+	require.NoError(t, err)
+	sources, err = repo.ListByOverlayIDForUser(ctx, overlayID, twitchOwner)
+	require.NoError(t, err)
+	require.True(t, sources[0].IsOwnChannel, "twitch-login owner (username == channel_id) must own the channel")
+
+	// Linked-credentials path: a non-Twitch-login user who linked this Twitch channel.
+	linkedOwner := uuid.New().String()
+	_, err = repo.pool.Exec(ctx,
+		`INSERT INTO users (id, username, auth_provider) VALUES ($1, 'kicklogin', 'kick')`, linkedOwner)
+	require.NoError(t, err)
+	_, err = repo.pool.Exec(ctx, `
+		INSERT INTO twitch_oauth_tokens
+			(user_id, twitch_user_id, twitch_login, access_token, refresh_token, token_expires_at, granted_scopes)
+		VALUES ($1, '777', 'CaesarLP', 'enc-access', 'enc-refresh', NOW() - INTERVAL '1 hour', ARRAY['user:read:chat'])
+	`, linkedOwner)
+	require.NoError(t, err)
+	sources, err = repo.ListByOverlayIDForUser(ctx, overlayID, linkedOwner)
+	require.NoError(t, err)
+	require.True(t, sources[0].IsOwnChannel,
+		"linked twitch_oauth_tokens owner must own the channel even with an expired token (re-consent is the point)")
+}
+
+// TestListByOverlayID_DefaultsIsOwnChannelFalse ensures the back-compat method that omits a
+// requesting user never reports ownership.
+func TestListByOverlayID_DefaultsIsOwnChannelFalse(t *testing.T) {
+	repo, cleanup := setupSourceTestDatabase(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	overlayID := createTestOverlay(t, repo)
+	require.NoError(t, repo.Create(ctx, &models.ChatSource{
+		OverlayID: overlayID, Platform: "twitch", ChannelID: "caesarlp",
+		ChannelName: "CaesarLP", Config: map[string]interface{}{},
+	}))
+
+	sources, err := repo.ListByOverlayID(ctx, overlayID)
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	require.False(t, sources[0].IsOwnChannel)
+}
