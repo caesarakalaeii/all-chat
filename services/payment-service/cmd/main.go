@@ -90,6 +90,7 @@ func main() {
 	}
 
 	minCents := getInt("PATREON_MIN_TIER_CENTS", 500)
+	viewerMinCents := getInt("PATREON_VIEWER_MIN_TIER_CENTS", 200)
 	frontendURL := getEnv("FRONTEND_URL", "http://localhost:3000")
 
 	// JWT key chain for the user-facing connect/status endpoints.
@@ -134,7 +135,7 @@ func main() {
 	tokenRepo := repository.NewTokenRepository(db, encryptor, log)
 	subRepo := repository.NewSubscriptionRepository(db, log)
 	recomputer := premium.NewRecomputer(db, log)
-	entitlementSvc := entitlement.NewService(subRepo, recomputer, minCents, log)
+	entitlementSvc := entitlement.NewService(subRepo, recomputer, minCents, viewerMinCents, log)
 
 	oauthHandler := handlers.NewOAuthHandler(patreonOAuth, redisClient, tokenRepo, entitlementSvc, patreonCampaignID, frontendURL, log)
 	statusHandler := handlers.NewStatusHandler(subRepo, tokenRepo, recomputer, log)
@@ -193,13 +194,20 @@ func main() {
 	router.POST("/api/v1/webhooks/patreon", webhookHandler.Handle)
 	router.GET("/api/v1/payment/patreon/callback", oauthHandler.Callback)
 
-	// Authenticated routes (user JWT).
+	// Authenticated routes. JWTAuth accepts both user and viewer tokens (same
+	// keychain); each handler reads its own subject id (user_id / viewer_id) and
+	// 401s if the token is the wrong kind.
 	api := router.Group("/api/v1")
 	api.Use(middleware.JWTAuth(userKeyChain))
 	{
+		// Streamer premium (ADR-0018).
 		api.GET("/payment/patreon/connect", oauthHandler.Connect)
 		api.GET("/payment/status", statusHandler.Status)
 		api.DELETE("/payment/patreon/connection", statusHandler.Disconnect)
+		// Viewer premium (ADR-0019).
+		api.GET("/payment/viewer/patreon/connect", oauthHandler.ConnectViewer)
+		api.GET("/payment/viewer/status", statusHandler.ViewerStatus)
+		api.DELETE("/payment/viewer/patreon/connection", statusHandler.ViewerDisconnect)
 	}
 
 	port := getEnv("PORT", "8091")

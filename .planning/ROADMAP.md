@@ -412,7 +412,7 @@ Delivered so far:
 - payment-service: Patreon OAuth connect/callback, HMAC-MD5 webhook, reconcile job, status/disconnect
 - share-service admin path writes the tri-state override; API-gateway routes; frontend premium settings; ADR-0018
 
-### Phase 16: Split premium into streamer vs viewer tiers — PLANNED
+### Phase 16: Split premium into streamer vs viewer tiers — CODE COMPLETE (ADR-0019)
 
 **Goal:** Today there is one premium concept that conflates two audiences:
 `users.is_premium` gates **streamer/overlay-owner** features (sharing, moderation, TTS,
@@ -421,17 +421,27 @@ badge). Split these into two distinct, separately-priced products so viewers can
 **cheaper** subscription that grants only viewer-facing perks, while streamer premium
 keeps the richer feature set.
 
-**Scope sketch (revisit at planning time):**
-- Add a product/scope dimension to `premium_subscriptions` (e.g. `product IN ('streamer','viewer')`)
-  so the single payment-service pipeline can grant either from the appropriate Patreon tier(s).
-- Map Patreon tiers → product (cheaper tier → viewer, higher tier → streamer), config-driven.
-- Extend `shared/premium.Recompute` to also derive `viewers.is_premium` from viewer-scoped
-  subscriptions, mirroring the admin-override + active-subscription model already used for
-  `users.is_premium` (so a viewer admin override is possible too).
-- Viewer-facing subscribe/pricing UI; clarify entitlements per product in the frontend.
+**Delivered (ADR-0019):** polymorphic premium **subject** (`user` | `viewer`) + tier-driven
+`product` reusing the Phase 15 pipeline:
+- `migrations/064`: `premium_subscriptions.product` + `viewer_id`; `patreon_oauth_tokens`
+  made polymorphic (nullable `user_id`, new `viewer_id`, exactly-one-subject CHECK,
+  partial unique indexes); `viewers.premium_admin_override` tri-state.
+- `shared/premium.RecomputeViewer` — single writer of `viewers.is_premium` =
+  `Effective(override, active viewer-sub OR linked-streamer inheritance)`.
+- payment-service: subject-aware `entitlement.Apply`, polymorphic token/subscription
+  repos, viewer connect/status/disconnect handlers (`/api/v1/payment/viewer/*`,
+  viewer-JWT), webhook + reconcile resolve either subject, `PATREON_VIEWER_MIN_TIER_CENTS`.
+- auth-service: `LinkViewerToUser` + admin `SetViewerPremium` route through
+  `RecomputeViewer` (admin writes the tri-state override).
+- gateway: viewer payment routes; frontend: `/settings/viewer/premium` page + viewer
+  payment API client.
 
 **Depends on:** Phase 15 (payment-service / ADR-0018)
-**Status:** Planned (added 2026-06-20 per product decision)
+**Status:** Code complete + verified — `go build`/`vet`/unit + testcontainers E2E (viewer
+apply/recompute/webhook/one-subject CHECK) + migration-064 idempotency green; frontend
+tsc/eslint/487 vitest green (branch `worktree-payment-service`). Remaining: in-app
+discoverability link from `/settings/viewer` (deferred — that page carries pre-existing
+lint debt that would block the commit); deploy (config var + go-live verify).
 
 ### Phase 17: "Beta-Testers" role — grandfather existing premium users — PLANNED
 

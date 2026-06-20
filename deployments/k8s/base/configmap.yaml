@@ -40,6 +40,7 @@ data:
   PATREON_CAMPAIGN_ID: "16269405" # all_chat campaign ("The all in one Overlay")
   PATREON_REDIRECT_URL: https://allch.at/api/v1/payment/patreon/callback
   PATREON_MIN_TIER_CENTS: "500"
+  PATREON_VIEWER_MIN_TIER_CENTS: "200" # viewer premium tier, cheaper than streamer (ADR-0019)
   PAYMENT_RECONCILE_INTERVAL: 6h
 
   # Logging

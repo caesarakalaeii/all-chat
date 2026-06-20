@@ -56,6 +56,7 @@ import (
 )
 
 const minCents = 500
+const viewerMinCents = 200
 
 func TestEntitlementApplyGrantsAndRevokes(t *testing.T) {
 	if testing.Short() {
@@ -67,12 +68,12 @@ func TestEntitlementApplyGrantsAndRevokes(t *testing.T) {
 
 	userID := insertUser(t, pool, "apply")
 	subRepo := repository.NewSubscriptionRepository(pool, zap.NewNop())
-	svc := entitlement.NewService(subRepo, premium.NewRecomputer(pool, zap.NewNop()), minCents, zap.NewNop())
+	svc := entitlement.NewService(subRepo, premium.NewRecomputer(pool, zap.NewNop()), minCents, viewerMinCents, zap.NewNop())
 
 	// Active patron at threshold -> premium granted.
 	_, isPrem, err := svc.Apply(ctx, &patreon.MembershipSnapshot{
 		PatreonUserID: "pu-apply", PatronStatus: "active_patron", EntitledCents: 500,
-	}, &userID, nil)
+	}, &userID, nil, nil)
 	require.NoError(t, err)
 	assert.True(t, isPrem)
 	assert.True(t, dbPremium(t, pool, userID), "users.is_premium should be true after active membership")
@@ -80,7 +81,7 @@ func TestEntitlementApplyGrantsAndRevokes(t *testing.T) {
 	// Former patron -> premium revoked.
 	_, isPrem, err = svc.Apply(ctx, &patreon.MembershipSnapshot{
 		PatreonUserID: "pu-apply", PatronStatus: "former_patron",
-	}, &userID, nil)
+	}, &userID, nil, nil)
 	require.NoError(t, err)
 	assert.False(t, isPrem)
 	assert.False(t, dbPremium(t, pool, userID), "users.is_premium should be false after lapse")
@@ -160,7 +161,7 @@ func TestWebhookGrantsPremiumThenGate(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	subRepo := repository.NewSubscriptionRepository(pool, zap.NewNop())
 	tokenRepo := repository.NewTokenRepository(pool, nil, zap.NewNop()) // nil cipher: GetByPatreonUserID needs no decryption
-	svc := entitlement.NewService(subRepo, premium.NewRecomputer(pool, zap.NewNop()), minCents, zap.NewNop())
+	svc := entitlement.NewService(subRepo, premium.NewRecomputer(pool, zap.NewNop()), minCents, viewerMinCents, zap.NewNop())
 	const secret = "whsec_e2e"
 	wh := handlers.NewWebhookHandler(secret, rdb, tokenRepo, svc, zap.NewNop())
 
@@ -215,6 +216,156 @@ func TestWebhookGrantsPremiumThenGate(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, getGated(), "gate should deny after lapse")
 }
 
+// TestViewerEntitlementApplyGrantsAndRevokes mirrors the streamer apply test for the
+// viewer product (ADR-0019): an active patron at the cheaper viewer threshold flips
+// viewers.is_premium, and a lapse revokes it.
+func TestViewerEntitlementApplyGrantsAndRevokes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires Docker")
+	}
+	pool, cleanup := setupDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	viewerID := insertViewer(t, pool)
+	subRepo := repository.NewSubscriptionRepository(pool, zap.NewNop())
+	svc := entitlement.NewService(subRepo, premium.NewRecomputer(pool, zap.NewNop()), minCents, viewerMinCents, zap.NewNop())
+
+	// Active patron at the viewer threshold -> viewer premium granted.
+	_, isPrem, err := svc.Apply(ctx, &patreon.MembershipSnapshot{
+		PatreonUserID: "pv-apply", PatronStatus: "active_patron", EntitledCents: viewerMinCents,
+	}, nil, &viewerID, nil)
+	require.NoError(t, err)
+	assert.True(t, isPrem)
+	assert.True(t, dbViewerPremium(t, pool, viewerID), "viewers.is_premium should be true after active viewer membership")
+
+	// Below the viewer threshold -> not premium.
+	_, isPrem, err = svc.Apply(ctx, &patreon.MembershipSnapshot{
+		PatreonUserID: "pv-apply", PatronStatus: "active_patron", EntitledCents: viewerMinCents - 1,
+	}, nil, &viewerID, nil)
+	require.NoError(t, err)
+	assert.False(t, isPrem)
+	assert.False(t, dbViewerPremium(t, pool, viewerID), "below-threshold pledge should not grant viewer premium")
+
+	// Former patron -> premium revoked.
+	_, isPrem, err = svc.Apply(ctx, &patreon.MembershipSnapshot{
+		PatreonUserID: "pv-apply", PatronStatus: "former_patron",
+	}, nil, &viewerID, nil)
+	require.NoError(t, err)
+	assert.False(t, isPrem)
+	assert.False(t, dbViewerPremium(t, pool, viewerID), "viewers.is_premium should be false after lapse")
+}
+
+// TestRecomputeViewerInheritanceAndOverride validates RecomputeViewer's derivation:
+// inheritance from a linked premium streamer grants the badge, the tri-state admin
+// override wins both ways, and a force-grant works with no subscription.
+func TestRecomputeViewerInheritanceAndOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires Docker")
+	}
+	pool, cleanup := setupDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	rc := premium.NewRecomputer(pool, zap.NewNop())
+
+	// (a) Inheritance: viewer linked to a premium streamer is premium with no sub.
+	premUser := insertUser(t, pool, "inh")
+	_, err := pool.Exec(ctx, "UPDATE users SET is_premium = TRUE WHERE id = $1", premUser)
+	require.NoError(t, err)
+	vInherit := insertViewer(t, pool)
+	linkViewerSessionToUser(t, pool, vInherit, premUser, "twitch", "tw-inh")
+
+	got, err := rc.RecomputeViewer(ctx, vInherit)
+	require.NoError(t, err)
+	assert.True(t, got, "viewer linked to a premium streamer inherits the badge")
+	assert.True(t, dbViewerPremium(t, pool, vInherit))
+
+	// (b) Admin force-deny overrides inheritance.
+	_, err = pool.Exec(ctx, "UPDATE viewers SET premium_admin_override = FALSE WHERE id = $1", vInherit)
+	require.NoError(t, err)
+	got, err = rc.RecomputeViewer(ctx, vInherit)
+	require.NoError(t, err)
+	assert.False(t, got, "admin force-deny beats inheritance")
+	assert.False(t, dbViewerPremium(t, pool, vInherit))
+
+	// (c) Admin force-grant with no sub and no inheritance.
+	vComp := insertViewer(t, pool)
+	_, err = pool.Exec(ctx, "UPDATE viewers SET premium_admin_override = TRUE WHERE id = $1", vComp)
+	require.NoError(t, err)
+	got, err = rc.RecomputeViewer(ctx, vComp)
+	require.NoError(t, err)
+	assert.True(t, got, "admin force-grant grants viewer premium")
+	assert.True(t, dbViewerPremium(t, pool, vComp))
+}
+
+// TestViewerWebhookGrantsPremium is the viewer end-to-end: a connected viewer's
+// signed Patreon webhook flips viewers.is_premium on and then off.
+func TestViewerWebhookGrantsPremium(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires Docker")
+	}
+	pool, cleanup := setupDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	viewerID := insertViewer(t, pool)
+	// Link patreon account -> viewer (token values irrelevant to this path).
+	_, err := pool.Exec(ctx,
+		`INSERT INTO patreon_oauth_tokens (viewer_id, patreon_user_id, access_token, refresh_token, token_expires_at)
+		 VALUES ($1, $2, 'enc', 'enc', NOW() + INTERVAL '30 days')`, viewerID, "pv-e2e")
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	subRepo := repository.NewSubscriptionRepository(pool, zap.NewNop())
+	tokenRepo := repository.NewTokenRepository(pool, nil, zap.NewNop())
+	svc := entitlement.NewService(subRepo, premium.NewRecomputer(pool, zap.NewNop()), minCents, viewerMinCents, zap.NewNop())
+	const secret = "whsec_viewer"
+	wh := handlers.NewWebhookHandler(secret, rdb, tokenRepo, svc, zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/api/v1/webhooks/patreon", wh.Handle)
+
+	postWebhook := func(event, body string) int {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/patreon", strings.NewReader(body))
+		req.Header.Set("X-Patreon-Event", event)
+		req.Header.Set("X-Patreon-Signature", signMD5(secret, body))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	assert.False(t, dbViewerPremium(t, pool, viewerID), "should not be premium before subscribing")
+
+	// Active patron at the (cheaper) viewer threshold -> viewer premium.
+	activeBody := `{"data":{"type":"member","id":"mv","attributes":{"patron_status":"active_patron","currently_entitled_amount_cents":200,"last_charge_status":"Paid"},"relationships":{"user":{"data":{"type":"user","id":"pv-e2e"}}}}}`
+	assert.Equal(t, http.StatusOK, postWebhook(patreon.EventMembersCreate, activeBody))
+	assert.True(t, dbViewerPremium(t, pool, viewerID), "active viewer webhook should grant viewer premium")
+
+	formerBody := `{"data":{"type":"member","id":"mv","attributes":{"patron_status":"former_patron"},"relationships":{"user":{"data":{"type":"user","id":"pv-e2e"}}}}}`
+	assert.Equal(t, http.StatusOK, postWebhook(patreon.EventMembersDelete, formerBody))
+	assert.False(t, dbViewerPremium(t, pool, viewerID), "former viewer webhook should revoke viewer premium")
+}
+
+// TestOneSubjectConstraint asserts the ADR-0019 invariant that a subscription is
+// anchored to a user XOR a viewer, never both.
+func TestOneSubjectConstraint(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires Docker")
+	}
+	pool, cleanup := setupDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	userID := insertUser(t, pool, "both")
+	viewerID := insertViewer(t, pool)
+	_, err := pool.Exec(ctx,
+		`INSERT INTO premium_subscriptions (user_id, viewer_id, product, provider, provider_user_id, status, cents)
+		 VALUES ($1, $2, 'viewer', 'patreon', 'pu-both', 'active', 500)`, userID, viewerID)
+	require.Error(t, err, "a subscription anchored to both a user and a viewer must violate the one-subject CHECK")
+}
+
 // ---- helpers -------------------------------------------------------------------
 
 func signMD5(secret, body string) string {
@@ -228,6 +379,33 @@ func dbPremium(t *testing.T, pool *pgxpool.Pool, userID string) bool {
 	var p bool
 	require.NoError(t, pool.QueryRow(context.Background(), "SELECT is_premium FROM users WHERE id = $1", userID).Scan(&p))
 	return p
+}
+
+func dbViewerPremium(t *testing.T, pool *pgxpool.Pool, viewerID string) bool {
+	t.Helper()
+	var p bool
+	require.NoError(t, pool.QueryRow(context.Background(), "SELECT is_premium FROM viewers WHERE id = $1", viewerID).Scan(&p))
+	return p
+}
+
+// insertViewer creates a bare durable viewer identity and returns its id.
+func insertViewer(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+	var id string
+	require.NoError(t, pool.QueryRow(context.Background(), "INSERT INTO viewers DEFAULT VALUES RETURNING id").Scan(&id))
+	return id
+}
+
+// linkViewerSessionToUser creates a viewer_sessions row tying (platform,
+// platformUserID) to both the durable viewer and a streamer users account, so
+// RecomputeViewer's inheritance term can resolve the linked streamer.
+func linkViewerSessionToUser(t *testing.T, pool *pgxpool.Pool, viewerID, userID, platform, platformUserID string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO viewer_sessions (platform, platform_user_id, username, display_name, access_token, token_expires_at, viewer_id, user_id)
+		 VALUES ($1, $2, 'u', 'u', 'enc', NOW() + INTERVAL '1 day', $3, $4)`,
+		platform, platformUserID, viewerID, userID)
+	require.NoError(t, err)
 }
 
 var userSeq int

@@ -87,19 +87,18 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	// Resolve the all-chat user via the stored Patreon connection. A patron who
-	// never connected through our flow has no row — store the subscription anyway
-	// (user_id nil); it gets linked when they connect or on the next reconcile.
-	var userID *string
-	if uid, found, lookupErr := h.tokenRepo.GetByPatreonUserID(ctx, snap.PatreonUserID); lookupErr != nil {
-		h.logger.Error("Failed to resolve user for webhook", zap.Error(lookupErr))
+	// Resolve the all-chat subject (streamer user or viewer) via the stored Patreon
+	// connection. A patron who never connected through our flow has no row — store
+	// the subscription anyway (both nil); it gets linked when they connect or on the
+	// next reconcile.
+	userID, viewerID, _, lookupErr := h.tokenRepo.GetSubjectByPatreonUserID(ctx, snap.PatreonUserID)
+	if lookupErr != nil {
+		h.logger.Error("Failed to resolve subject for webhook", zap.Error(lookupErr))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup failed"})
 		return
-	} else if found {
-		userID = &uid
 	}
 
-	status, isPremium, err := h.entitlement.Apply(ctx, snap, userID, body)
+	status, isPremium, err := h.entitlement.Apply(ctx, snap, userID, viewerID, body)
 	if err != nil {
 		h.logger.Error("Failed to apply Patreon webhook", zap.String("event", event), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to apply"})

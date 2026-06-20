@@ -24,6 +24,7 @@
  */
 
 import type { ViewerInfo } from '../types/viewer'
+import type { PaymentStatus } from './payment'
 
 /**
  * Custom API client for viewer requests
@@ -86,6 +87,10 @@ class ViewerApiClient {
     })
     return response.json()
   }
+
+  async delete(endpoint: string): Promise<void> {
+    await this.fetch(endpoint, { method: 'DELETE' })
+  }
 }
 
 const viewerApiClient = new ViewerApiClient()
@@ -103,5 +108,30 @@ export const viewerApi = {
    */
   async logout(): Promise<void> {
     await viewerApiClient.post('/api/v1/auth/viewer/logout', {})
+  },
+
+  /**
+   * Viewer premium (ADR-0019): the viewer-scoped Patreon connection, authenticated
+   * with the viewer JWT. Mirrors the streamer payment API but grants the cheaper
+   * viewer cosmetic product.
+   */
+  async getPremiumStatus(): Promise<PaymentStatus> {
+    return viewerApiClient.get<PaymentStatus>('/api/v1/payment/viewer/status')
+  },
+
+  /**
+   * Fetch the Patreon consent URL and redirect the browser to it.
+   */
+  async startPatreonConnect(): Promise<void> {
+    const data = await viewerApiClient.get<{ auth_url: string }>(
+      '/api/v1/payment/viewer/patreon/connect'
+    )
+    if (data.auth_url) {
+      window.location.href = data.auth_url
+    }
+  },
+
+  async disconnectPatreon(): Promise<void> {
+    await viewerApiClient.delete('/api/v1/payment/viewer/patreon/connection')
   },
 }

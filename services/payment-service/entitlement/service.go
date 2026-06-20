@@ -15,9 +15,10 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // Package entitlement applies a Patreon membership snapshot to our state: it maps
-// the snapshot to a subscription status, persists it, and recomputes
-// users.is_premium. It is the single convergent write path shared by the webhook
-// handler, the reconcile job, and the OAuth callback.
+// the snapshot to a subscription status, persists it, and recomputes the relevant
+// is_premium column. It is the single convergent write path shared by the webhook
+// handler, the reconcile job, and the OAuth callback — for both the streamer
+// (users.is_premium) and viewer (viewers.is_premium) products (ADR-0018, ADR-0019).
 package entitlement
 
 import (
@@ -31,29 +32,43 @@ import (
 
 // Service applies membership snapshots to subscription + premium state.
 type Service struct {
-	subs       *repository.SubscriptionRepository
-	recomputer *premium.Recomputer
-	minCents   int
-	logger     *zap.Logger
+	subs           *repository.SubscriptionRepository
+	recomputer     *premium.Recomputer
+	minCents       int // streamer qualifying threshold (PATREON_MIN_TIER_CENTS)
+	viewerMinCents int // viewer qualifying threshold (PATREON_VIEWER_MIN_TIER_CENTS)
+	logger         *zap.Logger
 }
 
-// NewService builds an entitlement Service. minCents is the qualifying tier
-// threshold (PATREON_MIN_TIER_CENTS).
-func NewService(subs *repository.SubscriptionRepository, recomputer *premium.Recomputer, minCents int, logger *zap.Logger) *Service {
-	return &Service{subs: subs, recomputer: recomputer, minCents: minCents, logger: logger}
+// NewService builds an entitlement Service. minCents / viewerMinCents are the
+// qualifying tier thresholds for the streamer / viewer products respectively.
+func NewService(subs *repository.SubscriptionRepository, recomputer *premium.Recomputer, minCents, viewerMinCents int, logger *zap.Logger) *Service {
+	return &Service{subs: subs, recomputer: recomputer, minCents: minCents, viewerMinCents: viewerMinCents, logger: logger}
 }
 
-// Apply maps the snapshot to a subscription status, upserts the subscription row,
-// and — when the all-chat user is known — recomputes users.is_premium. raw is the
-// original provider payload for audit (nil when not available, e.g. reconcile).
-// It is idempotent and convergent: repeated or out-of-order calls converge to the
-// same state because the upsert is keyed and the recompute is a pure function of
-// current rows.
-func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, userID *string, raw []byte) (status string, isPremium bool, err error) {
-	status = patreon.SubscriptionStatusFor(*snap, s.minCents)
+// Apply maps the snapshot to a subscription status for the subject's product,
+// upserts the subscription row, and — when the subject is known — recomputes the
+// relevant is_premium column. The product is the viewer product iff viewerID is
+// set, otherwise the streamer product; the qualifying threshold follows the
+// product. raw is the original provider payload for audit (nil when not available,
+// e.g. reconcile / OAuth callback).
+//
+// At most one of userID / viewerID should be set. It is idempotent and convergent:
+// repeated or out-of-order calls converge because the upsert is keyed and the
+// recompute is a pure function of current rows.
+func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, userID, viewerID *string, raw []byte) (status string, isPremium bool, err error) {
+	product := repository.ProductStreamer
+	threshold := s.minCents
+	if viewerID != nil && *viewerID != "" {
+		product = repository.ProductViewer
+		threshold = s.viewerMinCents
+	}
+
+	status = patreon.SubscriptionStatusFor(*snap, threshold)
 
 	if err = s.subs.Upsert(ctx, repository.Subscription{
 		UserID:           userID,
+		ViewerID:         viewerID,
+		Product:          product,
 		Provider:         "patreon",
 		ProviderUserID:   snap.PatreonUserID,
 		Status:           status,
@@ -65,17 +80,28 @@ func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, u
 		return status, false, err
 	}
 
-	if userID != nil && *userID != "" {
+	switch {
+	case userID != nil && *userID != "":
 		isPremium, err = s.recomputer.Recompute(ctx, *userID)
 		if err != nil {
 			return status, false, err
 		}
-		s.logger.Info("Applied Patreon membership",
+		s.logger.Info("Applied Patreon membership (streamer)",
 			zap.String("user_id", *userID),
 			zap.String("patreon_user_id", snap.PatreonUserID),
 			zap.String("status", status),
 			zap.Bool("is_premium", isPremium))
-	} else {
+	case viewerID != nil && *viewerID != "":
+		isPremium, err = s.recomputer.RecomputeViewer(ctx, *viewerID)
+		if err != nil {
+			return status, false, err
+		}
+		s.logger.Info("Applied Patreon membership (viewer)",
+			zap.String("viewer_id", *viewerID),
+			zap.String("patreon_user_id", snap.PatreonUserID),
+			zap.String("status", status),
+			zap.Bool("is_premium", isPremium))
+	default:
 		s.logger.Info("Stored Patreon membership for unlinked patron",
 			zap.String("patreon_user_id", snap.PatreonUserID),
 			zap.String("status", status))

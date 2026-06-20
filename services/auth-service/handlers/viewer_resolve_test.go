@@ -34,7 +34,7 @@ import (
 type mockViewerIdentityRepo struct {
 	getOrCreate           func(ctx context.Context, platform, platformUserID string) (uuid.UUID, error)
 	linkPlatform          func(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) error
-	linkViewerToUser      func(ctx context.Context, platform, platformUserID, userID string, isPremium bool) error
+	linkViewerToUser      func(ctx context.Context, platform, platformUserID, userID string) error
 	getIsPremium          func(ctx context.Context, viewerID uuid.UUID) (bool, error)
 	getLinked             func(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
 	unlinkPlatform        func(ctx context.Context, viewerID uuid.UUID, platform string) error
@@ -55,9 +55,9 @@ func (m *mockViewerIdentityRepo) LinkPlatformToViewer(ctx context.Context, viewe
 	return nil
 }
 
-func (m *mockViewerIdentityRepo) LinkViewerToUser(ctx context.Context, platform, platformUserID, userID string, isPremium bool) error {
+func (m *mockViewerIdentityRepo) LinkViewerToUser(ctx context.Context, platform, platformUserID, userID string) error {
 	if m.linkViewerToUser != nil {
-		return m.linkViewerToUser(ctx, platform, platformUserID, userID, isPremium)
+		return m.linkViewerToUser(ctx, platform, platformUserID, userID)
 	}
 	return nil
 }

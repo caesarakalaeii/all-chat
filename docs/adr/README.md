@@ -302,6 +302,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0019: Split Streamer vs Viewer Premium via a Polymorphic Patreon Subject
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: `users.is_premium` (streamer features) and `viewers.is_premium` (cosmetic badge) are conflated; pure viewers (no `users` account) have no way to buy a cheaper viewer subscription
+**Decision**: Generalize the ADR-0018 pipeline to a polymorphic subject (`user` | `viewer`) + tier-driven `product`; viewers connect Patreon via a viewer-JWT flow in payment-service; `viewers.is_premium` becomes a single-writer derived column via `RecomputeViewer` (admin override + active viewer sub OR inherited streamer premium)
+**Impact**: One payment stack serves both products; viewer premium gains the convergent/clobber-free guarantees of the user side and fixes the inherited-premium-never-revoked staleness; one Patreon account grants one identity (documented)
+**→ Read**: [0019-split-streamer-viewer-premium.md](./0019-split-streamer-viewer-premium.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -423,9 +434,9 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 18
+**Total ADRs**: 19
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor

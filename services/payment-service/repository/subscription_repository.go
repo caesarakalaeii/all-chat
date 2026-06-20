@@ -27,10 +27,19 @@ import (
 	"go.uber.org/zap"
 )
 
+// Product values stored in premium_subscriptions.product (ADR-0019).
+const (
+	ProductStreamer = "streamer"
+	ProductViewer   = "viewer"
+)
+
 // Subscription is a row of premium_subscriptions — the source of truth for the
-// subscription half of users.is_premium.
+// subscription half of users.is_premium (product='streamer') or viewers.is_premium
+// (product='viewer'). At most one of UserID / ViewerID is set (ADR-0019).
 type Subscription struct {
-	UserID           *string // nullable: a webhook may arrive before the user links Patreon
+	UserID           *string // streamer subject; nullable (webhook may precede the link)
+	ViewerID         *string // viewer subject; nullable
+	Product          string  // "streamer" | "viewer" (defaults to streamer when empty)
 	Provider         string
 	ProviderUserID   string
 	Status           string
@@ -53,12 +62,17 @@ func NewSubscriptionRepository(db *pgxpool.Pool, logger *zap.Logger) *Subscripti
 
 // Upsert writes a subscription keyed on (provider, provider_user_id). It is the
 // single idempotent write path shared by the webhook, the reconcile job, and the
-// OAuth callback. A nil incoming UserID never clears a previously-resolved user id
-// (COALESCE), so a webhook for an as-yet-unlinked patron is preserved until linked.
+// OAuth callback. A nil incoming UserID/ViewerID never clears a previously-resolved
+// subject (COALESCE), so a webhook for an as-yet-unlinked patron is preserved until
+// linked.
 func (r *SubscriptionRepository) Upsert(ctx context.Context, s Subscription) error {
 	provider := s.Provider
 	if provider == "" {
 		provider = "patreon"
+	}
+	product := s.Product
+	if product == "" {
+		product = ProductStreamer
 	}
 
 	var rawArg any
@@ -68,38 +82,49 @@ func (r *SubscriptionRepository) Upsert(ctx context.Context, s Subscription) err
 
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO premium_subscriptions
-		    (user_id, provider, provider_user_id, status, tier_id, cents, current_period_end, raw, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+		    (user_id, viewer_id, product, provider, provider_user_id, status, tier_id, cents, current_period_end, raw, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
 		ON CONFLICT (provider, provider_user_id) DO UPDATE SET
 		    user_id            = COALESCE(EXCLUDED.user_id, premium_subscriptions.user_id),
+		    viewer_id          = COALESCE(EXCLUDED.viewer_id, premium_subscriptions.viewer_id),
+		    product            = EXCLUDED.product,
 		    status             = EXCLUDED.status,
 		    tier_id            = EXCLUDED.tier_id,
 		    cents              = EXCLUDED.cents,
 		    current_period_end = EXCLUDED.current_period_end,
 		    raw                = COALESCE(EXCLUDED.raw, premium_subscriptions.raw),
 		    updated_at         = NOW()`,
-		s.UserID, provider, s.ProviderUserID, s.Status, nullIfEmpty(s.TierID), s.Cents, s.CurrentPeriodEnd, rawArg)
+		s.UserID, s.ViewerID, product, provider, s.ProviderUserID, s.Status, nullIfEmpty(s.TierID), s.Cents, s.CurrentPeriodEnd, rawArg)
 	if err != nil {
 		return fmt.Errorf("upsert subscription: %w", err)
 	}
 	return nil
 }
 
-// GetByUserID returns the most recently updated subscription for a user.
+// GetByUserID returns the most recently updated streamer-product subscription for a user.
 func (r *SubscriptionRepository) GetByUserID(ctx context.Context, userID string) (*Subscription, bool, error) {
+	return r.getLatest(ctx, "user_id = $1 AND product = '"+ProductStreamer+"'", userID)
+}
+
+// GetByViewerID returns the most recently updated viewer-product subscription for a viewer.
+func (r *SubscriptionRepository) GetByViewerID(ctx context.Context, viewerID string) (*Subscription, bool, error) {
+	return r.getLatest(ctx, "viewer_id = $1 AND product = '"+ProductViewer+"'", viewerID)
+}
+
+func (r *SubscriptionRepository) getLatest(ctx context.Context, where, arg string) (*Subscription, bool, error) {
 	var s Subscription
 	var tierID *string
 	err := r.db.QueryRow(ctx, `
-		SELECT user_id, provider, provider_user_id, status, tier_id, cents, current_period_end
+		SELECT user_id, viewer_id, product, provider, provider_user_id, status, tier_id, cents, current_period_end
 		FROM premium_subscriptions
-		WHERE user_id = $1
+		WHERE `+where+`
 		ORDER BY updated_at DESC
-		LIMIT 1`, userID).Scan(&s.UserID, &s.Provider, &s.ProviderUserID, &s.Status, &tierID, &s.Cents, &s.CurrentPeriodEnd)
+		LIMIT 1`, arg).Scan(&s.UserID, &s.ViewerID, &s.Product, &s.Provider, &s.ProviderUserID, &s.Status, &tierID, &s.Cents, &s.CurrentPeriodEnd)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("get subscription by user: %w", err)
+		return nil, false, fmt.Errorf("get subscription: %w", err)
 	}
 	if tierID != nil {
 		s.TierID = *tierID
@@ -113,6 +138,16 @@ func (r *SubscriptionRepository) MarkFormerByUserID(ctx context.Context, userID 
 		"UPDATE premium_subscriptions SET status = 'former', updated_at = NOW() WHERE user_id = $1", userID)
 	if err != nil {
 		return fmt.Errorf("mark subscriptions former: %w", err)
+	}
+	return nil
+}
+
+// MarkFormerByViewerID flags all of a viewer's subscriptions as former (on disconnect).
+func (r *SubscriptionRepository) MarkFormerByViewerID(ctx context.Context, viewerID string) error {
+	_, err := r.db.Exec(ctx,
+		"UPDATE premium_subscriptions SET status = 'former', updated_at = NOW() WHERE viewer_id = $1", viewerID)
+	if err != nil {
+		return fmt.Errorf("mark viewer subscriptions former: %w", err)
 	}
 	return nil
 }

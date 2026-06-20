@@ -117,14 +117,14 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 		if time.Until(t.ExpiresAt) <= m.refreshBuffer {
 			newTok, refreshErr := m.oauth.RefreshToken(ctx, t.RefreshToken)
 			if refreshErr != nil {
-				m.logger.Warn("Failed to refresh Patreon token; skipping user this pass",
-					zap.String("user_id", t.UserID), zap.Error(refreshErr))
+				m.logger.Warn("Failed to refresh Patreon token; skipping subject this pass",
+					subjectLabel(t), zap.Error(refreshErr))
 				failed++
 				continue
 			}
-			if updErr := m.tokenRepo.UpdateTokens(ctx, t.UserID, newTok); updErr != nil {
+			if updErr := m.tokenRepo.UpdateTokens(ctx, t.PatreonUserID, newTok); updErr != nil {
 				m.logger.Error("Failed to persist refreshed Patreon token",
-					zap.String("user_id", t.UserID), zap.Error(updErr))
+					subjectLabel(t), zap.Error(updErr))
 			}
 			accessToken = newTok.AccessToken
 		}
@@ -132,15 +132,14 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 		snap, qErr := m.oauth.GetIdentityWithMembership(ctx, accessToken, m.campaignID)
 		if qErr != nil {
 			m.logger.Warn("Failed to re-query Patreon membership",
-				zap.String("user_id", t.UserID), zap.Error(qErr))
+				subjectLabel(t), zap.Error(qErr))
 			failed++
 			continue
 		}
 
-		userID := t.UserID
-		if _, _, applyErr := m.entitlement.Apply(ctx, snap, &userID, nil); applyErr != nil {
+		if _, _, applyErr := m.entitlement.Apply(ctx, snap, t.UserID, t.ViewerID, nil); applyErr != nil {
 			m.logger.Error("Failed to apply reconciled membership",
-				zap.String("user_id", t.UserID), zap.Error(applyErr))
+				subjectLabel(t), zap.Error(applyErr))
 			failed++
 			continue
 		}
@@ -152,4 +151,16 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 		zap.Int("failed", failed),
 		zap.Int("total", len(tokens)))
 	return nil
+}
+
+// subjectLabel returns a log field identifying the connection's subject.
+func subjectLabel(t repository.PatreonToken) zap.Field {
+	switch {
+	case t.ViewerID != nil && *t.ViewerID != "":
+		return zap.String("viewer_id", *t.ViewerID)
+	case t.UserID != nil && *t.UserID != "":
+		return zap.String("user_id", *t.UserID)
+	default:
+		return zap.String("subject", "unknown")
+	}
 }
