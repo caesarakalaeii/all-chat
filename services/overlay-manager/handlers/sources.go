@@ -37,6 +37,7 @@ type SourceRepository interface {
 	Create(ctx context.Context, source *models.ChatSource) error
 	CreateOrUpdateAuto(ctx context.Context, source *models.ChatSource) error
 	ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error)
+	ListByOverlayIDForUser(ctx context.Context, overlayID, requestingUserID string) ([]*models.ChatSource, error)
 	GetByID(ctx context.Context, id string) (*models.ChatSource, error)
 	Delete(ctx context.Context, id string) error
 	UpdateConfig(ctx context.Context, id string, config map[string]interface{}) error
@@ -319,8 +320,9 @@ func (h *SourcesHandler) HandleListSources(c *gin.Context) {
 		return
 	}
 
-	// Get sources
-	sources, err := h.sourceRepo.ListByOverlayID(c.Request.Context(), overlayID)
+	// Get sources, computing IsOwnChannel for the authenticated user so the frontend can
+	// surface the IRC→EventSub re-consent nudge for channels this user can re-authorize.
+	sources, err := h.sourceRepo.ListByOverlayIDForUser(c.Request.Context(), overlayID, userID.(string))
 	if err != nil {
 		h.logger.Error("Failed to list sources", zap.Error(err), zap.String("overlay_id", overlayID))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list sources"})

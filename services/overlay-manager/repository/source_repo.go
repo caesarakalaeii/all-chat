@@ -121,10 +121,19 @@ func (r *SourceRepository) CreateOrUpdateAuto(ctx context.Context, source *model
 	return nil
 }
 
-// ListByOverlayID retrieves all sources for an overlay.
+// ListByOverlayID retrieves all sources for an overlay without per-user ownership
+// context (IsOwnChannel is always false). Use ListByOverlayIDForUser when the caller
+// is an authenticated user that needs the re-consent nudge flag.
+func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error) {
+	return r.ListByOverlayIDForUser(ctx, overlayID, "")
+}
+
+// ListByOverlayIDForUser retrieves all sources for an overlay, computing IsOwnChannel
+// relative to requestingUserID (pass "" for public/admin callers — ownership is then
+// always false).
 // For shared_overlay sources, it JOINs share_requests to populate ShareStatus.
 // Non-shared_overlay sources have ShareStatus == nil (omitted from JSON).
-func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error) {
+func (r *SourceRepository) ListByOverlayIDForUser(ctx context.Context, overlayID, requestingUserID string) ([]*models.ChatSource, error) {
 	// chat_via_eventsub mirrors the IRC/EventSub partition predicate (see
 	// twitch-eventsub-listener/channels/manager.go and twitch-listener/channels/repository.go):
 	// a Twitch source is read via EventSub when its channel owner granted user:read:chat
@@ -132,6 +141,13 @@ func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string
 	// linked Twitch credentials in twitch_oauth_tokens (ADR-0016: YouTube/Kick-login
 	// accounts that completed the Twitch add-source consent). The frontend uses it to
 	// show a badge / reconnect CTA.
+	//
+	// is_own_channel is whether requestingUserID ($2) owns this Twitch channel and can
+	// re-consent to enable EventSub chat. Unlike chat_via_eventsub it ignores scope/expiry
+	// (re-consent is exactly what fixes an expired/narrow grant) and is matched per-user,
+	// so it also covers non-Twitch-login owners via twitch_oauth_tokens (ADR-0016) — the
+	// case the old frontend username heuristic silently missed. NULLIF keeps an empty
+	// requesting user from matching (NULL = no row owns it).
 	query := `
 		SELECT ocs.id, ocs.overlay_id, ocs.platform, ocs.channel_id, ocs.channel_name,
 		       ocs.channel_handle, ocs.auth_required, ocs.config, ocs.is_active,
@@ -151,7 +167,20 @@ func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string
 		                 AND 'user:read:chat' = ANY(t.granted_scopes)
 		                 AND t.token_expires_at > NOW()
 		           )
-		       )) AS chat_via_eventsub
+		       )) AS chat_via_eventsub,
+		       (ocs.platform = 'twitch' AND (
+		           EXISTS (
+		               SELECT 1 FROM users u
+		               WHERE u.id = NULLIF($2, '')::uuid
+		                 AND u.auth_provider = 'twitch'
+		                 AND LOWER(u.username) = LOWER(ocs.channel_id)
+		           )
+		           OR EXISTS (
+		               SELECT 1 FROM twitch_oauth_tokens t
+		               WHERE t.user_id = NULLIF($2, '')::uuid
+		                 AND LOWER(t.twitch_login) = LOWER(ocs.channel_id)
+		           )
+		       )) AS is_own_channel
 		FROM overlay_chat_sources ocs
 		LEFT JOIN share_requests sr
 		    ON ocs.platform = 'shared_overlay'
@@ -160,7 +189,7 @@ func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string
 		ORDER BY ocs.created_at DESC
 	`
 
-	rows, err := r.pool.Query(ctx, query, overlayID)
+	rows, err := r.pool.Query(ctx, query, overlayID, requestingUserID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sources: %w", err)
 	}
@@ -183,6 +212,7 @@ func (r *SourceRepository) ListByOverlayID(ctx context.Context, overlayID string
 			&source.UpdatedAt,
 			&source.ShareStatus,
 			&source.ChatViaEventSub,
+			&source.IsOwnChannel,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan source: %w", err)
