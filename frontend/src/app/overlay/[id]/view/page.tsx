@@ -38,6 +38,7 @@ import Link from 'next/link'
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
+import { MaintenanceInfoButton } from '@/components/MaintenanceInfoButton'
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
 import { ActivityPanel } from '@/components/overlay/ActivityPanel'
 import { ChatPanel, type ChatPanelModeration } from '@/components/overlay/ChatPanel'
@@ -389,6 +390,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
               variant="inline"
             />
           )}
+          <MaintenanceInfoButton />
           <button
             onClick={() => setShowDetails((v) => !v)}
             aria-pressed={showDetails}
