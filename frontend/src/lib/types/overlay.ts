@@ -204,6 +204,10 @@ export interface ChatSource {
   /** Twitch only: true when the channel owner granted user:read:chat, so chat is read via
    *  EventSub instead of IRC. Computed server-side on the overlay source list. */
   chat_via_eventsub?: boolean
+  /** Twitch only: true when the requesting user owns this channel and can re-consent to
+   *  enable EventSub chat (Twitch-login or linked credentials). Computed server-side per
+   *  requester; drives the IRC→EventSub migration nudge. */
+  is_own_channel?: boolean
 }
 
 export type StreamSelectionStrategy =

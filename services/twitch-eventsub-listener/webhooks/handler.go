@@ -924,10 +924,11 @@ func buildChatTags(e *eventsub.ChatMessageEvent) map[string]string {
 	// Boolean flags are derived from badges (EventSub has no separate sub/mod/turbo fields).
 	tags["subscriber"], tags["mod"], tags["turbo"] = "0", "0", "0"
 	if len(e.Badges) > 0 {
-		// "set_id/id,set_id/id" — EventSub's badge id IS the version the badge enricher expects.
+		// "set_id/id,set_id/id" — for most sets EventSub's badge id IS the version the
+		// badge enricher expects, but predictions are special (see badgeTagVersion).
 		parts := make([]string, 0, len(e.Badges))
 		for _, b := range e.Badges {
-			parts = append(parts, b.SetID+"/"+b.ID)
+			parts = append(parts, b.SetID+"/"+badgeTagVersion(b))
 			switch b.SetID {
 			case "subscriber":
 				tags["subscriber"] = "1"
@@ -978,13 +979,48 @@ func buildChatTags(e *eventsub.ChatMessageEvent) map[string]string {
 		if len(e.SourceBadges) > 0 {
 			parts := make([]string, 0, len(e.SourceBadges))
 			for _, b := range e.SourceBadges {
-				parts = append(parts, b.SetID+"/"+b.ID)
+				parts = append(parts, b.SetID+"/"+badgeTagVersion(b))
 			}
 			tags["source-badges"] = strings.Join(parts, ",")
 		}
 	}
 
 	return tags
+}
+
+// badgeTagVersion returns the badge version to put in the IRC-style "badges" tag.
+// For most sets EventSub's badge id already equals the version the badge enricher
+// looks up. The "predictions" set is the exception: EventSub sends the numeric
+// outcome index (e.g. "0", "1") rather than the color-coded version that the badge
+// image API keys on ("blue-1", "pink-2", ...), so the index can never be resolved
+// to an icon and the badge silently vanishes from overlays. IRC always delivered
+// the color version directly; this restores parity by translating the index.
+func badgeTagVersion(b eventsub.ChatBadge) string {
+	if b.SetID == "predictions" {
+		return predictionBadgeVersion(b.ID)
+	}
+	return b.ID
+}
+
+// predictionBadgeVersion maps an EventSub prediction outcome index to the
+// color-coded badge version Twitch uses for the image CDN. It follows Twitch's
+// two-outcome convention (outcome 0 = "blue-1", outcome 1 = "pink-2"); predictions
+// with additional outcomes use "blue-N" (badge set: blue-1..blue-10). The outcome
+// count is not present on the chat message, so a multi-outcome prediction's second
+// outcome (index 1) renders as "pink-2" rather than "blue-2" — a rare cosmetic
+// edge case that still shows a badge instead of none. Unknown ids pass through.
+func predictionBadgeVersion(id string) string {
+	switch id {
+	case "0":
+		return "blue-1"
+	case "1":
+		return "pink-2"
+	default:
+		if n, err := strconv.Atoi(id); err == nil && n >= 2 && n <= 9 {
+			return fmt.Sprintf("blue-%d", n+1)
+		}
+		return id
+	}
 }
 
 // buildEmotesTag renders the IRC "emotes" tag ("id:start-end,start-end/id:...") from the
