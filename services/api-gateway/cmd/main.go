@@ -497,6 +497,12 @@ func main() {
 		publicAPI.POST("/test-stream/start", proxyHandler.ForwardRequest)
 		publicAPI.POST("/test-stream/stop", proxyHandler.ForwardRequest)
 		publicAPI.GET("/test-stream/status", proxyHandler.ForwardRequest)
+
+		// Payment service (ADR-0018) — public surfaces. The Patreon webhook is
+		// authenticated by its HMAC signature; the OAuth callback by a one-time
+		// Redis state. Both validated inside payment-service, so no gateway JWT.
+		publicAPI.POST("/webhooks/patreon", proxyHandler.ForwardRequest)
+		publicAPI.GET("/payment/patreon/callback", proxyHandler.ForwardRequest)
 	}
 
 	// Twitch badge proxy endpoints (public, but not part of /api/v1 service registry)
@@ -590,6 +596,11 @@ func main() {
 		protectedAPI.POST("/shares/:id/reject", proxyHandler.ForwardRequest)        // -> share-service
 		protectedAPI.POST("/shares/:id/revoke", proxyHandler.ForwardRequest)        // -> share-service
 		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)     // -> share-service
+
+		// Payment service (ADR-0018) — authenticated surfaces (-> payment-service).
+		protectedAPI.GET("/payment/patreon/connect", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/payment/status", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/payment/patreon/connection", proxyHandler.ForwardRequest)
 		// User-facing upcoming maintenance (-> overlay-manager)
 		protectedAPI.GET("/maintenance/upcoming", proxyHandler.ForwardRequest)
 	}

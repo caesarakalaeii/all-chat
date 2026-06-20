@@ -235,6 +235,25 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		StripPrefix: false,
 	}
 
+	// Payment Service (ADR-0018): Patreon premium connect/status + webhooks.
+	// Serves /api/v1/payment/* and /api/v1/webhooks/patreon directly (no strip),
+	// like share-service / moderation-service.
+	paymentURL := getEnvOrDefault("PAYMENT_SERVICE_URL", "http://localhost:8091")
+	registry.Services["payment-service"] = &ServiceConfig{
+		Name:        "payment-service",
+		BaseURL:     paymentURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/payment",
+		StripPrefix: false,
+	}
+	registry.Services["payment-webhooks"] = &ServiceConfig{
+		Name:        "payment-webhooks",
+		BaseURL:     paymentURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/webhooks/patreon",
+		StripPrefix: false,
+	}
+
 	// Validate all service URLs are set
 	for name, service := range registry.Services {
 		if service.BaseURL == "" {

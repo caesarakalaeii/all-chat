@@ -134,6 +134,22 @@ function SettingsContent() {
           </div>
         </Card>
 
+        {/* Premium section */}
+        <Card className="p-6">
+          <h2 className="mb-4 text-lg font-semibold text-text">Premium</h2>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-text-sub">
+              Unlock premium features by backing All-Chat on Patreon.
+            </p>
+            <Link
+              href="/settings/premium"
+              className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-text transition-colors hover:bg-surface-2"
+            >
+              Manage Premium
+            </Link>
+          </div>
+        </Card>
+
         {/* Data & Privacy section */}
         <Card className="p-6">
           <h2 className="mb-4 text-lg font-semibold text-text">Data &amp; Privacy</h2>

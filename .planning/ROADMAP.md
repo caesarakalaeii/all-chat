@@ -394,3 +394,63 @@ Plans:
 - [x] 14-06-key-rotator-sweeper-PLAN.md — services/auth-service/cmd/key-rotator binary with idempotent per-table sweeps + telemetry (D-03, D-06) [Wave 2]
 - [x] 14-07-deployment-manifests-and-sweeper-job-PLAN.md — Add _V1 env entries to all 12 deployments + Pitfall 1 fix + key-rotator Job/CronJob manifests (D-02, D-04, D-06, D-08, D-10) [Wave 3]
 - [x] 14-08-rotation-runbook-PLAN.md — docs/runbooks/secret-rotation.md + docs/runbooks/db-password-rotation.md (D-13, D-14, D-15, D-18, D-19) [Wave 3]
+
+### Phase 15: Patreon premium (payment-service) — IN PROGRESS
+
+**Goal:** Let users self-serve **premium** by backing all-chat's own Patreon campaign,
+instead of premium being admin-granted only. New `services/payment-service` is a second
+writer of `users.is_premium` via an OAuth connect flow, membership webhooks, and a
+reconcile job. `users.is_premium` becomes a derived column (admin override OR active
+subscription) so admin comps survive lapses.
+**Requirements:** ADR-0018
+**Depends on:** Phase 7 (feature gates)
+**Status:** Code complete + verified — `go build`/`vet`/`gofmt`/unit/testcontainers-E2E + migration-063 idempotency green; frontend tsc/eslint/487 vitest green (branch `worktree-payment-service`). Deploy pending: Patreon app registered, `allchat-secrets` resealed, `PATREON_CAMPAIGN_ID` set — awaiting commit + post-deploy live verification (cutover SQL to pin the ~5 existing comps; test-patron grant/revoke).
+
+Delivered so far:
+- Migration 063 (`premium_subscriptions`, `patreon_oauth_tokens`, `users.premium_admin_override` tri-state)
+- `shared/premium.RecomputePremium` (derives `users.is_premium`)
+- payment-service: Patreon OAuth connect/callback, HMAC-MD5 webhook, reconcile job, status/disconnect
+- share-service admin path writes the tri-state override; API-gateway routes; frontend premium settings; ADR-0018
+
+### Phase 16: Split premium into streamer vs viewer tiers — PLANNED
+
+**Goal:** Today there is one premium concept that conflates two audiences:
+`users.is_premium` gates **streamer/overlay-owner** features (sharing, moderation, TTS,
+stream-selection) while `viewers.is_premium` is a **viewer** cosmetic flag (premium
+badge). Split these into two distinct, separately-priced products so viewers can buy a
+**cheaper** subscription that grants only viewer-facing perks, while streamer premium
+keeps the richer feature set.
+
+**Scope sketch (revisit at planning time):**
+- Add a product/scope dimension to `premium_subscriptions` (e.g. `product IN ('streamer','viewer')`)
+  so the single payment-service pipeline can grant either from the appropriate Patreon tier(s).
+- Map Patreon tiers → product (cheaper tier → viewer, higher tier → streamer), config-driven.
+- Extend `shared/premium.Recompute` to also derive `viewers.is_premium` from viewer-scoped
+  subscriptions, mirroring the admin-override + active-subscription model already used for
+  `users.is_premium` (so a viewer admin override is possible too).
+- Viewer-facing subscribe/pricing UI; clarify entitlements per product in the frontend.
+
+**Depends on:** Phase 15 (payment-service / ADR-0018)
+**Status:** Planned (added 2026-06-20 per product decision)
+
+### Phase 17: "Beta-Testers" role — grandfather existing premium users — PLANNED
+
+**Goal:** Introduce a **Beta-Testers** role that receives **all premium features plus
+early-access** ones, and move the users who held premium *before* paid monetization into it
+as a thank-you / grandfathering.
+
+**Scope sketch (revisit at planning time):**
+- Role mechanism for `beta_tester` (e.g. `users.is_beta_tester BOOLEAN`, surfaced in JWT
+  `claims.Roles` alongside `admin`; or generalize roles into a table). A new
+  `RequireRole`/early-access gate honors beta_tester.
+- Early-access feature gates: extend `feature_gates` with a tier (`free|premium|beta`) or an
+  `early_access` flag; beta testers pass both premium and early-access gates.
+- **Grandfathering = manual, not an auto migration** (product decision 2026-06-20): there are
+  only ~5 premium users today, so migrate them by hand. Add a **"Grant Beta Tester" button in
+  the admin dashboard** (an admin action, like the existing premium toggle) as the ongoing
+  mechanism. This deliberately avoids a blanket `UPDATE … WHERE is_premium=TRUE` data migration,
+  which the re-running migration runner would re-apply on every pod start (the 009-incident class
+  of bug). No data migration; an admin endpoint + button instead.
+
+**Depends on:** Phase 15 (payment-service), ideally Phase 16
+**Status:** Planned (added 2026-06-20 per product decision)

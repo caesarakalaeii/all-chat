@@ -291,6 +291,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0018: Premium Entitlements via Patreon
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: `users.is_premium` is admin-granted only; we want self-serve premium by backing All-Chat's own Patreon, without breaking admin comps or the premium read path
+**Decision**: New `payment-service` (Patreon OAuth connect + HMAC-MD5 webhooks + reconcile job); `users.is_premium` becomes a derived column = `(premium_admin_override IS TRUE) OR (override IS NULL AND active subscription)`, recomputed by `shared/premium.RecomputePremium`; identity via Patreon OAuth; status from Patreon's own grace-aware signal; single-replica reconcile backstop
+**Impact**: Premium readers unchanged; admin comps survive lapses and payment never clobbers admin decisions; convergent/idempotent write path; Patreon-only (Ko-fi deferred)
+**→ Read**: [0018-premium-entitlements-via-patreon.md](./0018-premium-entitlements-via-patreon.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -412,7 +423,7 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 17
+**Total ADRs**: 18
 **Status**: All accepted (✅)
 **Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path)
 
@@ -421,4 +432,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-06-19
+**Last Updated**: 2026-06-20

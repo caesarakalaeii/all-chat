@@ -43,6 +43,7 @@ jobs:
       source-manager: ${{ steps.changes.outputs.source-manager }}
       token-refresh-service: ${{ steps.changes.outputs.token-refresh-service }}
       moderation-service: ${{ steps.changes.outputs.moderation-service }}
+      payment-service: ${{ steps.changes.outputs.payment-service }}
       share-service: ${{ steps.changes.outputs.share-service }}
       discord-bot: ${{ steps.changes.outputs.discord-bot }}
       discord-listener: ${{ steps.changes.outputs.discord-listener }}
@@ -100,6 +101,9 @@ jobs:
               - 'services/auth-service/oauth/**'
             moderation-service:
               - 'services/moderation-service/**'
+              - 'shared/**'
+            payment-service:
+              - 'services/payment-service/**'
               - 'shared/**'
             share-service:
               - 'services/share-service/**'
@@ -173,6 +177,9 @@ jobs:
           - name: moderation-service
             changed: ${{ needs.detect-changes.outputs.moderation-service }}
             path: services/moderation-service
+          - name: payment-service
+            changed: ${{ needs.detect-changes.outputs.payment-service }}
+            path: services/payment-service
           - name: share-service
             changed: ${{ needs.detect-changes.outputs.share-service }}
             path: services/share-service
@@ -263,6 +270,7 @@ jobs:
           - source-manager
           - token-refresh-service
           - moderation-service
+          - payment-service
           - discord-listener
 
     steps:
