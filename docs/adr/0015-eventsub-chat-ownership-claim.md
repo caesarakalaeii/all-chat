@@ -145,6 +145,26 @@ discipline the previous byte-identical SQL predicate aimed for.
   total-outage case is bounded by this).
 - **Timeline**: 2026-06-03.
 
+## Migration UX (2026-06-20 addendum)
+
+The claim mechanism makes the partition *safe*, but a channel only leaves IRC once its owner has
+granted the chat scopes (`user:read:chat` + `user:bot` + `channel:bot`). Channels added before the
+chat-scope consent flow existed never re-consented, so the majority of registered Twitch channels
+remained on IRC — which matters because IRC's shared bot is capped (~100 channels) and silently
+drops the overflow once more than that are live at once. The migration is therefore driven from the
+product UI, not automatically:
+
+- `overlay-manager` exposes two per-source booleans on `GET /api/v1/overlays/:id/sources`:
+  `chat_via_eventsub` (any owner consent satisfies the partition predicate) and `is_own_channel`
+  (the *requesting* user owns this channel and can re-consent — computed for both Twitch-login and
+  ADR-0016 linked-credential owners via `ListByOverlayIDForUser`).
+- The frontend surfaces a dismissible dashboard banner plus a per-source CTA for sources where
+  `is_own_channel && !chat_via_eventsub`, linking the existing add-source re-consent reflow
+  (`auth-service` `GetAuthURLWithChatScopes`, `force_verify=true`). One re-consent migrates all of
+  that account's own-channel sources on the next sync.
+
+This is UX layered on the existing partition; it does not change the claim/fallback mechanism above.
+
 ## Related Decisions
 
 - ADR-0014 (Demand linger) — the demand window during which a chat sub exists; this ADR makes the
