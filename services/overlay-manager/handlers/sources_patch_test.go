@@ -63,6 +63,10 @@ func (m *mockSourceRepositoryWithConfig) ListByOverlayID(ctx context.Context, ov
 	return nil, nil
 }
 
+func (m *mockSourceRepositoryWithConfig) ListByOverlayIDForUser(ctx context.Context, overlayID, _ string) ([]*models.ChatSource, error) {
+	return m.ListByOverlayID(ctx, overlayID)
+}
+
 func (m *mockSourceRepositoryWithConfig) GetByID(ctx context.Context, id string) (*models.ChatSource, error) {
 	if m.getByIDFunc != nil {
 		return m.getByIDFunc(ctx, id)

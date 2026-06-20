@@ -2433,9 +2433,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             setStreamSelectExpandedSourceId((prev) => (prev === s.id ? null : s.id))
                           }
                           isOwnChannel={
-                            user?.auth_provider === 'twitch' &&
-                            !!user?.username &&
-                            user.username.toLowerCase() === source.channel_id.toLowerCase()
+                            // Prefer the server-computed flag (covers linked/non-Twitch-login
+                            // owners per ADR-0016); fall back to the username heuristic only if
+                            // the field is absent (older API responses).
+                            source.is_own_channel ??
+                            (user?.auth_provider === 'twitch' &&
+                              !!user?.username &&
+                              user.username.toLowerCase() === source.channel_id.toLowerCase())
                           }
                           onReconnectChat={handleReconnectTwitchChat}
                         />

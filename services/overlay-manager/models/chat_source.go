@@ -37,9 +37,15 @@ type ChatSource struct {
 	// scope (user:read:chat) and has a valid token — i.e. its chat is read via the
 	// EventSub listener rather than IRC. Computed (not stored); only populated by
 	// ListByOverlayID. The frontend uses it to show a badge / reconnect CTA.
-	ChatViaEventSub bool      `json:"chat_via_eventsub"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ChatViaEventSub bool `json:"chat_via_eventsub"`
+	// IsOwnChannel is true when the requesting user owns this Twitch channel and can
+	// therefore re-consent to enable EventSub chat — either via their Twitch-login
+	// users row (username == channel_id) or a linked twitch_oauth_tokens row (ADR-0016).
+	// Computed per-requester; only populated by ListByOverlayIDForUser (false otherwise).
+	// Drives the IRC→EventSub re-consent nudge. Independent of ChatViaEventSub/token validity.
+	IsOwnChannel bool      `json:"is_own_channel"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // Valid platforms
