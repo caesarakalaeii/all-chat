@@ -34,6 +34,7 @@ import (
 	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
+	"github.com/caesar/all-chat/shared/premium"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -113,7 +114,8 @@ func main() {
 	}
 
 	// Initialize repositories
-	premiumRepo := repository.NewPremiumRepository(dbPool, log)
+	recomputer := premium.NewRecomputer(dbPool, log)
+	premiumRepo := repository.NewPremiumRepository(dbPool, recomputer, log)
 	userSearchRepo := repository.NewUserSearchRepository(dbPool, log)
 	shareRepo := repository.NewShareRepository(dbPool, log)
 
@@ -183,7 +185,7 @@ func main() {
 
 		// Share requests - GET doesn't need premium check
 		// User decision from RESEARCH.md Pitfall #5: Non-premium users can VIEW but cannot CREATE/ACCEPT
-		api.GET("/shares/incoming", shareHandler.ListIncoming)                    // No premium middleware
+		api.GET("/shares/incoming", shareHandler.ListIncoming)                   // No premium middleware
 		api.GET("/shares/accepted", shareHandler.GetAcceptedShares)              // No premium - read-only informational
 		api.GET("/shares/unseen-acceptances", shareHandler.GetUnseenAcceptances) // No premium - all senders can see
 		api.POST("/shares/:id/mark-seen", shareHandler.MarkAcceptanceSeen)       // No premium - all senders can mark seen
@@ -291,4 +293,3 @@ func getEnv(key, defaultValue string) string {
 	}
 	return defaultValue
 }
-
