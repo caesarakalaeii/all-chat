@@ -38,6 +38,7 @@ import (
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
+	"github.com/caesar/all-chat/shared/premium"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -215,11 +216,16 @@ func main() {
 	viewerKickRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/viewer/kick/callback")
 	viewerKickOAuth := oauth.NewViewerKickOAuth(kickClientID, kickClientSecret, viewerKickRedirectURL)
 
+	// Viewer premium recompute (ADR-0019): derives viewers.is_premium from the
+	// viewer admin override + active viewer subscription + linked-streamer
+	// inheritance. Shared by the admin override path and the viewer↔streamer link.
+	viewerPremiumRecomputer := premium.NewRecomputer(db, log)
+
 	// Create viewer repository
-	viewerRepo := repository.NewViewerRepository(db, tokenCipher)
+	viewerRepo := repository.NewViewerRepository(db, tokenCipher, viewerPremiumRecomputer)
 
 	// Create viewer identity repository (Phase 28: cross-platform viewer linking)
-	viewerIdentityRepo := repository.NewViewerIdentityRepository(db)
+	viewerIdentityRepo := repository.NewViewerIdentityRepository(db, viewerPremiumRecomputer)
 
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)

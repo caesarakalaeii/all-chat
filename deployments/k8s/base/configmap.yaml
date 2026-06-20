@@ -10,6 +10,7 @@ data:
   EMOTE_SERVICE_URL: http://emote-service.allchat.svc.cluster.local:8083
   MESSAGE_PROCESSOR_URL: http://message-processor.allchat.svc.cluster.local:8087
   SOURCE_MANAGER_URL: http://source-manager.allchat.svc.cluster.local:8083
+  PAYMENT_SERVICE_URL: http://payment-service.allchat.svc.cluster.local:8091
 
   # Database Configuration
   DATABASE_HOST: allchat-cluster-rw.allchat.svc.cluster.local
@@ -33,6 +34,14 @@ data:
   # YouTube API Configuration
   POLLING_INTERVAL_MS: "2000"
   QUOTA_LIMIT_DAILY: "10000"
+
+  # Patreon premium (payment-service, ADR-0018) — non-secret config.
+  # Secrets (PATREON_CLIENT_ID/SECRET, PATREON_WEBHOOK_SECRET) live in allchat-secrets.
+  PATREON_CAMPAIGN_ID: "16269405" # all_chat campaign ("The all in one Overlay")
+  PATREON_REDIRECT_URL: https://allch.at/api/v1/payment/patreon/callback
+  PATREON_MIN_TIER_CENTS: "500"
+  PATREON_VIEWER_MIN_TIER_CENTS: "200" # viewer premium tier, cheaper than streamer (ADR-0019)
+  PAYMENT_RECONCILE_INTERVAL: 6h
 
   # Logging
   LOG_LEVEL: info

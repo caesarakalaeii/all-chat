@@ -18,10 +18,12 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/shared/premium"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,15 +31,18 @@ import (
 
 // ViewerRepository handles database operations for viewer sessions
 type ViewerRepository struct {
-	db     *pgxpool.Pool
-	cipher StringCipher
+	db         *pgxpool.Pool
+	cipher     StringCipher
+	recomputer *premium.Recomputer
 }
 
-// NewViewerRepository creates a new ViewerRepository
-func NewViewerRepository(db *pgxpool.Pool, cipher StringCipher) *ViewerRepository {
+// NewViewerRepository creates a new ViewerRepository. recomputer derives
+// viewers.is_premium after an admin override change (ADR-0019).
+func NewViewerRepository(db *pgxpool.Pool, cipher StringCipher, recomputer *premium.Recomputer) *ViewerRepository {
 	return &ViewerRepository{
-		db:     db,
-		cipher: cipher,
+		db:         db,
+		cipher:     cipher,
+		recomputer: recomputer,
 	}
 }
 
@@ -415,21 +420,36 @@ func (r *ViewerRepository) UnbanViewer(ctx context.Context, sessionID uuid.UUID)
 	return nil
 }
 
-// SetViewerPremium updates the is_premium flag on the viewers table for a given viewer_session ID.
+// SetViewerPremium records the admin's viewer-premium decision as a tri-state
+// override (ADR-0019, mirroring users.premium_admin_override) on the viewer linked
+// to the session, then re-derives viewers.is_premium via shared/premium. Granting
+// maps to a force-grant (override TRUE) that survives a subscription lapse; revoking
+// clears the override (NULL) so premium then follows any active viewer subscription
+// or linked-streamer inheritance. A hard viewer-premium ban (override FALSE) is
+// reserved for a future explicit admin action.
 func (r *ViewerRepository) SetViewerPremium(ctx context.Context, sessionID uuid.UUID, isPremium bool) error {
-	query := `
-		UPDATE viewers
-		SET is_premium = $2
-		WHERE id = (SELECT viewer_id FROM viewer_sessions WHERE id = $1 AND viewer_id IS NOT NULL)
-	`
-
-	result, err := r.db.Exec(ctx, query, sessionID, isPremium)
+	var viewerID uuid.UUID
+	err := r.db.QueryRow(ctx,
+		`SELECT viewer_id FROM viewer_sessions WHERE id = $1 AND viewer_id IS NOT NULL`, sessionID).Scan(&viewerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("viewer not found or no linked viewer identity")
+	}
 	if err != nil {
-		return fmt.Errorf("failed to set viewer premium: %w", err)
+		return fmt.Errorf("failed to resolve viewer for session: %w", err)
 	}
 
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("viewer not found or no linked viewer identity")
+	var override *bool
+	if isPremium {
+		v := true
+		override = &v
+	}
+	if _, err := r.db.Exec(ctx,
+		`UPDATE viewers SET premium_admin_override = $2 WHERE id = $1`, viewerID, override); err != nil {
+		return fmt.Errorf("failed to update viewer premium override: %w", err)
+	}
+
+	if _, err := r.recomputer.RecomputeViewer(ctx, viewerID.String()); err != nil {
+		return fmt.Errorf("failed to recompute viewer premium: %w", err)
 	}
 
 	return nil

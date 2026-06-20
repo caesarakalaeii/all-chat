@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/caesar/all-chat/shared/premium"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,12 +30,14 @@ import (
 // ViewerIdentityRepository handles database operations for viewer identity
 // (cross-platform linking and cosmetics).
 type ViewerIdentityRepository struct {
-	db *pgxpool.Pool
+	db         *pgxpool.Pool
+	recomputer *premium.Recomputer
 }
 
-// NewViewerIdentityRepository creates a new ViewerIdentityRepository.
-func NewViewerIdentityRepository(db *pgxpool.Pool) *ViewerIdentityRepository {
-	return &ViewerIdentityRepository{db: db}
+// NewViewerIdentityRepository creates a new ViewerIdentityRepository. recomputer
+// derives viewers.is_premium after a viewer↔streamer link change (ADR-0019).
+func NewViewerIdentityRepository(db *pgxpool.Pool, recomputer *premium.Recomputer) *ViewerIdentityRepository {
+	return &ViewerIdentityRepository{db: db, recomputer: recomputer}
 }
 
 // GetOrCreateViewerByPlatform looks up or creates a viewer record for the given
@@ -202,35 +205,44 @@ func (r *ViewerIdentityRepository) UpsertAvatarCosmetics(
 	return nil
 }
 
-// LinkViewerToUser links a viewer session to a user account and propagates
-// premium status. Called after OAuth when a linked streamer account is found.
-func (r *ViewerIdentityRepository) LinkViewerToUser(ctx context.Context, platform, platformUserID string, userID string, isPremium bool) error {
+// LinkViewerToUser links a viewer session to a streamer user account and recomputes
+// the viewer's premium badge. Called after OAuth when a linked streamer account is
+// found. viewers.is_premium is derived by shared/premium.RecomputeViewer — whose
+// "premium" half includes the linked-streamer inheritance term — so this no longer
+// writes the flag directly; RecomputeViewer is the single writer (ADR-0019). This
+// also lets a streamer lapse later revoke the inherited badge on the next recompute,
+// which the old direct write never did.
+func (r *ViewerIdentityRepository) LinkViewerToUser(ctx context.Context, platform, platformUserID, userID string) error {
 	parsedID, err := uuid.Parse(userID)
 	if err != nil {
 		return fmt.Errorf("invalid user ID: %w", err)
 	}
 	// Link the viewer session row to the user account.
-	_, err = r.db.Exec(ctx,
+	if _, err := r.db.Exec(ctx,
 		`UPDATE viewer_sessions SET user_id = $1 WHERE platform = $2 AND platform_user_id = $3`,
 		parsedID, platform, platformUserID,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("failed to link viewer session to user: %w", err)
 	}
 
-	// Propagate premium flag to the viewers table so the enricher can read it
-	// without joining through viewer_sessions → users on every message.
-	if isPremium {
-		_, err = r.db.Exec(ctx,
-			`UPDATE viewers SET is_premium = true
-			 WHERE id = (SELECT viewer_id FROM viewer_platform_identities WHERE platform = $1 AND platform_user_id = $2 LIMIT 1)`,
-			platform, platformUserID,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to propagate premium to viewer: %w", err)
-		}
+	// Recompute the durable viewer's premium badge now that the streamer link exists.
+	// If the platform identity isn't mapped to a viewer yet, there is nothing to
+	// recompute (cosmetics fail gracefully); the next viewer activity will converge.
+	var viewerID uuid.UUID
+	err = r.db.QueryRow(ctx,
+		`SELECT viewer_id FROM viewer_platform_identities WHERE platform = $1 AND platform_user_id = $2 LIMIT 1`,
+		platform, platformUserID,
+	).Scan(&viewerID)
+	if err == pgx.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to resolve viewer for premium recompute: %w", err)
 	}
 
+	if _, err := r.recomputer.RecomputeViewer(ctx, viewerID.String()); err != nil {
+		return fmt.Errorf("failed to recompute viewer premium: %w", err)
+	}
 	return nil
 }
 

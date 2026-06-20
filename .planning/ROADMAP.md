@@ -394,3 +394,88 @@ Plans:
 - [x] 14-06-key-rotator-sweeper-PLAN.md — services/auth-service/cmd/key-rotator binary with idempotent per-table sweeps + telemetry (D-03, D-06) [Wave 2]
 - [x] 14-07-deployment-manifests-and-sweeper-job-PLAN.md — Add _V1 env entries to all 12 deployments + Pitfall 1 fix + key-rotator Job/CronJob manifests (D-02, D-04, D-06, D-08, D-10) [Wave 3]
 - [x] 14-08-rotation-runbook-PLAN.md — docs/runbooks/secret-rotation.md + docs/runbooks/db-password-rotation.md (D-13, D-14, D-15, D-18, D-19) [Wave 3]
+
+### Phase 15: Patreon premium (payment-service) — IN PROGRESS
+
+**Goal:** Let users self-serve **premium** by backing all-chat's own Patreon campaign,
+instead of premium being admin-granted only. New `services/payment-service` is a second
+writer of `users.is_premium` via an OAuth connect flow, membership webhooks, and a
+reconcile job. `users.is_premium` becomes a derived column (admin override OR active
+subscription) so admin comps survive lapses.
+**Requirements:** ADR-0018
+**Depends on:** Phase 7 (feature gates)
+**Status:** Code complete + verified — `go build`/`vet`/`gofmt`/unit/testcontainers-E2E + migration-063 idempotency green; frontend tsc/eslint/487 vitest green (branch `worktree-payment-service`). Deploy pending: Patreon app registered, `allchat-secrets` resealed, `PATREON_CAMPAIGN_ID` set — awaiting commit + post-deploy live verification (cutover SQL to pin the ~5 existing comps; test-patron grant/revoke).
+
+Delivered so far:
+- Migration 063 (`premium_subscriptions`, `patreon_oauth_tokens`, `users.premium_admin_override` tri-state)
+- `shared/premium.RecomputePremium` (derives `users.is_premium`)
+- payment-service: Patreon OAuth connect/callback, HMAC-MD5 webhook, reconcile job, status/disconnect
+- share-service admin path writes the tri-state override; API-gateway routes; frontend premium settings; ADR-0018
+
+### Phase 16: Split premium into streamer vs viewer tiers — CODE COMPLETE (ADR-0019)
+
+**Goal:** Today there is one premium concept that conflates two audiences:
+`users.is_premium` gates **streamer/overlay-owner** features (sharing, moderation, TTS,
+stream-selection) while `viewers.is_premium` is a **viewer** cosmetic flag (premium
+badge). Split these into two distinct, separately-priced products so viewers can buy a
+**cheaper** subscription that grants only viewer-facing perks, while streamer premium
+keeps the richer feature set.
+
+**Delivered (ADR-0019):** polymorphic premium **subject** (`user` | `viewer`) + tier-driven
+`product` reusing the Phase 15 pipeline:
+- `migrations/064`: `premium_subscriptions.product` + `viewer_id`; `patreon_oauth_tokens`
+  made polymorphic (nullable `user_id`, new `viewer_id`, exactly-one-subject CHECK,
+  partial unique indexes); `viewers.premium_admin_override` tri-state.
+- `shared/premium.RecomputeViewer` — single writer of `viewers.is_premium` =
+  `Effective(override, active viewer-sub OR linked-streamer inheritance)`.
+- payment-service: subject-aware `entitlement.Apply`, polymorphic token/subscription
+  repos, viewer connect/status/disconnect handlers (`/api/v1/payment/viewer/*`,
+  viewer-JWT), webhook + reconcile resolve either subject, `PATREON_VIEWER_MIN_TIER_CENTS`.
+- auth-service: `LinkViewerToUser` + admin `SetViewerPremium` route through
+  `RecomputeViewer` (admin writes the tri-state override).
+- gateway: viewer payment routes; frontend: `/settings/viewer/premium` page + viewer
+  payment API client.
+
+**Depends on:** Phase 15 (payment-service / ADR-0018)
+**Status:** Code complete + verified — `go build`/`vet`/unit + testcontainers E2E (viewer
+apply/recompute/webhook/one-subject CHECK) + migration-064 idempotency green; frontend
+tsc/eslint/487 vitest green (branch `worktree-payment-service`). Remaining: in-app
+discoverability link from `/settings/viewer` (deferred — that page carries pre-existing
+lint debt that would block the commit); deploy (config var + go-live verify).
+
+### Phase 17: "Beta-Testers" role — grandfather existing premium users — CODE COMPLETE (ADR-0020)
+
+**Goal:** Introduce a **Beta-Testers** role that receives **all premium features plus
+early-access** ones, and move the users who held premium *before* paid monetization into it
+as a thank-you / grandfathering.
+
+**Delivered (ADR-0020):** beta-tester modeled as "premium-plus", reusing ADR-0018's
+derived-column model and ADR-0008's feature gates:
+- `migrations/065`: `users.is_beta_tester BOOLEAN` + `feature_gates.early_access BOOLEAN`
+  (idempotent, no entitlement-value writes — so a re-run can't grandfather anyone).
+- `shared/premium.Recompute` ORs `is_beta_tester` into the `is_premium` derivation, so a
+  beta-tester *is* premium (an admin force-deny still wins) and passes every existing
+  `RequirePremium` gate. `Effective` unchanged.
+- `feature_gates.early_access` is an orthogonal dimension; `shared/middleware.RequireEarlyAccess`
+  enforces it by reading `is_beta_tester` from the DB — mirroring `RequirePremium`, so a grant is
+  **fresh** (no stale-JWT wait). `FeatureGateCache` caches both flags (`IsEarlyAccess`).
+- share-service admin `POST /api/v1/admin/beta-tester/users/:id` (`SetUserBetaTester` = write +
+  recompute) mirrors the premium toggle; the feature-gates admin endpoint now also manages
+  `early_access`. auth-service surfaces `users.is_beta_tester` on the user object + admin list.
+- Frontend: admin users page "Grant/Revoke Beta Tester" control + BETA badge; admin features
+  page `early_access` toggle.
+- **Grandfathering = manual, not an auto migration** (product decision 2026-06-20): the ~5 users
+  are moved by hand via the admin button. Deliberately avoids a blanket `UPDATE … WHERE
+  is_premium=TRUE` (the re-running runner would re-apply it every pod start — the 009-incident
+  class — and it would also sweep in paid premium users).
+- **Decision note:** the original sketch floated surfacing `beta_tester` into JWT `claims.Roles`;
+  ADR-0020 instead enforces via a DB read (mirrors `RequirePremium`, fresh on grant, avoids
+  churning the JWT generators). The frontend reads `is_beta_tester` from the user object.
+
+**Depends on:** Phase 15 (payment-service), Phase 16 (admin override + Recompute templates)
+**Status:** Code complete + verified — `go build`/`vet`/unit + testcontainers E2E (beta grants
+premium via Recompute; admin force-deny beats it; real `RequireEarlyAccess` admits a beta-tester
+and denies others; graduation opens it) + migration-065 rerun idempotency green; frontend
+tsc/eslint/487 vitest green (branch `worktree-payment-service`). Remaining: deploy (no new config
+var — `early_access`/`is_beta_tester` default FALSE); grandfather the ~5 users via the admin button
+at go-live.

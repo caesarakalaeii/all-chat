@@ -136,10 +136,12 @@ func (m *mockOverlays) GetByIDAndUserID(_ context.Context, overlayID, _ string) 
 
 // mockGateChecker implements sharedMiddleware.GateChecker.
 type mockGateChecker struct {
-	isPremiumResult bool
+	isPremiumResult     bool
+	isEarlyAccessResult bool
 }
 
-func (m *mockGateChecker) IsPremium(_ string) bool { return m.isPremiumResult }
+func (m *mockGateChecker) IsPremium(_ string) bool     { return m.isPremiumResult }
+func (m *mockGateChecker) IsEarlyAccess(_ string) bool { return m.isEarlyAccessResult }
 
 // ---- Shared fixtures -------------------------------------------------------
 

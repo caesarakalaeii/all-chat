@@ -28,11 +28,16 @@ import (
 
 // mockGateChecker implements GateChecker for testing
 type mockGateChecker struct {
-	isPremiumResult bool
+	isPremiumResult     bool
+	isEarlyAccessResult bool
 }
 
 func (m *mockGateChecker) IsPremium(_ string) bool {
 	return m.isPremiumResult
+}
+
+func (m *mockGateChecker) IsEarlyAccess(_ string) bool {
+	return m.isEarlyAccessResult
 }
 
 // newTestRouter creates a gin router that injects a user_id into the context

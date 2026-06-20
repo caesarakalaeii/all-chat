@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -41,6 +40,7 @@ interface User {
   youtube_id?: string
   kick_id?: string
   is_premium: boolean
+  is_beta_tester: boolean
   is_banned: boolean
   banned_at?: string
   banned_reason?: string
@@ -72,6 +72,8 @@ export default function UsersPage() {
   const [unbanDialogUser, setUnbanDialogUser] = useState<User | null>(null)
   const [premiumDialogUser, setPremiumDialogUser] = useState<User | null>(null)
   const [premiumLoading, setPremiumLoading] = useState(false)
+  const [betaDialogUser, setBetaDialogUser] = useState<User | null>(null)
+  const [betaLoading, setBetaLoading] = useState(false)
 
   // Fetch all users from the database
   useEffect(() => {
@@ -289,6 +291,55 @@ export default function UsersPage() {
     }
   }
 
+  // handleSetBetaTester grants/revokes the beta-tester role (ADR-0020): all premium
+  // features plus early-access ones. This is the manual grandfathering mechanism for
+  // the pre-monetization premium users — there is no data migration.
+  const handleSetBetaTester = async (userId: string, username: string, isBetaTester: boolean) => {
+    setBetaLoading(true)
+    try {
+      const token = localStorage.getItem('jwt_token')
+      const response = await fetch(`/api/v1/admin/beta-tester/users/${userId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_beta_tester: isBetaTester }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update beta-tester status')
+      }
+
+      toastManager.add({
+        title: isBetaTester
+          ? `${username} is now a beta tester`
+          : `${username} is no longer a beta tester`,
+        type: 'success',
+      })
+      setBetaDialogUser(null)
+      await refetchUsers()
+
+      // Update selectedUser in place. Beta testers are premium (the backend recompute
+      // folds is_beta_tester into is_premium), so reflect that here too.
+      if (selectedUser?.id === userId) {
+        setSelectedUser((u) =>
+          u
+            ? { ...u, is_beta_tester: isBetaTester, is_premium: isBetaTester ? true : u.is_premium }
+            : u
+        )
+      }
+    } catch (err: any) {
+      toastManager.add({
+        title: err.message || 'Failed to update beta-tester status',
+        type: 'error',
+      })
+    } finally {
+      setBetaLoading(false)
+    }
+  }
+
   // Filter and search users
   const displayUsers = users.filter((u) => {
     // Filter by status
@@ -420,7 +471,12 @@ export default function UsersPage() {
                         <div className="flex items-center">
                           <p className="text-sm font-medium text-text">{user.display_name}</p>
                           <div className="ml-2 flex space-x-1">
-                            {user.is_premium && (
+                            {user.is_beta_tester && (
+                              <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400">
+                                BETA
+                              </span>
+                            )}
+                            {user.is_premium && !user.is_beta_tester && (
                               <span className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
                                 PREMIUM
                               </span>
@@ -695,6 +751,117 @@ export default function UsersPage() {
                             }
                           >
                             {premiumLoading ? 'Saving...' : 'Grant Premium'}
+                          </Button>
+                        </div>
+                      </Dialog.Content>
+                    </Dialog.Root>
+                  )}
+                </div>
+
+                {/* Beta Tester Section (ADR-0020): all premium + early-access features */}
+                <div className="mt-6 border-t border-border pt-6">
+                  {selectedUser.is_beta_tester ? (
+                    <>
+                      <div className="mb-3 rounded-lg border border-violet-500/20 bg-violet-500/10 p-3">
+                        <p className="text-sm font-medium text-violet-400">Beta tester</p>
+                        <p className="mt-1 text-xs text-violet-400/70">
+                          Has all premium features plus early-access ones.
+                        </p>
+                      </div>
+                      <Dialog.Root
+                        open={
+                          betaDialogUser?.id === selectedUser.id &&
+                          betaDialogUser?.is_beta_tester === true
+                        }
+                        onOpenChange={(open) => {
+                          if (!open) setBetaDialogUser(null)
+                        }}
+                      >
+                        <Dialog.Trigger
+                          render={
+                            <Button
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => setBetaDialogUser(selectedUser)}
+                            >
+                              Revoke Beta Tester
+                            </Button>
+                          }
+                        />
+                        <Dialog.Content showCloseButton={false}>
+                          <Dialog.Title>
+                            Revoke beta tester for &ldquo;{selectedUser.username}&rdquo;?
+                          </Dialog.Title>
+                          <Dialog.Description>
+                            They lose early-access features. Premium then follows their subscription
+                            or any admin override.
+                          </Dialog.Description>
+                          <div className="mt-6 flex justify-end gap-3">
+                            <Dialog.Close
+                              render={
+                                <Button variant="outline" disabled={betaLoading}>
+                                  Cancel
+                                </Button>
+                              }
+                            />
+                            <Button
+                              variant="destructive"
+                              disabled={betaLoading}
+                              onClick={() =>
+                                handleSetBetaTester(selectedUser.id, selectedUser.username, false)
+                              }
+                            >
+                              {betaLoading ? 'Saving...' : 'Revoke Beta Tester'}
+                            </Button>
+                          </div>
+                        </Dialog.Content>
+                      </Dialog.Root>
+                    </>
+                  ) : (
+                    <Dialog.Root
+                      open={
+                        betaDialogUser?.id === selectedUser.id &&
+                        betaDialogUser?.is_beta_tester === false
+                      }
+                      onOpenChange={(open) => {
+                        if (!open) setBetaDialogUser(null)
+                      }}
+                    >
+                      <Dialog.Trigger
+                        render={
+                          <Button
+                            variant="outline"
+                            className="w-full border-violet-500/40 text-violet-400 hover:border-violet-500/60 hover:bg-violet-500/10"
+                            onClick={() => setBetaDialogUser(selectedUser)}
+                          >
+                            Grant Beta Tester
+                          </Button>
+                        }
+                      />
+                      <Dialog.Content showCloseButton={false}>
+                        <Dialog.Title>
+                          Grant beta tester to &ldquo;{selectedUser.username}&rdquo;?
+                        </Dialog.Title>
+                        <Dialog.Description>
+                          They gain all premium features plus early-access ones. Use this to
+                          grandfather pre-monetization premium users.
+                        </Dialog.Description>
+                        <div className="mt-6 flex justify-end gap-3">
+                          <Dialog.Close
+                            render={
+                              <Button variant="outline" disabled={betaLoading}>
+                                Cancel
+                              </Button>
+                            }
+                          />
+                          <Button
+                            variant="default"
+                            disabled={betaLoading}
+                            onClick={() =>
+                              handleSetBetaTester(selectedUser.id, selectedUser.username, true)
+                            }
+                          >
+                            {betaLoading ? 'Saving...' : 'Grant Beta Tester'}
                           </Button>
                         </div>
                       </Dialog.Content>
