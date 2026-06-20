@@ -406,7 +406,7 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 			return
 		}
 
-		oauthState := oauth.NewAddSourceState(csrfToken, overlayID, userIDStr)
+		oauthState := oauth.NewModerationState(csrfToken, overlayID, userIDStr)
 		if err := oauthState.Validate(); err != nil {
 			h.logger.Error("Invalid OAuth state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -764,24 +764,33 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 					zap.String("overlay_id", oauthState.OverlayID),
 					zap.Error(err),
 				)
-				// Redirect with error
-				redirectURL := fmt.Sprintf("%s/overlays/%s?error=failed_to_add_source",
-					h.frontendURL,
-					oauthState.OverlayID,
-				)
-				h.redirectWithTombstone(c, platform, oauthState.CSRFToken, redirectURL)
+				// Redirect with error. Moderation re-consent returns to the overlay
+				// monitor it was launched from, not the overlay settings page.
+				errRedirect := fmt.Sprintf("%s/overlays/%s?error=failed_to_add_source", h.frontendURL, oauthState.OverlayID)
+				if oauthState.IsModeration() {
+					errRedirect = fmt.Sprintf("%s/overlay/%s/view?error=moderation_setup_failed", h.frontendURL, oauthState.OverlayID)
+				}
+				h.redirectWithTombstone(c, platform, oauthState.CSRFToken, errRedirect)
 				return
 			}
 
-			// Redirect through auth callback to preserve authentication, then to overlay page
-			// The frontend auth callback will store the JWT and then redirect to the overlay
-			redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer&redirect_to=/overlays/%s&source_added=%s",
+			// Redirect through auth callback to preserve authentication, then to the
+			// originating page. Moderation re-consent returns to the overlay monitor
+			// (/overlay/{id}/view) where the streamer enabled it; a real source-add
+			// returns to overlay settings (ADR-0017).
+			redirectTo := fmt.Sprintf("/overlays/%s", oauthState.OverlayID)
+			completionMarker := fmt.Sprintf("source_added=%s", platform)
+			if oauthState.IsModeration() {
+				redirectTo = fmt.Sprintf("/overlay/%s/view", oauthState.OverlayID)
+				completionMarker = fmt.Sprintf("moderation_enabled=%s", platform)
+			}
+			redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer&redirect_to=%s&%s",
 				h.frontendURL,
 				jwtToken,
 				token.RefreshToken,
 				int64(h.jwtExpiry.Seconds()),
-				oauthState.OverlayID,
-				platform,
+				redirectTo,
+				completionMarker,
 			)
 
 			h.logger.Info("Source added successfully via OAuth",

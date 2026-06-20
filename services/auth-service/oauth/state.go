@@ -31,12 +31,19 @@ const (
 	ActionAddSource OAuthAction = "add_source"
 )
 
+// PurposeModeration marks an add-source flow that is really an opt-in moderation
+// re-consent (ADR-0017). It reuses the add-source action so the callback runs the
+// same token/scope persistence, but the marker lets the callback return the user to
+// the overlay monitor (/overlay/{id}/view) instead of the overlay settings page.
+const PurposeModeration = "moderation"
+
 // OAuthState represents the state parameter for OAuth flow
 type OAuthState struct {
 	CSRFToken string      `json:"csrf_token"` // Random string for CSRF protection
 	OverlayID string      `json:"overlay_id,omitempty"` // Target overlay for source addition
 	UserID    string      `json:"user_id,omitempty"` // Current user ID for account linking
 	Action    OAuthAction `json:"action"` // Action to take after callback
+	Purpose   string      `json:"purpose,omitempty"` // Sub-flow marker (e.g. moderation re-consent)
 }
 
 // NewLoginState creates a new state for login flow
@@ -55,6 +62,21 @@ func NewAddSourceState(csrfToken, overlayID, userID string) *OAuthState {
 		UserID:    userID,
 		Action:    ActionAddSource,
 	}
+}
+
+// NewModerationState creates a state for the opt-in moderation re-consent flow
+// (ADR-0017). It is an add-source state — so the shared callback persists the new
+// token/scopes and overlay link unchanged — tagged with PurposeModeration so the
+// callback returns the user to the overlay monitor rather than overlay settings.
+func NewModerationState(csrfToken, overlayID, userID string) *OAuthState {
+	s := NewAddSourceState(csrfToken, overlayID, userID)
+	s.Purpose = PurposeModeration
+	return s
+}
+
+// IsModeration reports whether this state is an opt-in moderation re-consent flow.
+func (s *OAuthState) IsModeration() bool {
+	return s.Purpose == PurposeModeration
 }
 
 // Encode serializes the state to JSON string
