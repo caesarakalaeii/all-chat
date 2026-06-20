@@ -291,6 +291,39 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0018: Premium Entitlements via Patreon
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: `users.is_premium` is admin-granted only; we want self-serve premium by backing All-Chat's own Patreon, without breaking admin comps or the premium read path
+**Decision**: New `payment-service` (Patreon OAuth connect + HMAC-MD5 webhooks + reconcile job); `users.is_premium` becomes a derived column = `(premium_admin_override IS TRUE) OR (override IS NULL AND active subscription)`, recomputed by `shared/premium.RecomputePremium`; identity via Patreon OAuth; status from Patreon's own grace-aware signal; single-replica reconcile backstop
+**Impact**: Premium readers unchanged; admin comps survive lapses and payment never clobbers admin decisions; convergent/idempotent write path; Patreon-only (Ko-fi deferred)
+**→ Read**: [0018-premium-entitlements-via-patreon.md](./0018-premium-entitlements-via-patreon.md)
+
+---
+
+### ADR-0019: Split Streamer vs Viewer Premium via a Polymorphic Patreon Subject
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: `users.is_premium` (streamer features) and `viewers.is_premium` (cosmetic badge) are conflated; pure viewers (no `users` account) have no way to buy a cheaper viewer subscription
+**Decision**: Generalize the ADR-0018 pipeline to a polymorphic subject (`user` | `viewer`) + tier-driven `product`; viewers connect Patreon via a viewer-JWT flow in payment-service; `viewers.is_premium` becomes a single-writer derived column via `RecomputeViewer` (admin override + active viewer sub OR inherited streamer premium)
+**Impact**: One payment stack serves both products; viewer premium gains the convergent/clobber-free guarantees of the user side and fixes the inherited-premium-never-revoked staleness; one Patreon account grants one identity (documented)
+**→ Read**: [0019-split-streamer-viewer-premium.md](./0019-split-streamer-viewer-premium.md)
+
+---
+
+### ADR-0020: Beta-Tester Role + Early-Access Feature Gates
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: Thank the ~5 pre-monetization premium users with a standing role granting all premium features plus early-access ones; there is no role above premium, and a blanket grandfather `UPDATE` would re-run every pod start (009-incident class) and sweep in paid users
+**Decision**: `users.is_beta_tester` folded into the `is_premium` derivation (a beta-tester is premium) + a `feature_gates.early_access` dimension enforced by a DB-backed `RequireEarlyAccess` (mirrors `RequirePremium`, fresh on grant); grandfathering is manual via an admin "Grant Beta Tester" button — no data migration. JWT-role gating rejected (stale until re-login)
+**Impact**: Reuses ADR-0018 `Recompute`/`Effective` + ADR-0008 gates with no new authz subsystem; beta-testers pass every premium gate transparently; grant/revoke is fresh and convergent
+**→ Read**: [0020-beta-tester-role.md](./0020-beta-tester-role.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -412,13 +445,13 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 17
+**Total ADRs**: 19
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-06-19
+**Last Updated**: 2026-06-20

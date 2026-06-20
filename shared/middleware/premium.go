@@ -24,10 +24,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// GateChecker is a narrow interface for checking feature gate premium status.
-// Implemented by featuregates.FeatureGateCache in production and by mocks in tests.
+// GateChecker is a narrow interface for checking feature gate status. Implemented
+// by featuregates.FeatureGateCache in production and by mocks in tests. The two
+// dimensions are orthogonal (ADR-0008 premium, ADR-0020 early-access): a gate may
+// require premium, early-access (beta-tester), both, or neither.
 type GateChecker interface {
 	IsPremium(key string) bool
+	IsEarlyAccess(key string) bool
 }
 
 // premiumQuerier is an injectable function type for querying a user's premium status.

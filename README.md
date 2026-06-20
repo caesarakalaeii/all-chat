@@ -184,6 +184,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `source-manager` | Leader election, active source tracking, demand coordination |
 | `share-service` | Shareable overlay link generation |
 | `moderation-service` | Cross-platform chat moderation write-path: delete / timeout / ban (ADR-0017) |
+| `payment-service` | Patreon premium entitlements: grants `users.is_premium` (streamer, ADR-0018) and `viewers.is_premium` (viewer split, ADR-0019) from subscriptions |
 | `token-refresh-service` | OAuth token refresh on schedule |
 
 ### Tech Stack
@@ -242,6 +243,7 @@ Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README
 - **ADR-0006**: YouTube quota reserve-confirm-rollback pattern
 - **ADR-0007**: Leadership rebalancing for auto-scaling listeners
 - **ADR-0008**: Feature gate infrastructure for premium capabilities
+- **ADR-0020**: Beta-tester role + early-access feature gates (extends ADR-0008; a beta-tester is premium plus early-access, granted via an admin button — no data migration)
 - **ADR-0013**: Public overlay observability view + shared `useOverlayStream` hook
 - **ADR-0014**: Linger upstream capture demand symmetric with the downstream pub/sub linger
 - **ADR-0015**: Dynamic EventSub chat-ownership claim — IRC is the always-on fallback; EventSub owns a channel only while it is actively delivering chat (no silent loss across the partition)

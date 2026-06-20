@@ -20,24 +20,25 @@ import "time"
 
 // User represents a user in the system
 type User struct {
-	ID              string    `json:"id"`
-	TwitchID        *string   `json:"twitch_id,omitempty"`      // Nullable for other platform users
-	GoogleID        *string   `json:"google_id,omitempty"`      // Nullable for non-YouTube users
-	KickID          *string   `json:"kick_id,omitempty"`        // Nullable for non-Kick users
-	AuthProvider    string    `json:"auth_provider"`            // "twitch", "youtube", or "kick"
-	Username        string    `json:"username"`
-	DisplayName     string    `json:"display_name"`
+	ID              string     `json:"id"`
+	TwitchID        *string    `json:"twitch_id,omitempty"` // Nullable for other platform users
+	GoogleID        *string    `json:"google_id,omitempty"` // Nullable for non-YouTube users
+	KickID          *string    `json:"kick_id,omitempty"`   // Nullable for non-Kick users
+	AuthProvider    string     `json:"auth_provider"`       // "twitch", "youtube", or "kick"
+	Username        string     `json:"username"`
+	DisplayName     string     `json:"display_name"`
 	ProfileImageURL string     `json:"profile_image_url"`
-	IsAdmin         bool       `json:"is_admin"`                  // Admin role for access control
-	IsPremium       bool       `json:"is_premium"`                // Premium feature access
-	IsBanned        bool       `json:"is_banned"`                 // Ban status
-	BannedAt        *time.Time `json:"banned_at,omitempty"`       // When user was banned
-	BannedReason    *string    `json:"banned_reason,omitempty"`   // Reason for ban
-	BannedBy        *string    `json:"banned_by,omitempty"`       // Admin who banned (user ID)
-	AccessToken     string     `json:"-"`                         // Never expose in JSON
-	RefreshToken    string     `json:"-"`                         // Never expose in JSON
+	IsAdmin         bool       `json:"is_admin"`                // Admin role for access control
+	IsPremium       bool       `json:"is_premium"`              // Premium feature access (derived)
+	IsBetaTester    bool       `json:"is_beta_tester"`          // Beta-tester role (ADR-0020): all premium + early-access
+	IsBanned        bool       `json:"is_banned"`               // Ban status
+	BannedAt        *time.Time `json:"banned_at,omitempty"`     // When user was banned
+	BannedReason    *string    `json:"banned_reason,omitempty"` // Reason for ban
+	BannedBy        *string    `json:"banned_by,omitempty"`     // Admin who banned (user ID)
+	AccessToken     string     `json:"-"`                       // Never expose in JSON
+	RefreshToken    string     `json:"-"`                       // Never expose in JSON
 	TokenExpiresAt  time.Time  `json:"-"`
-	GrantedScopes   []string   `json:"-"`                         // OAuth scopes granted at consent (TEXT[] in DB); gates EventSub chat reading
+	GrantedScopes   []string   `json:"-"` // OAuth scopes granted at consent (TEXT[] in DB); gates EventSub chat reading
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }

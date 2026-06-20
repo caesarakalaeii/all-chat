@@ -83,6 +83,39 @@ func TestIsPremiumUnknownKey_EmptyCache(t *testing.T) {
 	assert.True(t, got, "IsPremium should return true (safe default) even with empty cache")
 }
 
+// TestIsEarlyAccess_KnownKey verifies IsEarlyAccess reflects the early_access flag
+// for a known key, independently of is_premium (ADR-0020).
+func TestIsEarlyAccess_KnownKey(t *testing.T) {
+	cache := featuregates.NewFeatureGateCacheWithEarlyAccess(map[string]bool{
+		"beta-feature":   true,
+		"stable-feature": false,
+	})
+
+	assert.True(t, cache.IsEarlyAccess("beta-feature"), "early-access gate should report true")
+	assert.False(t, cache.IsEarlyAccess("stable-feature"), "non-early-access gate should report false")
+}
+
+// TestIsEarlyAccessUnknownKey verifies IsEarlyAccess fails closed (true) for unknown
+// keys, mirroring IsPremium — an unseeded gate is beta-only, not silently open.
+func TestIsEarlyAccessUnknownKey(t *testing.T) {
+	cache := featuregates.NewFeatureGateCacheWithEarlyAccess(map[string]bool{})
+
+	assert.True(t, cache.IsEarlyAccess("non-existent-gate-key-xyz"),
+		"IsEarlyAccess should return true (safe default) for unknown keys")
+}
+
+// TestEarlyAccessAndPremiumAreOrthogonal verifies the two dimensions don't bleed
+// into each other: a premium-only gate is not early-access, and vice versa.
+func TestEarlyAccessAndPremiumAreOrthogonal(t *testing.T) {
+	premiumOnly := featuregates.NewFeatureGateCacheWithGates(map[string]bool{"p": true})
+	assert.True(t, premiumOnly.IsPremium("p"))
+	assert.False(t, premiumOnly.IsEarlyAccess("p"), "premium gate seeded via WithGates is not early-access")
+
+	earlyOnly := featuregates.NewFeatureGateCacheWithEarlyAccess(map[string]bool{"e": true})
+	assert.True(t, earlyOnly.IsEarlyAccess("e"))
+	assert.False(t, earlyOnly.IsPremium("e"), "early-access gate seeded via WithEarlyAccess is not premium")
+}
+
 // TestPubSubInvalidationTriggersReload verifies that publishing to the PubSub
 // channel causes the cache to reload its in-memory gates map.
 func TestPubSubInvalidationTriggersReload(t *testing.T) {
