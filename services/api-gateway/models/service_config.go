@@ -224,6 +224,17 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		RewritePrefix: "/public/test-stream",
 	}
 
+	// Moderation Service (ADR-0017): authenticated chat-moderation write path.
+	// Serves /api/v1/moderation/* directly (no strip), like share-service.
+	moderationURL := getEnvOrDefault("MODERATION_SERVICE_URL", "http://localhost:8092")
+	registry.Services["moderation-service"] = &ServiceConfig{
+		Name:        "moderation-service",
+		BaseURL:     moderationURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/moderation",
+		StripPrefix: false,
+	}
+
 	// Validate all service URLs are set
 	for name, service := range registry.Services {
 		if service.BaseURL == "" {

@@ -112,6 +112,7 @@ Each service has a detailed README:
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
 - share-service — Shareable overlay links (`services/share-service/`, no README yet)
+- [moderation-service](./services/moderation-service/README.md) - Cross-platform chat moderation write-path (delete/timeout/ban, ADR-0017)
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 - [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
 

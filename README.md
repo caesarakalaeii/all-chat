@@ -183,6 +183,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `overlay-manager` | Overlay CRUD, source configuration, settings |
 | `source-manager` | Leader election, active source tracking, demand coordination |
 | `share-service` | Shareable overlay link generation |
+| `moderation-service` | Cross-platform chat moderation write-path: delete / timeout / ban (ADR-0017) |
 | `token-refresh-service` | OAuth token refresh on schedule |
 
 ### Tech Stack

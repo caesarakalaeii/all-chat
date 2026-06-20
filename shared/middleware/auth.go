@@ -71,11 +71,18 @@ func JWTAuth(kc *auth.KeyChain) gin.HandlerFunc {
 		// Try to validate as regular user token
 		claims, err := auth.ValidateJWTWithKeyChain(tokenString, kc)
 		if err == nil {
-			// Regular user token
+			// Regular user token. For impersonation tokens UserID is already the
+			// target (effective) user, so ownership checks keyed on "user_id" behave
+			// as the impersonated user — which is intended.
 			c.Set("user_id", claims.UserID)
 			c.Set("username", claims.Username)
 			c.Set("twitch_id", claims.TwitchID)
 			c.Set("roles", claims.Roles)
+			// Impersonation provenance (ADR-0017). Empty unless an admin is acting as
+			// this user; downstream services (e.g. moderation-service) attribute the
+			// real admin in their audit log while the action runs as the target user.
+			c.Set("impersonated_by", claims.ImpersonatedBy)
+			c.Set("impersonated_user", claims.ImpersonatedUser)
 			c.Next()
 			return
 		}

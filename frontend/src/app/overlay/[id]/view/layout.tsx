@@ -28,6 +28,8 @@
 
 import type { Metadata } from 'next'
 
+import { OverlayViewGuard } from './OverlayViewGuard'
+
 export const metadata: Metadata = {
   title: 'All-Chat Monitor',
   description: 'Readable chat & activity monitor for streamers',
@@ -48,7 +50,7 @@ export default function OverlayViewLayout({ children }: { children: React.ReactN
       `,
         }}
       />
-      {children}
+      <OverlayViewGuard>{children}</OverlayViewGuard>
     </>
   )
 }
