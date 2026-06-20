@@ -298,6 +298,7 @@ Built on the shoulders of:
 
 ## Support
 
+- [Back us on Patreon](https://patreon.com/all_chat) — unlock premium (streamer €5 / viewer €2)
 - [Discord community](https://discord.gg/xCGBSuz39P)
 - [GitHub Issues](https://github.com/caesarakalaeii/all-chat/issues)
 - [GitHub Discussions](https://github.com/caesarakalaeii/all-chat/discussions)
