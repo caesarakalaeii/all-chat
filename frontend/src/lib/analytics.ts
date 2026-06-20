@@ -39,6 +39,7 @@ export type AnalyticsEvent =
   | 'overlay_created'
   | 'source_added'
   | 'source_add_failed'
+  | 'moderation_enabled'
   | 'obs_url_copied'
   // Feature adoption
   | 'theme_applied'

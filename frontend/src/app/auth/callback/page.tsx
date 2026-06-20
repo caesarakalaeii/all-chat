@@ -79,20 +79,27 @@ function AuthCallbackContent() {
         const user = await authApi.getMe()
         setUser(user)
 
-        // Check for redirect_to parameter (used when adding sources via OAuth)
+        // Check for redirect_to parameter (used when adding sources / enabling
+        // moderation via OAuth). `moderation_enabled` marks an opt-in moderation
+        // re-consent (ADR-0017) that returns to the overlay monitor, not settings.
         const redirectTo = params.get('redirect_to')
         const sourceAdded = params.get('source_added')
+        const moderationEnabled = params.get('moderation_enabled')
 
-        // A `source_added` callback means an OAuth source-add completed rather than
-        // a fresh sign-in; track them as distinct funnel steps.
-        if (sourceAdded) {
+        // Distinct funnel steps: a completion marker means an OAuth source-add or
+        // moderation re-consent finished, rather than a fresh sign-in.
+        if (moderationEnabled) {
+          trackEvent('moderation_enabled', { via: 'oauth', platform: moderationEnabled })
+        } else if (sourceAdded) {
           trackEvent('source_added', { via: 'oauth' })
         } else {
           trackEvent('signin_completed', { platform: user.auth_provider ?? 'unknown' })
         }
 
         if (redirectTo) {
-          // Redirect to specific page (e.g., overlay page after adding source)
+          // Source-add returns to overlay settings with a confirmation marker; the
+          // moderation monitor reflects the new scope on its own capabilities fetch,
+          // so it just navigates back cleanly.
           const redirectURL = sourceAdded ? `${redirectTo}?source_added=${sourceAdded}` : redirectTo
           router.push(redirectURL)
         } else {
