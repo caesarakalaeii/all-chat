@@ -617,6 +617,9 @@ func main() {
 	{
 		adminAPI.POST("/premium/users/:id", proxyHandler.ForwardRequest) // -> share-service
 
+		// Beta-tester role management (-> share-service, ADR-0020)
+		adminAPI.POST("/beta-tester/users/:id", proxyHandler.ForwardRequest)
+
 		// Feature gate management (-> share-service)
 		adminAPI.GET("/feature-gates", proxyHandler.ForwardRequest)
 		adminAPI.PATCH("/feature-gates/:key", proxyHandler.ForwardRequest)

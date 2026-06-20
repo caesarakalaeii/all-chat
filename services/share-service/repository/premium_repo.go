@@ -76,6 +76,46 @@ func (r *PremiumRepository) UpdateUserPremium(ctx context.Context, userID string
 	return nil
 }
 
+// SetUserBetaTester records the admin's beta-tester decision (ADR-0020) and
+// re-derives users.is_premium via shared/premium. A beta tester is premium (the
+// recompute folds is_beta_tester into is_premium) AND unlocks early-access gates
+// that plain premium does not. Unlike the premium override this is a plain boolean
+// — there is no "force-deny beta" state; revoking simply clears the flag, after
+// which premium follows the subscription/override again on the recompute.
+//
+// This is the ongoing "Grant Beta Tester" mechanism; the ~5 pre-monetization
+// premium users are grandfathered by an admin calling it per user, never by a
+// blanket data migration (ADR-0020 / the 009-incident class).
+func (r *PremiumRepository) SetUserBetaTester(ctx context.Context, userID string, isBetaTester bool) error {
+	result, err := r.db.Exec(ctx,
+		"UPDATE users SET is_beta_tester = $1 WHERE id = $2",
+		isBetaTester, userID)
+	if err != nil {
+		r.logger.Error("Failed to update beta-tester status",
+			zap.String("user_id", userID),
+			zap.Bool("is_beta_tester", isBetaTester),
+			zap.Error(err))
+		return fmt.Errorf("failed to update beta-tester status: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found: %s", userID)
+	}
+
+	if _, err := r.recomputer.Recompute(ctx, userID); err != nil {
+		r.logger.Error("Failed to recompute premium after beta-tester change",
+			zap.String("user_id", userID),
+			zap.Error(err))
+		return fmt.Errorf("failed to recompute premium status: %w", err)
+	}
+
+	r.logger.Info("Beta-tester status updated",
+		zap.String("user_id", userID),
+		zap.Bool("is_beta_tester", isBetaTester))
+
+	return nil
+}
+
 func (r *PremiumRepository) IsPremium(ctx context.Context, userID string) (bool, error) {
 	var isPremium bool
 	err := r.db.QueryRow(ctx,

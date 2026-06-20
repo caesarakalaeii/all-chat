@@ -59,8 +59,17 @@ const (
 type FeatureGate struct {
 	Key         string
 	IsPremium   bool
+	EarlyAccess bool
 	Description string
 	UpdatedAt   time.Time
+}
+
+// gateFlags holds the per-key gate dimensions kept in the cache. is_premium
+// (ADR-0008) and early_access (ADR-0020) are orthogonal: a feature can require
+// premium, early-access (beta-tester), both, or neither.
+type gateFlags struct {
+	isPremium   bool
+	earlyAccess bool
 }
 
 // FeatureGateCache maintains an in-memory map of feature gate states.
@@ -71,7 +80,7 @@ type FeatureGateCache struct {
 	logger *zap.Logger
 
 	mu    sync.RWMutex
-	gates map[string]bool
+	gates map[string]gateFlags
 
 	// refreshIntervalOverride allows tests to inject a shorter ticker period.
 	refreshIntervalOverride time.Duration
@@ -87,18 +96,33 @@ func NewFeatureGateCache(db *pgxpool.Pool, rc *redis.Client, logger *zap.Logger)
 		db:     db,
 		redis:  rc,
 		logger: logger,
-		gates:  make(map[string]bool),
+		gates:  make(map[string]gateFlags),
 	}
 }
 
 // NewFeatureGateCacheWithGates creates a FeatureGateCache pre-populated with
-// the given gates map. Intended for unit tests that do not need a DB or Redis.
+// the given premium-gate map (key -> is_premium). Intended for unit tests that do
+// not need a DB or Redis. early_access defaults to false for every key; use
+// NewFeatureGateCacheWithEarlyAccess to seed early-access gates.
 func NewFeatureGateCacheWithGates(gates map[string]bool) *FeatureGateCache {
 	c := &FeatureGateCache{
-		gates: make(map[string]bool, len(gates)),
+		gates: make(map[string]gateFlags, len(gates)),
 	}
 	for k, v := range gates {
-		c.gates[k] = v
+		c.gates[k] = gateFlags{isPremium: v}
+	}
+	return c
+}
+
+// NewFeatureGateCacheWithEarlyAccess creates a FeatureGateCache pre-populated with
+// the given early-access map (key -> early_access). Intended for unit tests of the
+// early-access gate. is_premium defaults to false for every key.
+func NewFeatureGateCacheWithEarlyAccess(gates map[string]bool) *FeatureGateCache {
+	c := &FeatureGateCache{
+		gates: make(map[string]gateFlags, len(gates)),
+	}
+	for k, v := range gates {
+		c.gates[k] = gateFlags{earlyAccess: v}
 	}
 	return c
 }
@@ -109,7 +133,7 @@ func NewFeatureGateCacheWithGates(gates map[string]bool) *FeatureGateCache {
 func NewFeatureGateCacheForTest(rc *redis.Client, onReload func()) *FeatureGateCache {
 	return &FeatureGateCache{
 		redis:    rc,
-		gates:    make(map[string]bool),
+		gates:    make(map[string]gateFlags),
 		onReload: onReload,
 	}
 }
@@ -119,7 +143,7 @@ func NewFeatureGateCacheForTest(rc *redis.Client, onReload func()) *FeatureGateC
 func NewFeatureGateCacheForTestWithInterval(rc *redis.Client, onReload func(), interval time.Duration) *FeatureGateCache {
 	return &FeatureGateCache{
 		redis:                   rc,
-		gates:                   make(map[string]bool),
+		gates:                   make(map[string]gateFlags),
 		onReload:                onReload,
 		refreshIntervalOverride: interval,
 	}
@@ -138,7 +162,23 @@ func (c *FeatureGateCache) IsPremium(key string) bool {
 	if !ok {
 		return true // unknown key: safe default, treat as premium-required
 	}
-	return val
+	return val.isPremium
+}
+
+// IsEarlyAccess returns true if the given feature gate is an early-access feature
+// (ADR-0020), reachable only by beta-testers via middleware.RequireEarlyAccess.
+//
+// Safe default: returns true for any unknown key, mirroring IsPremium — an
+// unseeded key fails closed (beta-only) rather than silently opening the feature.
+func (c *FeatureGateCache) IsEarlyAccess(key string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	val, ok := c.gates[key]
+	if !ok {
+		return true // unknown key: safe default, treat as early-access-required
+	}
+	return val.earlyAccess
 }
 
 // Start performs an initial reload from DB, subscribes to the Pub/Sub
@@ -248,20 +288,20 @@ func (c *FeatureGateCache) triggerReload(ctx context.Context) {
 // reload queries the DB for all feature gates and atomically swaps the
 // in-memory map under a write lock.
 func (c *FeatureGateCache) reload(ctx context.Context) error {
-	rows, err := c.db.Query(ctx, "SELECT feature_key, is_premium FROM feature_gates")
+	rows, err := c.db.Query(ctx, "SELECT feature_key, is_premium, early_access FROM feature_gates")
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	newGates := make(map[string]bool)
+	newGates := make(map[string]gateFlags)
 	for rows.Next() {
 		var key string
-		var isPremium bool
-		if err := rows.Scan(&key, &isPremium); err != nil {
+		var flags gateFlags
+		if err := rows.Scan(&key, &flags.isPremium, &flags.earlyAccess); err != nil {
 			return err
 		}
-		newGates[key] = isPremium
+		newGates[key] = flags
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -284,7 +324,7 @@ func (c *FeatureGateCache) GetAll(ctx context.Context) ([]FeatureGate, error) {
 	}
 
 	rows, err := c.db.Query(ctx,
-		"SELECT feature_key, is_premium, description, updated_at FROM feature_gates ORDER BY feature_key")
+		"SELECT feature_key, is_premium, early_access, description, updated_at FROM feature_gates ORDER BY feature_key")
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +333,7 @@ func (c *FeatureGateCache) GetAll(ctx context.Context) ([]FeatureGate, error) {
 	var gates []FeatureGate
 	for rows.Next() {
 		var g FeatureGate
-		if err := rows.Scan(&g.Key, &g.IsPremium, &g.Description, &g.UpdatedAt); err != nil {
+		if err := rows.Scan(&g.Key, &g.IsPremium, &g.EarlyAccess, &g.Description, &g.UpdatedAt); err != nil {
 			return nil, err
 		}
 		gates = append(gates, g)

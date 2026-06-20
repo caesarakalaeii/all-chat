@@ -210,6 +210,14 @@ func main() {
 			adminRoutes.POST("/users/:id", adminHandler.SetUserPremium)
 		}
 
+		// Beta-tester admin routes (ADR-0020) — separate prefix, same AdminOnly gate.
+		// Grants the beta-tester role (all premium + early-access features).
+		betaTesterRoutes := api.Group("/admin/beta-tester")
+		betaTesterRoutes.Use(middleware.AdminOnly())
+		{
+			betaTesterRoutes.POST("/users/:id", adminHandler.SetUserBetaTester)
+		}
+
 		// Feature gate admin routes (separate from /admin/premium to avoid path conflict)
 		featureGateRoutes := api.Group("/admin/feature-gates")
 		featureGateRoutes.Use(middleware.AdminOnly())

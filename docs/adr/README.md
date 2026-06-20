@@ -313,6 +313,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0020: Beta-Tester Role + Early-Access Feature Gates
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: Thank the ~5 pre-monetization premium users with a standing role granting all premium features plus early-access ones; there is no role above premium, and a blanket grandfather `UPDATE` would re-run every pod start (009-incident class) and sweep in paid users
+**Decision**: `users.is_beta_tester` folded into the `is_premium` derivation (a beta-tester is premium) + a `feature_gates.early_access` dimension enforced by a DB-backed `RequireEarlyAccess` (mirrors `RequirePremium`, fresh on grant); grandfathering is manual via an admin "Grant Beta Tester" button — no data migration. JWT-role gating rejected (stale until re-login)
+**Impact**: Reuses ADR-0018 `Recompute`/`Effective` + ADR-0008 gates with no new authz subsystem; beta-testers pass every premium gate transparently; grant/revoke is fresh and convergent
+**→ Read**: [0020-beta-tester-role.md](./0020-beta-tester-role.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

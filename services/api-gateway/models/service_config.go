@@ -189,6 +189,15 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		PathPrefix:  "/api/v1/admin/feature-gates",
 		StripPrefix: false,
 	}
+	// Admin beta-tester routes (ADR-0020) → share-service — separate prefix to avoid
+	// conflict with admin-users → auth-service, like admin/premium above.
+	registry.Services["share-service-admin-beta-tester"] = &ServiceConfig{
+		Name:        "share-service-admin-beta-tester",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/admin/beta-tester",
+		StripPrefix: false,
+	}
 
 	// Admin maintenance window routes → overlay-manager
 	registry.Services["admin-maintenance"] = &ServiceConfig{

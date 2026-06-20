@@ -366,6 +366,103 @@ func TestOneSubjectConstraint(t *testing.T) {
 	require.Error(t, err, "a subscription anchored to both a user and a viewer must violate the one-subject CHECK")
 }
 
+// TestRecomputeBetaTesterGrantsPremium validates the ADR-0020 input to the real
+// recompute SQL: a beta-tester is premium with no subscription, an admin force-deny
+// still beats it, and revoking the flag reverts to following the subscription.
+func TestRecomputeBetaTesterGrantsPremium(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires Docker")
+	}
+	pool, cleanup := setupDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	rc := premium.NewRecomputer(pool, zap.NewNop())
+
+	id := insertUser(t, pool, "beta")
+
+	// (a) Beta-tester with no subscription and no override is premium.
+	_, err := pool.Exec(ctx, "UPDATE users SET is_beta_tester = TRUE WHERE id = $1", id)
+	require.NoError(t, err)
+	got, err := rc.Recompute(ctx, id)
+	require.NoError(t, err)
+	assert.True(t, got, "a beta-tester is premium without any subscription")
+	assert.True(t, dbPremium(t, pool, id))
+
+	// (b) Admin force-deny beats beta-tester (override always wins).
+	_, err = pool.Exec(ctx, "UPDATE users SET premium_admin_override = FALSE WHERE id = $1", id)
+	require.NoError(t, err)
+	got, err = rc.Recompute(ctx, id)
+	require.NoError(t, err)
+	assert.False(t, got, "admin force-deny overrides beta-tester premium")
+	assert.False(t, dbPremium(t, pool, id))
+
+	// (c) Revoking beta-tester (and clearing the override) reverts to the
+	//     subscription, of which there is none -> not premium.
+	_, err = pool.Exec(ctx, "UPDATE users SET is_beta_tester = FALSE, premium_admin_override = NULL WHERE id = $1", id)
+	require.NoError(t, err)
+	got, err = rc.Recompute(ctx, id)
+	require.NoError(t, err)
+	assert.False(t, got, "after revoking beta-tester with no sub, not premium")
+	assert.False(t, dbPremium(t, pool, id))
+}
+
+// TestEarlyAccessGate is the end-to-end check for ADR-0020's early-access gate: the
+// real RequireEarlyAccess middleware, backed by a real feature_gates row and the
+// FeatureGateCache loaded from DB, admits a beta-tester and denies a plain user;
+// graduating the gate (early_access=FALSE) opens it to everyone authenticated.
+func TestEarlyAccessGate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires Docker")
+	}
+	pool, cleanup := setupDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	betaUser := insertUser(t, pool, "beta-gate")
+	_, err := pool.Exec(ctx, "UPDATE users SET is_beta_tester = TRUE WHERE id = $1", betaUser)
+	require.NoError(t, err)
+	plainUser := insertUser(t, pool, "plain-gate")
+
+	const earlyKey = "beta-feature"
+	_, err = pool.Exec(ctx,
+		"INSERT INTO feature_gates (feature_key, is_premium, early_access) VALUES ($1, FALSE, TRUE) ON CONFLICT (feature_key) DO UPDATE SET early_access = TRUE",
+		earlyKey)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+
+	gin.SetMode(gin.TestMode)
+	// serve mounts a throwaway router gated by RequireEarlyAccess acting as userID,
+	// using the given cache, and returns the status code.
+	serve := func(gates *featuregates.FeatureGateCache, userID string) int {
+		r := gin.New()
+		r.GET("/x",
+			func(c *gin.Context) { c.Set("user_id", userID); c.Next() },
+			middleware.RequireEarlyAccess(pool, gates, earlyKey, zap.NewNop()),
+			func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) },
+		)
+		req := httptest.NewRequest(http.MethodGet, "/x", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	// early_access = TRUE: beta-tester passes, plain user is denied.
+	gates := featuregates.NewFeatureGateCache(pool, rdb, zap.NewNop())
+	require.NoError(t, gates.Start(ctx))
+	assert.Equal(t, http.StatusOK, serve(gates, betaUser), "beta-tester passes the early-access gate")
+	assert.Equal(t, http.StatusForbidden, serve(gates, plainUser), "non-beta user is denied the early-access feature")
+
+	// Graduate the feature: a fresh cache (deterministic initial reload) sees
+	// early_access = FALSE and the gate opens to any authenticated user.
+	_, err = pool.Exec(ctx, "UPDATE feature_gates SET early_access = FALSE WHERE feature_key = $1", earlyKey)
+	require.NoError(t, err)
+	graduated := featuregates.NewFeatureGateCache(pool, rdb, zap.NewNop())
+	require.NoError(t, graduated.Start(ctx))
+	assert.Equal(t, http.StatusOK, serve(graduated, plainUser), "graduated feature is open to all authenticated users")
+}
+
 // ---- helpers -------------------------------------------------------------------
 
 func signMD5(secret, body string) string {
