@@ -21,8 +21,15 @@ import clsx from 'clsx'
 
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
+import { UserAvatar } from '@/components/UserAvatar'
 import { PlatformGlyph } from '@/components/overlay/PlatformGlyph'
+import {
+  ModerationControls,
+  type ModerationControlsProps,
+} from '@/components/overlay/ModerationControls'
+import { DEFAULT_VIEW_PREFS, type MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
 import { renderMessageContent } from '@/lib/renderMessage'
+import type { SourceCapability } from '@/lib/types/moderation'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import type { ModKind, ViewItem } from '@/lib/utils/overlayViewModel'
 
@@ -33,55 +40,90 @@ const MOD_LABEL: Record<ModKind, string> = {
   clear: 'cleared',
 }
 
+/** Moderation wiring passed down from the monitor page (omit to hide controls). */
+export interface ChatRowModeration extends Pick<
+  ModerationControlsProps,
+  'onDelete' | 'onTimeout' | 'onBan' | 'onUnban'
+> {
+  /** Capability for this row's source, or undefined if the source isn't listed. */
+  capability?: SourceCapability
+}
+
 /**
  * Compact, theme-agnostic chat row for the observability view. Shows every
  * signal the overlay carries (platform, badges, pronouns, username color /
  * gradient, emotes) using neutral design tokens — no overlay theme CSS, no
  * animations. Moderated messages stay visible but struck-through and tagged.
  */
-export function ChatRow({ item }: { item: ViewItem }) {
+export function ChatRow({
+  item,
+  prefs = DEFAULT_VIEW_PREFS,
+  moderation,
+}: {
+  item: ViewItem
+  prefs?: MonitorViewPrefs
+  moderation?: ChatRowModeration
+}) {
   const mod = item._moderated
   const displayName = item.user?.display_name || item.user?.username
   const time = new Date(item.timestamp).toLocaleTimeString()
   const isShared = item.metadata?.is_shared_chat === true
+  // System rows are operational notices, never moderatable.
+  const showControls = prefs.showModeration && !!moderation && item.platform !== 'system'
 
   return (
     <div
       data-platform={item.platform}
       data-username={item.user?.username}
       className={clsx(
-        'flex gap-2 border-b border-border/60 px-3 py-1.5 text-sm leading-relaxed',
+        'group flex gap-2 border-b border-border/60 px-3 py-1.5 text-sm leading-relaxed',
         mod && 'opacity-60'
       )}
     >
-      <span className="shrink-0 pt-0.5 font-mono text-xs text-text-dim tabular-nums select-none">
-        {time}
-      </span>
-      <span className="shrink-0 pt-0.5">
-        <PlatformGlyph platform={item.platform} />
-      </span>
+      {prefs.showTimestamps && (
+        <span className="shrink-0 pt-0.5 font-mono text-xs text-text-dim tabular-nums select-none">
+          {time}
+        </span>
+      )}
+      {prefs.showPlatformGlyph && (
+        <span className="shrink-0 pt-0.5">
+          <PlatformGlyph platform={item.platform} />
+        </span>
+      )}
+      {prefs.showAvatars && (
+        <span className="shrink-0 pt-0.5">
+          <UserAvatar
+            size={20}
+            avatarUrl={item.user?.avatar_url}
+            frameUrl={item.user?.avatar_frame_url}
+            flairUrl={item.user?.avatar_flair_url}
+            displayName={displayName}
+          />
+        </span>
+      )}
       <div className="min-w-0 flex-1 break-words">
-        {item.user?.badges?.map((badge, idx) =>
-          badge.name === 'allchat' ? (
-            <span key={idx} className="mr-1 inline-block align-text-bottom">
-              <AllChatBadge size={16} title={badge.name} />
-            </span>
-          ) : badge.name === 'allchat-premium' ? (
-            <span key={idx} className="mr-1 inline-block align-text-bottom">
-              <PremiumBadge size={16} title={badge.name} />
-            </span>
-          ) : badge.icon_url ? (
-            <Image
-              key={idx}
-              src={badge.icon_url}
-              alt={badge.name}
-              width={16}
-              height={16}
-              title={badge.name}
-              className="mr-1 inline-block h-4 w-auto object-contain align-text-bottom"
-            />
-          ) : null
-        )}
+        {prefs.showBadges &&
+          item.user?.badges?.map((badge, idx) =>
+            badge.name === 'allchat' ? (
+              <span key={idx} className="mr-1 inline-block align-text-bottom">
+                <AllChatBadge size={16} title={badge.name} />
+              </span>
+            ) : badge.name === 'allchat-premium' ? (
+              <span key={idx} className="mr-1 inline-block align-text-bottom">
+                <PremiumBadge size={16} title={badge.name} />
+              </span>
+            ) : badge.icon_url ? (
+              <Image
+                key={idx}
+                src={badge.icon_url}
+                alt={badge.name}
+                width={16}
+                height={16}
+                title={badge.name}
+                className="mr-1 inline-block h-4 w-auto object-contain align-text-bottom"
+              />
+            ) : null
+          )}
         {item.user?.name_gradient ? (
           <span
             className="font-semibold"
@@ -99,7 +141,7 @@ export function ChatRow({ item }: { item: ViewItem }) {
             {displayName}
           </span>
         )}
-        {item.user?.pronouns && (
+        {prefs.showPronouns && item.user?.pronouns && (
           <span className="ml-1 rounded bg-surface-2 px-1 text-[10px] font-medium text-text-sub">
             {item.user.pronouns}
           </span>
@@ -118,6 +160,16 @@ export function ChatRow({ item }: { item: ViewItem }) {
             {MOD_LABEL[mod.kind]}
             {mod.kind === 'timeout' && mod.banDuration ? ` ${mod.banDuration}s` : ''}
           </span>
+        )}
+        {showControls && moderation && (
+          <ModerationControls
+            item={item}
+            capability={moderation.capability}
+            onDelete={moderation.onDelete}
+            onTimeout={moderation.onTimeout}
+            onBan={moderation.onBan}
+            onUnban={moderation.onUnban}
+          />
         )}
       </div>
     </div>

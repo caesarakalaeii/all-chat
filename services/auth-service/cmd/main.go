@@ -351,6 +351,12 @@ func main() {
 		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
 
+		// Opt-in moderation re-consent (ADR-0017): requests only the moderation scopes
+		// for the ?actions= being enabled, on top of the existing grant. Twitch + Kick.
+		protected.GET("/twitch/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformTwitch))
+		protected.GET("/kick/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformKick))
+		protected.GET("/youtube/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformYouTube))
+
 		// Discord guild management routes (require JWT)
 		if discordHandler != nil {
 			protected.GET("/discord/connect", discordHandler.HandleConnect)

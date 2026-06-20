@@ -100,10 +100,11 @@ class ApiClient {
     return response.json()
   }
 
-  async post<T>(endpoint: string, data: unknown): Promise<T> {
+  async post<T>(endpoint: string, data: unknown, headers?: Record<string, string>): Promise<T> {
     const response = await this.fetch(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
+      ...(headers ? { headers } : {}),
     })
     return response.json()
   }

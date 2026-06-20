@@ -58,6 +58,13 @@ import type { SourceInfo } from '@/components/PlatformStatusIndicators'
 export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting'
 
 export interface UseOverlayStreamOptions {
+  /**
+   * Optional user JWT. When present it is appended to the WebSocket URL as
+   * `&token=` so the gateway can authenticate the connection (used by the
+   * authenticated monitor view; the public OBS overlay leaves it undefined).
+   * A late-hydrated token rebinds the socket once.
+   */
+  token?: string
   /** Enriched, deduped regular chat message (no event, or a non-deletion event). */
   onChat?: (message: ChatMessage) => void
   /** Enriched TikTok like-aggregate update (no dedup — may repeat by aggregation_id). */
@@ -85,7 +92,7 @@ const SEEN_ID_CAPACITY = 1024
 
 export function useOverlayStream(
   id: string,
-  options: UseOverlayStreamOptions,
+  options: UseOverlayStreamOptions
 ): UseOverlayStreamResult {
   const [config, setConfig] = useState<PublicOverlayConfig | null>(null)
   const [sources, setSources] = useState<Map<string, SourceInfo>>(new Map())
@@ -189,8 +196,15 @@ export function useOverlayStream(
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     let wsUrl = `${protocol}//${window.location.host}/ws/overlay/${id}`
+    const params: string[] = []
     if (lastSeenTimestampRef.current > 0) {
-      wsUrl += `?since=${lastSeenTimestampRef.current}`
+      params.push(`since=${lastSeenTimestampRef.current}`)
+    }
+    if (options.token) {
+      params.push(`token=${encodeURIComponent(options.token)}`)
+    }
+    if (params.length > 0) {
+      wsUrl += `?${params.join('&')}`
     }
 
     setConnectionStatus(attemptsRef.current > 0 ? 'reconnecting' : 'connecting')
@@ -299,7 +313,7 @@ export function useOverlayStream(
         switch (classified.kind) {
           case 'replay':
             classified.deletions.forEach((deletion) =>
-              optsRef.current.onDeletion?.(deletion, 'replay'),
+              optsRef.current.onDeletion?.(deletion, 'replay')
             )
             return
 
@@ -380,7 +394,7 @@ export function useOverlayStream(
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `sources` captured at bind time by design; reconnect bookkeeping lives in refs
-  }, [id, forceReconnect])
+  }, [id, forceReconnect, options.token])
 
   // Recover instantly when the environment signals the network is usable again:
   // the OS reports connectivity (`online`) or the streamer refocuses a
@@ -393,8 +407,7 @@ export function useOverlayStream(
       const ws = wsRef.current
       if (!ws || ws.readyState === WebSocket.CONNECTING) return // nothing to do / already trying
       const healthy =
-        ws.readyState === WebSocket.OPEN &&
-        !isConnectionStale(lastActivityRef.current, Date.now())
+        ws.readyState === WebSocket.OPEN && !isConnectionStale(lastActivityRef.current, Date.now())
       if (healthy) return
       requestReconnectRef.current?.(true)
     }

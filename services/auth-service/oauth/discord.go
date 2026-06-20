@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +41,16 @@ const (
 	PermSendMessages       uint64 = 2048  // 0x800
 	PermReadMessageHistory uint64 = 65536 // 0x10000
 	RequiredBotPermissions uint64 = PermViewChannel | PermSendMessages | PermReadMessageHistory // 68608
+
+	// Moderation permission bits, requested ONLY through the opt-in moderation re-invite
+	// (ADR-0017) — never bundled into the base listener invite. MANAGE_MESSAGES → delete,
+	// MODERATE_MEMBERS → timeout, BAN_MEMBERS → ban/unban.
+	PermManageMessages  uint64 = 1 << 13 // 8192
+	PermBanMembers      uint64 = 1 << 2  // 4
+	PermModerateMembers uint64 = 1 << 40
+	// ModerationBotPermissions is the elevated permission set the moderation re-invite
+	// URL requests: the base listener permissions plus the moderation permissions.
+	ModerationBotPermissions uint64 = RequiredBotPermissions | PermManageMessages | PermBanMembers | PermModerateMembers
 )
 
 // DiscordOAuth implements OAuthProvider for Discord bot authorization.
@@ -70,14 +81,27 @@ func (d *DiscordOAuth) WithBotToken(botToken string) *DiscordOAuth {
 	return d
 }
 
-// GetAuthURL returns the Discord bot invite URL. This shows a guild picker (not a user login page)
-// because scope=bot signals Discord to use the bot authorization flow.
-// permissions=68608 requests VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY.
+// GetAuthURL returns the base Discord bot invite URL. This shows a guild picker (not a
+// user login page) because scope=bot signals Discord to use the bot authorization flow.
+// The base permissions are VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY (68608).
 func (d *DiscordOAuth) GetAuthURL(state string) string {
+	return d.inviteURL(state, RequiredBotPermissions)
+}
+
+// GetModerationAuthURL returns the opt-in moderation RE-INVITE URL — the same bot invite
+// with the elevated moderation permissions (ADR-0017). Re-authorizing on an existing
+// guild upgrades the bot's permissions in place; the streamer then sees the moderation
+// controls once the capability endpoint reports the new permissions.
+func (d *DiscordOAuth) GetModerationAuthURL(state string) string {
+	return d.inviteURL(state, ModerationBotPermissions)
+}
+
+// inviteURL builds a bot invite URL requesting the given permission bitfield.
+func (d *DiscordOAuth) inviteURL(state string, permissions uint64) string {
 	params := url.Values{}
 	params.Set("client_id", d.clientID)
 	params.Set("scope", "bot")
-	params.Set("permissions", "68608")
+	params.Set("permissions", strconv.FormatUint(permissions, 10))
 	params.Set("state", state)
 	params.Set("redirect_uri", d.redirectURL)
 	params.Set("response_type", "code")

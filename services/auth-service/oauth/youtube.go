@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
@@ -76,6 +77,52 @@ func (y *YouTubeOAuth) GetAuthURL(state string) string {
 	return y.config.AuthCodeURL(state,
 		oauth2.AccessTypeOffline,
 		oauth2.SetAuthURLParam("prompt", "select_account"),
+	)
+}
+
+// youtubeModerationScopeByAction maps a moderation action to the Google OAuth scope it
+// requires. force-ssl was dropped from login (ADR-0012) and is re-added ONLY through the
+// opt-in moderation re-consent flow (ADR-0017). YouTube moderation is ban-only in v1.
+var youtubeModerationScopeByAction = map[string]string{
+	"ban": "https://www.googleapis.com/auth/youtube.force-ssl",
+}
+
+// YouTubeModerationScopesForActions returns the deduped, minimal set of YouTube scopes
+// the given moderation actions require. Unknown/unsupported actions are ignored.
+func YouTubeModerationScopesForActions(actions []string) []string {
+	seen := make(map[string]bool)
+	out := make([]string, 0, 1)
+	for _, a := range actions {
+		if scope, ok := youtubeModerationScopeByAction[a]; ok && !seen[scope] {
+			seen[scope] = true
+			out = append(out, scope)
+		}
+	}
+	return out
+}
+
+// GetAuthURLWithScopes builds a consent URL requesting the base login scopes plus
+// `extra` (deduped). prompt=consent is REQUIRED so an already-connected streamer is
+// actually re-prompted for the new force-ssl scope (and so Google reissues a refresh
+// token); access_type=offline keeps the refresh token. The moderation re-consent passes
+// extra = (existing granted scopes ∪ force-ssl), so the token is always a superset.
+func (y *YouTubeOAuth) GetAuthURLWithScopes(state string, extra []string) string {
+	seen := make(map[string]bool)
+	scopes := make([]string, 0, len(y.config.Scopes)+len(extra))
+	add := func(list []string) {
+		for _, s := range list {
+			if s != "" && !seen[s] {
+				seen[s] = true
+				scopes = append(scopes, s)
+			}
+		}
+	}
+	add(y.config.Scopes)
+	add(extra)
+	return y.config.AuthCodeURL(state,
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("prompt", "consent"),
+		oauth2.SetAuthURLParam("scope", strings.Join(scopes, " ")),
 	)
 }
 

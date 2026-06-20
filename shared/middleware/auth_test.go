@@ -252,3 +252,84 @@ func TestJWTAuth_AdminRouteIntegration(t *testing.T) {
 		t.Fatalf("non-admin token: expected 403, got %d", resp.Code)
 	}
 }
+
+// TestJWTAuth_PropagatesImpersonation verifies that an impersonation token exposes
+// both the effective (target) user and the real admin to downstream handlers, so the
+// moderation-service can attribute impersonated actions to the admin (ADR-0017).
+func TestJWTAuth_PropagatesImpersonation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		[]byte("test-secret"),
+		"v1",
+	)
+
+	// GenerateImpersonationJWT signs with the raw secret (no kid) -> legacy fallback.
+	token, err := auth.GenerateImpersonationJWT("admin-1", "admin", "target-7", "victim", "tw-123", "test-secret")
+	if err != nil {
+		t.Fatalf("failed to generate impersonation token: %v", err)
+	}
+
+	var gotUser, gotImpersonatedBy, gotImpersonatedUser string
+	router := gin.New()
+	router.Use(JWTAuth(kc))
+	router.GET("/protected", func(c *gin.Context) {
+		gotUser = c.GetString("user_id")
+		gotImpersonatedBy = c.GetString("impersonated_by")
+		gotImpersonatedUser = c.GetString("impersonated_user")
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	if gotUser != "target-7" {
+		t.Errorf("user_id should be the effective (target) user, got %q", gotUser)
+	}
+	if gotImpersonatedBy != "admin-1" {
+		t.Errorf("impersonated_by should be the real admin, got %q", gotImpersonatedBy)
+	}
+	if gotImpersonatedUser != "target-7" {
+		t.Errorf("impersonated_user should be the target, got %q", gotImpersonatedUser)
+	}
+}
+
+// TestJWTAuth_NormalTokenHasNoImpersonation verifies a regular token leaves the
+// impersonation context keys empty (so a non-impersonated action audits as itself).
+func TestJWTAuth_NormalTokenHasNoImpersonation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		[]byte("test-secret"),
+		"v1",
+	)
+	token, err := auth.GenerateToken("user-123", "testuser", "test-secret", time.Hour, true)
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
+
+	var gotImpersonatedBy, gotImpersonatedUser string
+	router := gin.New()
+	router.Use(JWTAuth(kc))
+	router.GET("/protected", func(c *gin.Context) {
+		gotImpersonatedBy = c.GetString("impersonated_by")
+		gotImpersonatedUser = c.GetString("impersonated_user")
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if gotImpersonatedBy != "" || gotImpersonatedUser != "" {
+		t.Errorf("normal token must not set impersonation keys, got by=%q user=%q", gotImpersonatedBy, gotImpersonatedUser)
+	}
+}
