@@ -34,10 +34,10 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
+	sharedredis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -91,17 +91,29 @@ func main() {
 
 	log.Info("Connected to PostgreSQL")
 
-	// Connect to Redis
+	// Connect to Redis, retrying with backoff so a transient Redis outage
+	// (e.g. the pod being rescheduled onto another node) does not crash-loop
+	// this service. The retry is cancelled on shutdown signals so SIGTERM still
+	// terminates the process promptly while it is waiting for Redis.
 	redisHost := getEnvOrDefault("REDIS_HOST", "localhost")
 	redisPort := getEnvOrDefault("REDIS_PORT", "6379")
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
-	})
-	defer redisClient.Close()
+	redisAddr := sharedredis.BuildDSN(redisHost, redisPort)
 
-	if err := redisClient.Ping(ctx).Err(); err != nil {
+	startupCtx, stopStartup := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	redisClient, err := sharedredis.NewClientWithRetry(startupCtx, redisAddr, getEnvOrDefault("REDIS_PASSWORD", ""), tracingEnabled,
+		sharedredis.DefaultRetryOptions(),
+		func(attempt int, err error, backoff time.Duration) {
+			log.Warn("Redis not reachable, retrying with backoff",
+				zap.Int("attempt", attempt),
+				zap.Duration("backoff", backoff),
+				zap.Error(err),
+			)
+		})
+	stopStartup()
+	if err != nil {
 		log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
+	defer redisClient.Close()
 
 	log.Info("Connected to Redis")
 
