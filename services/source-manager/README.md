@@ -62,6 +62,9 @@ SOURCE_MANAGER_SECRET=dev-service-secret
 PORT=8088
 LOG_LEVEL=info  # debug, info, warn, error
 
+# Redis auth (optional; omit for unauthenticated Redis)
+REDIS_PASSWORD=
+
 # Leader election settings
 LEADER_TTL_SECONDS=60          # Leadership lock duration
 LEADER_RENEW_INTERVAL=30       # Renew lock every 30s
@@ -148,6 +151,18 @@ GET /health/live   # Liveness
 GET /health/ready  # Readiness (checks DB + Redis)
 GET /metrics       # Prometheus metrics
 ```
+
+### Startup resilience
+
+On startup the service retries the initial Redis connection with exponential
+backoff (1s → 30s cap) instead of exiting on the first failure. This prevents a
+crash-loop when Redis is briefly unavailable (for example while its pod is
+rescheduled onto another node): the process stays alive, reports not-ready via
+`/health/ready`, and connects as soon as Redis returns. The retry aborts
+promptly on `SIGTERM`/`SIGINT` so shutdown is not delayed. A crash-looping
+Source Manager previously cascaded into listener leadership churn (the
+discord-listener "flapping" incident), so keeping this service up through a
+Redis blip matters beyond this service alone.
 
 ---
 
