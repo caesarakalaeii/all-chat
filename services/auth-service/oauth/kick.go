@@ -88,6 +88,11 @@ func (k *KickOAuth) GetAuthURL(state string) string {
 	return kickAuthURL + "?" + params.Encode()
 }
 
+// KickSendScope authorizes the Kick public "Send Chat Message" API
+// (POST /public/v1/chat). Requested ONLY through the opt-in advanced-controls
+// re-consent (alongside moderation:ban), never bundled into login/add-source.
+const KickSendScope = "chat:write"
+
 // kickModerationScopeByAction maps a moderation action to the Kick OAuth scope it
 // requires. Kick gates ban/timeout/unban behind a single scope and has no
 // single-message delete, so delete maps to nothing. Requested ONLY through the opt-in

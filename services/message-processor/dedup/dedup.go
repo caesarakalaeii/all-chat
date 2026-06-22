@@ -20,9 +20,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/caesar/all-chat/shared/sendall"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -177,4 +179,44 @@ func (d *Deduplicator) ClearForOverlay(ctx context.Context, overlayID, platform,
 	key := fmt.Sprintf("%s:%s", dedupPrefix, fingerprint)
 
 	return d.client.Del(ctx, key).Err()
+}
+
+// LookupSendAllGroup checks whether an incoming message matches a streamer "send to
+// all" pre-registration written by auth-service just before fan-out (keyed on the
+// platform, the streamer's platform-native sender id, and the normalized text). On a
+// match it returns the shared group (id + full platform set) so the echo can be
+// collapsed into one combined-pill message. Returns nil (treat as an ordinary message)
+// when there is no registration, and fails to nil on any Redis/parse error.
+func (d *Deduplicator) LookupSendAllGroup(ctx context.Context, platform, senderID, text string) (*sendall.Registration, error) {
+	if senderID == "" || text == "" {
+		return nil, nil
+	}
+	val, err := d.client.Get(ctx, sendall.Key(platform, senderID, text)).Result()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var reg sendall.Registration
+	if err := json.Unmarshal([]byte(val), &reg); err != nil {
+		return nil, err
+	}
+	if reg.GroupID == "" {
+		return nil, nil
+	}
+	return &reg, nil
+}
+
+// ClaimSendAllOverlay reports whether THIS echo is the first of its send-to-all group
+// to reach the given overlay (atomic SETNX). The winner publishes the combined-pill
+// message; losing siblings are dropped so the overlay shows one message, not N. Fails
+// open (returns true) on a Redis error so a blip never silently drops the message.
+func (d *Deduplicator) ClaimSendAllOverlay(ctx context.Context, overlayID, groupID string) (bool, error) {
+	wasSet, err := d.client.SetNX(ctx, sendall.PublishedKey(overlayID, groupID), "1", sendall.TTL).Result()
+	if err != nil {
+		d.logger.Error("sendall overlay claim SetNX failed, failing open", zap.Error(err))
+		return true, err
+	}
+	return wasSet, nil
 }
