@@ -243,7 +243,7 @@ func main() {
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
-	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient)
+	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient, getEnvOrDefault("YOUTUBE_LISTENER_URL", ""))
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)

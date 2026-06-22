@@ -42,12 +42,15 @@ import { MaintenanceInfoButton } from '@/components/MaintenanceInfoButton'
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
 import { ActivityPanel } from '@/components/overlay/ActivityPanel'
 import { ChatPanel, type ChatPanelModeration } from '@/components/overlay/ChatPanel'
+import { ChatSendBar } from '@/components/overlay/ChatSendBar'
 import { ConnectionBadge } from '@/components/overlay/ConnectionBadge'
+import { LayoutPicker } from '@/components/overlay/LayoutPicker'
 import { ObservabilitySummary } from '@/components/overlay/ObservabilitySummary'
 import { OverlayViewThemeToggle } from '@/components/overlay/OverlayViewThemeToggle'
 import { ViewSettingsBar } from '@/components/overlay/ViewSettingsBar'
 import { ResizableSplit } from '@/components/ResizableSplit'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
+import { authApi } from '@/lib/api/auth'
 import { startDiscordModerationReinvite } from '@/lib/api/discord'
 import {
   buildBanRequest,
@@ -71,6 +74,13 @@ import {
 } from '@/lib/utils/overlayViewModel'
 
 import {
+  DEFAULT_VIEW_LAYOUT,
+  LAYOUT_CONFIG,
+  loadViewLayout,
+  saveViewLayout,
+  type ViewLayout,
+} from './viewLayout'
+import {
   DEFAULT_VIEW_PREFS,
   loadViewPrefs,
   saveViewPrefs,
@@ -92,6 +102,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   const [light, setLight] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
   const [prefs, setPrefs] = useState<MonitorViewPrefs>(DEFAULT_VIEW_PREFS)
+  const [layout, setLayout] = useState<ViewLayout>(DEFAULT_VIEW_LAYOUT)
   const [capabilities, setCapabilities] = useState<ModerationCapabilities | null>(null)
   const modSeqRef = useRef(0)
   // Signatures of deletions we applied optimistically, awaiting their WS echo —
@@ -186,6 +197,21 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     saveViewPrefs(next)
   }, [])
 
+  // Restore the saved panel layout after mount (per-overlay; localStorage,
+  // client only — guards against SSR hydration mismatch like the prefs/theme).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage
+    setLayout(loadViewLayout(id))
+  }, [id])
+
+  const updateLayout = useCallback(
+    (next: ViewLayout) => {
+      setLayout(next)
+      saveViewLayout(id, next)
+    },
+    [id]
+  )
+
   // Start the opt-in moderation setup (ADR-0017). For the OAuth platforms this fetches a
   // consent URL (auth-service requests only the minimal moderation scopes for the actions
   // the platform supports) and redirects to it: Twitch grants all four actions; Kick
@@ -214,6 +240,20 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     },
     [id]
   )
+
+  // Re-login when a send fails with `reauth_required` (the platform OAuth token
+  // was revoked). Re-runs the platform's OAuth login (the canonical entry the
+  // landing page uses); falls back to Twitch when no platform is reported.
+  const reauthenticate = useCallback(async (platform?: string) => {
+    const p =
+      platform === 'twitch' || platform === 'youtube' || platform === 'kick' ? platform : 'twitch'
+    try {
+      const url = await authApi.getLoginUrl(p)
+      window.location.href = url
+    } catch {
+      toast.error('Could not start re-login. Please try again.')
+    }
+  }, [])
 
   // Restore the saved theme once on mount.
   useEffect(() => {
@@ -249,6 +289,18 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   // Sources the owner could moderate but hasn't granted the scope for.
   const missingScopeSources = useMemo(
     () => (capabilities?.sources ?? []).filter((s) => s.reason === 'missing_scope'),
+    [capabilities]
+  )
+
+  // Whether any source can currently send chat from the monitor (gates the send
+  // bar). TikTok/Discord have no send path, so only twitch/youtube/kick count.
+  const hasSendableSource = useMemo(
+    () =>
+      (capabilities?.sources ?? []).some(
+        (s) =>
+          s.can_send === true &&
+          (s.platform === 'twitch' || s.platform === 'youtube' || s.platform === 'kick')
+      ),
     [capabilities]
   )
 
@@ -404,6 +456,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Details
           </button>
+          <LayoutPicker layout={layout} onChange={updateLayout} />
           <ViewSettingsBar prefs={prefs} onChange={updatePrefs} />
           <OverlayViewThemeToggle light={light} onToggle={() => setLight((v) => !v)} />
           <Link
@@ -463,7 +516,9 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
                 onClick={() => enableModeration(s.platform)}
                 className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
-                {s.platform === 'discord' ? 'Re-invite the bot' : 'Enable moderation'}
+                {s.platform === 'discord'
+                  ? 'Re-invite the bot'
+                  : 'Enable moderation & chat sending'}
               </button>
             ) : (
               <span className="text-text-dim">(coming soon for {s.platform})</span>
@@ -481,9 +536,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         />
       )}
 
-      {/* Resizable Chat | Activity */}
+      {/* Resizable Chat | Activity — orientation/order driven by the layout picker. */}
       <ResizableSplit
         storageKey={`overlay-view-split-${id}`}
+        orientation={LAYOUT_CONFIG[layout].orientation}
+        reversed={LAYOUT_CONFIG[layout].reversed}
         left={
           <ChatPanel
             items={chat}
@@ -494,6 +551,15 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         }
         right={<ActivityPanel events={events} system={system} moderationLog={moderationLog} />}
       />
+
+      {/* Send bar — owner only, and only when ≥1 platform source can send. */}
+      {isOwner && hasSendableSource && capabilities && (
+        <ChatSendBar
+          sources={capabilities.sources}
+          onEnable={enableModeration}
+          onReauth={reauthenticate}
+        />
+      )}
     </div>
   )
 }

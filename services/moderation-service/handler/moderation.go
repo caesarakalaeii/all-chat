@@ -113,6 +113,7 @@ type Handler struct {
 	pub      DeletionEmitter
 	audit    Recorder
 	scopes   ScopeChecker
+	send     SendChecker
 	dispatch Dispatcher
 	gate     FeatureGate
 	logger   *zap.Logger
@@ -121,12 +122,16 @@ type Handler struct {
 // New creates a moderation Handler. The feature gate defaults to OpenGate (always
 // enabled); production overrides it with SetFeatureGate once the gate cache is up.
 func New(repo Authorizer, pub DeletionEmitter, rec Recorder, scopes ScopeChecker, dispatch Dispatcher, logger *zap.Logger) *Handler {
-	return &Handler{repo: repo, pub: pub, audit: rec, scopes: scopes, dispatch: dispatch, gate: OpenGate{}, logger: logger}
+	return &Handler{repo: repo, pub: pub, audit: rec, scopes: scopes, send: NoSendChecker{}, dispatch: dispatch, gate: OpenGate{}, logger: logger}
 }
 
 // SetFeatureGate overrides the moderation feature gate (ADR-0008). Call once at
 // startup before serving; the default is OpenGate.
 func (h *Handler) SetFeatureGate(g FeatureGate) { h.gate = g }
+
+// SetSendChecker overrides the chat-send capability checker (defaults to NoSendChecker,
+// which reports nothing sendable). Call once at startup before serving.
+func (h *Handler) SetSendChecker(s SendChecker) { h.send = s }
 
 // caller is the authenticated identity behind a request.
 type caller struct {
@@ -286,6 +291,15 @@ func (h *Handler) capabilityFor(ctx context.Context, userID string, s repository
 	if !models.PlatformSupported(s.Platform) {
 		sc.Reason = models.ReasonUnsupportedPlatform
 		return sc
+	}
+	// can_send is a SEPARATE capability from moderation (a different OAuth scope), so
+	// compute it up front: a source can be sendable without any moderation action
+	// granted, and vice versa. A send-check failure degrades to not-sendable.
+	if canSend, sErr := h.send.CanSend(ctx, userID, s.Platform, s.ChannelID); sErr != nil {
+		h.logger.Warn("capabilities: send-scope check failed; treating as not sendable",
+			zap.String("platform", s.Platform), zap.Error(sErr))
+	} else {
+		sc.CanSend = canSend
 	}
 	actions, err := h.scopes.GrantedActions(ctx, userID, s.Platform, s.ChannelID)
 	if err != nil {

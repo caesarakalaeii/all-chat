@@ -117,6 +117,44 @@ func RequiredTwitchScope(a Action) string {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Chat-send capability (advanced-controls opt-in).
+//
+// Sending a chat message from the monitor view needs a DIFFERENT OAuth scope than
+// moderation: Twitch user:write:chat, Kick chat:write. YouTube reuses the force-ssl
+// scope (ScopeYouTubeModeration) it already grants for bans. These scopes ride along
+// on the same opt-in re-consent that grants moderation, so a source is "sendable"
+// exactly when its granted scopes include the send scope.
+// ---------------------------------------------------------------------------
+
+// ScopeTwitchSend authorizes the Helix Send Chat Message API (user token).
+const ScopeTwitchSend = "user:write:chat"
+
+// ScopeKickSend authorizes the Kick public Send Chat Message API.
+const ScopeKickSend = "chat:write"
+
+// CanSendForTwitchScopes reports whether a Twitch token's scopes allow sending chat.
+func CanSendForTwitchScopes(scopes []string) bool { return scopesContain(scopes, ScopeTwitchSend) }
+
+// CanSendForKickScopes reports whether a Kick token's scopes allow sending chat.
+func CanSendForKickScopes(scopes []string) bool { return scopesContain(scopes, ScopeKickSend) }
+
+// CanSendForYouTubeScopes reports whether a YouTube token's scopes allow live-chat
+// send (force-ssl — the same scope that authorizes bans).
+func CanSendForYouTubeScopes(scopes []string) bool {
+	return scopesContain(scopes, ScopeYouTubeModeration)
+}
+
+// scopesContain reports whether want is present in scopes.
+func scopesContain(scopes []string, want string) bool {
+	for _, s := range scopes {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
 // Kick moderation OAuth scope. Kick's public API gates ban/timeout/unban behind a
 // single scope; there is no single-message delete endpoint, so Kick never grants
 // ActionDelete (see PlatformActions["kick"]). Requested only through the opt-in
@@ -311,8 +349,11 @@ type SourceCapability struct {
 	ChannelID   string   `json:"channel_id"`
 	ChannelName string   `json:"channel_name"`
 	Moderatable bool     `json:"moderatable"`
-	Reason      string   `json:"reason,omitempty"`
-	Actions     []Action `json:"actions"`
+	// CanSend reports whether the owner can send chat to this source from the monitor
+	// view (the chat-send scope is granted). Independent of Moderatable/Actions.
+	CanSend bool     `json:"can_send"`
+	Reason  string   `json:"reason,omitempty"`
+	Actions []Action `json:"actions"`
 }
 
 // Capabilities is the response of the capabilities endpoint: whether the caller

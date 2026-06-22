@@ -45,6 +45,11 @@ type UnifiedChatMessage struct {
 	ID          string                 `json:"id"`
 	OverlayID   string                 `json:"overlay_id"`
 	Platform    string                 `json:"platform"`
+	// Platforms is set only for a streamer "send to all" message whose per-platform
+	// echoes were collapsed into one: it lists every platform the message was sent to,
+	// so consumers can render a combined multi-platform pill. Omitted (nil) for ordinary
+	// single-platform messages, where the singular Platform above is authoritative.
+	Platforms   []string               `json:"platforms,omitempty"`
 	ChannelID   string                 `json:"channel_id"`
 	ChannelName string                 `json:"channel_name"`
 	User        UserInfo               `json:"user"`

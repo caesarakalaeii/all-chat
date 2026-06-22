@@ -43,6 +43,11 @@ export interface SourceCapability {
   moderatable: boolean
   reason?: ModerationUnavailableReason
   actions: ModerationAction[]
+  /**
+   * Whether the streamer can send chat messages on this source from the monitor.
+   * Optional; absent ⇒ treat as false (no send scope granted / unsupported).
+   */
+  can_send?: boolean
 }
 
 /** Overlay-wide moderation capabilities for the logged-in viewer. */

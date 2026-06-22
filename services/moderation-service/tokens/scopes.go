@@ -60,6 +60,22 @@ func (c *TwitchScopeChecker) GrantedActions(ctx context.Context, userID, platfor
 	return models.ActionsForTwitchScopes(cred.GrantedScopes), nil
 }
 
+// CanSend reports whether the owner's Twitch credential grants the chat-send scope
+// (user:write:chat). A missing credential yields false, mirroring GrantedActions.
+func (c *TwitchScopeChecker) CanSend(ctx context.Context, userID, platform, channelID string) (bool, error) {
+	if platform != "twitch" {
+		return false, nil
+	}
+	cred, err := c.src.Resolve(ctx, userID, channelID)
+	if errors.Is(err, ErrNoCredential) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return models.CanSendForTwitchScopes(cred.GrantedScopes), nil
+}
+
 // kickCredentialResolver is the subset of KickSource the scope checker needs.
 type kickCredentialResolver interface {
 	Resolve(ctx context.Context, userID, channelID string) (*KickCredential, error)
@@ -94,6 +110,22 @@ func (c *KickScopeChecker) GrantedActions(ctx context.Context, userID, platform,
 	return models.ActionsForKickScopes(cred.GrantedScopes), nil
 }
 
+// CanSend reports whether the owner's Kick credential grants the chat-send scope
+// (chat:write). A missing credential yields false.
+func (c *KickScopeChecker) CanSend(ctx context.Context, userID, platform, channelID string) (bool, error) {
+	if platform != "kick" {
+		return false, nil
+	}
+	cred, err := c.src.Resolve(ctx, userID, channelID)
+	if errors.Is(err, ErrNoCredential) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return models.CanSendForKickScopes(cred.GrantedScopes), nil
+}
+
 // youtubeCredentialResolver is the subset of YouTubeSource the scope checker needs.
 type youtubeCredentialResolver interface {
 	Resolve(ctx context.Context, userID, channelID string) (*YouTubeCredential, error)
@@ -124,4 +156,20 @@ func (c *YouTubeScopeChecker) GrantedActions(ctx context.Context, userID, platfo
 		return nil, err
 	}
 	return models.ActionsForYouTubeScopes(cred.GrantedScopes), nil
+}
+
+// CanSend reports whether the owner's YouTube credential grants live-chat send
+// (force-ssl, the same scope used for bans). A missing credential yields false.
+func (c *YouTubeScopeChecker) CanSend(ctx context.Context, userID, platform, channelID string) (bool, error) {
+	if platform != "youtube" {
+		return false, nil
+	}
+	cred, err := c.src.Resolve(ctx, userID, channelID)
+	if errors.Is(err, ErrNoCredential) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return models.CanSendForYouTubeScopes(cred.GrantedScopes), nil
 }

@@ -18,27 +18,47 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import clsx from 'clsx'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useHydrated } from '@/hooks/useHydrated'
+
+/**
+ * Layout orientation for the split on desktop.
+ * - `horizontal`: panels side-by-side with a vertical divider (the persisted
+ *   ratio drives the first panel's WIDTH). This is the original behavior.
+ * - `vertical`: panels stacked top/bottom with a horizontal divider (the
+ *   persisted ratio drives the first panel's HEIGHT).
+ */
+export type SplitOrientation = 'horizontal' | 'vertical'
 
 interface ResizableSplitProps {
   /** localStorage key used to persist the split ratio across reloads. */
   storageKey: string
   left: React.ReactNode
   right: React.ReactNode
-  /** Minimum / maximum percentage width of the left panel (desktop only). */
+  /** Minimum / maximum percentage size of the first panel (desktop only). */
   min?: number
   max?: number
-  /** Initial left-panel width percentage before any stored value is restored. */
+  /** Initial first-panel size percentage before any stored value is restored. */
   initial?: number
+  /**
+   * Desktop layout direction (default `horizontal`). `vertical` stacks the
+   * panels top/bottom with a horizontal (row-resize) divider.
+   */
+  orientation?: SplitOrientation
+  /**
+   * Swap which panel comes first: false (default) keeps `left` first
+   * (left / top); true puts `right` first (right / bottom).
+   */
+  reversed?: boolean
 }
 
 /**
- * Two-pane resizable split: side-by-side with a draggable divider on desktop,
- * stacked (no divider) on mobile. Keyboard-accessible (Arrow keys move the
- * divider ±5%) and persists the ratio to localStorage. Generalized from
- * SplitView; no external dependency.
+ * Two-pane resizable split: side-by-side (or stacked, via `orientation`) with a
+ * draggable divider on desktop, stacked (no divider) on mobile. Keyboard-accessible
+ * (Arrow keys move the divider ±5%) and persists the ratio to localStorage.
+ * Generalized from SplitView; no external dependency.
  */
 export function ResizableSplit({
   storageKey,
@@ -47,13 +67,16 @@ export function ResizableSplit({
   min = 25,
   max = 70,
   initial = 45,
+  orientation = 'horizontal',
+  reversed = false,
 }: ResizableSplitProps) {
   const hydrated = useHydrated()
   const containerRef = useRef<HTMLDivElement>(null)
-  const [leftPct, setLeftPct] = useState(initial)
+  const [firstPct, setFirstPct] = useState(initial)
   const [isDesktop, setIsDesktop] = useState(true)
   const isDragging = useRef(false)
-  const leftPctRef = useRef(initial)
+  const firstPctRef = useRef(initial)
+  const isVertical = orientation === 'vertical'
 
   const clamp = useCallback((pct: number) => Math.min(max, Math.max(min, pct)), [min, max])
 
@@ -71,8 +94,8 @@ export function ResizableSplit({
   const setPct = useCallback(
     (pct: number) => {
       const clamped = clamp(pct)
-      leftPctRef.current = clamped
-      setLeftPct(clamped)
+      firstPctRef.current = clamped
+      setFirstPct(clamped)
       return clamped
     },
     [clamp],
@@ -91,7 +114,7 @@ export function ResizableSplit({
     }
   }, [hydrated, storageKey, setPct])
 
-  // Track the md breakpoint so the inline width only applies on desktop.
+  // Track the md breakpoint so the inline size only applies on desktop.
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return
     const mq = window.matchMedia('(min-width: 768px)')
@@ -110,54 +133,84 @@ export function ResizableSplit({
     (e: React.PointerEvent) => {
       if (!isDragging.current || !containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
-      setPct(((e.clientX - rect.left) / rect.width) * 100)
+      // Compute the pointer position along the resize axis as a percentage of
+      // the container. When reversed, the first (sized) panel is on the far
+      // side, so invert the measurement.
+      const raw = isVertical
+        ? ((e.clientY - rect.top) / rect.height) * 100
+        : ((e.clientX - rect.left) / rect.width) * 100
+      setPct(reversed ? 100 - raw : raw)
     },
-    [setPct],
+    [setPct, isVertical, reversed],
   )
 
   const onPointerUp = useCallback(() => {
     if (!isDragging.current) return
     isDragging.current = false
-    persist(leftPctRef.current)
+    persist(firstPctRef.current)
   }, [persist])
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        persist(setPct(leftPctRef.current - 5))
-      } else if (e.key === 'ArrowRight') {
-        persist(setPct(leftPctRef.current + 5))
+      // Use the keys that match the divider's axis. Decrease/increase the first
+      // panel's size by 5% per press.
+      const decreaseKey = isVertical ? 'ArrowUp' : 'ArrowLeft'
+      const increaseKey = isVertical ? 'ArrowDown' : 'ArrowRight'
+      if (e.key === decreaseKey) {
+        persist(setPct(firstPctRef.current - 5))
+      } else if (e.key === increaseKey) {
+        persist(setPct(firstPctRef.current + 5))
       }
     },
-    [persist, setPct],
+    [persist, setPct, isVertical],
   )
+
+  // The first panel renders `right` when reversed, else `left`.
+  const firstPanel = reversed ? right : left
+  const secondPanel = reversed ? left : right
+
+  // Inline size only applies on desktop; vertical sizes height, horizontal width.
+  const firstStyle = isDesktop
+    ? isVertical
+      ? { height: `${firstPct}%` }
+      : { width: `${firstPct}%` }
+    : undefined
 
   return (
     <div
       ref={containerRef}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row"
+      className={clsx(
+        'flex min-h-0 flex-1 flex-col overflow-hidden',
+        isVertical ? 'md:flex-col' : 'md:flex-row',
+      )}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
       <div
-        className="min-h-0 flex-1 overflow-hidden md:flex-none"
-        style={isDesktop ? { width: `${leftPct}%` } : undefined}
+        className={clsx(
+          'min-h-0 flex-1 overflow-hidden',
+          isVertical ? 'md:flex-none' : 'md:flex-none',
+        )}
+        style={firstStyle}
       >
-        {left}
+        {firstPanel}
       </div>
 
       {/* Draggable divider — hidden on mobile (stacked layout) */}
       <div
-        className="hidden w-1 flex-shrink-0 cursor-col-resize bg-border transition-colors select-none hover:bg-twitch/50 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none md:block"
+        className={clsx(
+          'hidden flex-shrink-0 bg-border transition-colors select-none hover:bg-twitch/50 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none md:block',
+          isVertical ? 'h-1 w-full cursor-row-resize' : 'w-1 cursor-col-resize',
+        )}
         onPointerDown={onPointerDown}
         onKeyDown={onKeyDown}
         role="separator"
         aria-label="Drag to resize panels"
-        aria-orientation="vertical"
+        aria-orientation={isVertical ? 'horizontal' : 'vertical'}
         tabIndex={0}
       />
 
-      <div className="min-h-0 flex-1 overflow-hidden">{right}</div>
+      <div className="min-h-0 flex-1 overflow-hidden">{secondPanel}</div>
     </div>
   )
 }

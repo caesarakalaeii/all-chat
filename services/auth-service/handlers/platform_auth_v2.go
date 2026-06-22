@@ -370,13 +370,18 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 		// one scope and has no single-message delete. Unsupported platforms are rejected.
 		actions := splitActions(c.Query("actions"))
 		var modScopes []string
+		var sendScope string
 		switch provider.(type) {
 		case *oauth.TwitchOAuth:
 			modScopes = oauth.ModerationScopesForActions(actions)
+			sendScope = oauth.TwitchSendScope
 		case *oauth.KickOAuth:
 			modScopes = oauth.KickModerationScopesForActions(actions)
+			sendScope = oauth.KickSendScope
 		case *oauth.YouTubeOAuth:
 			modScopes = oauth.YouTubeModerationScopesForActions(actions)
+			// YouTube's force-ssl grant (requested for the ban action) already
+			// authorizes live-chat send, so there is no separate send scope.
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("moderation is not supported for %s", platform)})
 			return
@@ -384,6 +389,12 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 		if len(modScopes) == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban"})
 			return
+		}
+		// This opt-in is the unified "advanced controls" consent: a single re-consent
+		// grants moderation AND chat sending (the monitor view's send bar). Always fold
+		// in the platform's send scope so the issued token covers both at once.
+		if sendScope != "" {
+			modScopes = append(modScopes, sendScope)
 		}
 
 		// Union with the scopes already granted FOR THIS PLATFORM so the new token is a
@@ -1119,9 +1130,11 @@ func linkMayReplacePrimaryCredentials(authProvider string, platform oauth.Platfo
 // never blocked by this guard.
 var preservableScopes = []string{
 	"user:read:chat",
+	"user:write:chat", // Twitch chat-send grant (advanced-controls opt-in)
 	"moderator:manage:chat_messages",
 	"moderator:manage:banned_users",
 	"moderation:ban",                                    // Kick moderation grant (opt-in re-consent, ADR-0017)
+	"chat:write",                                        // Kick chat-send grant (advanced-controls opt-in)
 	"https://www.googleapis.com/auth/youtube.force-ssl", // YouTube moderation grant (ADR-0017)
 }
 

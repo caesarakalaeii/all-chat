@@ -96,4 +96,40 @@ describe('ResizableSplit', () => {
     const leftPanel = container.firstChild?.firstChild as HTMLElement
     await waitFor(() => expect(leftPanel.style.width).toBe('62%'))
   })
+
+  it('sizes height (not width) and uses Up/Down keys when orientation is vertical', () => {
+    const { container } = render(
+      <ResizableSplit
+        storageKey="k"
+        left={<div>L</div>}
+        right={<div>R</div>}
+        initial={45}
+        orientation="vertical"
+      />,
+    )
+    const firstPanel = container.firstChild?.firstChild as HTMLElement
+    expect(firstPanel.style.height).toBe('45%')
+    expect(firstPanel.style.width).toBe('')
+
+    const separator = screen.getByRole('separator')
+    expect(separator.getAttribute('aria-orientation')).toBe('horizontal')
+
+    fireEvent.keyDown(separator, { key: 'ArrowDown' })
+    expect(firstPanel.style.height).toBe('50%')
+    fireEvent.keyDown(separator, { key: 'ArrowUp' })
+    expect(firstPanel.style.height).toBe('45%')
+  })
+
+  it('renders the right panel first when reversed', () => {
+    const { container } = render(
+      <ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} reversed />,
+    )
+    const firstPanel = container.firstChild?.firstChild as HTMLElement
+    expect(firstPanel.textContent).toBe('R')
+  })
+
+  it('keeps aria-orientation vertical for the default horizontal layout', () => {
+    render(<ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} />)
+    expect(screen.getByRole('separator').getAttribute('aria-orientation')).toBe('vertical')
+  })
 })

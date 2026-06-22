@@ -43,6 +43,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/caesar/all-chat/shared/sendall"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -303,6 +304,19 @@ func main() {
 					)
 				}
 			}()
+		}
+
+		// Send-to-all detection (once per raw message): if this is a streamer's own
+		// message echoed back after a "send to all", auth-service pre-registered it so
+		// the N platform echoes collapse into one combined-pill message. Only chat
+		// messages participate — events never fan out this way.
+		var sendAllGroup *sendall.Registration
+		if rawMsg.EventType == "" || rawMsg.EventType == "chat" {
+			if reg, lookupErr := deduplicator.LookupSendAllGroup(ctx, rawMsg.Platform, rawMsg.UserID, rawMsg.Text); lookupErr != nil {
+				log.Debug("send-to-all lookup failed, treating as ordinary message", zap.Error(lookupErr))
+			} else {
+				sendAllGroup = reg
+			}
 		}
 
 		// Process message for each overlay.
@@ -577,6 +591,27 @@ func main() {
 			}
 
 		publish:
+			// Streamer send-to-all: collapse the per-platform echoes into one combined
+			// message. Reuse the shared group id (so all echoes share an id), attach the
+			// full platform set for the combined pill, and publish at most once per
+			// overlay — the first echo to arrive wins, later siblings are dropped here.
+			if sendAllGroup != nil {
+				unified.ID = sendAllGroup.GroupID
+				unified.Platforms = sendAllGroup.Platforms
+				if len(sendAllGroup.Platforms) > 0 {
+					unified.Platform = sendAllGroup.Platforms[0]
+				}
+				if won, claimErr := deduplicator.ClaimSendAllOverlay(ctx, overlay.OverlayID, sendAllGroup.GroupID); claimErr == nil && !won {
+					log.Debug("send-to-all echo already published to overlay, skipping",
+						zap.String("overlay_id", overlay.OverlayID),
+						zap.String("group_id", sendAllGroup.GroupID),
+						zap.String("platform", rawMsg.Platform),
+					)
+					processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "sendall_deduplicated", "skipped")
+					continue
+				}
+			}
+
 			// Check for duplicate messages per overlay (Phase 15-03: overlay-specific deduplication)
 			// Prevents duplicates from overlapping sources (e.g., Twitch Shared Chat)
 			// Extract platform message ID from tags for better fingerprinting
