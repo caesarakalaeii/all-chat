@@ -115,6 +115,9 @@ func main() {
 	// configures the credentials and gets real platform calls.
 	dispatchers := map[string]dispatch.PlatformDispatcher{}
 	scopeCheckers := map[string]handler.ScopeChecker{}
+	// sendCheckers parallels scopeCheckers: the same per-platform checker instances
+	// also report the chat-send capability (can_send) for the monitor view's send bar.
+	sendCheckers := map[string]handler.SendChecker{}
 
 	// Twitch (delete/timeout/ban/unban) needs the token cipher (to decrypt broadcaster
 	// tokens) AND the Twitch app credentials (Client-Id header + refresh grant).
@@ -128,7 +131,9 @@ func main() {
 		twitchSource := tokens.NewTwitchSource(dbPool, cipher, cfg.TwitchClientID, cfg.TwitchClientSecret)
 		twitchClient := clients.NewTwitchClient(cfg.TwitchClientID)
 		dispatchers["twitch"] = dispatch.NewTwitch(twitchSource, twitchClient, log)
-		scopeCheckers["twitch"] = tokens.NewTwitchScopeChecker(twitchSource)
+		twitchScopes := tokens.NewTwitchScopeChecker(twitchSource)
+		scopeCheckers["twitch"] = twitchScopes
+		sendCheckers["twitch"] = twitchScopes
 		log.Info("Twitch moderation enabled (real Helix calls)")
 	}
 
@@ -142,7 +147,9 @@ func main() {
 	default:
 		kickSource := tokens.NewKickSource(dbPool, cipher, cfg.KickClientID, cfg.KickClientSecret)
 		dispatchers["kick"] = dispatch.NewKick(kickSource, clients.NewKickClient(), log)
-		scopeCheckers["kick"] = tokens.NewKickScopeChecker(kickSource)
+		kickScopes := tokens.NewKickScopeChecker(kickSource)
+		scopeCheckers["kick"] = kickScopes
+		sendCheckers["kick"] = kickScopes
 		log.Info("Kick moderation enabled (real Kick API calls)")
 	}
 
@@ -158,7 +165,9 @@ func main() {
 		ytSource := tokens.NewYouTubeSource(dbPool, cipher, cfg.YouTubeClientID, cfg.YouTubeClientSecret)
 		ytQuota := quota.NewReserver(dbPool, getEnvInt("YOUTUBE_QUOTA_LIMIT_DAILY", quota.DefaultDailyLimit))
 		dispatchers["youtube"] = dispatch.NewYouTube(ytSource, clients.NewYouTubeClient(), clients.NewYouTubeLiveChatResolver(redisClient), ytQuota, log)
-		scopeCheckers["youtube"] = tokens.NewYouTubeScopeChecker(ytSource)
+		ytScopes := tokens.NewYouTubeScopeChecker(ytSource)
+		scopeCheckers["youtube"] = ytScopes
+		sendCheckers["youtube"] = ytScopes
 		log.Info("YouTube moderation enabled (ban-only, real Data API calls)")
 	}
 
@@ -187,6 +196,8 @@ func main() {
 	// Surface the cohort decision on the capabilities endpoint so the dashboard hides
 	// controls for users outside the rollout (the action routes are gated separately).
 	modHandler.SetFeatureGate(moderationGate{gates: gateCache, repo: repo})
+	// Wire the chat-send capability checker so capabilities report can_send per source.
+	modHandler.SetSendChecker(handler.MultiSendChecker(sendCheckers))
 
 	if cfg.GinMode == "release" {
 		gin.SetMode(gin.ReleaseMode)

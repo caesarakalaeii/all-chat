@@ -522,6 +522,10 @@ func main() {
 		protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", proxyHandler.ForwardRequest)
 
+		// Streamer chat send (monitor view sends using the streamer's own OAuth
+		// tokens) -> auth-service POST /chat/send.
+		protectedAPI.POST("/auth/chat/send", proxyHandler.ForwardRequest)
+
 		// Discord guild management
 		protectedAPI.GET("/auth/discord/connect", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/auth/guilds", proxyHandler.ForwardRequest)

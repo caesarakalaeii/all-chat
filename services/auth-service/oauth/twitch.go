@@ -37,6 +37,12 @@ import (
 // (broadcaster side). See services/twitch-eventsub-listener for the consumer.
 var TwitchChatScopes = []string{"user:read:chat", "user:bot", "channel:bot"}
 
+// TwitchSendScope authorizes the Helix "Send Chat Message" API
+// (POST /helix/chat/messages) for a user token where the broadcaster is also the
+// sender. Requested ONLY through the opt-in advanced-controls re-consent (alongside
+// the moderation scopes), never bundled into login/add-source (least privilege).
+const TwitchSendScope = "user:write:chat"
+
 // TwitchOAuth handles Twitch OAuth 2.0 flow
 type TwitchOAuth struct {
 	config *oauth2.Config

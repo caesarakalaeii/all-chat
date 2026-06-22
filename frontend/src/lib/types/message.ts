@@ -76,7 +76,13 @@ export interface EventInfo {
 export interface ChatMessage {
   id: string;
   overlay_id: string;
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'system';
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'system'; // Primary platform
+  /**
+   * All platforms this message was delivered to. Length > 1 for a streamer's
+   * "send to all" echo collapsed into one message; absent/length ≤ 1 ⇒ render
+   * just the singular `platform`.
+   */
+  platforms?: string[];
   channel_id: string;
   channel_name: string;
   user: UserInfo;

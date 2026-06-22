@@ -22,7 +22,7 @@ import clsx from 'clsx'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { UserAvatar } from '@/components/UserAvatar'
-import { PlatformGlyph } from '@/components/overlay/PlatformGlyph'
+import { PlatformGlyph, PlatformGlyphs } from '@/components/overlay/PlatformGlyph'
 import {
   ModerationControls,
   type ModerationControlsProps,
@@ -87,7 +87,11 @@ export function ChatRow({
       )}
       {prefs.showPlatformGlyph && (
         <span className="shrink-0 pt-0.5">
-          <PlatformGlyph platform={item.platform} />
+          {item.platforms && item.platforms.length > 1 ? (
+            <PlatformGlyphs platforms={item.platforms} />
+          ) : (
+            <PlatformGlyph platform={item.platform} />
+          )}
         </span>
       )}
       {prefs.showAvatars && (

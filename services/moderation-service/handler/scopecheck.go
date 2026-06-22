@@ -101,3 +101,33 @@ func (c *DiscordScopeChecker) GrantedActions(ctx context.Context, _ string, plat
 	}
 	return models.ActionsForDiscordPermissions(bits), nil
 }
+
+// SendChecker reports whether the overlay owner can send chat to a (platform, channel)
+// from the monitor view — i.e. whether their broadcaster credential's granted scopes
+// include the platform's chat-send scope. It mirrors ScopeChecker but for the send
+// capability, which rides on the same opt-in re-consent as moderation.
+type SendChecker interface {
+	CanSend(ctx context.Context, userID, platform, channelID string) (bool, error)
+}
+
+// MultiSendChecker routes a send-capability check to the checker registered for the
+// platform. A platform with no registered checker (Discord/TikTok — no streamer send
+// path) reports false, the correct default.
+type MultiSendChecker map[string]SendChecker
+
+// CanSend delegates to the per-platform checker.
+func (m MultiSendChecker) CanSend(ctx context.Context, userID, platform, channelID string) (bool, error) {
+	if c, ok := m[platform]; ok && c != nil {
+		return c.CanSend(ctx, userID, platform, channelID)
+	}
+	return false, nil
+}
+
+// NoSendChecker reports no send capability for any source. The default until send
+// checkers are wired.
+type NoSendChecker struct{}
+
+// CanSend always reports false.
+func (NoSendChecker) CanSend(context.Context, string, string, string) (bool, error) {
+	return false, nil
+}
