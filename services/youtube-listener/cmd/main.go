@@ -31,6 +31,7 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/youtube-listener/handlers"
 	ytmetrics "github.com/caesar/all-chat/services/youtube-listener/metrics"
+	"github.com/caesar/all-chat/services/youtube-listener/notifications"
 	"github.com/caesar/all-chat/services/youtube-listener/oauth"
 	"github.com/caesar/all-chat/services/youtube-listener/publisher"
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
@@ -171,6 +172,14 @@ func main() {
 	if err := quotaTracker.Start(ctx); err != nil {
 		log.Fatal("Failed to start quota tracker", zap.Error(err))
 	}
+
+	// Wire the quota notifier so threshold/state-transition events publish to the
+	// shared "quota:alerts" Redis channel the discord-bot subscribes to. Without this
+	// SetNotifier call the tracker's notifier stayed nil and quota alerts never fired.
+	// Gated by QUOTA_NOTIFIER_ENABLED (default on); the tracker no-ops on a nil notifier.
+	quotaNotifierEnabled := listener.Env("QUOTA_NOTIFIER_ENABLED", "true") == "true"
+	quotaNotifier := notifications.NewQuotaNotifier(redisClient, log, quotaNotifierEnabled, "quota:alerts")
+	quotaTracker.SetNotifier(quotaNotifier)
 
 	// Initialize per-channel quota tracker (new)
 	perChannelQuotaConfig := quota.Config{
