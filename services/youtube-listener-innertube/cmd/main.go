@@ -138,6 +138,19 @@ func main() {
 	// Repository for Redis persistence
 	repository := streams.NewRepository(redisClient, logger)
 
+	// Live-chat-id resolver: InnerTube polling never sees the official activeLiveChatId,
+	// so resolve it once per stream via the YouTube Data API (videos.list, 1 quota unit)
+	// and cache it for auth-service (streamer send) and moderation-service. Disabled when
+	// no API key is configured — the listener still reads chat normally (see ADR-0024).
+	youtubeAPIKey := listener.Env("YOUTUBE_API_KEY", "")
+	var liveChatResolver streams.LiveChatResolver
+	if youtubeAPIKey != "" {
+		liveChatResolver = streams.NewDataAPILiveChatResolver(youtubeAPIKey, logger)
+		logger.Info("Live-chat-id resolver enabled (YouTube Data API videos.list)")
+	} else {
+		logger.Warn("YOUTUBE_API_KEY not set; live-chat-id cache disabled — streamer sends to YouTube will fall back to search.list")
+	}
+
 	// Publisher
 	streamPublisher := publisher.NewStreamPublisher(redisClient, logger, innertubeMetrics, nil)
 
@@ -179,6 +192,7 @@ func main() {
 		streamPublisher,
 		innertubeClient,
 		redisClient,
+		liveChatResolver,
 		logger,
 		innertubeMetrics,
 		batchDetector,

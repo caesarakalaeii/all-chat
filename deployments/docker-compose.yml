@@ -296,6 +296,35 @@ services:
       - allchat
     restart: unless-stopped
 
+  # YouTube Quota Monitor (ADR-0023): reads the shared youtube_quota_usage table,
+  # exports the Prometheus quota metric, and publishes quota:alerts for the discord-bot.
+  youtube-quota-monitor:
+    build:
+      context: ../
+      dockerfile: services/youtube-quota-monitor/Dockerfile
+    container_name: allchat-youtube-quota-monitor
+    environment:
+      PORT: "8093"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: allchat_dev_password
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      QUOTA_MONITOR_INTERVAL: "30s"
+    ports:
+      - "8093:8093"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
   # Frontend (Phase 5)
   frontend:
     build:
@@ -326,12 +355,12 @@ services:
       DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      YOUTUBE_LISTENER_URL: http://youtube-listener:8086
+      YOUTUBE_LISTENER_URL: http://youtube-quota-monitor:8093
       STATUS_UPDATE_INTERVAL: "3600000"
     depends_on:
       redis:
         condition: service_healthy
-      youtube-listener:
+      youtube-quota-monitor:
         condition: service_started
     networks:
       - allchat

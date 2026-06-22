@@ -14,13 +14,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-// Package quota reserves YouTube Data API quota for moderation bans against the SAME
-// atomic counter the youtube-listener uses (the reserve/confirm/rollback_youtube_quota
-// SQL functions, migration 008, on the shared youtube_quota_usage table). It is not the
-// full youtube-listener Tracker — no in-memory state, no background reset/audit loops,
-// just the three atomic SQL calls keyed on the current Pacific date (YouTube resets
-// quota at midnight PT). This keeps an infrequent moderation ban (50 units) from pushing
-// the listener over its daily limit without coupling to the Tracker's lifecycle.
 package quota
 
 import (
@@ -32,20 +25,18 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// QuotaCostBan is the Data API cost of liveChatBans.insert.
-const QuotaCostBan = 50
-
-// DefaultDailyLimit mirrors youtube-listener's default (QUOTA_LIMIT_DAILY) so a shared
-// reservation check uses the same ceiling.
-const DefaultDailyLimit = 1009000
-
-// Querier is the subset of *pgxpool.Pool the reserver needs (kept small for testing).
+// Querier is the subset of *pgxpool.Pool the Reserver needs (kept small for testing).
 type Querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-// Reserver implements reserve-confirm-rollback (ADR-0006) over the shared SQL functions.
+// Reserver implements reserve-confirm-rollback (ADR-0006) over the shared SQL
+// functions (reserve/confirm/rollback_youtube_quota, migration 008) on the shared
+// youtube_quota_usage table. It has no in-memory state or background loops — just
+// the three atomic SQL calls keyed on the current Pacific date (YouTube resets
+// quota at midnight PT). Every service that spends quota uses one of these so a
+// ban (50 units) or a send (5 units) cannot push the daily counter past its limit.
 type Reserver struct {
 	db         Querier
 	dailyLimit int
@@ -53,17 +44,11 @@ type Reserver struct {
 }
 
 // NewReserver builds a reserver. A non-positive dailyLimit falls back to the default.
-// If the Pacific tz database is unavailable it falls back to UTC (the daily boundary
-// may then be a few hours off, which only matters for a ban issued near midnight PT).
 func NewReserver(db Querier, dailyLimit int) *Reserver {
 	if dailyLimit <= 0 {
 		dailyLimit = DefaultDailyLimit
 	}
-	loc, err := time.LoadLocation("America/Los_Angeles")
-	if err != nil {
-		loc = time.UTC
-	}
-	return &Reserver{db: db, dailyLimit: dailyLimit, loc: loc}
+	return &Reserver{db: db, dailyLimit: dailyLimit, loc: Pacific()}
 }
 
 // today is the current date in YouTube's reset timezone, formatted for the DATE param.

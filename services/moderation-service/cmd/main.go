@@ -36,6 +36,7 @@ import (
 	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
+	"github.com/caesar/all-chat/shared/quota"
 	"github.com/caesar/all-chat/shared/ratelimit"
 
 	"github.com/caesar/all-chat/services/moderation-service/audit"
@@ -43,7 +44,6 @@ import (
 	"github.com/caesar/all-chat/services/moderation-service/dispatch"
 	"github.com/caesar/all-chat/services/moderation-service/handler"
 	"github.com/caesar/all-chat/services/moderation-service/publisher"
-	"github.com/caesar/all-chat/services/moderation-service/quota"
 	"github.com/caesar/all-chat/services/moderation-service/repository"
 	"github.com/caesar/all-chat/services/moderation-service/tokens"
 

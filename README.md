@@ -176,6 +176,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `twitch-eventsub-listener` | Twitch EventSub webhooks (channel points, moderation, raids) |
 | `youtube-listener` | YouTube Data API polling with quota tracking |
 | `youtube-listener-innertube` | YouTube InnerTube API polling (zero quota cost) |
+| `youtube-quota-monitor` | Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023) |
 | `kick-listener` | Kick chat via Pusher WebSocket |
 | `tiktok-listener` | TikTok live chat via unofficial connector |
 | `discord-listener` | Discord channel chat relay |

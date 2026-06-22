@@ -24,8 +24,8 @@ import (
 
 	"github.com/caesar/all-chat/services/moderation-service/clients"
 	"github.com/caesar/all-chat/services/moderation-service/models"
-	"github.com/caesar/all-chat/services/moderation-service/quota"
 	"github.com/caesar/all-chat/services/moderation-service/tokens"
+	"github.com/caesar/all-chat/shared/quota"
 	"go.uber.org/zap"
 )
 
