@@ -10,12 +10,14 @@ Drop-in replacement for the official YouTube Listener using the InnerTube API in
 
 InnerTube-based YouTube chat listener that provides quota-free message ingestion as a drop-in replacement for the official API-based listener. Maintains identical RawChatMessage contract for seamless integration with message-processor.
 
+> **Note on quota**: message *ingestion* is fully quota-free. When `YOUTUBE_API_KEY` is configured, the listener additionally spends a single Data API unit per stream start (`videos.list`) to resolve the official `activeLiveChatId` for the streamer-send / moderation cache — see [Environment Variables](#environment-variables) and ADR-0025. This is optional and negligible; without the key the listener stays fully quota-free.
+
 ## Key Differences from Official Listener
 
 | Feature | Official Listener | InnerTube Listener |
 |---------|-------------------|-------------------|
 | API | YouTube Data API v3 | InnerTube (unofficial) |
-| Quota Cost | 5 units/request | Zero |
+| Quota Cost | 5 units/request | Zero for ingestion (+1 unit per stream for the live-chat-id send/mod cache when `YOUTUBE_API_KEY` is set) |
 | Stream Discovery | Search API | HTML parsing |
 | Event Types | Standard | Standard + deletions (Phase 13) |
 | Rate Limiting | API quota limits | IP-based (undocumented) |
@@ -51,6 +53,7 @@ Overlay WebSocket
 | `REDIS_HOST` | No | `localhost` | Redis hostname |
 | `REDIS_PORT` | No | `6379` | Redis port |
 | `HTTP_PORT` | No | `8080` | HTTP server port for health checks |
+| `YOUTUBE_API_KEY` | No | - | YouTube **Data API** key. When set, the listener resolves each live stream's official `activeLiveChatId` (one `videos.list` call, 1 quota unit per stream) and publishes it to the `youtube:stream:state` cache so auth-service (streamer chat send) and moderation-service can target the chat. Unset ⇒ cache disabled; sends fall back to the unreliable `search.list` path. See ADR-0025. |
 
 ## Running Locally
 

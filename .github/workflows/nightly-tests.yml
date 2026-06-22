@@ -29,6 +29,7 @@ jobs:
           - twitch-listener
           - twitch-eventsub-listener
           - youtube-listener
+          - youtube-quota-monitor
           - message-processor
           - share-service
           - source-manager

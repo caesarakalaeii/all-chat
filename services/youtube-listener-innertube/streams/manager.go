@@ -56,6 +56,10 @@ type Stream struct {
 	OverlayID    string
 	Continuation string
 	StartedAt    time.Time
+	// LiveChatID is the official activeLiveChatId, resolved once per stream (videos.list)
+	// and published to the youtube:stream:state cache for auth-service / moderation-service.
+	// Empty until resolution completes (or if no resolver is configured).
+	LiveChatID string
 }
 
 // DiscoveryState tracks ongoing discovery attempts for a channel
@@ -77,28 +81,29 @@ type DiscoveryState struct {
 //   - Redis-cached channel→video mappings
 //   - Overlay connection lifecycle tracking
 type Manager struct {
-	leader        *sourcemanager.LeadershipCoordinator
-	smClient      *sourcemanager.Client // Source manager client for querying active sources
-	repository    *Repository
-	discovery      *innertube.Discovery
-	publisher      *publisher.StreamPublisher
-	client         *innertube.Client
-	redisClient    *redis.Client
-	logger         *zap.Logger
-	metrics        *metrics.InnerTubeMetrics
-	statusPublisher *status.Publisher
-	batchDetector   *deletion.BatchDetector  // Batch deletion detector for cleanup
-	deletionBuffer  *deletion.DeletionBuffer // Deletion event buffer for cleanup
+	leader           *sourcemanager.LeadershipCoordinator
+	smClient         *sourcemanager.Client // Source manager client for querying active sources
+	repository       *Repository
+	discovery        *innertube.Discovery
+	publisher        *publisher.StreamPublisher
+	client           *innertube.Client
+	redisClient      *redis.Client
+	liveChatResolver LiveChatResolver // resolves activeLiveChatId for the send/mod cache; nil = disabled
+	logger           *zap.Logger
+	metrics          *metrics.InnerTubeMetrics
+	statusPublisher  *status.Publisher
+	batchDetector    *deletion.BatchDetector  // Batch deletion detector for cleanup
+	deletionBuffer   *deletion.DeletionBuffer // Deletion event buffer for cleanup
 
-	mu               sync.RWMutex
-	activeStreams    map[string]*Stream         // videoID → stream state
-	pollers          map[string]*poller.Poller  // videoID → active poller
-	discovering      map[string]*DiscoveryState // channelID → discovery state
-	connectedOverlays map[string]time.Time      // overlay_id → connection_time
+	mu                       sync.RWMutex
+	activeStreams            map[string]*Stream             // videoID → stream state
+	pollers                  map[string]*poller.Poller      // videoID → active poller
+	discovering              map[string]*DiscoveryState     // channelID → discovery state
+	connectedOverlays        map[string]time.Time           // overlay_id → connection_time
 	channelConnectedOverlays map[string]map[string]struct{} // channel_id → overlay_ids
 
 	// Demand-driven gating (Phase 5 gap closure)
-	demandMu        sync.RWMutex
+	demandMu         sync.RWMutex
 	demandedChannels map[string]bool // channelID -> has demand; nil = no filtering (backward compat)
 
 	// Discovery give-up tracking: channels whose discovery loop stopped after
@@ -126,6 +131,7 @@ func NewManager(
 	publisher *publisher.StreamPublisher,
 	client *innertube.Client,
 	redisClient *redis.Client,
+	liveChatResolver LiveChatResolver,
 	logger *zap.Logger,
 	m *metrics.InnerTubeMetrics,
 	batchDetector *deletion.BatchDetector,
@@ -139,6 +145,7 @@ func NewManager(
 		publisher:                publisher,
 		client:                   client,
 		redisClient:              redisClient,
+		liveChatResolver:         liveChatResolver,
 		logger:                   logger,
 		metrics:                  m,
 		statusPublisher:          status.NewPublisher(redisClient, logger),
@@ -163,6 +170,11 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Start periodic sync (every 30s, matches official listener)
 	m.wg.Add(1)
 	go m.periodicSync(ctx)
+
+	// Heartbeat the youtube:stream:state live-chat-id cache so it stays fresh while a
+	// stream is live and expires shortly after it ends (see streamStateRefreshLoop).
+	m.wg.Add(1)
+	go m.streamStateRefreshLoop(ctx)
 
 	// TODO: Add PostgreSQL LISTEN for instant source changes
 	// For now, rely on periodic sync only
@@ -746,6 +758,13 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		Status:    "connected",
 	})
 
+	// Resolve and cache the official activeLiveChatId so auth-service (streamer chat send)
+	// and moderation-service can target this channel's live chat. Done off the hot path:
+	// it is network I/O and must not run under m.mu, which this function holds.
+	if m.liveChatResolver != nil {
+		go m.resolveAndCacheLiveChat(channelID, videoID, overlayID)
+	}
+
 	// Watch for self-termination (e.g. stream went offline detected inside poller).
 	// When the poller exits on its own, clean up maps and release leadership so
 	// syncSources can trigger rediscovery.
@@ -755,9 +774,11 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		m.mu.Lock()
 		// Only clean up if this specific poller is still the registered one
 		// (it might have already been replaced by stopPollerAfterDebounce).
+		selfTerminated := false
 		if current, exists := m.pollers[videoID]; exists && current == p {
 			delete(m.pollers, videoID)
 			delete(m.activeStreams, videoID)
+			selfTerminated = true
 			m.logger.Info("Poller self-terminated, cleaned up state",
 				zap.String("channel_id", channelID),
 				zap.String("video_id", videoID),
@@ -765,6 +786,17 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 			)
 		}
 		m.mu.Unlock()
+
+		// Stream ended — drop the live-chat-id cache now so a streamer send no longer
+		// targets a dead chat (the heartbeat TTL would otherwise expire it within ~2m).
+		if selfTerminated {
+			if err := m.repository.DeleteStreamState(context.Background(), channelID); err != nil {
+				m.logger.Warn("Failed to clear stream state on self-termination",
+					zap.String("channel_id", channelID),
+					zap.Error(err),
+				)
+			}
+		}
 
 		if m.leader != nil {
 			m.leader.Release(videoID)
@@ -785,6 +817,104 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 	}
 
 	return nil
+}
+
+// resolveAndCacheLiveChat resolves the official activeLiveChatId for a freshly-started
+// stream (one videos.list call) and publishes it to the youtube:stream:state cache. Runs
+// in its own goroutine — never under m.mu — because it performs network I/O. A failure is
+// non-fatal: the listener keeps reading chat; only the streamer-send fast path is affected.
+func (m *Manager) resolveAndCacheLiveChat(channelID, videoID, overlayID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	liveChatID, err := m.liveChatResolver.Resolve(ctx, videoID)
+	if err != nil {
+		m.logger.Warn("Failed to resolve live chat ID; streamer-send cache not populated",
+			zap.String("channel_id", channelID),
+			zap.String("video_id", videoID),
+			zap.Error(err),
+		)
+		return
+	}
+
+	// Record on the stream so the heartbeat keeps the cache fresh — but only if this
+	// stream is still active (it may have ended while we were resolving).
+	m.mu.Lock()
+	stream, ok := m.activeStreams[videoID]
+	if ok {
+		stream.LiveChatID = liveChatID
+	}
+	m.mu.Unlock()
+	if !ok {
+		return
+	}
+
+	if err := m.repository.SetStreamState(ctx, channelID, videoID, overlayID, liveChatID); err != nil {
+		m.logger.Warn("Failed to cache stream state",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		return
+	}
+	m.logger.Info("Cached YouTube live chat ID for streamer sends / moderation",
+		zap.String("channel_id", channelID),
+		zap.String("video_id", videoID),
+		zap.String("live_chat_id", liveChatID),
+	)
+}
+
+// streamStateRefreshInterval is how often the live-chat-id cache is re-published. It must be
+// comfortably shorter than streamStateTTL so the entry never lapses while a stream is live.
+const streamStateRefreshInterval = 30 * time.Second
+
+// streamStateRefreshLoop periodically re-publishes the youtube:stream:state cache for every
+// actively-polled stream whose live chat id has been resolved, refreshing its TTL. A stream
+// that stops being polled simply drops out of the snapshot, so its entry expires after
+// streamStateTTL — that is the primary cleanup path, so no teardown site has to delete it.
+func (m *Manager) streamStateRefreshLoop(ctx context.Context) {
+	defer m.wg.Done()
+
+	ticker := time.NewTicker(streamStateRefreshInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-m.stopChan:
+			return
+		case <-ticker.C:
+			for _, st := range m.streamStatesToRefresh() {
+				if err := m.repository.SetStreamState(ctx, st.ChannelID, st.StreamID, st.OverlayID, st.LiveChatID); err != nil {
+					m.logger.Warn("Failed to refresh stream state",
+						zap.String("channel_id", st.ChannelID),
+						zap.Error(err),
+					)
+				}
+			}
+		}
+	}
+}
+
+// streamStatesToRefresh snapshots the active streams that have a resolved live chat id, so
+// the heartbeat can re-publish them without holding m.mu during the Redis writes.
+func (m *Manager) streamStatesToRefresh() []StreamState {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	states := make([]StreamState, 0, len(m.activeStreams))
+	for _, s := range m.activeStreams {
+		if s.LiveChatID == "" {
+			continue
+		}
+		states = append(states, StreamState{
+			ChannelID:  s.ChannelID,
+			StreamID:   s.VideoID,
+			OverlayID:  s.OverlayID,
+			LiveChatID: s.LiveChatID,
+		})
+	}
+	return states
 }
 
 // stopPollerAfterDebounce stops a poller after a debounce delay

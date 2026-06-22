@@ -18,12 +18,19 @@ package streams
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// streamStateTTL bounds how long the youtube:stream:state live-chat-id cache survives
+// without a refresh. The manager re-publishes it on a heartbeat (well within this window)
+// while the stream is actively polled, so a stream that ends — or a pod that dies — drops
+// out of the consumers' view within this window even if explicit cleanup is missed.
+const streamStateTTL = 2 * time.Minute
 
 // Repository handles persistence of channel→video mappings in Redis
 type Repository struct {
@@ -92,6 +99,45 @@ func (r *Repository) GetChannelVideoMapping(ctx context.Context, channelID strin
 	)
 
 	return videoID, nil
+}
+
+// SetStreamState publishes the youtube:stream:state:<channelID> cache entry that
+// auth-service (streamer chat send) and moderation-service (mod actions) read to resolve a
+// channel's official live chat. is_live is always true here — the entry exists only while
+// we are actively polling a live stream; its absence means "not live". TTL'd so a missed
+// cleanup self-heals (see streamStateTTL). See shared contract in streams/livechat.go.
+func (r *Repository) SetStreamState(ctx context.Context, channelID, videoID, overlayID, liveChatID string) error {
+	key := fmt.Sprintf("youtube:stream:state:%s", channelID)
+	state := StreamState{
+		ChannelID:   channelID,
+		StreamID:    videoID,
+		LiveChatID:  liveChatID,
+		OverlayID:   overlayID,
+		IsLive:      true,
+		LastUpdated: time.Now(),
+	}
+	data, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("marshal stream state: %w", err)
+	}
+	if err := r.redisClient.Set(ctx, key, data, streamStateTTL).Err(); err != nil {
+		r.logger.Warn("failed to set stream state",
+			zap.String("channel_id", channelID),
+			zap.Error(err),
+		)
+		return fmt.Errorf("set stream state: %w", err)
+	}
+	return nil
+}
+
+// DeleteStreamState removes the youtube:stream:state live-chat-id cache for a channel,
+// called when a stream ends so a streamer send no longer targets a dead live chat.
+func (r *Repository) DeleteStreamState(ctx context.Context, channelID string) error {
+	key := fmt.Sprintf("youtube:stream:state:%s", channelID)
+	if err := r.redisClient.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("delete stream state: %w", err)
+	}
+	return nil
 }
 
 // DeleteChannelVideoMapping removes a channel→video mapping from Redis

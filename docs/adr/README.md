@@ -324,6 +324,38 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0023: Decoupled YouTube Quota Monitor
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-22
+**Problem**: The quota-based `youtube-listener` (the only exporter of `listener_quota_usage_percentage` and publisher of `quota:alerts`) is no longer deployed, so YouTube quota alerting went dark — even though `moderation-service` (bans) and `auth-service` (sends) still spend official quota against the shared `youtube_quota_usage` table; `auth-service` wasn't even counting sends (it failed open against the dead listener)
+**Decision**: Extract a canonical `shared/quota` (state machine + `QuotaEvent`/`Notifier` + `Reserver`); switch `auth-service` sends to direct-SQL reserve-confirm-rollback; add a dedicated single-replica `youtube-quota-monitor` that reads the shared table, exports the Prometheus quota gauges, publishes `quota:alerts`, sweeps stale reservations, and serves `/quota/status` for the discord-bot poll
+**Impact**: Restores both alert paths (Prometheus + discord-bot) with one owner and no duplicate alerts; sends are now accounted; builds on ADR-0006 (reserve-confirm-rollback) and ADR-0022 (alerting source of truth, in caesar-deployment); single replica is load-bearing for alert dedup only — accounting stays DB-atomic. (No ADR-0022 in this repo: 0022 lives in caesar-deployment, so this is 0023.)
+**→ Read**: [0023-decoupled-youtube-quota-monitor.md](./0023-decoupled-youtube-quota-monitor.md)
+
+---
+
+### ADR-0024: Streamer Send-to-All Combined Pill via Pre-Register + Reconcile
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-22
+**Problem**: A streamer "send to all" collapses the per-platform echoes into one combined-pill message, but the pill was pre-registered with the *intended* platform set, so a failed platform (e.g. YouTube not live) still showed in the badge
+**Decision**: Keep the pre-registration before fan-out (so fast echoes are recognised, no duplicates/loss), then reconcile the dedup group to the *actual* success set — rewrite survivors when ≥2 succeed, delete the group when <2 succeed; per-platform `error_kind` now classified like the single-send path. (ADR-0021/0022 live in caesar-deployment; numbering is shared across both repos, so this is 0024)
+**→ Read**: [0024-send-to-all-combined-pill.md](./0024-send-to-all-combined-pill.md)
+
+---
+
+### ADR-0025: InnerTube Listener Caches activeLiveChatId for Streamer Sends
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-22
+**Problem**: Streamer sends to YouTube from the monitor always failed: auth-service's `youtube:stream:state` live-chat-id cache (strategy 1) was never populated because the deployed InnerTube listener never obtains the official `activeLiveChatId`, forcing the unreliable `search.list` fallback (observed 403 accountDelegationForbidden)
+**Decision**: The InnerTube listener resolves `activeLiveChatId` once per stream via Data API `videos.list` (1 quota unit, gated by `YOUTUBE_API_KEY`), publishes the existing `youtube:stream:state` contract, refreshes it on a heartbeat, and deletes on stream end. Ingestion stays quota-free; disabled with no key. Rejected redeploying the decommissioned quota listener
+**Impact**: YouTube send-to-all works in the InnerTube-only deployment via the reliable videos.list path; small, intentional break from strict zero-quota (~1 unit/stream). (ADR-0021/0022 in caesar-deployment, so this is 0025)
+**→ Read**: [0025-innertube-livechatid-cache.md](./0025-innertube-livechatid-cache.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

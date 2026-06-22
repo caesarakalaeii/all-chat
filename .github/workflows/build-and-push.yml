@@ -37,6 +37,7 @@ jobs:
       twitch-eventsub-listener: ${{ steps.changes.outputs.twitch-eventsub-listener }}
       youtube-listener: ${{ steps.changes.outputs.youtube-listener }}
       youtube-listener-innertube: ${{ steps.changes.outputs.youtube-listener-innertube }}
+      youtube-quota-monitor: ${{ steps.changes.outputs.youtube-quota-monitor }}
       kick-listener: ${{ steps.changes.outputs.kick-listener }}
       tiktok-listener: ${{ steps.changes.outputs.tiktok-listener }}
       message-processor: ${{ steps.changes.outputs.message-processor }}
@@ -83,6 +84,9 @@ jobs:
               - 'shared/**'
             youtube-listener-innertube:
               - 'services/youtube-listener-innertube/**'
+              - 'shared/**'
+            youtube-quota-monitor:
+              - 'services/youtube-quota-monitor/**'
               - 'shared/**'
             kick-listener:
               - 'services/kick-listener/**'
@@ -159,6 +163,9 @@ jobs:
           - name: youtube-listener-innertube
             changed: ${{ needs.detect-changes.outputs.youtube-listener-innertube }}
             path: services/youtube-listener-innertube
+          - name: youtube-quota-monitor
+            changed: ${{ needs.detect-changes.outputs.youtube-quota-monitor }}
+            path: services/youtube-quota-monitor
           - name: kick-listener
             changed: ${{ needs.detect-changes.outputs.kick-listener }}
             path: services/kick-listener
@@ -265,6 +272,7 @@ jobs:
           - twitch-listener
           - twitch-eventsub-listener
           - youtube-listener
+          - youtube-quota-monitor
           - message-processor
           - share-service
           - source-manager

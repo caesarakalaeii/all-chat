@@ -18,6 +18,7 @@ package quota
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"testing"
 
@@ -27,15 +28,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type fakeRow struct{ val bool }
+type fakeRow struct {
+	val     bool
+	scanErr error
+}
 
 func (f fakeRow) Scan(dest ...any) error {
-	*(dest[0].(*bool)) = f.val
+	if f.scanErr != nil {
+		return f.scanErr
+	}
+	if len(dest) > 0 {
+		if p, ok := dest[0].(*bool); ok {
+			*p = f.val
+		}
+	}
 	return nil
 }
 
 type fakeQuerier struct {
 	reserveResult bool
+	scanErr       error
+	execErr       error
 	sqls          []string
 	args          [][]any
 }
@@ -43,13 +56,13 @@ type fakeQuerier struct {
 func (f *fakeQuerier) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
 	f.sqls = append(f.sqls, sql)
 	f.args = append(f.args, args)
-	return fakeRow{val: f.reserveResult}
+	return fakeRow{val: f.reserveResult, scanErr: f.scanErr}
 }
 
 func (f *fakeQuerier) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	f.sqls = append(f.sqls, sql)
 	f.args = append(f.args, args)
-	return pgconn.CommandTag{}, nil
+	return pgconn.CommandTag{}, f.execErr
 }
 
 var dateRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
@@ -76,6 +89,15 @@ func TestReserve_InsufficientReturnsFalse(t *testing.T) {
 	assert.False(t, ok, "an over-limit reservation returns false so the caller skips the API call")
 }
 
+func TestReserve_ScanErrorPropagates(t *testing.T) {
+	q := &fakeQuerier{scanErr: errors.New("boom")}
+	r := NewReserver(q, 100)
+	ok, err := r.Reserve(context.Background(), QuotaCostYouTubeSend)
+	require.Error(t, err)
+	assert.False(t, ok)
+	assert.Contains(t, err.Error(), "reserve youtube quota")
+}
+
 func TestConfirmAndRollback_CallTheirSQL(t *testing.T) {
 	q := &fakeQuerier{}
 	r := NewReserver(q, 0)
@@ -86,6 +108,22 @@ func TestConfirmAndRollback_CallTheirSQL(t *testing.T) {
 	assert.Contains(t, q.sqls[0], "confirm_youtube_quota")
 	assert.Contains(t, q.sqls[1], "rollback_youtube_quota")
 	assert.Equal(t, QuotaCostBan, q.args[0][1])
+}
+
+func TestConfirm_ExecErrorPropagates(t *testing.T) {
+	q := &fakeQuerier{execErr: errors.New("db down")}
+	r := NewReserver(q, 0)
+	err := r.Confirm(context.Background(), QuotaCostYouTubeSend)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "confirm youtube quota")
+}
+
+func TestRollback_ExecErrorPropagates(t *testing.T) {
+	q := &fakeQuerier{execErr: errors.New("db down")}
+	r := NewReserver(q, 0)
+	err := r.Rollback(context.Background(), QuotaCostYouTubeSend)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rollback youtube quota")
 }
 
 func TestNewReserver_DefaultsDailyLimit(t *testing.T) {

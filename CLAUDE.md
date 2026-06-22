@@ -105,6 +105,7 @@ Each service has a detailed README:
 - [twitch-eventsub-listener](./services/twitch-eventsub-listener/README.md) - EventSub webhooks (channel points, moderation)
 - [youtube-listener](./services/youtube-listener/README.md) - HTTP polling, quota tracking
 - [youtube-listener-innertube](./services/youtube-listener-innertube/README.md) - InnerTube API polling (no quota cost)
+- [youtube-quota-monitor](./services/youtube-quota-monitor/README.md) - Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023)
 - [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
 - discord-listener — Discord channel chat relay (`services/discord-listener/`, no README yet)
