@@ -60,6 +60,7 @@ export interface ModEntry extends ModEntryData {
 const SYSTEM_EVENT_TYPES: ReadonlySet<EventType> = new Set<EventType>([
   'token_expiration_warning',
   'source_permission_error',
+  'listener_deprecation_notice',
 ])
 
 /**
