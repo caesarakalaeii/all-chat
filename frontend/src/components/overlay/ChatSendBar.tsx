@@ -65,9 +65,29 @@ function platformLabel(platform: string): string {
   }
 }
 
+/** Human-readable label for a send-to-all per-platform `error_kind`. */
+function humanizeErrorKind(kind: string): string {
+  switch (kind) {
+    case 'reauth_required':
+      return 'reconnect'
+    case 'missing_scope':
+      return 'locked'
+    case 'stream_offline':
+      return 'offline'
+    case 'quota_exhausted':
+      return 'quota'
+    case 'send_failed':
+      return 'failed'
+    default:
+      return kind
+  }
+}
+
+type FeedbackAction = { platform: string; action: 'enable' | 'reauth' }
+
 type Feedback =
   | { kind: 'success'; text: string }
-  | { kind: 'partial'; text: string }
+  | { kind: 'partial'; text: string; actions?: FeedbackAction[] }
   | { kind: 'error'; text: string; platform?: string; action?: 'enable' | 'reauth' }
 
 /**
@@ -186,12 +206,27 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
       if (isSendToAllResponse(res)) {
         const parts = res.results.map(
           (r) =>
-            `${platformLabel(r.platform)} ${r.success ? '✓' : `✗${r.error_kind ? ` ${r.error_kind}` : ''}`}`
+            `${platformLabel(r.platform)} ${r.success ? '✓' : `✗${r.error_kind ? ` ${humanizeErrorKind(r.error_kind)}` : ''}`}`
         )
         const allOk = res.results.every((r) => r.success)
+        // Surface an actionable button per failed platform that needs a user
+        // fix (reauth or enable). Without this the partial line just prints
+        // `reauth_required` with no way to start the flow (the single-send
+        // path handles these via thrown ApiError; send-to-all returns 200).
+        const actions: FeedbackAction[] = res.results
+          .filter((r) => !r.success)
+          .map((r) => {
+            if (r.error_kind === 'reauth_required')
+              return { platform: r.platform, action: 'reauth' as const }
+            if (r.error_kind === 'missing_scope')
+              return { platform: r.platform, action: 'enable' as const }
+            return null
+          })
+          .filter((a): a is FeedbackAction => a !== null)
         setFeedback({
           kind: allOk ? 'success' : 'partial',
           text: parts.join(' · '),
+          ...(actions.length ? { actions } : {}),
         })
       } else {
         setFeedback({ kind: 'success', text: 'Sent ✓' })
@@ -333,6 +368,21 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
               Reconnect
             </button>
           )}
+          {feedback.kind === 'partial' &&
+            feedback.actions?.map((a) => (
+              <button
+                key={`${a.platform}-${a.action}`}
+                type="button"
+                onClick={() =>
+                  a.action === 'reauth' ? onReauth(a.platform) : onEnable(a.platform)
+                }
+                className="font-semibold text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+              >
+                {a.action === 'reauth'
+                  ? `Reconnect ${platformLabel(a.platform)}`
+                  : `Enable ${platformLabel(a.platform)}`}
+              </button>
+            ))}
         </div>
       )}
     </form>
