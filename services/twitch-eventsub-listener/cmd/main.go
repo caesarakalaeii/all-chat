@@ -29,6 +29,7 @@ import (
 
 	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/channels"
+	"github.com/caesar/all-chat/services/twitch-eventsub-listener/claimexport"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/status"
@@ -103,7 +104,10 @@ func main() {
 	dbHost := listener.Env("DATABASE_HOST", "localhost")
 	dbPort := listener.Env("DATABASE_PORT", "5432")
 	dbUser := listener.Env("DATABASE_USER", "allchat")
-	dbPassword := listener.Env("DATABASE_PASSWORD", "allchat_dev_password")
+	dbPassword := listener.Env("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	dbName := listener.Env("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -173,6 +177,11 @@ func main() {
 	}
 	chatClaims := twitchchat.NewClaimStoreWithTTL(redisClient, claimTTL)
 	log.Info("Chat-ownership claim store initialized", zap.Duration("claim_ttl", claimTTL))
+
+	// Mirror the live chat-ownership claim set into a per-login gauge so the IRC→EventSub
+	// migration dashboard can subtract already-migrated channels from "still on IRC" panels
+	// (ADR-0015). Runs on every replica; duplicate series dedupe in PromQL.
+	go claimexport.ExportOwnedChannels(ctx, chatClaims, "twitch-eventsub-listener", log)
 
 	// Message-ID registry (native Twitch id → internal UUID), shared format with twitch-listener
 	// and read by message-processor to resolve single-message deletions. Same 1h TTL as IRC so the
