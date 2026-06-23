@@ -172,7 +172,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `api-gateway` | WebSocket server for overlays, HTTP routing, OAuth callbacks |
 | `auth-service` | Authentication, sessions, OAuth flows (Twitch, YouTube, Kick, Discord) |
 | `emote-service` | 7TV, BTTV, FFZ, and native emote resolution |
-| `twitch-listener` | Twitch IRC chat ingestion |
+| `twitch-listener` | Twitch IRC chat ingestion (⚠️ deprecated, ADR-0026 — migrating to `twitch-eventsub-listener`) |
 | `twitch-eventsub-listener` | Twitch EventSub webhooks (channel points, moderation, raids) |
 | `youtube-listener` | YouTube Data API polling with quota tracking |
 | `youtube-listener-innertube` | YouTube InnerTube API polling (zero quota cost) |
@@ -248,6 +248,7 @@ Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README
 - **ADR-0013**: Public overlay observability view + shared `useOverlayStream` hook
 - **ADR-0014**: Linger upstream capture demand symmetric with the downstream pub/sub linger
 - **ADR-0015**: Dynamic EventSub chat-ownership claim — IRC is the always-on fallback; EventSub owns a channel only while it is actively delivering chat (no silent loss across the partition)
+- **ADR-0026**: Two-phase deprecation of the Twitch IRC listener — `warn` nudges connected sources to re-add their Twitch source (in-overlay notice), `enforce` stops joining channels
 
 ### Documentation
 

@@ -544,6 +544,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           return '⚠️'
         case 'source_permission_error':
           return '🔒'
+        case 'listener_deprecation_notice':
+          return '🔄'
         default:
           return '✨'
       }
@@ -589,6 +591,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           return `${platform.charAt(0).toUpperCase() + platform.slice(1)} Authentication Error`
         case 'source_permission_error':
           return 'Bot Missing Channel Permission'
+        case 'listener_deprecation_notice':
+          return 'Twitch Connection Update'
         default:
           return 'Event!'
       }
@@ -638,6 +642,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             </div>
             <div className="text-xs text-red-300">
               {'→ Grant the bot "View Channel" permission in your Discord server settings'}
+            </div>
+          </div>
+        )}
+        {event.type === 'listener_deprecation_notice' && (
+          <div className="event-warning-message mt-2 ml-14 space-y-1 text-sm text-amber-200">
+            <div className="font-semibold">
+              {String(
+                event.metadata?.description ||
+                  'The legacy Twitch chat connection is being retired.'
+              )}
+            </div>
+            <div className="text-xs text-amber-300">
+              {'→ Re-add your Twitch source to switch to the new EventSub connection'}
             </div>
           </div>
         )}

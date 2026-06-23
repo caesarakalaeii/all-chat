@@ -48,9 +48,14 @@ const EVENT_TITLE: Partial<Record<EventType, string>> = {
   user_banned: 'User Banned',
   token_expiration_warning: 'Auth Warning',
   source_permission_error: 'Permission Error',
+  listener_deprecation_notice: 'Action Needed',
 }
 
-const SYSTEM_TYPES = new Set<EventType>(['token_expiration_warning', 'source_permission_error'])
+const SYSTEM_TYPES = new Set<EventType>([
+  'token_expiration_warning',
+  'source_permission_error',
+  'listener_deprecation_notice',
+])
 
 /** A single audience-activity (or system-notice) row for the activity feed. */
 export function CompactEvent({ item }: { item: ViewItem }) {

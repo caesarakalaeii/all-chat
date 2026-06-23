@@ -82,4 +82,10 @@ describe('ActivityPanel', () => {
     render(<ActivityPanel events={[]} system={system} moderationLog={[]} />)
     expect(screen.getByText('Permission Error')).toBeInTheDocument()
   })
+
+  it('renders the IRC listener deprecation migration notice', () => {
+    const system = [eventItem('s2', 'listener_deprecation_notice', '2026-05-31T10:02:00.000Z')]
+    render(<ActivityPanel events={[]} system={system} moderationLog={[]} />)
+    expect(screen.getByText('Action Needed')).toBeInTheDocument()
+  })
 })

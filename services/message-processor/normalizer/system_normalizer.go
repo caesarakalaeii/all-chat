@@ -50,6 +50,8 @@ func (n *SystemNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 		eventInfo, err = n.normalizeTokenWarning(raw)
 	case "source_permission_error":
 		eventInfo, err = n.normalizeSourcePermissionError(raw)
+	case "listener_deprecation_notice":
+		eventInfo, err = n.normalizeListenerDeprecation(raw)
 	default:
 		return nil, fmt.Errorf("unsupported system event type: %s", raw.EventType)
 	}
@@ -105,6 +107,32 @@ func (n *SystemNormalizer) normalizeSourcePermissionError(raw *models.RawChatMes
 
 	return &models.EventInfo{
 		Type:     "source_permission_error",
+		Tier:     tier,
+		Duration: duration,
+		IsUpdate: false,
+		Metadata: metadata,
+	}, nil
+}
+
+// normalizeListenerDeprecation normalizes a listener deprecation notice. Published
+// by the twitch-listener (ADR-0017) to nudge connected sources to re-add their
+// Twitch source, which migrates them onto the EventSub listener.
+func (n *SystemNormalizer) normalizeListenerDeprecation(raw *models.RawChatMessage) (*models.EventInfo, error) {
+	description, _ := raw.EventData["description"].(string)
+
+	metadata := make(map[string]interface{})
+	for k, v := range raw.EventData {
+		metadata[k] = v
+	}
+	if description == "" {
+		description = "The legacy Twitch chat connection is being retired. Re-add your Twitch source to keep chat working."
+	}
+	metadata["description"] = description
+
+	tier, duration := classifier.ClassifyEvent("system", "listener_deprecation_notice", nil)
+
+	return &models.EventInfo{
+		Type:     "listener_deprecation_notice",
 		Tier:     tier,
 		Duration: duration,
 		IsUpdate: false,
