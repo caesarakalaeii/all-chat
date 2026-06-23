@@ -87,6 +87,15 @@ func (n *SystemNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 	return unified, nil
 }
 
+// NormalizeEvent normalizes a system event for a specific overlay. System
+// events (token_expiration_warning, source_permission_error,
+// listener_deprecation_notice) carry an event_type and are therefore routed
+// through the processor's event path, which dispatches via NormalizeEvent.
+// Delegates to Normalize, which already switches on event_type.
+func (n *SystemNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID string) (*models.UnifiedChatMessage, error) {
+	return n.Normalize(raw, overlayID)
+}
+
 // normalizeSourcePermissionError normalizes a source permission error event.
 // Published by the discord-listener when the bot cannot access a configured channel.
 func (n *SystemNormalizer) normalizeSourcePermissionError(raw *models.RawChatMessage) (*models.EventInfo, error) {

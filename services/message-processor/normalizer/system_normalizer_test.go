@@ -80,3 +80,52 @@ func TestSystemNormalizer_RejectsUnknownEventType(t *testing.T) {
 	_, err := n.Normalize(raw, "overlay-123")
 	assert.Error(t, err)
 }
+
+// System events are routed through the processor's event path, which dispatches
+// via NormalizeEvent (not Normalize). A system event that reaches the event
+// switch must normalize through NormalizeEvent — otherwise it is silently
+// skipped and never published to overlays (regression: the event-path switch
+// previously had no SystemNormalizer case).
+func TestSystemNormalizer_NormalizeEvent_ListenerDeprecationNotice(t *testing.T) {
+	n := NewSystemNormalizer()
+	raw := &models.RawChatMessage{
+		MessageID: "msg-evt-1",
+		Platform:  "system",
+		EventType: "listener_deprecation_notice",
+		Timestamp: time.Now(),
+		EventData: map[string]interface{}{
+			"platform":    "twitch",
+			"channel_id":  "xqc",
+			"description": "Re-add your Twitch source to keep chat working.",
+			"action_url":  "/dashboard",
+		},
+	}
+
+	unified, err := n.NormalizeEvent(raw, "overlay-123")
+	require.NoError(t, err)
+
+	assert.Equal(t, "overlay-123", unified.OverlayID)
+	assert.Equal(t, "system", unified.Platform)
+	require.NotNil(t, unified.Event)
+	assert.Equal(t, "listener_deprecation_notice", unified.Event.Type)
+	assert.Equal(t, "high", unified.Event.Tier)
+}
+
+func TestSystemNormalizer_NormalizeEvent_TokenExpirationWarning(t *testing.T) {
+	n := NewSystemNormalizer()
+	raw := &models.RawChatMessage{
+		MessageID: "msg-evt-2",
+		Platform:  "system",
+		EventType: "token_expiration_warning",
+		Timestamp: time.Now(),
+		EventData: map[string]interface{}{
+			"platform":   "twitch",
+			"channel_id": "xqc",
+		},
+	}
+
+	unified, err := n.NormalizeEvent(raw, "overlay-123")
+	require.NoError(t, err)
+	require.NotNil(t, unified.Event)
+	assert.Equal(t, "token_expiration_warning", unified.Event.Type)
+}
